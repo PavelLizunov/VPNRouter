@@ -140,6 +140,44 @@ public class SingBoxManager : IDisposable
     private volatile bool _restartInProgress;
 
     /// <summary>
+    /// v2.41.2-r4 (2026-06-09 — reconnect-stop false-crash suppression):
+    /// set TRUE while an intentional <see cref="StopInternal"/> teardown is in
+    /// flight. <see cref="OnProcessExited"/> reads it — together with
+    /// <see cref="_restartInProgress"/> — to treat a late OS Exited callback
+    /// carrying an intentional-kill exit code (-1 / 137 / 143) as the expected
+    /// tail of a Stop, not a crash.
+    ///
+    /// <para><b>Why this exists alongside <see cref="_restartInProgress"/>:</b>
+    /// that flag is set ONLY inside <see cref="Restart"/>. But the GUI server /
+    /// subscription switch (<c>MainWindowViewModel.ReconnectAsync</c>) tears the
+    /// old sing-box down via <see cref="VpnEngine.Stop"/> → <see cref="Stop"/> →
+    /// <c>StopInternal(releaseLock: true)</c> and then a FRESH
+    /// <see cref="VpnEngine.StartAsync"/> — i.e. Stop()+Start, NOT
+    /// <see cref="Restart"/>. So <see cref="_restartInProgress"/> is false during
+    /// that stop, and when <c>SuppressExitedEvent</c> loses its ~14-33ms race
+    /// (the same window documented on <see cref="_restartInProgress"/>) the late
+    /// callback fell through to the ERR "sing-box crashed (exit code: -1)" branch
+    /// AND fired <see cref="Crashed"/> → <see cref="HealthMonitor"/> launched a
+    /// redundant recovery restart on top of the reconnect (churn + a brief extra
+    /// outage). Pavel's 2026-06-09 diagnostics (v2.41.2-r1) caught this on every
+    /// server switch.</para>
+    ///
+    /// <para><b>Scope is deliberately tight — this is the load-bearing safety
+    /// property:</b> set right after the concurrent-stop guard and cleared in
+    /// <see cref="StopInternal"/>'s finally, so it is true ONLY across the actual
+    /// kill+wait+cleanup body — exactly the window the late callback lands in. It
+    /// is NEVER true during a steady-state run, so it cannot mask a GENUINE crash:
+    /// a process that dies on its own has no Stop/Restart in flight → both flags
+    /// false → Crashed still fires and HealthMonitor still recovers, unchanged.
+    /// The exit-code gate (-1/137/143) is a second discriminator — a real
+    /// sing-box FATAL exits with code 1, never the Kill-signal codes. Volatile
+    /// for the same cross-thread reason as <see cref="_restartInProgress"/>
+    /// (written on the caller thread, read on the ThreadPool dispatcher thread
+    /// running <see cref="OnProcessExited"/>).</para>
+    /// </summary>
+    private volatile bool _stopInProgress;
+
+    /// <summary>
     /// PinkuDani Fix #3 (2026-05-21): true if the most recent sing-box exit
     /// was caused by a TUN configuration conflict — specifically the
     /// <c>configure tun interface: Cannot create a file when that file
@@ -300,6 +338,16 @@ public class SingBoxManager : IDisposable
             _logger.Debug("[SingBoxManager] StopInternal: concurrent call detected (releaseLock={Release}), skipping", releaseLock);
             return;
         }
+        // v2.41.2-r4 (reconnect-stop false-crash suppression): mark an
+        // intentional stop in flight BEFORE any Kill. A late OS Exited callback
+        // that wins the race against SuppressExitedEvent (the ~14-33ms window)
+        // is then recognised by OnProcessExited as the expected tail of a Stop
+        // and does NOT log a false crash / fire Crashed. Covers the GUI
+        // server-switch ReconnectAsync path (Stop()+Start, not Restart()) that
+        // _restartInProgress alone misses. Cleared in the finally below — so
+        // the flag is true only across this kill+wait+cleanup body and can never
+        // mask a genuine crash in steady state. See the _stopInProgress XML doc.
+        _stopInProgress = true;
         try
         {
         _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
@@ -579,6 +627,13 @@ public class SingBoxManager : IDisposable
         }
         finally
         {
+            // v2.41.2-r4: clear the intentional-stop flag FIRST (before the
+            // _stopState reset) so the suppression window stays open across the
+            // entire kill+wait+cleanup body above and closes only once the stop
+            // is fully done. Restart() keeps its own wider _restartInProgress
+            // window across the subsequent Sleep+LaunchProcess, so clearing here
+            // leaves no gap for the Restart case.
+            _stopInProgress = false;
             // B2 (v2.36): reset _stopState so subsequent (sequential)
             // Stop() callers can re-enter normally. Concurrent callers
             // saw 1 above and bailed; this releases the guard for the
@@ -1181,30 +1236,38 @@ public class SingBoxManager : IDisposable
             exitCodeError = ex;
         }
 
-        // v2.37.0-r52 (ekko 2026-05-25 routing-flip suppression): if Restart
-        // is in flight AND the exit code is the Windows-Kill signal (-1) or
-        // SIGKILL (137) or SIGTERM (143), the OS Exited callback just lost
-        // the race against SuppressExitedEvent. Don't fire Crashed — that
-        // would trigger HealthMonitor's backoff restart loop on top of the
-        // explicit Restart we're already doing, which is the source of
-        // ekko's "10-15 seconds of no internet during routing_mode flip"
-        // symptom. Log as INF so the suppression is auditable.
+        // v2.37.0-r52 (ekko 2026-05-25 routing-flip suppression) + v2.41.2-r4
+        // (2026-06-09 reconnect-stop suppression): if an intentional teardown
+        // is in flight — either a Restart (_restartInProgress) OR a plain Stop
+        // such as the GUI server-switch ReconnectAsync path (_stopInProgress) —
+        // AND the exit code is the Windows-Kill signal (-1), SIGKILL (137) or
+        // SIGTERM (143), then the OS Exited callback just lost its race against
+        // SuppressExitedEvent. Don't fire Crashed — that would trigger
+        // HealthMonitor's backoff restart loop on top of the teardown we're
+        // already doing (ekko's "10-15s no internet on routing_mode flip";
+        // Pavel's 2026-06-09 redundant-restart on every server switch). Log as
+        // INF so the suppression is auditable.
         //
         // Genuine sing-box FATALs (TUN-orphan, bad config) exit with code
         // 1, NOT -1/137/143 — those still flow through the Crashed event
-        // normally and get the HealthMonitor recovery treatment (see today's
-        // ekko log 2026-05-26 08:37 where exit code 1 + AutoFailover did
-        // its job correctly).
-        if (_restartInProgress && (exitCode == -1 || exitCode == 137 || exitCode == 143))
+        // normally and get the HealthMonitor recovery treatment (see ekko
+        // log 2026-05-26 08:37 where exit code 1 + AutoFailover did its job
+        // correctly). And the Kill-signal codes only suppress WHEN a teardown
+        // is in flight: a Task-Manager kill (-1) or OOM-kill (137) during a
+        // steady-state run leaves both flags false → still a crash → recover.
+        if ((_restartInProgress || _stopInProgress) && (exitCode == -1 || exitCode == 137 || exitCode == 143))
         {
             _logger.Information(
-                "[SingBoxManager] Expected exit during Restart (exit code: {Code}) — suppressing Crashed event, late OS callback after SuppressExitedEvent",
+                "[SingBoxManager] Expected exit during intentional {Phase:l} (exit code: {Code}) — suppressing Crashed event, late OS callback after SuppressExitedEvent",
+                _restartInProgress ? "restart" : "stop",
                 exitCode);
             // Still need to clean up handle state — fall through to the
             // existing _capturedStderr scan + TunOrphan detection (those
             // are safe no-ops on intentional exit), but skip Crashed.Invoke
-            // and the post-crash adapter cleanup below (Restart() does its
-            // own LaunchProcess which handles that).
+            // and the post-crash adapter cleanup below: Restart() does its own
+            // LaunchProcess (PreStartCleanupAsync) and Stop()'s StopInternal
+            // finally runs its own DisableOrphanedAdapter — so the adapter is
+            // covered either way.
             LogSingBoxCrashTail();
             DetectTunOrphanCrashSignature();
             return;

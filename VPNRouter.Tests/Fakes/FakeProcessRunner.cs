@@ -185,6 +185,20 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     private bool _exitedSuppressed;
 
+    /// <summary>
+    /// Test-side: when true, a <see cref="Kill"/> / <see cref="SignalExit"/>
+    /// AFTER <see cref="SuppressExitedEvent"/> STILL raises the
+    /// <see cref="Exited"/> event — modelling the late OS callback that was
+    /// already queued before <c>EnableRaisingEvents=false</c> took effect (the
+    /// ~14-33ms race brat / ekko / Pavel field logs caught, which the production
+    /// <c>SuppressExitedEvent</c> loses in ~15-30% of intentional stops).
+    /// Default <c>false</c> = SuppressExitedEvent wins (the common case), so
+    /// existing suppression tests are unaffected. Opt-in. Used by
+    /// <c>SingBoxManagerReconnectStopSuppressionTests</c> to drive the
+    /// reconnect-stop late-Exited race deterministically.
+    /// </summary>
+    public bool SimulateExitedRaceLost { get; set; }
+
     /// <summary>Test-side: stub the snapshot the production path reads via
     /// <see cref="TryGetSnapshot"/>. Default null mirrors the
     /// "process has exited / metrics unavailable" branch — production tests
@@ -216,7 +230,13 @@ public sealed class FakeProcessHandle : IProcessHandle
         // not raising the C# Exited event. The exit Task still completes
         // so WaitForExitAsync unblocks (production OS behaviour is the
         // same — process IS dead, just no Exited event raised).
-        if (_exit.TrySetResult(exitCode) && !_exitedSuppressed)
+        //
+        // v2.41.2-r4: SimulateExitedRaceLost overrides the suppression — it
+        // models the OS callback that was ALREADY queued when EnableRaisingEvents
+        // flipped, so it fires despite the suppression. _exit.TrySetResult still
+        // gates on first-completion, so a subsequent Dispose()/Kill() won't
+        // double-fire.
+        if (_exit.TrySetResult(exitCode) && (!_exitedSuppressed || SimulateExitedRaceLost))
             Exited?.Invoke(this, exitCode);
     }
 
