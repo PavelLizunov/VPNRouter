@@ -185,20 +185,62 @@ public partial class MainWindowViewModel
     // title, description, and CTA visual. Bindings expose 3 mutually-exclusive
     // bools per state so XAML can show/hide a .state-variant block cleanly.
 
-    /// <summary>True when VPN is up and no connect/disconnect is in-flight.</summary>
-    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting;
-    /// <summary>True only during an active connect/disconnect transition.</summary>
-    public bool SimpleStatusIsWarn => IsConnecting;
+    /// <summary>
+    /// v2.41.2-r3 (rectuspc): the post-start probe / AutoFailover can report the
+    /// active config dead (server unreachable, no candidates) while the engine
+    /// still holds IsConnected=true (TUN is up) — a silent dead "Connected".
+    /// Simple Mode doesn't bind classic StatusText, so we surface that message
+    /// through the status card here. Set by OnAutoFailoverMessage, cleared on the
+    /// next connect attempt (OnIsConnectingChanged). Null = no active alert.
+    /// </summary>
+    private string? _lastConnectionAlert;
+
+    /// <summary>True while a dead-config alert is active (overrides a deceptive
+    /// green "Protected").</summary>
+    private bool HasConnectionAlert => !string.IsNullOrEmpty(_lastConnectionAlert);
+
+    /// <summary>Raise change-notification for every status-card member that
+    /// depends on <see cref="_lastConnectionAlert"/>. Shared by the failover
+    /// handler (sets the alert) and the connect hook (clears it).</summary>
+    private void RaiseSimpleAlertProps()
+    {
+        OnPropertyChanged(nameof(SimpleStatusIsOn));
+        OnPropertyChanged(nameof(SimpleStatusIsWarn));
+        OnPropertyChanged(nameof(SimpleStatusIsOff));
+        OnPropertyChanged(nameof(SimpleStatusTitle));
+        OnPropertyChanged(nameof(SimpleStatusDescription));
+    }
+
+    /// <summary>MVVM Toolkit hook — a new connect attempt clears any stale
+    /// dead-config alert from a previous session so the card reflects the
+    /// fresh attempt, not the last failure.</summary>
+    partial void OnIsConnectingChanged(bool value)
+    {
+        if (value && HasConnectionAlert)
+        {
+            _lastConnectionAlert = null;
+            RaiseSimpleAlertProps();
+        }
+    }
+
+    /// <summary>True when VPN is up, no transition in flight, and the tunnel
+    /// hasn't been reported dead.</summary>
+    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !HasConnectionAlert;
+    /// <summary>True during an active transition OR while the active config is
+    /// reported dead.</summary>
+    public bool SimpleStatusIsWarn => IsConnecting || HasConnectionAlert;
     /// <summary>True when idle and not currently transitioning.</summary>
-    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting;
+    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !HasConnectionAlert;
 
     /// <summary>
     /// Status-card title — one word when possible. Mirrors the variant-A
-    /// "Protected / Connecting… / Not connected" wording.
+    /// "Protected / Connecting… / Not connected" wording. A dead-config alert
+    /// downgrades a deceptive "Protected" to "Not connected" — the tunnel is up
+    /// but carries no traffic, so claiming "Protected" would be a lie.
     /// </summary>
     public string SimpleStatusTitle => IsConnecting
         ? Strings.SmpStatusConnecting
-        : IsConnected
+        : (IsConnected && !HasConnectionAlert)
             ? Strings.SmpStatusProtected
             : Strings.SmpStatusNotConnected;
 
@@ -213,6 +255,10 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            // Dead-config alert wins over both the connected and idle text —
+            // it can be active while IsConnected is still true (silent dead
+            // "Connected"). rectuspc v2.41.2-r3.
+            if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
             {
                 // Reuse the SmpActiveServerLine logic but strip the "Through:"

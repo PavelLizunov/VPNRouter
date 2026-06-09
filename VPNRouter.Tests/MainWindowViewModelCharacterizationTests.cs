@@ -192,10 +192,13 @@ public class MainWindowViewModelCharacterizationTests
     // v2.41.2-r2 (rectuspc dead-Connected surfacing): + OnAutoFailoverMessage()
     // private handler wired to VpnEngine.AutoFailoverTriggered (surfaces the
     // "server unreachable / no candidates" message into StatusText instead of
-    // a silent green Connected). Cross-platform member → strict snapshot drifts,
-    // re-pinned to the actual.
+    // a silent green Connected). Cross-platform member → strict snapshot drifts.
+    // v2.41.2-r3: r2 surfaced only in classic StatusText; Simple Mode (default
+    // UI) doesn't bind it, so the message was invisible there. Added Simple-Mode
+    // surfacing: _lastConnectionAlert field, HasConnectionAlert, RaiseSimpleAlertProps,
+    // OnIsConnectingChanged partial. Re-pinned to the actual.
     private const string PinnedHashWindows =
-        "7cae0c42cf34b4cec915bf7ec5d9d5cf4e4a113dd13301701cb2dba4dc125277";
+        "255bd7b907da1bb80458529c12465c063876ec1672a1f5f9c99200c34dfab214";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

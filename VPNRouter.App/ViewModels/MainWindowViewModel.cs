@@ -4014,7 +4014,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (string.IsNullOrWhiteSpace(message)) return;
         Dispatcher.UIThread.Post(() =>
         {
-            StatusText = "⚠ " + message;
+            var text = "⚠ " + message;
+            StatusText = text;                 // classic/advanced status line
+            // Simple Mode (the default UI) does NOT bind StatusText — it shows
+            // SimpleStatusTitle/Description. Surface the same alert through the
+            // Simple status card so a silent dead "Connected" reads as a warning
+            // instead of a green "Protected" (rectuspc, v2.41.2-r3).
+            _lastConnectionAlert = text;
+            RaiseSimpleAlertProps();
             _logger?.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
         });
     }
