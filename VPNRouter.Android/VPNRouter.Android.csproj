@@ -218,7 +218,25 @@
          from zxing-android-embedded. C# side (MainActivity.cs) reaches
          into it via reflection because the aar import uses Bind="false". -->
     <AndroidJavaSource Include="QrScanLauncher.java" />
+    <!-- DNS-tunnel (slipstream) JNI binding. Loads libslipstream_jni.so (built
+         from Mygod/slipstream-rust + our slipstream-android crate). Gated by a
+         runtime dlopen probe (SlipstreamNative.isAvailable) so a build/ABI
+         without the .so refuses the dns-tunnel scheme rather than crashing. -->
+    <AndroidJavaSource Include="SlipstreamNative.java" />
     <None Include="VpnRouterService.kt" />
+  </ItemGroup>
+
+  <!-- DNS-tunnel sidecar native lib, per ABI. Bundled in the APK (like libbox,
+       NOT pulled — needed precisely when the network is hostile). Built locally
+       on the Mac host (cargo-ndk), cached under tools/slipstream-android-cache/
+       (gitignored, local-only, same constraint as libbox.aar). Exists-guarded
+       so a build without it still produces an APK (dns-tunnel just unavailable). -->
+  <ItemGroup>
+    <AndroidNativeLibrary
+        Condition="Exists('$(MSBuildThisFileDirectory)..\tools\slipstream-android-cache\arm64-v8a\libslipstream_jni.so')"
+        Include="$(MSBuildThisFileDirectory)..\tools\slipstream-android-cache\arm64-v8a\libslipstream_jni.so">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
   </ItemGroup>
 
 </Project>

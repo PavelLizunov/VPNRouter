@@ -117,6 +117,13 @@ public class MainActivity : AvaloniaMainActivity
     // v3.0 Phase 7.5 — per-app filter intent extras (handbook §5.5).
     private const string ExtraPerAppMode = "per_app_mode";
     private const string ExtraPerAppPackages = "per_app_packages";
+    // DNS-tunnel (slipstream) — forwarded only when the active server is
+    // dns-tunnel; the service starts the in-process Slipstream front before
+    // libbox. Must match the EXTRA_DNS_TUNNEL_* keys in VpnRouterService.java.
+    private const string ExtraDnsTunnelDomain = "dns_tunnel_domain";
+    private const string ExtraDnsTunnelResolvers = "dns_tunnel_resolvers";
+    private const string ExtraDnsTunnelCert = "dns_tunnel_cert";
+    private const string ExtraDnsTunnelPort = "dns_tunnel_port";
     // v3.0 Phase 1.I — broadcasts from VpnRouterService so the UI can
     // mirror REAL tunnel state, not just intent.
     private const string ActionTunnelUp = "com.ninitux.vpnrouter.TUNNEL_UP";
@@ -1052,7 +1059,7 @@ public class MainActivity : AvaloniaMainActivity
             return;
         }
 
-        DispatchTunnelStart(configJson);
+        DispatchTunnelStart(configJson, entry);
     }
 
     /// <summary>
@@ -1060,8 +1067,14 @@ public class MainActivity : AvaloniaMainActivity
     /// custom-config and subscription/manual paths share the same
     /// per-app filter forwarding + foreground-service launch. Pre-CC
     /// the dispatch was inlined at the bottom of StartTunnelService.
+    ///
+    /// <para>DNS-tunnel (slipstream): when <paramref name="dnsTunnelEntry"/> is
+    /// a dns-tunnel server, the tunnel domain / resolvers / leaf cert are
+    /// forwarded as intent extras so the service can spin up the in-process
+    /// Slipstream front (libslipstream_jni) before libbox. Null / non-dns-tunnel
+    /// entries (e.g. the custom-JSON path) carry no slipstream extras.</para>
     /// </summary>
-    private void DispatchTunnelStart(string configJson)
+    private void DispatchTunnelStart(string configJson, VPNRouter.Core.Models.VlessServerEntry? dnsTunnelEntry = null)
     {
         // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
         // Read user's saved selection and forward to VpnRouterService.
@@ -1080,6 +1093,33 @@ public class MainActivity : AvaloniaMainActivity
             .PutExtra(ExtraAllowedPackages, Array.Empty<string>())
             .PutExtra(ExtraPerAppMode, perAppMode)
             .PutExtra(ExtraPerAppPackages, perAppPackages);
+
+        // DNS-tunnel (slipstream) — forward the tunnel parameters so the
+        // service brings up the Slipstream front before libbox. The generated
+        // config already points sing-box's VLESS outbound at 127.0.0.1:7001
+        // (ConfigGenerator.BuildDnsTunnelOutbound); these extras are what let
+        // the service actually start the local front that listens there.
+        if (dnsTunnelEntry is not null &&
+            string.Equals(dnsTunnelEntry.Protocol, "dns-tunnel", System.StringComparison.OrdinalIgnoreCase))
+        {
+            var resolverList = new System.Collections.Generic.List<string>();
+            if (dnsTunnelEntry.DnsResolvers is not null)
+            {
+                foreach (var r in dnsTunnelEntry.DnsResolvers)
+                {
+                    if (!string.IsNullOrWhiteSpace(r))
+                        resolverList.Add(r.Trim());
+                }
+            }
+            var resolvers = resolverList.ToArray();
+            intent
+                .PutExtra(ExtraDnsTunnelDomain, dnsTunnelEntry.DnsDomain ?? string.Empty)
+                .PutExtra(ExtraDnsTunnelResolvers, resolvers)
+                .PutExtra(ExtraDnsTunnelCert, dnsTunnelEntry.DnsLeafCertPem ?? string.Empty)
+                .PutExtra(ExtraDnsTunnelPort, VPNRouter.Core.Services.SlipstreamManager.DefaultLocalPort);
+            global::Android.Util.Log.Info("VpnRouter",
+                $"dns-tunnel: forwarding slipstream params (domain={dnsTunnelEntry.DnsDomain}, resolvers={resolvers.Length})");
+        }
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
         {

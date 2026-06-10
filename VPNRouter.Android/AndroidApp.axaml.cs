@@ -499,6 +499,28 @@ public partial class AndroidApp : Avalonia.Application
             catch { /* nothing more we can do */ }
         }
 
+        // DNS-tunnel (slipstream) availability gate — probe whether the native
+        // Slipstream client (libslipstream_jni.so) is bundled + loadable for
+        // this device ABI. ServerUriParser refuses the dns-tunnel:// scheme when
+        // this is false, so a build/ABI without the .so degrades cleanly (the
+        // scheme is rejected at parse time, not mid-connect with an
+        // UnsatisfiedLinkError). Same .so the service loads — System.loadLibrary
+        // is idempotent, so this just primes it. Must run before ReloadServerList
+        // (which parses cached servers through ServerUriParser).
+        try
+        {
+            global::Java.Lang.JavaSystem.LoadLibrary("slipstream_jni");
+            ServerUriParser.SlipstreamRuntimeAvailable = true;
+            global::Android.Util.Log.Info("VpnRouter",
+                "dns-tunnel: native Slipstream library available — dns-tunnel:// enabled");
+        }
+        catch (Exception ex)
+        {
+            ServerUriParser.SlipstreamRuntimeAvailable = false;
+            global::Android.Util.Log.Info("VpnRouter",
+                $"dns-tunnel: native Slipstream library unavailable ({ex.GetType().Name}) — dns-tunnel:// disabled");
+        }
+
         Localization.LoadFromStorage();
         ApplyTheme();
 

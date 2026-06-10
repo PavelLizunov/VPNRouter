@@ -137,6 +137,16 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_TUNNEL_DOWN = "com.ninitux.vpnrouter.TUNNEL_DOWN";
     public static final String ACTION_TUNNEL_ERROR = "com.ninitux.vpnrouter.TUNNEL_ERROR";
     public static final String EXTRA_ERROR_MESSAGE = "error_message";
+    // DNS-tunnel (slipstream) — when the active server is dns-tunnel the
+    // service brings up the in-process Slipstream client (libslipstream_jni)
+    // BEFORE libbox and points sing-box's generated VLESS outbound at
+    // 127.0.0.1:<port>. These carry the tunnel parameters parsed from the
+    // dns-tunnel:// link; absent (null) for every other scheme, which keeps
+    // the slipstream path inert. See SlipstreamNative.java.
+    public static final String EXTRA_DNS_TUNNEL_DOMAIN = "dns_tunnel_domain";
+    public static final String EXTRA_DNS_TUNNEL_RESOLVERS = "dns_tunnel_resolvers";
+    public static final String EXTRA_DNS_TUNNEL_CERT = "dns_tunnel_cert";
+    public static final String EXTRA_DNS_TUNNEL_PORT = "dns_tunnel_port";
 
     private static final int NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "vpnrouter_tunnel";
@@ -155,6 +165,13 @@ public final class VpnRouterService extends VpnService {
     // and keeps the persistence path simple.
     private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
     private static final String KEY_AUTO_RECONNECT = "auto_reconnect_on_network_change";
+    // DNS-tunnel (slipstream) last-good params, so an Always-on / swipe-recovery
+    // bring-up rebuilds the Slipstream front too (not just libbox). Resolvers
+    // are newline-packed like the per-app packages slot.
+    private static final String KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN = "last_good_dns_tunnel_domain";
+    private static final String KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS = "last_good_dns_tunnel_resolvers_lines";
+    private static final String KEY_LAST_GOOD_DNS_TUNNEL_CERT = "last_good_dns_tunnel_cert";
+    private static final String KEY_LAST_GOOD_DNS_TUNNEL_PORT = "last_good_dns_tunnel_port";
 
     private static boolean libboxSetupDone = false;
 
@@ -162,6 +179,16 @@ public final class VpnRouterService extends VpnService {
     private String[] pendingAllowedPackages;
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
+    // DNS-tunnel (slipstream) pending params — non-null only when the active
+    // server arrived as dns-tunnel. startTunnel() brings up the Slipstream
+    // front before libbox when pendingDnsTunnelDomain is set.
+    private String pendingDnsTunnelDomain;
+    private String[] pendingDnsTunnelResolvers;
+    private String pendingDnsTunnelCert;
+    private int pendingDnsTunnelPort;
+    // True once nativeStart spawned the Slipstream worker, so stopTunnel
+    // tears it down after libbox. Reset on stop.
+    private boolean slipstreamRunning;
     private BoxService boxService;
     private ParcelFileDescriptor currentPfd;
     // v2.32.0 AND-NETRES — wake-lock held during connect-init so the
@@ -295,6 +322,10 @@ public final class VpnRouterService extends VpnService {
             pendingAllowedPackages = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
             pendingPerAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
             pendingPerAppPackages = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
+            pendingDnsTunnelDomain = intent.getStringExtra(EXTRA_DNS_TUNNEL_DOMAIN);
+            pendingDnsTunnelResolvers = intent.getStringArrayExtra(EXTRA_DNS_TUNNEL_RESOLVERS);
+            pendingDnsTunnelCert = intent.getStringExtra(EXTRA_DNS_TUNNEL_CERT);
+            pendingDnsTunnelPort = intent.getIntExtra(EXTRA_DNS_TUNNEL_PORT, 7001);
             startTunnel();
         } else if (ACTION_STOP.equals(action)) {
             // v2.40.0-r8 (#3): an explicit user Disconnect must defuse any pending
@@ -395,6 +426,7 @@ public final class VpnRouterService extends VpnService {
 
         try {
             ensureLibboxSetup();
+            startSlipstreamIfNeeded();
             startLibboxService();
             persistLastGoodConfig();
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
@@ -435,6 +467,28 @@ public final class VpnRouterService extends VpnService {
             } else {
                 editor.remove(KEY_LAST_GOOD_PER_APP_PACKAGES);
             }
+            if (pendingDnsTunnelDomain != null && !pendingDnsTunnelDomain.isEmpty()) {
+                editor.putString(KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN, pendingDnsTunnelDomain);
+                editor.putString(KEY_LAST_GOOD_DNS_TUNNEL_CERT,
+                        pendingDnsTunnelCert != null ? pendingDnsTunnelCert : "");
+                editor.putInt(KEY_LAST_GOOD_DNS_TUNNEL_PORT,
+                        pendingDnsTunnelPort > 0 ? pendingDnsTunnelPort : 7001);
+                if (pendingDnsTunnelResolvers != null && pendingDnsTunnelResolvers.length > 0) {
+                    StringBuilder rb = new StringBuilder();
+                    for (int i = 0; i < pendingDnsTunnelResolvers.length; i++) {
+                        if (i > 0) rb.append('\n');
+                        rb.append(pendingDnsTunnelResolvers[i] != null ? pendingDnsTunnelResolvers[i] : "");
+                    }
+                    editor.putString(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS, rb.toString());
+                } else {
+                    editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS);
+                }
+            } else {
+                editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN);
+                editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS);
+                editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_CERT);
+                editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_PORT);
+            }
             // apply() is async + non-throwing — for a "best effort" path
             // that's the right choice. commit() would block the foreground
             // start path on disk I/O for ~5-50 ms.
@@ -468,6 +522,18 @@ public final class VpnRouterService extends VpnService {
             } else {
                 pendingPerAppPackages = packed.split("\n");
             }
+            // DNS-tunnel restore — so an Always-on / swipe-recovery bring-up
+            // re-establishes the Slipstream front, not just libbox. Empty
+            // domain ⇒ a non-dns-tunnel last-good config (slipstream stays inert).
+            pendingDnsTunnelDomain = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN, null);
+            if (pendingDnsTunnelDomain != null && pendingDnsTunnelDomain.isEmpty()) {
+                pendingDnsTunnelDomain = null;
+            }
+            pendingDnsTunnelCert = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_CERT, null);
+            pendingDnsTunnelPort = prefs.getInt(KEY_LAST_GOOD_DNS_TUNNEL_PORT, 7001);
+            String packedResolvers = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS, null);
+            pendingDnsTunnelResolvers = (packedResolvers == null || packedResolvers.isEmpty())
+                    ? new String[0] : packedResolvers.split("\n");
             // Allowed-packages extra was the legacy slot; AND-NETRES restore
             // path always uses the per-app filter mode/packages exclusively.
             pendingAllowedPackages = new String[0];
@@ -584,6 +650,87 @@ public final class VpnRouterService extends VpnService {
         Log.i(LOG_TAG, "libbox service started successfully (v2.32.0)");
     }
 
+    /**
+     * DNS-tunnel (slipstream): when the active server arrived with dns-tunnel
+     * parameters, bring up the in-process Slipstream client BEFORE libbox and
+     * wait for its local TCP front to listen. sing-box's generated VLESS
+     * outbound dials 127.0.0.1:&lt;port&gt;, so starting libbox before the front
+     * is listening would dial a dead local socket — we fail CLOSED here (throw
+     * → startTunnel's catch broadcasts the error + stops) rather than leaving a
+     * "Connected" UI over a tunnel that can't carry traffic.
+     *
+     * <p>No-op for every non-dns-tunnel server (pendingDnsTunnelDomain null).
+     * The Slipstream resolver UDP:53 traffic bypasses the TUN automatically
+     * because the service self-disallows the VPNRouter UID in openTun(), so no
+     * extra loop-avoidance routing is needed.</p>
+     */
+    private void startSlipstreamIfNeeded() throws Exception {
+        if (pendingDnsTunnelDomain == null || pendingDnsTunnelDomain.isEmpty()) {
+            return;
+        }
+        int port = pendingDnsTunnelPort > 0 ? pendingDnsTunnelPort : 7001;
+        if (!SlipstreamNative.isAvailable()) {
+            throw new Exception("dns-tunnel: native Slipstream library not available for this device ABI");
+        }
+        String[] resolvers = pendingDnsTunnelResolvers != null
+                ? pendingDnsTunnelResolvers : new String[0];
+        Log.i(LOG_TAG, "dns-tunnel: starting Slipstream front on 127.0.0.1:" + port
+                + " (domain=" + pendingDnsTunnelDomain + ", resolvers=" + resolvers.length + ")");
+        boolean spawned = SlipstreamNative.nativeStart(
+                pendingDnsTunnelCert != null ? pendingDnsTunnelCert : "",
+                pendingDnsTunnelDomain,
+                port,
+                resolvers);
+        if (!spawned) {
+            throw new Exception("dns-tunnel: Slipstream nativeStart returned false");
+        }
+        slipstreamRunning = true;
+        // The local TCP listener binds almost immediately on spawn (before the
+        // QUIC-over-DNS handshake even completes), so this normally returns in
+        // well under a second. The 8 s cap is the fail-closed worst case and
+        // stays comfortably inside the foreground-service onStartCommand ANR
+        // window — the connect wake-lock is held for the whole window.
+        if (!waitForLocalPort(port, 8_000L)) {
+            throw new Exception("dns-tunnel: Slipstream front did not start listening on 127.0.0.1:" + port);
+        }
+        Log.i(LOG_TAG, "dns-tunnel: Slipstream front is listening on 127.0.0.1:" + port);
+    }
+
+    /** Poll 127.0.0.1:port for a connectable listener up to timeoutMs. */
+    private boolean waitForLocalPort(int port, long timeoutMs) {
+        long deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs;
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            java.net.Socket s = new java.net.Socket();
+            try {
+                s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 500);
+                return true;
+            } catch (Exception ignored) {
+                // front not listening yet
+            } finally {
+                try { s.close(); } catch (Exception ignored) { }
+            }
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** Tear down the Slipstream client if it was started. Idempotent. */
+    private void stopSlipstreamIfRunning() {
+        if (!slipstreamRunning) return;
+        try {
+            SlipstreamNative.nativeStop();
+            Log.i(LOG_TAG, "dns-tunnel: Slipstream front stopped");
+        } catch (Throwable t) {
+            Log.w(LOG_TAG, "dns-tunnel: nativeStop threw: " + t.getMessage());
+        }
+        slipstreamRunning = false;
+    }
+
     private void stopTunnel() {
         if (boxService != null) {
             try {
@@ -593,6 +740,9 @@ public final class VpnRouterService extends VpnService {
             }
             boxService = null;
         }
+        // DNS-tunnel: tear down the Slipstream front AFTER libbox so sing-box
+        // never dials a dead 127.0.0.1 front during its own shutdown.
+        stopSlipstreamIfRunning();
         if (currentPfd != null) {
             try { currentPfd.close(); } catch (Exception e) {
                 Log.w(LOG_TAG, "pfd.close threw: " + e.getMessage());
