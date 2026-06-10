@@ -96,9 +96,61 @@ status surfacing. Distribution: the GitHub release (repo TBD).
 
 ## Slice order (each compiles + tests green before next)
 
-1. **Foundation** (this slice): AppPaths + model fields + parser + parser tests.
-2. SlipstreamManager + tests (FakeProcessRunner seam).
-3. ConfigGenerator dns-tunnel outbound + sing-box-check test.
-4. VpnEngine lifecycle coupling + LeakProtection awareness + tests.
-5. SlipstreamUpdater (once repo named).
-6. App UI (link intake + badge + status).
+1. **Foundation** (this slice): AppPaths + model fields + parser + parser tests. ✅ DONE
+2. SlipstreamManager + tests (FakeProcessRunner seam). ✅ DONE
+3. ConfigGenerator dns-tunnel outbound + sing-box-check test. ✅ DONE
+4. VpnEngine lifecycle coupling + LeakProtection awareness + tests. ✅ DONE
+5. SlipstreamUpdater (once repo named). ⏳ DEFERRED (no pinned release yet)
+6. App UI (link intake + badge + status). ✅ DONE
+
+All shipped inert/gated behind `Protocol == "dns-tunnel"` (strict equality) → zero
+effect on existing servers. 6 commits on `main`. Unit suites: ServerUriParserDnsTunnel
+(15), SlipstreamManager (10), ConfigGeneratorDnsTunnel (1), DnsTunnelUi (3).
+
+## Build provenance — Windows slipstream-client.exe (2026-06-10)
+
+Built from source on the dev VM (no upstream pre-built .exe exists). Recorded so CI
+or a future rebuild is reproducible. Build tree lives on the **D: EXTRA** disk
+(`D:\build`), off the cramped 3 GB C:.
+
+**Toolchain assembled:**
+- VS Build Tools 2022 → `D:\VS2022BT` (MSVC 14.44.35207, Windows SDK 10.0.22621, bundled CMake 3.31).
+- Rust 1.96 msvc host → `CARGO_HOME=D:\rust\cargo`, `RUSTUP_HOME=D:\rust\rustup`.
+- vcpkg → `D:\vcpkg`; `openssl:x64-windows-static-md@3.6.2` (static OpenSSL, **dynamic CRT**).
+  vcpkg also fetched **pkgconf 2.5.1** to `D:\vcpkg\dl\tools\msys2\...\mingw64\bin\pkgconf.exe`.
+- slipstream-rust checkout + picoquic submodule → `D:\build\slipstream-rust`.
+
+**The non-obvious blockers (each a one-liner once known):**
+1. slproweb OpenSSL installer download stalled at 0 bytes (RU network filtering — the
+   very problem this feature exists for) → switched to **vcpkg** (GitHub-hosted) OpenSSL.
+2. `scripts/build_picoquic_windows.ps1` uses the PowerShell-7 automatic `$IsWindows`
+   under `Set-StrictMode`; we drive it from Windows PowerShell **5.1** → `do_build.ps1`
+   pre-sets `$IsWindows = $true`.
+3. picotls' `CMakeLists.txt:12` does `find_package(PkgConfig)` (REQUIRED) → fails on
+   Windows with no pkg-config. **Fix:** `do_build.ps1` locates vcpkg's pkgconf and exports
+   `PKG_CONFIG_EXECUTABLE`/`PKG_CONFIG`; the build script then passes `-DPKG_CONFIG_EXECUTABLE`.
+   (The earlier `pthread.lib LNK1104` noise was a benign FindThreads probe, not the cause.)
+
+**Build recipe** (`D:\build\do_build.ps1`): import vcvars64 env → prepend CMake+cargo to
+PATH → set CARGO/RUSTUP/VCPKG_ROOT + PKG_CONFIG_EXECUTABLE → `build_picoquic_windows.ps1
+-Configuration Release -Platform x64` → `cargo build --release -p slipstream-client`.
+Result: `target\release\slipstream-client.exe` (6.5 MB, cargo stage 53s).
+
+**Verified (2026-06-10):**
+- `--help` CLI flags match `SlipstreamManager` argv exactly: `--cert`, `-d/--domain`,
+  `-l/--tcp-listen-port`, `--tcp-listen-host`, `-r/--resolver` (repeatable). No `--uuid`
+  on the client (correct — uuid lives in the sing-box VLESS layer).
+- **Local-chain smoke PASS:** spawned with a dummy self-signed leaf + НСДИ resolvers →
+  `INFO Listening on TCP port 7001` and `127.0.0.1:7001` accepts TCP **before** any tunnel
+  is reachable. Confirms `WaitForPortListening` ordering + the fail-closed model.
+- SHA256 `ab6500bdcef3b2a563972617b4e4c60725d830391840896585ecd85ff64f71bd`.
+- Placed at `SlipstreamExePath` (`%ProgramData%\VPNRouter\slipstream\bin\slipstream-client.exe`).
+- **Distribution note (slice 5):** only non-OS DLL dep is `VCRUNTIME140.dll` (the
+  `api-ms-win-crt-*` are UCRT, always on Win10/11). Clean machines may lack it → either
+  bundle the ~120 KB DLL beside the exe, or rebuild fully static
+  (`RUSTFLAGS=-C target-feature=+crt-static` + `x64-windows-static` OpenSSL).
+
+**Still pending — full tunnel e2e:** needs a real `dns-tunnel://` profile (live domain +
+НСДИ resolvers + the prod server's leaf.pem). The local leg (build → spawn → bind the port
+config-gen targets) is proven; the over-DNS leg can only be exercised against the deployed
+slipstream server.
