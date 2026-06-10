@@ -32,20 +32,31 @@ app traffic ──TUN──▶ sing-box ──VLESS outbound──▶ 127.0.0.1:
 2. **Activation = manual only.** User picks the dns-tunnel server/link like any
    server. No auto-failover wiring in MVP (that's a phase-2 tie-in with
    AutoFailover's "no candidate servers left" path).
-3. **Distribution = GitHub release (pull-on-demand)**, mirroring TgProxy/Zapret.
-   ⚠ **OPEN: repo + tag + asset names** — fill `SlipstreamUpdater.RepoPublic`
-   const + asset-name convention once the user names the release. Everything
-   else is independent of this; `SlipstreamUpdater` is the only blocked file.
+3. **Binary distribution (REVISED 2026-06-10 per user):** there is NO pre-built
+   .exe and no pinned fork. Upstream `github.com/Mygod/slipstream-rust`
+   (Apache-2.0) builds from source (Rust + picoquic via
+   `scripts/build_picoquic_windows.ps1` + `cargo build --release -p
+   slipstream-client`, ≥2 GB RAM). **MVP: build the .exe ourselves and place it
+   at `SlipstreamExePath`.** A pinned cross-platform release under a single
+   `const {repo,tag,asset}` comes later → **`SlipstreamUpdater` (slice 5) is
+   deferred, not blocking.** If the binary is absent, `SlipstreamManager` throws
+   a clear "build/install slipstream-client" error.
 
-## Open clarification — cert vs fingerprint
+## Cert handling — RESOLVED (user, 2026-06-10)
 
-The `dns-tunnel://` profile carries `fingerprint` (sha256 of leaf), but the CLI
-wants `--cert <leaf.pem>` (full PEM). A hash can't reconstruct a PEM. MVP
-assumption: **the leaf.pem is a server property (same for all users) and ships
-in the release bundle** alongside the binary, written to `SlipstreamCertPath`;
-the per-user `fingerprint` is a **pin** the manager verifies against the bundled
-PEM's sha256 before launch (refuse on mismatch). Confirm slipstream-client has a
-pin mode OR that the leaf ships with the binary.
+slipstream-client has `--cert <leaf.pem>` (full PEM); there is **NO `--pin
+<sha256>` flag** — the client verifies the server-presented leaf against the
+PEM. Decision: **the full leaf.pem lives IN THE PROFILE** (the `dns-tunnel://`
+payload), NOT bundled with the binary and NOT reduced to a fingerprint-pin.
+Rationale: self-contained — scales to multi-server / cert rotation with no
+client rebuild.
+- `VlessServerEntry.DnsLeafCertPem` carries the full PEM (load-bearing).
+- `SlipstreamManager` writes that PEM to `AppPaths.SlipstreamActiveCertPath` at
+  launch and passes `--cert <that path>`. Cleaned on Stop. (The leaf is a
+  *public* server cert — not a secret — so on-disk write is fine.)
+- `DnsLeafFingerprint` stays optional in the link for display + an integrity
+  cross-check (if present, `SlipstreamManager` verifies sha256(PEM)==fingerprint
+  and refuses on mismatch — catches a tampered/corrupt link).
 
 ## Local port — MVP simplification
 

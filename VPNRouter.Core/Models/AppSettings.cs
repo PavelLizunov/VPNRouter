@@ -1029,9 +1029,24 @@ public class VlessServerEntry
     public List<string> DnsResolvers { get; set; } = new();
 
     /// <summary>
-    /// dns-tunnel: sha256 of the server leaf cert (hex). Verified as a pin
-    /// against the bundled <c>leaf.pem</c> before slipstream-client launch.
-    /// Empty for other protocols.
+    /// dns-tunnel: the full server leaf certificate (PEM, with BEGIN/END
+    /// markers). Load-bearing — slipstream-client verifies the server-presented
+    /// leaf against this via <c>--cert</c>. Carried in the profile (self-contained,
+    /// supports multi-server / rotation without rebuilding the client) rather than
+    /// bundled with the binary. SlipstreamManager writes it to
+    /// <see cref="AppPaths.SlipstreamActiveCertPath"/> at launch. A leaf cert is
+    /// public material (the server presents it in every TLS handshake), so storing
+    /// it in the profile / on disk is not a secret leak. Empty for other protocols.
+    /// </summary>
+    [YamlMember(Alias = "dns_leaf_cert")]
+    public string DnsLeafCertPem { get; set; } = string.Empty;
+
+    /// <summary>
+    /// dns-tunnel: OPTIONAL sha256 of the leaf cert (hex), for display + an
+    /// integrity cross-check against <see cref="DnsLeafCertPem"/>. Not a pin
+    /// (slipstream-client has no <c>--pin</c>); when present, SlipstreamManager
+    /// verifies <c>sha256(PEM) == fingerprint</c> and refuses on mismatch. Empty
+    /// for other protocols / when not supplied.
     /// </summary>
     [YamlMember(Alias = "dns_leaf_fingerprint")]
     public string DnsLeafFingerprint { get; set; } = string.Empty;

@@ -16,6 +16,15 @@ public class ServerUriParserDnsTunnelTests
 {
     private const string SampleUuid = "11111111-1111-1111-1111-111111111111";
 
+    // Leaf PEM as it appears INSIDE the JSON payload (newlines escaped \n per
+    // JSON spec) and the same after JSON decoding (real newlines). Fake content
+    // — the parser only checks for the BEGIN CERTIFICATE marker, not X.509.
+    private const string PemInJson =
+        "-----BEGIN CERTIFICATE-----\\nMIIBfakeLineOne\\nMIIBfakeLineTwo\\n-----END CERTIFICATE-----\\n";
+    // Parser .Trim()s surrounding whitespace, so the trailing newline is dropped.
+    private static readonly string PemDecoded =
+        "-----BEGIN CERTIFICATE-----\nMIIBfakeLineOne\nMIIBfakeLineTwo\n-----END CERTIFICATE-----";
+
     private static string B64Url(string json)
     {
         var b = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
@@ -29,6 +38,7 @@ public class ServerUriParserDnsTunnelTests
         "{\"domain\":\"tunnel.example.org\"," +
         "\"resolvers\":[\"195.208.4.1:53\",\"195.208.5.1:53\"]," +
         "\"fingerprint\":\"deadbeef\"," +
+        "\"cert\":\"" + PemInJson + "\"," +
         "\"uuid\":\"" + SampleUuid + "\"}";
 
     [Fact]
@@ -42,6 +52,7 @@ public class ServerUriParserDnsTunnelTests
         Assert.Equal("tunnel.example.org", e.Server); // identity mirror
         Assert.Equal(SampleUuid, e.Uuid);
         Assert.Equal("deadbeef", e.DnsLeafFingerprint);
+        Assert.Equal(PemDecoded, e.DnsLeafCertPem); // full PEM, newlines decoded
         Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, e.DnsResolvers);
     }
 
@@ -86,9 +97,29 @@ public class ServerUriParserDnsTunnelTests
     [Fact]
     public void Parse_FingerprintOptional_DefaultsEmpty()
     {
-        var json = "{\"domain\":\"t.org\",\"resolvers\":[\"195.208.4.1:53\"],\"uuid\":\"" + SampleUuid + "\"}";
+        var json = "{\"domain\":\"t.org\",\"resolvers\":[\"195.208.4.1:53\"]," +
+                   "\"cert\":\"" + PemInJson + "\",\"uuid\":\"" + SampleUuid + "\"}";
         var e = ServerUriParser.Parse(Link(json));
         Assert.Equal(string.Empty, e.DnsLeafFingerprint);
+        Assert.Equal(PemDecoded, e.DnsLeafCertPem); // cert still required + present
+    }
+
+    [Fact]
+    public void Parse_MissingCert_Throws()
+    {
+        // Valid domain/resolvers/uuid but no cert — the PEM is load-bearing.
+        var json = "{\"domain\":\"t.org\",\"resolvers\":[\"195.208.4.1:53\"],\"uuid\":\"" + SampleUuid + "\"}";
+        var ex = Assert.Throws<FormatException>(() => ServerUriParser.Parse(Link(json)));
+        Assert.Contains("cert", ex.Message);
+    }
+
+    [Fact]
+    public void Parse_CertNotPem_Throws()
+    {
+        var json = "{\"domain\":\"t.org\",\"resolvers\":[\"195.208.4.1:53\"]," +
+                   "\"cert\":\"hello-not-a-pem\",\"uuid\":\"" + SampleUuid + "\"}";
+        var ex = Assert.Throws<FormatException>(() => ServerUriParser.Parse(Link(json)));
+        Assert.Contains("PEM", ex.Message);
     }
 
     [Fact]

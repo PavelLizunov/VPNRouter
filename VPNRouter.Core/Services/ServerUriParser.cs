@@ -213,7 +213,7 @@ public static class ServerUriParser
         try { jsonBytes = DecodeBase64UrlBytes(body); }
         catch { throw new FormatException("dns-tunnel: payload is not valid base64url"); }
 
-        string domain = string.Empty, uuid = string.Empty, fingerprint = string.Empty;
+        string domain = string.Empty, uuid = string.Empty, fingerprint = string.Empty, cert = string.Empty;
         var resolvers = new List<string>();
         try
         {
@@ -228,6 +228,8 @@ public static class ServerUriParser
                 uuid = u.GetString() ?? string.Empty;
             if (root.TryGetProperty("fingerprint", out var f) && f.ValueKind == JsonValueKind.String)
                 fingerprint = f.GetString() ?? string.Empty;
+            if (root.TryGetProperty("cert", out var c) && c.ValueKind == JsonValueKind.String)
+                cert = c.GetString() ?? string.Empty;
             if (root.TryGetProperty("resolvers", out var r) && r.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in r.EnumerateArray())
@@ -250,6 +252,15 @@ public static class ServerUriParser
         if (string.IsNullOrWhiteSpace(uuid))
             throw new FormatException("dns-tunnel: missing 'uuid'");
 
+        // The leaf PEM is load-bearing: slipstream-client verifies the server
+        // against it via --cert. Required + must look like a PEM (full X.509
+        // validation is slipstream-client's job, not ours).
+        cert = cert.Trim();
+        if (cert.Length == 0)
+            throw new FormatException("dns-tunnel: missing 'cert' (server leaf PEM)");
+        if (!cert.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal))
+            throw new FormatException("dns-tunnel: 'cert' is not a PEM certificate (no BEGIN CERTIFICATE marker)");
+
         return new VlessServerEntry
         {
             Protocol = "dns-tunnel",
@@ -257,6 +268,7 @@ public static class ServerUriParser
             Server = domain,   // identity for dedup/display; outbound targets 127.0.0.1
             DnsDomain = domain,
             DnsResolvers = resolvers,
+            DnsLeafCertPem = cert,
             DnsLeafFingerprint = fingerprint,
             Uuid = uuid,
         };

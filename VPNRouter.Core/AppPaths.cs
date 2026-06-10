@@ -67,7 +67,11 @@ public static class AppPaths
     public static string SlipstreamBinDir => Path.Combine(SlipstreamDir, "bin");
     public static string SlipstreamExePath => Path.Combine(SlipstreamBinDir,
         OperatingSystem.IsWindows() ? "slipstream-client.exe" : "slipstream-client");
-    public static string SlipstreamCertPath => Path.Combine(SlipstreamDir, "leaf.pem");
+    // Active leaf cert (PEM) for the currently-selected dns-tunnel server. NOT a
+    // bundled asset — the PEM travels in the dns-tunnel:// profile and is written
+    // here by SlipstreamManager at launch, then passed to slipstream-client via
+    // --cert. Overwritten each launch, removed on Stop. (A leaf cert is public.)
+    public static string SlipstreamActiveCertPath => Path.Combine(SlipstreamDir, "active-leaf.pem");
     public static string SlipstreamVersionPath => Path.Combine(SlipstreamDir, "version.txt");
     public static string SlipstreamLogPath => Path.Combine(LogsDir, "slipstream.log");
 
