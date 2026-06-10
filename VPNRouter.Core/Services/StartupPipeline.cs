@@ -226,6 +226,15 @@ internal interface IStartupHost
     /// <summary>Store the lifecycle-owned SingBoxManager (Stop() disposes it).</summary>
     void SetSingBoxManager(SingBoxManager manager);
 
+    /// <summary>
+    /// dns-tunnel ONLY — bring up the slipstream transport sidecar before
+    /// sing-box, so the VLESS outbound (127.0.0.1:port) has a live local front.
+    /// Throws on failure (fail-closed: sing-box must never start over a dead
+    /// local port). The pipeline calls this strictly gated on the active server
+    /// protocol, so it never fires for any other server type.
+    /// </summary>
+    void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings);
+
     /// <summary>Store the lifecycle-owned firewall manager.</summary>
     void SetFirewallManager(IFirewallManager firewall);
 
@@ -433,6 +442,20 @@ internal sealed class StartupPipeline
             settings, profile, scanResult, ct);
 
         ct.ThrowIfCancellationRequested();
+
+        // Phase 6.5 (dns-tunnel ONLY) — bring up the slipstream transport before
+        // sing-box. STRICTLY gated on the active server protocol → zero effect on
+        // every other server type (the common path skips this entirely). The
+        // VLESS outbound generated in Phase 4 targets 127.0.0.1:<port>, so the
+        // local front must be live first. Fail-closed: a throw here aborts the
+        // start, so sing-box never launches over a dead local port.
+        var activeForTransport = settings.Vless?.GetActiveServers() ?? new List<VlessServerEntry>();
+        if (activeForTransport.Count > 0 &&
+            string.Equals(activeForTransport[0].Protocol, "dns-tunnel", StringComparison.OrdinalIgnoreCase))
+        {
+            _host.StartDnsTunnelTransport(activeForTransport[0], settings);
+            ct.ThrowIfCancellationRequested();
+        }
 
         // Phase 7 — StartSingBox + warmup + post-start probe.
         var pid = await StartSingBoxPhaseAsync(

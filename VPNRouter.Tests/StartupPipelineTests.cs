@@ -469,6 +469,9 @@ public sealed class StartupPipelineTests : IDisposable
         public void SetActiveProfile(Profile profile) => ActiveProfile = profile;
         public void SetScanResult(ScanResult result) => ScanResultRecorded = result;
         public void SetSingBoxManager(SingBoxManager manager) => SetSingBox = manager;
+        public VlessServerEntry? DnsTunnelTransportStarted { get; private set; }
+        public void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings)
+            => DnsTunnelTransportStarted = activeServer;
         public void SetFirewallManager(IFirewallManager firewall) => SetFirewall = firewall;
         public void SetProcessMonitor(IProcessMonitor etw) => SetEtw = etw;
         public void SetHealthMonitor(HealthMonitor monitor) => SetHealth = monitor;

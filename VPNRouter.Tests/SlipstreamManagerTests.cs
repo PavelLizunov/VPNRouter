@@ -202,6 +202,23 @@ public class SlipstreamManagerTests
     }
 
     [Fact]
+    public void IsPortListening_TrueWhenBound_FalseWhenClosed()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        try
+        {
+            Assert.True(SlipstreamManager.IsPortListening(port));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+        Assert.False(SlipstreamManager.IsPortListening(port)); // nothing listening now
+    }
+
+    [Fact]
     public void Stop_KillsProcess_SuppressesExited_AndRemovesActiveCert()
     {
         EnsureDummyBinary();

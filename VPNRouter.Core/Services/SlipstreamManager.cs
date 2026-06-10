@@ -346,6 +346,38 @@ public class SlipstreamManager : IDisposable
         }
     }
 
+    /// <summary>True if something accepts a loopback TCP connection on
+    /// <paramref name="port"/> right now (i.e. it's bound + listening).</summary>
+    internal static bool IsPortListening(int port)
+    {
+        try
+        {
+            using var client = new TcpClient();
+            return client.ConnectAsync(IPAddress.Loopback, port).Wait(300) && client.Connected;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Poll until the local port is accepting connections (slipstream-client is
+    /// up AND bound), or the timeout elapses / the process dies. VpnEngine uses
+    /// this to fail closed before sing-box dials the local front.
+    /// </summary>
+    public bool WaitForPortListening(int timeoutMs)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (_handle == null || _handle.HasExited) return false; // process died
+            if (IsPortListening(LocalPort)) return true;
+            Thread.Sleep(100);
+        }
+        return false;
+    }
+
     /// <summary>Best-effort owner-process hint for a busy port (Windows netstat).</summary>
     internal static string? TryResolvePortOwner(int port)
     {

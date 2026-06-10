@@ -897,6 +897,7 @@ public sealed class VpnEngineLifecycleTests
         public void SetActiveProfile(Profile profile) { }
         public void SetScanResult(ScanResult result) { }
         public void SetSingBoxManager(SingBoxManager manager) { }
+        public void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings) { }
         public void SetFirewallManager(IFirewallManager firewall) { }
         public void SetProcessMonitor(IProcessMonitor etw) { }
         public void SetHealthMonitor(HealthMonitor monitor) { }

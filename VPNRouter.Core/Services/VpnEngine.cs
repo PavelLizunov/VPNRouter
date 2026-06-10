@@ -42,6 +42,12 @@ public class VpnEngine : IDisposable
     // queued probe doesn't fire failover after the user manually disconnects.
     private CancellationTokenSource? _probeCts;
 
+    // DNS-tunnel (slipstream) transport sidecar. Created lazily by the startup
+    // host ONLY when the active server is dns-tunnel; null for every other
+    // server type. Stopped in Stop() after sing-box. See
+    // plans/dns-tunnel-slipstream-integration-2026-06-10.md.
+    private SlipstreamManager? _slipstream;
+
     private bool _disposed;
 
     // ─── Public state ────────────────────────────────────────────────────────
@@ -410,6 +416,10 @@ public class VpnEngine : IDisposable
         try { _probeCts?.Cancel(); } catch { }
         try { _healthMonitor?.Stop(); } catch { }  // BR-6a: BEFORE sing-box
         try { _singBox?.Stop(); } catch { }
+        // DNS-tunnel: tear the transport down AFTER sing-box (the outbound that
+        // rode it is already gone). No-op for every non-dns-tunnel session
+        // (_slipstream stays null unless a dns-tunnel server was started).
+        try { _slipstream?.Stop(); } catch { }
 
         // Task #36-A (Phase 4) — routed through IWindowsDnsHardening so the
         // happy-path Stop test (Task #36-C) captures the Restore invocation
@@ -431,6 +441,7 @@ public class VpnEngine : IDisposable
         try { _firewall?.Dispose(); } catch { }
 
         _singBox = null;
+        _slipstream = null;
         _healthMonitor = null;
         _etw = null;
         _firewall = null;
@@ -936,6 +947,33 @@ public class VpnEngine : IDisposable
         public void SetScanResult(ScanResult result) => _engine._scanResult = result;
 
         public void SetSingBoxManager(SingBoxManager manager) => _engine._singBox = manager;
+
+        public void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings)
+        {
+            // The DNS-leak lockdown blocks the very DNS queries slipstream needs
+            // to reach the НСДИ resolvers (the tunnel's own transport). Warn, don't
+            // hard-fail — the user may have allow-rules. (Opt-in, off by default.)
+            if (settings.App?.DnsLeakLockdown == true)
+                _engine._logger?.Warning(
+                    "[VpnEngine] dns-tunnel active WITH DnsLeakLockdown — the lockdown may block " +
+                    "slipstream-client's DNS to the resolvers (the tunnel's own transport). " +
+                    "If the tunnel won't connect, disable DnsLeakLockdown.");
+
+            var slip = _engine._slipstream ??= new SlipstreamManager(_engine._logger);
+            _engine.OnStatus("Starting DNS-tunnel transport...");
+            slip.Start(activeServer, SlipstreamManager.DefaultLocalPort); // throws → fail-closed
+
+            // Fail-closed: confirm the local port is actually accepting before
+            // sing-box is told to dial it.
+            if (!slip.WaitForPortListening(5000))
+            {
+                slip.Stop();
+                throw new SlipstreamException(
+                    "slipstream-client did not start listening on 127.0.0.1:" +
+                    SlipstreamManager.DefaultLocalPort + " within 5s");
+            }
+            _engine.OnStatus("DNS-tunnel transport up (127.0.0.1:" + SlipstreamManager.DefaultLocalPort + ")");
+        }
 
         public void SetFirewallManager(IFirewallManager firewall) => _engine._firewall = firewall;
 
