@@ -1217,7 +1217,29 @@ public static class ConfigGenerator
             "shadowsocks" => BuildShadowsocksOutbound(entry, tag),
             "ss"          => BuildShadowsocksOutbound(entry, tag),
             "naive"       => BuildNaiveOutbound(entry, tag),
+            "dns-tunnel"  => BuildDnsTunnelOutbound(entry, tag),
             _             => BuildVlessOutboundCore(entry, tag),
+        };
+    }
+
+    /// <summary>
+    /// DNS-tunnel (slipstream) outbound. The VLESS traffic rides over the local
+    /// slipstream-client front (started separately by SlipstreamManager /
+    /// VpnEngine), so the outbound targets <c>127.0.0.1:&lt;localPort&gt;</c> with
+    /// the uuid set and <b>no TLS / Reality / flow / transport</b> — the tunnel
+    /// provides its own QUIC-TLS. The real server domain + resolvers + leaf cert
+    /// live in the dns-tunnel profile and are consumed by SlipstreamManager, not
+    /// here. No domain_resolver: the server is a literal loopback IP.
+    /// </summary>
+    private static SingBoxOutbound BuildDnsTunnelOutbound(VlessServerEntry entry, string tag)
+    {
+        return new SingBoxOutbound
+        {
+            Type       = "vless",
+            Tag        = tag,
+            Server     = "127.0.0.1",
+            ServerPort = SlipstreamManager.DefaultLocalPort,
+            Uuid       = entry.Uuid,
         };
     }
 
