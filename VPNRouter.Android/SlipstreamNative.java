@@ -44,12 +44,14 @@ public final class SlipstreamNative {
      * Start the DNS tunnel. Returns true if the worker thread spawned; the
      * tunnel comes up asynchronously, so poll 127.0.0.1:port for listening.
      *
-     * @param certPem   the server leaf certificate PEM (from the dns-tunnel:// profile)
+     * @param certPath  filesystem path to the server leaf certificate PEM, written
+     *                  by the caller (ClientConfig.cert is a path the client reads,
+     *                  not inline PEM)
      * @param domain    the tunnel domain (e.g. t.example.org)
      * @param port      local TCP port for sing-box's VLESS outbound to dial (e.g. 7001)
      * @param resolvers recursive resolvers as "ip:port" (e.g. 195.208.4.1:53)
      */
-    public static native boolean nativeStart(String certPem, String domain, int port, String[] resolvers);
+    public static native boolean nativeStart(String certPath, String domain, int port, String[] resolvers);
 
     /** Stop and tear down the tunnel. Idempotent. */
     public static native void nativeStop();

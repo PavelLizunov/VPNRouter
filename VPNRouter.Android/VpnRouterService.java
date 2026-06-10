@@ -674,10 +674,24 @@ public final class VpnRouterService extends VpnService {
         }
         String[] resolvers = pendingDnsTunnelResolvers != null
                 ? pendingDnsTunnelResolvers : new String[0];
+        // The Slipstream client's ClientConfig.cert is a FILE PATH (it does
+        // fs::read on it for the leaf-cert pin) — NOT the PEM text. Desktop's
+        // SlipstreamManager writes the PEM to disk and passes the path; mirror
+        // that here. Passing the raw PEM made run_client fail
+        // "Failed to read cert <PEM>: No such file or directory".
+        String certPath = "";
+        if (pendingDnsTunnelCert != null && !pendingDnsTunnelCert.isEmpty()) {
+            java.io.File certFile = new java.io.File(getFilesDir(), "slipstream-cert.pem");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(certFile)) {
+                fos.write(pendingDnsTunnelCert.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            certPath = certFile.getAbsolutePath();
+            Log.i(LOG_TAG, "dns-tunnel: wrote leaf cert to " + certPath);
+        }
         Log.i(LOG_TAG, "dns-tunnel: starting Slipstream front on 127.0.0.1:" + port
                 + " (domain=" + pendingDnsTunnelDomain + ", resolvers=" + resolvers.length + ")");
         boolean spawned = SlipstreamNative.nativeStart(
-                pendingDnsTunnelCert != null ? pendingDnsTunnelCert : "",
+                certPath,
                 pendingDnsTunnelDomain,
                 port,
                 resolvers);
@@ -696,27 +710,45 @@ public final class VpnRouterService extends VpnService {
         Log.i(LOG_TAG, "dns-tunnel: Slipstream front is listening on 127.0.0.1:" + port);
     }
 
-    /** Poll 127.0.0.1:port for a connectable listener up to timeoutMs. */
+    /**
+     * Poll 127.0.0.1:port for a connectable listener up to timeoutMs. The TCP
+     * connect MUST run off the main thread — startTunnel runs on the service's
+     * main thread, where a blocking socket connect throws
+     * NetworkOnMainThreadException (StrictMode). Doing it inline made every
+     * probe "fail" even though the Slipstream front was listening the whole
+     * time, so the front was always torn down by the fail-closed timeout.
+     */
     private boolean waitForLocalPort(int port, long timeoutMs) {
-        long deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs;
-        while (android.os.SystemClock.elapsedRealtime() < deadline) {
-            java.net.Socket s = new java.net.Socket();
-            try {
-                s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 500);
-                return true;
-            } catch (Exception ignored) {
-                // front not listening yet
-            } finally {
-                try { s.close(); } catch (Exception ignored) { }
+        final java.util.concurrent.atomic.AtomicBoolean ok =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        Thread probe = new Thread(() -> {
+            long deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs;
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                java.net.Socket s = new java.net.Socket();
+                try {
+                    s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 500);
+                    ok.set(true);
+                    return;
+                } catch (Exception ignored) {
+                    // front not listening yet
+                } finally {
+                    try { s.close(); } catch (Exception ignored) { }
+                }
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
-            try {
-                Thread.sleep(200);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
+        }, "slipstream-portcheck");
+        probe.start();
+        try {
+            probe.join(timeoutMs + 2000);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
-        return false;
+        return ok.get();
     }
 
     /** Tear down the Slipstream client if it was started. Idempotent. */
