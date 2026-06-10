@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json;
 using System.Web;
 using VPNRouter.Core.Models;
 
@@ -49,6 +50,14 @@ public static class ServerUriParser
     public static bool NaiveRuntimeAvailable { get; internal set; } =
         OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
 
+    /// <summary>
+    /// dns-tunnel (slipstream) needs the native slipstream-client sidecar, which
+    /// exists for Windows + Linux only (Rust/picoquic). macOS / Android refuse the
+    /// scheme at intake so it can never reach config-gen. Settable for tests.
+    /// </summary>
+    public static bool SlipstreamRuntimeAvailable { get; internal set; } =
+        OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+
     /// <summary>Parse any supported share-link URI. Throws <see cref="FormatException"/> on unsupported scheme or malformed input.</summary>
     /// <remarks>
     /// v2.32.3: VLESS goes through <see cref="VlessUriParser.Parse"/> which
@@ -88,8 +97,18 @@ public static class ServerUriParser
                     "This platform can't use naive servers — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
             entry = ParseNaive(uri);
         }
+        else if (uri.StartsWith("dns-tunnel://", StringComparison.OrdinalIgnoreCase))
+        {
+            // Platform gate (mirror naive): the slipstream-client sidecar is
+            // Windows/Linux only. Refuse at intake on macOS/Android.
+            if (!SlipstreamRuntimeAvailable)
+                throw new FormatException(
+                    "DNS-tunnel servers are supported only on Windows and Linux (they need the slipstream-client sidecar). " +
+                    "This platform can't use dns-tunnel servers — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
+            entry = ParseDnsTunnel(uri);
+        }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive://. Got: {Truncate(uri, 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel://. Got: {Truncate(uri, 40)}");
 
         // v2.32.3 input gate (2026-05-17) — placeholder fingerprints can
         // surface in any protocol's server IP. Reject before the entry
@@ -156,11 +175,103 @@ public static class ServerUriParser
             line.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase))
             return NaiveRuntimeAvailable;
 
+        // dns-tunnel (slipstream) — Win/Linux only, same intake gate as naive.
+        if (line.StartsWith("dns-tunnel://", StringComparison.OrdinalIgnoreCase))
+            return SlipstreamRuntimeAvailable;
+
         return line.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ─── DNS-tunnel (slipstream) ───────────────────────────────────────────
+    //
+    // Link: dns-tunnel://<base64url-JSON>[#name]
+    //   JSON = { "domain": "...", "resolvers": ["195.208.4.1:53", ...],
+    //            "fingerprint": "<sha256 leaf hex>", "uuid": "<per-user uuid>" }
+    // The VLESS uuid is reused as-is. The outbound is later generated against
+    // 127.0.0.1:<localPort> (slipstream-client front), so Server holds the
+    // domain only for dedup/display identity.
+    private static VlessServerEntry ParseDnsTunnel(string uri)
+    {
+        var body = uri.Substring("dns-tunnel://".Length);
+
+        string? fragName = null;
+        var hashIdx = body.IndexOf('#');
+        if (hashIdx >= 0)
+        {
+            fragName = Uri.UnescapeDataString(body.Substring(hashIdx + 1));
+            body = body.Substring(0, hashIdx);
+        }
+        body = body.Trim();
+        if (body.Length == 0)
+            throw new FormatException("dns-tunnel: empty base64url payload");
+
+        byte[] jsonBytes;
+        try { jsonBytes = DecodeBase64UrlBytes(body); }
+        catch { throw new FormatException("dns-tunnel: payload is not valid base64url"); }
+
+        string domain = string.Empty, uuid = string.Empty, fingerprint = string.Empty;
+        var resolvers = new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(jsonBytes);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new FormatException("dns-tunnel: payload JSON must be an object");
+
+            if (root.TryGetProperty("domain", out var d) && d.ValueKind == JsonValueKind.String)
+                domain = d.GetString() ?? string.Empty;
+            if (root.TryGetProperty("uuid", out var u) && u.ValueKind == JsonValueKind.String)
+                uuid = u.GetString() ?? string.Empty;
+            if (root.TryGetProperty("fingerprint", out var f) && f.ValueKind == JsonValueKind.String)
+                fingerprint = f.GetString() ?? string.Empty;
+            if (root.TryGetProperty("resolvers", out var r) && r.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in r.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var v = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(v)) resolvers.Add(v!.Trim());
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            throw new FormatException("dns-tunnel: payload is not valid JSON");
+        }
+
+        if (string.IsNullOrWhiteSpace(domain))
+            throw new FormatException("dns-tunnel: missing 'domain'");
+        if (resolvers.Count == 0)
+            throw new FormatException("dns-tunnel: missing 'resolvers'");
+        if (string.IsNullOrWhiteSpace(uuid))
+            throw new FormatException("dns-tunnel: missing 'uuid'");
+
+        return new VlessServerEntry
+        {
+            Protocol = "dns-tunnel",
+            Name = string.IsNullOrWhiteSpace(fragName) ? domain : fragName!,
+            Server = domain,   // identity for dedup/display; outbound targets 127.0.0.1
+            DnsDomain = domain,
+            DnsResolvers = resolvers,
+            DnsLeafFingerprint = fingerprint,
+            Uuid = uuid,
+        };
+    }
+
+    /// <summary>base64url (RFC 4648 §5, <c>-_</c>, optional padding) → bytes.</summary>
+    private static byte[] DecodeBase64UrlBytes(string s)
+    {
+        s = s.Replace('-', '+').Replace('_', '/');
+        switch (s.Length % 4)
+        {
+            case 2: s += "=="; break;
+            case 3: s += "=";  break;
+        }
+        return Convert.FromBase64String(s);
     }
 
     // ─── Hysteria2 ─────────────────────────────────────────────────────────

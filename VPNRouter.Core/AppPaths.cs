@@ -59,6 +59,18 @@ public static class AppPaths
     public static string WgturnVariantPath => Path.Combine(WgturnDir, "variant.txt");
     public static string WgturnCliLogPath => Path.Combine(LogsDir, "wgturn-cli.log");
 
+    // DNS-tunnel (slipstream) — last-resort transport sidecar. Dedicated dir
+    // parallel to wgturn/, zapret/, tg-proxy/. Binary + leaf cert pulled from a
+    // GitHub release on demand (SlipstreamUpdater). See
+    // plans/dns-tunnel-slipstream-integration-2026-06-10.md.
+    public static string SlipstreamDir => Path.Combine(DataDir, "slipstream");
+    public static string SlipstreamBinDir => Path.Combine(SlipstreamDir, "bin");
+    public static string SlipstreamExePath => Path.Combine(SlipstreamBinDir,
+        OperatingSystem.IsWindows() ? "slipstream-client.exe" : "slipstream-client");
+    public static string SlipstreamCertPath => Path.Combine(SlipstreamDir, "leaf.pem");
+    public static string SlipstreamVersionPath => Path.Combine(SlipstreamDir, "version.txt");
+    public static string SlipstreamLogPath => Path.Combine(LogsDir, "slipstream.log");
+
     /// <summary>Ensure all required directories exist.</summary>
     public static void EnsureDirectories()
     {

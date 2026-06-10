@@ -886,6 +886,11 @@ public class VlessServerEntry
     /// <item><c>tuic</c> — TUIC v5</item>
     /// <item><c>shadowsocks</c> — Shadowsocks 2022 (with optional ShadowTLS v3 plugin)</item>
     /// <item><c>naive</c> — NaiveProxy (HTTP/2 or HTTP/3 via Cronet; Windows + Linux only)</item>
+    /// <item><c>dns-tunnel</c> — VLESS tunnelled over DNS via a local slipstream-client
+    /// sidecar (last-resort transport; Windows + Linux only). Carries
+    /// <see cref="DnsDomain"/> / <see cref="DnsResolvers"/> / <see cref="DnsLeafFingerprint"/>
+    /// + reuses <see cref="Uuid"/>; the VLESS outbound is generated against
+    /// 127.0.0.1:&lt;localPort&gt; with no TLS (the tunnel does its own QUIC-TLS).</item>
     /// </list>
     /// New entries default to "vless" so legacy settings.yaml without
     /// this field stays valid.
@@ -1001,6 +1006,35 @@ public class VlessServerEntry
     /// </summary>
     [YamlMember(Alias = "naive_quic")]
     public bool NaiveQuic { get; set; }
+
+    // ── DNS-tunnel (slipstream) fields ──────────────────────────────────────
+    // Populated only when Protocol == "dns-tunnel". Parsed from a
+    // dns-tunnel:// share-link (base64url-JSON payload). See
+    // plans/dns-tunnel-slipstream-integration-2026-06-10.md.
+
+    /// <summary>
+    /// dns-tunnel: the tunnel domain (slipstream-client <c>-d</c>). Also mirrored
+    /// into <see cref="Server"/> for dedup/display identity. Empty for other
+    /// protocols.
+    /// </summary>
+    [YamlMember(Alias = "dns_domain")]
+    public string DnsDomain { get; set; } = string.Empty;
+
+    /// <summary>
+    /// dns-tunnel: НСДИ resolver endpoints (<c>ip:port</c>, e.g.
+    /// <c>195.208.4.1:53</c>) — slipstream-client repeats <c>-r</c> for each
+    /// (multipath). Empty for other protocols.
+    /// </summary>
+    [YamlMember(Alias = "dns_resolvers")]
+    public List<string> DnsResolvers { get; set; } = new();
+
+    /// <summary>
+    /// dns-tunnel: sha256 of the server leaf cert (hex). Verified as a pin
+    /// against the bundled <c>leaf.pem</c> before slipstream-client launch.
+    /// Empty for other protocols.
+    /// </summary>
+    [YamlMember(Alias = "dns_leaf_fingerprint")]
+    public string DnsLeafFingerprint { get; set; } = string.Empty;
 }
 
 /// <summary>VLESS Reality settings (replaces TLS)</summary>
