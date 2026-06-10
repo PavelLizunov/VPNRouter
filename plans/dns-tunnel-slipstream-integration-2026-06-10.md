@@ -150,7 +150,38 @@ Result: `target\release\slipstream-client.exe` (6.5 MB, cargo stage 53s).
   bundle the ~120 KB DLL beside the exe, or rebuild fully static
   (`RUSTFLAGS=-C target-feature=+crt-static` + `x64-windows-static` OpenSSL).
 
-**Still pending — full tunnel e2e:** needs a real `dns-tunnel://` profile (live domain +
-НСДИ resolvers + the prod server's leaf.pem). The local leg (build → spawn → bind the port
-config-gen targets) is proven; the over-DNS leg can only be exercised against the deployed
-slipstream server.
+## Full tunnel e2e — attempted against real link (2026-06-10)
+
+User supplied a real link: `dns-tunnel://<b64>#main-brat` for domain `t.ninitux.top`,
+uuid `5550051c-…-b918118f86ef`, resolvers `195.208.4.1:53` + `195.208.5.1:53`.
+
+**Parser bug found + fixed (commit 6032875):** the production server emits SHORT keys
+`{cert,d,fp,r,uuid,v}`, but `ParseDnsTunnel` only read the long spellings
+(`domain/resolvers/fingerprint`) → threw "missing domain" on EVERY real link. Now reads
+short keys first, long as fallback, ignores `v`. `fp` verified == sha256(leaf DER);
+`NormalizeHex` already handles the `AA:BB:CC` form. Pinned by `Parse_RealProductionLink_Parses`
++ `Parse_ShortKeys_ProductionSchema_…` (27 dns-tunnel tests green).
+
+**Headless e2e (no TUN/admin): client + integration PROVEN, tunnel blocked server-side.**
+- НСДИ resolvers reachable (both answer google.com/example.com).
+- slipstream-client (our build) spawns, binds 7001, and **sends Recursive-mode DNS tunnel
+  queries** to `195.208.4.1:53` (trace: `mode=Recursive send_pkts+=6 send_bytes+=846`).
+- sing-box `mixed:10808 → vless → 127.0.0.1:7001` config validates + routes correctly
+  (`outbound/vless[proxy]: outbound connection to api.ipify.org:80`).
+- BUT the tunnel never establishes (`streams=0` forever); curl through it times out (exit 28).
+- **Root cause (server-side DNS):** `t.ninitux.top` has **NO NS delegation**. NXDOMAIN from
+  Cloudflare (its parent NS), 1.1.1.1, and 8.8.8.8; a `<x>.t.ninitux.top` query to the НСДИ
+  resolver returns SERVFAIL. The resolver answers normal domains fine, so it's healthy — the
+  recursive path just has nothing to delegate to. `ninitux.top` is on Cloudflare
+  (colin/eloise.ns.cloudflare.com) but no `t` sub-zone is carved out to the slipstream server.
+
+**To finish the e2e, server side needs ONE of:**
+1. **NS delegation (the censorship-resistant path):** in Cloudflare DNS for `ninitux.top`, add
+   `t  NS  <ns-host>` + glue `<ns-host>  A  <slipstream-server-public-IP>`, so the НСДИ
+   resolver can reach the slipstream server as authoritative for `t.ninitux.top`.
+2. **Direct `--authoritative <server-ip>:53`** (bypasses delegation): proves tunnel+integration
+   but sends DNS straight to the server IP (DPI can see/block it) — only a debug fallback, not
+   the production path. Needs the server's public IP (not in DNS; user has it).
+
+The client + VPNRouter integration are correct as far as testable without a working
+server-side delegation; the remaining failure is purely the deployed server's DNS setup.
