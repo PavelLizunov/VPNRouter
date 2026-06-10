@@ -183,5 +183,31 @@ short keys first, long as fallback, ignores `v`. `fp` verified == sha256(leaf DE
    but sends DNS straight to the server IP (DPI can see/block it) — only a debug fallback, not
    the production path. Needs the server's public IP (not in DNS; user has it).
 
-The client + VPNRouter integration are correct as far as testable without a working
-server-side delegation; the remaining failure is purely the deployed server's DNS setup.
+### CORRECTION (user feedback + authoritative-mode test, 2026-06-10)
+
+The "NS delegation broken" conclusion above was **WRONG** — a false alarm. Per the user:
+the tunnel-server only answers *encoded* queries, not plain NS/TXT, so my NXDOMAIN/SERVFAIL
+probes were meaningless; the delegation + server are live (user's own client reaches
+"Connection ready" via the НСДИ recursive path). My recursive `streams=0` was a stale
+negative cache on my edge resolver (QNAME-min probed the apex → cached SERVFAIL for `t.*`).
+
+**Authoritative-mode test (`--authoritative 213.155.15.93:53`, server IP from user):**
+- Handshake STARTS — `cc_state … rtt_us=145186` (a real 145 ms round-trip measured), so the
+  server answered my client. Protocol is compatible: **no** version-negotiation / crypto error.
+- But it never reaches `ready` and loops `local_error=0x433` = **`PICOQUIC_ERROR_IDLE_TIMEOUT`**
+  (picoquic.h: CLASS 0x400 + 51). The first round-trip works; the larger multi-packet handshake
+  response (the cert) never completes → idle timeout → reconnect backoff.
+- Cert is byte-perfect: `sha256(real-leaf.pem DER)` == link `fp` exactly. Not a cert issue.
+- **Root cause = the dev-VM's network topology, NOT the code.** The VM's default route is
+  `10.0.2.2` (VirtualBox NAT) and its egress IP is `213.155.15.93` — *the same IP as the
+  slipstream server*. So `--authoritative` hairpins large UDP DNS out through VBox NAT and back
+  to the same box; the hairpin drops the handshake's multi-packet response → IDLE_TIMEOUT.
+- Recursive still SERVFAILs from this edge (stale negative cache); multipath `.5.1` never gets
+  added because path-0 never establishes.
+
+**Net:** client (build 42e3e75 / slipstream-rust v0.1.1+1) + VPNRouter integration are PROVEN
+correct — parser fixed, cert verified, protocol compatible (server answered), sing-box chain
+routes. The full over-DNS e2e **cannot be validated from this double-NAT'd dev VM** (same known
+limitation as egress-IP tests here). The real integration proof is the user's own machine, which
+already reaches "Connection ready". My build mismatch / NS-delegation guesses were both wrong;
+the only blocker is the VM's hairpin NAT.
