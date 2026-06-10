@@ -369,6 +369,14 @@ public partial class ServerViewModel : ViewModelBase
                     parts.Add(HasUdpSibling ? "naive + hy2" : "naive");
                     break;
 
+                case "dns-tunnel":
+                    // DNS-tunnel (slipstream) — VLESS tunnelled over DNS. The
+                    // generated outbound is plain VLESS to a local port, but the
+                    // subtitle must show the real transport so users can tell this
+                    // last-resort server apart from a normal one.
+                    parts.Add("dns-tunnel");
+                    break;
+
                 default:
                     // VLESS — keep original "transport + security" format
                     var transport = _originalEntry?.Transport?.Type;

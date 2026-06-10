@@ -48,7 +48,10 @@ public static class SimpleInputDetector
             // apply time so the parser doesn't blame an "invalid link" on macOS).
             trimmed.StartsWith("naive://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase))
+            trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase) ||
+            // dns-tunnel (slipstream) last-resort transport (Win/Linux runtime;
+            // platform-gated at apply time, like naive).
+            trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase))
             return SmpInputKind.ServerUri;
 
         if (trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase) ||
