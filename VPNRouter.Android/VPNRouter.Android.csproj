@@ -237,6 +237,12 @@
         Include="$(MSBuildThisFileDirectory)..\tools\slipstream-android-cache\arm64-v8a\libslipstream_jni.so">
       <Abi>arm64-v8a</Abi>
     </AndroidNativeLibrary>
+    <!-- armeabi-v7a + x86_64 libslipstream_jni.so are built + cached under
+         tools/slipstream-android-cache/{armeabi-v7a,x86_64}/ but intentionally
+         NOT bundled: libbox.aar (sing-box) ships arm64-v8a only, so an APK that
+         advertised those ABIs would install on 32-bit/x86 devices and then
+         crash on connect (no libbox there). Wire these in only once libbox.aar
+         is rebuilt multi-ABI. -->
   </ItemGroup>
 
 </Project>
