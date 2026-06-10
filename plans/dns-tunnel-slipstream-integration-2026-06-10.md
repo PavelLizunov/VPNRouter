@@ -100,8 +100,45 @@ status surfacing. Distribution: the GitHub release (repo TBD).
 2. SlipstreamManager + tests (FakeProcessRunner seam). ✅ DONE
 3. ConfigGenerator dns-tunnel outbound + sing-box-check test. ✅ DONE
 4. VpnEngine lifecycle coupling + LeakProtection awareness + tests. ✅ DONE
-5. SlipstreamUpdater (once repo named). ⏳ DEFERRED (no pinned release yet)
+5. Distribution. ✅ DONE — **bundle-in-installer** (not pull). See "Slice 5" below.
+   On-demand SlipstreamUpdater stays deferred (would pull from GitHub = blocked
+   exactly when slipstream is needed; later use a non-GitHub channel).
 6. App UI (link intake + badge + status). ✅ DONE
+
+## Slice 5 — distribution (2026-06-10): bundle-in-installer, static binary
+
+**Model decision (workflow-validated):** BUNDLE in the Windows installer (like
+sing-box), NOT on-demand pull. slipstream is a last-resort transport reached
+precisely when GitHub is blocked — pulling the binary from api.github.com at the
+moment of need is a circular dependency. wgturn's on-demand model (which was
+stripped for CI cross-platform parity) is the wrong precedent for a Windows-only
+censorship transport.
+
+**Static rebuild (user choice):** rebuilt slipstream-client.exe fully static
+(`RUSTFLAGS=-C target-feature=+crt-static` + OpenSSL `x64-windows-static` +
+picoquic/picotls `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DCMAKE_POLICY_DEFAULT_CMP0091=NEW`)
+so there is **NO VCRUNTIME140 / UCRT dependency** — verified via `dumpbin /imports`
+(only core OS DLLs: ws2_32/kernel32/ntdll/bcrypt/crypt32/advapi32). Removes the
+"forgot the DLL in the update ZIP" bug class entirely. New SHA256
+`26e9c496144cf18920d7bd5dc0940ed20d3f13097e6696d523407c5248ebfbd6` (6.7 MB),
+`--help` argv unchanged. Build recipe: `D:\build\do_build_static.ps1` +
+`-StaticCrt` switch added to `build_picoquic_windows.ps1`.
+
+**Changes:**
+- `AppPaths.cs`: `SlipstreamBundledExePath` (app/ source helper) + `SlipstreamBinDir`
+  added to `EnsureDirectories()`. SlipstreamExePath (ProgramData) stays canonical runtime.
+- `SlipstreamManager.EnsureBinaryProvisioned()`: copy-on-first-use bundled→runtime
+  (overwrite:false, never clobbers an updater-written copy), then fail-closed. Mirrors
+  `SingBoxManager.TryColocateCronet`. 5 SlipstreamManagerProvisioningTests pin it.
+- `build.ps1`: `-SlipstreamPath` param + bundle block after sing-box (override →
+  `tools\slipstream-cache\` → graceful-skip) → `app/`; + update-ZIP `_bootstrap/`
+  inclusion. No new release asset (14-asset count + verify-integrity stay green).
+- `packaging\windows\install.ps1`: Defender path exclusions (try/catch — Tamper
+  Protection silently no-ops) for InstallRoot + DataRoot. Interim until code-signing
+  (Task #132); unsigned DNS-tunneling exe is quarantine-prone.
+
+**Test ceiling on this VM:** binary-lands-in-ZIP + runtime-resolution + manager
+spawn+bind are testable; the full over-DNS tunnel is NOT (hairpin NAT — see below).
 
 All shipped inert/gated behind `Protocol == "dns-tunnel"` (strict equality) → zero
 effect on existing servers. 6 commits on `main`. Unit suites: ServerUriParserDnsTunnel

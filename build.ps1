@@ -50,6 +50,12 @@ param(
     # downloading upstream. Used for local testing of custom builds.
     # Empty string means "auto-download upstream $SingBoxVersion".
     [string]$SingBoxPath = "",
+    # Optional override: pre-built slipstream-client.exe (DNS-tunnel transport)
+    # to bundle. Empty = probe tools\slipstream-cache\slipstream-client.exe, else
+    # graceful-skip (dns-tunnel stays unavailable until the binary is built+placed).
+    # Built from source (Mygod/slipstream-rust) — no pinned upstream release, so
+    # no auto-download. Windows-only MVP.
+    [string]$SlipstreamPath = "",
     [switch]$Upload,
     [string]$GitHubRepo = "PavelLizunov/VPNRouter",
     # Build a local Android APK alongside the Windows artifacts. See
@@ -354,6 +360,33 @@ if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
     Write-Host "       Bundled upstream sing-box v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
 }
 
+# ── slipstream-client.exe — DNS-tunnel transport, BUNDLED (Windows-only MVP) ──
+# Unlike wgturn/zapret (on-demand pull), slipstream is BUNDLED because it's a
+# last-resort transport reached precisely when GitHub is blocked (circular dep:
+# can't pull the binary from GitHub at the moment you need it to reach GitHub).
+# Built from source locally (Mygod/slipstream-rust + picoquic), fully static /MT
+# so there is NO VCRUNTIME140 dependency. No pinned upstream release yet -> no
+# auto-download; graceful-skip if neither -SlipstreamPath nor the cache exists.
+Write-Host "[6b/9] Bundling slipstream-client.exe (DNS-tunnel)..." -ForegroundColor Yellow
+$slipStreamSrc = ""
+if ($SlipstreamPath -and (Test-Path $SlipstreamPath)) {
+    $slipStreamSrc = $SlipstreamPath
+} else {
+    $slipCache = Join-Path $Root "tools\slipstream-cache\slipstream-client.exe"
+    if (Test-Path $slipCache) { $slipStreamSrc = $slipCache }
+}
+if ($slipStreamSrc) {
+    Copy-Item $slipStreamSrc (Join-Path $DistDir "slipstream-client.exe") -Force
+    # Defensive: a dynamic build would need its sibling VCRUNTIME140.dll. The
+    # static build has none, so this normally copies nothing.
+    $slipVcr = Join-Path (Split-Path $slipStreamSrc -Parent) "VCRUNTIME140.dll"
+    if (Test-Path $slipVcr) { Copy-Item $slipVcr (Join-Path $DistDir "VCRUNTIME140.dll") -Force }
+    $slipSize = [math]::Round((Get-Item $slipStreamSrc).Length / 1MB, 1)
+    Write-Host "       Bundled slipstream-client ($slipSize MB) from $slipStreamSrc" -ForegroundColor Green
+} else {
+    Write-Host "       slipstream-client: NOT bundled (no -SlipstreamPath, no tools\slipstream-cache) - dns-tunnel unavailable until built+placed" -ForegroundColor Yellow
+}
+
 # ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──
 # Pre-r3 the build step here cloned PavelLizunov/wgturn-core and
 # cross-compiled wgturn-cli.exe into app/bin/. This caused:
@@ -510,6 +543,17 @@ if (Test-Path $cronetInDist) {
     Copy-Item $cronetInDist $BootstrapDir
     $updateFileCount++
     Write-Host "       libcronet.dll included in update (under _bootstrap/)" -ForegroundColor Gray
+}
+# slipstream-client.exe (DNS-tunnel) must travel in the update payload too, else
+# an auto-updated user loses the bundled transport (same class as libcronet).
+# (Static build -> no VCRUNTIME140.dll sibling; copy it only if a dynamic build left one.)
+$slipInDist = Join-Path $DistDir "slipstream-client.exe"
+if (Test-Path $slipInDist) {
+    Copy-Item $slipInDist $BootstrapDir
+    $updateFileCount++
+    Write-Host "       slipstream-client.exe included in update (under _bootstrap/)" -ForegroundColor Gray
+    $slipVcrInDist = Join-Path $DistDir "VCRUNTIME140.dll"
+    if (Test-Path $slipVcrInDist) { Copy-Item $slipVcrInDist $BootstrapDir; $updateFileCount++ }
 }
 # wgturn-cli: downloaded on demand (v2.32.1-r3+, see plans/wgturn-on-demand-download.md)
 # Zapret: downloaded on demand, not in update package

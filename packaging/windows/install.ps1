@@ -279,6 +279,20 @@ if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
 
 Ok "Installed $resolvedVersion to $InstallRoot"
 
+# == Windows Defender exclusions (interim, until code-signing — Task #132) =====
+# The DNS-tunnel sidecar (slipstream-client.exe) is unsigned and does DNS
+# tunnelling — a textbook exfiltration signature heuristic AV flags aggressively.
+# Exclude both the install dir and the runtime data dir so it isn't quarantined.
+# Tamper Protection on managed devices silently no-ops Add-MpPreference even when
+# elevated, so this is best-effort; the README documents manual exclusion too.
+try {
+    Add-MpPreference -ExclusionPath $InstallRoot -ErrorAction SilentlyContinue
+    Add-MpPreference -ExclusionPath $DataRoot    -ErrorAction SilentlyContinue
+    Ok "Defender exclusions added ($InstallRoot, $DataRoot)"
+} catch {
+    Warn "Could not add Defender exclusions (Tamper Protection may block this) - see README if AV quarantines a file"
+}
+
 # Clean up downloaded ZIP (cache in %TEMP% is fine to keep, but tidy)
 Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 

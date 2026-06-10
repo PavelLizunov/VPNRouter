@@ -112,11 +112,16 @@ public class SlipstreamManager : IDisposable
         if (string.IsNullOrWhiteSpace(entry.DnsLeafCertPem))
             throw new SlipstreamException("dns-tunnel server has no leaf certificate (PEM)");
 
-        // ── Binary present? (MVP: built from source / installed, no updater yet) ──
+        // ── Binary present? Promote the installer-bundled copy (app/) to the
+        //    runtime path on first use, then fail closed if still absent. ──
+        EnsureBinaryProvisioned(
+            AppPaths.SlipstreamExePath, AppPaths.SlipstreamBundledExePath,
+            AppPaths.SlipstreamBinDir, _logger);
         if (!File.Exists(AppPaths.SlipstreamExePath))
             throw new SlipstreamException(
                 $"slipstream-client not found at {AppPaths.SlipstreamExePath}. " +
-                "Build it from Mygod/slipstream-rust or install the slipstream bundle.");
+                "It ships bundled with the Windows installer; for a dev build, build it " +
+                "from Mygod/slipstream-rust and place it there. (DNS-tunnel is Windows/Linux only.)");
 
         // ── Optional leaf fingerprint integrity cross-check (hard-reject) ──
         if (!string.IsNullOrWhiteSpace(entry.DnsLeafFingerprint))
@@ -293,6 +298,34 @@ public class SlipstreamManager : IDisposable
         {
             _logger.Debug(ex, "[Slipstream] active cert cleanup failed");
         }
+    }
+
+    /// <summary>
+    /// Copy the installer-bundled slipstream-client (app/) to the runtime path
+    /// (<paramref name="targetExePath"/>) on first use, so a fresh install works
+    /// without an updater. No-op if the runtime copy already exists (never
+    /// clobbers a newer updater-written binary — <c>overwrite: false</c>) or if
+    /// nothing is bundled. Returns true if the runtime binary is present after.
+    /// Best-effort: a copy failure (e.g. non-elevated, unwritable ProgramData)
+    /// is logged and swallowed — the caller's File.Exists check is the real gate.
+    /// </summary>
+    internal static bool EnsureBinaryProvisioned(
+        string targetExePath, string? bundledExePath, string targetBinDir, ILogger? logger)
+    {
+        if (File.Exists(targetExePath)) return true;
+        if (string.IsNullOrEmpty(bundledExePath) || !File.Exists(bundledExePath)) return false;
+        try
+        {
+            Directory.CreateDirectory(targetBinDir);
+            File.Copy(bundledExePath, targetExePath, overwrite: false);
+            logger?.Information("[Slipstream] Promoted bundled binary {Src} -> {Dst}",
+                bundledExePath, targetExePath);
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex, "[Slipstream] Could not promote bundled binary to {Dst}", targetExePath);
+        }
+        return File.Exists(targetExePath); // a concurrent Start() may have won the copy
     }
 
     /// <summary>sha256 of the leaf DER (the standard cert fingerprint), hex

@@ -60,13 +60,31 @@ public static class AppPaths
     public static string WgturnCliLogPath => Path.Combine(LogsDir, "wgturn-cli.log");
 
     // DNS-tunnel (slipstream) — last-resort transport sidecar. Dedicated dir
-    // parallel to wgturn/, zapret/, tg-proxy/. Binary + leaf cert pulled from a
-    // GitHub release on demand (SlipstreamUpdater). See
-    // plans/dns-tunnel-slipstream-integration-2026-06-10.md.
+    // parallel to wgturn/, zapret/, tg-proxy/. The binary is BUNDLED in the
+    // installer (app/, like sing-box) — NOT pulled from GitHub, because
+    // slipstream is reached precisely when GitHub is blocked (circular dep).
+    // SlipstreamManager promotes the bundled copy to SlipstreamExePath on first
+    // use. SlipstreamUpdater (on-demand refresh via a non-GitHub channel) is a
+    // deferred follow-up. See plans/dns-tunnel-slipstream-integration-2026-06-10.md.
     public static string SlipstreamDir => Path.Combine(DataDir, "slipstream");
     public static string SlipstreamBinDir => Path.Combine(SlipstreamDir, "bin");
     public static string SlipstreamExePath => Path.Combine(SlipstreamBinDir,
         OperatingSystem.IsWindows() ? "slipstream-client.exe" : "slipstream-client");
+    /// <summary>The slipstream-client binary as shipped inside the install
+    /// payload (app/ root = <see cref="AppContext.BaseDirectory"/>), or null if
+    /// not bundled. This is the SOURCE; <see cref="SlipstreamExePath"/> stays the
+    /// canonical RUNTIME location (matches sing-box: bundled in app/, executed
+    /// from a settings/data path). Mirrors how SingBoxManager co-locates
+    /// libcronet from AppContext.BaseDirectory.</summary>
+    public static string? SlipstreamBundledExePath
+    {
+        get
+        {
+            var p = Path.Combine(AppContext.BaseDirectory,
+                OperatingSystem.IsWindows() ? "slipstream-client.exe" : "slipstream-client");
+            return File.Exists(p) ? p : null;
+        }
+    }
     // Active leaf cert (PEM) for the currently-selected dns-tunnel server. NOT a
     // bundled asset — the PEM travels in the dns-tunnel:// profile and is written
     // here by SlipstreamManager at launch, then passed to slipstream-client via
@@ -83,6 +101,7 @@ public static class AppPaths
         Directory.CreateDirectory(CacheDir);
         Directory.CreateDirectory(BinDir);
         Directory.CreateDirectory(WgturnBinDir);
+        Directory.CreateDirectory(SlipstreamBinDir);
         Directory.CreateDirectory(ProfilesDir);
         Directory.CreateDirectory(GeoDir);
     }
