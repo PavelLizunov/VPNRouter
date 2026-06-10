@@ -175,4 +175,55 @@ public class ServerUriParserDnsTunnelTests
             ServerUriParser.SlipstreamRuntimeAvailable = saved;
         }
     }
+
+    // ── Production server schema: SHORT keys (d/r/fp), the authoritative form ──
+
+    private const string ShortKeyJson =
+        "{\"cert\":\"" + PemInJson + "\"," +
+        "\"d\":\"tunnel.example.org\"," +
+        "\"fp\":\"DE:AD:BE:EF\"," +
+        "\"r\":[\"195.208.4.1:53\",\"195.208.5.1:53\"]," +
+        "\"uuid\":\"" + SampleUuid + "\",\"v\":2}";
+
+    [Fact]
+    public void Parse_ShortKeys_ProductionSchema_PopulatesAllFields()
+    {
+        // The real slipstream server emits {cert,d,fp,r,uuid,v}. The colon-
+        // separated fingerprint is carried verbatim (SlipstreamManager normalises
+        // it before the sha256 cross-check). "v" is ignored.
+        var e = ServerUriParser.Parse(Link(ShortKeyJson, "main-brat"));
+
+        Assert.Equal("dns-tunnel", e.Protocol);
+        Assert.Equal("main-brat", e.Name);
+        Assert.Equal("tunnel.example.org", e.DnsDomain);
+        Assert.Equal("tunnel.example.org", e.Server);
+        Assert.Equal(SampleUuid, e.Uuid);
+        Assert.Equal("DE:AD:BE:EF", e.DnsLeafFingerprint);
+        Assert.Equal(PemDecoded, e.DnsLeafCertPem);
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, e.DnsResolvers);
+    }
+
+    // The exact production link (server "main-brat", domain t.ninitux.top). Pins
+    // that a real, deployed-server link parses — the field-name mismatch that
+    // would have rejected it (long-key parser vs short-key emitter) is the bug
+    // this regression locks. The leaf is a *public* server cert (safe to embed).
+    private const string RealProductionLink =
+        "dns-tunnel://eyJjZXJ0IjoiLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tXG5NSUlCS3pDQjBhQURBZ0VDQWhFQTByelEwNjBGOElWMnBOZUZDRy9LdWpBS0JnZ3Foa2pPUFFRREFqQVZNUk13XG5FUVlEVlFRRERBcHpiR2x3YzNSeVpXRnRNQ0lZRHpJd01qWXdOakE0TWpBMU5qQTRXaGdQTXpBeU5URXdNRGt5XG5NRFUyTURoYU1CVXhFekFSQmdOVkJBTU1Dbk5zYVhCemRISmxZVzB3V1RBVEJnY3Foa2pPUFFJQkJnZ3Foa2pPXG5QUU1CQndOQ0FBVGw1T09EcGVzc2dyY2JtMU90T3dlRmo0bHRsMFBkMTI0Q2l5cjVCRmxqTDJESGZ4R1ZMcHM3XG5ZazBaWGNhTTRpTk8wQWFMdEpUdXpvNXlHci83bUQ0Yk1Bb0dDQ3FHU000OUJBTUNBMGtBTUVZQ0lRRE9FM0V2XG5GUW5ueDZvcG5yZ2gvODB3ZDNlaE0vOXBtRFV2VmV2YVpGaGxyUUloQU5NQUx1eGZpZnBaUHltei9EM0tVYXYxXG5hMEVTd3pXOVVYb1RCcWFsYnZxclxuLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLSIsImQiOiJ0Lm5pbml0dXgudG9wIiwiZnAiOiI0NzoxRTo4Nzo4RjozRTo0ODpDODoxQzo1RjpCRjozMDoyRTpCODpBODozQTowNTo3MjowRDpCOTo3NzpBMjoxMTo4MTowOTpFNjpFNTpFRjo5MjpDNDo2Njo3Qjo5MiIsInIiOlsiMTk1LjIwOC40LjE6NTMiLCIxOTUuMjA4LjUuMTo1MyJdLCJ1dWlkIjoiNTU1MDA1MWMtMmIxMC00YzExLThkNzMtYjkxODExOGY4NmVmIiwidiI6Mn0#main-brat";
+
+    [Fact]
+    public void Parse_RealProductionLink_Parses()
+    {
+        var e = ServerUriParser.Parse(RealProductionLink);
+
+        Assert.Equal("dns-tunnel", e.Protocol);
+        Assert.Equal("main-brat", e.Name);
+        Assert.Equal("t.ninitux.top", e.DnsDomain);
+        Assert.Equal("5550051c-2b10-4c11-8d73-b918118f86ef", e.Uuid);
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, e.DnsResolvers);
+        Assert.StartsWith("-----BEGIN CERTIFICATE-----", e.DnsLeafCertPem);
+        Assert.Contains("-----END CERTIFICATE-----", e.DnsLeafCertPem);
+        Assert.Equal(
+            "47:1E:87:8F:3E:48:C8:1C:5F:BF:30:2E:B8:A8:3A:05:72:0D:B9:77:A2:11:81:09:E6:E5:EF:92:C4:66:7B:92",
+            e.DnsLeafFingerprint);
+    }
 }

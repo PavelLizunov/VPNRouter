@@ -189,11 +189,15 @@ public static class ServerUriParser
     // ─── DNS-tunnel (slipstream) ───────────────────────────────────────────
     //
     // Link: dns-tunnel://<base64url-JSON>[#name]
-    //   JSON = { "domain": "...", "resolvers": ["195.208.4.1:53", ...],
-    //            "fingerprint": "<sha256 leaf hex>", "uuid": "<per-user uuid>" }
-    // The VLESS uuid is reused as-is. The outbound is later generated against
-    // 127.0.0.1:<localPort> (slipstream-client front), so Server holds the
-    // domain only for dedup/display identity.
+    //   Production server schema (v2 — SHORT keys, authoritative):
+    //     { "d": "<domain>", "r": ["195.208.4.1:53", ...], "cert": "<leaf PEM>",
+    //       "fp": "<sha256 leaf hex, colon-separated ok>",
+    //       "uuid": "<per-user uuid>", "v": 2 }
+    //   The long spellings (domain/resolvers/fingerprint) are also accepted so
+    //   our own test fixtures + any verbose emitter keep working. "v" is ignored
+    //   (forward-compat). The VLESS uuid is reused as-is; the outbound is later
+    //   generated against 127.0.0.1:<localPort> (slipstream-client front), so
+    //   Server holds the domain only for dedup/display identity.
     private static VlessServerEntry ParseDnsTunnel(string uri)
     {
         var body = uri.Substring("dns-tunnel://".Length);
@@ -222,22 +226,23 @@ public static class ServerUriParser
             if (root.ValueKind != JsonValueKind.Object)
                 throw new FormatException("dns-tunnel: payload JSON must be an object");
 
-            if (root.TryGetProperty("domain", out var d) && d.ValueKind == JsonValueKind.String)
-                domain = d.GetString() ?? string.Empty;
-            if (root.TryGetProperty("uuid", out var u) && u.ValueKind == JsonValueKind.String)
-                uuid = u.GetString() ?? string.Empty;
-            if (root.TryGetProperty("fingerprint", out var f) && f.ValueKind == JsonValueKind.String)
-                fingerprint = f.GetString() ?? string.Empty;
-            if (root.TryGetProperty("cert", out var c) && c.ValueKind == JsonValueKind.String)
-                cert = c.GetString() ?? string.Empty;
-            if (root.TryGetProperty("resolvers", out var r) && r.ValueKind == JsonValueKind.Array)
+            // Production server emits short keys (d/r/fp); accept the long
+            // spellings too. First present key wins.
+            domain      = ReadJsonString(root, "d", "domain");
+            uuid        = ReadJsonString(root, "uuid");
+            fingerprint = ReadJsonString(root, "fp", "fingerprint");
+            cert        = ReadJsonString(root, "cert");
+            foreach (var key in new[] { "r", "resolvers" })
             {
+                if (!root.TryGetProperty(key, out var r) || r.ValueKind != JsonValueKind.Array)
+                    continue;
                 foreach (var item in r.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.String) continue;
                     var v = item.GetString();
                     if (!string.IsNullOrWhiteSpace(v)) resolvers.Add(v!.Trim());
                 }
+                if (resolvers.Count > 0) break; // first non-empty array wins
             }
         }
         catch (JsonException)
@@ -272,6 +277,20 @@ public static class ServerUriParser
             DnsLeafFingerprint = fingerprint,
             Uuid = uuid,
         };
+    }
+
+    /// <summary>First present string property among <paramref name="names"/>
+    /// (tried in order), or empty. Lets one parser accept both the short
+    /// production keys (d/r/fp) and the verbose spellings.</summary>
+    private static string ReadJsonString(JsonElement root, params string[] names)
+    {
+        foreach (var n in names)
+            if (root.TryGetProperty(n, out var e) && e.ValueKind == JsonValueKind.String)
+            {
+                var v = e.GetString();
+                if (!string.IsNullOrEmpty(v)) return v;
+            }
+        return string.Empty;
     }
 
     /// <summary>base64url (RFC 4648 §5, <c>-_</c>, optional padding) → bytes.</summary>
