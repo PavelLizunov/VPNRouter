@@ -66,6 +66,15 @@ public sealed class FakeSingBoxApi : ISingBoxApi
     /// to null to resume normal behaviour.</summary>
     public Exception? FaultToThrow { get; set; }
 
+    /// <summary>
+    /// Value returned by <see cref="GetProxyDelayAsync"/> — the live proxy
+    /// reachability probe used by StrictDns failover. <c>null</c> = the proxy
+    /// could not reach the test URL (unreachable). Default 42ms (reachable).
+    /// When <see cref="TunnelHealthy"/> is false this is forced to null so a
+    /// SimulateCrash() also makes the proxy probe report unreachable.
+    /// </summary>
+    public int? ProxyDelayMs { get; set; } = 42;
+
     // ── Helpers tests use to drive state ───────────────────────────────
 
     /// <summary>Mark the tunnel as crashed — subsequent calls fail. Mirrors
@@ -153,6 +162,18 @@ public sealed class FakeSingBoxApi : ISingBoxApi
         // Return a snapshot copy so test mutation doesn't reach the caller.
         IReadOnlyList<ProxyInfo> copy = Proxies.ToArray();
         return Task.FromResult(copy);
+    }
+
+    /// <inheritdoc/>
+    public Task<int?> GetProxyDelayAsync(string proxyTag, string testUrl, int timeoutMs, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        Record("GetProxyDelay", proxyTag);
+        if (FaultToThrow is not null) throw FaultToThrow;
+
+        // A crashed/unhealthy tunnel can't carry the probe → unreachable.
+        var delay = TunnelHealthy ? ProxyDelayMs : null;
+        return Task.FromResult(delay);
     }
 
     private void Record(string method, string detail)

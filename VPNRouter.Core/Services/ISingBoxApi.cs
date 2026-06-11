@@ -102,6 +102,25 @@ public interface ISingBoxApi
     /// <returns>List of <see cref="ProxyInfo"/> records. Empty list on any
     /// failure (never null — keeps caller LINQ ergonomic).</returns>
     Task<IReadOnlyList<ProxyInfo>> ListProxiesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// GET <c>/proxies/{tag}/delay</c> — actively measure the named proxy's
+    /// real reachability by having sing-box fetch <paramref name="testUrl"/>
+    /// THROUGH that proxy. Unlike <see cref="ListProxiesAsync"/> (last-known
+    /// cached value) this forces a fresh probe, so it's a live "is the tunnel
+    /// actually carrying traffic right now" signal — used by the StrictDns
+    /// runtime failover (<see cref="StrictDnsFailoverPolicy"/>) as both the
+    /// fail-open trigger and the flap-safe re-arm signal. It does NOT touch
+    /// <c>dns.final</c>, so it stays valid whether or not StrictDns is
+    /// currently suppressed.
+    /// </summary>
+    /// <param name="proxyTag">Outbound/group tag (conventionally <c>"proxy"</c>).</param>
+    /// <param name="testUrl">URL sing-box fetches through the proxy (a 204
+    /// endpoint such as <c>http://www.gstatic.com/generate_204</c>).</param>
+    /// <param name="timeoutMs">Per-probe deadline in milliseconds.</param>
+    /// <returns>Measured delay in ms, or <c>null</c> when the proxy could not
+    /// reach the test URL within the timeout (treated as "unreachable").</returns>
+    Task<int?> GetProxyDelayAsync(string proxyTag, string testUrl, int timeoutMs, CancellationToken ct = default);
 }
 
 /// <summary>

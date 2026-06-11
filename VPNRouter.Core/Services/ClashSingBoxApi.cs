@@ -381,6 +381,58 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<int?> GetProxyDelayAsync(string proxyTag, string testUrl, int timeoutMs, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(proxyTag) || string.IsNullOrWhiteSpace(testUrl))
+            return null;
+
+        try
+        {
+            using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            // Give the HTTP call a hair more than the probe's own timeout so the
+            // sing-box-side deadline (passed as ?timeout=) is what actually fires,
+            // yielding a clean null rather than a transport cancellation.
+            deadlineCts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs + 1500));
+
+            // GET /proxies/{tag}/delay?timeout={ms}&url={testUrl}. sing-box fetches
+            // testUrl THROUGH the named proxy and returns {"delay": N} on success or
+            // a non-200 + {"message": "..."} when the proxy can't reach it.
+            var encodedTag = Uri.EscapeDataString(proxyTag);
+            var encodedUrl = Uri.EscapeDataString(testUrl);
+            var url = $"{_baseUrl}/proxies/{encodedTag}/delay?timeout={timeoutMs}&url={encodedUrl}";
+
+            using var response = await _http.GetAsync(url, deadlineCts.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                // 408 / 503 / 500 etc — the proxy could not reach the test URL.
+                // That's exactly the "unreachable" signal the caller wants.
+                _logger.Debug("[ClashSingBoxApi] Proxy delay probe {Tag} -> HTTP {Code} (treated as unreachable)",
+                    proxyTag, (int)response.StatusCode);
+                return null;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(deadlineCts.Token).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("delay", out var delayEl)
+                && delayEl.TryGetInt32(out var delay)
+                && delay >= 0)
+            {
+                return delay;
+            }
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[ClashSingBoxApi] GetProxyDelayAsync failed for {Tag}", proxyTag);
+            return null;
+        }
+    }
+
     /// <summary>Disposes the owned HttpClient when this instance created
     /// one (i.e. ctor was called without <paramref name="httpClient"/>).
     /// An externally-supplied client is left alone — disposal is the

@@ -40,6 +40,23 @@ public class HealthMonitor : IDisposable
     // inject a capture stub (NullWindowsDnsHardening).
     private readonly IWindowsDnsHardening _dnsHardening;
 
+    // v2.42.0 StrictDns runtime failover. "Strict DNS — all DNS via VPN"
+    // forces dns.final = vpn-dns (DoH through the proxy). When the proxy goes
+    // unreachable (dead/slow server — the germany "endless loading / no
+    // internet" report) EVERY DNS query hangs on that dead path. We suppress
+    // StrictDns (dns.final → local-dns, DoH on the real NIC) while the proxy
+    // is unreachable and re-arm on recovery. _strictDnsFailedOver is the live
+    // "currently suppressed" state read by GenerateConfigJson; the streak
+    // counters debounce so a single transient hiccup doesn't flap dns.final.
+    // See StrictDnsFailoverPolicy (sibling of the DnsLeakLockdown fail-open).
+    private volatile bool _strictDnsFailedOver;
+    private int _strictDnsUnhealthyStreak;
+    private int _strictDnsHealthyStreak;
+    private const string StrictDnsProbeUrl = "http://www.gstatic.com/generate_204";
+    private const int StrictDnsProbeTimeoutMs = 3000;
+    private const int StrictDnsFailThreshold = 2;     // consecutive failed probes → fail open
+    private const int StrictDnsRecoverThreshold = 2;  // consecutive healthy probes → re-arm
+
     private System.Threading.Timer? _healthTimer;
     private System.Threading.Timer? _debounceTimer;
 
@@ -463,6 +480,16 @@ public class HealthMonitor : IDisposable
                 bool serving = isHealthy && ClashApiResponds();
                 _dnsHardening.ReconcileLockdownForHealth(serving, _appSettings, _logger);
             }
+
+            // v2.42.0: StrictDns runtime failover — keep "all DNS via tunnel"
+            // (dns.final=vpn-dns) only while the proxy is actually reachable;
+            // fail open to a direct resolver (local-dns) otherwise, and re-arm
+            // on recovery. Gated on isHealthy because the reconcile applies via
+            // hot-reload, which needs sing-box up; the reconciler is also a
+            // no-op when StrictDns isn't the sole DNS driver (zero cost when
+            // the feature is off).
+            if (isHealthy)
+                ReconcileStrictDnsFailover();
         }
         catch (Exception ex)
         {
@@ -490,6 +517,107 @@ public class HealthMonitor : IDisposable
     {
         try { return _api.GetVersionAsync().GetAwaiter().GetResult() != null; }
         catch { return false; }
+    }
+
+    // ─── v2.42.0: StrictDns runtime failover ─────────────────────────────────
+
+    /// <summary>
+    /// Raised when StrictDns ("all DNS via tunnel") is auto-suppressed because
+    /// the proxy went unreachable (arg=true) or re-armed on recovery
+    /// (arg=false). The App may surface a toast; Core only logs.
+    /// </summary>
+    public event EventHandler<bool>? StrictDnsFailoverChanged;
+
+    /// <summary>
+    /// True when StrictDns is the SOLE reason DNS is forced through the tunnel —
+    /// generated (not custom) mode, split (not full) tunnel, include (not
+    /// exclude) apps, and the toggle on. In full-tunnel / exclude mode ALL
+    /// traffic legitimately rides the tunnel so DNS must stay on vpn-dns; we
+    /// never fail those over.
+    /// </summary>
+    private bool StrictDnsIsSoleDriver()
+    {
+        var app = _appSettings?.App;
+        if (app is null || !app.StrictDns) return false;
+        if ((app.ConfigMode ?? "generated").Equals("custom", StringComparison.OrdinalIgnoreCase)) return false;
+        if ((app.RoutingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase)) return false;
+        if ((app.RoutingAppsMode ?? "include").Equals("exclude", StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Live proxy-reachability probe via Clash <c>/proxies/proxy/delay</c> —
+    /// sing-box fetches a 204 endpoint THROUGH the proxy. Non-null delay =
+    /// reachable. Tests the proxy directly (not dns.final), so it stays valid
+    /// as both the fail-open trigger and the re-arm signal. The ISingBoxApi
+    /// impl enforces an internal deadline so this can't wedge the timer thread.
+    /// </summary>
+    private bool ProxyReachable()
+    {
+        try
+        {
+            return _api.GetProxyDelayAsync("proxy", StrictDnsProbeUrl, StrictDnsProbeTimeoutMs)
+                       .GetAwaiter().GetResult() != null;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// StrictDns failover reconcile (see <see cref="StrictDnsFailoverPolicy"/>).
+    /// Probes the proxy, debounces both directions, and on a real transition
+    /// regenerates the config (StrictDns suppressed / restored) + hot-reloads —
+    /// only <c>dns.final</c> moves, routing is unchanged. Called every healthy
+    /// tick; no-op when StrictDns isn't the sole DNS driver and we're not
+    /// currently failed over (so zero probe cost when the feature is off).
+    /// </summary>
+    private void ReconcileStrictDnsFailover()
+    {
+        bool soleDriver = StrictDnsIsSoleDriver();
+        var scan = _lastScan;
+        // Nothing to arm AND nothing to undo, or no scan to regenerate from yet
+        // → bail before the (3s) probe.
+        if ((!soleDriver && !_strictDnsFailedOver) || scan is null)
+            return;
+
+        bool proxyOk = ProxyReachable();
+        if (proxyOk) { _strictDnsHealthyStreak++; _strictDnsUnhealthyStreak = 0; }
+        else { _strictDnsUnhealthyStreak++; _strictDnsHealthyStreak = 0; }
+
+        // Hysteresis: only flip after the relevant threshold of consecutive
+        // same-result probes, so a single transient hiccup doesn't flap dns.final.
+        bool effectiveHealthy = _strictDnsFailedOver
+            ? _strictDnsHealthyStreak >= StrictDnsRecoverThreshold   // re-arm: N consecutive good
+            : _strictDnsUnhealthyStreak < StrictDnsFailThreshold;    // fail: N consecutive bad
+
+        var action = StrictDnsFailoverPolicy.Decide(soleDriver, effectiveHealthy, _strictDnsFailedOver);
+        if (action == StrictDnsAction.None)
+            return;
+
+        bool failOpen = action == StrictDnsAction.FailOpen;
+        _strictDnsFailedOver = failOpen;
+
+        try
+        {
+            // GenerateConfigJson reads _strictDnsFailedOver; reuse the last
+            // scan's process list so only dns.final changes.
+            var configJson = GenerateConfigJson(scan.ProcessNames.ToList());
+            var reloaded = TryHotReloadViaApi(configJson);
+
+            if (failOpen)
+                _logger.Warning(
+                    "[HealthMonitor] StrictDns auto-disabled (fail-open) — proxy unreachable after {N} probes; DNS failed over to direct resolver (local-dns) so the machine keeps internet (reload={Ok})",
+                    _strictDnsUnhealthyStreak, reloaded);
+            else
+                _logger.Information(
+                    "[HealthMonitor] StrictDns re-armed — proxy reachable again after {N} probes; all DNS back through the tunnel (reload={Ok})",
+                    _strictDnsHealthyStreak, reloaded);
+
+            StrictDnsFailoverChanged?.Invoke(this, failOpen);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[HealthMonitor] StrictDns failover reload failed");
+        }
     }
 
     private void OnSingBoxCrashed(object? sender, EventArgs e)
@@ -947,7 +1075,12 @@ public class HealthMonitor : IDisposable
             _appSettings,
             ConfigPipeline.ValidationMode.Advisory,
             warningSink: null, // HealthMonitor surfaces leaks via logger only
-            logger: _logger);
+            logger: _logger,
+            // v2.42.0 StrictDns failover: while the proxy is unreachable we
+            // suppress "all DNS via tunnel" (dns.final → local-dns) so the
+            // machine keeps DNS. The flag persists across regens (process
+            // rescans, restarts) until a healthy tick re-arms it.
+            strictDnsOverride: _strictDnsFailedOver ? false : (bool?)null);
     }
 
     /// <summary>

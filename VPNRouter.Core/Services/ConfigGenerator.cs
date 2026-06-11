@@ -19,7 +19,8 @@ public static class ConfigGenerator
     public static SingBoxConfig Generate(
         Profile profile,
         IEnumerable<string> resolvedProcessNames,
-        AppSettings settings)
+        AppSettings settings,
+        bool? strictDnsOverride = null)
     {
         // Filter out wildcard patterns — sing-box process_name doesn't support globs
         // Only pass exact .exe names (no * or ?)
@@ -100,7 +101,7 @@ public static class ConfigGenerator
                 Timestamp = true,
                 Output = logPath
             },
-            Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode),
+            Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode, strictDnsOverride),
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
             Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy),
@@ -881,10 +882,18 @@ public static class ConfigGenerator
 
     // ─── DNS (sing-box 1.12+ format) ──────────────────────────────────────────
 
-    private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings, bool isExcludeMode = false)
+    private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings, bool isExcludeMode = false, bool? strictDnsOverride = null)
     {
         var routingMode = settings.App.RoutingMode ?? "split";
         var isFullTunnel = routingMode.Equals("full", StringComparison.OrdinalIgnoreCase);
+
+        // v2.42.0 StrictDns runtime failover: HealthMonitor can pass
+        // strictDnsOverride=false to suppress "all DNS via tunnel" when the
+        // proxy is unreachable (germany endless-loading). null = honour the
+        // persisted setting. Full-tunnel / exclude mode still force vpn-dns
+        // regardless — there StrictDns isn't the sole driver and all traffic
+        // legitimately rides the tunnel. See StrictDnsFailoverPolicy.
+        var strictDns = strictDnsOverride ?? settings.App.StrictDns;
 
         // AM-1: in exclude mode `processes` holds the apps we are KEEPING
         // direct, so route.final flips to "proxy". The DNS default
@@ -893,7 +902,7 @@ public static class ConfigGenerator
         // their queries inside the tunnel when they're not even using
         // it). StrictDns and Full tunnel keep their existing semantics
         // (override to vpn-dns).
-        var defaultVpnDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
+        var defaultVpnDns = isFullTunnel || isExcludeMode || strictDns;
 
         var dns = new SingBoxDns
         {
