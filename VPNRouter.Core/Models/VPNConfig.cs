@@ -682,6 +682,17 @@ public class RouteRule
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? IpCidr { get; set; }
 
+    /// <summary>
+    /// Marks an always-on infrastructure rule that lives in the leading rule
+    /// block (alongside sniff / hijack-dns / ip_is_private) so
+    /// <c>ConfigGenerator.FindCustomRulesInsertionPoint</c> skips past it when
+    /// placing toggle/custom rules. Used by the dns-tunnel slipstream-exclusion
+    /// rules, which must sit BEFORE hijack-dns yet are not sniff/hijack/private.
+    /// Never serialized — purely a generator-side ordering hint.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsInfrastructure { get; set; }
+
     /// <summary>Match by destination port(s).</summary>
     [JsonPropertyName("port")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

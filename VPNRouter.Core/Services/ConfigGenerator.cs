@@ -91,7 +91,8 @@ public static class ConfigGenerator
 
         var logPath = AppPaths.SingBoxLogPath;
 
-        var outbounds = BuildOutbounds(settings, out bool hasUdpProxy);
+        var outbounds = BuildOutbounds(settings, out bool hasUdpProxy,
+            out bool isDnsTunnel, out var dnsTunnelResolverIps);
 
         var config = new SingBoxConfig
         {
@@ -104,7 +105,7 @@ public static class ConfigGenerator
             Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode, strictDnsOverride),
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps),
             Experimental = new SingBoxExperimental()
         };
 
@@ -332,7 +333,7 @@ public static class ConfigGenerator
         for (int i = 0; i < config.Route.Rules.Count; i++)
         {
             var r = config.Route.Rules[i];
-            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true)
+            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true || r.IsInfrastructure)
             {
                 insertAt = i + 1;
                 continue;
@@ -672,7 +673,7 @@ public static class ConfigGenerator
         for (int i = 0; i < config.Route.Rules.Count; i++)
         {
             var r = config.Route.Rules[i];
-            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true)
+            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true || r.IsInfrastructure)
             {
                 insertAt = i + 1;
                 continue;
@@ -800,7 +801,7 @@ public static class ConfigGenerator
         for (int i = 0; i < config.Route.Rules.Count; i++)
         {
             var r = config.Route.Rules[i];
-            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true)
+            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true || r.IsInfrastructure)
             {
                 insertAt = i + 1;
                 continue;
@@ -1033,7 +1034,8 @@ public static class ConfigGenerator
     /// - Servers WITHOUT flow → "proxy-udp" (UDP, better for voice/video)
     /// - If all servers have same flow config → single "proxy" outbound
     /// </summary>
-    private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy)
+    private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy,
+        out bool isDnsTunnel, out List<string> dnsTunnelResolverIps)
     {
         var servers = settings.Vless.GetActiveServers();
 
@@ -1073,6 +1075,17 @@ public static class ConfigGenerator
                 "before calling Generate(). " +
                 "See plans/vpnrouter-v2.28-flow-mismatch.md for context.");
         }
+
+        // DNS-tunnel detection — the single source of truth for the route-layer
+        // slipstream self-exclusion (see BuildRoute). When the active proxy is a
+        // dns-tunnel server the VLESS outbound targets the local slipstream front
+        // (127.0.0.1:7001); slipstream's OWN upstream traffic to the DNS resolvers
+        // must be kept OUT of the tunnel or it loops back into itself.
+        var dnsTunnelEntry = servers.FirstOrDefault(s => s.IsDnsTunnel);
+        isDnsTunnel = dnsTunnelEntry != null;
+        dnsTunnelResolverIps = isDnsTunnel
+            ? ExtractResolverIps(dnsTunnelEntry!.DnsResolvers)
+            : new List<string>();
 
         var outbounds = new List<SingBoxOutbound>();
 
@@ -1250,6 +1263,52 @@ public static class ConfigGenerator
             ServerPort = SlipstreamManager.DefaultLocalPort,
             Uuid       = entry.Uuid,
         };
+    }
+
+    /// <summary>The slipstream-client executable basename that sing-box matches
+    /// in process_name rules (platform-correct: "slipstream-client.exe" on
+    /// Windows, "slipstream-client" elsewhere — dns-tunnel is Windows/Linux only).
+    /// Used by <see cref="BuildRoute"/> to keep the slipstream front's own
+    /// upstream traffic OUT of the tunnel.</summary>
+    private static string SlipstreamProcessName => Path.GetFileName(AppPaths.SlipstreamExePath);
+
+    /// <summary>
+    /// Extract literal IP addresses from dns-tunnel resolver strings
+    /// (<c>"1.2.3.4:53"</c>, <c>"[2001:db8::1]:53"</c>, <c>"9.9.9.9"</c>),
+    /// skipping hostnames (those are covered by the process_name exclusion).
+    /// Returns bare IPs suitable for a sing-box <c>ip_cidr</c> rule (a bare IP
+    /// is treated as /32 or /128). Order-preserving, de-duplicated.
+    /// </summary>
+    private static List<string> ExtractResolverIps(IEnumerable<string>? resolvers)
+    {
+        var ips = new List<string>();
+        if (resolvers == null) return ips;
+        foreach (var raw in resolvers)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var s = raw.Trim();
+            string host;
+            if (s.StartsWith("[", StringComparison.Ordinal))          // [ipv6]:port
+            {
+                var end = s.IndexOf(']');
+                if (end <= 1) continue;
+                host = s.Substring(1, end - 1);
+            }
+            else
+            {
+                var firstColon = s.IndexOf(':');
+                var lastColon  = s.LastIndexOf(':');
+                // Strip a trailing :port only for the unambiguous ipv4:port shape
+                // (exactly one colon). A bare IPv6 literal has multiple colons and
+                // no brackets — keep it whole.
+                host = (firstColon >= 0 && firstColon == lastColon)
+                    ? s.Substring(0, lastColon)
+                    : s;
+            }
+            if (System.Net.IPAddress.TryParse(host, out _) && !ips.Contains(host))
+                ips.Add(host);
+        }
+        return ips;
     }
 
     /// <summary>VLESS+Reality outbound (the original implementation).</summary>
@@ -1520,7 +1579,8 @@ public static class ConfigGenerator
 
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
-        bool blockQuicOnTcpProxy = true)
+        bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
+        List<string>? dnsTunnelResolverIps = null)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -1529,10 +1589,40 @@ public static class ConfigGenerator
             // Protocol sniffing: detect HTTP/TLS/QUIC and override destination with sniffed domain.
             // Replaces deprecated inbound-level sniff + sniff_override_destination (removed in 1.13).
             new() { Action = "sniff", Timeout = "300ms" },
-
-            // DNS traffic: hijack and resolve through DNS module (replaces "dns" outbound)
-            new() { Protocol = "dns", Action = "hijack-dns" }
         };
+
+        // DNS-tunnel (slipstream) self-exclusion — MUST precede hijack-dns AND the
+        // proxy final. The slipstream-client front (127.0.0.1:7001) carries the
+        // VLESS stream, but its OWN upstream packets to the DNS resolvers would
+        // otherwise be (a) hijacked by the DNS module (they're DNS on :53) or
+        // (b) routed to final=proxy=127.0.0.1:7001 = itself → deadlock
+        // ("dial tcp 127.0.0.1:7001 i/o timeout", all DNS hangs, no internet).
+        // Android excludes the whole app via VpnService; on Windows/Linux
+        // slipstream is a SEPARATE process, so exclude it here by resolver-IP
+        // (destination-based, reliable even before sniff) AND process_name
+        // (covers DoH/DoT resolvers on non-:53 ports). IsInfrastructure keeps
+        // FindCustomRulesInsertionPoint treating these as the leading block.
+        if (isDnsTunnel)
+        {
+            if (dnsTunnelResolverIps is { Count: > 0 })
+                rules.Add(new RouteRule
+                {
+                    IpCidr           = dnsTunnelResolverIps,
+                    Action           = "route",
+                    Outbound         = "direct",
+                    IsInfrastructure = true,
+                });
+            rules.Add(new RouteRule
+            {
+                ProcessName      = new List<string> { SlipstreamProcessName },
+                Action           = "route",
+                Outbound         = "direct",
+                IsInfrastructure = true,
+            });
+        }
+
+        // DNS traffic: hijack and resolve through DNS module (replaces "dns" outbound)
+        rules.Add(new RouteRule { Protocol = "dns", Action = "hijack-dns" });
 
         // Private IPs always direct — MUST be before process/default rules so that
         // traffic to local/VPN subnets (WireGuard, AmneziaWG, LAN) is never

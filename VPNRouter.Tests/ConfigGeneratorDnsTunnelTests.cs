@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -73,5 +75,127 @@ public class ConfigGeneratorDnsTunnelTests
         Assert.Equal(Uuid, proxy.Uuid);                                 // reused VLESS uuid
         Assert.Null(proxy.Tls);                                         // no TLS — tunnel does QUIC-TLS
         Assert.True(string.IsNullOrEmpty(proxy.Flow));                  // no xtls flow
+    }
+
+    // ─── v2.42.0-r4: dns-tunnel routing-loop fix ───────────────────────────────
+    // slipstream-client's OWN upstream traffic to the DNS resolvers must escape to
+    // `direct` BEFORE the hijack-dns rule (it's DNS on :53) and BEFORE final=proxy
+    // (=127.0.0.1:7001 = itself). Otherwise the tunnel deadlocks: "dial tcp
+    // 127.0.0.1:7001 i/o timeout", all DNS hangs, no internet. (Android excludes
+    // the whole app via VpnService; Windows/Linux slipstream is a separate proc.)
+
+    [Fact]
+    public void Generate_DnsTunnel_FullTunnel_ExcludesSlipstreamBeforeHijackDns()
+    {
+        var settings = DnsTunnelSettings();
+        settings.App.RoutingMode = "full";                  // the loop scenario: final=proxy
+        Assert.Single(VlessServersResolver.Resolve(settings));
+        var config = ConfigGenerator.Generate(DiscordProfile(), new[] { "Discord.exe" }, settings);
+
+        var rules = config.Route.Rules;
+        int hijackIdx = rules.FindIndex(r => r.Action == "hijack-dns");
+        Assert.True(hijackIdx >= 0, "hijack-dns rule must exist");
+
+        // resolver-IP → direct, positioned BEFORE hijack-dns
+        int ipIdx = rules.FindIndex(r =>
+            r.Action == "route" && r.Outbound == "direct" && r.IpCidr != null &&
+            r.IpCidr.Contains("195.208.4.1") && r.IpCidr.Contains("195.208.5.1"));
+        Assert.True(ipIdx >= 0, "resolver-IP exclusion rule must exist");
+        Assert.True(ipIdx < hijackIdx, "resolver-IP exclusion must precede hijack-dns");
+
+        // process_name slipstream → direct, positioned BEFORE hijack-dns
+        int procIdx = rules.FindIndex(r =>
+            r.Action == "route" && r.Outbound == "direct" && r.ProcessName != null &&
+            r.ProcessName.Any(p => p.StartsWith("slipstream-client", System.StringComparison.Ordinal)));
+        Assert.True(procIdx >= 0, "slipstream process_name exclusion must exist");
+        Assert.True(procIdx < hijackIdx, "process_name exclusion must precede hijack-dns");
+
+        Assert.Equal("proxy", config.Route.Final);          // full tunnel still lands on proxy
+    }
+
+    [Fact]
+    public void Generate_DnsTunnel_ResolverIpExtraction_SkipsHostnames_HandlesIpv6()
+    {
+        var settings = DnsTunnelSettings();
+        settings.App.Subscriptions[0].Servers[0].DnsResolvers = new List<string>
+        {
+            "195.208.4.1:53",       // ipv4:port      → 195.208.4.1
+            "dns.example.com:53",    // hostname:port  → skipped (process_name covers it)
+            "[2001:db8::1]:853",     // [ipv6]:port    → 2001:db8::1
+            "9.9.9.9",               // bare ipv4      → 9.9.9.9
+        };
+        Assert.Single(VlessServersResolver.Resolve(settings));
+        var config = ConfigGenerator.Generate(DiscordProfile(), new[] { "Discord.exe" }, settings);
+
+        var ipRule = config.Route.Rules.FirstOrDefault(r =>
+            r.Action == "route" && r.Outbound == "direct" && r.IpCidr != null &&
+            r.IpCidr.Contains("195.208.4.1"));
+        Assert.NotNull(ipRule);
+        Assert.Contains("195.208.4.1", ipRule!.IpCidr!);
+        Assert.Contains("2001:db8::1", ipRule.IpCidr!);
+        Assert.Contains("9.9.9.9", ipRule.IpCidr!);
+        Assert.DoesNotContain("dns.example.com", ipRule.IpCidr!);   // hostname not an ip_cidr
+    }
+
+    [Fact]
+    public void Generate_NormalVless_NoSlipstreamExclusion()
+    {
+        // A plain VLESS server (no DNS-tunnel fields → IsDnsTunnel false) must NOT
+        // get the slipstream exclusion rules — they're dns-tunnel-only.
+        var settings = DnsTunnelSettings();
+        settings.App.Subscriptions[0].Servers = new List<VlessServerEntry>
+        {
+            new() { Protocol = "vless", Name = "Normal", Server = "vless.example.org", Port = 443, Uuid = Uuid }
+        };
+        settings.App.ActiveSubscriptionServer = "Normal";
+        Assert.Single(VlessServersResolver.Resolve(settings));
+        var config = ConfigGenerator.Generate(DiscordProfile(), new[] { "Discord.exe" }, settings);
+
+        Assert.DoesNotContain(config.Route.Rules, r =>
+            r.ProcessName != null &&
+            r.ProcessName.Any(p => p.StartsWith("slipstream-client", System.StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// Integration: the generated dns-tunnel config (with the new ip_cidr +
+    /// process_name slipstream-exclusion rules) must be loadable by sing-box
+    /// 1.13. Pins that the exclusion-rule JSON shape is valid sing-box syntax.
+    /// Skips on CI without the binary.
+    /// </summary>
+    [Fact]
+    public void Generate_DnsTunnel_FullTunnel_PassesSingBoxCheck()
+    {
+        const string singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!File.Exists(singBoxPath)) return; // no binary locally — skip
+
+        var settings = DnsTunnelSettings();
+        settings.App.RoutingMode = "full";
+        Assert.Single(VlessServersResolver.Resolve(settings));
+        var config = ConfigGenerator.Generate(DiscordProfile(), new[] { "Discord.exe" }, settings);
+        var json = ConfigGenerator.Serialize(config);
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-dnstunnel-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, json);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath,
+                Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+            Assert.True(proc.ExitCode == 0,
+                $"sing-box check failed on dns-tunnel config (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{json}");
+        }
+        finally
+        {
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+        }
     }
 }
