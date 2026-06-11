@@ -377,15 +377,19 @@ public sealed class VpnEngineOrchestratorTests
         var stopIdx = src.IndexOf("public void Stop()");
         Assert.True(stopIdx >= 0, "Source must contain 'public void Stop()'");
 
-        // The _healthMonitor.Stop call must appear in the Stop method
-        // body BEFORE the _singBox.Stop call.
-        var hmIdx = src.IndexOf("_healthMonitor?.Stop()", stopIdx);
-        var sbIdx = src.IndexOf("_singBox?.Stop()", stopIdx);
+        // The _healthMonitor teardown must appear in the Stop method body
+        // BEFORE the _singBox teardown. v2.42.0-r4 (perf audit H-1/M-1): both
+        // are now Dispose() (not Stop()) so SingBoxManager unhooks its
+        // AppDomain.ProcessExit handler and HealthMonitor releases its owned
+        // Clash HttpClient + unsubscribes Crashed. Dispose calls Stop
+        // internally, so the BR-6a ordering invariant is unchanged.
+        var hmIdx = src.IndexOf("_healthMonitor?.Dispose()", stopIdx);
+        var sbIdx = src.IndexOf("_singBox?.Dispose()", stopIdx);
 
-        Assert.True(hmIdx > 0, "Stop must call _healthMonitor?.Stop()");
-        Assert.True(sbIdx > 0, "Stop must call _singBox?.Stop()");
+        Assert.True(hmIdx > 0, "Stop must call _healthMonitor?.Dispose()");
+        Assert.True(sbIdx > 0, "Stop must call _singBox?.Dispose()");
         Assert.True(hmIdx < sbIdx,
-            "BR-6a invariant violated: HealthMonitor must stop BEFORE sing-box. " +
+            "BR-6a invariant violated: HealthMonitor must be torn down BEFORE sing-box. " +
             $"Got _healthMonitor at {hmIdx}, _singBox at {sbIdx}.");
 
         // Pin the BR-6a comment as well so the rationale lives next to

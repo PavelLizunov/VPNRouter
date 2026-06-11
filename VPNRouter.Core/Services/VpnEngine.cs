@@ -414,8 +414,16 @@ public class VpnEngine : IDisposable
         // Timer) so doing it first costs nothing on the user-visible
         // disconnect path.
         try { _probeCts?.Cancel(); } catch { }
-        try { _healthMonitor?.Stop(); } catch { }  // BR-6a: BEFORE sing-box
-        try { _singBox?.Stop(); } catch { }
+        // P0 leak fix (H-1/M-1, perf audit 2026-06-11): Dispose (not Stop) so the
+        // SingBoxManager unhooks its AppDomain.ProcessExit handler — otherwise
+        // every connect cycle roots a NEW SingBoxManager + its HealthMonitor (via
+        // Crashed) + ClashSingBoxApi + a live HttpClient forever (~80 KB/cycle,
+        // measured). Dispose is a safe superset of Stop on both (each calls Stop
+        // internally), and HealthMonitor.Dispose also releases its owned Clash API
+        // HttpClient + unsubscribes from Crashed. Monitor-before-sing-box ordering
+        // (BR-6a) is preserved — _healthMonitor first.
+        try { _healthMonitor?.Dispose(); } catch { }  // BR-6a: BEFORE sing-box
+        try { _singBox?.Dispose(); } catch { }
         // DNS-tunnel: tear the transport down AFTER sing-box (the outbound that
         // rode it is already gone). No-op for every non-dns-tunnel session
         // (_slipstream stays null unless a dns-tunnel server was started).

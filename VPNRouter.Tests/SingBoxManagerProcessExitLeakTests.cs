@@ -65,13 +65,22 @@ public sealed class SingBoxManagerProcessExitLeakTests
     {
         var refs = CreateAndDispose(25);
 
-        // Robust collection: a blocking gen-2 collect, drain finalizers, then
-        // collect again to reclaim anything the finalizer freed.
-        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-        GC.WaitForPendingFinalizers();
-        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        // Robust collection: LOOP forced gen-2 collects + finalizer drains.
+        // A ProcessExit-rooted instance is a HARD root — it survives every
+        // round, so a real leak still fails this. But a plain GC straggler
+        // (promoted to gen2 under test-host load, awaiting a later sweep) can
+        // outlive a single 2-collect pass; on a busy Windows runner this made
+        // the test flake at "3-4/25 alive" even though Dispose correctly
+        // unsubscribes. Looping clears the stragglers without masking a leak.
+        int alive = refs.Count;
+        for (int round = 0; round < 8 && alive > 0; round++)
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            alive = refs.Count(r => r.IsAlive);
+        }
 
-        var alive = refs.Count(r => r.IsAlive);
         Assert.True(alive == 0,
             $"{alive}/25 disposed SingBoxManager instances are still alive after a full GC. " +
             "The AppDomain.ProcessExit subscription is likely retaining them — Dispose() must " +

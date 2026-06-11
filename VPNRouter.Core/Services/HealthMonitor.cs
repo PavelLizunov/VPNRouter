@@ -72,7 +72,10 @@ public class HealthMonitor : IDisposable
     private int _restartAttempts;
     private bool _vpnWasRunning;
     private bool _disposed;
-    private bool _isStopping;   // set during HealthMonitor.Stop() to block crash handling
+    // volatile (M-9, perf audit 2026-06-11): read on the threadpool AttemptRestart
+    // continuation to abort a sing-box revival after a user Stop; the write happens
+    // on the UI thread in Stop(), so the reader must see it without tearing.
+    private volatile bool _isStopping;   // set during HealthMonitor.Stop() to block crash handling
 
     // v2.31.5-r2 (user-reported VPN-loss bug):
     // tracks user intent — true between Start() and Stop(), regardless of
@@ -728,6 +731,20 @@ public class HealthMonitor : IDisposable
                 // RunTunOrphanRecoveryCleanup for the rationale + timing.
                 if (!RunTunOrphanRecoveryCleanup(ct)) return;
 
+                // M-9 (perf audit 2026-06-11): re-check the stop/cancel gate
+                // immediately before reviving sing-box. The entry check (top of
+                // this continuation) can be 1-3s stale by now — the scan, config
+                // regen, and TUN-orphan cleanup above all take real time, and the
+                // user may have pressed Stop in that window. Without this re-check
+                // sing-box gets RESTARTED after a user Stop (UI shows "disconnected"
+                // while the tunnel is live). _isStopping is volatile so this
+                // threadpool thread sees Stop()'s write on the UI thread.
+                if (ct.IsCancellationRequested || _isStopping)
+                {
+                    _logger.Information("[HealthMonitor] Stop requested during restart prep — aborting sing-box revival");
+                    return;
+                }
+
                 // Phase 2D-4 (2026-05-17): try hot-reload via the
                 // ISingBoxApi split first; fall back to a full restart
                 // if it didn't take. Pre-2D-4 this was a single
@@ -1097,6 +1114,14 @@ public class HealthMonitor : IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
+
+        // M-1 (perf audit 2026-06-11): unsubscribe from SingBoxManager.Crashed so
+        // the two objects don't root each other after teardown. The subscription
+        // is made ONCE in the ctor (there is no Start() that re-subscribes), so
+        // the -= belongs in Dispose (terminal), NOT Stop (which can precede a
+        // resume). Combined with SingBoxManager.Dispose unhooking ProcessExit
+        // (now called from VpnEngine.Stop), this closes the per-connect leak.
+        try { _singBox.Crashed -= OnSingBoxCrashed; } catch { }
 
         // Phase 2D-4: tear down the owned ClashSingBoxApi (and its
         // HttpClient) if the ctor created one. External fakes are the
