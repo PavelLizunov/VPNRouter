@@ -164,6 +164,54 @@ if ($mbs -ne $null) {
     Verdict 'download' $false 'speed test failed/timed out (very slow tunnel)'
 }
 
+# ---------- Layer 6.6: Browser-grade HTTP/2 (curl) ----------
+# Chrome uses HTTP/2 (and tries QUIC) to YouTube; the IWR probe above is HTTP/1.1
+# and too lenient (it got 200 where the browser shows ERR_CONNECTION_CLOSED).
+# curl --http2 reproduces the browser path - if the browser fails, this should too.
+Sec 'Browser-grade HTTP/2 (curl --http2)'
+$h2YoutubeFailed = $false
+# Prefer the Windows-shipped curl (System32) so `-o NUL` is the null device and
+# the HTTP/2 stack is the OS one; fall back to whatever curl.exe is on PATH.
+$curlExe = Join-Path $env:SystemRoot 'System32\curl.exe'
+if (-not (Test-Path $curlExe)) { $curlExe = (Get-Command curl.exe -EA SilentlyContinue | Select-Object -First 1).Source }
+if (-not $curlExe -or -not (Test-Path $curlExe)) {
+    Verdict 'curl' $null 'curl.exe not found - skipping (Win10+ ships it)'
+} else {
+    foreach ($site in 'https://www.youtube.com','https://www.google.com','https://mail.google.com') {
+        $lbl  = ($site -replace '^https?://','')
+        $code = ("$(& $curlExe -sS --http2 -o NUL -w '%{http_code}' --max-time 25 $site 2>$null)").Trim()
+        $ok2  = ($code -match '^[2-4]\d\d$')
+        if ($lbl -match 'youtube' -and -not $ok2) { $h2YoutubeFailed = $true }
+        Verdict "h2 $lbl" $ok2 ($(if ($ok2) { "HTTP/2 $code" } else { "FAILED (curl exit ~ browser ERR_CONNECTION_CLOSED)" }))
+    }
+    $h1 = ("$(& $curlExe -sS --http1.1 -o NUL -w '%{http_code}' --max-time 25 'https://www.youtube.com' 2>$null)").Trim()
+    Verdict 'h1 youtube' ($h1 -match '^[2-4]\d\d$') ("HTTP/1.1 $h1  (control: h1 ok + h2 FAIL => HTTP/2 / MTU)")
+}
+
+# ---------- Layer 6.7: MTU ----------
+# Classic 'curl works, browser RSTs through a VPN': big browser packets (large TLS
+# ClientHello, HTTP/2 frames) exceed the path MTU and, if ICMP/PMTUD is blocked,
+# the connection is reset -> ERR_CONNECTION_CLOSED. Small IWR requests squeak through.
+Sec 'MTU (fragmentation -> ERR_CONNECTION_CLOSED on big packets)'
+$tunMtu = $null
+Get-NetIPInterface -AddressFamily IPv4 -EA SilentlyContinue |
+    Where-Object { $_.ConnectionState -eq 'Connected' } | Sort-Object InterfaceMetric |
+    Select-Object -First 6 | ForEach-Object {
+        Line ("  {0,-24} MTU={1} metric={2}" -f $_.InterfaceAlias, $_.NlMtu, $_.InterfaceMetric)
+        if ($_.InterfaceAlias -match 'VPNRouter|sing-box|tun') { $tunMtu = $_.NlMtu }
+    }
+if ($tunMtu) {
+    $okM = ($tunMtu -ge 1280 -and $tunMtu -le 1500)
+    Verdict 'tun mtu' $okM ("$tunMtu" + $(if ($tunMtu -gt 1500) { " - JUMBO; big packets fragment and can RST youtube (lower it / MSS-clamp)" } elseif ($tunMtu -lt 1280) { " - very low" } else { " - normal" }))
+}
+
+# ---------- Layer 6.8: IPv6 ----------
+Sec 'IPv6'
+$v6 = @(Get-NetIPAddress -AddressFamily IPv6 -EA SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(fe80|::1)' -and $_.PrefixOrigin -ne 'WellKnown' -and $_.SuffixOrigin -ne 'Link' })
+$ytAAAA = @(Resolve-DnsName 'youtube.com' -Type AAAA -EA SilentlyContinue | Where-Object { $_.IPAddress })
+$v6risk = ($v6.Count -gt 0 -and $ytAAAA.Count -gt 0)
+Verdict 'ipv6' (-not $v6risk) ($(if ($v6.Count -gt 0) { "host has global IPv6 ($($v6[0].IPAddress)); youtube AAAA=$($ytAAAA.Count -gt 0)" + $(if ($v6risk) { " - browser may use IPv6 OUTSIDE the v4 tunnel -> reset" }) } else { 'no global IPv6 (fine for a v4-only tunnel)' }))
+
 # ---------- Layer 7: egress IP ----------
 Sec 'Egress IP (should be the VPN server, not your ISP)'
 $eip = $null
@@ -187,6 +235,15 @@ try {
 Sec 'BEST GUESS'
 if (-not $delay) {
     Line 'Server is unreachable through the tunnel -> the selected server is dead/slow. Switch servers and retest.'
+} elseif ($h2YoutubeFailed) {
+    Line "Browser-grade HTTP/2 to YouTube FAILED here too -> this REPRODUCES the browser's ERR_CONNECTION_CLOSED (the basic HTTP/1.1 probe was too lenient)."
+    if ($tunMtu -and $tunMtu -gt 1500) {
+        Line "TUN MTU is $tunMtu (jumbo) -> most likely fragmentation. Lower the TUN MTU / add MSS-clamp."
+    } elseif (-not $hasUdpProxy) {
+        Line "Proxy is TCP-only ($($proxyTypes -join ',')) with QUIC blocked -> use a UDP server (Hysteria2/TUIC) so YouTube's QUIC works natively. If that also fails, it's MTU/HTTP-2 through the tunnel."
+    } else {
+        Line "Check MTU above + try a different server; the failure is at the HTTP/2 layer, not DNS/TCP."
+    }
 } elseif (-not $hasUdpProxy -and -not $quicReject) {
     Line "QUIC is NOT blocked on a TCP-only proxy -> classic YouTube 'endless loading'. Enable 'Block QUIC on TCP-only proxy' (or reconnect to regenerate the rule)."
 } elseif ($ytIp -and -not $gvIp) {
