@@ -125,7 +125,7 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal("advanced", roundTripped.App.UiMode);
         Assert.Equal("generated", roundTripped.App.ConfigMode);
         Assert.Equal("VPNRouter-TUN", roundTripped.Tun.InterfaceName);
-        Assert.Equal(9000, roundTripped.Tun.Mtu);
+        Assert.Equal(1280, roundTripped.Tun.Mtu);   // v2.42.0-r3: was 9000 (jumbo broke HTTP/2 over TCP-only proxies)
         Assert.Equal("ipv4_only", roundTripped.Dns.Strategy);
         Assert.Equal(30, roundTripped.Monitoring.HealthCheckInterval);
         Assert.Equal("PavelLizunov/VPNRouter", roundTripped.Update.GitHubRepo);
@@ -534,9 +534,13 @@ update:
 
         var settings = SettingsLoader.Parse(yaml);
 
-        // schema_version alias (Wave 39 bumped to 5 — see comment at top
-        // of the YAML literal above)
-        Assert.Equal(5, settings.SchemaVersion);
+        // schema_version alias. Parse always migrates up to
+        // CurrentSchemaVersion (a schema-5 blob now advances to v6 via the
+        // MTU migrator), so pin against CurrentSchemaVersion rather than the
+        // input literal — the wire-format alias mapping is what this test
+        // actually exercises, and the MTU-only v5->v6 step leaves every other
+        // field below untouched.
+        Assert.Equal(AppSettings.CurrentSchemaVersion, settings.SchemaVersion);
 
         // app.* aliases
         Assert.Equal("warning", settings.App.LogLevel);

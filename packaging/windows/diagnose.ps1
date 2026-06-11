@@ -207,7 +207,11 @@ if ($tunMtu) {
 
 # ---------- Layer 6.8: IPv6 ----------
 Sec 'IPv6'
-$v6 = @(Get-NetIPAddress -AddressFamily IPv6 -EA SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(fe80|::1)' -and $_.PrefixOrigin -ne 'WellKnown' -and $_.SuffixOrigin -ne 'Link' })
+# Exclude fe80 (link-local), ::1 (loopback) AND fc/fd (ULA fc00::/7 - the v6
+# equivalent of 10.x/192.168.x, NOT globally routable so it can't leak around
+# a v4 tunnel). Only 2000::/3 (starts 2 or 3) is real global unicast. A docker/
+# Hyper-V host commonly carries an fd58:... ULA that previously false-flagged.
+$v6 = @(Get-NetIPAddress -AddressFamily IPv6 -EA SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(fe80|fc|fd|::1)' -and $_.PrefixOrigin -ne 'WellKnown' -and $_.SuffixOrigin -ne 'Link' })
 $ytAAAA = @(Resolve-DnsName 'youtube.com' -Type AAAA -EA SilentlyContinue | Where-Object { $_.IPAddress })
 $v6risk = ($v6.Count -gt 0 -and $ytAAAA.Count -gt 0)
 Verdict 'ipv6' (-not $v6risk) ($(if ($v6.Count -gt 0) { "host has global IPv6 ($($v6[0].IPAddress)); youtube AAAA=$($ytAAAA.Count -gt 0)" + $(if ($v6risk) { " - browser may use IPv6 OUTSIDE the v4 tunnel -> reset" }) } else { 'no global IPv6 (fine for a v4-only tunnel)' }))

@@ -162,13 +162,14 @@ vless:
         Assert.Equal(1, loaded.Vless.Servers.Count);
         Assert.Equal("main-brat-manual", loaded.Vless.Servers[0].Name);
 
-        // After Load, schema should have migrated 4→5 in memory. Note:
+        // After Load, schema should have migrated 4→current in memory. Note:
         // LoadCore's migrator-save writes to AppPaths.ConfigYamlPath (the
         // hard-coded default), NOT our test's custom path. So the file
         // on disk stays at its original schema_version, but the in-memory
         // tree we return has been migrated. The latter is what callers
-        // use; the disk re-save is a best-effort optimisation.
-        Assert.Equal(5, loaded.SchemaVersion);
+        // use; the disk re-save is a best-effort optimisation. Assert
+        // against CurrentSchemaVersion so future schema bumps don't trip this.
+        Assert.Equal(AppSettings.CurrentSchemaVersion, loaded.SchemaVersion);
     }
 
     /// <summary>
@@ -361,15 +362,20 @@ vless:
             "schema_version: 4\napp:\n  theme: dark\n");
         Assert.Equal(4, a.SchemaVersion);
 
-        // Case B: missing schema_version → expect 5 (C# field initializer)
+        // Case B: missing schema_version → expect the C# field initializer,
+        // which is `= CurrentSchemaVersion` (tracks the current schema so a
+        // fresh in-memory AppSettings never looks stale). We assert against
+        // CurrentSchemaVersion rather than a frozen literal so a schema bump
+        // (e.g. v5->v6 MTU migration) doesn't trip this repro test.
         var b = deserializer.Deserialize<AppSettings>(
             "app:\n  theme: dark\n");
-        if (b.SchemaVersion != 5)
+        if (b.SchemaVersion != AppSettings.CurrentSchemaVersion)
         {
             throw new Xunit.Sdk.XunitException(
                 $"REGRESSION ROOT CAUSE FOUND: StaticDeserializer initialises " +
                 $"AppSettings.SchemaVersion to {b.SchemaVersion} when the YAML field " +
-                $"is missing, NOT the C# field default (CurrentSchemaVersion = 5). " +
+                $"is missing, NOT the C# field default (CurrentSchemaVersion = " +
+                $"{AppSettings.CurrentSchemaVersion}). " +
                 $"This means any YAML missing schema_version triggers the full " +
                 $"migration chain → CleanupOrphanVlessServers wipes manual " +
                 $"Vless.Servers entries. " +

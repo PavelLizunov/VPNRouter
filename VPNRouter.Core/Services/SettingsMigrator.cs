@@ -40,6 +40,7 @@ public static class SettingsMigrator
                 2 => Migrate_2_to_3(settings, logger),
                 3 => Migrate_3_to_4(settings, logger),
                 4 => Migrate_4_to_5(settings, logger),
+                5 => Migrate_5_to_6(settings, logger),
                 _ => throw new InvalidOperationException(
                     $"No SettingsMigrator step defined for schema v{v} -> v{v + 1}. " +
                     $"This means the config file schema is newer than the running app — " +
@@ -627,6 +628,32 @@ public static class SettingsMigrator
             "pre-Wave-39 config (opt-in by default — sing-box DNS routing via VLESS:443 " +
             "is the primary leak protection; user enables firewall block via Settings → " +
             "Leak Protection if desired)");
+        return s;
+    }
+
+    /// <summary>
+    /// v2.42.0-r3 (2026-06-11): lower the TUN MTU off the old 9000 jumbo default.
+    /// With <c>stack=system</c> a 9000-byte TUN MTU put oversized HTTP/2 segments
+    /// on the wire that the real 1500-MTU path can't carry; with PMTUD broken they
+    /// were RST, so browsers got <c>ERR_CONNECTION_CLOSED</c> on YouTube / Google
+    /// over TCP-only (VLESS) proxies — while small clients (curl --http1.1,
+    /// PowerShell IWR) squeaked through and UDP/QUIC proxies bypassed it entirely.
+    /// Confirmed via diagnose.ps1 on a real user (h2 FAIL + tun mtu 9000).
+    ///
+    /// <para>Only rewrites the exact old default (9000) so a user who deliberately
+    /// set a custom MTU keeps it. 1280 = the IPv6 minimum MTU — guaranteed to
+    /// traverse any path (mobile / PPPoE / lossy links included). Idempotent.</para>
+    /// </summary>
+    private static AppSettings Migrate_5_to_6(AppSettings s, ILogger? logger)
+    {
+        if (s.Tun != null && s.Tun.Mtu == 9000)
+        {
+            s.Tun.Mtu = 1280;
+            logger?.Information(
+                "[SettingsMigrator] v5->v6: lowered TUN MTU 9000 -> 1280 (jumbo MTU broke " +
+                "HTTP/2 over TCP-only proxies -> browser ERR_CONNECTION_CLOSED on YouTube; " +
+                "1280 = IPv6 minimum, traverses any path)");
+        }
         return s;
     }
 }

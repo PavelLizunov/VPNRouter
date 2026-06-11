@@ -37,7 +37,7 @@ public class AppSettings
     /// belt-and-suspenders defense-in-depth, not a baseline requirement.
     /// See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
     /// </summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -1138,8 +1138,16 @@ public class TunSettings
     [YamlMember(Alias = "ipv6_enabled")]
     public bool Ipv6Enabled { get; set; } = false;
 
+    // v2.42.0-r3: was 9000 (sing-box jumbo default). With stack=system that
+    // 9000-byte TUN MTU put oversized HTTP/2 segments on the wire that the real
+    // 1500-MTU path can't carry; with PMTUD broken they were RST -> browsers got
+    // ERR_CONNECTION_CLOSED on YouTube/Google over TCP-only (VLESS) proxies while
+    // small clients (curl --http1.1, PowerShell) squeaked through and UDP/QUIC
+    // proxies bypassed it. 1280 (IPv6 minimum) traverses ANY path. Confirmed via
+    // diagnose.ps1 on a real user (h2 FAIL + tun mtu 9000). SettingsMigrator
+    // v5->v6 lowers existing 9000 configs.
     [YamlMember(Alias = "mtu")]
-    public int Mtu { get; set; } = 9000;
+    public int Mtu { get; set; } = 1280;
 
     [YamlMember(Alias = "auto_route")]
     public bool AutoRoute { get; set; } = true;

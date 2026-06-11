@@ -24,7 +24,7 @@ public class VpnEngineTunFingerprintTests
         InterfaceName = "VPNRouter-TUN",
         Ipv4Address = "172.19.0.1/30",
         Ipv6Enabled = false,
-        Mtu = 9000,
+        Mtu = 1280,   // v2.42.0-r3 product default (was 9000); MtuChange test uses 1500 to differ
         AutoRoute = true,
         StrictRoute = false,
         RouteExcludeAddress = new List<string>()

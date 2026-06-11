@@ -240,8 +240,10 @@ public class SingBoxInbound
     [JsonPropertyName("address")]
     public List<string> Address { get; set; } = new() { "172.19.0.1/30" };
 
+    // v2.42.0-r3: 9000 jumbo broke HTTP/2 over TCP-only proxies (browser
+    // ERR_CONNECTION_CLOSED via fragmentation). 1280 = IPv6 min, traverses any path.
     [JsonPropertyName("mtu")]
-    public int Mtu { get; set; } = 9000;
+    public int Mtu { get; set; } = 1280;
 
     [JsonPropertyName("auto_route")]
     public bool AutoRoute { get; set; } = true;
