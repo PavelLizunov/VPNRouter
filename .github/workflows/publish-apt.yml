@@ -307,6 +307,10 @@ jobs:
           # deterministic byte content on GitHub Pages.
           sed 's/\r$//' packaging/windows/install.ps1   > gh-pages-dir/install.ps1
           sed 's/\r$//' packaging/windows/uninstall.ps1 > gh-pages-dir/uninstall.ps1
+          # diagnose.ps1 — read-only YouTube/connectivity layer-probe a user runs
+          # while connected on a full-tunnel config:
+          #   iwr -useb https://vpn.ninitux.com/diagnose.ps1 | iex
+          sed 's/\r$//' packaging/windows/diagnose.ps1  > gh-pages-dir/diagnose.ps1
 
           # Android download / install page at /android. Client-side JS
           # resolves the latest VPNRouter-v*-android.apk from the GitHub API
@@ -325,7 +329,7 @@ jobs:
           # Re-add CRLF for genuine Windows execution semantics.
           sed 's/$/\r/' /tmp/repair-lf.cmd > gh-pages-dir/repair.cmd
           chmod 755 gh-pages-dir/repair.cmd
-          chmod 644 gh-pages-dir/install.ps1 gh-pages-dir/uninstall.ps1
+          chmod 644 gh-pages-dir/install.ps1 gh-pages-dir/uninstall.ps1 gh-pages-dir/diagnose.ps1
           # Simple landing page at gh-pages root linking to the installer +
           # apt repo. Prevents the 404 that Pages currently returns for `/`.
           cat > gh-pages-dir/index.html <<'HTML'
