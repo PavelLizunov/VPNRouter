@@ -121,12 +121,23 @@ if ($hasUdpProxy) {
 }
 
 # ---------- Layer 6: HTTP round-trip ----------
+# Any HTTP status back = the server answered = reachability OK (even a 404).
+# Only a timeout / no-response (null) is a real FAIL. Works on PS 5.1 (throws
+# System.Net.WebException) and PS 7 (HttpResponseException) - both expose
+# .Exception.Response.StatusCode.
 Sec 'HTTP round-trip (through the tunnel)'
-foreach ($url in 'http://www.gstatic.com/generate_204','https://www.youtube.com','https://i.ytimg.com/favicon.ico') {
-    $t = Timed { try { (Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 20 -MaximumRedirection 2).StatusCode } catch { $null } }
-    $ok = [bool]$t.Result
+foreach ($url in 'http://www.gstatic.com/generate_204','https://www.youtube.com','https://www.youtube.com/generate_204') {
+    $t = Timed {
+        try { [int](Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 20 -MaximumRedirection 2).StatusCode }
+        catch {
+            $resp = $_.Exception.Response
+            if ($resp -and $resp.StatusCode) { [int]$resp.StatusCode } else { $null }
+        }
+    }
+    $code = $t.Result
+    $ok = ($code -ne $null)
     $lbl = ($url -replace '^https?://','' )
-    Verdict "http $lbl" $ok ($(if ($ok) { "HTTP $($t.Result)  ($($t.Ms) ms)" } else { "no response / timeout ($($t.Ms) ms)" }))
+    Verdict "http $lbl" $ok ($(if ($ok) { "HTTP $code  ($($t.Ms) ms)" } else { "no response / timeout ($($t.Ms) ms)" }))
 }
 
 # ---------- Layer 7: egress IP ----------
