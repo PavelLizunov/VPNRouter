@@ -140,6 +140,30 @@ foreach ($url in 'http://www.gstatic.com/generate_204','https://www.youtube.com'
     Verdict "http $lbl" $ok ($(if ($ok) { "HTTP $code  ($($t.Ms) ms)" } else { "no response / timeout ($($t.Ms) ms)" }))
 }
 
+# ---------- Layer 6.5: Throughput (enough bandwidth for video?) ----------
+# 'YouTube response is very slow' usually = the page loads (small) but video
+# buffers (sustained). This measures the actual download speed through the
+# tunnel. HD YouTube needs ~0.5-3 MB/s; below ~1 MB/s video will spin.
+Sec 'Throughput (sustained download through the tunnel)'
+$mbs = $null
+$tmp = Join-Path $env:TEMP 'vpnr-speed.bin'
+try {
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    Invoke-WebRequest 'https://speed.cloudflare.com/__down?bytes=10000000' -UseBasicParsing -OutFile $tmp -TimeoutSec 60
+    $sw.Stop()
+    $bytes = (Get-Item $tmp).Length
+    $sec   = [math]::Max($sw.Elapsed.TotalSeconds, 0.001)
+    $mbs   = [math]::Round(($bytes / 1MB) / $sec, 2)
+    $mbps  = [math]::Round(($bytes * 8 / 1000000) / $sec, 1)
+    Remove-Item $tmp -Force -EA SilentlyContinue
+} catch {}
+if ($mbs -ne $null) {
+    $fast = ($mbs -ge 1.0)
+    Verdict 'download' $fast ("$mbs MB/s ($mbps Mbps) for 10 MB" + $(if ($fast) { " - enough for HD video" } else { " - TOO SLOW; YouTube video will buffer (need ~0.5-3 MB/s)" }))
+} else {
+    Verdict 'download' $false 'speed test failed/timed out (very slow tunnel)'
+}
+
 # ---------- Layer 7: egress IP ----------
 Sec 'Egress IP (should be the VPN server, not your ISP)'
 $eip = $null
@@ -167,6 +191,9 @@ if (-not $delay) {
     Line "QUIC is NOT blocked on a TCP-only proxy -> classic YouTube 'endless loading'. Enable 'Block QUIC on TCP-only proxy' (or reconnect to regenerate the rule)."
 } elseif ($ytIp -and -not $gvIp) {
     Line 'youtube.com resolves but googlevideo (video CDN) does not -> DNS issue specifically on the CDN domain.'
+} elseif ($mbs -ne $null -and $mbs -lt 1.0) {
+    Line "Bandwidth is LOW ($mbs MB/s) -> the page loads but video buffers ('slow YouTube response'). This is the server's speed/peering, not a config bug."
+    Line "Try a faster server - ideally a UDP-capable one (Hysteria2 / TUIC) so YouTube's QUIC works natively instead of slow TCP-over-tunnel."
 } else {
     Line 'No single obvious break above. Send this report - the per-layer timings tell us where it stalls.'
 }
