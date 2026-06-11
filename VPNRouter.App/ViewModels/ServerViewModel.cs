@@ -329,7 +329,13 @@ public partial class ServerViewModel : ViewModelBase
     {
         get
         {
-            var protocol = (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
+            // v2.42.0-r2: detect dns-tunnel by its payload fields, not just the
+            // Protocol string — Android's JSON cache can drop Protocol back to
+            // "vless" while the dns fields survive, which mislabeled a working
+            // dns-tunnel server as "tcp + reality". IsDnsTunnel is field-based.
+            var protocol = (_originalEntry?.IsDnsTunnel == true)
+                ? "dns-tunnel"
+                : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
             var parts = new System.Collections.Generic.List<string>();
 
             // v2.30.1-r3: for non-VLESS protocols (Hysteria2 / TUIC / SS),

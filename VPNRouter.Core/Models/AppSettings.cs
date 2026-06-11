@@ -898,6 +898,25 @@ public class VlessServerEntry
     [YamlMember(Alias = "protocol")]
     public string Protocol { get; set; } = "vless";
 
+    /// <summary>
+    /// True when this entry is a DNS-tunnel (slipstream) server. Field-based
+    /// (not just the <see cref="Protocol"/> string) so it survives a
+    /// serialization round-trip that drops <c>Protocol</c> back to its "vless"
+    /// default. v2.42.0-r2 symptom: a dns-tunnel server ran fine on Android but
+    /// its list subtitle showed "tcp + reality" because the JSON cache lost
+    /// <c>Protocol</c> while the dns-tunnel payload (<see cref="DnsDomain"/> /
+    /// <see cref="DnsResolvers"/> / <see cref="DnsLeafCertPem"/>) survived — and
+    /// those fields ONLY exist on a dns-tunnel entry, so their presence
+    /// unambiguously identifies one.
+    /// </summary>
+    [YamlIgnore]
+    [JsonIgnore]
+    public bool IsDnsTunnel =>
+        string.Equals(Protocol, "dns-tunnel", System.StringComparison.OrdinalIgnoreCase)
+        || !string.IsNullOrWhiteSpace(DnsDomain)
+        || (DnsResolvers != null && DnsResolvers.Count > 0)
+        || !string.IsNullOrWhiteSpace(DnsLeafCertPem);
+
     [YamlMember(Alias = "server")]
     public string Server { get; set; } = string.Empty;
 
