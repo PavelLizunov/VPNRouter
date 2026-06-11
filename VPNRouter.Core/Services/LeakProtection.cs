@@ -533,6 +533,21 @@ public static class LeakProtection
             if (string.IsNullOrEmpty(server))
                 continue;
 
+            // DNS-tunnel (slipstream) + any local-front transport: the proxy
+            // outbound deliberately targets a loopback address (the local
+            // slipstream-client listening on 127.0.0.1:<port>), and the real
+            // egress server is reached THROUGH that local client — validated by
+            // SlipstreamManager from the dns-tunnel profile, not here. A
+            // loopback target can never be a remote leak: traffic can't leave
+            // the box via 127.0.0.1, so it fails closed (connection refused;
+            // VpnEngine already refuses to start sing-box over a dead local
+            // port) rather than leaking to a dead/hostile IP — which is the
+            // only thing this subscription-scope check defends against. So it's
+            // out of scope for the allow-list. (Fixes the v2.42.0 dns-tunnel
+            // "127.0.0.1:7001 not in active subscription scope" false-positive.)
+            if (IsLoopbackServer(server))
+                continue;
+
             var port = ob.ServerPort ?? 0;
             var uuid = ob.Uuid?.Trim() ?? string.Empty;
 
@@ -618,6 +633,28 @@ public static class LeakProtection
             return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// True when <paramref name="server"/> is a loopback target
+    /// (<c>127.0.0.0/8</c>, <c>::1</c>, or the literal <c>localhost</c>). Such
+    /// a proxy outbound is a local-front transport — the DNS-tunnel slipstream
+    /// client listens on <c>127.0.0.1:&lt;port&gt;</c> and relays to the real
+    /// server itself — so it is exempt from the subscription-scope leak check:
+    /// traffic can't leave the box via loopback, so a mismatch fails closed
+    /// rather than leaking to a remote IP.
+    /// </summary>
+    private static bool IsLoopbackServer(string? server)
+    {
+        if (string.IsNullOrWhiteSpace(server))
+            return false;
+
+        var s = server.Trim();
+        if (s.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return System.Net.IPAddress.TryParse(s, out var ip)
+            && System.Net.IPAddress.IsLoopback(ip);
     }
 
     /// <summary>

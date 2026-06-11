@@ -431,4 +431,82 @@ public sealed class LeakProtectionScopeAwareTests
             e.Contains("193.233.217.174")
             && (e.Contains("scope") || e.Contains("legacy") || e.Contains("subscription")));
     }
+
+    // ─── DNS-tunnel (slipstream) loopback proxy outbound — exempt from scope ───
+    //
+    // v2.42.0 regression: the DNS-tunnel transport rewrites the proxy outbound
+    // to target the local slipstream-client front (127.0.0.1:7001); the REAL
+    // server is reached THROUGH that local client (validated by
+    // SlipstreamManager from the dns-tunnel profile, not by LeakProtection).
+    // Pre-fix the scope-aware check saw "127.0.0.1:7001 not in the active
+    // subscription scope" and hard-failed VpnEngine.StartAsync (user's exact
+    // "Latvia DNS ~main-brat" log, 2026-06-11). A loopback target can't carry
+    // traffic off-box, so it's a fail-closed local relay, never a remote leak —
+    // and is now exempt from the subscription-server allow-list.
+
+    [Fact]
+    public void GeneratedMode_WithSubscription_DnsTunnelLoopbackOutbound_Passes()
+    {
+        // Reproduces the user's scenario: generated mode, an enabled
+        // subscription with real servers, but the proxy outbound is the
+        // DNS-tunnel local front (127.0.0.1:7001) carrying the real UUID.
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.App.Subscriptions.Add(new SubscriptionEntry
+        {
+            Name = "main-brat",
+            Url = "https://example.com/sub",
+            Enabled = true,
+            Servers = new List<VlessServerEntry>
+            {
+                new() { Name = "lv-01 main-brat", Server = "213.155.15.93", Port = 443, Uuid = "sub-uuid-lv" },
+            }
+        });
+
+        // BuildDnsTunnelOutbound shape: vless over 127.0.0.1:7001, real uuid.
+        var config = CreateValidConfig(
+            proxyServer: "127.0.0.1",
+            proxyPort: 7001,
+            proxyUuid: "sub-uuid-lv");
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.True(result.IsValid,
+            "DNS-tunnel loopback proxy outbound must pass scope validation. Errors: "
+            + string.Join("; ", result.Errors));
+        Assert.DoesNotContain(result.Errors, e =>
+            e.Contains("127.0.0.1")
+            && (e.Contains("scope") || e.Contains("legacy") || e.Contains("subscription")));
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1")]   // IPv4 loopback (the dns-tunnel default)
+    [InlineData("127.5.6.7")]   // anywhere in 127.0.0.0/8
+    [InlineData("::1")]         // IPv6 loopback
+    [InlineData("localhost")]   // hostname form
+    public void GeneratedMode_WithSubscription_LoopbackVariants_AllExempt(string loopback)
+    {
+        // Lock the IsLoopbackServer helper's coverage across every loopback
+        // spelling a local-front transport might emit, so none of them trips
+        // the subscription-scope leak error.
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.App.Subscriptions.Add(new SubscriptionEntry
+        {
+            Name = "sub",
+            Url = "https://example.com/sub",
+            Enabled = true,
+            Servers = new List<VlessServerEntry>
+            {
+                new() { Server = "1.2.3.4", Port = 443, Uuid = "sub-uuid" },
+            }
+        });
+
+        var config = CreateValidConfig(proxyServer: loopback, proxyPort: 7001, proxyUuid: "any");
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.DoesNotContain(result.Errors, e =>
+            e.Contains("scope") || e.Contains("not in the active subscription"));
+    }
 }

@@ -32,6 +32,14 @@ public class HealthMonitor : IDisposable
     // (test fakes, future DI wiring) — disposal is the caller's job.
     private readonly IDisposable? _ownedApi;
 
+    // DNS-leak-lockdown reconciler. "Block DNS outside VPN" is a projection of
+    // live tunnel state: lifted (fail open) the moment the tunnel stops serving
+    // and re-armed on recovery, so a crash + restart-backoff or a dead/slow
+    // server can't strand the user with DNS blocked ("no internet / endless
+    // loading"). Optional ctor arg defaults to the real Windows impl; tests
+    // inject a capture stub (NullWindowsDnsHardening).
+    private readonly IWindowsDnsHardening _dnsHardening;
+
     private System.Threading.Timer? _healthTimer;
     private System.Threading.Timer? _debounceTimer;
 
@@ -170,13 +178,16 @@ public class HealthMonitor : IDisposable
         IFirewallManager firewall,
         MonitoringSettings settings,
         ILogger? logger = null,
-        ISingBoxApi? api = null)
+        ISingBoxApi? api = null,
+        IWindowsDnsHardening? dnsHardening = null)
     {
         _singBox = singBox;
         _scanner = scanner;
         _firewall = firewall;
         _settings = settings;
         _logger = logger ?? Log.Logger;
+        // Default to the real Windows impl (no-op off-Windows); tests pass a stub.
+        _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
 
         // Resolve the Clash API client. Default to a ClashSingBoxApi
         // wired against the same target SingBoxManager.TryHotReload used
@@ -432,6 +443,26 @@ public class HealthMonitor : IDisposable
                 _logger.Information("[HealthMonitor] VPN is up");
                 VpnStarted?.Invoke(this, EventArgs.Empty);
             }
+
+            // v2.42.0: DnsLeakLockdown "Auto" (fail-open) reconcile. The
+            // "Block DNS outside VPN" firewall lockdown now follows live tunnel
+            // state instead of staying pinned for the whole session — while the
+            // tunnel is confirmed serving it stays armed; the moment serving
+            // drops (crash backoff, dead/slow server, TUN not routing) it is
+            // LIFTED so the user keeps DNS + internet instead of "no internet /
+            // endless loading". Gate "serving" on the Clash API actually
+            // responding (Windows IsHealthy() is process-liveness only and would
+            // re-arm before the TUN forwards DNS — same signal the deferred
+            // kill-switch lift above uses). Short-circuit && skips the 3s probe
+            // when sing-box is already dead. Only runs when the feature is on
+            // (zero cost + no extra probe otherwise). Idempotent — the
+            // reconciler only touches the firewall on a real Enable/Disable
+            // transition (see DnsLockdownPolicy).
+            if (_appSettings?.App?.DnsLeakLockdown == true)
+            {
+                bool serving = isHealthy && ClashApiResponds();
+                _dnsHardening.ReconcileLockdownForHealth(serving, _appSettings, _logger);
+            }
         }
         catch (Exception ex)
         {
@@ -473,6 +504,19 @@ public class HealthMonitor : IDisposable
         // while sing-box is down and TUN interface is gone
         try { _firewall.EnableBlockRules(); }
         catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to enable firewall block rules on crash"); }
+
+        // v2.42.0: DnsLeakLockdown fail-open. sing-box (and the TUN with it) is
+        // gone, so the DNS-port block rules would now strand the user offline.
+        // Lift them immediately rather than waiting for the next health tick —
+        // the tick re-arms once the tunnel is confirmed serving again. This is
+        // the INVERSE of the kill-switch EnableBlockRules() above on purpose:
+        // block_on_vpn_fail is a kill-switch (fail-CLOSED on crash), the DNS
+        // leak lockdown is a privacy feature with nothing to protect while the
+        // tunnel is down (fail-OPEN on crash). Different threat models — see
+        // DnsLockdownPolicy. Gated inside the reconciler on the DnsLeakLockdown
+        // flag, so this is a no-op when the feature is off.
+        try { _dnsHardening.ReconcileLockdownForHealth(false, _appSettings, _logger); }
+        catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to lift DNS lockdown on crash"); }
 
         if (_settings.RestartOnFailure)
             AttemptRestart();

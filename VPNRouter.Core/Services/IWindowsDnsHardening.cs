@@ -114,6 +114,24 @@ public interface IWindowsDnsHardening
     /// settings is null.</param>
     /// <param name="logger">Serilog logger.</param>
     void EnableLockdownIfConfigured(AppSettings? settings, ILogger? logger);
+
+    /// <summary>
+    /// Reconcile the firewall DNS-port lockdown against live tunnel state —
+    /// the fail-open "Auto" semantics. Driven from the HealthMonitor tick with
+    /// the live serving signal (and on the sing-box crash hook with
+    /// <paramref name="tunnelServing"/>=false) so the lockdown is LIFTED the
+    /// moment the tunnel stops routing (user keeps internet while the VPN is
+    /// down / reconnecting) and RE-ARMED once it is confirmed serving again.
+    /// Idempotent — only mutates the firewall on a real Enable/Disable
+    /// transition. No-op when <c>AppConfig.DnsLeakLockdown</c> is false.
+    /// See <see cref="DnsLockdownPolicy"/> for the rationale + decision matrix.
+    /// </summary>
+    /// <param name="tunnelServing">True when the TUN is confirmed routing
+    /// (sing-box healthy AND Clash API responding). False on outage / crash.</param>
+    /// <param name="settings">App settings carrying the DnsLeakLockdown flag +
+    /// TUN CIDR. No-op when null or the flag is off.</param>
+    /// <param name="logger">Serilog logger.</param>
+    void ReconcileLockdownForHealth(bool tunnelServing, AppSettings? settings, ILogger? logger);
 }
 
 /// <summary>
@@ -157,6 +175,14 @@ public sealed class WindowsDnsHardeningImpl : IWindowsDnsHardening
     {
 #if PLATFORM_WINDOWS
         WindowsDnsHardening.EnableLockdownIfConfigured(settings, logger);
+#endif
+    }
+
+    /// <inheritdoc />
+    public void ReconcileLockdownForHealth(bool tunnelServing, AppSettings? settings, ILogger? logger)
+    {
+#if PLATFORM_WINDOWS
+        WindowsDnsHardening.ReconcileLockdownForHealth(tunnelServing, settings, logger);
 #endif
     }
 }

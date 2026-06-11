@@ -68,6 +68,22 @@ public sealed class NullWindowsDnsHardening : IWindowsDnsHardening
     public int EnableLockdownCount =>
         Calls.Count(c => c.Op == "EnableLockdownIfConfigured");
 
+    /// <summary>
+    /// Ordered log of every <see cref="ReconcileLockdownForHealth"/>
+    /// invocation with the live <c>tunnelServing</c> signal the caller
+    /// passed. Tests assert the HealthMonitor drives this with
+    /// serving=false on crash / unhealthy tick and serving=true once the
+    /// Clash API confirms the TUN is routing again.
+    /// </summary>
+    public List<(bool TunnelServing, AppSettings? Settings)> ReconcileCalls { get; } = new();
+
+    /// <summary>How many times <see cref="ReconcileLockdownForHealth"/> fired.</summary>
+    public int ReconcileCount => ReconcileCalls.Count;
+
+    /// <summary>The <c>tunnelServing</c> value of the most recent reconcile (null if none).</summary>
+    public bool? LastReconcileServing =>
+        ReconcileCalls.Count == 0 ? null : ReconcileCalls[^1].TunnelServing;
+
     /// <inheritdoc />
     public void Apply(AppSettings? settings, ILogger? logger) =>
         Calls.Add(("Apply", settings));
@@ -79,4 +95,11 @@ public sealed class NullWindowsDnsHardening : IWindowsDnsHardening
     /// <inheritdoc />
     public void EnableLockdownIfConfigured(AppSettings? settings, ILogger? logger) =>
         Calls.Add(("EnableLockdownIfConfigured", settings));
+
+    /// <inheritdoc />
+    public void ReconcileLockdownForHealth(bool tunnelServing, AppSettings? settings, ILogger? logger)
+    {
+        Calls.Add(("ReconcileLockdownForHealth", settings));
+        ReconcileCalls.Add((tunnelServing, settings));
+    }
 }

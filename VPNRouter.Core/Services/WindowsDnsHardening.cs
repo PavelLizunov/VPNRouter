@@ -44,6 +44,16 @@ public static class WindowsDnsHardening
     private static readonly string StatePath =
         Path.Combine(AppPaths.DataDir, "dns-hardening-state.json");
 
+    // Tracks whether OUR firewall DNS-port block rules are currently installed.
+    // The lockdown is a projection of live tunnel state (see DnsLockdownPolicy):
+    // armed only while the tunnel is confirmed serving, lifted (fail-open) the
+    // moment it stops serving, re-armed on recovery. ReconcileLockdownForHealth
+    // is the single mutator; EnableLockdownIfConfigured (warm-up arm) and Restore
+    // (Stop) funnel through the same effective-state so netsh only runs on real
+    // transitions. volatile: read/written from the HealthMonitor timer thread,
+    // the StartupPipeline warm-up task, and VpnEngine.Stop.
+    private static volatile bool _lockdownEffective;
+
     /// <summary>
     /// Apply DNS hardening: disable SMHNR + parallel A/AAAA, set TUN metric.
     /// Saves original values so they can be restored later.
@@ -147,33 +157,67 @@ public static class WindowsDnsHardening
     /// </summary>
     public static void EnableLockdownIfConfigured(AppSettings? settings, ILogger? logger = null)
     {
-        var log = logger ?? Log.Logger;
-        if (settings?.App?.DnsLeakLockdown != true)
-        {
-            log.Debug("[DnsHardening] DnsLeakLockdown disabled — skipping firewall rule install");
-            return;
-        }
+        // The warm-up probe just confirmed TUN is routing, so this is simply
+        // "reconcile with the tunnel serving" — arms the lockdown when the
+        // setting is on, no-ops otherwise. Funnelling through the reconciler
+        // keeps a single source of truth for _lockdownEffective so the
+        // HealthMonitor fail-open / re-arm path stays consistent.
+        ReconcileLockdownForHealth(tunnelServing: true, settings, logger);
+    }
 
-        log.Information(
-            "[DnsHardening] DnsLeakLockdown enabled — installing firewall rules in background " +
-            "(BR-7: deferred until TUN warm-up confirmed routing)");
-        // BR-8 (brat 2026-05-20) — pass the TUN CIDR so EnableDnsLockdownAsync
-        // can add an explicit allow rule for sing-box's TUN DNS endpoint
-        // (typically 172.19.0.2:53). Without this, the unscoped block rule
-        // banned every UDP/53 outbound including TUN-bound DNS, leaving the
-        // user without working DNS once the lockdown installed.
-        var tunCidr = settings.Tun?.Ipv4Address;
-        _ = Task.Run(async () =>
+    /// <summary>
+    /// Reconcile the firewall DNS-port lockdown against live tunnel state —
+    /// the fail-open "Auto" semantics (see <see cref="DnsLockdownPolicy"/>).
+    ///
+    /// <para>Called: (a) from the StartupPipeline warm-up success branch with
+    /// <paramref name="tunnelServing"/>=true to arm; (b) every HealthMonitor
+    /// tick with the live serving signal (sing-box healthy AND Clash API
+    /// responding == TUN inbound loaded) to lift on outage / re-arm on
+    /// recovery; (c) from the sing-box crash hook with false for an immediate
+    /// fail-open. Idempotent — only touches netsh on a real Enable/Disable
+    /// transition. Fire-and-forget background netsh so the timer / warm-up
+    /// threads never block; non-throwing.</para>
+    /// </summary>
+    public static void ReconcileLockdownForHealth(bool tunnelServing, AppSettings? settings, ILogger? logger = null)
+    {
+        var log = logger ?? Log.Logger;
+        bool settingEnabled = settings?.App?.DnsLeakLockdown == true;
+        var action = DnsLockdownPolicy.Decide(settingEnabled, tunnelServing, _lockdownEffective);
+
+        switch (action)
         {
-            try
-            {
-                await FirewallManager.EnableDnsLockdownAsync(log, tunCidr);
-            }
-            catch (Exception ex)
-            {
-                log.Warning(ex, "[DnsHardening] Background DNS lockdown install failed (non-fatal)");
-            }
-        });
+            case DnsLockdownAction.Enable:
+                _lockdownEffective = true;
+                log.Information(
+                    "[DnsHardening] DnsLeakLockdown armed — TUN confirmed serving " +
+                    "(UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)");
+                // BR-8 (brat 2026-05-20) — pass the TUN CIDR so the block rule
+                // allows sing-box's own TUN DNS endpoint (172.19.0.2:53), else
+                // even tunnelled DNS dies once the lockdown installs.
+                var tunCidr = settings?.Tun?.Ipv4Address;
+                _ = Task.Run(async () =>
+                {
+                    try { await FirewallManager.EnableDnsLockdownAsync(log, tunCidr); }
+                    catch (Exception ex) { log.Warning(ex, "[DnsHardening] Background DNS lockdown install failed (non-fatal)"); }
+                });
+                break;
+
+            case DnsLockdownAction.Disable:
+                _lockdownEffective = false;
+                log.Information(
+                    "[DnsHardening] DnsLeakLockdown lifted (fail-open) — tunnel not serving; " +
+                    "DNS restored so the user keeps internet while the VPN is down / reconnecting");
+                _ = Task.Run(async () =>
+                {
+                    try { await FirewallManager.DisableDnsLockdownAsync(log); }
+                    catch (Exception ex) { log.Warning(ex, "[DnsHardening] Background DNS lockdown lift failed (non-fatal)"); }
+                });
+                break;
+
+            case DnsLockdownAction.None:
+            default:
+                break;
+        }
     }
 
     /// <summary>
@@ -226,6 +270,9 @@ public static class WindowsDnsHardening
         // forget so a stuck netsh during shutdown doesn't block VpnEngine.Stop
         // (which has its own try/catch wrapper around this call but still
         // wouldn't want to wait on a 5s timeout per call).
+        // Clear effective-state so the next session's reconcile starts clean
+        // (Stop is the authoritative "lockdown is gone" point).
+        _lockdownEffective = false;
         _ = Task.Run(async () =>
         {
             try
