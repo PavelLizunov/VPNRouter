@@ -178,6 +178,20 @@ public class SlipstreamManager : IDisposable
             ExecutablePath: AppPaths.SlipstreamExePath,
             Arguments: argv,
             WorkingDirectory: AppPaths.SlipstreamBinDir,
+            EnvironmentOverrides: new Dictionary<string, string>
+            {
+                // slipstream-client logs via tracing_subscriber, whose EnvFilter
+                // reads RUST_LOG (default "info"). Pin it so the connection-
+                // lifecycle WARN lines are emitted — these are the ONLY signal
+                // for why a live DNS-tunnel drops:
+                //   "Connection closed … local_error=0x433"  (QUIC idle timeout)
+                //   "Connection closed; reconnecting in Nms" (backoff 250ms→5s)
+                //   "Path for resolver … became unavailable" (resolver went silent)
+                // Without capturing these a "worked then died" report is
+                // un-rootcause-able. RUST_BACKTRACE surfaces any client panic.
+                ["RUST_LOG"] = "info",
+                ["RUST_BACKTRACE"] = "1",
+            },
             CaptureStdout: true,
             CaptureStderr: true);
 
@@ -200,7 +214,20 @@ public class SlipstreamManager : IDisposable
         LocalPort = localPort;
         var startedHandle = _handle;
         startedHandle.Exited += (_, code) =>
+        {
             _logger.Warning("[Slipstream] Process exited (exit code: {Code})", code);
+            AppendTransportLog($"--- process exited (code {code}) ---");
+        };
+        // slipstream-client logs to STDOUT (tracing fmt default), so OutputLine
+        // carries the connection-lifecycle WARN/ERROR lines. Persist BOTH streams
+        // to a dedicated slipstream.log (AppPaths.SlipstreamLogPath) so a live
+        // tunnel drop is diagnosable after the fact — and the redaction-safe
+        // diagnostics export picks it up. ErrorLine still feeds the 16 KB
+        // early-exit buffer (unchanged).
+        AppendTransportLog(
+            $"=== spawn PID {startedHandle.Pid} -d {entry.DnsDomain} -l {localPort} " +
+            $"resolvers={resolvers.Count} ===");
+        startedHandle.OutputLine += OnOutputLineHandler;
         startedHandle.ErrorLine += OnErrorLineHandler;
         _logger.Information("[Slipstream] Spawned PID {Pid} on 127.0.0.1:{Port}",
             startedHandle.Pid, localPort);
@@ -240,11 +267,56 @@ public class SlipstreamManager : IDisposable
     private void OnErrorLineHandler(object? sender, string line)
     {
         if (string.IsNullOrEmpty(line)) return;
+        AppendTransportLog(line);
         const int MaxStderrBuffer = 16 * 1024;
         lock (_stderrGate)
             if (_capturedStderr.Length < MaxStderrBuffer)
                 _capturedStderr.AppendLine(line);
     }
+
+    private void OnOutputLineHandler(object? sender, string line)
+    {
+        if (string.IsNullOrEmpty(line)) return;
+        AppendTransportLog(line);
+        // Surface the connection-lifecycle WARN/ERROR lines to the MAIN app log
+        // too, so the primary diagnostic log shows a flapping/dying tunnel
+        // without needing to open slipstream.log. Normal operation is near-silent
+        // at info level (only the initial "Listening …"), so this does not flood.
+        if (line.IndexOf("WARN", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            line.IndexOf("ERROR", StringComparison.OrdinalIgnoreCase) >= 0)
+            _logger.Warning("[Slipstream] {Line}", StripAnsi(line));
+    }
+
+    // ── Dedicated transport log (AppPaths.SlipstreamLogPath) ──
+    // Both slipstream streams + lifecycle markers land here so a post-mortem
+    // (or the diagnostics export) can root-cause a dropped tunnel. Best-effort,
+    // size-capped, ANSI-stripped. Static + locked so concurrent OutputLine/
+    // ErrorLine callbacks (separate reader threads) don't interleave a line.
+    private const long TransportLogMaxBytes = 8 * 1024 * 1024;
+    private static readonly object _transportLogGate = new();
+
+    private static void AppendTransportLog(string line)
+    {
+        if (string.IsNullOrEmpty(line)) return;
+        try
+        {
+            lock (_transportLogGate)
+            {
+                var path = AppPaths.SlipstreamLogPath;
+                var fi = new FileInfo(path);
+                if (fi.Exists && fi.Length > TransportLogMaxBytes) return; // capped — keep the head
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.AppendAllText(path,
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {StripAnsi(line)}{Environment.NewLine}");
+            }
+        }
+        catch { /* best-effort diagnostics — never throw from a log callback */ }
+    }
+
+    // slipstream's tracing fmt emits ANSI colour codes (\e[33m …); strip them so
+    // the file + main log are plain text.
+    private static string StripAnsi(string s)
+        => System.Text.RegularExpressions.Regex.Replace(s, "\\[[0-9;]*m", "");
 
     public void Stop()
     {

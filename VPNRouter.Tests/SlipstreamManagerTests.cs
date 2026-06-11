@@ -128,6 +128,31 @@ public class SlipstreamManagerTests
     }
 
     [Fact]
+    public void Start_SetsRustLogEnv_SoTransportDeathIsDiagnosable()
+    {
+        EnsureDummyBinary();
+        try
+        {
+            var (fake, _) = AliveRunner();
+            var mgr = new SlipstreamManager(runner: fake) { StartupProbeMs = 50 };
+
+            mgr.Start(MakeEntry(), localPort: 7001);
+
+            Assert.Single(fake.StartCalls);
+            var env = fake.StartCalls[0].EnvironmentOverrides;
+            Assert.NotNull(env);
+            // RUST_LOG=info makes slipstream-client emit its connection-lifecycle
+            // WARN lines ("local_error=0x433" idle-timeout / "resolver … became
+            // unavailable" / "reconnecting in Nms") which SlipstreamManager now
+            // persists to slipstream.log — without this env the tunnel-death
+            // post-mortem is blank (the regression this guards against).
+            Assert.True(env!.TryGetValue("RUST_LOG", out var lvl));
+            Assert.Equal("info", lvl);
+        }
+        finally { CleanupFiles(); }
+    }
+
+    [Fact]
     public void Start_FingerprintMatch_Spawns()
     {
         EnsureDummyBinary();

@@ -101,6 +101,12 @@ public static class DiagnosticsExporter
             // emergency channel log, if present
             AddLogTail(staging, AppPaths.WgturnCliLogPath, "wgturn-cli-tail.log", entries, warnings);
 
+            // DNS-tunnel (slipstream) transport log, if present — carries the
+            // QUIC-over-DNS connection lifecycle (idle-timeout 0x433, resolver-
+            // unavailable, reconnect backoff) needed to root-cause a dropped
+            // dns-tunnel. No-op for every non-dns-tunnel user (file absent).
+            AddLogTail(staging, AppPaths.SlipstreamLogPath, "slipstream-tail.log", entries, warnings);
+
             // geo file manifest (sizes + dates, NOT the files)
             AddText(staging, "geo-manifest.txt", BuildGeoManifest(), entries);
 
@@ -143,6 +149,7 @@ public static class DiagnosticsExporter
         "  vpnrouter*.log          - app logs, last few days (scrubbed)",
         "  singbox-tail.log        - sing-box log, current (scrubbed)",
         "  singbox-old-tail.log    - sing-box log, previous rotation if present (scrubbed)",
+        "  slipstream-tail.log     - DNS-tunnel transport log, if dns-tunnel was used (scrubbed)",
         "  geo-manifest.txt        - geo rule file sizes & dates (not the files)",
     });
 
