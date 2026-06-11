@@ -1048,6 +1048,20 @@ public class VlessServerEntry
     public List<string> DnsResolvers { get; set; } = new();
 
     /// <summary>
+    /// dns-tunnel: OPTIONAL authoritative DNS endpoint(s) (<c>ip:port</c>, e.g.
+    /// <c>213.155.15.93:53</c>) — slipstream-client repeats <c>--authoritative</c>
+    /// for each. Queries the tunnel server's authoritative NS DIRECTLY, bypassing
+    /// the recursive resolver. The recursive НСДИ resolvers rate-limit the covert
+    /// query stream after ~1.5-3 min (→ QUIC idle-timeout 0x433); the authoritative
+    /// path has no such limit, so where the network allows direct UDP to it the
+    /// tunnel is stable. Passed ALONGSIDE <see cref="DnsResolvers"/> (multipath:
+    /// authoritative when reachable, recursive as the censorship-resilient
+    /// fallback). Empty for other protocols / when the server publishes none.
+    /// </summary>
+    [YamlMember(Alias = "dns_authoritative")]
+    public List<string> DnsAuthoritative { get; set; } = new();
+
+    /// <summary>
     /// dns-tunnel: the full server leaf certificate (PEM, with BEGIN/END
     /// markers). Load-bearing — slipstream-client verifies the server-presented
     /// leaf against this via <c>--cert</c>. Carried in the profile (self-contained,

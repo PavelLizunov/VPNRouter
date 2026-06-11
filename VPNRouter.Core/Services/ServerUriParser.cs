@@ -219,6 +219,7 @@ public static class ServerUriParser
 
         string domain = string.Empty, uuid = string.Empty, fingerprint = string.Empty, cert = string.Empty;
         var resolvers = new List<string>();
+        var authoritative = new List<string>();
         try
         {
             using var doc = JsonDocument.Parse(jsonBytes);
@@ -243,6 +244,29 @@ public static class ServerUriParser
                     if (!string.IsNullOrWhiteSpace(v)) resolvers.Add(v!.Trim());
                 }
                 if (resolvers.Count > 0) break; // first non-empty array wins
+            }
+
+            // OPTIONAL authoritative endpoint(s): query the tunnel server's NS
+            // directly, bypassing the rate-limiting recursive resolver. Accept a
+            // single string OR an array; short "auth" or long "authoritative".
+            foreach (var key in new[] { "auth", "authoritative" })
+            {
+                if (!root.TryGetProperty(key, out var a)) continue;
+                if (a.ValueKind == JsonValueKind.String)
+                {
+                    var v = a.GetString();
+                    if (!string.IsNullOrWhiteSpace(v)) authoritative.Add(v!.Trim());
+                }
+                else if (a.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in a.EnumerateArray())
+                    {
+                        if (item.ValueKind != JsonValueKind.String) continue;
+                        var v = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(v)) authoritative.Add(v!.Trim());
+                    }
+                }
+                if (authoritative.Count > 0) break; // first present key wins
             }
         }
         catch (JsonException)
@@ -273,6 +297,7 @@ public static class ServerUriParser
             Server = domain,   // identity for dedup/display; outbound targets 127.0.0.1
             DnsDomain = domain,
             DnsResolvers = resolvers,
+            DnsAuthoritative = authoritative,
             DnsLeafCertPem = cert,
             DnsLeafFingerprint = fingerprint,
             Uuid = uuid,

@@ -153,6 +153,30 @@ public class SlipstreamManagerTests
     }
 
     [Fact]
+    public void Start_WithAuthoritative_PassesAuthoritativeAlongsideResolvers()
+    {
+        EnsureDummyBinary();
+        try
+        {
+            var (fake, _) = AliveRunner();
+            var mgr = new SlipstreamManager(runner: fake) { StartupProbeMs = 50 };
+            var entry = MakeEntry();
+            entry.DnsAuthoritative = new System.Collections.Generic.List<string> { "213.155.15.93:53" };
+
+            mgr.Start(entry, localPort: 7001);
+
+            var argv = fake.StartCalls[0].Arguments.ToList();
+            // --authoritative passed (bypass the rate-limiting recursive resolver)…
+            var ai = argv.IndexOf("--authoritative");
+            Assert.True(ai >= 0 && ai + 1 < argv.Count, "expected --authoritative <ep> in argv");
+            Assert.Equal("213.155.15.93:53", argv[ai + 1]);
+            // …WITHOUT dropping the -r recursive resolvers (multipath fallback).
+            Assert.Contains("-r", argv);
+        }
+        finally { CleanupFiles(); }
+    }
+
+    [Fact]
     public void Start_FingerprintMatch_Spawns()
     {
         EnsureDummyBinary();

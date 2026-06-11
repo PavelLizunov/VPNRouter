@@ -174,6 +174,16 @@ public class SlipstreamManager : IDisposable
         };
         foreach (var r in resolvers) { argv.Add("-r"); argv.Add(r); }
 
+        // OPTIONAL authoritative endpoint(s) — query the tunnel server's NS
+        // directly, bypassing the rate-limiting recursive resolver (the recursive
+        // НСДИ resolvers drop the covert query stream after ~1.5-3 min → QUIC
+        // idle-timeout 0x433). Passed ALONGSIDE -r so slipstream multipaths:
+        // authoritative when the network allows direct UDP to it, recursive as the
+        // censorship-resilient fallback. Absent for servers that publish none.
+        var authoritative = (entry.DnsAuthoritative ?? new List<string>())
+            .Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a.Trim()).ToList();
+        foreach (var a in authoritative) { argv.Add("--authoritative"); argv.Add(a); }
+
         var request = new ProcessRequest(
             ExecutablePath: AppPaths.SlipstreamExePath,
             Arguments: argv,
@@ -196,8 +206,8 @@ public class SlipstreamManager : IDisposable
             CaptureStderr: true);
 
         _logger.Information(
-            "[Slipstream] Spawn: {Exe} -d {Domain} -l {Port} (resolvers: {N})",
-            request.ExecutablePath, entry.DnsDomain, localPort, resolvers.Count);
+            "[Slipstream] Spawn: {Exe} -d {Domain} -l {Port} (resolvers: {N}, authoritative: {M})",
+            request.ExecutablePath, entry.DnsDomain, localPort, resolvers.Count, authoritative.Count);
 
         lock (_stderrGate) _capturedStderr.Clear();
 

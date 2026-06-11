@@ -54,6 +54,36 @@ public class ServerUriParserDnsTunnelTests
         Assert.Equal("deadbeef", e.DnsLeafFingerprint);
         Assert.Equal(PemDecoded, e.DnsLeafCertPem); // full PEM, newlines decoded
         Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, e.DnsResolvers);
+        Assert.Empty(e.DnsAuthoritative); // none in the baseline link
+    }
+
+    [Fact]
+    public void Parse_AuthoritativeString_ShortKey_Populates()
+    {
+        // Server publishes a single authoritative endpoint (short "auth" key) to
+        // let the client bypass the rate-limiting recursive resolver.
+        var json =
+            "{\"d\":\"t.ninitux.top\"," +
+            "\"r\":[\"195.208.4.1:53\"]," +
+            "\"auth\":\"213.155.15.93:53\"," +
+            "\"cert\":\"" + PemInJson + "\"," +
+            "\"uuid\":\"" + SampleUuid + "\"}";
+        var e = ServerUriParser.Parse(Link(json));
+        Assert.Equal(new[] { "213.155.15.93:53" }, e.DnsAuthoritative);
+        Assert.Equal(new[] { "195.208.4.1:53" }, e.DnsResolvers); // recursive preserved (multipath)
+    }
+
+    [Fact]
+    public void Parse_AuthoritativeArray_LongKey_Populates()
+    {
+        var json =
+            "{\"domain\":\"t.org\"," +
+            "\"resolvers\":[\"195.208.4.1:53\"]," +
+            "\"authoritative\":[\"213.155.15.93:53\",\"213.155.15.93:5353\"]," +
+            "\"cert\":\"" + PemInJson + "\"," +
+            "\"uuid\":\"" + SampleUuid + "\"}";
+        var e = ServerUriParser.Parse(Link(json));
+        Assert.Equal(new[] { "213.155.15.93:53", "213.155.15.93:5353" }, e.DnsAuthoritative);
     }
 
     [Fact]
