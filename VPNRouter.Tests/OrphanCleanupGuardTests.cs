@@ -53,6 +53,11 @@ public sealed class OrphanCleanupGuardTests
         // so a future refactor doesn't accidentally remove them too.
         Assert.Contains("KillByName(\"sing-box\"", stripped);
         Assert.Contains("KillByName(\"VPNRouter.GUI\"", stripped);
+
+        // M-2 (perf audit 2026-06-11): the dns-tunnel transport (slipstream-
+        // client) is swept too, so an orphan can't permanently hold port 7001
+        // and fail-close the next dns-tunnel reconnect.
+        Assert.Contains("KillByName(\"slipstream-client\"", stripped);
     }
 
     private static string? LoadOrphanCleanupSource()

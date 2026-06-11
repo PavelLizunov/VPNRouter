@@ -84,7 +84,20 @@ public static class OrphanCleanup
         // 1. Kill any sing-box.exe processes. We're starting fresh —
         // the engine will spawn its own sing-box if needed.
         if (!skipSingBoxKill)
+        {
             KillByName("sing-box", null);
+
+            // M-2 (perf audit 2026-06-11): also sweep an orphaned
+            // slipstream-client (the dns-tunnel transport). It binds the fixed
+            // local port 7001; if a crash / hard-kill leaves it behind, the next
+            // dns-tunnel connect's port pre-flight throws
+            // SlipstreamPortConflictException and reconnect is fail-closed until
+            // a manual kill. Gated with sing-box (same skipSingBoxKill guard, and
+            // it isn't an orphan when another instance owns the live tunnel).
+            // GetProcessesByName takes the basename without extension, so this
+            // matches slipstream-client.exe (Windows) and slipstream-client (Linux).
+            KillByName("slipstream-client", null);
+        }
 
         // 2. Kill any leftover VPNRouter.GUI.exe (legacy WinForms or Go stub).
         // Stub should self-exit but defensive in case it's hung. Always run
