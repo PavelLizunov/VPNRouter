@@ -196,18 +196,16 @@ public class SlipstreamManager : IDisposable
         // the (now 180s) idle window. 2s is far under that, so liveness is unaffected.
         argv.Add("-t"); argv.Add("2000");
 
-        // r9 (DIAGNOSTIC, TEMPORARY): max per-path observability to root-cause the
-        // ~1.5-2 min degradation. --debug-poll emits per-resolver congestion-control
-        // snapshots (cwnd / rtt / in_transit / flow_blocked) so we can see whether
-        // the authoritative path (213.155.15.93) stays healthy while the recursive
-        // НСДИ resolver (195.208.x) throttles — the single fact that decides whether
-        // prefer-authoritative can save the tunnel or the rate-limit is a hard wall.
-        // --debug-streams logs each covert stream's open/reset lifecycle so we see
-        // exactly when/why new connections start failing (the rx_bytes=0 resets).
-        // Paired with RUST_LOG=debug below. REVERT in r10 once root-caused — verbose,
-        // belongs only on a diagnostic candidate.
-        argv.Add("--debug-poll");
-        argv.Add("--debug-streams");
+        // r10: the r9 diagnostic flags (--debug-poll / --debug-streams) are REMOVED.
+        // They answered the question — picoquic multipath already shifts ~all traffic
+        // to the authoritative path (213.155.15.93) and keeps it healthy (flow_blocked
+        // never true), so the recursive-resolver rate-limit is NOT the bottleneck when
+        // authoritative is reachable. BUT the r9 build segfaulted (0xC0000005) at ~6.8
+        // min: the per-poll FFI reads into picoquic that --debug-poll performs (~40k in
+        // 41s) are the prime suspect for a use-after-free on a path being torn down.
+        // Removing them returns the client to the stable r8 transport surface; if it
+        // STILL crashes at ~6-7 min the fault is in picoquic multipath itself and needs
+        // a source-level fix + rebuild. Same r7 binary (fec9d314) — no rebuild.
 
         var request = new ProcessRequest(
             ExecutablePath: AppPaths.SlipstreamExePath,
@@ -225,14 +223,13 @@ public class SlipstreamManager : IDisposable
                 // Without capturing these a "worked then died" report is
                 // un-rootcause-able. RUST_BACKTRACE surfaces any client panic.
                 //
-                // r9 (DIAGNOSTIC, TEMPORARY): bumped info→debug to emit the
-                // per-resolver cc snapshots that --debug-poll gates at runtime
-                // (cwnd / rtt / in_transit / flow_blocked per path) plus the
-                // --debug-streams per-stream lifecycle. command_dispatch is pinned
-                // back to error — at debug it is a per-message firehose that would
-                // bury the per-path signal and blow the log cap before the ~1.5-2 min
-                // degradation window. REVERT to "info" in r10 once root-caused.
-                ["RUST_LOG"] = "debug,slipstream_client::streams::command_dispatch=error",
+                // r10: reverted r9's debug level back to "info". The per-resolver cc
+                // firehose did its job (authoritative path proven healthy) but the
+                // verbose FFI polling it enabled is the prime suspect for the r9
+                // 0xC0000005 segfault. info still emits every lifecycle WARN — the
+                // signal needed to see a crash and its context — without the per-poll
+                // hot loop. RUST_BACKTRACE stays on to surface any Rust-side panic.
+                ["RUST_LOG"] = "info",
                 ["RUST_BACKTRACE"] = "1",
             },
             CaptureStdout: true,
@@ -350,12 +347,11 @@ public class SlipstreamManager : IDisposable
     // (or the diagnostics export) can root-cause a dropped tunnel. Best-effort,
     // size-capped, ANSI-stripped. Static + locked so concurrent OutputLine/
     // ErrorLine callbacks (separate reader threads) don't interleave a line.
-    // r9 (DIAGNOSTIC): 8→32 MB. The debug-verbose build (--debug-poll +
-    // --debug-streams + RUST_LOG=debug) emits far more per second; combined with
-    // per-session rotation (RotateTransportLog) this comfortably holds a full
-    // multi-minute diagnostic session without tripping the head-keep cap mid-test.
-    // REVERT to 8 MB in r10 with the rest of the diagnostic instrumentation.
-    private const long TransportLogMaxBytes = 32 * 1024 * 1024;
+    // 8 MB cap (r9's 32 MB bump reverted in r10 with the debug firehose). With
+    // per-session rotation (RotateTransportLog) and info-level output this easily
+    // holds a full multi-minute session's lifecycle lines without tripping the
+    // head-keep cap.
+    private const long TransportLogMaxBytes = 8 * 1024 * 1024;
     private static readonly object _transportLogGate = new();
 
     // r9 (DIAGNOSTIC): roll the current transport log to .prev at the start of each

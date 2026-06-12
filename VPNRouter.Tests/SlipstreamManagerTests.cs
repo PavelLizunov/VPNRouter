@@ -116,8 +116,7 @@ public class SlipstreamManagerTests
                 "-r", "195.208.5.1:53",
                 "-c", "bbr",      // r7: honor entry.CongestionControl (default bbr)
                 "-t", "2000",     // r7: gentler keep-alive
-                "--debug-poll",   // r9 (DIAGNOSTIC): per-resolver cc snapshots
-                "--debug-streams",// r9 (DIAGNOSTIC): per-stream open/reset lifecycle
+                // r10: r9's --debug-poll / --debug-streams removed (segfault suspect).
             };
             Assert.Equal(expected, argv);
 
@@ -149,12 +148,11 @@ public class SlipstreamManagerTests
             // ("local_error=0x433" idle-timeout / "resolver … became unavailable" /
             // "reconnecting in Nms") which SlipstreamManager persists to
             // slipstream.log — without RUST_LOG the tunnel-death post-mortem is blank.
-            // r9 (DIAGNOSTIC): bumped info→debug to also surface the per-resolver cc
-            // snapshots (gated by --debug-poll) for root-causing the ~1.5-2 min
-            // degradation; command_dispatch pinned to error so it isn't a firehose.
-            // REVERT to "info" in r10 with the rest of the diagnostic instrumentation.
+            // r10: reverted to "info" (r9's debug firehose is the segfault suspect).
+            // info still emits every connection-lifecycle WARN — enough to see a crash
+            // and its context — without the per-poll FFI hot loop.
             Assert.True(env!.TryGetValue("RUST_LOG", out var lvl));
-            Assert.Equal("debug,slipstream_client::streams::command_dispatch=error", lvl);
+            Assert.Equal("info", lvl);
         }
         finally { CleanupFiles(); }
     }
