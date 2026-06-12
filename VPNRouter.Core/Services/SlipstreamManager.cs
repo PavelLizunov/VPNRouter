@@ -196,6 +196,17 @@ public class SlipstreamManager : IDisposable
         // the (now 180s) idle window. 2s is far under that, so liveness is unaffected.
         argv.Add("-t"); argv.Add("2000");
 
+        // r12 (Codex measure-first): emit SAFE per-resolver throughput counters at INFO
+        // once a second — payload vs empty DNS responses, polls, pending/inflight, and
+        // last-payload-age. This is the safe replacement for the reverted r9 --debug-poll:
+        // pure Rust counters on the existing 1s report path, with NO per-poll FFI
+        // path-quality reads (the r9 0xC0000005 suspect). Lines land in slipstream.log
+        // (RUST_LOG=info) so the recursive-vs-authoritative download collapse is finally
+        // measurable: watch "payload+=" fall toward 0 and "last_payload_ms" climb while a
+        // resolver still has stream tx → the download-throttle Codex hypothesized. The
+        // per-resolver "mode=Recursive/Authoritative" label separates the two paths.
+        argv.Add("--path-stats");
+
         // r10: the r9 diagnostic flags (--debug-poll / --debug-streams) are REMOVED.
         // They answered the question — picoquic multipath already shifts ~all traffic
         // to the authoritative path (213.155.15.93) and keeps it healthy (flow_blocked
