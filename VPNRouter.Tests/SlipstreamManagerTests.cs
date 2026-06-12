@@ -116,6 +116,8 @@ public class SlipstreamManagerTests
                 "-r", "195.208.5.1:53",
                 "-c", "bbr",      // r7: honor entry.CongestionControl (default bbr)
                 "-t", "2000",     // r7: gentler keep-alive
+                "--debug-poll",   // r9 (DIAGNOSTIC): per-resolver cc snapshots
+                "--debug-streams",// r9 (DIAGNOSTIC): per-stream open/reset lifecycle
             };
             Assert.Equal(expected, argv);
 
@@ -143,13 +145,16 @@ public class SlipstreamManagerTests
             Assert.Single(fake.StartCalls);
             var env = fake.StartCalls[0].EnvironmentOverrides;
             Assert.NotNull(env);
-            // RUST_LOG=info makes slipstream-client emit its connection-lifecycle
-            // WARN lines ("local_error=0x433" idle-timeout / "resolver … became
-            // unavailable" / "reconnecting in Nms") which SlipstreamManager now
-            // persists to slipstream.log — without this env the tunnel-death
-            // post-mortem is blank (the regression this guards against).
+            // slipstream-client emits its connection-lifecycle WARN lines
+            // ("local_error=0x433" idle-timeout / "resolver … became unavailable" /
+            // "reconnecting in Nms") which SlipstreamManager persists to
+            // slipstream.log — without RUST_LOG the tunnel-death post-mortem is blank.
+            // r9 (DIAGNOSTIC): bumped info→debug to also surface the per-resolver cc
+            // snapshots (gated by --debug-poll) for root-causing the ~1.5-2 min
+            // degradation; command_dispatch pinned to error so it isn't a firehose.
+            // REVERT to "info" in r10 with the rest of the diagnostic instrumentation.
             Assert.True(env!.TryGetValue("RUST_LOG", out var lvl));
-            Assert.Equal("info", lvl);
+            Assert.Equal("debug,slipstream_client::streams::command_dispatch=error", lvl);
         }
         finally { CleanupFiles(); }
     }

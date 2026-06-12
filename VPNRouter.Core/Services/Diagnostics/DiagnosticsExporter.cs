@@ -106,6 +106,10 @@ public static class DiagnosticsExporter
             // unavailable, reconnect backoff) needed to root-cause a dropped
             // dns-tunnel. No-op for every non-dns-tunnel user (file absent).
             AddLogTail(staging, AppPaths.SlipstreamLogPath, "slipstream-tail.log", entries, warnings);
+            // r9 (DIAGNOSTIC): SlipstreamManager rotates the transport log to .prev at
+            // the start of each session. Capture it too so a reconnect after the key
+            // (degraded) session doesn't lose that session's per-path debug output.
+            AddLogTail(staging, AppPaths.SlipstreamLogPath + ".prev", "slipstream-prev-tail.log", entries, warnings);
 
             // geo file manifest (sizes + dates, NOT the files)
             AddText(staging, "geo-manifest.txt", BuildGeoManifest(), entries);
@@ -150,6 +154,7 @@ public static class DiagnosticsExporter
         "  singbox-tail.log        - sing-box log, current (scrubbed)",
         "  singbox-old-tail.log    - sing-box log, previous rotation if present (scrubbed)",
         "  slipstream-tail.log     - DNS-tunnel transport log, if dns-tunnel was used (scrubbed)",
+        "  slipstream-prev-tail.log- DNS-tunnel transport log, previous session if present (scrubbed)",
         "  geo-manifest.txt        - geo rule file sizes & dates (not the files)",
     });
 

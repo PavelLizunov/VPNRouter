@@ -196,6 +196,19 @@ public class SlipstreamManager : IDisposable
         // the (now 180s) idle window. 2s is far under that, so liveness is unaffected.
         argv.Add("-t"); argv.Add("2000");
 
+        // r9 (DIAGNOSTIC, TEMPORARY): max per-path observability to root-cause the
+        // ~1.5-2 min degradation. --debug-poll emits per-resolver congestion-control
+        // snapshots (cwnd / rtt / in_transit / flow_blocked) so we can see whether
+        // the authoritative path (213.155.15.93) stays healthy while the recursive
+        // НСДИ resolver (195.208.x) throttles — the single fact that decides whether
+        // prefer-authoritative can save the tunnel or the rate-limit is a hard wall.
+        // --debug-streams logs each covert stream's open/reset lifecycle so we see
+        // exactly when/why new connections start failing (the rx_bytes=0 resets).
+        // Paired with RUST_LOG=debug below. REVERT in r10 once root-caused — verbose,
+        // belongs only on a diagnostic candidate.
+        argv.Add("--debug-poll");
+        argv.Add("--debug-streams");
+
         var request = new ProcessRequest(
             ExecutablePath: AppPaths.SlipstreamExePath,
             Arguments: argv,
@@ -211,7 +224,15 @@ public class SlipstreamManager : IDisposable
                 //   "Path for resolver … became unavailable" (resolver went silent)
                 // Without capturing these a "worked then died" report is
                 // un-rootcause-able. RUST_BACKTRACE surfaces any client panic.
-                ["RUST_LOG"] = "info",
+                //
+                // r9 (DIAGNOSTIC, TEMPORARY): bumped info→debug to emit the
+                // per-resolver cc snapshots that --debug-poll gates at runtime
+                // (cwnd / rtt / in_transit / flow_blocked per path) plus the
+                // --debug-streams per-stream lifecycle. command_dispatch is pinned
+                // back to error — at debug it is a per-message firehose that would
+                // bury the per-path signal and blow the log cap before the ~1.5-2 min
+                // degradation window. REVERT to "info" in r10 once root-caused.
+                ["RUST_LOG"] = "debug,slipstream_client::streams::command_dispatch=error",
                 ["RUST_BACKTRACE"] = "1",
             },
             CaptureStdout: true,
@@ -220,6 +241,21 @@ public class SlipstreamManager : IDisposable
         _logger.Information(
             "[Slipstream] Spawn: {Exe} -d {Domain} -l {Port} (resolvers: {N}, authoritative: {M})",
             request.ExecutablePath, entry.DnsDomain, localPort, resolvers.Count, authoritative.Count);
+
+        // r9 (DIAGNOSTIC): rotate the transport log so THIS session's debug-verbose
+        // output lands in a clean file. Without this, a slipstream.log already at the
+        // size cap from accumulated r4-r8 sessions would silently swallow the new
+        // session (AppendTransportLog returns early when over-cap). Previous session
+        // is preserved as .prev (also picked up by the diagnostics export).
+        RotateTransportLog();
+
+        // r9 (DIAGNOSTIC): log the COMPLETE argv so the transport log self-documents
+        // exactly which flags were in effect for this session — confirms -c/-t/
+        // --authoritative/--debug-* all reached the binary when reading back a
+        // user-supplied slipstream.log out of context.
+        var argvLine = "[Slipstream] argv: " + string.Join(" ", argv);
+        _logger.Information(argvLine);
+        AppendTransportLog(argvLine);
 
         lock (_stderrGate) _capturedStderr.Clear();
 
@@ -314,8 +350,34 @@ public class SlipstreamManager : IDisposable
     // (or the diagnostics export) can root-cause a dropped tunnel. Best-effort,
     // size-capped, ANSI-stripped. Static + locked so concurrent OutputLine/
     // ErrorLine callbacks (separate reader threads) don't interleave a line.
-    private const long TransportLogMaxBytes = 8 * 1024 * 1024;
+    // r9 (DIAGNOSTIC): 8→32 MB. The debug-verbose build (--debug-poll +
+    // --debug-streams + RUST_LOG=debug) emits far more per second; combined with
+    // per-session rotation (RotateTransportLog) this comfortably holds a full
+    // multi-minute diagnostic session without tripping the head-keep cap mid-test.
+    // REVERT to 8 MB in r10 with the rest of the diagnostic instrumentation.
+    private const long TransportLogMaxBytes = 32 * 1024 * 1024;
     private static readonly object _transportLogGate = new();
+
+    // r9 (DIAGNOSTIC): roll the current transport log to .prev at the start of each
+    // session so a fresh, uncapped file captures THIS connection's debug output.
+    // Guards against an already-full slipstream.log (from accumulated r4-r8 sessions)
+    // silently swallowing the new session because AppendTransportLog short-circuits
+    // when the file is already over TransportLogMaxBytes.
+    private static void RotateTransportLog()
+    {
+        try
+        {
+            lock (_transportLogGate)
+            {
+                var path = AppPaths.SlipstreamLogPath;
+                if (!File.Exists(path)) return;
+                var prev = path + ".prev";
+                try { if (File.Exists(prev)) File.Delete(prev); } catch { /* best-effort */ }
+                File.Move(path, prev);
+            }
+        }
+        catch { /* best-effort diagnostics — never throw from the start path */ }
+    }
 
     private static void AppendTransportLog(string line)
     {
