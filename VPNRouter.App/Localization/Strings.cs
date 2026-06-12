@@ -348,6 +348,8 @@ public static class Strings
 
     public static string StrictModeLabel => global::VPNRouter.Core.Localization.Strings.StrictModeLabel;
     public static string StrictModeHint => global::VPNRouter.Core.Localization.Strings.StrictModeHint;
+    public static string MtuLabel => global::VPNRouter.Core.Localization.Strings.MtuLabel;
+    public static string MtuHint => global::VPNRouter.Core.Localization.Strings.MtuHint;
     public static string ForceIpv4Label => global::VPNRouter.Core.Localization.Strings.ForceIpv4Label;
     public static string FlushDnsLabel => global::VPNRouter.Core.Localization.Strings.FlushDnsLabel;
     // v2.31.6-r18: hint expanded — user feedback iter#7 audit asked

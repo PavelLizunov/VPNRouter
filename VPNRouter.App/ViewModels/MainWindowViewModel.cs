@@ -1116,6 +1116,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // were the VM's own self-OnPropertyChanged announcements at lines
     // 806-807 (also removed).
     [ObservableProperty] private bool _strictMode = false;
+    [ObservableProperty] private int _tunMtu = 1280;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
@@ -2575,6 +2576,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string ShowLogsLabel => Strings.ShowLogs;
     public string StrictModeLabel => Strings.StrictModeLabel;
     public string StrictModeHint => Strings.StrictModeHint;
+    public string MtuLabel => Strings.MtuLabel;
+    public string MtuHint => Strings.MtuHint;
     public string ForceIpv4Label => Strings.ForceIpv4Label;
     public string FlushDnsLabel => Strings.FlushDnsLabel;
     public string StrictDnsLabel => Strings.StrictDnsLabel;
@@ -3155,6 +3158,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         // Strict mode
         StrictMode = _settings.App.StrictMode;
+        TunMtu = _settings.Tun.Mtu;
 
         // IPv4 + DNS flush + Strict DNS
         ForceIpv4Only = _settings.App.ForceIpv4Only;
@@ -3189,6 +3193,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
         DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
         FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
+
+        // Self-heal hosts files written by older builds that duplicated the
+        // finland*.discord.media voice entries across BOTH the Discord and
+        // Flowseal blocks (~200 redundant lines). No-op once deduped; only
+        // the Flowseal copy is stripped, the native Discord block stays owner.
+        if (DiscordHostsInstalled && FlowsealHostsInstalled)
+        {
+            try { VPNRouter.Core.Services.HostsManager.ReconcileDiscordDuplicates(_logger); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Discord/Flowseal hosts reconcile failed (non-fatal)"); }
+        }
 
         if (VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
@@ -3850,6 +3864,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         // Strict mode
         _settings.App.StrictMode = StrictMode;
+        _settings.Tun.Mtu = TunMtu < 576 ? 576 : (TunMtu > 9000 ? 9000 : TunMtu);
 
         // IPv4 + DNS flush + Strict DNS
         _settings.App.ForceIpv4Only = ForceIpv4Only;

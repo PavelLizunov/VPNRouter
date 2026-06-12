@@ -700,6 +700,12 @@ public static class Strings
     public static string StrictModeHint => Ru
         ? "Health check каждые 5 секунд вместо 30. Уменьшает окно потенциальной утечки трафика при крахе sing-box."
         : "Health check every 5 seconds instead of 30. Reduces the leak window if sing-box silently hangs.";
+    public static string MtuLabel => Ru
+        ? "MTU TUN-интерфейса"
+        : "TUN interface MTU";
+    public static string MtuHint => Ru
+        ? "Размер пакета TUN-интерфейса. По умолчанию 1280 (надёжно, IPv6-минимум). Больше (≈1400) — выше скорость, но значение >1480 может ломать HTTP/2 на некоторых прокси. Применяется при переподключении."
+        : "TUN interface packet size. Default 1280 (safe, IPv6 minimum). Higher (~1400) = better throughput, but values >1480 can break HTTP/2 on some proxies. Applied on reconnect.";
     public static string ForceIpv4Label => Ru
         // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
         // a Russian sentence. Use natural RU "IPv6-утечек".

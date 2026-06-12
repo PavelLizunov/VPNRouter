@@ -7,6 +7,7 @@
 //
 // Brief: plans/phase2-2G-untested-services-2026-05-17.md sub-wave 7a-1.
 
+using System.Text;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 
@@ -22,6 +23,8 @@ public sealed class HostsManagerTests
 
     private const string DiscordMarkerStart = "# === VPNRouter Discord hosts START ===";
     private const string DiscordMarkerEnd = "# === VPNRouter Discord hosts END ===";
+    private const string FlowsealMarkerStart = "# === VPNRouter Flowseal hosts START ===";
+    private const string FlowsealMarkerEnd = "# === VPNRouter Flowseal hosts END ===";
     private const int FinlandRangeStart = 10000;
     private const int FinlandRangeEnd = 10199;
     private const int FinlandCount = FinlandRangeEnd - FinlandRangeStart + 1; // 200
@@ -275,7 +278,321 @@ public sealed class HostsManagerTests
         Assert.DoesNotContain("104.25.158.178 finland10001.discord.media", result);
     }
 
+    // ── Discord × Flowseal dedup ───────────────────────────────────────────────
+    //
+    // The upstream Flowseal/zapret-discord-youtube .service/hosts file bundles
+    // the SAME finland*.discord.media voice entries our native Discord block
+    // writes. With both features enabled older builds wrote ~200 identical
+    // lines twice. The native Discord block is the canonical owner; the
+    // Flowseal copy must be suppressed regardless of install order.
+
+    [Fact]
+    public async Task BothFeatures_DiscordThenFlowseal_NoDiscordMediaLineDuplicated()
+    {
+        // Dominant order (OneTap auto-installs Discord first, then Flowseal).
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, "127.0.0.1 localhost\n");
+        var sut = NewManagerWithFlowseal(fs, BuildFlowsealBodyWithDiscordRange());
+
+        Assert.True(sut.InstallInstance().success);
+        Assert.True((await sut.InstallFlowsealInstanceAsync()).success);
+
+        var content = fs.ReadAllText(FakeHostsPath);
+        AssertNoDiscordMediaDuplicates(content);
+        // The native Discord block keeps the full range exactly once.
+        Assert.Equal(FinlandCount, CountDiscordMediaHostLines(content));
+        // Non-discord Flowseal overrides survive the dedup.
+        Assert.Contains("www.youtube.com", content);
+    }
+
+    [Fact]
+    public async Task BothFeatures_FlowsealThenDiscord_NoDiscordMediaLineDuplicated()
+    {
+        // Reverse order (user toggles Flowseal hosts before Discord hosts).
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, "127.0.0.1 localhost\n");
+        var sut = NewManagerWithFlowseal(fs, BuildFlowsealBodyWithDiscordRange());
+
+        Assert.True((await sut.InstallFlowsealInstanceAsync()).success);
+        Assert.True(sut.InstallInstance().success);
+
+        var content = fs.ReadAllText(FakeHostsPath);
+        AssertNoDiscordMediaDuplicates(content);
+        Assert.Equal(FinlandCount, CountDiscordMediaHostLines(content));
+        Assert.Contains("www.youtube.com", content);
+    }
+
+    [Fact]
+    public async Task FlowsealOnly_WithoutDiscordBlock_RetainsDiscordMediaEntries()
+    {
+        // Flowseal alone must still fix Discord voice — we only suppress the
+        // discord.media copy when the native block is present to own it.
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, "127.0.0.1 localhost\n");
+        var sut = NewManagerWithFlowseal(fs, BuildFlowsealBodyWithDiscordRange());
+
+        Assert.True((await sut.InstallFlowsealInstanceAsync()).success);
+
+        var content = fs.ReadAllText(FakeHostsPath);
+        Assert.False(sut.IsInstalledInstance()); // Discord block NOT installed
+        Assert.Contains($"finland{FinlandRangeStart}.discord.media", content);
+        Assert.Contains($"finland{FinlandRangeEnd}.discord.media", content);
+        Assert.Equal(FinlandCount, CountDiscordMediaHostLines(content));
+    }
+
+    [Fact]
+    public void Reconcile_PreDuplicatedFile_StripsFlowsealCopyKeepsNativeOwner()
+    {
+        // Heal a file an older build produced: BOTH blocks carry the range.
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, BuildPreDuplicatedHostsFile());
+        var sut = NewManagerWithRunner(fs);
+
+        // Before: each finland host appears twice.
+        Assert.Equal(FinlandCount * 2, CountDiscordMediaHostLines(fs.ReadAllText(FakeHostsPath)));
+
+        var (changed, _) = sut.ReconcileDiscordDuplicatesInstance();
+
+        Assert.True(changed);
+        var content = fs.ReadAllText(FakeHostsPath);
+        AssertNoDiscordMediaDuplicates(content);
+        Assert.Equal(FinlandCount, CountDiscordMediaHostLines(content));
+        // Both blocks' markers round-trip intact.
+        Assert.Contains(DiscordMarkerStart, content);
+        Assert.Contains(DiscordMarkerEnd, content);
+        Assert.Contains(FlowsealMarkerStart, content);
+        Assert.Contains(FlowsealMarkerEnd, content);
+        // Non-discord Flowseal override survived.
+        Assert.Contains("www.youtube.com", content);
+
+        // Idempotent: a second pass finds nothing left to reconcile.
+        Assert.False(sut.ReconcileDiscordDuplicatesInstance().changed);
+    }
+
+    [Fact]
+    public void Reconcile_OnlyDiscordBlock_IsNoOp()
+    {
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, "127.0.0.1 localhost\n");
+        var sut = NewManagerWithRunner(fs);
+        Assert.True(sut.InstallInstance().success);
+
+        var (changed, msg) = sut.ReconcileDiscordDuplicatesInstance();
+
+        Assert.False(changed);
+        Assert.Equal("Nothing to reconcile", msg);
+        Assert.Equal(FinlandCount, CountDiscordMediaHostLines(fs.ReadAllText(FakeHostsPath)));
+    }
+
+    [Fact]
+    public async Task BothFeatures_UninstallBoth_RestoresOriginalNoFinlandRemains()
+    {
+        // Round-trip after dedup: removing both blocks leaves the original
+        // file with zero finland/marker residue.
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, "127.0.0.1 localhost\n");
+        var sut = NewManagerWithFlowseal(fs, BuildFlowsealBodyWithDiscordRange());
+
+        Assert.True(sut.InstallInstance().success);
+        Assert.True((await sut.InstallFlowsealInstanceAsync()).success);
+
+        Assert.True(sut.UninstallFlowsealInstance().success);
+        Assert.True(sut.UninstallInstance().success);
+
+        var after = fs.ReadAllText(FakeHostsPath);
+        Assert.DoesNotContain("finland", after);
+        Assert.DoesNotContain(DiscordMarkerStart, after);
+        Assert.DoesNotContain(FlowsealMarkerStart, after);
+        Assert.Contains("127.0.0.1 localhost", after);
+    }
+
+    [Theory]
+    [InlineData("104.25.158.178 finland10000.discord.media", true)]
+    [InlineData("104.25.158.178 discord.media", true)]
+    [InlineData("   104.25.158.178   finland10042.discord.media   ", true)]
+    [InlineData("104.25.158.178 finland10000.discord.media.", true)] // trailing-dot FQDN
+    [InlineData("104.16.0.2 www.youtube.com", false)]
+    [InlineData("# 104.25.158.178 finland10000.discord.media", false)] // comment
+    [InlineData("127.0.0.1 discord.media.evil.com", false)] // look-alike, not a subdomain
+    [InlineData("104.25.158.178", false)] // IP only, no host
+    [InlineData("", false)]
+    public void IsDiscordMediaHostLine_ClassifiesLine(string line, bool expected)
+        => Assert.Equal(expected, HostsManager.IsDiscordMediaHostLine(line));
+
+    // ── GitHub update-path pin strip ───────────────────────────────────────────
+    //
+    // The upstream Flowseal hosts file pins release-assets.githubusercontent.com
+    // (the 302 target of every github.com/.../releases/download/... asset URL) to
+    // a single hardcoded GitHub-Pages Fastly anycast IP. Carrying that pin into
+    // our block can silently break VPNRouter's OWN auto-updater (stale IP / POP
+    // that doesn't front release assets / censor-null-route) — stranding the user
+    // on an old build. We strip update-path GitHub hosts but keep the
+    // Discord/Telegram DPI-bypass entries and raw.githubusercontent.com.
+    // Found from a real problem-user's hosts file 2026-06-11.
+
+    [Theory]
+    [InlineData("185.199.109.133 release-assets.githubusercontent.com", false)] // current asset 302 target
+    [InlineData("185.199.109.133 RELEASE-ASSETS.GitHubUserContent.com", false)] // case-insensitive
+    [InlineData("185.199.109.133 release-assets.githubusercontent.com.", false)] // trailing-dot FQDN
+    [InlineData("185.199.109.133 objects.githubusercontent.com", false)]        // alternate asset target
+    [InlineData("140.82.121.3 github.com", false)]                              // initial 302 source
+    [InlineData("140.82.121.6 api.github.com", false)]                          // release-list endpoint
+    [InlineData("185.199.109.133 raw.githubusercontent.com", true)]             // KEPT — recoverable + DPI value
+    [InlineData("185.199.108.133 avatars.githubusercontent.com", true)]        // KEPT — VPNRouter never resolves it
+    [InlineData("149.154.167.220 telegram.org", true)]                          // KEPT — Telegram DPI bypass
+    [InlineData("104.25.158.178 finland10000.discord.media", true)]             // KEPT — Discord DPI bypass
+    [InlineData("127.0.0.1 localhost", true)]                                   // KEPT — unrelated user entry
+    public void StripUpdatePathGitHubPins_KeepsExpectedHosts(string line, bool kept)
+    {
+        var result = HostsManager.StripUpdatePathGitHubPins(new[] { line });
+        // A kept line round-trips verbatim; a stripped single-host line vanishes.
+        Assert.Equal(kept, result.Count == 1 && result[0] == line);
+    }
+
+    [Fact]
+    public void StripUpdatePathGitHubPins_MultiHostLine_KeepsSurvivorsDropsCriticalHost()
+    {
+        // Defensive: hosts syntax allows several hostnames per line. Flowseal
+        // ships one-per-line today, but if a future line co-locates an
+        // update-critical host with an innocent one, drop only the critical
+        // hostname and keep the survivor — never the whole line.
+        var input = new[]
+        {
+            "185.199.109.133 release-assets.githubusercontent.com keep.example.com",
+            "140.82.121.3 api.github.com", // whole line is update-critical
+        };
+
+        var result = HostsManager.StripUpdatePathGitHubPins(input);
+
+        Assert.Contains("185.199.109.133 keep.example.com", result);
+        Assert.DoesNotContain(result, l => l.Contains("release-assets", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result, l => l.Contains("api.github.com", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task InstallFlowseal_DropsReleaseAssetsPin_ButKeepsDpiBypassEntries()
+    {
+        // End-to-end through the real install path: the written Flowseal block
+        // must NOT pin release-assets.githubusercontent.com (would break our own
+        // updater) but MUST keep Telegram/Discord DPI-bypass + raw.githubusercontent.
+        var body =
+            "# Flowseal zapret-discord-youtube hosts\n" +
+            "149.154.167.220 telegram.org\n" +
+            "149.154.167.220 t.me\n" +
+            "185.199.109.133 raw.githubusercontent.com\n" +
+            "185.199.109.133 release-assets.githubusercontent.com\n" +
+            "185.199.108.133 avatars.githubusercontent.com\n" +
+            "104.25.158.178 finland10000.discord.media\n";
+        var fs = new InMemoryFileSystem();
+        fs.Seed(FakeHostsPath, "127.0.0.1 localhost\n");
+        var sut = NewManagerWithFlowseal(fs, body);
+
+        Assert.True((await sut.InstallFlowsealInstanceAsync()).success);
+
+        var content = fs.ReadAllText(FakeHostsPath);
+        Assert.Contains(FlowsealMarkerStart, content);
+        Assert.Contains("149.154.167.220 telegram.org", content);              // Telegram bypass kept
+        Assert.Contains("185.199.109.133 raw.githubusercontent.com", content); // raw kept (DPI value)
+        Assert.Contains("185.199.108.133 avatars.githubusercontent.com", content); // not our dep — kept
+        Assert.Contains("finland10000.discord.media", content);                // Discord bypass kept
+        // THE FIX: our own updater's redirect-target host is never pinned.
+        Assert.DoesNotContain("release-assets.githubusercontent.com", content);
+    }
+
     // ── Test helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Manager wired to a FakeHttpClient serving <paramref name="flowsealBody"/>
+    /// and a FakeProcessRunner stubbing ipconfig /flushdns, so the Flowseal
+    /// install path runs without real network or process spawns.
+    /// </summary>
+    private static HostsManager NewManagerWithFlowseal(InMemoryFileSystem fs, string flowsealBody)
+    {
+        var http = new FakeHttpClient().Setup("Flowseal/zapret-discord-youtube", flowsealBody);
+        return new HostsManager(fs, FakeHostsPath, http, StubRunner());
+    }
+
+    /// <summary>Manager with a stub ipconfig runner but the default HTTP seam
+    /// (used by paths that never fetch, e.g. Reconcile / Install).</summary>
+    private static HostsManager NewManagerWithRunner(InMemoryFileSystem fs)
+        => new(fs, FakeHostsPath, http: null, runner: StubRunner());
+
+    private static FakeProcessRunner StubRunner()
+    {
+        var runner = new FakeProcessRunner();
+        runner.OnRun(_ => true,
+            new ProcessResult(ExitCode: 0, Stdout: "", Stderr: "",
+                Duration: TimeSpan.FromMilliseconds(10), TimedOut: false));
+        return runner;
+    }
+
+    /// <summary>
+    /// Synthesize an upstream Flowseal hosts file that — like the real one —
+    /// bundles the full finland10000-10199.discord.media range our native
+    /// Discord block also writes, plus a couple of unrelated Cloudflare
+    /// overrides that must survive the dedup.
+    /// </summary>
+    private static string BuildFlowsealBodyWithDiscordRange()
+    {
+        var sb = new StringBuilder();
+        sb.Append("# Flowseal zapret-discord-youtube hosts\n");
+        sb.Append("104.16.0.1 youtubei.googleapis.com\n");
+        sb.Append("104.16.0.2 www.youtube.com\n");
+        for (int i = FinlandRangeStart; i <= FinlandRangeEnd; i++)
+            sb.Append(DiscordIp).Append(" finland").Append(i).Append(".discord.media\n");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Build a hosts file as an older (pre-dedup) build would have left it:
+    /// both the Discord and Flowseal blocks carry the full finland range.
+    /// </summary>
+    private static string BuildPreDuplicatedHostsFile()
+    {
+        var sb = new StringBuilder();
+        sb.Append("127.0.0.1 localhost\n\n");
+
+        sb.Append(DiscordMarkerStart).Append('\n');
+        for (int i = FinlandRangeStart; i <= FinlandRangeEnd; i++)
+            sb.Append(DiscordIp).Append(" finland").Append(i).Append(".discord.media\n");
+        sb.Append(DiscordMarkerEnd).Append("\n\n");
+
+        sb.Append(FlowsealMarkerStart).Append('\n');
+        sb.Append("104.16.0.2 www.youtube.com\n");
+        for (int i = FinlandRangeStart; i <= FinlandRangeEnd; i++)
+            sb.Append(DiscordIp).Append(" finland").Append(i).Append(".discord.media\n");
+        sb.Append(FlowsealMarkerEnd).Append('\n');
+
+        return sb.ToString();
+    }
+
+    /// <summary>Count non-comment hosts lines mapping a *.discord.media host.</summary>
+    private static int CountDiscordMediaHostLines(string content) => content
+        .Split('\n')
+        .Count(l => !l.TrimStart().StartsWith("#", StringComparison.Ordinal)
+                    && l.Contains(".discord.media", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Assert that no *.discord.media hostname is mapped more than once across
+    /// the whole file (the core invariant) AND that at least one such mapping
+    /// survives (guard against an over-aggressive strip removing them all).
+    /// </summary>
+    private static void AssertNoDiscordMediaDuplicates(string content)
+    {
+        var hosts = content
+            .Split('\n')
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0 && !l.StartsWith("#", StringComparison.Ordinal))
+            .Select(l => l.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            .Where(t => t.Length >= 2 && t[1].EndsWith(".discord.media", StringComparison.OrdinalIgnoreCase))
+            .Select(t => t[1].ToLowerInvariant())
+            .ToList();
+
+        var dups = hosts.GroupBy(h => h).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        Assert.True(dups.Count == 0,
+            $"discord.media host(s) duplicated: {string.Join(", ", dups)}");
+        Assert.NotEmpty(hosts);
+    }
 
     /// <summary>
     /// Count non-overlapping occurrences of <paramref name="needle"/> in
