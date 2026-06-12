@@ -1083,8 +1083,16 @@ public static class ConfigGenerator
         // must be kept OUT of the tunnel or it loops back into itself.
         var dnsTunnelEntry = servers.FirstOrDefault(s => s.IsDnsTunnel);
         isDnsTunnel = dnsTunnelEntry != null;
+        // Exclude BOTH the recursive resolver IPs AND the authoritative endpoint IP
+        // (r7+ --authoritative) from the tunnel. r6 added the authoritative path but
+        // not its IP here, so slipstream's queries to it got captured by full-tunnel
+        // final=proxy and looped back to 127.0.0.1:7001 — breaking the data plane
+        // (rx_bytes=0, no traffic). The authoritative endpoint must be reached DIRECT
+        // (or fail closed on a whitelist net), never through the tunnel.
         dnsTunnelResolverIps = isDnsTunnel
-            ? ExtractResolverIps(dnsTunnelEntry!.DnsResolvers)
+            ? ExtractResolverIps(
+                (dnsTunnelEntry!.DnsResolvers ?? new List<string>())
+                .Concat(dnsTunnelEntry.DnsAuthoritative ?? new List<string>()))
             : new List<string>();
 
         var outbounds = new List<SingBoxOutbound>();

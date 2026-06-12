@@ -113,6 +113,32 @@ public class ConfigGeneratorDnsTunnelTests
         Assert.Equal("proxy", config.Route.Final);          // full tunnel still lands on proxy
     }
 
+    // ─── v2.42.0-r8: authoritative endpoint must ALSO be excluded ──────────────
+    // r7 added the slipstream --authoritative path, but r6 built the loop-exclusion
+    // from DnsResolvers ONLY — so queries to the authoritative endpoint (213.155.15.93)
+    // looped through full-tunnel final=proxy back into 127.0.0.1:7001 = slipstream
+    // itself. Symptom on the user's real machine: tunnel "ready" + "Added path
+    // 213.155.15.93" but rx_bytes=0 on every stream (no traffic) + ~31s teardown.
+    [Fact]
+    public void Generate_DnsTunnel_FullTunnel_ExcludesAuthoritativeEndpointToo()
+    {
+        var settings = DnsTunnelSettings();
+        settings.App.RoutingMode = "full";
+        settings.App.Subscriptions[0].Servers[0].DnsAuthoritative =
+            new List<string> { "213.155.15.93:53" };
+        Assert.Single(VlessServersResolver.Resolve(settings));
+        var config = ConfigGenerator.Generate(DiscordProfile(), new[] { "Discord.exe" }, settings);
+
+        int hijackIdx = config.Route.Rules.FindIndex(r => r.Action == "hijack-dns");
+        var ipRule = config.Route.Rules.FirstOrDefault(r =>
+            r.Action == "route" && r.Outbound == "direct" && r.IpCidr != null &&
+            r.IpCidr.Contains("213.155.15.93"));
+        Assert.NotNull(ipRule);                              // authoritative IP excluded → direct
+        Assert.Contains("195.208.4.1", ipRule!.IpCidr!);     // recursive resolvers still excluded too
+        Assert.True(config.Route.Rules.IndexOf(ipRule) < hijackIdx,
+            "authoritative exclusion must precede hijack-dns");
+    }
+
     [Fact]
     public void Generate_DnsTunnel_ResolverIpExtraction_SkipsHostnames_HandlesIpv6()
     {
