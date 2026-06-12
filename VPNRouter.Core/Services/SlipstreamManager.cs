@@ -184,6 +184,18 @@ public class SlipstreamManager : IDisposable
             .Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a.Trim()).ToList();
         foreach (var a in authoritative) { argv.Add("--authoritative"); argv.Add(a); }
 
+        // r7 (stability): honor the configured congestion control — bbr paces sends
+        // smoother than slipstream's default, so a covert DNS flood trips the
+        // recursive НСДИ resolver's rate-limit less. Only bbr/dcubic are valid for
+        // slipstream-client; anything else falls through to its default.
+        var cc = (entry.CongestionControl ?? "").Trim().ToLowerInvariant();
+        if (cc == "bbr" || cc == "dcubic") { argv.Add("-c"); argv.Add(cc); }
+        // r7 (stability): gentler keep-alive (2s vs the 400ms default) — fewer idle
+        // queries to the rate-limiting resolver, and during a throttle it probes
+        // lightly instead of hammering, giving the resolver room to recover within
+        // the (now 180s) idle window. 2s is far under that, so liveness is unaffected.
+        argv.Add("-t"); argv.Add("2000");
+
         var request = new ProcessRequest(
             ExecutablePath: AppPaths.SlipstreamExePath,
             Arguments: argv,

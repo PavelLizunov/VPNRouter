@@ -114,6 +114,8 @@ public class SlipstreamManagerTests
                 "--tcp-listen-host", "127.0.0.1",
                 "-r", "195.208.4.1:53",
                 "-r", "195.208.5.1:53",
+                "-c", "bbr",      // r7: honor entry.CongestionControl (default bbr)
+                "-t", "2000",     // r7: gentler keep-alive
             };
             Assert.Equal(expected, argv);
 
