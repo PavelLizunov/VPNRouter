@@ -465,27 +465,61 @@ public class SlipstreamManager : IDisposable
 
     /// <summary>
     /// Copy the installer-bundled slipstream-client (app/) to the runtime path
-    /// (<paramref name="targetExePath"/>) on first use, so a fresh install works
-    /// without an updater. No-op if the runtime copy already exists (never
-    /// clobbers a newer updater-written binary — <c>overwrite: false</c>) or if
-    /// nothing is bundled. Returns true if the runtime binary is present after.
-    /// Best-effort: a copy failure (e.g. non-elevated, unwritable ProgramData)
-    /// is logged and swallowed — the caller's File.Exists check is the real gate.
+    /// (<paramref name="targetExePath"/>), keeping the runtime copy in sync with the
+    /// freshly-bundled binary. Returns true if the runtime binary is present after.
+    /// Best-effort: a copy failure (e.g. non-elevated, unwritable ProgramData, or the
+    /// target locked by a live instance) is logged and swallowed — the caller's
+    /// File.Exists check is the real gate.
+    /// <para>VERSION-AWARE (v2.42.0-r13): the runtime copy lives in ProgramData and is
+    /// NOT refreshed by the app/-only auto-update. The original <c>overwrite:false</c> +
+    /// early-return-if-exists meant an existing user kept a stale slipstream-client.exe
+    /// forever — so every transport change (new CLI flags, the recursive poll-budget, …)
+    /// silently never reached them, and a flag the updated DLL passes that the OLD binary
+    /// doesn't know (e.g. <c>--path-stats</c> in r12) makes it exit(2) → dns-tunnel dead.
+    /// We now re-promote (overwrite) when the runtime copy is missing or a different size
+    /// — a real slipstream rebuild always shifts the binary length, so size is a reliable
+    /// "the bundle changed" signal without re-copying 7 MB on every Start.</para>
     /// </summary>
     internal static bool EnsureBinaryProvisioned(
         string targetExePath, string? bundledExePath, string targetBinDir, ILogger? logger)
     {
-        if (File.Exists(targetExePath)) return true;
-        if (string.IsNullOrEmpty(bundledExePath) || !File.Exists(bundledExePath)) return false;
+        var haveBundle = !string.IsNullOrEmpty(bundledExePath) && File.Exists(bundledExePath);
+        var haveTarget = File.Exists(targetExePath);
+        // Nothing to promote from: keep whatever runtime copy already exists (dev builds
+        // with a hand-placed binary and no app/ bundle still work).
+        if (!haveBundle) return haveTarget;
+
+        var needCopy = !haveTarget;
+        if (!needCopy)
+        {
+            try
+            {
+                // A real slipstream rebuild always shifts the file length, so a size
+                // mismatch reliably flags "the app/ bundle was updated but this stale
+                // ProgramData copy wasn't" — exactly the r12 --path-stats skew. Equal
+                // length → assume identical → skip the 7 MB re-copy every Start.
+                needCopy = new FileInfo(bundledExePath!).Length != new FileInfo(targetExePath).Length;
+            }
+            catch (Exception ex)
+            {
+                // Unreadable runtime/bundle metadata — safest to re-promote.
+                logger?.Warning(ex, "[Slipstream] Could not compare runtime vs bundled binary — re-promoting");
+                needCopy = true;
+            }
+        }
+        if (!needCopy) return true;
+
         try
         {
             Directory.CreateDirectory(targetBinDir);
-            File.Copy(bundledExePath, targetExePath, overwrite: false);
-            logger?.Information("[Slipstream] Promoted bundled binary {Src} -> {Dst}",
-                bundledExePath, targetExePath);
+            File.Copy(bundledExePath!, targetExePath, overwrite: true);
+            logger?.Information("[Slipstream] Promoted bundled binary {Src} -> {Dst} ({Len} bytes, app {Ver})",
+                bundledExePath, targetExePath, new FileInfo(targetExePath).Length, AppVersion.Version);
         }
         catch (Exception ex)
         {
+            // Most likely the target is locked by a live slipstream-client. Keep the
+            // existing binary; the next Start (once the lock clears) re-promotes.
             logger?.Warning(ex, "[Slipstream] Could not promote bundled binary to {Dst}", targetExePath);
         }
         return File.Exists(targetExePath); // a concurrent Start() may have won the copy

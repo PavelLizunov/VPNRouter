@@ -116,6 +116,7 @@ public class SlipstreamManagerTests
                 "-r", "195.208.5.1:53",
                 "-c", "bbr",      // r7: honor entry.CongestionControl (default bbr)
                 "-t", "2000",     // r7: gentler keep-alive
+                "--path-stats",   // r12: safe per-resolver throughput counters (Codex measure-first)
                 // r10: r9's --debug-poll / --debug-streams removed (segfault suspect).
             };
             Assert.Equal(expected, argv);
