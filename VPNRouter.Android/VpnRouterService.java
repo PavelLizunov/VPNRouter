@@ -188,15 +188,73 @@ public final class VpnRouterService extends VpnService {
     private int pendingDnsTunnelPort;
     // True once nativeStart spawned the Slipstream worker, so stopTunnel
     // tears it down after libbox. Reset on stop.
-    private boolean slipstreamRunning;
-    private BoxService boxService;
-    private ParcelFileDescriptor currentPfd;
+    // B1 (v2.42.0-r14): volatile — written on the lifecycle worker, read on the
+    // main/binder thread (onTaskRemoved, the restore-branch hint).
+    private volatile boolean slipstreamRunning;
+    private volatile BoxService boxService;
+    private volatile ParcelFileDescriptor currentPfd;
     // v2.32.0 AND-NETRES — wake-lock held during connect-init so the
     // box service can finish its first dial even on a screen-off / Doze
     // device. Acquired in startTunnel(), released when tunnel-up fires
     // OR the start path errors. 60-second hard cap so a stuck dial can't
     // drain battery indefinitely.
     private PowerManager.WakeLock connectWakeLock;
+
+    // B1 (v2.42.0-r14) — the VPN lifecycle (start/stopTunnel) runs on this
+    // dedicated single-thread executor, NOT the service main thread. start/stop
+    // do BLOCKING native + libbox work: SlipstreamNative.nativeStart/nativeStop,
+    // waitForLocalPort's ~10s join, BoxService.start()/close(). On the main thread
+    // a Stop while the dns-tunnel is mid-reconnect (НСДИ resolver rate-limit →
+    // QUIC 0x433 → reconnect backoff) wedged the foreground-service main thread →
+    // ANR → "freeze until force-stop" (reported on two phones). onStartCommand now
+    // only calls startForeground (fast, main thread per the FGS contract) and
+    // enqueues the lifecycle work here. Single-thread ⇒ start/stop are serialized.
+    private final java.util.concurrent.ExecutorService lifecycleExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(
+                    new java.util.concurrent.ThreadFactory() {
+                        @Override
+                        public Thread newThread(Runnable r) {
+                            Thread t = new Thread(r, "vpn-lifecycle");
+                            t.setDaemon(true);
+                            return t;
+                        }
+                    });
+
+    /** Enqueue VPN lifecycle work onto the dedicated worker (never the main
+     *  thread). Swallows the post-shutdown rejection during onDestroy. */
+    private void submitLifecycle(Runnable task) {
+        try {
+            lifecycleExecutor.execute(task);
+        } catch (java.util.concurrent.RejectedExecutionException rex) {
+            Log.w(LOG_TAG, "lifecycle executor rejected task (shutting down): " + rex.getMessage());
+        }
+    }
+
+    /**
+     * Run a potentially-blocking native teardown on a throwaway daemon thread and
+     * wait up to timeoutMs. If it doesn't finish (e.g. nativeStop joining a
+     * Slipstream worker that is stuck in reconnect backoff), log and return so the
+     * lifecycle worker proceeds instead of wedging. The leaked thread finishes
+     * later or dies with the process; the OS reclaims native resources regardless.
+     */
+    private void runBounded(String name, long timeoutMs, Runnable action) {
+        Thread t = new Thread(action, "vpn-bounded-" + name);
+        t.setDaemon(true);
+        long start = android.os.SystemClock.elapsedRealtime();
+        t.start();
+        try {
+            t.join(timeoutMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+        if (t.isAlive()) {
+            Log.w(LOG_TAG, name + " did not finish within " + timeoutMs
+                    + "ms — proceeding (stuck native teardown; leaked thread)");
+        } else {
+            long dur = android.os.SystemClock.elapsedRealtime() - start;
+            if (dur > 250) Log.i(LOG_TAG, name + " took " + dur + "ms");
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -318,22 +376,47 @@ public final class VpnRouterService extends VpnService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_START.equals(action)) {
-            pendingConfigJson = intent.getStringExtra(EXTRA_CONFIG_JSON);
-            pendingAllowedPackages = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
-            pendingPerAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
-            pendingPerAppPackages = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
-            pendingDnsTunnelDomain = intent.getStringExtra(EXTRA_DNS_TUNNEL_DOMAIN);
-            pendingDnsTunnelResolvers = intent.getStringArrayExtra(EXTRA_DNS_TUNNEL_RESOLVERS);
-            pendingDnsTunnelCert = intent.getStringExtra(EXTRA_DNS_TUNNEL_CERT);
-            pendingDnsTunnelPort = intent.getIntExtra(EXTRA_DNS_TUNNEL_PORT, 7001);
-            startTunnel();
+            // B1: capture extras on the (fast) main thread; run the BLOCKING
+            // lifecycle on the worker. startForeground MUST be prompt on the main
+            // thread (FGS contract) — do it here, not inside startTunnel (which now
+            // runs worker-side and could be briefly queued behind a prior op).
+            if (!ensureForegroundStarted()) {
+                return START_STICKY; // background-FGS-start refused — already broadcast + stopSelf
+            }
+            final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
+            final String[] allowed = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
+            final String perAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
+            final String[] perAppPkgs = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
+            final String dnsDomain = intent.getStringExtra(EXTRA_DNS_TUNNEL_DOMAIN);
+            final String[] dnsResolvers = intent.getStringArrayExtra(EXTRA_DNS_TUNNEL_RESOLVERS);
+            final String dnsCert = intent.getStringExtra(EXTRA_DNS_TUNNEL_CERT);
+            final int dnsPort = intent.getIntExtra(EXTRA_DNS_TUNNEL_PORT, 7001);
+            submitLifecycle(new Runnable() {
+                @Override
+                public void run() {
+                    pendingConfigJson = cfg;
+                    pendingAllowedPackages = allowed;
+                    pendingPerAppMode = perAppMode;
+                    pendingPerAppPackages = perAppPkgs;
+                    pendingDnsTunnelDomain = dnsDomain;
+                    pendingDnsTunnelResolvers = dnsResolvers;
+                    pendingDnsTunnelCert = dnsCert;
+                    pendingDnsTunnelPort = dnsPort;
+                    startTunnel();
+                }
+            });
         } else if (ACTION_STOP.equals(action)) {
             // v2.40.0-r8 (#3): an explicit user Disconnect must defuse any pending
             // onTaskRemoved swipe-recovery alarm, else a swipe-then-Disconnect
             // within the ~1.5s window silently re-establishes the tunnel.
             cancelScheduledRestart();
-            stopTunnel();
-            stopSelf();
+            submitLifecycle(new Runnable() {
+                @Override
+                public void run() {
+                    stopTunnel();
+                    stopSelf();
+                }
+            });
         } else {
             // v2.32.0 AND-NETRES — Always-on entry path.
             // The system starts us via the <intent-filter> declared in the
@@ -356,16 +439,24 @@ public final class VpnRouterService extends VpnService {
             // would orphan the old BoxService + ParcelFileDescriptor and cause
             // a spurious ~2s tunnel re-establish on every swipe-away. Only
             // restore in a genuinely fresh/killed process (boxService == null).
-            if (boxService != null) {
-                Log.i(LOG_TAG, "AND-NODOZE: restart/always-on intent but tunnel "
-                        + "already running — no-op (service survived the swipe)");
-            } else if (loadLastGoodConfig()) {
-                startTunnel();
-            } else {
-                Log.w(LOG_TAG, "AND-NETRES: no last-good config saved; "
-                        + "user must launch app and tap Connect at least once");
-                stopSelf();
+            if (!ensureForegroundStarted()) {
+                return START_STICKY; // background-FGS-start refused — already broadcast + stopSelf
             }
+            submitLifecycle(new Runnable() {
+                @Override
+                public void run() {
+                    if (boxService != null) {
+                        Log.i(LOG_TAG, "AND-NODOZE: restart/always-on intent but tunnel "
+                                + "already running — no-op (service survived the swipe)");
+                    } else if (loadLastGoodConfig()) {
+                        startTunnel();
+                    } else {
+                        Log.w(LOG_TAG, "AND-NETRES: no last-good config saved; "
+                                + "user must launch app and tap Connect at least once");
+                        stopSelf();
+                    }
+                }
+            });
         }
         // START_STICKY: if the kernel kills us under memory pressure, the
         // framework recreates the service with a null intent → we hit the
@@ -380,23 +471,20 @@ public final class VpnRouterService extends VpnService {
         return null;
     }
 
-    private void startTunnel() {
-        // Bug-AND-011 / Medium-5 (2026-05-16 code review) — call the
-        // 3-arg startForeground on Android 14+ (API 34) with explicit
-        // FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED. The 2-arg form
-        // works today via manifest declaration but is fragile under
-        // future ANR enforcement; the explicit form is the documented
-        // best practice for VPN services on API 34+.
-        // v2.40.0 AND-NODOZE (2026-06-02) — wrap startForeground. On Android
-        // 12+ (API 31) a background-initiated foreground-service start can be
-        // refused with ForegroundServiceStartNotAllowedException — e.g. the
-        // onTaskRemoved AlarmManager restart on a device where the user later
-        // revoked the battery-opt exemption. Pre-fix that threw straight into
-        // the AND-CRASH-HOOK uncaught handler (process death + a crash report
-        // for what is really a benign "can't run in background" condition).
-        // Now we broadcast a tunnel error and stop cleanly. The happy path
-        // (Connect from a visible Activity, or restart while battery-exempt)
-        // is unaffected.
+    /**
+     * Call startForeground promptly on the MAIN thread — the FGS contract requires
+     * it within seconds of a startForegroundService. Returns false if a
+     * background-FGS-start was refused (already broadcast + stopSelf).
+     *
+     * <p>Bug-AND-011 / Medium-5 (2026-05-16): 3-arg startForeground on API 34+ with
+     * explicit FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED. v2.40.0 AND-NODOZE
+     * (2026-06-02): on Android 12+ a background-initiated FGS start can be refused
+     * with ForegroundServiceStartNotAllowedException — broadcast an error and stop
+     * cleanly instead of reaching the AND-CRASH-HOOK uncaught handler. v2.42.0-r14
+     * (B1): split out of startTunnel so the prompt foreground call stays on the
+     * main thread while the blocking lifecycle moves to the worker executor.</p>
+     */
+    private boolean ensureForegroundStarted() {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIFICATION_ID, buildNotification(),
@@ -404,6 +492,7 @@ public final class VpnRouterService extends VpnService {
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification());
             }
+            return true;
         } catch (Exception e) {
             Log.e(LOG_TAG, "AND-NODOZE: startForeground refused ("
                     + e.getClass().getSimpleName() + ": " + e.getMessage()
@@ -414,9 +503,13 @@ public final class VpnRouterService extends VpnService {
                 sendBroadcast(err);
             } catch (Exception ignored) { }
             stopSelf();
-            return;
+            return false;
         }
+    }
 
+    /** Bring the tunnel up. Runs on the lifecycle worker (lifecycleExecutor);
+     *  startForeground was already invoked on the main thread in onStartCommand. */
+    private void startTunnel() {
         // AND-NETRES: hold a partial wake-lock during the ~5 s connect-init
         // window. Without it, on a screen-off / Doze device the kernel
         // can swap us out mid-handshake and the first dial silently
@@ -754,23 +847,39 @@ public final class VpnRouterService extends VpnService {
     /** Tear down the Slipstream client if it was started. Idempotent. */
     private void stopSlipstreamIfRunning() {
         if (!slipstreamRunning) return;
-        try {
-            SlipstreamNative.nativeStop();
-            Log.i(LOG_TAG, "dns-tunnel: Slipstream front stopped");
-        } catch (Throwable t) {
-            Log.w(LOG_TAG, "dns-tunnel: nativeStop threw: " + t.getMessage());
-        }
         slipstreamRunning = false;
+        // B1: bound nativeStop — if the Slipstream worker is stuck in QUIC reconnect
+        // backoff (the НСДИ rate-limit-drop case), the join inside nativeStop can
+        // hang. Cap it so the lifecycle worker proceeds and the UI never wedges.
+        runBounded("nativeStop", 4_000L, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    SlipstreamNative.nativeStop();
+                    Log.i(LOG_TAG, "dns-tunnel: Slipstream front stopped");
+                } catch (Throwable t) {
+                    Log.w(LOG_TAG, "dns-tunnel: nativeStop threw: " + t.getMessage());
+                }
+            }
+        });
     }
 
     private void stopTunnel() {
-        if (boxService != null) {
-            try {
-                boxService.close();
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "boxService.close threw: " + e.getMessage());
-            }
-            boxService = null;
+        final BoxService bs = boxService;
+        boxService = null;
+        if (bs != null) {
+            // B1: bound boxService.close — libbox shutdown can block if sing-box is
+            // tearing down while dialing a dead 127.0.0.1 dns-tunnel front.
+            runBounded("boxService.close", 4_000L, new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        bs.close();
+                    } catch (Exception e) {
+                        Log.w(LOG_TAG, "boxService.close threw: " + e.getMessage());
+                    }
+                }
+            });
         }
         // DNS-tunnel: tear down the Slipstream front AFTER libbox so sing-box
         // never dials a dead 127.0.0.1 front during its own shutdown.
@@ -799,13 +908,26 @@ public final class VpnRouterService extends VpnService {
         // Explicit "stop using VPN" (permission revoked / another VPN took over):
         // defuse any pending swipe-recovery restart so we don't resurrect it.
         cancelScheduledRestart();
-        stopTunnel();
+        // B1: onRevoke is delivered on a binder thread — never run the blocking
+        // teardown inline; enqueue it on the lifecycle worker.
+        submitLifecycle(new Runnable() {
+            @Override
+            public void run() { stopTunnel(); }
+        });
         super.onRevoke();
     }
 
     @Override
     public void onDestroy() {
-        stopTunnel();
+        // B1: enqueue a final teardown, then stop accepting new lifecycle work.
+        // shutdown() is non-blocking — it lets the queued stop drain on the daemon
+        // worker without blocking onDestroy (main thread). On process death the OS
+        // reclaims anything a bounded teardown didn't finish.
+        submitLifecycle(new Runnable() {
+            @Override
+            public void run() { stopTunnel(); }
+        });
+        lifecycleExecutor.shutdown();
         super.onDestroy();
     }
 
