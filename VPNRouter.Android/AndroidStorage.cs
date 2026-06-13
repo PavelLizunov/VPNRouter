@@ -1212,7 +1212,11 @@ public static class AndroidStorage
                 editor.Remove(key);
             else
                 editor.PutString(key, value);
-            return editor.Commit();
+            // A4 (B3): Apply() — async, non-blocking. These are ordinary UI prefs
+            // (tab/selection/per-app toggles); the service's recovery-critical
+            // last-good-config is persisted separately via the Java apply() path.
+            editor.Apply();
+            return true;
         }
         catch
         {
@@ -1246,7 +1250,8 @@ public static class AndroidStorage
             using var editor = prefs.Edit();
             if (editor == null) return false;
             editor.PutBoolean(key, value);
-            return editor.Commit();
+            editor.Apply(); // A4 (B3): async, non-blocking — ordinary UI pref
+            return true;
         }
         catch
         {
@@ -1282,7 +1287,8 @@ public static class AndroidStorage
             using var editor = prefs.Edit();
             if (editor == null) return false;
             editor.PutInt(key, value);
-            return editor.Commit();
+            editor.Apply(); // A4 (B3): async, non-blocking — ordinary UI pref
+            return true;
         }
         catch
         {
