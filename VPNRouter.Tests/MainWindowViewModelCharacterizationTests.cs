@@ -197,8 +197,13 @@ public class MainWindowViewModelCharacterizationTests
     // UI) doesn't bind it, so the message was invisible there. Added Simple-Mode
     // surfacing: _lastConnectionAlert field, HasConnectionAlert, RaiseSimpleAlertProps,
     // OnIsConnectingChanged partial. Re-pinned to the actual.
+    // v2.42.0-r18 (2026-06-13): catch-up bump for the TUN MTU GUI field added in
+    // 5195098 ("feat(network): add TUN MTU GUI field") — TunMtu ObservableProperty
+    // + Load/Save is Windows-conditional, so only the Windows hash drifted; the
+    // Linux pin + CI stayed green and the Windows pin was missed at the time. This
+    // dev-VM pre-flight (the only place the Windows MVM test runs) caught it.
     private const string PinnedHashWindows =
-        "255bd7b907da1bb80458529c12465c063876ec1672a1f5f9c99200c34dfab214";
+        "8227642a181b17974083192e9da6a145417c175b83988189f41e53afcc06f00e";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
