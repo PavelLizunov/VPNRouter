@@ -510,6 +510,15 @@ public final class VpnRouterService extends VpnService {
     /** Bring the tunnel up. Runs on the lifecycle worker (lifecycleExecutor);
      *  startForeground was already invoked on the main thread in onStartCommand. */
     private void startTunnel() {
+        // A2 (B3): a re-Start while a tunnel is already live must not orphan the old
+        // BoxService/TUN pfd/Slipstream (the old code overwrote boxService without
+        // closing it on the second start). Tear down the previous resources first —
+        // WITHOUT dropping the foreground notification (we stay foreground across the
+        // restart) or broadcasting TUNNEL_DOWN (we are reconfiguring, not stopping).
+        if (boxService != null) {
+            Log.i(LOG_TAG, "startTunnel: tunnel already live — tearing down previous before re-start");
+            teardownTunnelResources();
+        }
         // AND-NETRES: hold a partial wake-lock during the ~5 s connect-init
         // window. Without it, on a screen-off / Doze device the kernel
         // can swap us out mid-handshake and the first dial silently
@@ -864,7 +873,15 @@ public final class VpnRouterService extends VpnService {
         });
     }
 
-    private void stopTunnel() {
+    /**
+     * Close the tunnel's native resources (BoxService, Slipstream front, TUN pfd) and
+     * release the connect wake-lock — WITHOUT touching the foreground notification or
+     * broadcasting TUNNEL_DOWN. Used by {@link #stopTunnel} (full stop) and by
+     * {@link #startTunnel}'s stop-old-before-start (A2: a re-Start must not orphan the
+     * previous BoxService/pfd/Slipstream). Bounded so a stuck native teardown can't
+     * wedge the lifecycle worker.
+     */
+    private void teardownTunnelResources() {
         final BoxService bs = boxService;
         boxService = null;
         if (bs != null) {
@@ -895,6 +912,10 @@ public final class VpnRouterService extends VpnService {
         // (or the tunnel was running and got externally stopped) we make
         // sure the wake-lock doesn't leak.
         releaseConnectWakeLock();
+    }
+
+    private void stopTunnel() {
+        teardownTunnelResources();
         stopForeground(STOP_FOREGROUND_REMOVE);
         try {
             sendBroadcast(new Intent(ACTION_TUNNEL_DOWN).setPackage(getPackageName()));
