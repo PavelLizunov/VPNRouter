@@ -1087,7 +1087,7 @@ public partial class AndroidApp
             },
         };
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
-        nameStack.PointerReleased += (s, e) => SelectServerAndClose(srv);
+        nameStack.PointerReleased += (s, e) => ApplyServerSelection(srv);
 
         // Mobile design 2026-05-11 — name+meta+ping+refresh 4-col layout.
         // The IP and Port cells collapsed into the meta-line under the
@@ -1291,14 +1291,44 @@ public partial class AndroidApp
         };
     }
 
-    private void SelectServerAndClose(VlessServerEntry srv)
+    /// <summary>
+    /// Make <paramref name="srv"/> the active server from an Advanced tab
+    /// (Servers list or Subscribe list) WITHOUT bouncing back to Simple.
+    ///
+    /// <para>Pre-2026-06-14 this closed the whole Advanced shell
+    /// (CloseAdvancedShell) and only SAVED the choice — so a running tunnel kept
+    /// the OLD server until the user went back into Advanced and pressed
+    /// Stop+Start. User-reported as a jarring jump + a needless round-trip.</para>
+    ///
+    /// <para>Now: stay in Advanced, move the active-server highlight, and — when
+    /// the tunnel is up — apply the new server in place. The Java service's
+    /// ACTION_START tears down the old tunnel before starting the new one
+    /// (teardownTunnelResources / A2), so the status card stays Connected through
+    /// a clean ~2s server swap; no manual Stop+Start. When disconnected we just
+    /// save it (applies on the next Connect).</para>
+    /// </summary>
+    private void ApplyServerSelection(VlessServerEntry srv)
     {
-        // AND-MIGRATE-OVERLAYS (2026-05-09): selecting a server in the
-        // Servers tab closes the entire Advanced shell — same UX shape
-        // as the old per-overlay close (return to Simple page so the
-        // user can hit Connect on the freshly-active server).
         AndroidStorage.SetSelectedServerName(srv.Name);
-        CloseAdvancedShell();
+
+        var activity = MainActivity.Instance;
+        if (activity is not null && MainActivity.IntendedConnected)
+        {
+            ShowMenuFeedback(string.Format(Localization.SrvSwitchedReconnect, srv.Name));
+            // Re-applies the freshly-selected server in place (no Stop+Start) —
+            // the service swaps the tunnel; the card stays Connected.
+            activity.RequestConnect();
+        }
+        else
+        {
+            ShowMenuFeedback(string.Format(Localization.SrvSelectedActive, srv.Name));
+        }
+
+        // Move the active-server highlight on both Advanced lists that surface
+        // it (the user stays on whichever tab they tapped). Best-effort.
+        try { RebuildServerList(); } catch { }
+        try { ScheduleAggregatedServerListRebuild(); } catch { }
+        UpdateConfigSummary();
     }
 
     // ── Test-all batch ─────────────────────────────────────────────────────

@@ -95,8 +95,14 @@ public class AndroidAppCharacterizationTests
     // the Avalonia-11-era subscriber-swap is unreachable. AttachLifecycleEvents
     // kept (idempotent subscribe). See
     // plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md.
+    // v2.42.0-r20 (2026-06-14, user-reported Advanced->Simple jump): renamed
+    // AndroidApp.ServerList.cs `SelectServerAndClose` -> `ApplyServerSelection`
+    // (server pick stays in Advanced + applies in place instead of closing the
+    // shell). Method-name change → surface drift. (Subscribe-tab call-site change
+    // is body-only; the new Localization delegates live in Localization.cs, not
+    // an AndroidApp partial — neither affects this hash.)
     private const string PinnedHash =
-        "b55220aa3103e01b6d2a2f18571ecc917b17b11a60058031fd9f873b36c54b12";
+        "5b2ebaac26899d3828e3bc6d5ffcb35be050398e5b560de76964933d6836950b";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

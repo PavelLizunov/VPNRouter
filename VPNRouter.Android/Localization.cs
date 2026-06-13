@@ -805,6 +805,8 @@ internal static class Localization
     public static string SrvTipTestAll => global::VPNRouter.Core.Localization.Strings.SrvTipTestAll;
     public static string SrvTipSelectServer => global::VPNRouter.Core.Localization.Strings.SrvTipSelectServer;
     public static string SrvActiveBadge => global::VPNRouter.Core.Localization.Strings.SrvActiveBadge;
+    public static string SrvSwitchedReconnect => global::VPNRouter.Core.Localization.Strings.SrvSwitchedReconnect;
+    public static string SrvSelectedActive => global::VPNRouter.Core.Localization.Strings.SrvSelectedActive;
     public static string MenuSectionFreeConfigs => global::VPNRouter.Core.Localization.Strings.MenuSectionFreeConfigs;
     public static string MenuItemOpenFreeConfigs => global::VPNRouter.Core.Localization.Strings.MenuItemOpenFreeConfigs;
     public static string FcOverlayTitle => global::VPNRouter.Core.Localization.Strings.FcOverlayTitle;

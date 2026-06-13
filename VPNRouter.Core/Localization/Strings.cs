@@ -2630,6 +2630,21 @@ public static class Strings
 
     public static string SrvActiveBadge => Ru ? "активный" : "active";
 
+    /// <summary>Toast when the user picks a server in an Advanced tab while the
+    /// VPN is connected — the new server is applied in place (a brief reconnect)
+    /// and the user stays in Advanced (no bounce to Simple, no manual Stop+Start).
+    /// {0} = server name.</summary>
+    public static string SrvSwitchedReconnect => Ru
+        ? "Переключаюсь на {0}..."
+        : "Switching to {0}...";
+
+    /// <summary>Toast when the user picks a server in an Advanced tab while
+    /// disconnected — saved as the active server, applies on the next Connect.
+    /// {0} = server name.</summary>
+    public static string SrvSelectedActive => Ru
+        ? "Активный сервер: {0}"
+        : "Active server: {0}";
+
     /// <summary>Kebab menu item that opens the Free Configs overlay.</summary>
     public static string MenuSectionFreeConfigs => Ru ? "Бесплатные конфиги" : "Free configs";
 

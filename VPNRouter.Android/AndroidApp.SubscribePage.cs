@@ -603,11 +603,9 @@ public partial class AndroidApp
             },
         };
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
-        nameStack.PointerReleased += (_, _) =>
-        {
-            AndroidStorage.SetSelectedServerName(srv.Name);
-            CloseAdvancedShell();
-        };
+        // Stay in Advanced + apply in place (shared with the Servers tab) —
+        // no bounce to Simple, no manual Stop+Start. See ApplyServerSelection.
+        nameStack.PointerReleased += (_, _) => ApplyServerSelection(srv);
 
         // Ping pill (Mobile.html `.ping.g/.o/.b/.muted`) — colored bg,
         // white text, mono, min-width so the column doesn't jitter as
