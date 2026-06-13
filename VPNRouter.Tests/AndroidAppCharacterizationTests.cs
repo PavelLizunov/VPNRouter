@@ -87,8 +87,16 @@ public class AndroidAppCharacterizationTests
     // AndroidApp.axaml.cs (Health Check off the UI thread). A6's log-path
     // consolidation is body-only + its helper lives in AndroidDiagnosticsExporter.cs
     // (not an AndroidApp partial), so it does NOT affect this surface hash.
+    // 2026-06-13 status-card lifecycle investigation (task_b0cad072): removed
+    // the vestigial multi-instance machinery from AndroidApp.VpnLifecycle.cs —
+    // the `s_currentLifecycleSubscriber` static field + DetachLifecycleEvents()
+    // + DisposeDiagnosticsTimer() methods. Avalonia 12 builds one AndroidApp +
+    // one MainView per process (proven via Avalonia.Android.dll decompile), so
+    // the Avalonia-11-era subscriber-swap is unreachable. AttachLifecycleEvents
+    // kept (idempotent subscribe). See
+    // plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md.
     private const string PinnedHash =
-        "c462691df3361a4e6437c316a09cbd43ea7cffd7bb6975859d3b67007bb9c201";
+        "b55220aa3103e01b6d2a2f18571ecc917b17b11a60058031fd9f873b36c54b12";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

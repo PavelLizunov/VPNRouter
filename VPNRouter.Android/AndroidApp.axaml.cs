@@ -2551,8 +2551,9 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     // VPN lifecycle / chip state / diagnostics pump methods + the
-    // s_currentLifecycleSubscriber + _lifecycleEventsAttached fields all
-    // live in AndroidApp.VpnLifecycle.cs (Phase 2C Wave 9, 2026-05-18).
+    // _lifecycleEventsAttached field all live in AndroidApp.VpnLifecycle.cs
+    // (Phase 2C Wave 9, 2026-05-18; multi-instance subscriber-swap removed
+    // 2026-06-13 — Avalonia 12 = one AndroidApp per process).
 
     /// <summary>
     /// Bug-AND-007b (2026-05-16) — hide the Android soft keyboard

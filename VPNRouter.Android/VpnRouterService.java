@@ -165,6 +165,12 @@ public final class VpnRouterService extends VpnService {
     // and keeps the persistence path simple.
     private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
     private static final String KEY_AUTO_RECONNECT = "auto_reconnect_on_network_change";
+    // v2.42.0 resume re-sync — authoritative live tunnel state, written in
+    // lockstep with the ACTION_TUNNEL_UP/DOWN broadcasts. The C# side reads it
+    // (AndroidStorage.GetTunnelLive) on MainActivity.OnResume to demote a stale
+    // "Connected" status card when a broadcast was lost because no Activity
+    // (hence no receiver) was alive at send time.
+    private static final String KEY_TUNNEL_LIVE = "tunnel_live";
     // DNS-tunnel (slipstream) last-good params, so an Always-on / swipe-recovery
     // bring-up rebuilds the Slipstream front too (not just libbox). Resolvers
     // are newline-packed like the per-app packages slot.
@@ -549,8 +555,29 @@ public final class VpnRouterService extends VpnService {
                 err.putExtra(EXTRA_ERROR_MESSAGE, "foreground-start-blocked");
                 sendBroadcast(err);
             } catch (Exception ignored) { }
+            setTunnelLive(false);
             stopSelf();
             return false;
+        }
+    }
+
+    /**
+     * v2.42.0 resume re-sync — persist the authoritative live tunnel state to
+     * the shared prefs in lockstep with the TUNNEL_UP/DOWN broadcasts. The C#
+     * MainActivity.OnResume reads this (AndroidStorage.GetTunnelLive) to demote
+     * a stale "Connected" status card when a broadcast was lost because no
+     * Activity (hence no receiver) was alive at send time. Best-effort: a prefs
+     * failure just means the next resume can't self-heal — it never blocks the
+     * tunnel. apply() is async + non-blocking, fine for the worker thread.
+     */
+    private void setTunnelLive(boolean live) {
+        try {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_TUNNEL_LIVE, live)
+                    .apply();
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "setTunnelLive(" + live + ") threw: " + e.getMessage());
         }
     }
 
@@ -579,11 +606,13 @@ public final class VpnRouterService extends VpnService {
             startLibboxService();
             persistLastGoodConfig();
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
+            setTunnelLive(true);
         } catch (Exception e) {
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + e.getMessage(), e);
             Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
             err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + e.getMessage());
             sendBroadcast(err);
+            setTunnelLive(false);
             stopSelf();
         } finally {
             releaseConnectWakeLock();
@@ -986,6 +1015,9 @@ public final class VpnRouterService extends VpnService {
         } catch (Exception e) {
             Log.w(LOG_TAG, "broadcast tunnel-down threw: " + e.getMessage());
         }
+        // v2.42.0 resume re-sync — record the down so a resume that missed the
+        // (possibly lost) TUNNEL_DOWN broadcast can demote a stale card.
+        setTunnelLive(false);
     }
 
     @Override

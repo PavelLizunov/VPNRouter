@@ -379,6 +379,43 @@ public class MainActivity : AvaloniaMainActivity
     }
 
     /// <summary>
+    /// Resume re-sync (demote-only). The <see cref="TunnelStateReceiver"/> only
+    /// lives while this Activity is alive (registered in <see cref="OnCreate"/>,
+    /// unregistered in <see cref="OnDestroy"/>), and the process-local
+    /// TUNNEL_UP/DOWN broadcasts are not sticky. So a TUNNEL_DOWN that fires
+    /// while the Activity is destroyed in the background ("Don't keep
+    /// activities", an OEM task-killer, or the unregister/register recreation
+    /// gap) is lost — leaving the status card falsely "Connected" with no other
+    /// re-sync (<c>OnFrameworkInitializationCompleted</c> runs once per
+    /// process). On resume we read the service-persisted authoritative
+    /// live-state and, if the card is falsely up, correct it down through the
+    /// existing <see cref="SetIntent"/> → <see cref="IntentChanged"/> →
+    /// <c>UpdateConnectionState</c> path. DEMOTE-ONLY: see
+    /// <see cref="VPNRouter.Core.Services.TunnelStateResync"/> for why we never
+    /// promote Off → On from the flag.
+    /// </summary>
+    protected override void OnResume()
+    {
+        base.OnResume();
+        try
+        {
+            if (VPNRouter.Core.Services.TunnelStateResync.TryResolveOnResume(
+                    IntendedConnected, AndroidStorage.GetTunnelLive(), out var corrected))
+            {
+                global::Android.Util.Log.Info("VpnRouter",
+                    $"resume re-sync: card showed Connected={IntendedConnected} but service "
+                    + $"live-state was down — correcting card to connected={corrected}");
+                SetIntent(corrected);
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"resume re-sync threw: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// v3.0 Phase 1.I — receives tunnel state broadcasts from the
     /// foreground VpnRouterService. Updates <see cref="_intendedConnected"/>
     /// (now misnamed — it's the real state, not just intent — but the

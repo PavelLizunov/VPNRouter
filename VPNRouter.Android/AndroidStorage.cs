@@ -167,6 +167,21 @@ public static class AndroidStorage
     }
     public static bool SetConfigMode(string value) => SetString(KeyConfigMode, value);
 
+    // v2.42.0 resume re-sync — authoritative live tunnel state, written by the
+    // Java VpnRouterService in lockstep with the TUNNEL_UP/DOWN broadcasts
+    // (same "vpnrouter_settings" prefs file == PrefsName). Read on
+    // MainActivity.OnResume to demote a stale "Connected" status card when a
+    // TUNNEL_DOWN broadcast was lost because no Activity (hence no receiver)
+    // was alive at send time. See TunnelStateResync for the demote-only
+    // decision + plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md.
+    private const string KeyTunnelLive = "tunnel_live";
+
+    /// <summary>
+    /// Service-persisted authoritative tunnel live-state: true between a
+    /// TUNNEL_UP and the next TUNNEL_DOWN. Defaults to false (no tunnel).
+    /// </summary>
+    public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
+
     public static string? GetCustomConfigJson() => GetString(KeyCustomConfigJson);
     public static bool SetCustomConfigJson(string? value) => SetString(KeyCustomConfigJson, value);
 

@@ -18,10 +18,8 @@ namespace VPNRouter.Android;
 /// <list type="bullet">
 ///   <item>Connect/Disconnect tap dispatch (<see cref="OnConnectClicked"/>
 ///   → <c>MainActivity.Instance.RequestConnect/Disconnect</c>).</item>
-///   <item>Static lifecycle-event attach/detach
-///   (<see cref="AttachLifecycleEvents"/> / <see cref="DetachLifecycleEvents"/>)
-///   with single-subscriber invariant via
-///   <c>s_currentLifecycleSubscriber</c>.</item>
+///   <item>Idempotent lifecycle-event subscribe
+///   (<see cref="AttachLifecycleEvents"/>).</item>
 ///   <item>Status card phase transitions
 ///   (<see cref="UpdateConnectionState"/>).</item>
 ///   <item>Chip state machine for VPN + Zapret pills
@@ -46,16 +44,14 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
-    /// <summary>
-    /// Bug-AND-011 / High-4 (2026-05-16 code review) — static tracker so
-    /// only ONE AndroidApp has lifecycle subscriptions live at a time.
-    /// Calling Attach on a new instance detaches the previous one
-    /// automatically (see <see cref="AttachLifecycleEvents"/>). Without
-    /// this every reconstructed AndroidApp instance would accumulate a
-    /// subscriber on the static MainActivity events, indefinitely
-    /// retaining the previous visual tree + Bitmap cache.
-    /// </summary>
-    private static AndroidApp? s_currentLifecycleSubscriber;
+    // Idempotency guard for AttachLifecycleEvents. Avalonia 12 builds exactly
+    // ONE AndroidApp + one MainView per process (the App is created once in
+    // AvaloniaAndroidApplication.OnCreate; every Activity recreation re-parents
+    // the SAME MainView — see Avalonia.Android.ApplicationLifetime.MainView →
+    // MainViewFactory = () => _mainView), so the historical multi-instance
+    // subscriber-swap (Bug-AND-011 / High-4, Avalonia-11-era `s_currentLifecycleSubscriber`)
+    // is unreachable and was removed 2026-06-13. See
+    // plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md.
     private bool _lifecycleEventsAttached;
 
     private void OnConnectClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -104,25 +100,13 @@ public partial class AndroidApp
 
     private void AttachLifecycleEvents()
     {
-        var prev = System.Threading.Interlocked.Exchange(ref s_currentLifecycleSubscriber, this);
-        if (prev is not null && !ReferenceEquals(prev, this))
-            prev.DetachLifecycleEvents();
+        // Idempotent: OnFrameworkInitializationCompleted runs once per process
+        // (single AndroidApp instance — see _lifecycleEventsAttached doc), so
+        // this subscribes exactly once; the guard is belt-and-suspenders.
         if (_lifecycleEventsAttached) return;
         _lifecycleEventsAttached = true;
         MainActivity.IntentChanged += OnIntentChanged;
         MainActivity.TunnelErrorReported += OnTunnelErrorReported;
-    }
-
-    private void DetachLifecycleEvents()
-    {
-        if (!_lifecycleEventsAttached) return;
-        _lifecycleEventsAttached = false;
-        try { MainActivity.IntentChanged -= OnIntentChanged; } catch { }
-        try { MainActivity.TunnelErrorReported -= OnTunnelErrorReported; } catch { }
-        // Bug-AND-011 / Low-1 — release the diagnostics timer alongside
-        // event subscriptions so the retired AndroidApp drops its only
-        // remaining strong reference path into Avalonia's dispatcher.
-        DisposeDiagnosticsTimer();
     }
 
     private void UpdateConnectionState(bool connected)
@@ -463,21 +447,6 @@ public partial class AndroidApp
         if (_statusHealthCheck is not null) _statusHealthCheck.IsVisible = false;
         // Title resets to plain "Not connected" inside UpdateConnectionState,
         // so we don't touch _statusCard.Title here.
-    }
-
-    /// <summary>
-    /// Bug-AND-011 / Low-1 (2026-05-16) — explicitly tear down the
-    /// diagnostics DispatcherTimer when the AndroidApp instance is
-    /// being abandoned (lifecycle event swap or harness rebuild). The
-    /// timer was never released pre-fix; under recreation paths every
-    /// retired AndroidApp kept its own timer rooted in the static
-    /// MainActivity.* events. Idempotent + null-safe.
-    /// </summary>
-    private void DisposeDiagnosticsTimer()
-    {
-        if (_diagnosticsTimer is null) return;
-        try { _diagnosticsTimer.Stop(); } catch { /* best-effort */ }
-        _diagnosticsTimer = null;
     }
 
     private void OnDiagnosticsTick()
