@@ -4640,14 +4640,16 @@ public partial class AndroidApp : Avalonia.Application
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
         try
         {
-            var ctx = global::Android.App.Application.Context;
-            var extDir = ctx.GetExternalFilesDir(null);
-            if (extDir is null)
+            // A6 (2026-06-13) — surface FilesDir/singbox.log (private sandbox,
+            // Bug-AND-011), the path the service actually writes. Was the
+            // GetExternalFilesDir path, so the value copied to the clipboard
+            // pointed at a file that never exists post-Bug-AND-011.
+            var logPath = AndroidDiagnosticsExporter.ResolveSingboxLogPath();
+            if (logPath is null)
             {
                 ShowMenuFeedback(Localization.SaveStatusUnknown);
                 return;
             }
-            var logPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
             CopyToClipboard("singbox-log-path", logPath);
             ShowMenuFeedback(logPath);
         }
@@ -4756,24 +4758,38 @@ public partial class AndroidApp : Avalonia.Application
     /// overlay as a viewer. Mirrors desktop's notepad-pop pattern with
     /// Android's in-app text viewer.
     /// </summary>
-    private void OnMenuHealthCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void OnMenuHealthCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        // A7 (2026-06-13): HealthCheck.RunAll runs DNS/network probes that can
+        // stall, so offload the whole compute + file-write to a background
+        // thread (mirrors OnMenuExportDiagClicked's await Task.Run pattern).
+        // Disable the menu item for the duration so a deliberate re-tap can't
+        // launch a second probe; re-enable in finally so it recovers on
+        // success, exception, and the early-return path alike. The await
+        // resumes on the UI SynchronizationContext, so the UI mutations below
+        // stay UI-safe.
+        if (_menuHealthCheckItem is not null) _menuHealthCheckItem.IsEnabled = false;
         try
         {
-            var results = VPNRouter.Core.Services.HealthCheck.RunAll();
-            var report = VPNRouter.Core.Services.HealthCheck.FormatReport(results);
-
-            var ctx = global::Android.App.Application.Context;
-            var filesDir = ctx.FilesDir?.AbsolutePath
-                           ?? VPNRouter.Core.AppPaths.DataDir;
-            var reportPath = System.IO.Path.Combine(filesDir, "last-health-check.txt");
-            try
+            var report = await System.Threading.Tasks.Task.Run(() =>
             {
-                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(reportPath)!);
-                System.IO.File.WriteAllText(reportPath, report);
-            }
-            catch { /* still surface the report inline below */ }
+                var results = VPNRouter.Core.Services.HealthCheck.RunAll();
+                var formatted = VPNRouter.Core.Services.HealthCheck.FormatReport(results);
+
+                var ctx = global::Android.App.Application.Context;
+                var filesDir = ctx.FilesDir?.AbsolutePath
+                               ?? VPNRouter.Core.AppPaths.DataDir;
+                var reportPath = System.IO.Path.Combine(filesDir, "last-health-check.txt");
+                try
+                {
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(reportPath)!);
+                    System.IO.File.WriteAllText(reportPath, formatted);
+                }
+                catch { /* still surface the report inline below */ }
+
+                return formatted;
+            });
 
             if (_logOverlay is null) return;
             if (_logViewerTitle is not null)
@@ -4798,6 +4814,10 @@ public partial class AndroidApp : Avalonia.Application
         catch (Exception ex)
         {
             ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+        finally
+        {
+            if (_menuHealthCheckItem is not null) _menuHealthCheckItem.IsEnabled = true;
         }
     }
 

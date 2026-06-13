@@ -390,11 +390,11 @@ public partial class AndroidApp
         if (_logViewerContent is null) return;
         try
         {
-            var ctx = global::Android.App.Application.Context;
-            var extDir = ctx.GetExternalFilesDir(null);
-            var logPath = extDir is not null
-                ? System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log")
-                : null;
+            // A6 (2026-06-13) — read FilesDir/singbox.log (private sandbox,
+            // Bug-AND-011), the path the service actually writes + the health
+            // probe reads. Was GetExternalFilesDir, which never exists post-
+            // Bug-AND-011 → the viewer always showed the empty state.
+            var logPath = AndroidDiagnosticsExporter.ResolveSingboxLogPath();
 
             if (logPath is null || !System.IO.File.Exists(logPath))
             {

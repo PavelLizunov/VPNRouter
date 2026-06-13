@@ -59,6 +59,50 @@ internal static class AndroidDiagnosticsExporter
     /// </summary>
     private const long MaxTailReadBytes = 2L * 1024 * 1024;
 
+    /// <summary>
+    /// A6 (2026-06-13) — single source of truth for the runtime sing-box log
+    /// path on Android. The service + health probe write/read
+    /// <c>FilesDir/singbox.log</c> (private sandbox, Bug-AND-011), so every
+    /// reader (in-app log viewer, diagnostics exporter, "copy log path" kebab)
+    /// must resolve the same location or a freeze report looks empty/stale.
+    ///
+    /// <para>Prefers <c>FilesDir/singbox.log</c>. Falls back to the legacy
+    /// <c>GetExternalFilesDir(null)/singbox.log</c> only when the FilesDir copy
+    /// is absent — migration safety for a report carried over from a
+    /// pre-Bug-AND-011 build that wrote to external storage. Returns null when
+    /// neither directory is available.</para>
+    /// </summary>
+    internal static string? ResolveSingboxLogPath()
+    {
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            var filesDir = ctx.FilesDir;
+            if (filesDir is not null)
+            {
+                var primary = Path.Combine(filesDir.AbsolutePath, "singbox.log");
+                if (File.Exists(primary)) return primary;
+            }
+            // Legacy fallback: only honour an external copy when the private
+            // sandbox copy doesn't exist (a report from an older build).
+            var ext = ctx.GetExternalFilesDir(null);
+            if (ext is not null)
+            {
+                var legacy = Path.Combine(ext.AbsolutePath, "singbox.log");
+                if (File.Exists(legacy)) return legacy;
+            }
+            // Neither exists yet — return the canonical primary path so callers
+            // surface an honest "empty" state for the right location.
+            return filesDir is not null
+                ? Path.Combine(filesDir.AbsolutePath, "singbox.log")
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public sealed record Result(string? ZipPath, IReadOnlyList<string> Entries, IReadOnlyList<string> Warnings);
 
     /// <summary>
@@ -91,15 +135,12 @@ internal static class AndroidDiagnosticsExporter
             AddText(staging, "README.txt", BuildReadme(), entries);
             AddText(staging, "summary.txt", BuildSummary(timestamp, connected, configMode, serverCount), entries);
 
-            // sing-box log (external files dir — matches the in-app log viewer).
-            string? extLog = null;
-            try
-            {
-                var ext = global::Android.App.Application.Context.GetExternalFilesDir(null);
-                if (ext is not null) extLog = Path.Combine(ext.AbsolutePath, "singbox.log");
-            }
-            catch (Exception ex) { warnings.Add($"external files dir unavailable: {ex.GetType().Name}"); }
-            AddLogTail(staging, extLog, "singbox-tail.log", entries, warnings);
+            // sing-box log — FilesDir/singbox.log (private sandbox, Bug-AND-011),
+            // matching the runtime writer + health probe + in-app log viewer.
+            // A6 (2026-06-13): was GetExternalFilesDir, which never exists post-
+            // Bug-AND-011 → bundle's singbox-tail.log was always empty.
+            var singboxLog = ResolveSingboxLogPath();
+            AddLogTail(staging, singboxLog, "singbox-tail.log", entries, warnings);
 
             // Go-runtime stderr (private sandbox — Bug-AND-011 path).
             AddLogTail(staging, Path.Combine(AppPaths.DataDir, "singbox.stderr.log"),

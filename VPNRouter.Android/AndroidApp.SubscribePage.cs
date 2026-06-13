@@ -89,6 +89,16 @@ public partial class AndroidApp
     /// switched away from.</summary>
     private CancellationTokenSource? _subsAggTestAllCts;
 
+    // AND-PERF (A5, v2.42.0): coalesce per-probe-result aggregated-list
+    // rebuilds. "Test all" delivers N results, and the old per-result
+    // Dispatcher.Post(RebuildAggregatedServerList) queued N full O(N) rebuilds
+    // = O(N^2) BuildAggregatedServerRow calls (janks hard at 100+ servers).
+    // Mirrors the Servers-tab _srvRebuildScheduled fix: this flag collapses a
+    // burst of results into ONE debounced rebuild. 0 = idle, 1 = a rebuild is
+    // already queued (Interlocked-guarded because ApplyAggregatedResult runs
+    // from up to 4 concurrent probe continuations).
+    private int _subsAggRebuildScheduled;
+
     /// <summary>
     /// In-memory mirror of the persisted subscription list. Modified by
     /// add / remove / refresh handlers, then flushed via
@@ -800,7 +810,35 @@ public partial class AndroidApp
             LastTestedAt = DateTimeOffset.UtcNow,
             Error = result.Error,
         };
-        Dispatcher.UIThread.Post(RebuildAggregatedServerList);
+        // Re-render the affected row by rebuilding the list, but COALESCE the
+        // burst: "Test all" delivers N results and a naive per-result
+        // Dispatcher.Post(RebuildAggregatedServerList) queues N full O(N)
+        // rebuilds = O(N^2) BuildAggregatedServerRow calls. Schedule a single
+        // debounced rebuild that picks up every result applied so far (final
+        // state still guaranteed by the finally-block RebuildAggregatedServerList
+        // in OnSubsAggTestAllClicked / TestSingleAggregatedServerAsync).
+        ScheduleAggregatedServerListRebuild();
+    }
+
+    /// <summary>
+    /// Coalesce a burst of per-result updates into a single aggregated-list
+    /// rebuild. ApplyAggregatedResult fires once per probe completion (up to 4
+    /// concurrently); the first call queues a Background-priority rebuild and
+    /// flips the flag, and every other call in the same burst is a no-op — the
+    /// queued rebuild reads the latest <c>_subsAggResults</c> /
+    /// <c>_subsAggTestingKeys</c> so it renders all results applied so far.
+    /// Turns O(N^2) into O(N) for "Test all". Mirrors
+    /// <see cref="ScheduleServerListRebuild"/> on the Servers tab.
+    /// </summary>
+    private void ScheduleAggregatedServerListRebuild()
+    {
+        if (Interlocked.CompareExchange(ref _subsAggRebuildScheduled, 1, 0) != 0)
+            return; // a rebuild is already queued — it will include this result
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref _subsAggRebuildScheduled, 0);
+            RebuildAggregatedServerList();
+        }, DispatcherPriority.Background);
     }
 
     private void UpdateAggregatedProgressText(int done, int total)

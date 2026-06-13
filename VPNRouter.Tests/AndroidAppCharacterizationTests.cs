@@ -80,8 +80,15 @@ public class AndroidAppCharacterizationTests
     // OnMenuExportDiagClicked handler (Android diagnostics-export kebab parity).
     // v2.40.0-r7 bump (2026-06-03): added _srvRebuildScheduled field +
     // ScheduleServerListRebuild() (Servers Test-all O(N^2)→O(N) rebuild coalesce).
+    // v2.42.0-r17 bump (2026-06-13, B3.2 Codex batch): A5 added
+    // _subsAggRebuildScheduled field + ScheduleAggregatedServerListRebuild() in
+    // AndroidApp.SubscribePage.cs (Subscribe Test-all O(N^2)→O(N) coalesce);
+    // A7 changed OnMenuHealthCheckClicked from void to async void in
+    // AndroidApp.axaml.cs (Health Check off the UI thread). A6's log-path
+    // consolidation is body-only + its helper lives in AndroidDiagnosticsExporter.cs
+    // (not an AndroidApp partial), so it does NOT affect this surface hash.
     private const string PinnedHash =
-        "644bf6c583f12f3c2c801d21815d97baca4a754105db05d0ec9a9b3cb2d2901a";
+        "c462691df3361a4e6437c316a09cbd43ea7cffd7bb6975859d3b67007bb9c201";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

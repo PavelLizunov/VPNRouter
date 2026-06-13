@@ -75,8 +75,8 @@ import android.net.NetworkRequest;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
-import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.SystemClock;
@@ -200,6 +200,19 @@ public final class VpnRouterService extends VpnService {
     // drain battery indefinitely.
     private PowerManager.WakeLock connectWakeLock;
 
+    // A3 (v2.42.0): dedicated thread for ConnectivityManager.NetworkCallback
+    // delivery — created lazily on first connect, reused across reconnects, and
+    // quit on service destroy. The libbox default-interface monitor's fireUpdate()
+    // does a bounded NetworkInterface.getByName retry (~500ms of Thread.sleep
+    // worst case) plus a blocking updateDefaultInterface() JNI call into libbox;
+    // delivering those on the MAIN looper added foreground-service main-thread
+    // pressure on every Wi-Fi<->cellular handoff (worst while a dns-tunnel was
+    // mid-reconnect). A SERVICE-level HandlerThread (vs one per platformInterface
+    // instance) avoids both a per-connect thread leak and a reuse-after-quit
+    // hazard. Matches sagernet's DefaultNetworkListener design.
+    private HandlerThread netCallbackThread;
+    private Handler netCallbackHandler;
+
     // B1 (v2.42.0-r14) — the VPN lifecycle (start/stopTunnel) runs on this
     // dedicated single-thread executor, NOT the service main thread. start/stop
     // do BLOCKING native + libbox work: SlipstreamNative.nativeStart/nativeStop,
@@ -253,6 +266,40 @@ public final class VpnRouterService extends VpnService {
         } else {
             long dur = android.os.SystemClock.elapsedRealtime() - start;
             if (dur > 250) Log.i(LOG_TAG, name + " took " + dur + "ms");
+        }
+    }
+
+    /**
+     * A3: lazily create + start the shared net-monitor looper thread and return
+     * its Handler, so ConnectivityManager.NetworkCallback delivery (and the
+     * ~500ms getByName retry + blocking updateDefaultInterface JNI inside
+     * fireUpdate) runs OFF the main thread. Synchronized against
+     * quitNetCallbackThread.
+     */
+    private synchronized Handler ensureNetCallbackHandler() {
+        if (netCallbackHandler == null) {
+            netCallbackThread = new HandlerThread("vpn-net-monitor");
+            netCallbackThread.start();
+            netCallbackHandler = new Handler(netCallbackThread.getLooper());
+        }
+        return netCallbackHandler;
+    }
+
+    /**
+     * A3: stop the shared net-monitor looper thread. Null-safe (may never have
+     * been created if the service stopped before any connect). quitSafely drains
+     * already-queued interface updates first. Called on the lifecycle worker from
+     * onDestroy, AFTER teardown has unregistered the NetworkCallback.
+     */
+    private synchronized void quitNetCallbackThread() {
+        if (netCallbackThread != null) {
+            try {
+                netCallbackThread.quitSafely();
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "A3: netCallbackThread.quitSafely threw: " + e.getMessage());
+            }
+            netCallbackThread = null;
+            netCallbackHandler = null;
         }
     }
 
@@ -881,9 +928,17 @@ public final class VpnRouterService extends VpnService {
      * previous BoxService/pfd/Slipstream). Bounded so a stuck native teardown can't
      * wedge the lifecycle worker.
      */
-    private void teardownTunnelResources() {
+    private boolean teardownTunnelResources() {
         final BoxService bs = boxService;
         boxService = null;
+        // LOW (double-broadcast guard): record whether anything was actually live
+        // BEFORE tearing it down, so stopTunnel can drop the foreground
+        // notification + broadcast TUNNEL_DOWN at most once. An explicit Stop
+        // enqueues stopTunnel() AND triggers onDestroy() (which enqueues
+        // stopTunnel() again on the same serial worker); the second pass finds
+        // nothing live and must stay silent. Captured before stopSlipstreamIfRunning
+        // clears slipstreamRunning and before currentPfd is nulled below.
+        final boolean wasLive = bs != null || slipstreamRunning || currentPfd != null;
         if (bs != null) {
             // B1: bound boxService.close — libbox shutdown can block if sing-box is
             // tearing down while dialing a dead 127.0.0.1 dns-tunnel front.
@@ -912,10 +967,19 @@ public final class VpnRouterService extends VpnService {
         // (or the tunnel was running and got externally stopped) we make
         // sure the wake-lock doesn't leak.
         releaseConnectWakeLock();
+        return wasLive;
     }
 
     private void stopTunnel() {
-        teardownTunnelResources();
+        // LOW (double-broadcast guard): an explicit Stop runs stopTunnel() once
+        // here and again from onDestroy() (stopSelf -> onDestroy enqueues another
+        // stopTunnel on the same serial lifecycle worker). teardownTunnelResources
+        // reports whether anything was actually live; only the pass that tore
+        // something down drops the foreground notification + broadcasts
+        // TUNNEL_DOWN, so the UI sees the down-event exactly once.
+        if (!teardownTunnelResources()) {
+            return;
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         try {
             sendBroadcast(new Intent(ACTION_TUNNEL_DOWN).setPackage(getPackageName()));
@@ -946,7 +1010,12 @@ public final class VpnRouterService extends VpnService {
         // reclaims anything a bounded teardown didn't finish.
         submitLifecycle(new Runnable() {
             @Override
-            public void run() { stopTunnel(); }
+            public void run() {
+                stopTunnel();
+                // A3: quit the shared net-monitor thread AFTER teardown so
+                // boxService.close() has already unregistered its NetworkCallback.
+                quitNetCallbackThread();
+            }
         });
         lifecycleExecutor.shutdown();
         super.onDestroy();
@@ -1213,7 +1282,6 @@ public final class VpnRouterService extends VpnService {
         // ConnectivityManager.NetworkCallback we registered to feed it.
         private InterfaceUpdateListener defaultListener;
         private ConnectivityManager.NetworkCallback defaultCallback;
-        private final Handler mainHandler = new Handler(Looper.getMainLooper());
         // v2.32.0 AND-NETRES — first-bind tracking. When the user disables
         // the "auto-reconnect on network change" toggle, we still need to
         // fire the FIRST updateDefaultInterface so sing-box's outbound
@@ -1480,16 +1548,16 @@ public final class VpnRouterService extends VpnService {
                             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                             .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
                             .build();
-                    cm.registerBestMatchingNetworkCallback(request, defaultCallback, mainHandler);
+                    cm.registerBestMatchingNetworkCallback(request, defaultCallback, service.ensureNetCallbackHandler());
                     Log.i(LOG_TAG, "Phase 6.2: registerBestMatchingNetworkCallback (API 31+)");
                 } else if (Build.VERSION.SDK_INT >= 28) {
                     NetworkRequest request = new NetworkRequest.Builder()
                             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                             .build();
-                    cm.requestNetwork(request, defaultCallback, mainHandler);
+                    cm.requestNetwork(request, defaultCallback, service.ensureNetCallbackHandler());
                     Log.i(LOG_TAG, "Phase 6.2: requestNetwork (API 28-30)");
                 } else if (Build.VERSION.SDK_INT >= 26) {
-                    cm.registerDefaultNetworkCallback(defaultCallback, mainHandler);
+                    cm.registerDefaultNetworkCallback(defaultCallback, service.ensureNetCallbackHandler());
                     Log.i(LOG_TAG, "Phase 6.2: registerDefaultNetworkCallback (API 26-27)");
                 } else if (Build.VERSION.SDK_INT >= 24) {
                     cm.registerDefaultNetworkCallback(defaultCallback);
