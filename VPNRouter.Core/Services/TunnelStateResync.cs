@@ -22,8 +22,11 @@ namespace VPNRouter.Core.Services;
 /// <c>plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md</c>.</para>
 ///
 /// <para><strong>Demote-only by design.</strong> It only corrects a falsely-
-/// "connected" card <em>down</em> to disconnected when the service's persisted
-/// live-state says down. It never promotes Off → On from the persisted flag,
+/// "connected" card <em>down</em> to disconnected when the tunnel is not
+/// actually up — judged from two signals: the service-persisted live-state flag
+/// (catches an explicit stop / lost TUNNEL_DOWN) and the live VPN-transport
+/// state from the platform (catches a silent tun death the service never
+/// noticed). It never promotes Off → On from the persisted flag,
 /// because a fresh process can carry a stale <c>tunnel_live = true</c> after the
 /// process (and its in-process service) was killed without a clean teardown;
 /// promoting from that would falsely show "Connected" on a launch where the
@@ -38,25 +41,41 @@ public static class TunnelStateResync
     /// </summary>
     /// <param name="intendedConnected">What the card currently reflects
     /// (<c>MainActivity.IntendedConnected</c>).</param>
-    /// <param name="serviceTunnelLive">The service-persisted authoritative
-    /// live-state (<c>AndroidStorage.GetTunnelLive()</c>): true between a
-    /// <c>TUNNEL_UP</c> and the next <c>TUNNEL_DOWN</c>.</param>
+    /// <param name="serviceTunnelLive">The service-persisted live-state
+    /// (<c>AndroidStorage.GetTunnelLive()</c>): true between a <c>TUNNEL_UP</c>
+    /// and the next <c>TUNNEL_DOWN</c>. NOT sufficient alone — some OEMs (e.g.
+    /// KYOCERA A101BM / Android 12) tear down the tun on a system-settings VPN
+    /// disconnect WITHOUT invoking <c>VpnService.onRevoke</c>, so the service
+    /// never runs <c>stopTunnel</c> and this flag stays <c>true</c> while the
+    /// tunnel is actually dead. Hence the second signal below.</param>
+    /// <param name="vpnTransportActive">Ground truth from the platform: is a
+    /// VPN-transport network actually active right now
+    /// (<c>ConnectivityManager</c> <c>TRANSPORT_VPN</c>)? Pass <c>true</c> when
+    /// it cannot be determined (fail-safe: don't demote on unknown).</param>
     /// <param name="correctedIntent">When this returns true, the intent the
     /// card should be set to.</param>
     /// <returns>true when the card is stale and must be corrected; false when
     /// it is already in sync or a correction would be unsafe (see class doc).</returns>
-    public static bool TryResolveOnResume(bool intendedConnected, bool serviceTunnelLive, out bool correctedIntent)
+    public static bool TryResolveOnResume(
+        bool intendedConnected, bool serviceTunnelLive, bool vpnTransportActive, out bool correctedIntent)
     {
-        // Falsely-connected: the UI thinks we're up but the service tore the
-        // tunnel down (a lost TUNNEL_DOWN). Correct down.
-        if (intendedConnected && !serviceTunnelLive)
+        // Demote a falsely-"connected" card when the UI thinks we're up but the
+        // tunnel isn't, via either signal:
+        //   * !serviceTunnelLive  — explicit stop / a lost TUNNEL_DOWN broadcast
+        //     (the receiver was gone when it fired).
+        //   * !vpnTransportActive — silent tun death the service never noticed
+        //     (no onRevoke/stopTunnel ran, so the flag is stale-true).
+        if (intendedConnected && (!serviceTunnelLive || !vpnTransportActive))
         {
             correctedIntent = false;
             return true;
         }
 
-        // Already in sync, OR a promotion we deliberately don't trust the
-        // persisted flag for (Off + stale-or-real live=true). Leave as-is.
+        // Already in sync, OR a promotion we deliberately don't make from these
+        // signals (Off + live). Leave as-is. (Never promotes Off -> On — a stale
+        // tunnel_live=true after an unclean kill must not show Connected on a
+        // fresh process; and an Always-on bring-up is promoted by the live
+        // TUNNEL_UP broadcast, not here.)
         correctedIntent = intendedConnected;
         return false;
     }

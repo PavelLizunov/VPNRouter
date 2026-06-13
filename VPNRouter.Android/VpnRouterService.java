@@ -1022,6 +1022,7 @@ public final class VpnRouterService extends VpnService {
 
     @Override
     public void onRevoke() {
+        Log.i(LOG_TAG, "onRevoke: VPN revoked by system/user — tearing down tunnel");
         // Explicit "stop using VPN" (permission revoked / another VPN took over):
         // defuse any pending swipe-recovery restart so we don't resurrect it.
         cancelScheduledRestart();

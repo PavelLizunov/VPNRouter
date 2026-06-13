@@ -173,11 +173,42 @@ from `AndroidApp.VpnLifecycle.cs`; re-pinned the source-surface hash
 
 **Verification status:** `dotnet test` 37/37 green (incl. the 4 new + re-pinned
 characterization); Android `dotnet build -c Release` 0 errors (signed APK built).
-**Remaining gate (REQUIRED before/at ship):** on-device DKA pass — enable "Don't
-keep activities", connect, background the app (Activity destroyed), drop the
-tunnel, return → card must read "Not connected"; plus the standard
-browse-toggle-browse loop. Needs the physical A101BM (PIN). Recommend its own
-`-rN`, not folded silently.
+
+### UPDATE 2026-06-13 — device testing found r18 INSUFFICIENT → r19 dual-signal fix
+
+On-device DKA verification on the A101BM (via Mac adb) exposed a gap the
+flag-only r18 fix could not cover. Repro: connect (VLESS) → "Don't keep
+activities" ON → background (Activity destroyed) → disconnect the tunnel from
+the **system VPN Settings** → reopen. Result on r18: tunnel definitively down
+(0 VPN networks, no tun, no key icon) but the card stayed **"Connected · 2:13"**.
+Diagnostic build logged `OnResume: IntendedConnected=True, tunnel_live=True`.
+
+Root cause: on this OEM (KYOCERA / Android 12) the system-Settings VPN disconnect
+tears down the tun **without invoking `VpnService.onRevoke`** — so the service
+never runs `stopTunnel`, never broadcasts `TUNNEL_DOWN`, and never writes
+`tunnel_live=false`. The flag stays stale-`true`, so r18's `!tunnel_live`
+condition was false and it (correctly, per its own logic) did not demote. This
+is a *silent tun death* the service simply does not notice (it has no in-service
+health monitor).
+
+**r19 fix:** the resume re-sync now also consults the platform **ground truth** —
+`ConnectivityManager` enumerated for an active `TRANSPORT_VPN` network
+(`MainActivity.IsVpnTransportActive`). Decision (in the pure
+`TunnelStateResync.TryResolveOnResume(intended, tunnel_live, vpnActive)`):
+demote when `intended && (!tunnel_live || !vpnActive)`. Fail-safe: an
+undeterminable VPN state returns `true` (treat as active → never a false Off).
+This covers explicit-stop-lost-broadcast (flag) AND silent tun death (transport).
+
+**r19 device-verified PASS on A101BM (log + screenshot):**
+- Negative (genuinely connected, `vpn-net-count=1`): background+foreground →
+  resume re-sync absent → no false demote.
+- Positive (silent disconnect, `vpn-net-count=0`): reopen →
+  `resume re-sync: card showed Connected=True but tunnel is down
+  (tunnel_live=True, vpnActive=False) — correcting card to connected=False`;
+  screenshot footer flips "Connected · 2:13" → **"Not connected" / "Start VPN"**.
+
+Shipped as `v2.42.0-r19` (supersedes r18). `dotnet test` green incl. dual-signal
+`TunnelStateResyncTests`. The original DKA recommendation stands and is now met.
 
 ## Secondary finding — `vpn-lifecycle` thread count (7 live, 6 after disconnect)
 

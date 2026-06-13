@@ -385,26 +385,34 @@ public class MainActivity : AvaloniaMainActivity
     /// TUNNEL_UP/DOWN broadcasts are not sticky. So a TUNNEL_DOWN that fires
     /// while the Activity is destroyed in the background ("Don't keep
     /// activities", an OEM task-killer, or the unregister/register recreation
-    /// gap) is lost — leaving the status card falsely "Connected" with no other
-    /// re-sync (<c>OnFrameworkInitializationCompleted</c> runs once per
-    /// process). On resume we read the service-persisted authoritative
-    /// live-state and, if the card is falsely up, correct it down through the
-    /// existing <see cref="SetIntent"/> → <see cref="IntentChanged"/> →
+    /// gap) is lost. Worse, some OEMs (KYOCERA A101BM / Android 12, device-
+    /// observed 2026-06-13) tear down the tun on a system-settings VPN
+    /// disconnect WITHOUT calling <c>VpnService.onRevoke</c>, so the service
+    /// never runs <c>stopTunnel</c> and the persisted <c>tunnel_live</c> flag
+    /// stays true while the tunnel is dead. Either way the card is left falsely
+    /// "Connected" with no other re-sync (<c>OnFrameworkInitializationCompleted</c>
+    /// runs once per process). On resume we judge the real state from BOTH the
+    /// persisted flag AND the live VPN-transport ground truth
+    /// (<see cref="IsVpnTransportActive"/>), and demote a stale card down via
+    /// the existing <see cref="SetIntent"/> → <see cref="IntentChanged"/> →
     /// <c>UpdateConnectionState</c> path. DEMOTE-ONLY: see
     /// <see cref="VPNRouter.Core.Services.TunnelStateResync"/> for why we never
-    /// promote Off → On from the flag.
+    /// promote Off → On.
     /// </summary>
     protected override void OnResume()
     {
         base.OnResume();
         try
         {
+            var live = AndroidStorage.GetTunnelLive();
+            var vpnActive = IsVpnTransportActive();
             if (VPNRouter.Core.Services.TunnelStateResync.TryResolveOnResume(
-                    IntendedConnected, AndroidStorage.GetTunnelLive(), out var corrected))
+                    IntendedConnected, live, vpnActive, out var corrected))
             {
                 global::Android.Util.Log.Info("VpnRouter",
-                    $"resume re-sync: card showed Connected={IntendedConnected} but service "
-                    + $"live-state was down — correcting card to connected={corrected}");
+                    $"resume re-sync: card showed Connected={IntendedConnected} but tunnel is "
+                    + $"down (tunnel_live={live}, vpnActive={vpnActive}) — correcting card to "
+                    + $"connected={corrected}");
                 SetIntent(corrected);
             }
         }
@@ -412,6 +420,37 @@ public class MainActivity : AvaloniaMainActivity
         {
             global::Android.Util.Log.Warn("VpnRouter",
                 $"resume re-sync threw: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Ground-truth check: is a VPN-transport network actually active right now?
+    /// Enumerates <see cref="ConnectivityManager"/> networks for one carrying
+    /// <c>TRANSPORT_VPN</c>. This is what catches a silent tun death the service
+    /// never noticed (no <c>onRevoke</c>/<c>stopTunnel</c>, so the persisted
+    /// flag is stale). Fail-safe: returns <c>true</c> (treat as active → do NOT
+    /// demote) on any error or when it can't be determined, so a transient query
+    /// failure can never produce a false "Not connected".
+    /// </summary>
+    private bool IsVpnTransportActive()
+    {
+        try
+        {
+            if (GetSystemService(ConnectivityService) is not ConnectivityManager cm)
+                return true;
+            var networks = cm.GetAllNetworks();
+            if (networks is null) return true;
+            foreach (var n in networks)
+            {
+                var caps = cm.GetNetworkCapabilities(n);
+                if (caps is not null && caps.HasTransport(TransportType.Vpn))
+                    return true;
+            }
+            return false;
+        }
+        catch
+        {
+            return true;
         }
     }
 

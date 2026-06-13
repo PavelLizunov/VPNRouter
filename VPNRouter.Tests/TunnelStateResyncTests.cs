@@ -5,50 +5,42 @@ using Xunit;
 namespace VPNRouter.Tests;
 
 /// <summary>
-/// Pins the Android resume re-sync decision (demote-only). Guards against a
-/// future change that would make the resume re-sync promote Off → On from the
-/// persisted <c>tunnel_live</c> flag — which would reintroduce a falsely-
-/// "Connected" card on a fresh process whose flag is a stale true after an
-/// unclean kill. See
+/// Pins the Android resume re-sync decision (demote-only, dual-signal). Guards
+/// against (a) a future change that would make the resume re-sync promote
+/// Off → On from a stale flag, and (b) regressing the silent-tun-death coverage
+/// (no <c>vpnTransportActive</c> → demote even when the persisted flag is
+/// stale-true). See
 /// <c>plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md</c>.
 /// </summary>
 public class TunnelStateResyncTests
 {
-    [Fact]
-    public void FalselyConnected_CorrectsDown()
+    [Theory]
+    // intended, tunnel_live, vpnActive  => expect (act, corrected)
+    // --- demote cases (card falsely Connected) ---
+    [InlineData(true,  false, false, true,  false)] // explicit stop: flag down + no vpn
+    [InlineData(true,  false, true,  true,  false)] // flag down (lost TUNNEL_DOWN) even if a vpn lingers
+    [InlineData(true,  true,  false, true,  false)] // SILENT TUN DEATH: flag stale-true but no active vpn
+    // --- no-op cases ---
+    [InlineData(true,  true,  true,  false, true)]  // genuinely connected
+    [InlineData(false, true,  true,  false, false)] // Off + live: do NOT promote
+    [InlineData(false, true,  false, false, false)] // Off + stale flag: do NOT promote
+    [InlineData(false, false, false, false, false)] // Off + down: in sync
+    public void Resolve(bool intended, bool live, bool vpnActive, bool expectAct, bool expectCorrected)
     {
-        // Card shows Connected, but the service persisted live=down
-        // (a lost TUNNEL_DOWN). Must correct down.
+        var act = TunnelStateResync.TryResolveOnResume(intended, live, vpnActive, out var corrected);
+        Assert.Equal(expectAct, act);
+        Assert.Equal(expectCorrected, corrected);
+    }
+
+    [Fact]
+    public void SilentTunDeath_IsTheRegressionGuard()
+    {
+        // The A101BM case: tunnel torn down by the OEM without onRevoke, so the
+        // service never set tunnel_live=false. The vpn-transport ground truth
+        // must still demote the stale "Connected" card.
         var act = TunnelStateResync.TryResolveOnResume(
-            intendedConnected: true, serviceTunnelLive: false, out var corrected);
+            intendedConnected: true, serviceTunnelLive: true, vpnTransportActive: false, out var corrected);
         Assert.True(act);
         Assert.False(corrected);
-    }
-
-    [Fact]
-    public void Connected_And_Live_IsNoOp()
-    {
-        var act = TunnelStateResync.TryResolveOnResume(
-            intendedConnected: true, serviceTunnelLive: true, out _);
-        Assert.False(act);
-    }
-
-    [Fact]
-    public void Disconnected_And_StaleLive_DoesNotPromote()
-    {
-        // The dangerous case: a stale tunnel_live=true (process killed without
-        // a clean teardown) must NOT flip a fresh Off card to Connected.
-        var act = TunnelStateResync.TryResolveOnResume(
-            intendedConnected: false, serviceTunnelLive: true, out var corrected);
-        Assert.False(act);
-        Assert.False(corrected);
-    }
-
-    [Fact]
-    public void Disconnected_And_Down_IsNoOp()
-    {
-        var act = TunnelStateResync.TryResolveOnResume(
-            intendedConnected: false, serviceTunnelLive: false, out _);
-        Assert.False(act);
     }
 }
