@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       # Wave 26 (Phase 6, 2026-05-18) — bumped to multi-version setup so
       # both 8.0 + 10.0 SDKs are available. Wave 23 (commit c33e372,
@@ -77,7 +77,7 @@ jobs:
       # available 9.0.0-preview) or waiting for upstream to repair the
       # manifest. Tracked in `plans/research-android-ci-unblock-2026-05-25.md`.
       - name: Setup .NET 8 + 10 SDK
-        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
         with:
           dotnet-version: |
             8.0.x
@@ -87,7 +87,7 @@ jobs:
       # head restores hundreds of MB of packages on cold runs. Keyed on the
       # union hash of every .csproj so any package version bump invalidates
       # cleanly. Q11 will pin actions/cache to a commit SHA.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -98,7 +98,7 @@ jobs:
       # android` below takes 3–4 min on a cold runner (large SDK download).
       # Caching ~/.dotnet/workloads keyed on global.json (where SDK + workload
       # versions are pinned) avoids repeating that download on warm runs.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: ~/.dotnet/workloads
           key: dotnet-workloads-${{ runner.os }}-${{ hashFiles('**/global.json') }}
@@ -109,7 +109,7 @@ jobs:
       # tools. Temurin matches the developer-VM toolchain documented in
       # plans/vpnrouter-android-handbook.md §3.5.
       - name: Setup JDK 17 (Temurin)
-        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4.8.0
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
         with:
           distribution: temurin
           java-version: "17"
@@ -119,7 +119,7 @@ jobs:
       # The .NET Android workload picks up these env vars automatically;
       # no extra -p:AndroidSdkDirectory flag needed.
       - name: Setup Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
 
       # Wave 26 (Phase 6, 2026-05-18) — explicit platforms;android-36
       # + build-tools;36.0.0 install. setup-android only ships the
@@ -362,7 +362,7 @@ jobs:
         if: >-
           steps.keystore_decode.outputs.skip != 'true' &&
           steps.libbox_provision.outputs.skip != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: android-build-v${{ steps.version.outputs.version }}
           path: |
