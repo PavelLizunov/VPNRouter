@@ -3289,38 +3289,35 @@ public partial class AndroidApp : Avalonia.Application
     {
         var current = AndroidStorage.GetTheme();
         if (current == mode) return;
-        // F4 (2026-06-15, device-confirmed A101BM) — the Light/Dark toggle lives
-        // INSIDE the open kebab popup. Close the popup BEFORE RebuildSimplePageView
-        // (below) swaps ISingleViewApplicationLifetime.MainView. If the popup is
-        // left IsOpen across the swap, its top-level light-dismiss overlay is
-        // orphaned and silently eats taps on the page beneath until something
-        // dismisses it (device-observed: "page unresponsive" after a mid-menu
-        // theme toggle). Closing it here prevents that input-eating orphan.
-        //   PARTIAL FIX ONLY — does NOT cure the deeper RebuildSimplePageView
-        //   fragility: after the MainView swap the rebuilt popups (kebab,
-        //   Config·Mode dropdown) won't reopen and the status card stops
-        //   reflecting TUNNEL_UP/DOWN until the app restarts. Root cause is the
-        //   incomplete Phase-8.2 BindToken migration that forces a full view
-        //   rebuild on theme change (see comment below). Proper fix tracked
-        //   separately (finish BindToken migration OR re-establish popup/overlay
-        //   + event wiring after the swap). Language toggle is unaffected —
-        //   ApplyLanguage refreshes labels in place and never rebuilds the view.
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        // F4 full fix (2026-06-15, device-confirmed A101BM) — theme changes no
+        // longer swap ISingleViewApplicationLifetime.MainView. The pre-fix path
+        // rebuilt the whole MainView because ~257 GetBrush() snapshot sites don't
+        // repaint via DynamicResource — but the root swap orphaned every
+        // overlay-hosted control in the new tree: the kebab Popup AND every
+        // ComboBox dropdown (Config·Mode / DPI / DNS, which host their flyouts in
+        // internal Popups) wouldn't reopen, and the IntentChanged→_statusCard
+        // wiring went stale — all until the app restarted. (Activity.Recreate,
+        // tried even earlier, crashes the Mono runtime on Avalonia.Mobile.)
+        //
+        // The always-visible Simple page (BuildSimplePageView's tree) is already
+        // 100% BindToken/DynamicResource, so flipping RequestedThemeVariant below
+        // repaints it in place with NO rebuild — which is exactly why the kebab
+        // Popup, the ComboBoxes and the status-card wiring now survive the toggle.
+        // The only snapshot-heavy surfaces are the on-demand overlays (Advanced
+        // shell tabs + the app-picker that lives inside them); those are refreshed
+        // by RebuildSimplePageView() below, which now rebuilds ONLY the Advanced-
+        // shell overlay in place (a sibling swap inside the live root Grid),
+        // never the root MainView.
+        //
+        // The kebab popup deliberately stays OPEN across a Simple-page toggle so
+        // the user sees the Light/Dark segment highlight move (RepaintThemeSegment
+        // below) — the open menu repaints in place via its BindToken bindings.
         AndroidStorage.SetTheme(mode);
         RequestedThemeVariant = mode == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
 
-        // Bug #4 fix (2026-05-11) — Phase 8.2 BindToken migration is
-        // incomplete: ~247 GetBrush() snapshot call sites across the
-        // partials don't repaint on theme switch. Until that migration
-        // lands, rebuild the Avalonia MainView so every Build* helper
-        // re-runs with the new theme tokens. Activity.Recreate was
-        // tried first but crashes Mono runtime on Avalonia.Mobile
-        // (xamarin::android::Helpers::abort_application). Reassigning
-        // ISingleViewApplicationLifetime.MainView stays inside Avalonia
-        // and is safe — class-field references get overwritten by the
-        // re-run BuildSimplePageView so existing event subscriptions
-        // (MainActivity.IntentChanged → OnIntentChanged → mutates
-        // _statusCard etc.) still target the freshly-built controls.
+        // Refresh the on-demand Advanced-shell overlay for the new theme. Posted
+        // at Background priority so the chrome rebuild stays off the tap handler;
+        // the live Simple page has already repainted via DynamicResource.
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             try { RebuildSimplePageView(); }
@@ -3329,7 +3326,7 @@ public partial class AndroidApp : Avalonia.Application
                 try
                 {
                     global::Android.Util.Log.Warn("VpnRouter.Theme",
-                        $"RebuildSimplePageView after theme switch failed: {ex.GetType().Name}: {ex.Message}");
+                        $"Advanced-shell theme refresh failed: {ex.GetType().Name}: {ex.Message}");
                 }
                 catch { /* swallow logging failures */ }
             }
@@ -3362,55 +3359,66 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// Bug #4 fix (2026-05-11) — rebuild the Avalonia MainView so every
-    /// GetBrush() call site re-snapshots brushes from the new theme.
-    /// Called by ApplyTheme after RequestedThemeVariant changes. Safe
-    /// to call multiple times — each invocation tears down the old
-    /// view tree via the lifetime swap and constructs a fresh one
-    /// from the current AndroidStorage / theme state.
+    /// F4 full fix (2026-06-15) — despite the legacy name, this no longer
+    /// rebuilds the Simple page. The Simple-page tree
+    /// (<see cref="BuildSimplePageView"/>) is fully DynamicResource-bound and
+    /// repaints in place when <c>RequestedThemeVariant</c> flips, so it must NOT
+    /// be torn down — doing so (the pre-fix MainView swap) orphaned the kebab
+    /// Popup, every ComboBox dropdown and the IntentChanged→<c>_statusCard</c>
+    /// wiring until restart.
+    ///
+    /// <para>Instead this rebuilds ONLY the on-demand Advanced-shell overlay so
+    /// its ~257 <c>GetBrush()</c> snapshot sites (chrome + lazily-built tab
+    /// bodies) re-pick the new theme. The rebuild is an in-place SIBLING swap
+    /// inside the live root Grid (<see cref="_advShellOverlay"/> is a direct
+    /// child of the Grid returned by <see cref="BuildSimplePageView"/>); the
+    /// root MainView is never touched, so all the live Simple-page reactivity
+    /// survives. Safe to call repeatedly. Called by <see cref="ApplyTheme(string)"/>
+    /// after the theme variant changes.</para>
     /// </summary>
     private void RebuildSimplePageView()
     {
-        if (ApplicationLifetime is not
-            Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
-            return;
-        // Bug-AND-009 (2026-05-16) — capture navigation state BEFORE
-        // the rebuild so we can restore the user's position afterwards.
-        // brat reported "content disappears" when switching theme: the
-        // pre-fix RebuildSimplePageView dropped them back to the Simple
-        // page no matter what tab of the Advanced shell they had open
-        // (because BuildSimplePageView creates a fresh Advanced shell
-        // overlay whose IsVisible defaults to false).
-        var advancedWasOpen = _advShellOverlay?.IsVisible == true;
+        var old = _advShellOverlay;
+        if (old is null) return;
+        // _advShellOverlay is a direct child of the root Grid (see the return of
+        // BuildSimplePageView). Locate it so we can swap it in place without
+        // touching MainView. If the tree shape ever changes and it isn't a
+        // panel child, bail rather than risk a bad mutation.
+        if (old.Parent is not Panel rootPanel) return;
+        var idx = rootPanel.Children.IndexOf(old);
+        if (idx < 0) return;
+
+        var advancedWasOpen = old.IsVisible;
         var advancedTab = _advShellSelectedTab;
-        // Bug-AND-009 follow-up — clear the lazy tab-content cache
-        // before the rebuild. Each tab's Control reference is owned
-        // by the OLD overlay tree which is about to be replaced; if
-        // EnsureTabContentBuilt finds the tab key already present
-        // (true after first activation of any tab), it skips
-        // construction and re-adds the stale Control to the NEW host,
-        // producing the empty-body bug brat hit ("вкладка выбрана,
-        // содержимое пропало"). Also clear button refs so the new
-        // BuildAdvancedShellOverlay loop's tabPanel.Children.Add
-        // doesn't end up wired to dead buttons.
+
+        // The kebab popup may be open and (via OnAdvancedKebabClicked) anchored
+        // to the Advanced shell's kebab button, which the rebuild below replaces.
+        // Dismiss it in that case so it isn't left anchored to a detached
+        // PlacementTarget. When the toggle came from the Simple-page kebab
+        // (overlay hidden) the popup stays open so the user sees the Light/Dark
+        // segment highlight move.
+        if (advancedWasOpen && _kebabPopup is not null)
+            _kebabPopup.IsOpen = false;
+
+        // Drop the lazy tab caches — their Controls belong to the OLD overlay
+        // tree about to be discarded. BuildAdvancedShellOverlay repopulates
+        // _advShellTabButtons; the tab bodies rebuild on next activation (same
+        // contract the language-toggle rebuild in RefreshAdvancedShellStrings
+        // relies on). Not clearing them would re-add stale Controls to the new
+        // content host (Bug-AND-009 empty-body class).
         _advShellTabContent.Clear();
         _advShellTabButtons.Clear();
-        // Build the new view BEFORE swapping so any construction
-        // exception leaves the old one intact and visible.
-        var fresh = BuildSimplePageView();
-        singleView.MainView = fresh;
-        // Re-seed transient UI state that BuildSimplePageView's
-        // fresh instance doesn't know about — connection state +
-        // server list cache. Mirrors OnFrameworkInitializationCompleted's
-        // post-build calls so the rebuilt view immediately reflects
-        // current reality instead of defaulting to disconnected /
-        // empty.
-        UpdateConnectionState(MainActivity.IntendedConnected);
-        ReloadServerList();
-        // Bug-AND-009 — restore Advanced-shell navigation if the user
-        // had it open. The fresh BuildSimplePageView created a NEW
-        // _advShellOverlay field reference (via BuildAdvancedShellOverlay),
-        // so reopening uses the rebuilt-with-the-new-theme overlay tree.
+
+        // Build the fresh overlay BEFORE swapping so a construction exception
+        // leaves the old one intact and visible.
+        var fresh = BuildAdvancedShellOverlay();
+        rootPanel.Children[idx] = fresh;
+        _advShellOverlay = fresh;
+
+        // Re-open the previously-active tab so the user stays where they were,
+        // now rendered with the new theme. The footer connection state is seeded
+        // inside BuildAdvancedShellOverlay; the Simple page (untouched) keeps its
+        // own _statusCard / server-list state, so no Simple-side re-seed is needed.
         if (advancedWasOpen)
         {
             try { OpenAdvancedShell(advancedTab); }
@@ -3419,7 +3427,7 @@ public partial class AndroidApp : Avalonia.Application
                 try
                 {
                     global::Android.Util.Log.Warn("VpnRouter.Theme",
-                        $"Restore Advanced shell after rebuild failed: {ex.GetType().Name}: {ex.Message}");
+                        $"Restore Advanced shell after theme rebuild failed: {ex.GetType().Name}: {ex.Message}");
                 }
                 catch { /* swallow logging failures */ }
             }
