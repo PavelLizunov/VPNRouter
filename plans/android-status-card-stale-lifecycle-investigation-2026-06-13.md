@@ -248,6 +248,41 @@ it's a real leak; the cheap hardening then is `((ThreadPoolExecutor))…
 allowCoreThreadTimeOut(true)` semantics (or replace the single-thread executor
 with one whose core thread times out) so an idle drained worker self-reaps.
 
+### DEVICE-CONFIRMED 2026-06-15 (A101BM / 54499112209 via Mac adb) — real leak, and it's a churn+hang bug
+
+Measured on v2.42.0 (shipped) and a `allowCoreThreadTimeOut` fix build, both
+release-signed, in-place `adb install -r`:
+
+- **Idle baseline** (38h-old process, disconnected): **0** `vpn-lifecycle` threads —
+  at a clean idle steady-state nothing leaks; the executor self-cleans when
+  `onDestroy` runs. (`vpn-lifecycle` has a single source — grep-confirmed — so the
+  count is unambiguous.)
+- **After ONE connect** (VLESS, not dns-tunnel; fresh process): **5–6** `vpn-lifecycle`
+  threads, all state S, **one** ServiceRecord (`lastStartId=1`), **stable past 4 min**.
+  Single-thread executor = 1 worker/instance ⇒ ~5–6 *instances* with live workers:
+  one connect spawns ~6 VpnRouterService instances and most of their start tasks
+  never complete (workers stuck busy, not idle).
+- **With `allowCoreThreadTimeOut(true)`**: the count reaped **6 → 4** over the 30s
+  window (vs the old build holding **5 stable**) — proving the timeout reaps the
+  IDLE orphan subset. But **4 workers persisted, stable, state S** even after 105s
+  idle: BUSY-stuck in hung tasks, which a core-thread timeout cannot reap.
+
+**Conclusion:** B4 is a real leak, but deeper than "thread count": (1) one connect
+spawns ~6 VpnRouterService instances (service churn) and (2) ~4 of their start tasks
+HANG, leaving busy-stuck daemon workers that leak for the process lifetime.
+`allowCoreThreadTimeOut(true)` is a correct but **PARTIAL** mitigation — reaps the
+idle-orphan subset only; it neither stops the churn nor reaps busy-stuck workers.
+
+**Real fix needs forensics unavailable on a release APK.** The stuck-worker Java
+stacks (to see where start tasks hang) require a debuggable build or rooted device
+(`/data/anr/traces.txt` via `run-as`, or a debugger); SIGQUIT's dump isn't readable
+on the release build. Open follow-up: (a) capture the stuck-worker stacks on a
+debuggable build; (b) root-cause the ~6-instances-per-connect churn (two-phase-start
+retry? failover restart? START_STICKY recreate?); (c) fix the hang + bound the churn.
+Rule out first: the marginal test server may force a connect-time retry/failover
+cycle — retest with a known-fast server to see if a clean single connect still
+spawns multiple instances.
+
 ## Files referenced
 - `VPNRouter.Android/AndroidApp.VpnLifecycle.cs` — Attach/Detach, OnIntentChanged,
   UpdateConnectionState, diagnostics timer, `s_currentLifecycleSubscriber`.

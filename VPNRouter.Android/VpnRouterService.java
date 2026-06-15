@@ -245,16 +245,33 @@ public final class VpnRouterService extends VpnService {
     // ANR → "freeze until force-stop" (reported on two phones). onStartCommand now
     // only calls startForeground (fast, main thread per the FGS contract) and
     // enqueues the lifecycle work here. Single-thread ⇒ start/stop are serialized.
-    private final java.util.concurrent.ExecutorService lifecycleExecutor =
-            java.util.concurrent.Executors.newSingleThreadExecutor(
-                    new java.util.concurrent.ThreadFactory() {
-                        @Override
-                        public Thread newThread(Runnable r) {
-                            Thread t = new Thread(r, "vpn-lifecycle");
-                            t.setDaemon(true);
-                            return t;
-                        }
-                    });
+    private final java.util.concurrent.ExecutorService lifecycleExecutor = newLifecycleExecutor();
+
+    // B4 fix (2026-06-15, device-confirmed on A101BM): use an explicit single-thread
+    // pool with core-thread timeout so an idle "vpn-lifecycle" worker self-reaps
+    // after 30s. If a service instance is killed/restarted WITHOUT onDestroy
+    // (START_STICKY recreate, OEM power-kill), its lifecycleExecutor never gets
+    // shutdown() and its parked daemon worker would otherwise leak for the whole
+    // process lifetime — measured: ONE connect left 5 idle "vpn-lifecycle" workers
+    // (4 orphaned, all state S, stable past 4 min). Core-timeout is the ONLY way an
+    // orphaned worker dies, since shutdown() can't be called on a vanished instance's
+    // executor. Still core=max=1 ⇒ start/stop stay strictly serialized (the B1
+    // contract); the worker just respawns on the next task after an idle gap.
+    private static java.util.concurrent.ExecutorService newLifecycleExecutor() {
+        java.util.concurrent.ThreadPoolExecutor exec = new java.util.concurrent.ThreadPoolExecutor(
+                1, 1, 30L, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<Runnable>(),
+                new java.util.concurrent.ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r, "vpn-lifecycle");
+                        t.setDaemon(true);
+                        return t;
+                    }
+                });
+        exec.allowCoreThreadTimeOut(true);
+        return exec;
+    }
 
     /** Enqueue VPN lifecycle work onto the dedicated worker (never the main
      *  thread). Swallows the post-shutdown rejection during onDestroy. */
