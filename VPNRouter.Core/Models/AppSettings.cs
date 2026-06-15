@@ -1048,6 +1048,21 @@ public class VlessServerEntry
     public List<string> DnsResolvers { get; set; } = new();
 
     /// <summary>
+    /// dns-tunnel: when true, prefer the OS/operator default resolver(s) discovered
+    /// at connect time over the hardcoded <see cref="DnsResolvers"/> (desktop: the
+    /// active NIC's DNS servers; Android: the active network's
+    /// <c>ConnectivityManager.getLinkProperties().getDnsServers()</c>). Set by a
+    /// <c>"system"</c>/<c>"auto"</c>/<c>"os"</c> sentinel token in the link's <c>r</c>
+    /// array. This is the operator-agnostic WL-BYPASS path: on a strict RU mobile
+    /// whitelist the only reachable DNS is the operator's own resolver, so a link
+    /// cannot hardcode НСДИ IPs and work for every operator. Any concrete IPs that
+    /// ALSO appear in <c>r</c> stay in <see cref="DnsResolvers"/> as a fallback for
+    /// when the OS resolver can't be discovered.
+    /// </summary>
+    [YamlMember(Alias = "dns_use_system_resolver")]
+    public bool DnsUseSystemResolver { get; set; }
+
+    /// <summary>
     /// dns-tunnel: OPTIONAL authoritative DNS endpoint(s) (<c>ip:port</c>, e.g.
     /// <c>213.155.15.93:53</c>) — slipstream-client repeats <c>--authoritative</c>
     /// for each. Queries the tunnel server's authoritative NS DIRECTLY, bypassing

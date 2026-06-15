@@ -61,6 +61,57 @@ public class SlipstreamManagerTests
         return (fake, handle);
     }
 
+    // ── SelectResolvers — system-resolver mode (pure, no process/OS dependency) ──
+    // System-resolver mode (link sentinel "system") is the operator-agnostic
+    // WL-BYPASS path: on a strict RU mobile whitelist only the operator's own
+    // resolver is reachable, so the OS-discovered resolver wins over the link's
+    // hardcoded НСДИ IPs (which stay as the fallback).
+
+    [Fact]
+    public void SelectResolvers_NoSystemFlag_ReturnsLinkLiterals()
+    {
+        var e = MakeEntry(); // DnsUseSystemResolver=false by default
+        var r = SlipstreamManager.SelectResolvers(e, new[] { "10.0.0.1:53" });
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, r); // OS list ignored
+    }
+
+    [Fact]
+    public void SelectResolvers_SystemFlag_OsAvailable_PrefersOs()
+    {
+        var e = MakeEntry();
+        e.DnsUseSystemResolver = true;
+        var r = SlipstreamManager.SelectResolvers(e, new[] { "10.152.222.133:53", "10.152.222.140:53" });
+        Assert.Equal(new[] { "10.152.222.133:53", "10.152.222.140:53" }, r); // operator resolver wins
+    }
+
+    [Fact]
+    public void SelectResolvers_SystemFlag_OsEmpty_FallsBackToLiterals()
+    {
+        var e = MakeEntry();
+        e.DnsUseSystemResolver = true;
+        var r = SlipstreamManager.SelectResolvers(e, Array.Empty<string>());
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, r); // fallback to link IPs
+    }
+
+    [Fact]
+    public void SelectResolvers_SystemFlag_OsEmpty_NoLiterals_ReturnsEmpty()
+    {
+        var e = MakeEntry();
+        e.DnsUseSystemResolver = true;
+        e.DnsResolvers = new List<string>(); // sentinel-only link
+        var r = SlipstreamManager.SelectResolvers(e, Array.Empty<string>());
+        Assert.Empty(r); // caller fails closed
+    }
+
+    [Fact]
+    public void SelectResolvers_SystemFlag_DedupesOsList()
+    {
+        var e = MakeEntry();
+        e.DnsUseSystemResolver = true;
+        var r = SlipstreamManager.SelectResolvers(e, new[] { "10.0.0.1:53", "10.0.0.1:53", "10.0.0.2:53" });
+        Assert.Equal(new[] { "10.0.0.1:53", "10.0.0.2:53" }, r);
+    }
+
     [Fact]
     public void Start_NonDnsTunnelEntry_ThrowsArgument()
     {

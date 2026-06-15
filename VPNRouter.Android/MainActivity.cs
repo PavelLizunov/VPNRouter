@@ -124,6 +124,7 @@ public class MainActivity : AvaloniaMainActivity
     private const string ExtraDnsTunnelResolvers = "dns_tunnel_resolvers";
     private const string ExtraDnsTunnelCert = "dns_tunnel_cert";
     private const string ExtraDnsTunnelPort = "dns_tunnel_port";
+    private const string ExtraDnsTunnelUseSystemResolver = "dns_tunnel_use_system_resolver";
     // v3.0 Phase 1.I — broadcasts from VpnRouterService so the UI can
     // mirror REAL tunnel state, not just intent.
     private const string ActionTunnelUp = "com.ninitux.vpnrouter.TUNNEL_UP";
@@ -1192,9 +1193,11 @@ public class MainActivity : AvaloniaMainActivity
                 .PutExtra(ExtraDnsTunnelDomain, dnsTunnelEntry.DnsDomain ?? string.Empty)
                 .PutExtra(ExtraDnsTunnelResolvers, resolvers)
                 .PutExtra(ExtraDnsTunnelCert, dnsTunnelEntry.DnsLeafCertPem ?? string.Empty)
-                .PutExtra(ExtraDnsTunnelPort, VPNRouter.Core.Services.SlipstreamManager.DefaultLocalPort);
+                .PutExtra(ExtraDnsTunnelPort, VPNRouter.Core.Services.SlipstreamManager.DefaultLocalPort)
+                .PutExtra(ExtraDnsTunnelUseSystemResolver, dnsTunnelEntry.DnsUseSystemResolver);
             global::Android.Util.Log.Info("VpnRouter",
-                $"dns-tunnel: forwarding slipstream params (domain={dnsTunnelEntry.DnsDomain}, resolvers={resolvers.Length})");
+                $"dns-tunnel: forwarding slipstream params (domain={dnsTunnelEntry.DnsDomain}, " +
+                $"resolvers={resolvers.Length}, systemResolver={dnsTunnelEntry.DnsUseSystemResolver})");
         }
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)

@@ -86,6 +86,65 @@ public class ServerUriParserDnsTunnelTests
         Assert.Equal(new[] { "213.155.15.93:53", "213.155.15.93:5353" }, e.DnsAuthoritative);
     }
 
+    // ── System-resolver sentinel (operator-agnostic WL-BYPASS) ──
+    // On a strict RU mobile whitelist the hardcoded НСДИ IPs are L3-blocked and the
+    // only reachable DNS is the operator's own resolver, so a link publishes a
+    // "system" sentinel in `r` to tell the client to use the OS default resolver
+    // discovered at connect time instead of a hardcoded IP.
+
+    [Fact]
+    public void Parse_SystemSentinel_SetsFlag_NoLiteralResolver()
+    {
+        var json =
+            "{\"d\":\"t.org\"," +
+            "\"r\":[\"system\"]," +
+            "\"cert\":\"" + PemInJson + "\"," +
+            "\"uuid\":\"" + SampleUuid + "\"}";
+        var e = ServerUriParser.Parse(Link(json));
+        Assert.True(e.DnsUseSystemResolver);
+        Assert.Empty(e.DnsResolvers);            // sentinel is not a literal resolver IP
+    }
+
+    [Fact]
+    public void Parse_SystemSentinel_WithFallbackIp_KeepsBoth()
+    {
+        // A link may carry the sentinel AND concrete IPs: prefer the OS resolver,
+        // fall back to the literals when it can't be discovered.
+        var json =
+            "{\"d\":\"t.org\"," +
+            "\"r\":[\"system\",\"10.0.0.1:53\"]," +
+            "\"cert\":\"" + PemInJson + "\"," +
+            "\"uuid\":\"" + SampleUuid + "\"}";
+        var e = ServerUriParser.Parse(Link(json));
+        Assert.True(e.DnsUseSystemResolver);
+        Assert.Equal(new[] { "10.0.0.1:53" }, e.DnsResolvers);
+    }
+
+    [Theory]
+    [InlineData("system")]
+    [InlineData("AUTO")]
+    [InlineData("os")]
+    [InlineData("Device")]
+    public void Parse_SystemSentinel_CaseInsensitiveVariants(string token)
+    {
+        var json =
+            "{\"d\":\"t.org\"," +
+            "\"r\":[\"" + token + "\"]," +
+            "\"cert\":\"" + PemInJson + "\"," +
+            "\"uuid\":\"" + SampleUuid + "\"}";
+        var e = ServerUriParser.Parse(Link(json));
+        Assert.True(e.DnsUseSystemResolver);
+    }
+
+    [Fact]
+    public void Parse_ConcreteResolversOnly_SystemFlagStaysFalse()
+    {
+        // Regression: an ordinary hardcoded-IP link must NOT flip the new flag.
+        var e = ServerUriParser.Parse(Link(GoodJson));
+        Assert.False(e.DnsUseSystemResolver);
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, e.DnsResolvers);
+    }
+
     [Fact]
     public void Parse_NoFragment_NameDefaultsToDomain()
     {

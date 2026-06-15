@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -105,10 +106,31 @@ public class SlipstreamManager : IDisposable
         // ── Profile field validation ──
         if (string.IsNullOrWhiteSpace(entry.DnsDomain))
             throw new SlipstreamException("dns-tunnel server has no domain");
-        var resolvers = (entry.DnsResolvers ?? new List<string>())
-            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
+        // ── Resolver selection ──
+        //   System-resolver mode (link sentinel "system"): prefer the OS/operator
+        //   default resolver(s) discovered now — before the TUN is up, so this reads
+        //   the underlying physical NIC's DNS. On a strict RU mobile whitelist the
+        //   operator resolver is the ONLY reachable DNS, so a link cannot hardcode
+        //   НСДИ IPs and work for every operator. The link's literal IPs (if any)
+        //   are the fallback when the OS resolver can't be discovered.
+        List<string> resolvers;
+        if (entry.DnsUseSystemResolver)
+        {
+            var osResolvers = ReadOsResolvers();
+            resolvers = SelectResolvers(entry, osResolvers);
+            _logger.Information(
+                "[Slipstream] System-resolver mode: {OsCount} OS resolver(s) discovered; " +
+                "using {Used} ({Source})",
+                osResolvers.Count, resolvers.Count, osResolvers.Count > 0 ? "OS" : "link fallback");
+        }
+        else
+        {
+            resolvers = SelectResolvers(entry, Array.Empty<string>());
+        }
         if (resolvers.Count == 0)
-            throw new SlipstreamException("dns-tunnel server has no resolvers");
+            throw new SlipstreamException(entry.DnsUseSystemResolver
+                ? "dns-tunnel server requests the system resolver but none could be discovered and no fallback resolvers are configured"
+                : "dns-tunnel server has no resolvers");
         if (string.IsNullOrWhiteSpace(entry.DnsLeafCertPem))
             throw new SlipstreamException("dns-tunnel server has no leaf certificate (PEM)");
 
@@ -523,6 +545,61 @@ public class SlipstreamManager : IDisposable
             logger?.Warning(ex, "[Slipstream] Could not promote bundled binary to {Dst}", targetExePath);
         }
         return File.Exists(targetExePath); // a concurrent Start() may have won the copy
+    }
+
+    /// <summary>
+    /// Pick the effective covert resolvers for <paramref name="entry"/>. Pure +
+    /// testable: when <see cref="VlessServerEntry.DnsUseSystemResolver"/> is set the
+    /// OS-discovered <paramref name="systemResolvers"/> win (the operator-agnostic
+    /// WL-BYPASS path); the link's literal <see cref="VlessServerEntry.DnsResolvers"/>
+    /// are the fallback when the OS list is empty. Otherwise the literals are used
+    /// verbatim. May return an empty list (the caller fails closed).
+    /// </summary>
+    internal static List<string> SelectResolvers(VlessServerEntry entry, IReadOnlyList<string> systemResolvers)
+    {
+        var literals = (entry.DnsResolvers ?? new List<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim()).ToList();
+        if (!entry.DnsUseSystemResolver)
+            return literals;
+        var sys = (systemResolvers ?? Array.Empty<string>())
+            .Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return sys.Count > 0 ? sys : literals; // OS resolver preferred; literals are the fallback
+    }
+
+    /// <summary>
+    /// Discover the OS default DNS resolver(s) of the active physical NIC(s) as
+    /// <c>ip:53</c> strings (IPv4, deduped; loopback / link-local / tunnel adapters
+    /// skipped). Best-effort: returns empty on any failure so the caller falls back
+    /// to the link's literal resolvers. Called BEFORE the TUN is up, so it reads the
+    /// underlying network's DNS (e.g. the mobile operator resolver) — the only DNS
+    /// reachable on a strict whitelist.
+    /// </summary>
+    internal static List<string> ReadOsResolvers()
+    {
+        var result = new List<string>();
+        try
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue; // skip TUN / VPN adapters
+                IPInterfaceProperties props;
+                try { props = ni.GetIPProperties(); } catch { continue; }
+                foreach (var dns in props.DnsAddresses)
+                {
+                    if (dns.AddressFamily != AddressFamily.InterNetwork) continue; // IPv4 covert path
+                    if (IPAddress.IsLoopback(dns)) continue;
+                    var ip = dns.ToString();
+                    if (ip.StartsWith("169.254", StringComparison.Ordinal)) continue; // link-local
+                    var ep = ip + ":53";
+                    if (!result.Contains(ep)) result.Add(ep);
+                }
+            }
+        }
+        catch { /* best-effort; empty -> caller falls back to the link's literals */ }
+        return result;
     }
 
     /// <summary>sha256 of the leaf DER (the standard cert fingerprint), hex

@@ -147,6 +147,13 @@ public final class VpnRouterService extends VpnService {
     public static final String EXTRA_DNS_TUNNEL_RESOLVERS = "dns_tunnel_resolvers";
     public static final String EXTRA_DNS_TUNNEL_CERT = "dns_tunnel_cert";
     public static final String EXTRA_DNS_TUNNEL_PORT = "dns_tunnel_port";
+    // When true, ignore EXTRA_DNS_TUNNEL_RESOLVERS as the primary path and use the
+    // active network's OS resolver(s) (ConnectivityManager → LinkProperties →
+    // getDnsServers()). The operator-agnostic WL-BYPASS path: on a strict RU mobile
+    // whitelist the operator's own resolver is the only reachable DNS, so a link
+    // cannot hardcode НСДИ IPs and work for every operator. The forwarded resolvers
+    // stay as the fallback when no OS resolver is discoverable.
+    public static final String EXTRA_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "dns_tunnel_use_system_resolver";
 
     private static final int NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "vpnrouter_tunnel";
@@ -178,6 +185,7 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS = "last_good_dns_tunnel_resolvers_lines";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_CERT = "last_good_dns_tunnel_cert";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_PORT = "last_good_dns_tunnel_port";
+    private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
     private static boolean libboxSetupDone = false;
 
@@ -192,6 +200,7 @@ public final class VpnRouterService extends VpnService {
     private String[] pendingDnsTunnelResolvers;
     private String pendingDnsTunnelCert;
     private int pendingDnsTunnelPort;
+    private boolean pendingDnsTunnelUseSystemResolver;
     // True once nativeStart spawned the Slipstream worker, so stopTunnel
     // tears it down after libbox. Reset on stop.
     // B1 (v2.42.0-r14): volatile — written on the lifecycle worker, read on the
@@ -444,6 +453,7 @@ public final class VpnRouterService extends VpnService {
             final String[] dnsResolvers = intent.getStringArrayExtra(EXTRA_DNS_TUNNEL_RESOLVERS);
             final String dnsCert = intent.getStringExtra(EXTRA_DNS_TUNNEL_CERT);
             final int dnsPort = intent.getIntExtra(EXTRA_DNS_TUNNEL_PORT, 7001);
+            final boolean dnsUseSystem = intent.getBooleanExtra(EXTRA_DNS_TUNNEL_USE_SYSTEM_RESOLVER, false);
             submitLifecycle(new Runnable() {
                 @Override
                 public void run() {
@@ -455,6 +465,7 @@ public final class VpnRouterService extends VpnService {
                     pendingDnsTunnelResolvers = dnsResolvers;
                     pendingDnsTunnelCert = dnsCert;
                     pendingDnsTunnelPort = dnsPort;
+                    pendingDnsTunnelUseSystemResolver = dnsUseSystem;
                     startTunnel();
                 }
             });
@@ -651,6 +662,8 @@ public final class VpnRouterService extends VpnService {
                         pendingDnsTunnelCert != null ? pendingDnsTunnelCert : "");
                 editor.putInt(KEY_LAST_GOOD_DNS_TUNNEL_PORT,
                         pendingDnsTunnelPort > 0 ? pendingDnsTunnelPort : 7001);
+                editor.putBoolean(KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER,
+                        pendingDnsTunnelUseSystemResolver);
                 if (pendingDnsTunnelResolvers != null && pendingDnsTunnelResolvers.length > 0) {
                     StringBuilder rb = new StringBuilder();
                     for (int i = 0; i < pendingDnsTunnelResolvers.length; i++) {
@@ -666,6 +679,7 @@ public final class VpnRouterService extends VpnService {
                 editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS);
                 editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_CERT);
                 editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_PORT);
+                editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER);
             }
             // apply() is async + non-throwing — for a "best effort" path
             // that's the right choice. commit() would block the foreground
@@ -709,6 +723,8 @@ public final class VpnRouterService extends VpnService {
             }
             pendingDnsTunnelCert = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_CERT, null);
             pendingDnsTunnelPort = prefs.getInt(KEY_LAST_GOOD_DNS_TUNNEL_PORT, 7001);
+            pendingDnsTunnelUseSystemResolver =
+                    prefs.getBoolean(KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER, false);
             String packedResolvers = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS, null);
             pendingDnsTunnelResolvers = (packedResolvers == null || packedResolvers.isEmpty())
                     ? new String[0] : packedResolvers.split("\n");
@@ -852,6 +868,22 @@ public final class VpnRouterService extends VpnService {
         }
         String[] resolvers = pendingDnsTunnelResolvers != null
                 ? pendingDnsTunnelResolvers : new String[0];
+        // System-resolver mode (link sentinel "system"): use the active network's
+        // OS resolver(s) — the operator-agnostic WL-BYPASS path. On a strict RU
+        // mobile whitelist the operator's own resolver (e.g. 10.x) is the only
+        // reachable DNS, so a link cannot hardcode НСДИ IPs. The forwarded literals
+        // stay as the fallback when no OS resolver is discoverable.
+        if (pendingDnsTunnelUseSystemResolver) {
+            String[] sys = readSystemResolvers();
+            if (sys.length > 0) {
+                Log.i(LOG_TAG, "dns-tunnel: system-resolver mode — using " + sys.length
+                        + " OS resolver(s) over " + resolvers.length + " link resolver(s)");
+                resolvers = sys;
+            } else {
+                Log.w(LOG_TAG, "dns-tunnel: system-resolver mode but no OS resolver discovered — "
+                        + "falling back to " + resolvers.length + " link resolver(s)");
+            }
+        }
         // The Slipstream client's ClientConfig.cert is a FILE PATH (it does
         // fs::read on it for the leaf-cert pin) — NOT the PEM text. Desktop's
         // SlipstreamManager writes the PEM to disk and passes the path; mirror
@@ -886,6 +918,46 @@ public final class VpnRouterService extends VpnService {
             throw new Exception("dns-tunnel: Slipstream front did not start listening on 127.0.0.1:" + port);
         }
         Log.i(LOG_TAG, "dns-tunnel: Slipstream front is listening on 127.0.0.1:" + port);
+    }
+
+    /**
+     * Discover the active network's OS resolver(s) as "ip:53" strings via
+     * ConnectivityManager — the operator-agnostic WL-BYPASS path. Prefers the
+     * active default network, falling through to other networks only if it yields
+     * none. IPv4 only (the covert path uses ip:53); loopback / link-local skipped;
+     * deduped. Best-effort: returns an empty array on any failure so the caller
+     * falls back to the link's forwarded resolvers. The underlying network is up
+     * here (slipstream starts before the TUN), so on a strict mobile whitelist this
+     * returns the operator resolver (e.g. 10.x) — the only DNS reachable there.
+     */
+    private String[] readSystemResolvers() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) return new String[0];
+            java.util.List<Network> nets = new java.util.ArrayList<>();
+            Network active = cm.getActiveNetwork();
+            if (active != null) nets.add(active);
+            for (Network n : cm.getAllNetworks()) {
+                if (!nets.contains(n)) nets.add(n); // active first, then the rest as fallback
+            }
+            for (Network net : nets) {
+                LinkProperties lp = cm.getLinkProperties(net);
+                if (lp == null || lp.getDnsServers() == null) continue;
+                for (java.net.InetAddress a : lp.getDnsServers()) {
+                    if (!(a instanceof java.net.Inet4Address)) continue; // IPv4 covert path
+                    if (a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                    String h = a.getHostAddress();
+                    if (h == null) continue;
+                    String ep = h + ":53";
+                    if (!out.contains(ep)) out.add(ep);
+                }
+                if (!out.isEmpty()) break; // active network's resolvers suffice
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "dns-tunnel: readSystemResolvers threw: " + e.getMessage());
+        }
+        return out.toArray(new String[0]);
     }
 
     /**

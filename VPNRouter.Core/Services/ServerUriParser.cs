@@ -220,6 +220,7 @@ public static class ServerUriParser
         string domain = string.Empty, uuid = string.Empty, fingerprint = string.Empty, cert = string.Empty;
         var resolvers = new List<string>();
         var authoritative = new List<string>();
+        var useSystemResolver = false;
         try
         {
             using var doc = JsonDocument.Parse(jsonBytes);
@@ -241,9 +242,18 @@ public static class ServerUriParser
                 {
                     if (item.ValueKind != JsonValueKind.String) continue;
                     var v = item.GetString();
-                    if (!string.IsNullOrWhiteSpace(v)) resolvers.Add(v!.Trim());
+                    if (string.IsNullOrWhiteSpace(v)) continue;
+                    var t = v!.Trim();
+                    // A "system"/"auto"/"os" sentinel means: use the OS/operator
+                    // default resolver discovered at connect time, not a hardcoded
+                    // IP. On a strict RU mobile whitelist the НСДИ IPs are
+                    // L3-blocked and only the operator resolver is reachable, so
+                    // this is the operator-agnostic WL-BYPASS path. Concrete IPs in
+                    // the same array are kept in DnsResolvers as a fallback.
+                    if (IsSystemResolverSentinel(t)) { useSystemResolver = true; continue; }
+                    resolvers.Add(t);
                 }
-                if (resolvers.Count > 0) break; // first non-empty array wins
+                if (useSystemResolver || resolvers.Count > 0) break; // first usable array wins
             }
 
             // OPTIONAL authoritative endpoint(s): query the tunnel server's NS
@@ -276,8 +286,8 @@ public static class ServerUriParser
 
         if (string.IsNullOrWhiteSpace(domain))
             throw new FormatException("dns-tunnel: missing 'domain'");
-        if (resolvers.Count == 0)
-            throw new FormatException("dns-tunnel: missing 'resolvers'");
+        if (resolvers.Count == 0 && !useSystemResolver)
+            throw new FormatException("dns-tunnel: missing 'resolvers' (provide IPs or the \"system\" sentinel)");
         if (string.IsNullOrWhiteSpace(uuid))
             throw new FormatException("dns-tunnel: missing 'uuid'");
 
@@ -297,12 +307,23 @@ public static class ServerUriParser
             Server = domain,   // identity for dedup/display; outbound targets 127.0.0.1
             DnsDomain = domain,
             DnsResolvers = resolvers,
+            DnsUseSystemResolver = useSystemResolver,
             DnsAuthoritative = authoritative,
             DnsLeafCertPem = cert,
             DnsLeafFingerprint = fingerprint,
             Uuid = uuid,
         };
     }
+
+    /// <summary>True for the dns-tunnel resolver sentinel tokens that mean
+    /// "use the OS/operator default resolver" instead of a hardcoded IP. On a
+    /// strict RU mobile whitelist the operator resolver is the only reachable DNS,
+    /// so a link publishes <c>"r":["system"]</c> to stay operator-agnostic.</summary>
+    private static bool IsSystemResolverSentinel(string s) =>
+        s.Equals("system", StringComparison.OrdinalIgnoreCase)
+        || s.Equals("auto", StringComparison.OrdinalIgnoreCase)
+        || s.Equals("os", StringComparison.OrdinalIgnoreCase)
+        || s.Equals("device", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>First present string property among <paramref name="names"/>
     /// (tried in order), or empty. Lets one parser accept both the short
