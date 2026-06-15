@@ -24,6 +24,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A11 justification (2026-06-15): the per-app split-tunnel picker must
+         enumerate ALL installed apps so the user can choose which ones route
+         through the VPN. A <queries> element only permits querying a KNOWN, fixed
+         set of packages and cannot list arbitrary installed apps, so it is not a
+         substitute for a VPN app picker. Distribution is sideload-only (no Play
+         policy gate today); if Play distribution is ever pursued this needs a Play
+         Console declaration or a <queries>-based narrower fallback that degrades
+         the picker. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
                      tools:ignore="QueryAllPackagesPermission" />
     <!-- v2.32.0 (2026-05-07) — auto-update sideload. Lets the app hand

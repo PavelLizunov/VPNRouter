@@ -188,6 +188,14 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
     private static boolean libboxSetupDone = false;
+    // A10 (2026-06-15): process-lifetime cache of the system CA store as PEM
+    // strings. The AndroidCAStore is effectively immutable for a process run, but
+    // libbox can call systemCertificates() on every TLS-using connection — re-
+    // enumerating + Base64-PEM-encoding ~150 certs each time is needless work. A CA
+    // change requires Settings and is picked up on the next app launch. Held on the
+    // outer service (Java forbids static fields in the non-static PlatformInterface
+    // inner class); volatile for the cross-thread publish.
+    private static volatile List<String> sCachedSystemCertificatePems;
 
     private String pendingConfigJson;
     private String[] pendingAllowedPackages;
@@ -1546,6 +1554,12 @@ public final class VpnRouterService extends VpnService {
          */
         @Override
         public StringIterator systemCertificates() {
+            // A10: serve the process-lifetime cache when warm. Hand out a fresh
+            // copy so the iterator can never disturb the shared (immutable) list.
+            List<String> cached = sCachedSystemCertificatePems;
+            if (cached != null) {
+                return new SimpleStringIterator(new ArrayList<>(cached));
+            }
             try {
                 List<String> certs = new ArrayList<>();
                 KeyStore ks = KeyStore.getInstance("AndroidCAStore");
@@ -1559,7 +1573,10 @@ public final class VpnRouterService extends VpnService {
                             + "-----END CERTIFICATE-----";
                     certs.add(pem);
                 }
-                return new SimpleStringIterator(certs);
+                // Publish an immutable snapshot. A benign race just recomputes the
+                // same set — no lock needed.
+                sCachedSystemCertificatePems = Collections.unmodifiableList(certs);
+                return new SimpleStringIterator(new ArrayList<>(certs));
             } catch (Exception e) {
                 Log.w(LOG_TAG, "systemCertificates failed: " + e.getMessage());
                 return new SimpleStringIterator(new ArrayList<>());
