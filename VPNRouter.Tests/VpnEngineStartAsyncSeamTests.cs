@@ -166,6 +166,31 @@ public sealed class VpnEngineStartAsyncSeamTests
         Assert.Null(engine.SingBoxPid);
     }
 
+    // ─── Conflict-skip remembered for failover/reconnect re-entry (2026-06-15) ───
+
+    [Fact]
+    public async Task StartAsync_RemembersSkipVpnConflictCheck_ForFailoverReentry()
+    {
+        // Reconnect fix: StartAsync records its skipVpnConflictCheck argument up
+        // front (before any phase), so the internal AutoFailover restart delegates
+        // re-enter StartAsync with the SAME skip. Without it, a removed-config
+        // failover re-ran the Phase 0 ConflictingVpnDetector pre-flight WITHOUT the
+        // user's "Ignore", threw ConflictingVpnException, and the VPN stayed down
+        // while a tolerated VPN (AmneziaWG / WireGuard) was up. Drive the cheap
+        // empty-servers early-throw (phase 2) — the skip is already stored by then —
+        // and assert the remembered value tracks the argument both ways.
+        var settings = BuildSafePreStartSettings(configMode: "subscribe");
+        using var engine = BuildEngine();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
+        Assert.True(engine.SkipVpnConflictCheckSnapshot);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: false));
+        Assert.False(engine.SkipVpnConflictCheckSnapshot);
+    }
+
     [Fact]
     public async Task StartAsync_SubscribeMode_AllSubscriptionsDisabled_Throws()
     {

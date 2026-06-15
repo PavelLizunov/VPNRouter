@@ -88,6 +88,14 @@ public class VpnEngine : IDisposable
     /// </summary>
     internal string TunFingerprint { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Test seam: the conflict-skip remembered by the last <see cref="StartAsync"/>
+    /// (reconnect fix 2026-06-15). The AutoFailover restart delegates re-enter
+    /// <see cref="StartAsync"/> with this value so an internal failover honours the
+    /// user's "Ignore VPN conflict" instead of re-throwing ConflictingVpnException.
+    /// </summary>
+    internal bool SkipVpnConflictCheckSnapshot => _skipVpnConflictCheck;
+
     // ─── Events for UI ───────────────────────────────────────────────────────
 
     /// <summary>Fired when engine status changes (e.g. "Loading profiles...", "sing-box started")</summary>
@@ -581,9 +589,13 @@ public class VpnEngine : IDisposable
     /// </summary>
     internal static string ComputeTunFingerprint(Models.TunSettings tun)
     {
-        // Order-independent join of the exclude list — users might reorder
-        // entries in the UI without any structural change intended.
-        var excludes = tun.RouteExcludeAddress ?? new List<string>();
+        // Order-independent join of the EFFECTIVE exclude list (persisted user
+        // list + runtime auto-detected WG/AWG subnets). Using the effective set
+        // here — not just the persisted list — is what makes a WG/AWG adapter
+        // appearing OR disappearing between StartAsync and a hot ApplyAsync flip
+        // the fingerprint and force a full TUN rebuild (route_exclude_address is
+        // a kernel TUN property the Clash-API hot-reload cannot re-lay).
+        var excludes = tun.GetEffectiveRouteExcludeAddress();
         var excludeKey = string.Join(",",
             excludes
                 .Where(s => !string.IsNullOrWhiteSpace(s))
