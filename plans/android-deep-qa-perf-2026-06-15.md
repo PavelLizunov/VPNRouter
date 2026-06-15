@@ -47,7 +47,7 @@ forced parallelism.
 | F3 | 1 | "⚠ Stale check" on a HEALTHY but IDLE connection — health probe `_lastHealthOk = grew\|\|recent` keys off sing-box LOG growth; idle tunnel writes no log → flips unhealthy after 60s | P2 (UX, alarming false alarm) | 3 timeline samples + device-confirmed root cause + post-fix re-verify | **FIXED + VERIFIED** — added OS VPN-transport ground truth (`_lastHealthOk = grew\|\|recent\|\|vpnUp`); 75s idle now shows "✓ Last check 1s ago" |
 | F4 | 1 | **Theme toggle → RebuildSimplePageView breaks the rebuilt view's live reactivity**: kebab + Config·Mode popups won't reopen AND the status card stops reflecting TUNNEL_UP/DOWN, until app restart | P1 (UX; Simple page partially dead after a mid-session theme change) | reproduced ×3; isolated (plain reopen OK; theme-toggle reopen FAILS; clean connect card OK, post-rebuild connect card STUCK "Not connected") | **PARTIAL fix** (close popup before rebuild → kills orphan-eats-input). Full fix = finish BindToken migration / re-wire after swap → **spawned task** |
 | F-RU | 1 | RU language toggle = **FALSE POSITIVE** (works: immediate refresh + persist). Earlier "dead" reading was tainted by F4 stale refs | — | clean fresh-launch test: EN↔RU instant + cold-launch in RU | Not a bug — lesson logged |
-| F6 | Settings | **Two unsynced routing-mode keys**: Simple page reads/writes `PerAppMode` (off=All traffic, drives the actual VpnService per-app filter), Advanced Settings→Routing reads/writes a separate `RoutingMode` ("split"/"full"). Manual toggles update only their own key → drift; the Advanced radio can show a state that contradicts Simple AND doesn't drive routing | P2 (confusing; Advanced control misleading/maybe non-functional) | confirmed in code (init from PerAppMode at 1244/1274, re-seed from RoutingMode at 2369) + device (Simple "All traffic" vs Advanced "Split Tunnel", traffic = full-tunnel) | Documented — needs model unification → **spawned task** |
+| F6 | Settings | **Two unsynced routing-mode keys**: Simple page reads/writes `PerAppMode` (off=All traffic, drives the actual VpnService per-app filter), Advanced Settings→Routing reads/writes a separate `RoutingMode` ("split"/"full"). Manual toggles update only their own key → drift; the Advanced radio can show a state that contradicts Simple AND doesn't drive routing | P2 (confusing; Advanced control misleading/maybe non-functional) | confirmed in code (init from PerAppMode at 1244/1274, re-seed from RoutingMode at 2369) + device (Simple "All traffic" vs Advanced "Split Tunnel", traffic = full-tunnel) | **FIXED (projection)** — RoutingMode is now a pure projection of PerAppMode (single source of truth), mirroring desktop. Build green (Core/Tests/Android 0 err, 97 tests). On-device browse-toggle-browse re-verify pending. |
 | F7 | 2/3 | **Browse test PASS** + perf: real traffic through tunnel (~1.3 MB), heavy HTTP/2 sites (wikipedia/bbc) render+scroll, no ERR_CONNECTION_CLOSED (MTU-1280 holds on Android); server switch re-apply works (browse-toggle-browse loop) | (positive) | example.com/.org, wikipedia (scrolled), bbc.com/news; tun0 byte deltas | Verified |
 
 ### F1 detail — B4 thread accounting (the multi-build root-cause)
@@ -103,6 +103,65 @@ instantly AND the app cold-launching in the persisted language. **Lesson: a sing
 session yields a confident wrong conclusion — re-test from a pristine state before
 trusting a "dead control" finding.** (Exactly the user's "re-check multiple times from
 different architectural viewpoints" mandate paying off.)
+
+### F6 detail — fix (single-source-of-truth projection, mirrors desktop)
+
+User directive: "Посмотри как это работает в windows версии и не выдумывай ничего."
+
+**How desktop does it (the model to mirror):** desktop has ONE source of
+truth — a single `IsSplitTunnel` bool that BOTH the Simple radio
+(`SimplePage.axaml:228`) AND the Network/Settings radio (`NetworkPage.axaml:249`)
+bind to. `RoutingMode` ("split"/"full") is purely its serialized projection
+(`MainWindowViewModel.SimpleMode.cs:625` writes `RoutingMode = value ? "split"
+: "full"`; loaded back at `MainWindowViewModel.cs:3149`). There is no second
+key, so the two radios can never disagree.
+
+**Why Android drifted:** Android invented a SECOND key. The VpnService per-app
+filter (`PerAppMode`) is the only thing that drives split-vs-full —
+`MainActivity.DispatchTunnelStart` forwards `GetPerAppMode()`, and the
+generated sing-box config is ALWAYS full-tunnel (`AndroidConfigBuilder` hard-
+sets `settings.App.RoutingMode="full"` at lines 86 + 211). So `RoutingMode`
+was dead storage that the Advanced→Routing radio read/wrote independently
+while the Simple radio read/wrote `PerAppMode` → the two contradicted (device-
+confirmed A101BM: Simple "All traffic" + Advanced "Split Tunnel" same session;
+tun0-byte delta proved the EFFECTIVE routing followed PerAppMode = full).
+
+Verified `RoutingMode` feeds NO Android config-gen before changing anything
+(the user's "verify before removing" gate): `AndroidConfigBuilder` overrides it
+to "full" on both the generated and custom paths; nothing reads
+`AndroidStorage.GetRoutingMode()` for the data plane.
+
+**Fix (mirror desktop's single source of truth, no new UI design):** make
+`PerAppMode` the single source of truth (= desktop's `IsSplitTunnel`) and make
+`RoutingMode` a PURE PROJECTION of it. Two pure Core helpers in
+`PerAppFilterMode` (the existing net8.0-testable seam alongside
+`Normalize`/`ResolveLastMode`/`IsSplit`):
+- `RoutingModeFor(perAppMode)` → "off"→"full", include/exclude→"split"
+  (inverse of desktop's `IsSplitTunnel = !RoutingMode.Equals("full")`).
+- `PerAppModeForRoutingChange(routingMode, current, lastMode)` → the PerAppMode
+  a split/full toggle should write (or null = no-op): "full"→"off"; "split"
+  restores last include/exclude intent only when currently off.
+
+`AndroidStorage.GetRoutingMode`/`SetRoutingMode` now delegate to these, so
+EVERY existing caller (`BuildSettingsRoutingSection`, `ReseedNetworkTabState`,
+`OnSettingsRoutingChanged`, `ApplyProfile` re-seed, `AndroidConfigShare`
+export/import) keeps working unchanged but now reads/writes the one source of
+truth — drift is impossible by construction. `CloseAdvancedShell` also re-seeds
+the Simple split/full radios so a routing change made inside Advanced reflects
+on the (non-rebuilt) Simple page underneath. The legacy `routing_mode`
+SharedPreferences key is left only in `RepairAllOnLoad`/`ResetUserSettings` so
+stale values from older installs still get cleaned up; nothing reads it.
+
+Side benefit: clearing a profile (`ProfileApplication.Plan(null)` →
+`RoutingMode="full"`) now actually forces full-tunnel (PerAppMode→"off"),
+which the old dead key could never do.
+
+Tests: `PerAppFilterModeTests` +34 cases (projection both directions +
+round-trip drift invariant). Build: Core/Tests/Android 0 errors, 97 storage/
+profile/config-share/per-app tests green, AndroidApp source-hash pin holds
+(body-only edits). **Pending: on-device browse-toggle-browse re-verify on
+A101BM (per the mandatory Android browse-test rule) — toggle routing in BOTH
+Simple and Advanced, confirm they agree + the tun0 delta follows.**
 
 ## Baseline measurements (A101BM, v2.42.0 + local A10/A11/B4, instrumented build)
 

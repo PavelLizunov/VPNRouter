@@ -532,6 +532,21 @@ public partial class AndroidApp
         // CloseServerListOverlay tail.
         ReloadServerList();
         UpdateConfigSummary();
+
+        // F6 (2026-06-15) — the Advanced→Settings→Routing radio now drives the
+        // same source of truth as the Simple page (PerAppMode, via the
+        // GetRoutingMode projection). The Simple page persists underneath this
+        // overlay and is NOT rebuilt on close, so re-seed its split/full
+        // radios here — otherwise a routing change made inside Advanced would
+        // leave the Simple radios showing the pre-change state (the same
+        // cross-surface contradiction F6 fixes, just in the other direction).
+        // Mirrors the ApplyProfile re-seed; setting IsChecked re-fires the
+        // idempotent OnTunnelModeRadioChanged (no write when PerAppMode already
+        // matches), which also refreshes the "Choose apps…" stack visibility.
+        var routing = AndroidStorage.GetRoutingMode();
+        if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
+        if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
+        UpdatePerAppFormCountLabel();
     }
 
     /// <summary>

@@ -66,4 +66,56 @@ public static class PerAppFilterMode
         var n = Normalize(value);
         return n == Include || n == Exclude;
     }
+
+    // ── F6 (2026-06-15, plans/android-deep-qa-perf-2026-06-15.md) ──────────
+    //
+    // Single-source-of-truth projection between the desktop-style "split" /
+    // "full" routing verb and the Android per-app filter tri-state.
+    //
+    // On Android the VpnService per-app filter (this tri-state) is the ONLY
+    // thing that drives split-vs-full: the generated sing-box config is
+    // always full-tunnel (AndroidConfigBuilder hard-sets RoutingMode="full"),
+    // so the desktop "routing_mode" knob has no data-plane effect. Before
+    // this fix Android stored routing_mode as a SECOND independent key, which
+    // drifted out of sync with PerAppMode (Simple page read PerAppMode while
+    // Advanced→Routing read routing_mode → contradictory radios, device-
+    // confirmed on A101BM). These two helpers let AndroidStorage make
+    // routing_mode a pure projection of PerAppMode, mirroring desktop where a
+    // SINGLE IsSplitTunnel bool backs both the Simple and Settings radios so
+    // they can never disagree.
+
+    /// <summary>
+    /// Project the per-app filter tri-state onto the desktop-style routing
+    /// verb: "off" → "full" (whole-device tunnel), include/exclude → "split".
+    /// Inverse of desktop's <c>IsSplitTunnel = !RoutingMode.Equals("full")</c>.
+    /// </summary>
+    public static string RoutingModeFor(string? perAppMode) =>
+        IsSplit(perAppMode) ? "split" : "full";
+
+    /// <summary>
+    /// Resolve the per-app filter value a routing-mode change should write,
+    /// or <c>null</c> when the change is a no-op (already in the requested
+    /// split/full state) so the caller can skip the SharedPreferences write.
+    /// <list type="bullet">
+    ///   <item>"full" → "off" (collapse to whole-device tunnel), unless
+    ///   already "off".</item>
+    ///   <item>"split" → restore the last include/exclude intent
+    ///   (<see cref="ResolveLastMode"/>) ONLY when currently "off"; an
+    ///   already-split picker keeps its direction so split→split never
+    ///   silently flips include↔exclude.</item>
+    /// </list>
+    /// Any non-"full" verb is treated as split (mirrors desktop's
+    /// <c>!RoutingMode.Equals("full")</c> rule).
+    /// </summary>
+    public static string? PerAppModeForRoutingChange(
+        string? routingMode, string? currentPerAppMode, string? lastMode)
+    {
+        var current = Normalize(currentPerAppMode);
+        var wantFull = string.Equals(routingMode, "full", StringComparison.OrdinalIgnoreCase);
+        if (wantFull)
+            return current == Off ? null : Off;
+        // want split:
+        if (current != Off) return null;        // already split — keep include/exclude
+        return ResolveLastMode(lastMode);        // restore last active direction
+    }
 }

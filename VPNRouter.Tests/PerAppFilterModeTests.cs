@@ -95,4 +95,80 @@ public class PerAppFilterModeTests
         Assert.Equal("include", PerAppFilterMode.Include);
         Assert.Equal("exclude", PerAppFilterMode.Exclude);
     }
+
+    // ── F6 (2026-06-15, plans/android-deep-qa-perf-2026-06-15.md) ──────────
+    //
+    // RoutingMode is a pure projection of PerAppMode on Android: the two
+    // SharedPreferences keys used to drift (Simple page seeded its radio from
+    // PerAppMode, Advanced→Routing from a separate routing_mode key →
+    // contradictory radios, device-confirmed on A101BM). AndroidStorage's
+    // GetRoutingMode / SetRoutingMode now delegate to these helpers so the
+    // two surfaces can never disagree, mirroring desktop's single
+    // IsSplitTunnel bool. The storage round-trip itself lives in
+    // VPNRouter.Android.AndroidStorage (Android-runtime-only); the projection
+    // rules below are the testable seam.
+
+    [Theory]
+    // off → full tunnel; include/exclude → split. Inverse of desktop's
+    // IsSplitTunnel = !RoutingMode.Equals("full").
+    [InlineData("off", "full")]
+    [InlineData("OFF", "full")]
+    [InlineData(null, "full")]
+    [InlineData("", "full")]
+    [InlineData("garbage", "full")]   // normalises to off → full
+    [InlineData("include", "split")]
+    [InlineData("Include", "split")]
+    [InlineData("exclude", "split")]
+    [InlineData("EXCLUDE", "split")]
+    public void RoutingModeFor_ProjectsPerAppModeToSplitFull(string? perAppMode, string expected)
+    {
+        Assert.Equal(expected, PerAppFilterMode.RoutingModeFor(perAppMode));
+    }
+
+    [Theory]
+    // "full" collapses to "off" unless already off (then no-op = null).
+    [InlineData("full", "include", "include", "off")]
+    [InlineData("full", "exclude", "exclude", "off")]
+    [InlineData("full", "off", "include", null)]      // already full → no write
+    // "split" from off restores the last active include/exclude intent.
+    [InlineData("split", "off", "include", "include")]
+    [InlineData("split", "off", "exclude", "exclude")]
+    [InlineData("split", "off", null, "include")]     // no last mode → include default
+    [InlineData("split", "off", "garbage", "include")]
+    // "split" while already split is a no-op (keeps the current direction —
+    // must NOT silently flip include↔exclude).
+    [InlineData("split", "include", "exclude", null)]
+    [InlineData("split", "exclude", "include", null)]
+    // Any non-"full" verb is treated as split (mirrors desktop's
+    // !RoutingMode.Equals("full")).
+    [InlineData("SPLIT", "off", "include", "include")]
+    public void PerAppModeForRoutingChange_TranslatesVerbToPerAppMode(
+        string routingMode, string currentPerAppMode, string? lastMode, string? expected)
+    {
+        Assert.Equal(expected,
+            PerAppFilterMode.PerAppModeForRoutingChange(routingMode, currentPerAppMode, lastMode));
+    }
+
+    [Theory]
+    // Drift invariant: applying a routing verb then projecting back yields
+    // the verb that was applied — the round-trip the two AndroidStorage keys
+    // failed before F6. (Simulates SetRoutingMode → GetRoutingMode.)
+    [InlineData("off", "full", "full")]
+    [InlineData("include", "full", "full")]
+    [InlineData("exclude", "full", "full")]
+    [InlineData("off", "split", "split")]
+    [InlineData("include", "split", "split")]
+    [InlineData("exclude", "split", "split")]
+    public void RoutingChange_ThenProject_RoundTrips(
+        string startPerAppMode, string applyRoutingMode, string expectedRoutingMode)
+    {
+        // SetRoutingMode semantics: null means "no change", so the effective
+        // PerAppMode is either the helper's result or the unchanged start.
+        var lastMode = PerAppFilterMode.ResolveLastMode(startPerAppMode);
+        var next = PerAppFilterMode.PerAppModeForRoutingChange(
+            applyRoutingMode, startPerAppMode, lastMode);
+        var effectivePerAppMode = next ?? startPerAppMode;
+
+        Assert.Equal(expectedRoutingMode, PerAppFilterMode.RoutingModeFor(effectivePerAppMode));
+    }
 }

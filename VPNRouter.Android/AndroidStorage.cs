@@ -861,9 +861,37 @@ public static class AndroidStorage
     private static readonly HashSet<string> AllowedThemes =
         new(StringComparer.OrdinalIgnoreCase) { "light", "dark", "system" };
 
+    // F6 (2026-06-15, plans/android-deep-qa-perf-2026-06-15.md) — RoutingMode
+    // is no longer independent storage. On Android the VpnService per-app
+    // filter (PerAppMode) is the only thing that drives split-vs-full: the
+    // generated sing-box config is ALWAYS full-tunnel (AndroidConfigBuilder
+    // hard-sets settings.App.RoutingMode="full"), so a separate routing_mode
+    // key was dead state that drifted out of sync with PerAppMode (the Simple
+    // page seeded its radio from PerAppMode while Advanced→Routing seeded from
+    // routing_mode → contradictory radios, device-confirmed on A101BM where
+    // Simple showed "All traffic" and Advanced showed "Split Tunnel" in the
+    // same session). We now mirror desktop, where a SINGLE IsSplitTunnel bool
+    // backs both the Simple and Settings routing radios: GetRoutingMode /
+    // SetRoutingMode are pure projections of PerAppMode (the single source of
+    // truth), so the two surfaces can never disagree. Every existing caller
+    // (BuildSettingsRoutingSection, ReseedNetworkTabState, OnSettingsRouting-
+    // Changed, ApplyProfile, AndroidConfigShare) keeps working unchanged.
+    //
+    // The legacy routing_mode SharedPreferences key is intentionally LEFT in
+    // RepairAllOnLoad / ResetUserSettings (AllowedRoutingModes still backs the
+    // self-repair spec) purely so stale values written by older installs get
+    // validated + wiped on factory reset; nothing reads routing_mode anymore.
     public static string GetRoutingMode() =>
-        ValidateOrDefault(KeyRoutingMode, GetString(KeyRoutingMode), AllowedRoutingModes, "split");
-    public static bool SetRoutingMode(string value) => SetString(KeyRoutingMode, value);
+        VPNRouter.Core.Models.PerAppFilterMode.RoutingModeFor(GetPerAppMode());
+
+    public static bool SetRoutingMode(string value)
+    {
+        var newPerAppMode = VPNRouter.Core.Models.PerAppFilterMode.PerAppModeForRoutingChange(
+            value, GetPerAppMode(), GetPerAppLastMode());
+        // null = no-op (already in the requested split/full state) — skip the
+        // write so we don't churn PerAppMode or its sticky last-mode key.
+        return newPerAppMode is null || SetPerAppMode(newPerAppMode);
+    }
 
     public static bool GetBypassRussianTraffic() => GetBool(KeyBypassRussianTraffic, defaultValue: true);
     public static bool SetBypassRussianTraffic(bool value) => SetBool(KeyBypassRussianTraffic, value);
