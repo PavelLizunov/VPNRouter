@@ -23,13 +23,19 @@
                     <StackPanel Orientation="Horizontal" Spacing="4"/>
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
-            <ListBoxItem Content="{Binding LblToolZapret}"  Padding="10,4" FontSize="11"/>
-            <ListBoxItem Content="{Binding LblToolTgProxy}" Padding="10,4" FontSize="11"/>
+            <!-- Per-tool visibility (2026-06-15 parity fix): Zapret + Telegram proxy
+                 are Windows-only; the Emergency Channel is cross-platform. On
+                 macOS/Linux only the Emergency Channel sub-tab shows. -->
+            <ListBoxItem Content="{Binding LblToolZapret}"  Padding="10,4" FontSize="11"
+                         IsVisible="{Binding IsZapretAvailable}"/>
+            <ListBoxItem Content="{Binding LblToolTgProxy}" Padding="10,4" FontSize="11"
+                         IsVisible="{Binding IsTgProxyAvailable}"/>
             <!-- v2.32.2 (W-4) — third Tools sub-tab for the wgturn-core
                  Emergency Channel card. Title reuses the same Strings.cs
                  key the card title uses so the tab caption + card title
                  stay in sync. -->
-            <ListBoxItem Content="{Binding L_LblToolEmergencyChannel}" Padding="10,4" FontSize="11"/>
+            <ListBoxItem Content="{Binding L_LblToolEmergencyChannel}" Padding="10,4" FontSize="11"
+                         IsVisible="{Binding IsEmergencyChannelAvailable}"/>
         </ListBox>
 
         <!-- Sub-pages -->

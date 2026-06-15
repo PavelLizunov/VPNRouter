@@ -207,8 +207,12 @@ public class MainWindowViewModelCharacterizationTests
     // removed-config reconnect/failover honours the user's "Ignore conflict" and
     // doesn't re-throw ConflictingVpnException). Cross-platform field → Linux pin
     // drifts in lock-step (soft-fail; capture the actual from the next ubuntu CI run).
+    // 2026-06-15 (Emergency-Channel macOS/Linux unhide): + IsEmergencyChannelAvailable
+    // and IsToolsAvailable public properties (Tools tab now gated on any-sub-tool, so
+    // the cross-platform wgturn Emergency Channel shows off Windows). Cross-platform
+    // getters → Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI).
     private const string PinnedHashWindows =
-        "e896384300ad3585662bb4dbc409a0b98b21a15964cfb15760b92111a3bd280d";
+        "0790ad5d8642419f9d3744d55eca8a5dfb0779a57e1f0b15d4e8d6ca3458bd91";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

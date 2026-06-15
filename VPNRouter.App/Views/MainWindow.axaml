@@ -763,11 +763,13 @@
                     <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
                     <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
                     <ListBoxItem Content="{Binding LblTabApps}"        Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
-                    <!-- v2.21.0: Tools tab hidden on Linux — its only sub-pages
-                         are Zapret and TgProxy, both Windows-only. The tab
-                         visibility uses IsZapretAvailable (same signal). -->
+                    <!-- Tools tab: Zapret + Telegram proxy are Windows-only, but the
+                         wgturn Emergency Channel works on Windows/macOS/Linux. Gate on
+                         IsToolsAvailable (ANY sub-tool) so the tab — and the Emergency
+                         Channel — shows on macOS/Linux too (2026-06-15 parity fix; was
+                         IsZapretAvailable, which hid the whole tab off Windows). -->
                     <ListBoxItem Content="{Binding LblTabTools}"       Padding="8,5" FontSize="12" FontWeight="SemiBold"
-                                 IsVisible="{Binding IsZapretAvailable}"/>
+                                 IsVisible="{Binding IsToolsAvailable}"/>
                     <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
                 </ListBox>
             </ScrollViewer>

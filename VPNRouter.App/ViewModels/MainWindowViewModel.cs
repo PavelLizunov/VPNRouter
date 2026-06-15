@@ -529,6 +529,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
     public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
+    /// <summary>True when the wgturn Emergency Channel is available — Windows /
+    /// macOS / Linux. The wgturn-cli binary is fetched on-demand per platform by
+    /// WgturnUpdater (which publishes windows/darwin/linux x64+arm64 assets), so it
+    /// needs no bundling.</summary>
+    public bool IsEmergencyChannelAvailable =>
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux();
+    /// <summary>Tools-tab visibility gate. Visible when ANY sub-tool is available,
+    /// so the Emergency Channel shows on macOS/Linux even though Zapret + Telegram
+    /// proxy are Windows-only. Was gated on <see cref="IsZapretAvailable"/>, which
+    /// hid the whole Tools tab — and the cross-platform Emergency Channel — off
+    /// Windows (the parity bug fixed 2026-06-15).</summary>
+    public bool IsToolsAvailable => Internals.ToolTabAvailability.ToolsTabVisible(
+        IsZapretAvailable, IsTgProxyAvailable, IsEmergencyChannelAvailable);
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
@@ -2521,7 +2534,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
     [NotifyPropertyChangedFor(nameof(IsTgProxyToolSelected))]
     [NotifyPropertyChangedFor(nameof(IsEmergencyChannelToolSelected))]
-    private int _selectedToolIndex;
+    // Default to the first AVAILABLE sub-tab so macOS/Linux (no Zapret/TgProxy)
+    // opens on the Emergency Channel instead of the hidden Windows-only Zapret page.
+    private int _selectedToolIndex = Internals.ToolTabAvailability.DefaultToolIndex(
+        OperatingSystem.IsWindows(),                                             // Zapret
+        OperatingSystem.IsWindows(),                                             // Telegram proxy
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()); // Emergency Channel
 
     public bool IsZapretToolSelected => SelectedToolIndex == 0;
     public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
