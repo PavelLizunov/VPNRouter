@@ -144,7 +144,10 @@ public partial class MainWindowViewModel
                 Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                 Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
             var startTask = Task.Run(
-                () => _engine.StartAsync(_settings, cts.Token),
+                // Carry the session "ignore conflict" decision (reconnect fix
+                // 2026-06-15) so a Free Configs connect after the user ignored a
+                // tolerated VPN doesn't re-throw ConflictingVpnException.
+                () => _engine.StartAsync(_settings, cts.Token, _skipVpnConflictThisSession),
                 cts.Token);
 
             var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(

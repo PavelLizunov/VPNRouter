@@ -38,6 +38,13 @@ public class VpnEngine : IDisposable
     // failovers; reset on every successful start.
     private ConfigSanityCheck? _sanityCheck;
     private AutoFailoverEngine? _failover;
+    // Reconnect fix (2026-06-15): the user's "Ignore VPN conflict" decision,
+    // remembered from the last StartAsync so the internal AutoFailover restart
+    // delegates re-enter StartAsync with the SAME skip. Else a failover after an
+    // ignored conflict re-runs the Phase 0 ConflictingVpnDetector pre-flight and
+    // throws ConflictingVpnException, leaving the VPN down while a tolerated VPN
+    // (AmneziaWG / WireGuard) is up.
+    private bool _skipVpnConflictCheck;
     // Post-start probe runs in the background; we cancel it on Stop so a
     // queued probe doesn't fire failover after the user manually disconnects.
     private CancellationTokenSource? _probeCts;
@@ -200,6 +207,10 @@ public class VpnEngine : IDisposable
     /// </param>
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
+        // Remember the conflict-skip for the session so internal re-entries (the
+        // AutoFailover restart delegates) honour the user's "Ignore" too — a
+        // failover after an ignored conflict must not re-block on Phase 0.
+        _skipVpnConflictCheck = skipVpnConflictCheck;
         // Phase 3C (2026-05-18): the 750-LOC inline sequence that used to
         // live here moved into StartupPipeline. The pipeline walks the 8
         // canonical phases (Resolve -> Scan -> Generate -> PreStartChecks
@@ -1019,7 +1030,7 @@ public class VpnEngine : IDisposable
                 {
                     try
                     {
-                        await _engine.StartAsync(CapturedSettings(), innerCt);
+                        await _engine.StartAsync(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
                         return true;
                     }
                     catch (Exception ex)
@@ -1049,7 +1060,7 @@ public class VpnEngine : IDisposable
                     try
                     {
                         _engine.Stop();
-                        await _engine.StartAsync(CapturedSettings(), innerCt);
+                        await _engine.StartAsync(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
                         return true;
                     }
                     catch (Exception ex)

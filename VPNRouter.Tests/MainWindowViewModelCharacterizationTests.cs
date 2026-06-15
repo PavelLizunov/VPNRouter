@@ -202,8 +202,13 @@ public class MainWindowViewModelCharacterizationTests
     // + Load/Save is Windows-conditional, so only the Windows hash drifted; the
     // Linux pin + CI stayed green and the Windows pin was missed at the time. This
     // dev-VM pre-flight (the only place the Windows MVM test runs) caught it.
+    // 2026-06-15 (VPN-conflict reconnect fix): private field _skipConflictCheckOnce
+    // renamed to _skipVpnConflictThisSession (one-shot → session-scoped so a
+    // removed-config reconnect/failover honours the user's "Ignore conflict" and
+    // doesn't re-throw ConflictingVpnException). Cross-platform field → Linux pin
+    // drifts in lock-step (soft-fail; capture the actual from the next ubuntu CI run).
     private const string PinnedHashWindows =
-        "8227642a181b17974083192e9da6a145417c175b83988189f41e53afcc06f00e";
+        "e896384300ad3585662bb4dbc409a0b98b21a15964cfb15760b92111a3bd280d";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

@@ -329,14 +329,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// v2.32.1-r5 (Bug-r10-B) — session-scoped opt-out from
-    /// <see cref="ConflictingVpnDetector"/>. Set by
-    /// <see cref="IgnoreVpnConflictAndConnectAsyncCommand"/>; consumed
-    /// (and reset to false) by the next <see cref="ToggleConnectionAsync"/>
-    /// in its single call to <see cref="VpnEngine.StartAsync"/>. Session-only
-    /// — следующий Connect снова detect'ит.
+    /// v2.32.1-r5 (Bug-r10-B) + reconnect fix (2026-06-15) — session-scoped
+    /// opt-out from <see cref="ConflictingVpnDetector"/>. Set by
+    /// <see cref="IgnoreVpnConflictAndConnectAsyncCommand"/> and KEPT for the rest
+    /// of the app session so EVERY (re)start honours it: the primary Connect, the
+    /// subscription/server-switch reconnect, the Free Configs connect, and (via
+    /// <see cref="VpnEngine"/>) the internal AutoFailover re-entry.
+    ///
+    /// <para>Previously a one-shot reset right after the first Connect — so when a
+    /// subscription server was removed, the auto-reconnect / failover re-ran the
+    /// Phase 0 conflict pre-flight WITHOUT the user's ignore, threw
+    /// <c>ConflictingVpnException</c>, and the VPN never came back while a tolerated
+    /// VPN (AmneziaWG / WireGuard) was up. Persisting it for the session fixes that;
+    /// a fresh re-detect happens on the next app launch.</para>
     /// </summary>
-    private bool _skipConflictCheckOnce;
+    private bool _skipVpnConflictThisSession;
 
     /// <summary>
     /// v2.32.1-r5 (Bug-r10-B) — «Игнорировать» button. Bypasses
@@ -349,7 +356,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task IgnoreVpnConflictAndConnectAsync()
     {
-        _skipConflictCheckOnce = true;
+        _skipVpnConflictThisSession = true;
         ConflictingVpnWarningText = string.Empty;
         _logger.Information("[VM] User opted to ignore VPN conflict — retrying Connect with bypass");
         if (!IsConnected && !IsConnecting)
@@ -4277,13 +4284,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                // v2.32.1-r5 (Bug-r10-B): session-scoped opt-out from
-                // ConflictingVpnDetector. _skipConflictCheckOnce is set
-                // by IgnoreVpnConflictCommand. Consumed exactly once —
-                // resets immediately after so the NEXT Connect attempt
-                // re-detects.
-                var skipConflictCheck = _skipConflictCheckOnce;
-                _skipConflictCheckOnce = false;
+                // v2.32.1-r5 (Bug-r10-B) + reconnect fix (2026-06-15): session-
+                // scoped opt-out from ConflictingVpnDetector, set by
+                // IgnoreVpnConflictCommand. KEPT for the session (NOT reset here)
+                // so the subscription/server-switch reconnect + AutoFailover honour
+                // it too — else a removed-config reconnect re-throws
+                // ConflictingVpnException and the VPN can't come back. A fresh
+                // re-detect happens on the next app launch.
+                var skipConflictCheck = _skipVpnConflictThisSession;
 
                 var startTask = Task.Run(
                     () => _engine.StartAsync(_settings, cts.Token, skipConflictCheck),
@@ -7150,7 +7158,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
                     var startTask = Task.Run(
-                        () => _engine.StartAsync(_settings, cts.Token),
+                        // Reconnect (subscription/server change) must carry the
+                        // session "ignore conflict" decision — else it re-throws
+                        // ConflictingVpnException while a tolerated VPN is up.
+                        () => _engine.StartAsync(_settings, cts.Token, _skipVpnConflictThisSession),
                         cts.Token);
 
                     var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
