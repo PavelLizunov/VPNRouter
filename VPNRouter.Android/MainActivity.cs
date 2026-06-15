@@ -433,11 +433,21 @@ public class MainActivity : AvaloniaMainActivity
     /// demote) on any error or when it can't be determined, so a transient query
     /// failure can never produce a false "Not connected".
     /// </summary>
-    private bool IsVpnTransportActive()
+    private bool IsVpnTransportActive() => IsVpnTransportActive(this);
+
+    /// <summary>
+    /// Static ground-truth VPN-transport check (Context-parameterized) so the
+    /// periodic health probe (<c>AndroidApp.RunHealthProbe</c>) can reuse the
+    /// exact same signal the resume re-sync trusts, instead of duplicating the
+    /// ConnectivityManager enumeration. Fail-safe: returns <c>true</c> on any
+    /// error / null context so a transient query failure never produces a false
+    /// "Not connected" (resume) or a false "Stale check" (health probe).
+    /// </summary>
+    internal static bool IsVpnTransportActive(Context? ctx)
     {
         try
         {
-            if (GetSystemService(ConnectivityService) is not ConnectivityManager cm)
+            if (ctx?.GetSystemService(ConnectivityService) is not ConnectivityManager cm)
                 return true;
             var networks = cm.GetAllNetworks();
             if (networks is null) return true;

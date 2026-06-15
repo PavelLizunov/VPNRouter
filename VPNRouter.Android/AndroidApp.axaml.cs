@@ -3289,6 +3289,23 @@ public partial class AndroidApp : Avalonia.Application
     {
         var current = AndroidStorage.GetTheme();
         if (current == mode) return;
+        // F4 (2026-06-15, device-confirmed A101BM) — the Light/Dark toggle lives
+        // INSIDE the open kebab popup. Close the popup BEFORE RebuildSimplePageView
+        // (below) swaps ISingleViewApplicationLifetime.MainView. If the popup is
+        // left IsOpen across the swap, its top-level light-dismiss overlay is
+        // orphaned and silently eats taps on the page beneath until something
+        // dismisses it (device-observed: "page unresponsive" after a mid-menu
+        // theme toggle). Closing it here prevents that input-eating orphan.
+        //   PARTIAL FIX ONLY — does NOT cure the deeper RebuildSimplePageView
+        //   fragility: after the MainView swap the rebuilt popups (kebab,
+        //   Config·Mode dropdown) won't reopen and the status card stops
+        //   reflecting TUNNEL_UP/DOWN until the app restarts. Root cause is the
+        //   incomplete Phase-8.2 BindToken migration that forces a full view
+        //   rebuild on theme change (see comment below). Proper fix tracked
+        //   separately (finish BindToken migration OR re-establish popup/overlay
+        //   + event wiring after the swap). Language toggle is unaffected —
+        //   ApplyLanguage refreshes labels in place and never rebuilds the view.
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
         AndroidStorage.SetTheme(mode);
         RequestedThemeVariant = mode == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
 

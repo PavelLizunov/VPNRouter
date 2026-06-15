@@ -247,16 +247,21 @@ public final class VpnRouterService extends VpnService {
     // enqueues the lifecycle work here. Single-thread ⇒ start/stop are serialized.
     private final java.util.concurrent.ExecutorService lifecycleExecutor = newLifecycleExecutor();
 
-    // B4 fix (2026-06-15, device-confirmed on A101BM): use an explicit single-thread
-    // pool with core-thread timeout so an idle "vpn-lifecycle" worker self-reaps
-    // after 30s. If a service instance is killed/restarted WITHOUT onDestroy
+    // B4 (2026-06-15, A101BM, 21 connect/disconnect cycles): an explicit single-thread
+    // pool with core-thread timeout so an idle "vpn-lifecycle" worker self-reaps after
+    // 30s. Rationale: if a service instance is killed/recreated WITHOUT onDestroy
     // (START_STICKY recreate, OEM power-kill), its lifecycleExecutor never gets
-    // shutdown() and its parked daemon worker would otherwise leak for the whole
-    // process lifetime — measured: ONE connect left 5 idle "vpn-lifecycle" workers
-    // (4 orphaned, all state S, stable past 4 min). Core-timeout is the ONLY way an
-    // orphaned worker dies, since shutdown() can't be called on a vanished instance's
-    // executor. Still core=max=1 ⇒ start/stop stay strictly serialized (the B1
-    // contract); the worker just respawns on the next task after an idle gap.
+    // shutdown(); a parked daemon worker keeps the orphaned executor alive (worker ->
+    // executor ref => not GC'd), leaking for the process lifetime. Core-timeout is the
+    // only way that orphaned worker dies. Still core=max=1 ⇒ start/stop stay strictly
+    // serialized (the B1 contract); the worker just respawns on the next task.
+    //   NOTE: this is NOT a per-connect leak. Device measurement: "vpn-lifecycle"
+    //   oscillates 4 (idle) <-> 5 (just after a connect, reaped back to 4 within 30s),
+    //   and total process threads warm up (~39 -> ~48 over the first ~6-8 connects as
+    //   the libbox Go runtime grows its M-pool to steady state) then PLATEAU — flat at
+    //   ~48 across cycles 7..21, RSS stable. The unnamed "Thread-N" growth is libbox
+    //   gomobile JNI-attached goroutine M's (our teardownTunnelResources closes the
+    //   BoxService correctly); it is bounded and RSS-neutral, so benign.
     private static java.util.concurrent.ExecutorService newLifecycleExecutor() {
         java.util.concurrent.ThreadPoolExecutor exec = new java.util.concurrent.ThreadPoolExecutor(
                 1, 1, 30L, java.util.concurrent.TimeUnit.SECONDS,

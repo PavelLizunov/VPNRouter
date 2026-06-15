@@ -581,7 +581,21 @@ public partial class AndroidApp
             // has resumed normally.
             var recent = (DateTime.UtcNow - mtime) < HealthStaleThreshold;
 
-            _lastHealthOk = grew || recent;
+            // F3 (2026-06-15, device-confirmed A101BM): log growth is a
+            // "traffic is flowing" signal, NOT a "tunnel is alive" signal. A
+            // connected-but-IDLE tunnel writes no sing-box log lines, so after
+            // HealthStaleThreshold (60s) the probe would flip to "Stale check"
+            // on a perfectly healthy VPN — a common false alarm whenever the
+            // user isn't actively generating traffic. Fold in the OS
+            // VPN-transport ground truth (the same ConnectivityManager
+            // TRANSPORT_VPN signal the resume re-sync trusts): if a VPN
+            // transport is still up, the tunnel is alive regardless of log
+            // idle. Genuine tunnel death (transport gone) still falls through
+            // to the stale warning, so wedge detection is preserved.
+            var vpnUp = MainActivity.IsVpnTransportActive(
+                global::Android.App.Application.Context);
+
+            _lastHealthOk = grew || recent || vpnUp;
             _lastHealthLogSize = size;
             _lastHealthLogMTime = mtime;
             _firstProbePending = false;
