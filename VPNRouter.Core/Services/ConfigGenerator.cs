@@ -1000,6 +1000,10 @@ public static class ConfigGenerator
 
     private static List<SingBoxInbound> BuildInbounds(AppSettings settings)
     {
+        // Effective = persisted user list + freshly auto-detected WG/AWG subnets
+        // (deduped). The auto subnets are runtime-only and never persisted; see
+        // TunSettings.GetEffectiveRouteExcludeAddress / StartupPipeline step 4.5.
+        var routeExcludes = settings.Tun.GetEffectiveRouteExcludeAddress();
         return new List<SingBoxInbound>
         {
             new()
@@ -1011,8 +1015,8 @@ public static class ConfigGenerator
                 Mtu                     = settings.Tun.Mtu,
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors
-                RouteExcludeAddress     = settings.Tun.RouteExcludeAddress.Count > 0
-                                            ? settings.Tun.RouteExcludeAddress
+                RouteExcludeAddress     = routeExcludes.Count > 0
+                                            ? routeExcludes
                                             : null,
                 EndpointIndependentNat  = false,
                 Stack                   = "system"

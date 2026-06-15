@@ -370,6 +370,53 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.NotNull(result.Profile!.Processes);
     }
 
+    // Phase 3 (step 4.5): WG/AWG auto-exclude is recomputed fresh every connect
+    // into the runtime-only AutoDetectedExcludeAddress and NEVER merged into the
+    // persisted RouteExcludeAddress. A subnet that no longer corresponds to a
+    // live adapter must drop out, and the user's persisted list must be untouched.
+    [Fact]
+    public async Task ScanProcesses_VanishedWgAdapter_DropsStaleAutoExclude_AndNeverMutatesPersistedList()
+    {
+        // Pre-seed the runtime auto list with a stale subnet from a "previous
+        // connect", plus a real user-authored exclude in the persisted list.
+        // We use 203.0.113.0/24 (RFC 5737 TEST-NET-3, documentation-only) as the
+        // stale entry: no real network adapter can ever carry it, so the
+        // pipeline's fresh DetectWireGuardSubnets re-scan is GUARANTEED to drop
+        // it regardless of whatever WG/AWG adapters this host actually has.
+        var settings = BuildBaseSettings();
+        settings.App.RoutingMode = "split";
+        settings.ActiveProfile = "TestProfile";
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            MakeServer("main", "104.194.156.93", 443)
+        };
+        settings.Vless.ActiveServer = "main";
+
+        settings.Tun.RouteExcludeAddress = new List<string> { "192.168.77.0/24" };
+        settings.Tun.AutoDetectedExcludeAddress = new List<string> { "203.0.113.0/24" };
+        var persistedSnapshot = new List<string>(settings.Tun.RouteExcludeAddress);
+
+        var host = new TestStartupHost();
+        var pipeline = new StartupPipeline(host, _store);
+
+        var result = await pipeline.ExecuteAsync(
+            new StartupContext(settings, StartupMode.HotReload),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.ConfigJson);
+
+        // 1. The stale auto subnet is gone after the fresh re-detect.
+        Assert.DoesNotContain("203.0.113.0/24", settings.Tun.AutoDetectedExcludeAddress);
+
+        // 2. The persisted user list was NEVER mutated by auto-detection.
+        Assert.Equal(persistedSnapshot, settings.Tun.RouteExcludeAddress);
+
+        // 3. Generated config carries the user exclude but NOT the stale auto one.
+        Assert.Contains("192.168.77.0/24", result.ConfigJson!);
+        Assert.DoesNotContain("203.0.113.0/24", result.ConfigJson!);
+    }
+
     // Phase 8 (records): StartupResult shape pin — fields populated correctly
     // for the HotReload mode.
     [Fact]

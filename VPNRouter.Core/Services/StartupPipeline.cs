@@ -853,17 +853,25 @@ internal sealed class StartupPipeline
         ct.ThrowIfCancellationRequested();
 
         // 4.5 — auto-detect WG/AWG subnets that should bypass the TUN.
+        //
+        // RUNTIME-ONLY, recomputed fresh on EVERY connect: the detected subnets
+        // are stored in the non-persisted settings.Tun.AutoDetectedExcludeAddress
+        // and folded into the effective exclude list at config-generation time
+        // (TunSettings.GetEffectiveRouteExcludeAddress). They are deliberately
+        // NEVER merged into the persisted RouteExcludeAddress.
+        //
+        // The assignment is unconditional (even when empty) — that RESET is the
+        // whole point of the fix: a WG/AWG adapter that has since disappeared, or
+        // a move to a different network, stops contributing an exclude on the
+        // next connect instead of leaving a stale subnet (e.g. 10.9.1.0/24,
+        // widened from a /32 point-to-point) routed DIRECT past the VPN forever.
         var detectedSubnets = NetworkInterfaceDetector.DetectWireGuardSubnets(
             settings.Tun.InterfaceName, _host.Logger);
+        settings.Tun.AutoDetectedExcludeAddress = detectedSubnets;
         if (detectedSubnets.Count > 0)
         {
-            var merged = new HashSet<string>(
-                settings.Tun.RouteExcludeAddress, StringComparer.OrdinalIgnoreCase);
-            foreach (var subnet in detectedSubnets)
-                merged.Add(subnet);
-            settings.Tun.RouteExcludeAddress = merged.ToList();
             _host.Logger?.Information(
-                "[StartupPipeline] Auto-excluded WG/AWG subnets: {Subnets}",
+                "[StartupPipeline] Auto-excluded WG/AWG subnets (runtime-only, not persisted): {Subnets}",
                 string.Join(", ", detectedSubnets));
         }
 

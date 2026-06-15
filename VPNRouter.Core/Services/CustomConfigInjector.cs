@@ -180,8 +180,11 @@ public static class CustomConfigInjector
             InjectGeoBypassRules(config, isActionBased);
         }
 
-        // Migrate legacy features to sing-box 1.13+ format
-        StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress, settings.App.ForceIpv4Only, settings.App.StrictDns);
+        // Migrate legacy features to sing-box 1.13+ format. Use the EFFECTIVE
+        // exclude list (persisted user list + runtime auto-detected WG/AWG
+        // subnets) so custom configs coexist with a host WG tunnel the same way
+        // generated configs do — without persisting the auto subnets.
+        StripUnsupportedFeatures(config, settings.Tun.GetEffectiveRouteExcludeAddress(), settings.App.ForceIpv4Only, settings.App.StrictDns);
 
         // Align route.final with the routing policy — mirrors
         // ConfigGenerator.BuildRoute's finalOutbound: full tunnel OR exclude
