@@ -93,7 +93,7 @@ Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Li
 
 - **Windows** — UAC-elevation; опциональный Windows Service для boot-time автозапуска, переживающий logoff пользователя.
 - **macOS** — нативный Apple Silicon; одноразовая настройка sudoers из DMG даёт passwordless TUN после.
-- **Linux** — POSIX capabilities (`cap_net_admin`) для passwordless TUN; systemd-сервис встроен в `.deb`.
+- **Linux** — POSIX capabilities (`cap_net_admin`, `cap_net_bind_service`) для passwordless TUN, применяются postinst-хуком `.deb` (`setcap`); session-автозапуск через `.desktop`-запись. systemd-сервиса / boot-time демона пока нет.
 
 ### Windows-only дополнения *(опционально)*
 
@@ -143,7 +143,7 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 | `VPNRouter-*-win.zip.sha256` | 🪟 Windows | Компаньон-файл SHA256 — автоапдейтер проверяет хеш перед распаковкой (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) с `InstallGuide.html` для одноразовой настройки sudoers |
 | `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Сырой `.app`-бандл (для ручной установки) |
-| `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Пакет для Debian/Ubuntu (systemd-сервис + desktop entry). Установка: `sudo dpkg -i <file>.deb` |
+| `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Пакет для Debian/Ubuntu (desktop entry + `setcap` для passwordless TUN; systemd-сервиса нет). Установка: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Сырой tarball (для ручной установки или упаковки в другие форматы) |
 | `VPNRouter-v{version}-android.apk` | 🤖 Android | Подписанный APK, API 23+, arm64/arm/x64/x86 универсальный. Выходит в stable-релизах + на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). Собирается без подписи локально (`build-android.ps1`) и **подписывается в CI** (`sign-android.yml`) — чистая CI-сборка заблокирована `NU1102` (.NET 10 убрал host Mono runtime pack для всех runner-ОС), поэтому сборка и подпись разделены. In-app апдейтер доставляет будущие APK. |
@@ -155,7 +155,7 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 |---|---|
 | [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Агрегированные ~25 000 публичных VLESS-конфигов + GeoIP-метаданные. Потребляется вкладкой Free Configs. |
 
-Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` ставит systemd-сервис, который берёт на себя root-права; `AppImage` требует `sudo` при первом запуске для TUN/NET_ADMIN capabilities.
+Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); read-only `AppImage` нельзя `setcap`'нуть, поэтому он откатывается на `pkexec` с запросом пароля при первом подключении.
 
 ## Требования
 

@@ -8,7 +8,7 @@ First-time setup:
      cd VPNRouter
 
 2. Make launcher executable (tar should preserve this, but just in case):
-     chmod +x VPNRouter.sh VPNRouter.App VPNRouter.CLI
+     chmod +x VPNRouter.sh VPNRouter.App
 
 3. Run:
      ./VPNRouter.sh
@@ -57,16 +57,22 @@ the VPNRouter tray icon. KDE / XFCE / Cinnamon work out of the box.
 
 sing-box binary
 ---------------
-The first time you Connect, VPNRouter downloads sing-box-linux-amd64
-into ~/.config/vpnrouter/bin/. About 25 MB one-time download.
+sing-box-linux-amd64 ships bundled next to VPNRouter.App (and inside the
+.deb), so there is no first-connect download — it is provisioned into
+~/.config/vpnrouter/bin/ on first run.
 
 
 What's not in this BETA
 -----------------------
   * Zapret DPI bypass (Windows-only for now — winws.exe via Cygwin)
   * Telegram proxy (Python-embeddable path is Windows-only)
-  * systemd service / boot autostart (session autostart via .desktop works)
-  * Auto-update (download new tarball manually for now)
+  * systemd service / boot autostart — the .deb does NOT install a systemd
+    unit; session autostart via the .desktop entry works
+  * DNS-leak lockdown / firewall kill-switch (Windows + macOS only; not on Linux)
+  * AppImage self-update — the .deb and tar.gz installs auto-update in place;
+    the AppImage is read-only, so update it by downloading a new one
+
+NaiveProxy and the DNS-tunnel (Slipstream) transport ARE supported on Linux.
 
 
 Questions / bugs

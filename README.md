@@ -93,7 +93,7 @@ Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](h
 
 - **Windows** — UAC elevation; optional Windows Service for boot-time autostart that survives user logoff.
 - **macOS** — Apple Silicon native; one-time sudoers setup from the DMG gives passwordless TUN afterwards.
-- **Linux** — POSIX capabilities (`cap_net_admin`) for passwordless TUN; systemd service bundled in the `.deb`.
+- **Linux** — POSIX capabilities (`cap_net_admin`, `cap_net_bind_service`) for passwordless TUN, applied by the `.deb` postinst (`setcap`); session autostart via the `.desktop` entry. No systemd service / boot-time daemon yet.
 
 ### Windows-only add-ons *(optional)*
 
@@ -143,7 +143,7 @@ For the one-liner install on all three platforms, see the [**Install**](#install
 | `VPNRouter-*-win.zip.sha256` | 🪟 Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
 | `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Raw `.app` bundle (for manual install) |
-| `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (systemd service + desktop entry). Install: `sudo dpkg -i <file>.deb` |
+| `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (desktop entry + `setcap` for passwordless TUN; no systemd service). Install: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
 | `VPNRouter-v{version}-android.apk` | 🤖 Android | Signed APK, API 23+, arm64/arm/x64/x86 universal. Shipped on stable releases + at [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). Built unsigned locally (`build-android.ps1`) and **signed in CI** (`sign-android.yml`) — a clean CI build is blocked by `NU1102` (.NET 10 withdrew the host Mono runtime pack for every runner OS), so build and signing are split. An in-app updater delivers future APKs. |
@@ -155,7 +155,7 @@ Also served automatically every 6 hours:
 |---|---|
 | [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Aggregated ~25 000 public VLESS configs + GeoIP metadata. Consumed by the in-app Free Configs tab. |
 
-Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time. On Linux, `.deb` installs a systemd service that handles the root privileges; `AppImage` requires `sudo` on first launch for TUN/NET_ADMIN capabilities.
+Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time. On Linux, the `.deb` applies `setcap cap_net_admin,cap_net_bind_service` to the bundled sing-box so TUN comes up without root or a password (no systemd service is installed); the read-only `AppImage` can't be `setcap`'d, so it falls back to a `pkexec` password prompt on first connect.
 
 ## Requirements
 

@@ -5,9 +5,10 @@ for history see `plans/`. When release or platform facts change, update this fil
 
 ## Releases
 
-- **Current stable:** v2.38.2
-- **In-flight candidate:** v2.39.0-r2 (rolling `-rN` prerelease; only one is
-  visible at a time) — one-click diagnostics export
+- **Current stable:** v2.42.0 (DNS-tunnel / Slipstream transport, YouTube/HTTP-2
+  jumbo-MTU fix, Android reliability batch, DNS-leak fail-open, macOS + Windows
+  kill-switch hardening).
+- **In-flight candidate:** none published.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after a verification + live-update gate. See `CLAUDE.local.md`.
 
@@ -22,9 +23,14 @@ for history see `plans/`. When release or platform facts change, update this fil
 
 ## Known limitations (current)
 
-- **Fail-closed leak protection is Windows-only.** macOS and Linux use a no-op
-  firewall manager, so `block_on_vpn_fail` has no backstop off Windows
-  (tracked: `plans/product-gap-audit-2026-05-30.md` P0).
+- **Fail-closed leak protection differs by platform.** Windows has the full
+  per-process firewall kill-switch + DNS hardening. macOS has a full-tunnel-only
+  pf kill-switch (default OFF) + DNS-to-TUN pinning (`MacDnsHardening`) — it can
+  NOT do per-process `block_on_vpn_fail`. Linux (shipped) still uses a no-op
+  firewall manager and no DNS hardening, so `block_on_vpn_fail` has no backstop
+  there; a best-effort systemd-resolved DNS hardening is implemented but not yet
+  released, and a Linux firewall kill-switch is still pending (tracked:
+  `plans/macos-linux-functional-parity-plan-2026-06-15.md`).
 - **Desktop binaries are unsigned** — no Windows Authenticode, no macOS
   notarization. Integrity is via `.sha256` sidecars only (tracked: audit P0).
 - **Android full build can't run on hosted CI** (NU1102: .NET 10 withdrew the
