@@ -185,7 +185,15 @@ public static class AndroidConfigShare
                 var s = doc.Settings;
                 if (!string.IsNullOrWhiteSpace(s.Theme)) AndroidStorage.SetTheme(s.Theme);
                 if (!string.IsNullOrWhiteSpace(s.Language)) AndroidStorage.SetLanguage(s.Language);
-                if (!string.IsNullOrWhiteSpace(s.RoutingMode)) AndroidStorage.SetRoutingMode(s.RoutingMode!);
+                // F6 follow-up (2026-06-16) — routing_mode is intentionally NOT
+                // applied in the settings block. Post-F6 AndroidStorage.SetRoutingMode
+                // is a pure projection that mutates PerAppMode (the real per-app
+                // filter — the routing source of truth on Android). Applying it here
+                // would silently flip the per-app filter the user opted NOT to import
+                // on a SETTINGS-ONLY import (applySettings=true, applyPerApp=false).
+                // The routing intent rightly travels only with the per-app block
+                // below (SetPerAppMode); the exported RoutingMode stays in the JSON
+                // for desktop/forward-compat but is a no-op on Android import.
                 if (s.BypassRussianTraffic.HasValue) AndroidStorage.SetBypassRussianTraffic(s.BypassRussianTraffic.Value);
                 if (s.BlockOnVpnFail.HasValue) AndroidStorage.SetBlockOnVpnFail(s.BlockOnVpnFail.Value);
                 if (!string.IsNullOrWhiteSpace(s.DnsStrategy)) AndroidStorage.SetDnsStrategy(s.DnsStrategy!);

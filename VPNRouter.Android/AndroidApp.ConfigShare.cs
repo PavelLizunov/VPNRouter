@@ -597,10 +597,23 @@ public partial class AndroidApp
         try { RefreshConfigModeUiFromStorage(); }
         catch { /* best-effort */ }
 
-        // Settings re-bind happens whenever the Settings overlay is opened
-        // next, so no eager refresh needed here. Theme + language live-
-        // switch is a known gap (handbook 8.2) — full repaint on next
-        // launch.
+        // F6 follow-up (2026-06-16) — ApplySnapshot may have changed PerAppMode
+        // (the routing source of truth) via the applied per-app block. Re-seed the
+        // Simple-page split/full radios — mirroring CloseAdvancedShell / ApplyProfile
+        // — so an import that changes routing can't leave the Simple page showing a
+        // mode that contradicts what Advanced→Settings will render on its next open
+        // (the exact cross-surface routing drift F6 fixes, just reached via the
+        // import path). Setting IsChecked re-fires the idempotent
+        // OnTunnelModeRadioChanged (no write when PerAppMode already matches) and
+        // refreshes the "Choose apps…" stack visibility. The Advanced→Settings
+        // radios self-heal via ReseedNetworkTabState on the next shell open.
+        var routing = AndroidStorage.GetRoutingMode();
+        if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
+        if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
+        UpdatePerAppFormCountLabel();
+
+        // Theme + language live-switch on import remains a known gap (handbook
+        // 8.2) — full repaint on next launch.
 
         _cfgImportPendingDoc = null;
         if (_cfgImportApplyBtn is not null) _cfgImportApplyBtn.IsVisible = false;
