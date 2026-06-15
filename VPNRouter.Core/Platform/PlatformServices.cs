@@ -52,15 +52,19 @@ public static class PlatformServices
     }
 
     /// <summary>
-    /// Fix #1 (r3): the Unix DNS-leak hardening service. MacDnsHardening on
-    /// macOS (pins the system resolver to the TUN gateway), a no-op everywhere
-    /// else (Windows uses IWindowsDnsHardening; Linux has no impl yet).
+    /// Fix #1 (r3): the Unix DNS-leak hardening service. MacDnsHardening on macOS
+    /// (pins the system resolver to the TUN gateway); LinuxDnsHardening on Linux
+    /// (systemd-resolved: pins the TUN link's DNS + default routing-domain via
+    /// resolvectl, fail-open); a no-op everywhere else (Windows uses
+    /// IWindowsDnsHardening). Both Unix impls are best-effort and never throw.
     /// </summary>
     public static IUnixDnsHardening CreateUnixDnsHardening(ILogger? logger = null)
     {
-        return OperatingSystem.IsMacOS()
-            ? new macOS.MacDnsHardening()
-            : NullUnixDnsHardening.Default;
+        if (OperatingSystem.IsMacOS())
+            return new macOS.MacDnsHardening();
+        if (OperatingSystem.IsLinux())
+            return new Linux.LinuxDnsHardening();
+        return NullUnixDnsHardening.Default;
     }
 
     /// <summary>
