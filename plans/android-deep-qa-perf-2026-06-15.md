@@ -45,7 +45,7 @@ forced parallelism.
 | F1 | 4 | **B4 "vpn-lifecycle thread leak" is NOT a leak** — bounded + plateaus | INFO (was suspected P2) | 21 connect cycles + 3 instr. builds | RESOLVED — instrumentation reverted, comment corrected |
 | F2 | 0/3 | Connect/disconnect path rock-solid: 21/21 connect OK, 21/21 disconnect OK, no ANR, no TIMEOUT | (positive) | 21 cycles | Verified |
 | F3 | 1 | "⚠ Stale check" on a HEALTHY but IDLE connection — health probe `_lastHealthOk = grew\|\|recent` keys off sing-box LOG growth; idle tunnel writes no log → flips unhealthy after 60s | P2 (UX, alarming false alarm) | 3 timeline samples + device-confirmed root cause + post-fix re-verify | **FIXED + VERIFIED** — added OS VPN-transport ground truth (`_lastHealthOk = grew\|\|recent\|\|vpnUp`); 75s idle now shows "✓ Last check 1s ago" |
-| F4 | 1 | **Theme toggle → RebuildSimplePageView breaks the rebuilt view's live reactivity**: kebab + Config·Mode popups won't reopen AND the status card stops reflecting TUNNEL_UP/DOWN, until app restart | P1 (UX; Simple page partially dead after a mid-session theme change) | reproduced ×3; isolated (plain reopen OK; theme-toggle reopen FAILS; clean connect card OK, post-rebuild connect card STUCK "Not connected") | **PARTIAL fix** (close popup before rebuild → kills orphan-eats-input). Full fix = finish BindToken migration / re-wire after swap → **spawned task** |
+| F4 | 1 | **Theme toggle → RebuildSimplePageView breaks the rebuilt view's live reactivity**: kebab + Config·Mode popups won't reopen AND the status card stops reflecting TUNNEL_UP/DOWN, until app restart | P1 (UX; Simple page partially dead after a mid-session theme change) | reproduced ×3; isolated (plain reopen OK; theme-toggle reopen FAILS; clean connect card OK, post-rebuild connect card STUCK "Not connected") | **FIXED + DEVICE-VERIFIED (2026-06-16, A101BM)** — stop swapping `ISingleViewApplicationLifetime.MainView` on theme change; Simple page repaints in place (DynamicResource), only the Advanced overlay rebuilds in-tree. See F4-fix detail below. |
 | F-RU | 1 | RU language toggle = **FALSE POSITIVE** (works: immediate refresh + persist). Earlier "dead" reading was tainted by F4 stale refs | — | clean fresh-launch test: EN↔RU instant + cold-launch in RU | Not a bug — lesson logged |
 | F6 | Settings | **Two unsynced routing-mode keys**: Simple page reads/writes `PerAppMode` (off=All traffic, drives the actual VpnService per-app filter), Advanced Settings→Routing reads/writes a separate `RoutingMode` ("split"/"full"). Manual toggles update only their own key → drift; the Advanced radio can show a state that contradicts Simple AND doesn't drive routing | P2 (confusing; Advanced control misleading/maybe non-functional) | confirmed in code (init from PerAppMode at 1244/1274, re-seed from RoutingMode at 2369) + device (Simple "All traffic" vs Advanced "Split Tunnel", traffic = full-tunnel) | **FIXED (projection)** — RoutingMode is now a pure projection of PerAppMode (single source of truth), mirroring desktop. Build green (Core/Tests/Android 0 err, 97 tests). On-device browse-toggle-browse re-verify pending. |
 | F7 | 2/3 | **Browse test PASS** + perf: real traffic through tunnel (~1.3 MB), heavy HTTP/2 sites (wikipedia/bbc) render+scroll, no ERR_CONNECTION_CLOSED (MTU-1280 holds on Android); server switch re-apply works (browse-toggle-browse loop) | (positive) | example.com/.org, wikipedia (scrolled), bbc.com/news; tun0 byte deltas | Verified |
@@ -91,6 +91,43 @@ orphaned open popup keeps the top-level overlay/light-dismiss layer; the fresh p
 re-acquire it, so `IsOpen=true` on the new popup renders nothing → menu dead until restart.
 Isolation proof: fresh launch open→close→reopen WORKS; the same with a Dark tap before the
 close FAILS (reproduced twice). Fix = close `_kebabPopup` before the rebuild.
+
+### F4-fix detail — drop the MainView swap entirely (2026-06-16)
+
+The partial fix (close the popup before the swap) was wrong about the root cause: the
+real culprit is the **MainView swap itself**, not the orphaned-open-popup. After
+`singleView.MainView = BuildSimplePageView()`, EVERY overlay-hosted control in the new
+tree mis-behaves — not just the kebab `Popup` but every `ComboBox` dropdown (Config·Mode
+collapse-row aside, the DPI/DNS pickers host their flyouts in internal `Popup`s) — and the
+`MainActivity.IntentChanged → OnIntentChanged → UpdateConnectionState → _statusCard` wiring
+goes stale. (Closing the popup first did not fix reopen; that confirmed the swap, not the
+popup, was the cause.)
+
+**Fix (pragmatic option a):** `ApplyTheme(mode)` no longer swaps `MainView`. The
+always-visible Simple page (`BuildSimplePageView`'s tree) is 100% `BindToken`/DynamicResource,
+so flipping `RequestedThemeVariant` repaints it in place — the kebab `Popup`, the
+ComboBoxes and the `_statusCard` wiring all survive because nothing is torn down. Only the
+on-demand surfaces (Advanced-shell tabs + app-picker, ~257 `GetBrush()` snapshot sites)
+need a rebuild; `RebuildSimplePageView()` was repurposed (same name/signature → no
+characterization-hash re-pin) to rebuild ONLY the `_advShellOverlay` as an in-place sibling
+swap inside the live root `Grid` (never the root MainView). The kebab popup now also stays
+OPEN across a Simple-page toggle (intended UX) and repaints live. Mascot bitmap + active
+segment/chip re-bind paths are unchanged.
+
+**Device verification (A101BM, Android 12, signed Debug APK via Mac adb, dark theme toggle
+from the kebab):**
+- Kebab: tap Dark → theme flips + menu STAYS OPEN + repaints dark + Dark highlighted →
+  close → **reopen WORKS** (the exact pre-fix regression). `f4_dark2`/`f4_reopen`.
+- Simple page fully repaints to dark in place (status card, config row, input, radios,
+  Connect, Advanced card). `f4_close`.
+- Advanced overlay opens fully dark (brand row, tab strip, footer, side-nav, Routing +
+  Leak-Protection content all themed) and is fully interactive (nav, radios, checkboxes,
+  DNS-strategy ComboBox visible) → in-place overlay rebuild confirmed. `f4_adv1`/`f4_leak`.
+- Status card: after the theme toggle, an `ACTION_TUNNEL_UP` broadcast (surgical exercise
+  of `TunnelStateReceiver → IntentChanged → UpdateConnectionState → _statusCard`, no real
+  tunnel needed) flips the card to **"Connected · 0:02"** (green dot, green VPN chip, CTA →
+  Disconnect). `f4_card_up4`. (Navigating away then back correctly demotes the *faked*
+  state via the resume re-sync ground-truth check — expected.)
 
 ### F-RU lesson — a tainted run produced a confident FALSE bug
 
