@@ -63,6 +63,15 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 
 Полный список — `.claude_handoff.md` "Infrastructure".
 
+### GitHub fetch caveat
+
+The `github` remote may advertise corrupt checkpoint refs under
+`refs/codex/turn-diffs/...`, which can make full fetches fail with
+`fatal: bad object refs/codex/...` / `did not send all necessary objects`.
+Avoid `git fetch github` / `git fetch github --tags` in release flows. Prefer
+`gh api`, targeted refs, or the `cut-stable` skill's verified local-tag mirror
+step when pushing a stable tag to Forgejo.
+
 ## Skills layer
 
 `.claude/skills/<name>/SKILL.md` — повторяющиеся workflow'ы. Видны через

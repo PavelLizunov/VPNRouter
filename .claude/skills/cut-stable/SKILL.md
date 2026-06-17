@@ -184,12 +184,25 @@ build.ps1 сделает:
 
 **Tag `vX.Y.Z` создаётся build.ps1 на текущем commit.** Stable tag — finalный, force-update НЕЛЬЗЯ.
 
-## Step 4 — fetch tag локально + push в Forgejo
+## Step 4 — mirror stable tag to Forgejo
+
+Do **not** use `git fetch github` / `git fetch github --tags` here: the GitHub
+remote can advertise corrupt `refs/codex/turn-diffs/...` checkpoint refs and
+abort full fetches with `fatal: bad object refs/codex/...`.
+
+`build.ps1` should already have created the local stable tag. Verify GitHub's
+tag commit via the API, confirm it matches the local tag/current commit, then
+push the local tag to Forgejo:
 
 ```bash
-git fetch github --tags         # fetches vX.Y.Z
+gh api repos/PavelLizunov/VPNRouter/commits/vX.Y.Z --jq .sha
+git rev-parse HEAD
+git show-ref --verify refs/tags/vX.Y.Z
 git push origin vX.Y.Z          # mirror в Forgejo
 ```
+
+If the local tag is missing, create it only after the GitHub API SHA matches
+the intended `HEAD`.
 
 ## Step 5 — Mac + Linux CI (auto-triggered tag push)
 
