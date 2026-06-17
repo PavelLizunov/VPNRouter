@@ -1,7 +1,7 @@
 ---
 name: cut-stable
 description: Promote a rolling -rN candidate to stable vX.Y.Z (no suffix). Bumps AppVersion, creates fresh tag without suffix, full rebuild + Mac/Linux CI, restores Latest, deletes -rN.
-when: Latest -rN passed full verification gate (build + tests + Mac/Linux CI green + 12 assets + MCP-verify + **mandatory pre-cut live update gate**) AND user gave explicit "cut" / "ok" / "promote" command (rule 6 в `AGENTS.md`, lessons v2.31.2 / v2.31.7). Cut НЕ autonomous.
+when: Latest -rN passed full verification gate (build + tests + Mac/Linux CI green + 14 desktop assets, 16 with Android after Step 5.6 + MCP-verify + **mandatory pre-cut live update gate**) AND user gave explicit "cut" / "ok" / "promote" command (rule 6 в `AGENTS.md`, lessons v2.31.2 / v2.31.7). Cut НЕ autonomous.
 ---
 
 # Cut a stable release
@@ -17,7 +17,11 @@ prerelease flag.
 2. Regression tests зелёные (`VlessServersResolverTests`, `ConfigGeneratorEmptyServersGuardTests`, `FreeConfigAggregatorPreserveTests`)
 3. Mac CI на последнем -rN — `success`
 4. Linux CI на последнем -rN — `success`
-5. `gh release view vX.Y.Z-rN --json assets --jq '.assets|length'` → `12`
+5. `gh release view vX.Y.Z-rN --json assets --jq '.assets|length'` → `14` (desktop-only)
+   **or `16`** if this candidate's Android APK was already built. The full correct set
+   is **16** = 4 Win + 4 Mac + 6 Linux + 2 Android; **14** = desktop-only. Android is
+   usually attached at the stable cut (Step 5.6), but a `-rN` may already carry it — so
+   accept both 14 and 16 here, just confirm the desktop 14 are all present.
 6. **Live update gate PASS** (см. секцию ниже) — обязательная mandatory.
 7. (soft) No user-reported regressions за ~24h после shipping последнего -rN
 
@@ -51,13 +55,17 @@ b) **Download install ZIP в чистый temp dir**:
    ```bash
    rm -rf /c/Temp/stable-test && mkdir -p /c/Temp/stable-test
    gh release download <previous-stable-tag> --repo PavelLizunov/VPNRouter \
-     --pattern 'VPNRouter-*-windows-x64.zip' --dir /c/Temp/stable-test
+     --pattern 'VPNRouter-v*-win.zip' --dir /c/Temp/stable-test
    ```
+   The full install ZIP is named `VPNRouter-vX.Y.Z-win.zip`. The `-v*-win.zip` glob
+   deliberately excludes the `VPNRouter-update-*-win.zip` lite package and the
+   `.sha256` sidecar. (The old `VPNRouter-*-windows-x64.zip` pattern matched **nothing** —
+   no asset carries `windows-x64` in its name.)
 
 c) **Extract + launch + initial settle**:
    ```bash
    cd /c/Temp/stable-test
-   powershell -Command "Expand-Archive -Path 'VPNRouter-*-windows-x64.zip' -DestinationPath ./extracted -Force"
+   powershell -Command "Expand-Archive -Path 'VPNRouter-v*-win.zip' -DestinationPath ./extracted -Force"
    powershell -Command "Start-Process -FilePath './extracted/VPNRouter.App.exe'"
    ```
    Wait 30s для App init (settings load, update check spin-up).
@@ -80,16 +88,31 @@ e) **Wait for update flow to complete**. Helper .cmd должен:
    tail -f "$LOCALAPPDATA/VPNRouter/Logs/update.log"   # или %ProgramData%/VPNRouter/logs/update.log
    ```
 
-f) **Verify new version installed cleanly**:
-   ```bash
-   powershell -Command "(Get-Item /c/Temp/stable-test/extracted/VPNRouter.App.exe).VersionInfo.ProductVersion"
-   ```
-   Должна быть `<candidate-rN-version>` (e.g. `2.31.8-r10`). Также:
-   ```bash
-   powershell -Command "(Get-Item /c/Temp/stable-test/extracted/VPNRouter.Core.dll).VersionInfo.FileVersion"
-   ```
-   AppVersion должна совпадать с candidate (правило #5 — string Version
-   ВКЛЮЧАЯ -rN суффикс).
+f) **Verify new version installed cleanly.** Important: do NOT verify via
+   `(Get-Item VPNRouter.App.exe).VersionInfo.ProductVersion`: the build passes no
+   `<Version>` (see `build.ps1` — plain `dotnet publish`, no `-p:Version`), so the PE
+   ProductVersion is the MSBuild default **`1.0.0+<gitsha>`** and `VersionInfo.FileVersion`
+   is `1.0.0.0` — NEVER the semantic version. Verify instead by any of:
+   - **CLI `doctor`** (most direct — prints `AppVersion.Version`, incl. the `-rN` suffix):
+     ```bash
+     /c/Temp/stable-test/extracted/VPNRouter.CLI.exe doctor   # first line → "Version: <candidate>"
+     ```
+     Do **not** use `VPNRouter.CLI.exe --version` — that prints the Spectre.Console
+     application version (`1.0.0`), not the release version.
+   - **InformationalVersion git-SHA flip**: the `+<gitsha>` suffix of the App.exe
+     ProductVersion must change from the baseline build's SHA to the candidate commit's
+     SHA (proof the new binaries actually landed, even though the `1.0.0` prefix is fixed).
+   - **Install receipt** `%ProgramData%\VPNRouter\.update-installed-version`: the updater
+     writes it, and the relaunched candidate **consumes (deletes)** it because the running
+     version is strictly newer than the recorded version. A receipt left behind ⇒ the new
+     version did not take.
+
+   > **Receipt semantics — NOT a bug:** line 2 of `.update-installed-version` is the
+   > **PRE-update** version by design (`TryWriteInstallReceipt` records the version you
+   > updated *from*; `CheckInstallReceipt` passes only when the running version is
+   > *strictly newer*). So right after a `2.42.0 → 2.42.1` update a receipt reading
+   > `2.42.0` is CORRECT — it's the baseline, and a clean launch then deletes it. Do not
+   > flag this as a failed update.
 
 g) **30-second smoke**: убедись App работает после update.
    - Если есть test профиль (free configs / saved subscription) — connect
@@ -118,7 +141,8 @@ i) **IF ANY STEP FAILS** (download error, install hang, helper crash, version
 - Previous stable tag downloaded: `vX.Y.(Z-1)` (or same Z, prior -rN cut)
 - Update path triggered: UI / programmatic
 - Helper.cmd exit code + log tail
-- ProductVersion + FileVersion после update (proof of successful flip)
+- Version proof after update: `doctor` semver + install receipt consumed +
+  InformationalVersion git-SHA flip (NOT PE ProductVersion — it's always `1.0.0+<gitsha>`)
 - Smoke result: connect/disconnect outcome + screenshot
 - PASS / FAIL per step (a..h)
 
@@ -169,11 +193,47 @@ git push origin vX.Y.Z          # mirror в Forgejo
 
 ## Step 5 — Mac + Linux CI (auto-triggered tag push)
 
-Wait for both runs. Verify 12 assets:
+Wait for both runs. Verify the desktop assets:
 ```bash
 gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json assets --jq '.assets | length'
 ```
-Должно быть **12**.
+**14** desktop assets (4 Win + 4 Mac + 6 Linux). After Step 5.6 (Android) it's
+**16**.
+
+## Step 5.6 — build + sign + attach the Android APK (stable only)
+
+The full Android build can't run on hosted CI (NU1102). Build it unsigned
+locally (warm NuGet cache) and sign it in CI with the keystore secret:
+
+```bash
+# 1. build the UNSIGNED apk on this VM (versionCode derives from the version)
+dotnet publish VPNRouter.Android/VPNRouter.Android.csproj -c Release \
+  -p:VpnRouterVersion=X.Y.Z -p:EnableAndroidTarget=true \
+  -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME"
+# the unsigned apk is com.ninitux.vpnrouter.apk under bin/Release/net*-android*/
+
+# 2. upload it to the release as the UNSIGNED staging asset (the install-page
+#    regex VPNRouter-v.*-android\.apk$ deliberately does NOT match -UNSIGNED)
+cp .../com.ninitux.vpnrouter.apk publish/android/VPNRouter-vX.Y.Z-android-UNSIGNED.apk
+gh release upload vX.Y.Z publish/android/VPNRouter-vX.Y.Z-android-UNSIGNED.apk --clobber
+
+# 3. sign in CI (zipalign + apksigner, no .NET -> no NU1102). It uploads the
+#    signed VPNRouter-vX.Y.Z-android.apk + .sha256 and removes the UNSIGNED asset.
+gh workflow run "Sign Android APK" -f version=X.Y.Z
+gh run watch <run-id> --exit-status
+
+# 4. verify: signed, versionCode preserved, sha256 matches
+gh release download vX.Y.Z --pattern "VPNRouter-vX.Y.Z-android.apk*"
+"$ANDROID_HOME/build-tools/<v>/apksigner.bat" verify --print-certs VPNRouter-vX.Y.Z-android.apk
+"$ANDROID_HOME/build-tools/<v>/aapt2.exe" dump badging VPNRouter-vX.Y.Z-android.apk | grep "^package:"
+```
+
+Optional but recommended: `adb install -r` on the attached phone via the Mac
+(`ssh slovn@192.168.0.246`, adb at `/opt/homebrew/bin/adb`) and confirm
+launch + no crash. After this, the asset count is **16**.
+
+Background: `plans/android-ci-distribution-roadmap-2026-05-31.md`,
+`.github/workflows/sign-android.yml`, `build-android.ps1`.
 
 ## Step 5.5 — post-publish draft + download-URL gate (mandatory)
 

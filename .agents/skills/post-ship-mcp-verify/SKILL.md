@@ -44,7 +44,7 @@ binary if the source it was built from has a red commit.
 ### Phase 2 — Download + install + launch
 
 ```bash
-powershell -ExecutionPolicy Bypass -File .Codex/skills/post-ship-mcp-verify/scripts/post-ship-install-launch.ps1 -Version "2.X.Y-rN"
+powershell -ExecutionPolicy Bypass -File .agents/skills/post-ship-mcp-verify/scripts/post-ship-install-launch.ps1 -Version "2.X.Y-rN"
 ```
 
 The script does ALL the non-interactive setup:
@@ -95,7 +95,7 @@ r10 = Zapret cache UI + r17 = ServerTesting labels → run both).
 ### Phase 5 — Log inspection
 
 ```bash
-powershell -ExecutionPolicy Bypass -File .Codex/skills/post-ship-mcp-verify/scripts/post-ship-collect-logs.ps1
+powershell -ExecutionPolicy Bypass -File .agents/skills/post-ship-mcp-verify/scripts/post-ship-collect-logs.ps1
 ```
 
 Tails the last 200 lines of the most-recent `vpnrouter*.log`, scans for
@@ -152,7 +152,7 @@ When this skill detects a problem:
 
 ## Anthropic best-practice alignment
 
-Per [Anthropic Skill best practices](https://platform.Codex.com/docs/en/agents-and-tools/agent-skills/best-practices)
+Per [Anthropic Skill best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
 and the [Skill Creator skill](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md):
 
 - **Progressive disclosure**: SKILL.md (this file) under 500 lines holds
@@ -170,7 +170,7 @@ and the [Skill Creator skill](https://github.com/anthropics/skills/blob/main/ski
 
 - `tools/verify-last-commit-ci.ps1` — Phase 1 dependency (CI gate)
 - `.githooks/pre-push` — sister enforcement (blocks pushing red)
-- `.Codex/skills/ship-rolling-candidate/SKILL.md` — upstream skill that
+- `.agents/skills/ship-rolling-candidate/SKILL.md` — upstream skill that
   chains into this one
 - `AGENTS.md` rule #1a — "MCP test mandatory after every ship" (the
   policy this skill enforces)

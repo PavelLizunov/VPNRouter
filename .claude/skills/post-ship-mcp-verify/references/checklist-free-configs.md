@@ -45,8 +45,8 @@ FreeConfigAggregator / FreeConfigDeepVerifier / GeoIP.
 
 ## Cleanup tools
 
-15. Click "🧹 Убрать мусор" — removes dead entries.
-16. Click "⭐ Только ✓✓" — keeps only verified.
+15. Click "Убрать мусор" — removes dead entries.
+16. Click "Только ✓✓" — keeps only verified.
 17. Verify Dashboard counts update.
 
 ## Per-feature log checks

@@ -49,6 +49,30 @@ Before bumping anything:
    Expected: all pass.
 4. **If MainWindowViewModelCharacterizationTests failed with Windows hash drift**:
    bump `PinnedHashWindows` in `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs` BEFORE Step 2 commit. The actual hash appears in the test output as `Actual: <hex>`.
+5. **Visual-diff gate (Windows-only — CI can't run this).** `VisualDiffTests`
+   has an `OperatingSystem.IsWindows()` skip guard, so the Linux/macOS CI
+   runners never execute the pixel-diff layer. Baseline drift therefore goes
+   INVISIBLE in CI — it slipped from v2.37 → v2.38 (DpiBypass/Telegram/Tools
+   redesign) and was only caught by a manual run on 2026-06-02. This dev-VM
+   pre-flight is the only place the diff actually runs, so it must run here:
+   ```bash
+   dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
+     --filter "FullyQualifiedName~VisualDiffTests"
+   ```
+   Expected: 3/3 pass (DpiBypass / Telegram / Tools). Run it as its OWN
+   command (not folded into the step-3 filter) — it's `[AvaloniaFact]` and the
+   dispatcher-thread shutdown is cleaner when isolated.
+   - **Green** → proceed.
+   - **Red AND this ship intentionally restyled those pages** → the baseline is
+     stale, not the code. Refresh per `VPNRouter.Tests/AGENTS.md` "Refresh
+     workflow когда страница интенционально меняется": run `PageScreenshotTests`,
+     **EYEBALL** the 3 fresh PNGs in `VPNRouter.Tests/screenshots/` (confirm no
+     clipped controls / overflow), `copy` each over
+     `VPNRouter.Tests/screenshots/baseline/`, re-run this gate until green, and
+     stage the refreshed baseline PNGs in THIS ship's Step-2 commit.
+   - **Red AND you did NOT touch those pages** → real visual regression
+     (control removed, theme inverted, layout shifted >~2 px). STOP and fix the
+     code before shipping; do NOT re-pin to hide it.
 
 ## Post-push verification (MANDATORY — was the v2.36.0-r6→r9 lesson)
 
@@ -82,7 +106,7 @@ This is non-negotiable. The visible state on the commits page is what the user
 sees. Green tag assets + red commit-level test = bad ship UX even if functional.
 
 A clean ship has BOTH:
-- Tag release: 12-14 assets, prerelease=true, previous-stable Latest restored.
+- Tag release: 14 desktop assets (16 if Android is attached), prerelease=true, previous-stable Latest restored.
 - Latest main commit: all check-runs green (build, grep, publish, test, test-update, verify).
 
 ## Step 1 — bump AppVersion
@@ -175,7 +199,7 @@ gh run watch <mac-run-id> --repo PavelLizunov/VPNRouter --exit-status
 gh run watch <linux-run-id> --repo PavelLizunov/VPNRouter --exit-status
 ```
 
-Когда оба done → проверить asset count = **12** (4 Win + 2 Mac + 6 Linux):
+Когда оба done → проверить desktop asset count = **14** (4 Win + 4 Mac + 6 Linux):
 ```bash
 gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.assets | length'
 ```
@@ -183,7 +207,7 @@ gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.ass
 ## Step 9 — report to user (notification only, не блокирующее)
 
 Кратко:
-- OK: tag, prerelease=true, Latest=PREV, 12 assets
+- OK: tag, prerelease=true, Latest=PREV, 14 desktop assets
 - Recovery shortcut + test flow checklist
 - Указать "verification gate зелёная — следующее действие cut-stable когда нет regression reports за ~24h"
 
@@ -199,7 +223,7 @@ gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.ass
   ```
   Если **не виден** через 5 минут после finalize → принудительно invalidate через delete+recreate (тег сохраняем):
   ```bash
-  # 1. Скачать все 12 assets локально
+  # 1. Скачать все 14 desktop assets локально
   mkdir /tmp/r-assets && cd /tmp/r-assets
   gh release download vX.Y.Z-rN --repo PavelLizunov/VPNRouter
 

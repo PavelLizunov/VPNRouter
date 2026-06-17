@@ -4,7 +4,7 @@
 # launches the new binary.
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File .claude/skills/post-ship-mcp-verify/scripts/post-ship-install-launch.ps1 -Version "2.37.0-r20"
+#   powershell -ExecutionPolicy Bypass -File .agents/skills/post-ship-mcp-verify/scripts/post-ship-install-launch.ps1 -Version "2.37.0-r20"
 #
 # Exit codes:
 #   0 - binary launched, PID returned in last line

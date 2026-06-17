@@ -64,13 +64,13 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 
 ## Skills layer
 
-`.Codex/skills/<name>/SKILL.md` — повторяющиеся workflow'ы. Видны через
+`.agents/skills/<name>/SKILL.md` — повторяющиеся workflow'ы. Видны через
 `Skill` tool после рестарта Codex (или сразу через явный invoke).
 
 | Skill | When |
 |---|---|
 | `ship-rolling-candidate` | Выпускаем `-rN` после code change |
-| `cut-stable` | -rN прошёл verification (build/tests/CI green, 12 assets) — промоутим к stable |
+| `cut-stable` | -rN прошёл verification (build/tests/CI green, 14 desktop assets / 16 with Android) — промоутим к stable |
 | `diagnose-config` | User шлёт config.yaml + current.json + log — методичный walkthrough |
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `Codex.ai/design` URL — fetch + extract + map tokens |
@@ -105,7 +105,7 @@ Open Tasks / Last session log.
 
    **1a. MCP test после каждого ship — обязательно, не "где testable".**
    Установлено user'ом 2026-05-04 после iter#7. Flow: ship -rN → CI green →
-   12 assets → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
+   14 desktop assets (16 with Android) → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
    computer-use тестит изменение по сценарию который описан в release
    notes / commit message → скриншоты + PASS/FAIL по каждому пункту →
    доклад user'у. Без user prompt'а — это часть ship cycle. У меня есть
@@ -129,7 +129,7 @@ Open Tasks / Last session log.
    само не cut'ает. Жди explicit "cut" / "ok" / "promote" перед `vX.Y.Z`
    stable. Conditions: (a) `dotnet build -c Release` 0 errors,
    (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
-   (d) `gh release view` показывает 12 assets, (e) MCP+UIA verify PASS
+   (d) `gh release view` показывает 14 desktop assets / 16 with Android, (e) MCP+UIA verify PASS
    где testable (или explicit "Core-only / not UI-testable" label),
    **(f) live update gate — install previous stable, trigger update к
    текущему -rN, verify success (см. cut-stable skill «Mandatory pre-cut
@@ -142,9 +142,9 @@ Open Tasks / Last session log.
    exception: ship + flag + let user decide if нужен ceremonial stable.
 7. **process_name в sing-box case-sensitive** — не использовать `ToLowerInvariant()`.
    Дедупликация через `StringComparer.OrdinalIgnoreCase` без mutation.
-8. **`.Codex/` partially editable** — `.Codex/skills/<name>/SKILL.md` и
-   `.Codex/AGENTS.md` (если есть) — content layer, редактируем. Остальное
-   (`settings.json`, `workflow.md`, `hooks/`, runtime cache) — harness config,
+8. **`.agents/` partially editable** — `.agents/skills/<name>/SKILL.md` and
+   root `AGENTS.md` are the content layer, редактируем. Остальное
+   (`.codex/config.toml`, hooks, runtime cache, sqlite/log state) — harness config,
    не трогать без user-явного запроса.
 9. **Никогда не emoji в файлах кода / config / документации** (это правило
    user'а на этот проект). Ru/En текст, технические symbols (✓ ✗ → · ║) ОК если
@@ -170,7 +170,7 @@ Open Tasks / Last session log.
     `C:/Program Files/VPNRouter/app/` → launch → walk через changed pages
     via `mcp__vpnrouter-test__*` (clicks + screenshots) → tail
     `vpnrouter*.log` for `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL
-    report. Реализация: `.Codex/skills/post-ship-mcp-verify/SKILL.md` +
+    report. Реализация: `.agents/skills/post-ship-mcp-verify/SKILL.md` +
     `scripts/post-ship-install-launch.ps1` + per-feature checklists в
     `references/checklist-{zapret,tgproxy,vpn-core,network-settings,
     free-configs,localization}.md`. Урок: 12 ships в r7..r18 batch с

@@ -3,7 +3,7 @@
 # returns a structured report to stdout.
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File .claude/skills/post-ship-mcp-verify/scripts/post-ship-collect-logs.ps1
+#   powershell -ExecutionPolicy Bypass -File .agents/skills/post-ship-mcp-verify/scripts/post-ship-collect-logs.ps1
 #
 # Output: prints any matching lines with [ERR]/Exception/FATAL/crashed,
 # then a single-line summary. Empty body = no issues.

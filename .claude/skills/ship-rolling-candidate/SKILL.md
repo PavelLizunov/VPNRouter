@@ -106,7 +106,7 @@ This is non-negotiable. The visible state on the commits page is what the user
 sees. Green tag assets + red commit-level test = bad ship UX even if functional.
 
 A clean ship has BOTH:
-- Tag release: 12-14 assets, prerelease=true, previous-stable Latest restored.
+- Tag release: 14 desktop assets (16 if Android is attached), prerelease=true, previous-stable Latest restored.
 - Latest main commit: all check-runs green (build, grep, publish, test, test-update, verify).
 
 ## Step 1 — bump AppVersion
@@ -199,7 +199,7 @@ gh run watch <mac-run-id> --repo PavelLizunov/VPNRouter --exit-status
 gh run watch <linux-run-id> --repo PavelLizunov/VPNRouter --exit-status
 ```
 
-Когда оба done → проверить asset count = **12** (4 Win + 2 Mac + 6 Linux):
+Когда оба done → проверить desktop asset count = **14** (4 Win + 4 Mac + 6 Linux):
 ```bash
 gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.assets | length'
 ```
@@ -207,7 +207,7 @@ gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.ass
 ## Step 9 — report to user (notification only, не блокирующее)
 
 Кратко:
-- ✅ tag, prerelease=true, Latest=PREV, 12 assets
+- OK: tag, prerelease=true, Latest=PREV, 14 desktop assets
 - Recovery shortcut + test flow checklist
 - Указать "verification gate зелёная — следующее действие cut-stable когда нет regression reports за ~24h"
 
@@ -223,7 +223,7 @@ gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.ass
   ```
   Если **не виден** через 5 минут после finalize → принудительно invalidate через delete+recreate (тег сохраняем):
   ```bash
-  # 1. Скачать все 12 assets локально
+  # 1. Скачать все 14 desktop assets локально
   mkdir /tmp/r-assets && cd /tmp/r-assets
   gh release download vX.Y.Z-rN --repo PavelLizunov/VPNRouter
 

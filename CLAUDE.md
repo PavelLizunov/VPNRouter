@@ -71,7 +71,7 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 | Skill | When |
 |---|---|
 | `ship-rolling-candidate` | Выпускаем `-rN` после code change |
-| `cut-stable` | -rN прошёл verification (build/tests/CI green, 12 assets) — промоутим к stable |
+| `cut-stable` | -rN прошёл verification (build/tests/CI green, 14 desktop assets / 16 with Android) — промоутим к stable |
 | `diagnose-config` | User шлёт config.yaml + current.json + log — методичный walkthrough |
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `claude.ai/design` URL — fetch + extract + map tokens |
@@ -107,7 +107,7 @@ Open Tasks / Last session log.
 
    **1a. MCP test после каждого ship — обязательно, не "где testable".**
    Установлено user'ом 2026-05-04 после iter#7. Flow: ship -rN → CI green →
-   12 assets → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
+   14 desktop assets (16 with Android) → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
    computer-use тестит изменение по сценарию который описан в release
    notes / commit message → скриншоты + PASS/FAIL по каждому пункту →
    доклад user'у. Без user prompt'а — это часть ship cycle. У меня есть
@@ -131,7 +131,7 @@ Open Tasks / Last session log.
    само не cut'ает. Жди explicit "cut" / "ok" / "promote" перед `vX.Y.Z`
    stable. Conditions: (a) `dotnet build -c Release` 0 errors,
    (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
-   (d) `gh release view` показывает 12 assets, (e) MCP+UIA verify PASS
+   (d) `gh release view` показывает 14 desktop assets / 16 with Android, (e) MCP+UIA verify PASS
    где testable (или explicit "Core-only / not UI-testable" label),
    **(f) live update gate — install previous stable, trigger update к
    текущему -rN, verify success (см. cut-stable skill «Mandatory pre-cut
