@@ -1,0 +1,252 @@
+# VPNRouter — root context for Codex
+
+Process-based split-tunnel VPN router for Windows / macOS / Linux. .NET 8 +
+Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
+`.claude_handoff.md` for current state.
+
+## Zone ownership
+
+- **Все зоны мои** (Pavel Lizunov, `PavelLizunov`). Нет директорий с ограниченным
+  доступом. Можно редактировать всё.
+- Не моя зона (внешние upstream): `tools/zapret/`, `tools/singbox-cache/` —
+  скачанные binary-артефакты, не комитим в репо.
+
+## Sub-AGENTS.md map
+
+Подробности по конкретной зоне — в её sub-AGENTS.md. Этот файл тонкий.
+
+| Зона | Sub-AGENTS.md |
+|---|---|
+| Бизнес-логика, sing-box, subscriptions, free configs | `VPNRouter.Core/AGENTS.md` |
+| Avalonia GUI, ViewModels, design tokens | `VPNRouter.App/AGENTS.md` |
+| CLI (Spectre.Console) | `VPNRouter.CLI/AGENTS.md` |
+| Windows Service wrapper | `VPNRouter.Service/AGENTS.md` |
+| xUnit tests | `VPNRouter.Tests/AGENTS.md` |
+| CI workflows + secrets | `.github/workflows/AGENTS.md` |
+| Per-platform install scripts + APT/winget | `packaging/AGENTS.md` |
+| Roadmap / handoff plans convention | `plans/AGENTS.md` |
+
+## Quick reference commands
+
+```bash
+# Build everything (Release)
+dotnet build VPNRouter.sln -c Release
+
+# Run regression tests (v2.28.x suite)
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
+  --filter "FullyQualifiedName~VlessServersResolverTests|FullyQualifiedName~ConfigGeneratorEmptyServersGuardTests|FullyQualifiedName~FreeConfigAggregatorPreserveTests"
+
+# Ship a rolling candidate (skill: ship-rolling-candidate)
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y-rN" -Upload
+
+# Cut stable (skill: cut-stable, autonomous когда -rN прошёл verification)
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y" -Upload
+
+# Push to both remotes
+git push github HEAD:main && git push origin HEAD:main
+
+# Verify release state
+gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
+```
+
+## Infrastructure quick-ref
+
+| Что | Где |
+|---|---|
+| GitHub repo | `PavelLizunov/VPNRouter` |
+| Forgejo mirror | `ssh://git@10.9.1.1:18222/slovn/vpnrouter.git` (через AmneziaWG VPN) |
+| Mac build host (manual) | `slovn@192.168.0.246` (через host AmneziaWG route, key `id_ed25519`) |
+| One-liner install domain | `vpn.ninitux.com` (CNAME → `pavellizunov.github.io`) |
+| Homebrew tap | `PavelLizunov/homebrew-vpnrouter` (auto-bumps на stable) |
+| APT repo | `vpn.ninitux.com/apt/` (reprepro signed, gh-pages branch) |
+
+Полный список — `.claude_handoff.md` "Infrastructure".
+
+## Skills layer
+
+`.Codex/skills/<name>/SKILL.md` — повторяющиеся workflow'ы. Видны через
+`Skill` tool после рестарта Codex (или сразу через явный invoke).
+
+| Skill | When |
+|---|---|
+| `ship-rolling-candidate` | Выпускаем `-rN` после code change |
+| `cut-stable` | -rN прошёл verification (build/tests/CI green, 12 assets) — промоутим к stable |
+| `diagnose-config` | User шлёт config.yaml + current.json + log — методичный walkthrough |
+| `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
+| `merge-design-handoff` | User шлёт `Codex.ai/design` URL — fetch + extract + map tokens |
+| `update-readme-versions` | После каждого release бампим version examples в README |
+| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Download → install → launch → computer-use клики → log scan → PASS/FAIL report. v2.37.0-r21+. |
+
+## Memory layer
+
+`.claude_handoff.md` (gitignored, в корне репо). Workflow:
+
+- **Старт сессии**: прочесть handoff → hydrate в `mcp__memory` граф (если активен).
+- **Конец сессии**: dump граф обратно в handoff + add "Last session log" entry.
+- **Compact restore**: handoff = primary state recovery file.
+
+Секции handoff (см. файл): Persons / Infrastructure / Code Artifacts /
+Open Tasks / Last session log.
+
+## Golden rules
+
+**Mode = autonomous до stable cut.** Подтверждений от user'а не запрашиваем
+для code → -rN ship cycle (commit / push / tag / release / cleanup). User
+прерывает явной командой ("стоп", "hold", "откати"). **Stable cut требует
+явной user-команды** ("cut" / "ok" / "promote") — см. урок v2.31.2 в
+`Codex.local.md`. Safety rails ниже остаются — про destructive ops.
+
+1. **Default = autonomous до stable.** Code change → build → tests → commit →
+   push в оба remote → ship -rN → mac/linux CI → finalize prerelease → delete
+   previous -rN → **MCP+UIA test (mandatory, см. rule #1a)** → доложить
+   user'у с детальным test report'ом + ждать cut. Без вопросов между
+   intermediate шагами. **Cut stable НЕ autonomous** — только по явной
+   команде. См. rule #6.
+
+   **1a. MCP test после каждого ship — обязательно, не "где testable".**
+   Установлено user'ом 2026-05-04 после iter#7. Flow: ship -rN → CI green →
+   12 assets → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
+   computer-use тестит изменение по сценарию который описан в release
+   notes / commit message → скриншоты + PASS/FAIL по каждому пункту →
+   доклад user'у. Без user prompt'а — это часть ship cycle. У меня есть
+   `mcp__vpnrouter-test__*` (window control / mouse / keyboard /
+   screenshot) + Bash для logs → нет нужды просить user'а скрин или
+   "проверь сам". Если изменение Core-only без UI surface (parser,
+   migration helper, etc.) — explicit "Core-only / not UI-testable"
+   label в докладе. Иначе MCP-test обязателен.
+2. **Push в ОБА remote** после commit'а: `git push github HEAD:main && git push origin HEAD:main`.
+   Forgejo через VPN — может быть down, retry позже автоматически.
+3. **Никогда `--no-verify` / `--no-gpg-sign`** без явного запроса. Если pre-commit
+   hook упал — фиксить причину, не bypass. (Safety rail, не workflow confirm.)
+4. **Никогда `git push --force` на `main`** — destructive, можно потерять работу.
+   Force-update tag (`git tag -f`) допустим только для prerelease tag'ов
+   до того как опубликован release. (Safety rail.)
+5. **`AppVersion.Version` ВСЕГДА совпадает с release tag**, включая `-rN`
+   суффикс. Урок v2.25.0-r1→r2 в `Codex.local.md`.
+6. **Stable cut по user-команде** (изменено 2026-05-03 после v2.31.4,
+   расширено 2026-05-06 после v2.31.7 helper.cmd parser bug).
+   Verification gate (6 conditions ниже) — обязательное READY условие, но
+   само не cut'ает. Жди explicit "cut" / "ok" / "promote" перед `vX.Y.Z`
+   stable. Conditions: (a) `dotnet build -c Release` 0 errors,
+   (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
+   (d) `gh release view` показывает 12 assets, (e) MCP+UIA verify PASS
+   где testable (или explicit "Core-only / not UI-testable" label),
+   **(f) live update gate — install previous stable, trigger update к
+   текущему -rN, verify success (см. cut-stable skill «Mandatory pre-cut
+   live update gate» секцию + `plans/cut-stable-checklist.md`).**
+   **Урок v2.31.2**: 2 из 5 stable cuts в одной session оказались
+   partial-fix slips потому что MCP verify не делался — нужен
+   human-in-the-loop. **Урок v2.31.7**: helper.cmd parser bug сломал 100%
+   user-upgrades, поймали через ~7 дней. Live update gate — единственный
+   способ это поймать до cut'а. Tiny / config-only / typo fixes —
+   exception: ship + flag + let user decide if нужен ceremonial stable.
+7. **process_name в sing-box case-sensitive** — не использовать `ToLowerInvariant()`.
+   Дедупликация через `StringComparer.OrdinalIgnoreCase` без mutation.
+8. **`.Codex/` partially editable** — `.Codex/skills/<name>/SKILL.md` и
+   `.Codex/AGENTS.md` (если есть) — content layer, редактируем. Остальное
+   (`settings.json`, `workflow.md`, `hooks/`, runtime cache) — harness config,
+   не трогать без user-явного запроса.
+9. **Никогда не emoji в файлах кода / config / документации** (это правило
+   user'а на этот проект). Ru/En текст, технические symbols (✓ ✗ → · ║) ОК если
+   user сам их использует в release notes.
+10. **MEMORY.md в `~/.Codex/projects/.../memory/` — auto-managed harness'ом**,
+    не редактировать руками без причины. `.claude_handoff.md` в репо — это
+    наш controlled file.
+11. **CI-gate перед каждым push** (added 2026-05-25 после r7..r18 red-CI streak).
+    После `git push` следующего commit'а — **MUST** запустить
+    `powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1`
+    BEFORE next code change. Exit 0 = можно дальше, exit 1/2/3 = STOP. Также
+    установлен `.githooks/pre-push` hook (`git config core.hooksPath .githooks`)
+    который физически блокирует push если предыдущий commit красный. Bypass
+    через `--no-verify` только с явной user-командой. Урок: 12 ships подряд
+    (r7..r18) с красным commit-CI потому что я забывал проверять между
+    ships — единственный red-X X на главной странице commits — и tag-level
+    CI (build-mac/linux на тэге) скрывал что push-event CI красный.
+
+12. **Post-ship MCP verify обязательный** (added 2026-05-25, расширение
+    rule #1a). После каждого `ship-rolling-candidate` (-rN tag создан +
+    binary uploaded) — **MUST** запустить `post-ship-mcp-verify` skill.
+    Skill автоматически: download ZIP from GitHub release → install over
+    `C:/Program Files/VPNRouter/app/` → launch → walk через changed pages
+    via `mcp__vpnrouter-test__*` (clicks + screenshots) → tail
+    `vpnrouter*.log` for `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL
+    report. Реализация: `.Codex/skills/post-ship-mcp-verify/SKILL.md` +
+    `scripts/post-ship-install-launch.ps1` + per-feature checklists в
+    `references/checklist-{zapret,tgproxy,vpn-core,network-settings,
+    free-configs,localization}.md`. Урок: 12 ships в r7..r18 batch с
+    красным CI И БЕЗ local MCP test потому что я полагался на тэг-level
+    CI green. Combined с rule #11 теперь невозможно skip обе проверки.
+
+13. **MCP verify должен ВЕСТИ к user-сценарию end-to-end, не остановиться
+    на "tab rendered"** (added 2026-05-25 после r25..r28 scroll-bug
+    thrash). Если фикс касается UI — verify должен пройти ВЕСЬ flow до
+    конечного элемента который user reported. Пример: r25..r28 я
+    shipал и claim'ил "tabs render" — но не доходил до scroll внутри
+    активной вкладки → user видел тот же bug что и до фикса 4 раза.
+    Чеклист: (a) клик целевого элемента, (b) check ВСЕ interactive
+    elements в его scope, (c) screenshot bottom of viewport, (d)
+    confirm exact strings user мог искать.
+
+14. **Git push reminder pattern** (added 2026-05-25 после второго
+    "ты опять забыл git" от user'а). После каждого commit IMMEDIATELY
+    выполняй `git push github HEAD:main && git push origin HEAD:main`
+    (или с TOLERATE_FAILURE если gate блокирует). Не задерживай push
+    "пока build идёт" — commit и push должны быть атомарной парой.
+    Если push заблокирован gate'ом — сразу info user'у текущий state
+    + что ждём. User видит remote main как single source of truth;
+    локальные коммиты "не существуют" для него.
+
+15. **CI status hygiene — never accumulate red Xs** (added 2026-05-25
+    после "опять забыл проверку состояния git" от user'а, скриншот с
+    r24..r29 все red 4/6). Pattern of failure: каждый -rN ship'ался
+    с Linux MVM hash drift (red `test`), я pushил с TOLERATE_FAILURE,
+    дальше код и снова TOLERATE_FAILURE, и так 5 коммитов с red X на
+    главной странице commits. User notices — это плохой signal.
+
+    Mechanism (r30):
+    - `tools/watch-after-push.ps1` — background watcher polls CI ~10
+      min after push. If `test` fails with Linux hash drift → parses
+      "Actual:" hash from job log → writes `.git-suggested-hash-bump.txt`
+      at repo root.
+    - `.githooks/post-push` — launches the watcher (manual invoke
+      because git has no native post-push; alias `git pushw` chains).
+    - **NEW RITUAL**: at start of EVERY session AND before EVERY
+      ship-rolling-candidate, run:
+      ```
+      for sha in $(git log --pretty=format:'%h' -7); do
+        echo "=== $sha ==="
+        gh api repos/PavelLizunov/VPNRouter/commits/$sha/check-runs \
+          --jq '.check_runs[] | select(.conclusion=="failure") | .name'
+      done
+      ```
+      If ANY red is found, FIX it BEFORE any new code change. Check
+      `.git-suggested-hash-bump.txt` first — if present, apply that
+      bump to MainWindowViewModelCharacterizationTests.cs.
+
+## Git safety
+
+- `main` — protected (никаких force-push без запроса). Заявленные fixes идут
+  через прямые commits.
+- Tags `vX.Y.Z` (stable) — финальные, не force-update'ить после публикации
+  release.
+- Tags `vX.Y.Z-rN` (prerelease) — можно force-update'ить пока не опубликован
+  release; после публикации лучше bumpнуть `-r(N+1)`.
+- В `Codex.local.md` — release retention policy (max ~30 на GitHub Releases page).
+
+## Cross-references
+
+- `Codex.local.md` — user-private (не редактируем): release process, version
+  policy, Forgejo creds, lessons learned.
+- `.Codex/workflow.md` — harness workflow, **read-only**.
+- `~/.Codex/projects/.../memory/MEMORY.md` — auto-managed user memory.
+
+## Не созданы (опциональны)
+
+- `.mcp.json` — нет MCP-серверов в проекте. `gh CLI` напрямую покрывает 95%
+  GitHub ops. Если user захочет Jira/Confluence/Slack/etc — добавим.
+
+---
+
+**Когда genuine ambiguity** — несколько валидных путей с разной семантикой,
+scope действительно непонятен, риск destructive op без отката — спросить.
+Иначе **делать**. По умолчанию: действие, не вопрос.
