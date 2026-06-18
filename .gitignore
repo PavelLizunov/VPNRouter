@@ -19,6 +19,9 @@ packages/
 logs/
 *.log
 
+# deploy-to-testpc.ps1 cached WinRM credential (DPAPI-encrypted, machine-bound)
+.testpc-cred-*.xml
+
 # OS
 Thumbs.db
 Desktop.ini
