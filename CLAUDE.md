@@ -57,6 +57,7 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 | GitHub repo | `PavelLizunov/VPNRouter` |
 | Forgejo mirror | `ssh://git@10.9.1.1:18222/slovn/vpnrouter.git` (через AmneziaWG VPN) |
 | Mac build host (manual) | `slovn@192.168.0.246` (через host AmneziaWG route, key `id_ed25519`) |
+| Proxmox test lab | `pve-ninitux` (https://192.168.0.169:8006) — Win `windows-brat`(100)@192.168.0.106, Debian `debian-xfce`(101)@192.168.0.99; creds/детали в `.claude_handoff.md` |
 | One-liner install domain | `vpn.ninitux.com` (CNAME → `pavellizunov.github.io`) |
 | Homebrew tap | `PavelLizunov/homebrew-vpnrouter` (auto-bumps на stable) |
 | APT repo | `vpn.ninitux.com/apt/` (reprepro signed, gh-pages branch) |

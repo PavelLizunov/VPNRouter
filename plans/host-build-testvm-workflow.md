@@ -22,6 +22,22 @@ self-contained VBox guest).
   VirtualBox/Hyper-V coexistence problem.
 - **Only the ZIP crosses the wire** (~48 MB Install ZIP), never the 13 GB repo.
 
+## Test targets (provisioned 2026-06-18/19)
+
+On Proxmox `pve-ninitux` (https://192.168.0.169:8006) + the Mac build host.
+Credentials are kept out of the repo — see `.claude_handoff.md` (gitignored) and
+Claude project memory.
+
+| Platform | Machine | Reach |
+|---|---|---|
+| Windows | VM `windows-brat` (vmid 100), Win10 Enterprise LTSC 2019 | WinRM/RDP @ 192.168.0.106, user `tester` |
+| Linux | VM `debian-xfce` (vmid 101), Debian 12 + XFCE | key-SSH `tester` @ 192.168.0.99 (NOPASSWD sudo) |
+| macOS + Android | `mm4.local` build host + USB Android phone | SSH `slovn@192.168.0.246`; `adb` serial 54499112209 |
+
+Notes: the host reaches `192.168.0.0/24` through AmneziaWG (expect occasional
+SSH/WinRM blips). Linux GUI needs `LIBGL_ALWAYS_SOFTWARE=1` on QEMU std-VGA.
+Host-side provisioning/automation helpers (not committed) live in `C:\vmsetup\`.
+
 ## One-time setup
 
 ### Dev host (done 2026-06-18)
