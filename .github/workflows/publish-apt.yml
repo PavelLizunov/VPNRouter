@@ -19,10 +19,10 @@ permissions:
 
 # Serialize all runs across the gh-pages workspace to eliminate the
 # push-rejected race that fired on rapid back-to-back releases (r3→r4
-# delete-and-republish dance, May 2026). The retry-with-rebase fix in
-# the publish step recovers from drift, but `concurrency` makes the
-# race unable to occur in the first place. Subsequent triggers queue
-# instead of running in parallel.
+# delete-and-republish dance, May 2026). The publish step force-pushes a
+# single orphan commit, so `concurrency` is what guarantees two runs
+# never force-push over each other. Subsequent triggers queue instead of
+# running in parallel.
 concurrency:
   group: publish-apt-gh-pages
   cancel-in-progress: false
@@ -270,7 +270,7 @@ jobs:
           echo "Collected debs:"
           ls -lh .apt-debs || true
 
-      - name: Ensure CNAME for custom domain
+      - name: Ensure gh-pages root metadata (CNAME, .nojekyll, index.md)
         run: |
           # Custom domain: vpn.ninitux.com. This CNAME file is what tells
           # GitHub Pages to serve gh-pages content at the custom hostname
@@ -282,6 +282,17 @@ jobs:
           # A single FQDN, no newline — GitHub's parser is strict about
           # trailing whitespace.
           printf 'vpn.ninitux.com' > gh-pages-dir/CNAME
+
+          # gh-pages is now published as a single ORPHAN commit on every
+          # run (see the final "Publish gh-pages" step), so EVERY file the
+          # site needs must be (re)materialised here — nothing survives
+          # implicitly from a previous commit. These two were previously
+          # written only when the branch was first created:
+          #   .nojekyll — disables Jekyll so paths starting with "_" and
+          #               the apt/ tree are served verbatim.
+          #   index.md  — trivial root marker (index.html is the real page).
+          touch gh-pages-dir/.nojekyll
+          echo "# VPNRouter APT Repository" > gh-pages-dir/index.md
 
       - name: Publish install scripts (Linux + Windows) to gh-pages root
         run: |
@@ -391,33 +402,34 @@ jobs:
           echo "Repository layout:"
           find . -maxdepth 4 -type f | sort | head -40
 
-      - name: Commit and push gh-pages
+      - name: Publish gh-pages (single orphan commit, force-push)
         run: |
           cd gh-pages-dir
+          # gh-pages is a FULLY GENERATED branch: the apt indices, pool,
+          # install scripts and landing pages are all rebuilt from scratch
+          # on every run, and the .deb source-of-truth lives on GitHub
+          # Releases. It therefore needs NO git history.
+          #
+          # We publish it as a single ORPHAN commit and force-push. This:
+          #   1. permanently prevents the branch from accumulating obsolete
+          #      pool/*.deb blobs in history. Each stable version's .deb is
+          #      a unique ~53 MB blob; on a long-lived branch they were
+          #      never pruned, so gh-pages history had grown to ~13 GB /
+          #      309 dead .deb blobs — effectively the entire repo's bloat.
+          #   2. doubles as the one-time cleanup: the first run after this
+          #      change collapses all that history into a single commit.
+          # The `concurrency:` guard at the top serialises runs, so the
+          # force-push can never race another publish.
+          git checkout --orphan _publish
           git add -A
           if git diff --cached --quiet; then
-              echo "Nothing to commit — apt repo already up to date"
-              exit 0
+              echo "::error::gh-pages working tree is empty — refusing to publish an empty site"
+              exit 1
           fi
           MSG="Publish $( [ -n "${{ github.event.release.tag_name }}" ] && echo "${{ github.event.release.tag_name }}" || echo "apt repo sync" )"
-          git commit -m "$MSG"
-          # Retry with rebase on conflict — concurrent release events
-          # (e.g. delete-r3 + publish-r4 + un-draft) can race on
-          # gh-pages, leading to rejected pushes. Pull-rebase + retry up
-          # to 5 times handles benign drift; a real conflict (impossible
-          # in this workflow since only this job touches the apt subdir)
-          # would surface as rebase failure.
-          for attempt in 1 2 3 4 5; do
-            if git push origin gh-pages; then
-              echo "Pushed to gh-pages branch on attempt $attempt"
-              exit 0
-            fi
-            echo "Push rejected on attempt $attempt — pulling --rebase and retrying"
-            git pull --rebase origin gh-pages
-            sleep $((attempt * 3))
-          done
-          echo "Failed to push after 5 attempts" >&2
-          exit 1
+          git commit -q -m "$MSG"
+          git push --force origin HEAD:gh-pages
+          echo "Published gh-pages as a single orphan commit: $MSG"
 
       - name: Print installation snippet
         run: |
