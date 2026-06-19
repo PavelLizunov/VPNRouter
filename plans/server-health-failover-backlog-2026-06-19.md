@@ -85,8 +85,15 @@ VLESS → выше доля relay-open EOF → параллельные конн
   successful vs failed relay-opens (знаменатель).
 - Без тостов и переключений. Лог-фикстуры 205004/214717 как регрессия.
 
-**Acceptance:** [ ] на 214717 классификатор даёт 1952 relay-open EOF; [ ] НЕ
-относит 733 upload-closes к outer-proxy (только 4 валидны); [ ] нет UI/failover.
+**Acceptance:** [x] классификатор (verified vs real logs): 214717 → 2178
+relay-open fail (EOF 1952 + dial-timeout 224 + reset 2), 739 LocalClose, 6
+ProxyStreamError; 205004 → 1588 (EOF 1587 + 1) + 216 LocalClose; [x] LocalClose
+НЕ в failure-rate (numerator = RelayOpenFail, denominator = RelayOpenAttempt);
+[ ] live Clash `/logs` WS stream + VpnEngine wiring за флагом (B0b); [ ] нет
+UI/failover. **Уточнение таксономии:** grep-числа ревью (1952 EOF / 4 RST) были
+подмножествами — `using outbound/` = маркер ЛЮБОГО relay-open фейла, ловит и 224
+dial-timeout'а, которые EOF-only счёт пропускал. Реализация B0a:
+`ConnectionHealthClassifier` + `ConnectionHealthState` + 28 тестов (commit ниже).
 
 ### A. Opt-in urltest по пулу серверов подписки · P1 · ~2-3 дня · risk: low-med
 Первая user-facing фича. **Переиспользовать `AddOutboundGroup`** — главное

@@ -101,6 +101,39 @@ review's corrected numbers; flag OFF → zero behaviour change (existing tests u
 - [ ] **Gate 5 — MCP verify**: N/A — Core-only, no UI surface (flag OFF, observe-only).
 - [ ] **Gate 6 — Characterization diff**: N/A — not a god-file split.
 
-## Outcome (filled after merge)
+## Outcome — B0a (filled 2026-06-19)
 
-_TBD_
+**Status**: PARTIAL — B0a (classifier + state + tests) done; B0b (Clash `/logs` WS
+stream + VpnEngine wiring) pending.
+**Files changed**: 5 new · +681 LOC (2 Core src, 3 test). No existing files modified
+(additive; nothing references the new types yet — wiring is B0b).
+
+**Gate results:**
+- [x] Gate 1 build: `dotnet build -c Release` 0 errors (154 warnings, all pre-existing).
+- [x] Gate 2 tests: 28 new green (26 unit + 2 fixture-vs-real-logs). Fixture repro on
+  real bundles: 214717 → 2178 RelayOpenFail (1952 EOF / 224 dial-timeout / 2 reset),
+  739 LocalClose, 6 ProxyStreamError; 205004 → 1588 (1587 EOF) + 216 LocalClose.
+  Full non-GUI suite: 1926 pass / 59 FAIL — all pre-existing environmental
+  (`UnauthorizedAccessException` on `C:\ProgramData\VPNRouter` in non-admin session;
+  process/TUN/VM classes), unrelated to this additive change. CI is the real gate.
+- [x] Gate 3 docs: this brief + `VPNRouter.Core/CLAUDE.md` service map (+2 rows) +
+  backlog §B0 acceptance updated with verified numbers.
+- [x] Gate 4 self-review: `simplify` ran (4 agents). Applied: defer regex/extraction
+  past null-return + attempt-first ordering (efficiency); named marker constants,
+  explicit teardown precedence helper, EOF/IPv6 comments (altitude). Skipped: per-node
+  / Destination / ConnId / WouldWarn YAGNI flags — spec-required (brief What, backlog
+  §B0 "destination + connection-id", review §E3 per-node, observe-only calibration).
+  `security-review`: N/A for B0a — pure parsing + in-memory state, no socket/TLS/
+  process/firewall/file-write surface. Deferred to B0b (Clash `/logs` WS client gets
+  the loopback-only guard, mirroring `ClashSingBoxApi`).
+- [-] Gate 5 MCP: N/A — Core-only, observe-only, no UI surface.
+- [-] Gate 6: N/A — not a god-file split.
+
+**Surprises**: the review's grep-based "1952 EOF / 4 RST" were subsets — `using
+outbound/` marks ANY relay-open failure, surfacing 224 dial-timeouts an EOF-only
+count missed; and the "4 forcibly-closed" were 4 RST + 4 wsarecv-timeouts (8 total
+node-socket breaks), of which 6 are mid-stream ProxyStreamError. Taxonomy widened
+accordingly and documented in the backlog.
+
+**Follow-ups**: B0b — `ClashLogStream` (Clash `/logs` WebSocket, reconnect/backoff,
+loopback guard, security-review) + `VpnEngine` wiring behind a flag (off) + live smoke.
