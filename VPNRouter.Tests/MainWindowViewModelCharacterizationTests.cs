@@ -212,7 +212,8 @@ public class MainWindowViewModelCharacterizationTests
     // the cross-platform wgturn Emergency Channel shows off Windows). Cross-platform
     // getters → Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI).
     private const string PinnedHashWindows =
-        "0790ad5d8642419f9d3744d55eca8a5dfb0779a57e1f0b15d4e8d6ca3458bd91";
+        // Backlog A (2026-06-20): + AutoSelectBestServer + L_AutoSelectBest + L_AutoSelectBestTip (urltest toggle).
+        "44153baad999b3c29b7ce2159cbf94704c243c7eac155598e6885d26ee01d306";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

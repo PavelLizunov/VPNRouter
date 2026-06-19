@@ -249,6 +249,13 @@
                          Foreground="{DynamicResource WarningFgBrush}"/>
           </Border>
         </StackPanel>
+        <!-- Backlog A (2026-06-20): opt-in urltest auto-select. Off by default;
+             takes effect on next connect. -->
+        <CheckBox IsChecked="{Binding AutoSelectBestServer}"
+                  MinHeight="0" Padding="4,0"
+                  ToolTip.Tip="{Binding L_AutoSelectBestTip}">
+          <TextBlock Text="{Binding L_AutoSelectBest}" TextWrapping="Wrap" FontSize="11"/>
+        </CheckBox>
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Grid.Column="0"
                      Text="{Binding L_SubscriptionsSection}"

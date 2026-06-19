@@ -1141,6 +1141,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
+    // Backlog A (2026-06-20): opt-in auto-select fastest reachable subscription
+    // server via sing-box urltest. Persisted to Vless.AutoSelectBestServer; takes
+    // effect on next connect/Apply (like BlockAds). Toggle on the Subscribe page.
+    [ObservableProperty] private bool _autoSelectBestServer = false;
     // Wave 39 (v2.35.0-r5): firewall-level DNS lockdown. When ON, the
     // FirewallManager adds outbound block rules for UDP/53, TCP/53, TCP/853
     // on all non-TUN interfaces while VPN is active. Protects against the
@@ -2611,6 +2615,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string BlockAdsHint => IsRussian
         ? "AdGuard DNS + adblock rule_set (~300K доменов)"
         : "AdGuard DNS + adblock rule_set (~300K domains)";
+    // Backlog A (2026-06-20): opt-in urltest auto-select toggle (Subscribe page).
+    public string L_AutoSelectBest => IsRussian ? "Авто-выбор лучшего сервера" : "Auto-select best server";
+    public string L_AutoSelectBestTip => IsRussian
+        ? "Маршрутизировать через самый быстрый доступный сервер подписки (urltest). Применяется при следующем подключении."
+        : "Route through the fastest reachable subscription server (urltest). Applies on next connect.";
 
     // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
@@ -3190,6 +3199,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
+        AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
         // Wave 39 — DNS leak lockdown (firewall block of UDP/53, TCP/53,
         // TCP/853 on non-TUN interfaces while VPN is active).
         IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
@@ -3896,6 +3906,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
+        _settings.Vless.AutoSelectBestServer = AutoSelectBestServer;
         // Wave 39 — DNS leak lockdown setting (default flipped per
         // SettingsMigrator: true for fresh installs, false for upgrades).
         _settings.App.DnsLeakLockdown = IsDnsLeakLockdownEnabled;
