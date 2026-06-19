@@ -137,3 +137,38 @@ accordingly and documented in the backlog.
 
 **Follow-ups**: B0b — `ClashLogStream` (Clash `/logs` WebSocket, reconnect/backoff,
 loopback guard, security-review) + `VpnEngine` wiring behind a flag (off) + live smoke.
+
+## Outcome — B0b (filled 2026-06-20)
+
+**Status**: PARTIAL — code complete; **live-smoke pending the test machine** (needs a
+running sing-box + elevated env; this session is non-admin).
+**Files changed**: 2 new (`ClashLogStream.cs`, `ClashLogStreamTests.cs`), 2 modified
+(`ClashSingBoxApi.cs` IsLoopbackHost private→internal static for reuse; `VpnEngine.cs`
++`TryStartConnectionHealthStream` + Stop() teardown + fields).
+
+**What**: `ClashLogStream` subscribes to Clash `/logs` over WebSocket, parses
+`{type,payload}` (JsonDocument), routes payloads through the B0a classifier into
+`ConnectionHealthState`. Reconnect with capped backoff, cancellable, loopback-guarded
+(reuses `ClashSingBoxApi.IsLoopbackHost`). Wired into `VpnEngine` **gated by env var
+`VPNROUTER_CONN_HEALTH=1`** (off by default): started post-start (best-effort try/catch
+— never throws into the VPN lifecycle), stopped/disposed in `Stop()`. `proxyEndpoints`
+passed null for now → `ProxyStreamError` attribution deferred (the primary relay-open
+failure-rate signal needs no node IP).
+
+**Gate results:**
+- [x] Gate 1 build: `dotnet build VPNRouter.sln -c Release` 0 errors.
+- [x] Gate 2 tests: 48 B0 tests green (26 classifier/state + 20 stream + 2 fixture).
+  20 new ClashLogStream tests (BuildLogsUri scheme+loopback guard, TryExtractPayload,
+  HandleMessage routing). Live WS receive/reconnect loop = smoke on test machine.
+- [x] Gate 3 docs: service map +ClashLogStream row (env flag documented); this Outcome.
+- [x] Gate 4 self-review: `security-review` ran (identify + filter) → **no findings**
+  (loopback guard tested against 12 bypass payloads incl. userinfo/subdomain/octal/
+  IPv6 — all rejected; JsonDocument no XXE/gadget; TLS .NET defaults; env-gate
+  observe-only, can't affect VPN). `simplify`: B0b reused the B0a-reviewed patterns
+  (named constants, IsLoopbackHost reuse, testable seams) — self-reviewed, no YAGNI.
+- [-] Gate 5 MCP: N/A — no UI surface (observe-only, flag off).
+- [-] Gate 6: N/A.
+
+**Live-smoke checklist (test machine — windows-brat or debian-xfce):** set
+`VPNROUTER_CONN_HEALTH=1`, connect VPN, confirm log `"Clash /logs stream connected"`,
+generate traffic, confirm classified events accrue (no exceptions); flag-off → no stream.

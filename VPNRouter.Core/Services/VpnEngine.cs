@@ -55,6 +55,14 @@ public class VpnEngine : IDisposable
     // plans/dns-tunnel-slipstream-integration-2026-06-10.md.
     private SlipstreamManager? _slipstream;
 
+    // B0 connection-health telemetry (observe-only, backlog §B0). Gated by the
+    // VPNROUTER_CONN_HEALTH env var — off by default, no UI yet. _connHealth is the
+    // rolling-window aggregator; _connHealthStream subscribes to Clash /logs and
+    // records classified events. Started post-start, stopped in Stop(). Never affects
+    // the VPN lifecycle. See plans/phase-b0-connection-health-telemetry-2026-06-19.md.
+    private ConnectionHealthState? _connHealth;
+    private ClashLogStream? _connHealthStream;
+
     private bool _disposed;
 
     // ─── Public state ────────────────────────────────────────────────────────
@@ -448,6 +456,13 @@ public class VpnEngine : IDisposable
         // (_slipstream stays null unless a dns-tunnel server was started).
         try { _slipstream?.Stop(); } catch { }
 
+        // B0 connection-health telemetry: stop the Clash /logs subscriber. No-op
+        // unless the VPNROUTER_CONN_HEALTH env flag started it. Observe-only — its
+        // teardown can't affect the disconnect path.
+        try { _connHealthStream?.Stop(); } catch { }
+        try { _connHealthStream?.Dispose(); } catch { }
+        _connHealthStream = null;
+
         // Task #36-A (Phase 4) — routed through IWindowsDnsHardening so the
         // happy-path Stop test (Task #36-C) captures the Restore invocation
         // through NullWindowsDnsHardening without mutating HKLM. Impl is a
@@ -574,6 +589,43 @@ public class VpnEngine : IDisposable
         return int.TryParse(portStr, out var port) && port > 0 && port <= 65535
             ? port
             : Default;
+    }
+
+    /// <summary>
+    /// B0b — start the observe-only Clash <c>/logs</c> telemetry stream when the
+    /// <c>VPNROUTER_CONN_HEALTH</c> env var is set ("1"/"true"). Best-effort: any
+    /// failure is swallowed so it can never affect the VPN lifecycle. The stream
+    /// records classified events into <see cref="_connHealth"/> and emits nothing
+    /// (no toast, no failover) — calibration data for backlog C/B. Stopped in
+    /// <see cref="Stop"/>. See plans/phase-b0-connection-health-telemetry-2026-06-19.md.
+    /// </summary>
+    internal void TryStartConnectionHealthStream(AppSettings settings)
+    {
+        var flag = Environment.GetEnvironmentVariable("VPNROUTER_CONN_HEALTH");
+        bool enabled = string.Equals(flag, "1", StringComparison.Ordinal) ||
+                       string.Equals(flag, "true", StringComparison.OrdinalIgnoreCase);
+        if (!enabled)
+            return;
+
+        try
+        {
+            _connHealthStream?.Dispose();
+            _connHealth ??= new ConnectionHealthState();
+            var clashPort = ParseClashApiPort(settings.SingBox.ClashApi);
+            // Clash API is loopback by convention; ClashLogStream re-applies the
+            // IsLoopbackHost guard. proxyEndpoints null for B0b — the primary
+            // relay-open failure-rate signal doesn't need it (ProxyStreamError
+            // attribution is a later enrichment).
+            _connHealthStream = new ClashLogStream(
+                $"http://127.0.0.1:{clashPort}", _connHealth, proxyEndpoints: null, logger: _logger);
+            _connHealthStream.Start();
+            _logger?.Information(
+                "[VpnEngine] Connection-health telemetry started (observe-only, Clash port {Port})", clashPort);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Debug(ex, "[VpnEngine] Connection-health telemetry start failed (non-fatal)");
+        }
     }
 
     /// <summary>
@@ -1110,6 +1162,11 @@ public class VpnEngine : IDisposable
             CancellationToken ct)
         {
             CaptureSettings(settings);
+
+            // B0b: start observe-only connection-health telemetry (env-gated,
+            // best-effort). Its own lifecycle/cts — survives the 15s probe, runs the
+            // whole session, stopped in VpnEngine.Stop().
+            _engine.TryStartConnectionHealthStream(settings);
 
             _engine._probeCts?.Cancel();
             _engine._probeCts?.Dispose();

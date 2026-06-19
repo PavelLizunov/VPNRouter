@@ -450,8 +450,11 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     /// literal. Accepts <c>localhost</c>, <c>127.0.0.0/8</c>, <c>::1</c>.
     /// Anything else returns false — including hostnames that might
     /// resolve to loopback at runtime, because DNS can be spoofed.
+    /// <para>Internal so the identical guard can be reused by
+    /// <see cref="ClashLogStream"/> — one source of truth for the loopback
+    /// security primitive rather than a copy.</para>
     /// </summary>
-    private static bool IsLoopbackHost(string host)
+    internal static bool IsLoopbackHost(string host)
     {
         if (string.IsNullOrWhiteSpace(host)) return false;
 
