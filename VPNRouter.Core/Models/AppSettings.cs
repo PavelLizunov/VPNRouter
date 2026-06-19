@@ -837,8 +837,19 @@ public class VlessConfig
     }
 
     /// <summary>
-    /// Returns ONLY the servers to route through — the active server and
-    /// its TCP/UDP pair (same IP, different flow). This is what
+    /// Backlog A (opt-in): when true, <see cref="GetActiveServers"/> returns a
+    /// same-protocol pool of the subscription's servers instead of just the selected
+    /// one, so the generated sing-box config wraps them in a <c>urltest</c> group and
+    /// auto-selects the fastest reachable node. Off by default — preserves the
+    /// single-server behaviour. Toggle lives on the Subscribe page. Same-protocol
+    /// only (consistent exit; avoids the cross-protocol exit-IP inconsistency).
+    /// </summary>
+    public bool AutoSelectBestServer { get; set; } = false;
+
+    /// <summary>
+    /// Returns ONLY the servers to route through — the active server and its same-IP
+    /// TCP/UDP pair, OR — when <see cref="AutoSelectBestServer"/> is on — the active
+    /// server's same-protocol pool (urltest auto-select). This is what
     /// ConfigGenerator uses to build sing-box outbounds.
     /// </summary>
     public List<VlessServerEntry> GetActiveServers()
@@ -855,9 +866,36 @@ public class VlessConfig
         // Fallback: first server
         active ??= all[0];
 
-        // Include all servers with the same IP (TCP + UDP pair)
+        // Opt-in auto-select: route through a same-protocol pool so the generator
+        // wraps it in a urltest group (fastest reachable node wins).
+        if (AutoSelectBestServer)
+            return BuildAutoSelectPool(all, active);
+
+        // Default: only the active server + its same-IP TCP/UDP pair.
         var activeIp = active.Server;
         return all.Where(s => s.Server == activeIp).ToList();
+    }
+
+    /// <summary>
+    /// Same-protocol bundle for opt-in auto-select. Includes every server sharing the
+    /// active server's protocol; for VLESS-vision (flow set) it keeps only flow entries
+    /// so the urltest group is a clean set of TCP/vision nodes (UDP rides the vision
+    /// flow) — preventing a cross-node TCP/UDP split when the subscription also carries
+    /// no-flow siblings. Never empty (falls back to the active server).
+    /// </summary>
+    private List<VlessServerEntry> BuildAutoSelectPool(List<VlessServerEntry> all, VlessServerEntry active)
+    {
+        var proto = active.Protocol ?? "vless";
+        var pool = all.Where(s =>
+            string.Equals(s.Protocol ?? "vless", proto, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (!string.IsNullOrEmpty(active.Flow))
+        {
+            var flowOnly = pool.Where(s => !string.IsNullOrEmpty(s.Flow)).ToList();
+            if (flowOnly.Count > 0) pool = flowOnly;
+        }
+
+        return pool.Count > 0 ? pool : new List<VlessServerEntry> { active };
     }
 }
 
