@@ -45,8 +45,18 @@ UI (`MODE=ui`, needs the phone unlocked):
 - T7 — PSS 213 MB. T9 PASS — tun0 stable.
 - T10 — **ChatGPT loaded with no Cloudflare challenge** through the DE exit (contrast: RU datacenter exits got "Verifying…"). Data point for `warp-outbound-exit-server-chatgpt` backlog.
 
-## Follow-ups
-- T4: add a multi-stream/parallel-curl variant so the automated number tracks fast.com.
-- T5: ICMP-vs-TUN — replace with a TCP-connect latency probe for tunnel-representative latency.
-- T8: a separate longer **unplugged** battery run for a real mAh/hour drain figure.
-- Wire this into `post-ship-mcp-verify` (or a sibling) so Android ships get the same gate as desktop.
+## Follow-ups — DONE 2026-06-21
+- T4 → multi-stream (NS parallel curls): 76.7 Mbps vs 42 single-stream, tracks fast.com's 84. ✅
+- T5 → TTFB (time-to-first-byte): ICMP **and** the TCP handshake are answered locally by the gvisor user-stack (~3 ms), so only TTFB traverses phone→exit→origin = real latency. ✅
+- T8 → `dumpsys battery unplug` + `batterystats --reset` window + `battery reset` to restore: real per-uid mAh without physically unplugging (needs a longer BAT_WIN for a stable figure). ✅
+- **Auto-gate**: harness can't run in GitHub CI (no device). It's the **manual Android post-ship gate** — run `ADB=/opt/homebrew/bin/adb bash tools/android-e2e-test.sh` (+ `MODE=ui`) on the Mac host after every Android ship, same role `post-ship-mcp-verify` plays for desktop.
+
+## Memory-leak verdict (2026-06-21)
+**No leak that grows with tunnel uptime.** Empirical (live, A101BM): Views=11 / Activities=1
+dead-flat across 8 UI-churn cycles; Native Heap stable ~90 MB; PSS reclaims on trim (1.7 GB
+churn spike → ~677 MB steady). Code audit (workflow, 4 agents) confirms: the dangerous classes
+(static-event Activity leak AND-011, chip-pulse CTS, mascot stream, QR/export statics) were all
+already fixed. Only genuinely usage-correlated growth = stale `_subsAggResults`/`_srvResults`
+entries for removed servers (low severity, bounded-prune fix). Footprint is heavy (~500-680 MB)
+— the Avalonia+Mono+43 MB libgojni tax; a native Kotlin app is far lighter — but it's footprint,
+not a leak. Full audit + best-practices + peer comparison: see session report 2026-06-21.

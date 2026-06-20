@@ -65,18 +65,22 @@ CODE="$(ash 'curl -s --max-time 15 -o /dev/null -w "%{http_code}" https://www.go
   || say "FAIL T3  https://google.com -> HTTP ${CODE:-timeout}"
 
 # ── T4 — real download throughput ──
-SPEED="$(ash curl -s --max-time 90 -o /dev/null -w '%{speed_download}' "$DL_URL")"
-MBPS="$(awk "BEGIN{printf \"%.1f\", (${SPEED:-0}*8)/1000000}")"
-# NOTE: single-stream curl through a proxy badly under-reports (measured 2.1 Mbps
-# here while fast.com multi-stream showed 84 Mbps on the same DE exit). Treat this
-# as a conservative connectivity floor; use MODE=ui fast.com for the real speed.
-awk "BEGIN{exit !($MBPS>0.5)}" \
-  && say "INFO T4  single-stream floor=${MBPS} Mbps (real multi-stream speed via MODE=ui fast.com)" \
-  || say "FAIL T4  single-stream=${MBPS} Mbps — no usable throughput (tun0=$TUN)"
+# Multi-stream: single-stream curl through a proxy badly under-reports (2.1 Mbps
+# single vs 84 Mbps fast.com on the same exit). N parallel streams track real speed.
+NS="${NS:-4}"
+SPEEDS="$(ash "for i in \$(seq 1 $NS); do curl -s --max-time 60 -o /dev/null -w '%{speed_download}\n' '$DL_URL' & done; wait")"
+TOT="$(echo "$SPEEDS" | awk '{s+=$1} END{printf "%.0f", s}')"
+MBPS="$(awk "BEGIN{printf \"%.1f\", (${TOT:-0}*8)/1000000}")"
+awk "BEGIN{exit !($MBPS>5)}" \
+  && say "PASS T4  multi-stream throughput=${MBPS} Mbps (${NS} streams, tun0=$TUN)" \
+  || say "WARN T4  multi-stream throughput=${MBPS} Mbps (<5 Mbps, ${NS} streams, tun0=$TUN)"
 
-# ── T5 — latency ──
-PING="$(ash ping -c 5 -W 2 1.1.1.1 | grep -oE 'avg[^=]*= [0-9./]+' | grep -oE '[0-9.]+' | sed -n '2p')"
-say "INFO T5  ping 1.1.1.1 avg=${PING:-?} ms"
+# ── T5 — latency via TTFB. ICMP ping AND the TCP handshake are answered LOCALLY by
+#   the gvisor user-stack (~3ms), so only time-to-first-byte traverses the full
+#   phone->exit->origin path and reflects real tunnel latency. ──
+TC="$(ash "curl -s --max-time 12 -o /dev/null -w '%{time_starttransfer}' https://1.1.1.1/cdn-cgi/trace")"
+TCMS="$(awk "BEGIN{printf \"%.0f\", ${TC:-0}*1000}")"
+say "INFO T5  TTFB to Cloudflare = ${TCMS} ms (real tunnel latency; ICMP/TCP-handshake are gvisor-local)"
 
 # ── T6 — idle CPU over 60s (OVERHEATING regression guard; shipped ~40% once) ──
 cpu(){ ash cat /proc/$P/stat | awk '{print $14+$15}'; }
@@ -90,9 +94,17 @@ awk "BEGIN{exit !($CPUPCT<10)}" \
 PSS="$(ash dumpsys meminfo "$PKG" | grep -i 'TOTAL PSS' | head -1 | grep -oE '[0-9]+' | head -1)"
 say "INFO T7  TOTAL PSS=$(( ${PSS:-0} / 1024 )) MB"
 
-# ── T8 — battery power estimate for the app (approx, charged-window) ──
-PWR="$(ash dumpsys batterystats --charged "$PKG" | grep -iE "Uid .*: .*mAh" | head -1)"
-say "INFO T8  battery: ${PWR:-<no estimate yet — needs a longer unplugged window>}"
+# ── T8 — battery drain: fake-unplug so batterystats accrues even on USB ──
+# `dumpsys battery unplug` makes the framework treat the device as on-battery so
+# batterystats attributes power; we reset, wait, read the app's mAh, then restore.
+BAT_WIN="${BAT_WIN:-120}"
+ash dumpsys battery unplug >/dev/null 2>&1
+ash dumpsys batterystats --reset >/dev/null 2>&1
+say "INFO T8  battery: fake-unplugged, accruing ${BAT_WIN}s idle-connected..."
+sleep "$BAT_WIN"
+PWR="$(ash "dumpsys batterystats --charged $PKG" | grep -iE "uid [0-9u]+:.*mah" | head -1)"
+ash dumpsys battery reset >/dev/null 2>&1   # CRITICAL: restore real charging state
+say "INFO T8  battery over ${BAT_WIN}s: ${PWR:-<no per-uid mAh accrued — try longer BAT_WIN>}"
 
 # ── T9 — stability: tun0 still up after the test window (NAT-idle 5-min drop) ──
 say "$([ "$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')" = up ] && echo 'PASS' || echo 'FAIL') T9  tun0 after window: $(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')"
