@@ -825,6 +825,7 @@ public static class AndroidStorage
     // is a follow-up — desktop reads BlockAds in ConfigGenerator.cs:96 to inject AdGuard
     // DoH + an ads rule_set; Android still uses the user-supplied DNS unchanged.
     private const string KeyBlockAds = "block_ads";                    // bool
+    private const string KeyAutoSelectBest = "auto_select_best_server"; // bool (A: urltest auto-select)
     private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
     private const string KeyAutostartVpn = "autostart_vpn";            // bool
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
@@ -905,6 +906,12 @@ public static class AndroidStorage
 
     public static bool GetBlockAds() => GetBool(KeyBlockAds, defaultValue: false);
     public static bool SetBlockAds(bool value) => SetBool(KeyBlockAds, value);
+
+    // A (2026-06-20): opt-in urltest auto-select. AndroidConfigBuilder reads this to
+    // build a same-protocol server pool, then the shared VlessConfig.GetActiveServers
+    // wraps it in a sing-box urltest group (fastest reachable node wins).
+    public static bool GetAutoSelectBestServer() => GetBool(KeyAutoSelectBest, defaultValue: false);
+    public static bool SetAutoSelectBestServer(bool value) => SetBool(KeyAutoSelectBest, value);
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");

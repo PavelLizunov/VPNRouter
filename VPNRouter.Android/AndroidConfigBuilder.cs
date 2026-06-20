@@ -111,7 +111,31 @@ public static class AndroidConfigBuilder
             "prefer_ipv4" => false,
             _ => true,                          // ipv4_only (default)
         };
-        settings.Vless.Servers.Add(entry);
+        // A (2026-06-20) — opt-in urltest auto-select, ported from desktop. When the
+        // user enables it, feed the WHOLE same-protocol subscription pool + the flag,
+        // so the shared VlessConfig.GetActiveServers builds a urltest group and
+        // ConfigGenerator emits a urltest "proxy" outbound (identical to desktop —
+        // GetActiveServers does the same-protocol/flow-only filtering). Off (default)
+        // or with <=1 server -> single-server behaviour, byte-identical to before.
+        if (AndroidStorage.GetAutoSelectBestServer())
+        {
+            var pool = AndroidStorage.GetServers();
+            if (pool != null && pool.Count > 1)
+            {
+                foreach (var s in pool)
+                    settings.Vless.Servers.Add(s);
+                settings.Vless.ActiveServer = entry.Name ?? string.Empty;
+                settings.Vless.AutoSelectBestServer = true;
+            }
+            else
+            {
+                settings.Vless.Servers.Add(entry);
+            }
+        }
+        else
+        {
+            settings.Vless.Servers.Add(entry);
+        }
 
         // Empty profile — Android's per-app filtering happens at the
         // VpnService.Builder layer (addAllowedApplication / addDisallowedApplication)
