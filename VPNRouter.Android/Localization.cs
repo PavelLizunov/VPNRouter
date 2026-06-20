@@ -216,6 +216,8 @@ internal static class Localization
     public static string RefreshAll => global::VPNRouter.Core.Localization.Strings.RefreshAll;
     public static string NeverRefreshed => global::VPNRouter.Core.Localization.Strings.NeverRefreshed;
     public static string SubUpdatedAt => global::VPNRouter.Core.Localization.Strings.SubUpdatedAt;
+    public static string AutoSelectBestServer => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServer;
+    public static string AutoSelectBestServerTip => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServerTip;
     public static string ToolsSection => global::VPNRouter.Core.Localization.Strings.ToolsSection;
     public static string RunDiagnostics => global::VPNRouter.Core.Localization.Strings.RunDiagnostics;
     public static string ClearDiscordCache => global::VPNRouter.Core.Localization.Strings.ClearDiscordCache;

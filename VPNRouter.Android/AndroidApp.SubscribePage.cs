@@ -49,6 +49,8 @@ public partial class AndroidApp
     private Avalonia.Controls.Button? _subsRefreshAllBtn;
     private TextBlock? _subsSectionLabel;
     private TextBlock? _subsRefreshAllStatus;
+    // A (2026-06-20) — opt-in urltest auto-select toggle (Subscribe tab, desktop parity).
+    private Avalonia.Controls.CheckBox? _subsAutoSelectChk;
 
     // ── AND-ADV-SERVERS-SUBSCRIBE Phase B (2026-05-10) ─────────────────
     // Aggregated server list at the TOP of the Subscribe tab (mirrors
@@ -283,6 +285,30 @@ public partial class AndroidApp
             Child = addFormRow,
         };
 
+        // ── A (2026-06-20) opt-in urltest auto-select toggle ───────────
+        //     Parity with desktop SubscribePage. Persists to AndroidStorage;
+        //     AndroidConfigBuilder reads it on connect to wrap the same-protocol
+        //     subscription pool in a sing-box urltest group (fastest node wins).
+        _subsAutoSelectChk = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetAutoSelectBestServer(),
+            Content = Localization.AutoSelectBestServer,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(_subsAutoSelectChk, Localization.AutoSelectBestServerTip);
+        _subsAutoSelectChk.IsCheckedChanged += (_, _) =>
+            AndroidStorage.SetAutoSelectBestServer(_subsAutoSelectChk.IsChecked == true);
+        var autoSelectBorder = new Border
+        {
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Background = GetBrush("SurfaceBaseBrush"),
+            Padding = new Thickness(10, 6, 10, 6),
+            Child = _subsAutoSelectChk,
+        };
+
         // ── Compose: aggregated server section fills the top space, the
         //    rest of the chrome docks below it. DockPanel adds the
         //    last child as the fill child, so addFormBorder /
@@ -293,10 +319,12 @@ public partial class AndroidApp
         DockPanel.SetDock(subsListScroller, Dock.Bottom);
         DockPanel.SetDock(sectionHeaderBorder, Dock.Bottom);
         DockPanel.SetDock(middleActionRow, Dock.Bottom);
+        DockPanel.SetDock(autoSelectBorder, Dock.Bottom);
         dock.Children.Add(addFormBorder);
         dock.Children.Add(subsListScroller);
         dock.Children.Add(sectionHeaderBorder);
         dock.Children.Add(middleActionRow);
+        dock.Children.Add(autoSelectBorder);
         dock.Children.Add(aggServerSection);
 
         return new Border
@@ -863,6 +891,8 @@ public partial class AndroidApp
         _subsAggTestingKeys.Clear();
         _subsAggResults = AndroidStorage.GetServerTestResults();
         if (_subsAggStatusText is not null) _subsAggStatusText.Text = string.Empty;
+        if (_subsAutoSelectChk is not null)
+            _subsAutoSelectChk.IsChecked = AndroidStorage.GetAutoSelectBestServer();
         RebuildSubsList();
         RebuildAggregatedServerList();
     }
@@ -1326,6 +1356,11 @@ public partial class AndroidApp
         if (_subsNewName is not null) _subsNewName.Watermark = Localization.AdvSubscribeNameLabel;
         if (_subsNewUrl is not null) _subsNewUrl.Watermark = Localization.AdvSubscribeUrlLabel;
         if (_subsEmptyHint is not null) _subsEmptyHint.Text = Localization.LblAddSubscriptionHint;
+        if (_subsAutoSelectChk is not null)
+        {
+            _subsAutoSelectChk.Content = Localization.AutoSelectBestServer;
+            ToolTip.SetTip(_subsAutoSelectChk, Localization.AutoSelectBestServerTip);
+        }
 
         // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — aggregated server table
         // headers + middle action row + empty hint.

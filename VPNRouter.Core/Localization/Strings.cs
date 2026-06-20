@@ -1003,6 +1003,13 @@ public static class Strings
     public static string RefreshAll => Ru ? "Обновить все" : "Refresh all";
     public static string NeverRefreshed => Ru ? "никогда" : "never";
     public static string SubUpdatedAt => Ru ? "Обновлено" : "Updated";
+    // A (2026-06-20) — opt-in urltest auto-select toggle (Android Subscribe tab,
+    // parity with desktop SubscribePage). Desktop uses VM L_AutoSelectBest*; Android
+    // reads these shared strings.
+    public static string AutoSelectBestServer => Ru ? "Авто-выбор лучшего сервера" : "Auto-select best server";
+    public static string AutoSelectBestServerTip => Ru
+        ? "Оборачивает серверы подписки одного протокола в urltest-группу — соединение идёт через самый быстрый доступный узел."
+        : "Wraps same-protocol subscription servers in a urltest group — traffic auto-routes through the fastest reachable node.";
 
     // ── Zapret tools ──
     public static string ToolsSection => Ru ? "Инструменты" : "Tools";

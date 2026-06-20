@@ -101,8 +101,10 @@ public class AndroidAppCharacterizationTests
     // shell). Method-name change → surface drift. (Subscribe-tab call-site change
     // is body-only; the new Localization delegates live in Localization.cs, not
     // an AndroidApp partial — neither affects this hash.)
+    // A (2026-06-20): added _subsAutoSelectChk field (Subscribe-tab auto-select
+    // toggle) to AndroidApp.SubscribePage.cs — intentional surface drift.
     private const string PinnedHash =
-        "5b2ebaac26899d3828e3bc6d5ffcb35be050398e5b560de76964933d6836950b";
+        "6ecae9f098390df3307994dc6f271372637f65c80541539e873f91d53b4e36c8";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()
