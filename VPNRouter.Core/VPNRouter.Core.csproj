@@ -28,7 +28,7 @@
        call sites migrated to System.Text.Json (Phase3StjJsonRoundTripTests +
        Phase4StjRoundTripTests pin wire-format compat). -->
   <ItemGroup>
-    <PackageReference Include="Serilog" Version="4.0.0" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="YamlDotNet" Version="15.3.0" />
