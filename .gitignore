@@ -56,6 +56,8 @@ tools/*
 !tools/build-libbox-aar.sh
 # v2.43.0: Windows companion build script (Go 1.25 + -checklinkname=0 + -javapkg).
 !tools/build-libbox-aar.ps1
+# v2.43.0: realistic on-device Android e2e harness (CPU/leak/speed/stability).
+!tools/android-e2e-test.sh
 # v2.37.0-r19: pre-ship CI gate — verify previous commit is green.
 !tools/verify-last-commit-ci.ps1
 # v2.31.1 follow-up: the recursive re-include above also pulled in this
