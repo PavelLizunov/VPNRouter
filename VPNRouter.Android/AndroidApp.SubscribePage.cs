@@ -969,6 +969,31 @@ public partial class AndroidApp
             TextWrapping = TextWrapping.NoWrap,
         };
         ToolTip.SetTip(metadataText, Localization.TipSubscriptionMetadata);
+        // P2 (2026-06-21): quota / days-left line from the Subscription-Userinfo header.
+        var infoPanel = new StackPanel
+        {
+            Spacing = 1,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        infoPanel.Children.Add(nameText);
+        infoPanel.Children.Add(metadataText);
+        var userInfo = VPNRouter.Core.Services.SubscriptionUserInfo.Parse(sub.UserInfo);
+        if (userInfo is not null)
+        {
+            var summary = userInfo.FormatSummary(DateTimeOffset.UtcNow);
+            if (!string.IsNullOrEmpty(summary))
+            {
+                infoPanel.Children.Add(new TextBlock
+                {
+                    Text = summary,
+                    FontSize = 9,
+                    FontWeight = FontWeight.SemiBold,
+                    FontFamily = new FontFamily("monospace"),
+                    Foreground = GetBrush("AccentFgBrush"),
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+            }
+        }
         // v2.32.0 (AND-4): wrap in a hit-test-friendly Border so the name
         // area is tappable independently of the action buttons. Tap →
         // open per-server testing overlay (drill-down).
@@ -976,12 +1001,7 @@ public partial class AndroidApp
         {
             Background = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new StackPanel
-            {
-                Spacing = 1,
-                VerticalAlignment = VerticalAlignment.Center,
-                Children = { nameText, metadataText },
-            },
+            Child = infoPanel,
         };
         nameStack.PointerReleased += (s, e) => OpenServerListOverlay(sub);
 

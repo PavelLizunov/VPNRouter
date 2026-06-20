@@ -35,7 +35,7 @@ public static class SubscriptionFetcher
     /// </summary>
     public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
     {
-        var (entries, _) = await FetchWithDiagnosticsAsync(url, logger, ct);
+        var (entries, _, _) = await FetchWithDiagnosticsAsync(url, logger, ct);
         return entries;
     }
 
@@ -47,14 +47,15 @@ public static class SubscriptionFetcher
     /// users understand *why* their fetched server count is lower than
     /// the provider's apparent list size.
     /// </summary>
-    internal static async Task<(List<VlessServerEntry> Entries, int DroppedPlaceholders)>
+    internal static async Task<(List<VlessServerEntry> Entries, int DroppedPlaceholders, string? UserInfo)>
         FetchWithDiagnosticsAsync(string url, ILogger? logger = null, CancellationToken ct = default)
     {
         var result = new List<VlessServerEntry>();
         var droppedPlaceholders = 0;
+        string? userInfo = null; // P2: Subscription-Userinfo response header (quota/expiry)
 
         if (string.IsNullOrWhiteSpace(url))
-            return (result, 0);
+            return (result, 0, userInfo);
 
         try
         {
@@ -69,13 +70,23 @@ public static class SubscriptionFetcher
             if (!httpResp.IsSuccess())
             {
                 logger?.Warning("[Subscription] HTTP {Status} from {Url}", httpResp.StatusCode, url);
-                return (result, 0);
+                return (result, 0, userInfo);
+            }
+            // P2: capture Subscription-Userinfo (case-insensitive — header key-folding
+            // varies by IHttpClient impl). Providers put quota + expiry here.
+            if (httpResp.Headers != null)
+            {
+                foreach (var kv in httpResp.Headers)
+                {
+                    if (string.Equals(kv.Key, "subscription-userinfo", StringComparison.OrdinalIgnoreCase))
+                    { userInfo = kv.Value; break; }
+                }
             }
             var response = httpResp.AsString();
             if (string.IsNullOrWhiteSpace(response))
             {
                 logger?.Warning("[Subscription] Empty response from {Url}", url);
-                return (result, 0);
+                return (result, 0, userInfo);
             }
 
             // v2.31.5+: parsing extracted to ParseBody for unit-testability
@@ -99,7 +110,7 @@ public static class SubscriptionFetcher
             logger?.Error(ex, "[Subscription] Fetch failed for {Url}", url);
         }
 
-        return (result, droppedPlaceholders);
+        return (result, droppedPlaceholders, userInfo);
     }
 
     /// <summary>
@@ -281,8 +292,12 @@ public static class SubscriptionFetcher
         // parallel warning here so callers that subscribe a *separate*
         // logger to RefreshEntryAsync (e.g. UI status panel) still see
         // the placeholder drop. Both messages stay aligned.
-        var (servers, droppedPlaceholders) = await FetchWithDiagnosticsAsync(entry.Url, logger, ct);
+        var (servers, droppedPlaceholders, userInfo) = await FetchWithDiagnosticsAsync(entry.Url, logger, ct);
         if (ct.IsCancellationRequested) return 0;
+
+        // P2: persist the provider's quota/expiry header when present (independent of
+        // server parsing; never wipe a good cached value with null on a transient fail).
+        if (userInfo != null) entry.UserInfo = userInfo;
 
         if (droppedPlaceholders > 0 && logger != null)
         {

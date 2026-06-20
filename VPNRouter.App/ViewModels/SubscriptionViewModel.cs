@@ -18,6 +18,8 @@ public partial class SubscriptionViewModel : ObservableObject
     [ObservableProperty] private bool _enabled;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LastRefreshedDisplay))]
+    [NotifyPropertyChangedFor(nameof(UserInfoDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasUserInfo))]
     private DateTimeOffset? _lastRefreshedAt;
     [ObservableProperty] private int _lastServerCount;
     [ObservableProperty] private bool _isRefreshing;
@@ -54,6 +56,20 @@ public partial class SubscriptionViewModel : ObservableObject
             return LastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         }
     }
+
+    /// <summary>P2 (2026-06-21) — quota / days-left from the provider's
+    /// Subscription-Userinfo header; empty string when the provider doesn't send it.</summary>
+    public string UserInfoDisplay
+    {
+        get
+        {
+            var ui = VPNRouter.Core.Services.SubscriptionUserInfo.Parse(_entry.UserInfo);
+            return ui?.FormatSummary(DateTimeOffset.UtcNow) ?? string.Empty;
+        }
+    }
+
+    /// <summary>True when <see cref="UserInfoDisplay"/> has something to show (drives IsVisible).</summary>
+    public bool HasUserInfo => UserInfoDisplay.Length > 0;
 
     public SubscriptionViewModel(SubscriptionEntry entry)
     {

@@ -589,6 +589,12 @@ public class SubscriptionEntry
 
     [YamlMember(Alias = "servers")]
     public List<VlessServerEntry> Servers { get; set; } = new();
+
+    // P2 (2026-06-21) — raw `Subscription-Userinfo` response header from the last
+    // fetch (e.g. "upload=..; download=..; total=..; expire=.."). Parsed for display
+    // via SubscriptionUserInfo.Parse. Null when the provider doesn't send it.
+    [YamlMember(Alias = "user_info")]
+    public string? UserInfo { get; set; }
 }
 
 /// <summary>A user-created Applications category.</summary>

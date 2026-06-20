@@ -321,6 +321,13 @@
                              FontSize="10"
                              TextWrapping="Wrap"
                              Foreground="{DynamicResource WarningFgBrush}"/>
+                  <!-- P2 (2026-06-21): remaining quota / days-left from the provider's
+                       Subscription-Userinfo header. Hidden when not provided. -->
+                  <TextBlock Text="{Binding UserInfoDisplay}"
+                             IsVisible="{Binding HasUserInfo}"
+                             FontSize="10"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource AccentFgBrush}"/>
                 </StackPanel>
 
                 <ProgressBar Grid.Column="2" IsVisible="{Binding IsRefreshing}"
