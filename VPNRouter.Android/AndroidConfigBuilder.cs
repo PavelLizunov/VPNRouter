@@ -119,8 +119,14 @@ public static class AndroidConfigBuilder
         // or with <=1 server -> single-server behaviour, byte-identical to before.
         if (AndroidStorage.GetAutoSelectBestServer())
         {
-            var pool = AndroidStorage.GetServers();
-            if (pool != null && pool.Count > 1)
+            // Bug-AND-A1 (2026-06-21, caught on-device): the pool must aggregate the
+            // SAME sources GetActiveServer() resolves from — the standalone server
+            // list AND every enabled subscription's Servers. Bug-AND-023 v4 stopped
+            // duplicating subscription servers into GetServers(), so reading only
+            // GetServers() returned <=1 in subscribe mode and the urltest group was
+            // never emitted (verified on device: outbound/vless[proxy], no urltest).
+            var pool = GetAllCandidateServers();
+            if (pool.Count > 1)
             {
                 foreach (var s in pool)
                     settings.Vless.Servers.Add(s);
@@ -306,6 +312,25 @@ public static class AndroidConfigBuilder
     /// <returns>JSON with the strategy applied to all proxy outbounds.</returns>
     public static string InjectDpiBypass(string json, string mode)
         => AndroidDpiBypassInjector.Inject(json, mode);
+
+    /// <summary>
+    /// Bug-AND-A1 (2026-06-21) — aggregate every candidate server for the A
+    /// auto-select pool from the SAME sources <see cref="AndroidStorage.GetActiveServer"/>
+    /// resolves from: the standalone server list PLUS every enabled subscription's
+    /// Servers. Bug-AND-023 v4 stopped mirroring subscription servers into the
+    /// standalone KeyServersJson pool, so <c>GetServers()</c> alone misses them in
+    /// subscribe mode (the common case) and the urltest group never formed.
+    /// </summary>
+    private static System.Collections.Generic.List<VlessServerEntry> GetAllCandidateServers()
+    {
+        var all = new System.Collections.Generic.List<VlessServerEntry>(AndroidStorage.GetServers());
+        foreach (var sub in AndroidStorage.GetSubscriptions())
+        {
+            if (sub is { Enabled: true, Servers: not null })
+                all.AddRange(sub.Servers);
+        }
+        return all;
+    }
 
     private static string PatchLogPathForAndroid(string json, string? logOutputPath)
     {
