@@ -826,6 +826,7 @@ public static class AndroidStorage
     // DoH + an ads rule_set; Android still uses the user-supplied DNS unchanged.
     private const string KeyBlockAds = "block_ads";                    // bool
     private const string KeyAutoSelectBest = "auto_select_best_server"; // bool (A: urltest auto-select)
+    private const string KeyPostNotifPrompt = "post_notif_prompt_shown"; // bool (B1: POST_NOTIFICATIONS asked once)
     private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
     private const string KeyAutostartVpn = "autostart_vpn";            // bool
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
@@ -847,6 +848,7 @@ public static class AndroidStorage
     // Reliability. Pure C#-side flag — the Java service reads the live
     // PowerManager state, not this, so it doesn't need to stay in sync.
     private const string KeyBatteryOptPromptShown = "battery_opt_prompt_shown";
+    private const string KeyBatteryOptLastPrompt = "battery_opt_last_prompt"; // B8: 24h re-prompt throttle
 
     // v2.32.0 SR-1 — semantic validation. Each enum getter normalises the
     // raw stored value through ValidateOrDefault, so a typoed / older /
@@ -912,6 +914,10 @@ public static class AndroidStorage
     // wraps it in a sing-box urltest group (fastest reachable node wins).
     public static bool GetAutoSelectBestServer() => GetBool(KeyAutoSelectBest, defaultValue: false);
     public static bool SetAutoSelectBestServer(bool value) => SetBool(KeyAutoSelectBest, value);
+
+    // B1 (2026-06-21): POST_NOTIFICATIONS asked-once gate (Android 13+).
+    public static bool GetPostNotifPromptShown() => GetBool(KeyPostNotifPrompt, defaultValue: false);
+    public static bool SetPostNotifPromptShown(bool value) => SetBool(KeyPostNotifPrompt, value);
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");
@@ -984,6 +990,11 @@ public static class AndroidStorage
         GetBool(KeyBatteryOptPromptShown, defaultValue: false);
     public static bool SetBatteryOptPromptShown(bool value) =>
         SetBool(KeyBatteryOptPromptShown, value);
+
+    // B8 (2026-06-21): ISO timestamp of the last battery-opt prompt, for the
+    // 24h-throttled re-prompt while the app is still not exempt.
+    public static string? GetBatteryOptLastPrompt() => GetString(KeyBatteryOptLastPrompt);
+    public static bool SetBatteryOptLastPrompt(string value) => SetString(KeyBatteryOptLastPrompt, value);
 
     // ── AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E persistence ─────────
     //
@@ -1220,6 +1231,18 @@ public static class AndroidStorage
             {
                 if (kvp.Value.LastTestedAt < cutoff) continue;
                 pruned[kvp.Key] = kvp.Value;
+            }
+            // L1 (2026-06-21) backstop: on top of the 7-day age-out, hard-cap the
+            // retained entries so a heavy 7-day window (pool-rotating subscriptions
+            // that mint new Server:Port:Uuid:Flow keys) can't bloat the blob. Keep
+            // the most-recent N by LastTestedAt. No coupling to the live server set.
+            const int MaxEntries = 300;
+            if (pruned.Count > MaxEntries)
+            {
+                var ordered = new List<KeyValuePair<string, ServerTestResultDto>>(pruned);
+                ordered.Sort((a, b) => b.Value.LastTestedAt.CompareTo(a.Value.LastTestedAt));
+                pruned = new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < MaxEntries; i++) pruned[ordered[i].Key] = ordered[i].Value;
             }
             var json = JsonSerializer.Serialize(pruned, JsonOptions);
             return SetString(KeyServerTestResults, json);

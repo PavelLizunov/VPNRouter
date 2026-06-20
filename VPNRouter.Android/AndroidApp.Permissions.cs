@@ -141,7 +141,6 @@ public partial class AndroidApp
     {
         try
         {
-            if (AndroidStorage.GetBatteryOptPromptShown()) return;
             var activity = MainActivity.Instance;
             if (activity is null) return;
             if (IsIgnoringBatteryOptimizations(activity))
@@ -152,10 +151,20 @@ public partial class AndroidApp
                 AndroidStorage.SetBatteryOptPromptShown(true);
                 return;
             }
+            // B8 (2026-06-21): NOT exempt. Battery-opt is the single biggest
+            // reliability lever — a one-shot prompt the user dismissed once left
+            // the tunnel doze-killable forever. Re-prompt, but throttle to at most
+            // once / 24h so it nudges without nagging.
+            var lastIso = AndroidStorage.GetBatteryOptLastPrompt();
+            if (!string.IsNullOrEmpty(lastIso)
+                && DateTimeOffset.TryParse(lastIso, out var last)
+                && (DateTimeOffset.UtcNow - last) < TimeSpan.FromHours(24))
+                return;
             AndroidStorage.SetBatteryOptPromptShown(true);
+            AndroidStorage.SetBatteryOptLastPrompt(DateTimeOffset.UtcNow.ToString("o"));
             RequestBatteryOptimizationExemption(activity);
             global::Android.Util.Log.Info("VpnRouter",
-                "AND-NODOZE: proactive battery-opt exemption prompt fired (first connect)");
+                "AND-NODOZE: battery-opt exemption prompt fired (not exempt; 24h-throttled re-prompt)");
         }
         catch (Exception ex)
         {

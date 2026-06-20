@@ -91,6 +91,7 @@ public class MainActivity : AvaloniaMainActivity
     // zxing-android-embedded's hard-coded REQUEST_CODE (0x0000C0DE) —
     // see RequestCodeQrScan below.
     private const int RequestCodeCameraQr = 0x4711;
+    private const int RequestCodePostNotifications = 0x4712;  // B1 (Android 13+)
 
     // Bug-AND-023 v2 — IntentIntegrator.REQUEST_CODE (com.journeyapps.
     // barcodescanner) is hard-coded to 0x0000C0DE / 49374. Mirroring it
@@ -364,6 +365,40 @@ public class MainActivity : AvaloniaMainActivity
         {
             global::Android.Util.Log.Warn("VpnRouter",
                 $"Bug-AND-011/Medium-3: QR temp sweep threw: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        // B1 (2026-06-21) — request POST_NOTIFICATIONS on first launch (Android 13+).
+        MaybeRequestPostNotifications();
+    }
+
+    /// <summary>
+    /// B1 (2026-06-21) — request POST_NOTIFICATIONS once on Android 13+ (Tiramisu).
+    /// The foreground-service notification is the user's only Disconnect affordance
+    /// and the visible proof the VPN runs; on API 33+ it is suppressed until granted.
+    /// Mirrors the CAMERA runtime-permission flow. The grant result is a no-op for us
+    /// (the FGS still runs; the notification simply appears once granted) so it reuses
+    /// the early-return in <see cref="OnRequestPermissionsResult"/>. Gated by a one-shot
+    /// AndroidStorage flag so we don't re-fire the system dialog on every launch.
+    /// </summary>
+    private void MaybeRequestPostNotifications()
+    {
+        try
+        {
+            if (!OperatingSystem.IsAndroidVersionAtLeast(33)) return;  // pre-13: granted at install
+            if (AndroidStorage.GetPostNotifPromptShown()) return;
+            AndroidStorage.SetPostNotifPromptShown(true);
+            var granted = AndroidX.Core.Content.ContextCompat.CheckSelfPermission(
+                this, global::Android.Manifest.Permission.PostNotifications) == Permission.Granted;
+            if (granted) return;
+            AndroidX.Core.App.ActivityCompat.RequestPermissions(
+                this,
+                new[] { global::Android.Manifest.Permission.PostNotifications },
+                RequestCodePostNotifications);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"B1: POST_NOTIFICATIONS request failed: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -914,7 +949,13 @@ public class MainActivity : AvaloniaMainActivity
         }
     }
 
-    private void StartTunnelService()
+    // B2 (2026-06-21): async void — the heavy AndroidConfigBuilder.BuildConfigJson*
+    // (JSON parse + STJ serialize + StripUnsupportedFeatures) runs in Task.Run so the
+    // connect tap never blocks the UI thread (ANR risk on budget devices with large
+    // custom JSON). The await continuation resumes on the UI thread (captured context),
+    // so DispatchTunnelStart + all SetIntent/UI calls stay on the UI thread. Callers
+    // (RequestConnect consent paths) invoke it fire-and-forget as their last statement.
+    private async void StartTunnelService()
     {
         // v3.0 Phase 6.1 (2026-05-04) — point sing-box log.output at a
         // world-readable file under getExternalFilesDir() so we can pull
@@ -978,7 +1019,8 @@ public class MainActivity : AvaloniaMainActivity
 
             try
             {
-                configJson = AndroidConfigBuilder.BuildConfigJsonFromCustom(rawJson, singboxLogPath);
+                configJson = await System.Threading.Tasks.Task.Run(
+                    () => AndroidConfigBuilder.BuildConfigJsonFromCustom(rawJson, singboxLogPath));
                 global::Android.Util.Log.Info("VpnRouter",
                     $"AND-CC: custom JSON injected ({rawJson.Length} → {configJson.Length} chars)");
             }
@@ -1111,7 +1153,8 @@ public class MainActivity : AvaloniaMainActivity
 
         try
         {
-            configJson = AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath);
+            configJson = await System.Threading.Tasks.Task.Run(
+                () => AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath));
             // Phase 6.2 debug — write the JSON we hand to libbox to a
             // world-readable file for offline inspection. Useful when
             // diagnosing routing issues like "TCP packets never reach
