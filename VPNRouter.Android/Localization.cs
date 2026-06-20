@@ -218,6 +218,8 @@ internal static class Localization
     public static string SubUpdatedAt => global::VPNRouter.Core.Localization.Strings.SubUpdatedAt;
     public static string AutoSelectBestServer => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServer;
     public static string AutoSelectBestServerTip => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServerTip;
+    public static string NotifTunnelActive => global::VPNRouter.Core.Localization.Strings.NotifTunnelActive;
+    public static string NotifDisconnect => global::VPNRouter.Core.Localization.Strings.NotifDisconnect;
     public static string ToolsSection => global::VPNRouter.Core.Localization.Strings.ToolsSection;
     public static string RunDiagnostics => global::VPNRouter.Core.Localization.Strings.RunDiagnostics;
     public static string ClearDiscordCache => global::VPNRouter.Core.Localization.Strings.ClearDiscordCache;

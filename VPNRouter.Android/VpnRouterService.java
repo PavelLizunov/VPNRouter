@@ -131,6 +131,14 @@ public final class VpnRouterService extends VpnService {
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
     public static final String EXTRA_PER_APP_MODE = "per_app_mode";
     public static final String EXTRA_PER_APP_PACKAGES = "per_app_packages";
+    public static final String EXTRA_NOTIF_TEXT = "notif_text";             // B7: localized FGS text
+    public static final String EXTRA_NOTIF_DISCONNECT = "notif_disconnect"; // B7: localized Disconnect label
+
+    // B7 (2026-06-21) — localized notification strings from the C# side (Localization),
+    // set in onStartCommand before ensureForegroundStarted(). Defaults are the prior
+    // hardcoded English so a missing extra (or an old caller) keeps current behavior.
+    private String notifText = "Tunnel active";
+    private String notifDisconnect = "Disconnect";
     // v3.0 Phase 1.I — broadcasts so the Avalonia UI can flip its button
     // label on real tunnel-state events instead of intent-only.
     public static final String ACTION_TUNNEL_UP = "com.ninitux.vpnrouter.TUNNEL_UP";
@@ -472,6 +480,13 @@ public final class VpnRouterService extends VpnService {
             // lifecycle on the worker. startForeground MUST be prompt on the main
             // thread (FGS contract) — do it here, not inside startTunnel (which now
             // runs worker-side and could be briefly queued behind a prior op).
+            // B7: capture localized notification strings BEFORE the foreground start
+            // (ensureForegroundStarted -> buildNotification) so the first FGS notification
+            // is localized. Empty/missing extras leave the English defaults.
+            String nText = intent.getStringExtra(EXTRA_NOTIF_TEXT);
+            if (nText != null && !nText.isEmpty()) notifText = nText;
+            String nDisc = intent.getStringExtra(EXTRA_NOTIF_DISCONNECT);
+            if (nDisc != null && !nDisc.isEmpty()) notifDisconnect = nDisc;
             if (!ensureForegroundStarted()) {
                 return START_STICKY; // background-FGS-start refused — already broadcast + stopSelf
             }
@@ -1272,10 +1287,10 @@ public final class VpnRouterService extends VpnService {
 
         return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("VPNRouter")
-                .setContentText("Tunnel active")
+                .setContentText(notifText)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
                 .setOngoing(true)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", stopPi)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, notifDisconnect, stopPi)
                 .build();
     }
 

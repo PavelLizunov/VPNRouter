@@ -1010,6 +1010,10 @@ public static class Strings
     public static string AutoSelectBestServerTip => Ru
         ? "Оборачивает серверы подписки одного протокола в urltest-группу — соединение идёт через самый быстрый доступный узел."
         : "Wraps same-protocol subscription servers in a urltest group — traffic auto-routes through the fastest reachable node.";
+    // B7 (2026-06-21) — Android foreground-service notification, passed to the Java
+    // VpnRouterService via intent extras (English literals stay as the Java fallback).
+    public static string NotifTunnelActive => Ru ? "Туннель активен" : "Tunnel active";
+    public static string NotifDisconnect => Ru ? "Отключить" : "Disconnect";
 
     // ── Zapret tools ──
     public static string ToolsSection => Ru ? "Инструменты" : "Tools";

@@ -118,6 +118,8 @@ public class MainActivity : AvaloniaMainActivity
     // v3.0 Phase 7.5 — per-app filter intent extras (handbook §5.5).
     private const string ExtraPerAppMode = "per_app_mode";
     private const string ExtraPerAppPackages = "per_app_packages";
+    private const string ExtraNotifText = "notif_text";            // B7: localized FGS notification text
+    private const string ExtraNotifDisconnect = "notif_disconnect"; // B7: localized Disconnect action label
     // DNS-tunnel (slipstream) — forwarded only when the active server is
     // dns-tunnel; the service starts the in-process Slipstream front before
     // libbox. Must match the EXTRA_DNS_TUNNEL_* keys in VpnRouterService.java.
@@ -1222,7 +1224,9 @@ public class MainActivity : AvaloniaMainActivity
             .PutExtra(ExtraConfigJson, configJson)
             .PutExtra(ExtraAllowedPackages, Array.Empty<string>())
             .PutExtra(ExtraPerAppMode, perAppMode)
-            .PutExtra(ExtraPerAppPackages, perAppPackages);
+            .PutExtra(ExtraPerAppPackages, perAppPackages)
+            .PutExtra(ExtraNotifText, Localization.NotifTunnelActive)         // B7
+            .PutExtra(ExtraNotifDisconnect, Localization.NotifDisconnect);    // B7
 
         // DNS-tunnel (slipstream) — forward the tunnel parameters so the
         // service brings up the Slipstream front before libbox. The generated
