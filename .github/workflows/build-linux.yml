@@ -236,7 +236,7 @@ jobs:
           Section: net
           Priority: optional
           Architecture: amd64
-          Depends: libx11-6, libice6, libsm6, libfontconfig1, libicu70 | libicu71 | libicu72 | libicu74, policykit-1 | polkitd
+          Depends: libx11-6, libice6, libsm6, libfontconfig1, libicu70 | libicu71 | libicu72 | libicu74, policykit-1 | polkitd, nftables
           Recommends: libayatana-appindicator3-1
           Maintainer: NiniTux <noreply@example.invalid>
           Installed-Size: ${SIZE_KB}

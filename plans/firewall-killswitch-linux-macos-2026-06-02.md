@@ -1,10 +1,14 @@
 # Fail-closed firewall backstop for Linux + macOS — DESIGN BRIEF
 
-**Status:** design only (2026-06-02 overnight). NO code shipped — this is a
-HIGH-risk P0 (firewall changes can break a host's connectivity, need root, and
-can't be meaningfully tested on the Windows dev VM). Implementation should land
-under supervision, tested on real Linux + macOS hosts. This brief is for the
-user to review and green-light before any code.
+**Status (2026-06-21):** macOS pf kill-switch SHIPPED (r6). **Linux nft kill-switch
+SHIPPED + device-verified** in v2.44.0-r1 — `LinuxFirewallManager` (nft, mirrors the
+macOS pf pattern: full-tunnel-only global egress block, server/LAN/loopback allow-list,
+marker-based orphan cleanup, fail-safe via `sudo -n nft`), wired in
+`PlatformServices.CreateFirewallFactory` + startup orphan sweep in App `Program.cs`,
+13 unit tests + real-host test on the Debian VM (public egress BLOCKED while LAN/SSH
+stayed up, clean teardown, no leftover table, no brick). `.deb` now `Depends: nftables`.
+Remaining: cross-platform DNS-lockdown parity (`IDnsLockdown`, separate follow-up).
+Original design brief below.
 
 Implements product-gap-audit **#131**.
 

@@ -416,6 +416,14 @@ sealed class Program
                 // isn't left with no internet. No-op on a normal launch.
                 VPNRouter.Core.Platform.macOS.MacFirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
             }
+            else if (OperatingSystem.IsLinux())
+            {
+                // Linux nft kill-switch orphan sweep. Marker-gated — only acts if a
+                // prior session was hard-killed while the kill-switch was engaged
+                // (Dispose never ran), deleting the leftover nft table so the host
+                // isn't left with no internet. No-op on a normal launch.
+                VPNRouter.Core.Platform.Linux.LinuxFirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
+            }
         }
         catch { }
 
