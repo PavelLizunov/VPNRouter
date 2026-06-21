@@ -178,7 +178,7 @@ Release-сборка + упаковка:
 
 ```powershell
 # Windows (PowerShell) — производит full + update ZIP'ы + их .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.32.0"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.43.0"
 ```
 
 ```bash
