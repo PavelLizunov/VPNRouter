@@ -69,6 +69,14 @@
                                    TextWrapping="Wrap"
                                    Margin="20,0,0,0"
                                    LineHeight="15"/>
+                        <!-- Desktop STATS parity (live up/down + conn, clash_api-polled) -->
+                        <TextBlock Text="{Binding ConnectionStatsText}"
+                                   IsVisible="{Binding HasConnectionStats}"
+                                   FontSize="10"
+                                   FontFamily="Consolas,Menlo,monospace"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="20,0,0,0"
+                                   LineHeight="15"/>
                     </StackPanel>
                 </Border>
 

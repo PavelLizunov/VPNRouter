@@ -93,6 +93,7 @@ public partial class MainWindowViewModel
         _runtimeStatusTimer = new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) =>
         {
             UpdateRuntimeStatus();
+            MaybePollConnStats();   // Desktop STATS: live up/down + conn count (fire-and-forget)
         });
         _runtimeStatusTimer.Start();
     }

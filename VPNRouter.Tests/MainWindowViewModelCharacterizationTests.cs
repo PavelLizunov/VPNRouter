@@ -213,7 +213,11 @@ public class MainWindowViewModelCharacterizationTests
     // getters → Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI).
     private const string PinnedHashWindows =
         // Backlog A (2026-06-20): + AutoSelectBestServer + L_AutoSelectBest + L_AutoSelectBestTip (urltest toggle).
-        "44153baad999b3c29b7ce2159cbf94704c243c7eac155598e6885d26ee01d306";
+        // Desktop STATS (2026-06-21): + ConnectionStatsText + HasConnectionStats + OnIsConnectedChanged +
+        // MaybePollConnStats/PollConnStatsAsync/HumanRate + _statsApi/_statsPrev*/_statsInFlight
+        // (MainWindowViewModel.ConnStats.cs). Cross-platform → Linux pin drifts in lock-step
+        // (soft-fail; capture from next ubuntu CI run).
+        "02fa85446b73b331d62716aba86e5077fa3fb3568c588f63fbc49442e7ae6c0c";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
