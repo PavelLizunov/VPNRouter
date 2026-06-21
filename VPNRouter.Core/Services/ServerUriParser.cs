@@ -521,9 +521,15 @@ public static class ServerUriParser
         }
         else
         {
-            // base64 userinfo. Restore base64 padding if missing
+            // base64 userinfo. Accept BOTH standard base64 and base64url
+            // ("-"/"_") — SIP002 mandates base64url and our Clash-YAML emitter
+            // (ClashYamlParser.MapShadowsocks) produces it, so a plain
+            // Convert.FromBase64String would throw on "-"/"_" and silently drop
+            // those servers. The Replace is a no-op for standard base64 (it has
+            // no "-"/"_") so it's safe for both. Restore padding if missing
             // ("Shadowrocket"-style links sometimes drop trailing '=').
-            var padded = userinfo.PadRight(userinfo.Length + (4 - userinfo.Length % 4) % 4, '=');
+            var normalized = userinfo.Replace('-', '+').Replace('_', '/');
+            var padded = normalized.PadRight(normalized.Length + (4 - normalized.Length % 4) % 4, '=');
             string decoded;
             try { decoded = Encoding.UTF8.GetString(Convert.FromBase64String(padded)); }
             catch (Exception ex)

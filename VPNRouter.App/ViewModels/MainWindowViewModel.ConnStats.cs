@@ -89,6 +89,28 @@ public partial class MainWindowViewModel
             if (api is null) return;
             var snap = await api.GetConnectionsAsync().ConfigureAwait(false);
             var now = snap.CapturedAt;
+
+            // GetConnectionsAsync returns an all-zero snapshot both on failure
+            // (timeout / non-2xx / parse error) and for a brand-new idle tunnel.
+            // Neither carries a real rate signal — skip the tick WITHOUT advancing
+            // the baseline. Otherwise a single dropped poll zeroes _statsPrev* and
+            // the next good poll renders a phantom multi-MB/s spike (delta computed
+            // against a zeroed baseline). Most visible during reconnect/hot-reload.
+            if (snap.ActiveCount == 0 && snap.TotalDownloadBytes == 0 && snap.TotalUploadBytes == 0)
+                return;
+
+            // Counter regression => sing-box restarted / counters reset (e.g. an
+            // in-place tunnel reconfigure while IsConnected stays true). Re-baseline
+            // silently so we don't emit a bogus spike (old large baseline vs new
+            // small counter); the next poll computes a correct delta.
+            if (snap.TotalDownloadBytes < _statsPrevDown || snap.TotalUploadBytes < _statsPrevUp)
+            {
+                _statsPrevDown = snap.TotalDownloadBytes;
+                _statsPrevUp = snap.TotalUploadBytes;
+                _statsPrevAt = now;
+                return;
+            }
+
             string? text = null;
             if (_statsPrevAt is { } prevAt)
             {

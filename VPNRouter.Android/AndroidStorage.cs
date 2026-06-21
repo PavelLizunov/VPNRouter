@@ -1663,6 +1663,10 @@ public static class AndroidStorage
                 KeyAutostartVpn, KeyAutostartZapret, KeyAutostartTgProxy,
                 KeyDpiBypassMode,
                 KeyActiveProfile,
+                // P4: external-control is a security-sensitive opt-in governing an
+                // exported receiver — a config-reset recovery must return it to
+                // default-OFF, not silently leave the VPN remotely controllable.
+                KeyExternalControl,
             };
             foreach (var k in liveKeys) editor.Remove(k);
             return editor.Commit();

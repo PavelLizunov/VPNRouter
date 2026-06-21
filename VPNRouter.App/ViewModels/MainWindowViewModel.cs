@@ -7191,6 +7191,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _subRefreshCts cleanup failed"); }
+
+        // 5. Dispose the clash_api live-stats client (owns an HttpClient). It is
+        // normally disposed on disconnect (OnIsConnectedChanged false), but a quit
+        // while still connected never flips IsConnected, so close it here too.
+        try
+        {
+            _statsApi?.Dispose();
+            _statsApi = null;
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _statsApi cleanup failed"); }
     }
 
     // ── Theme ──

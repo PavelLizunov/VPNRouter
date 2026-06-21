@@ -1118,7 +1118,13 @@ public final class VpnRouterService extends VpnService {
         Socket sock = null;
         try {
             sock = new Socket();
-            protect(sock);   // bypass our own tun — the whole point of P1
+            // bypass our own tun — the whole point of P1. protect() can return
+            // false (transient binder / service not yet a VpnService owner); the
+            // unprotected connect to loopback then routes into our tun and fails
+            // (caught below). Log so a persistently-failing poller is diagnosable
+            // rather than silently never reporting stats.
+            if (!protect(sock))
+                Log.w(LOG_TAG, "pollStatsOnce: protect(socket) returned false — stats may not flow this tick");
             sock.connect(new InetSocketAddress("127.0.0.1", 9090), 2000);
             sock.setSoTimeout(2000);
             java.io.OutputStream os = sock.getOutputStream();
@@ -1140,8 +1146,16 @@ public final class VpnRouterService extends VpnService {
             org.json.JSONObject obj = new org.json.JSONObject(body.substring(brace, end + 1));
             long down = obj.optLong("downloadTotal", 0L);
             long up = obj.optLong("uploadTotal", 0L);
-            int conn = obj.has("connections") && !obj.isNull("connections")
-                       ? obj.getJSONArray("connections").length() : 0;
+            // Isolate the connections-array read: if a libbox Clash-API version
+            // ships 'connections' as a non-array, getJSONArray throws and would
+            // otherwise discard the good down/up totals for this tick too.
+            int conn = 0;
+            try {
+                if (obj.has("connections") && !obj.isNull("connections"))
+                    conn = obj.getJSONArray("connections").length();
+            } catch (org.json.JSONException ignore) {
+                // schema drift — keep the down/up totals we already parsed.
+            }
             Intent it = new Intent(ACTION_STATS).setPackage(getPackageName());
             it.putExtra(EXTRA_STATS_DOWN, down);
             it.putExtra(EXTRA_STATS_UP, up);

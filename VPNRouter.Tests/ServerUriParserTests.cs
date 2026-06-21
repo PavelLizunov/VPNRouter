@@ -106,6 +106,23 @@ public class ServerUriParserTests
     }
 
     [Fact]
+    public void Shadowsocks_Base64UrlUserinfo_DecodesAndParses()
+    {
+        // Regression (v2.44.1): SIP002 and our Clash-YAML emitter
+        // (ClashYamlParser.MapShadowsocks) produce base64URL userinfo using
+        // '-'/'_', not standard base64. Before the fix the parser decoded with a
+        // plain Convert.FromBase64String which threw on '-'/'_', so those ss
+        // servers were silently dropped. This fixture's standard base64 contains
+        // a '+' (-> '-' in url-safe form), so it genuinely exercises the path.
+        // url-safe of UTF8("aes-256-gcm:s>>?>p?w") = "YWVzLTI1Ni1nY206cz4-Pz5wP3c".
+        var uri = "ss://YWVzLTI1Ni1nY206cz4-Pz5wP3c@host:8388#ss-b64url";
+        var e = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
+        Assert.Equal("shadowsocks", e.Protocol);
+        Assert.Equal("aes-256-gcm", e.Method);
+        Assert.Equal("s>>?>p?w", e.Password);
+    }
+
+    [Fact]
     public void Shadowsocks_ShadowTlsV3Plugin_ParsesPluginAndOpts()
     {
         var uri = "ss://2022-blake3-aes-256-gcm:k@host:443/?plugin=shadow-tls%3Bversion%3D3%3Bpassword%3Dstpw%3Bhost%3Dcdn.example.com#ss-stls";

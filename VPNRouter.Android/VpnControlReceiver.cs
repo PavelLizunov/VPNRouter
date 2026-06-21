@@ -65,7 +65,14 @@ public class VpnControlReceiver : BroadcastReceiver
             {
                 case ActExtStart: start = true; break;
                 case ActExtStop: start = false; break;
-                case ActExtToggle: start = !MainActivity.IntendedConnected; break;
+                // TOGGLE must read the PERSISTED tunnel state, not MainActivity's
+                // process-local static: an external broadcast (Tasker/adb) routinely
+                // arrives at a cold process where the Activity was never created, so
+                // the static reads its default `false` and TOGGLE would always START
+                // (inverting a toggle-to-stop when the tunnel is actually up). The
+                // service writes GetTunnelLive() in lockstep with TUNNEL_UP/DOWN, so
+                // it is correct even with no Activity alive.
+                case ActExtToggle: start = !AndroidStorage.GetTunnelLive(); break;
                 default: return;
             }
 

@@ -58,6 +58,19 @@ internal static class ClashYamlParser
     internal static List<string> ParseProxiesToUris(string body, ILogger? logger = null)
     {
         var uris = new List<string>();
+
+        // DoS guard: the body comes from a user-added subscription URL, but a
+        // compromised/malicious provider could ship an oversized YAML to OOM the
+        // refresh. Cap the raw size (a legit Clash list of even ~20k servers is
+        // well under 8 MB). Mirrors the JSON MaxDepth guards elsewhere in Core.
+        const int MaxBodyChars = 8 * 1024 * 1024;
+        if (body.Length > MaxBodyChars)
+        {
+            logger?.Warning("[Clash] YAML body too large ({Len} chars > {Max}) — skipping parse",
+                body.Length, MaxBodyChars);
+            return uris;
+        }
+
         Dictionary<string, object>? root;
         try
         {

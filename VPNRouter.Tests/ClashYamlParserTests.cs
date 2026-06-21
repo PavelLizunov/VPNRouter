@@ -137,4 +137,38 @@ proxies:
         Assert.Empty(ClashYamlParser.ParseProxiesToUris("not: valid\n  - broken: ["));
         Assert.Empty(ClashYamlParser.ParseProxiesToUris("proxies: []"));
     }
+
+    [Fact]
+    public void ParseProxiesToUris_OversizedBody_ReturnsEmpty()
+    {
+        // DoS guard (v2.44.1): a body over the 8 MB cap is rejected before the
+        // (unbounded) YAML deserialize, so a malicious/compromised provider can't
+        // OOM the refresh with a giant document.
+        var huge = "proxies:\n" + new string('x', 8 * 1024 * 1024 + 16);
+        Assert.Empty(ClashYamlParser.ParseProxiesToUris(huge));
+    }
+
+    [Fact]
+    public void ParseBody_ClashYaml_SsPasswordWithBase64UrlChars_RoundTrips()
+    {
+        // Regression (v2.44.1): the emitter writes base64URL ss userinfo ('-'/'_');
+        // a password whose "cipher:password" base64 contains '+'/'/' becomes '-'/'_'
+        // in the URI. Before the ServerUriParser base64url fix the entry was silently
+        // dropped (plain base64 decode threw). base64("aes-256-gcm:secret~?>>") has '+'.
+        const string ssYaml = @"
+proxies:
+  - name: ""SS-special""
+    type: ss
+    server: ss2.example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: ""secret~?>>""
+";
+        var entries = SubscriptionFetcher.ParseBody(ssYaml);
+        var ss = Assert.Single(entries, e => e.Protocol == "shadowsocks");
+        Assert.Equal("ss2.example.com", ss.Server);
+        Assert.Equal(8388, ss.Port);
+        Assert.Equal("aes-256-gcm", ss.Method);
+        Assert.Equal("secret~?>>", ss.Password);
+    }
 }
