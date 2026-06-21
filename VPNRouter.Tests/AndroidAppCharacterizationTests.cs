@@ -101,10 +101,13 @@ public class AndroidAppCharacterizationTests
     // shell). Method-name change → surface drift. (Subscribe-tab call-site change
     // is body-only; the new Localization delegates live in Localization.cs, not
     // an AndroidApp partial — neither affects this hash.)
-    // A (2026-06-20): added _subsAutoSelectChk field (Subscribe-tab auto-select
-    // toggle) to AndroidApp.SubscribePage.cs — intentional surface drift.
+    // A (2026-06-20): added _subsAutoSelectChk (Subscribe auto-select toggle).
+    // P1 (2026-06-21): live-stats members in AndroidApp.VpnLifecycle.cs
+    // (_statsPrevDown/_statsPrevUp/_statsPrevAt/_lastStatsSubtitle +
+    // OnStatsReported / HumanRate) — VpnRouterService broadcasts clash_api
+    // up/down via a protected socket; AndroidApp renders the rate. Intentional drift.
     private const string PinnedHash =
-        "6ecae9f098390df3307994dc6f271372637f65c80541539e873f91d53b4e36c8";
+        "3891b138b3bbb1ca0e9d32a0d5dbcfd7e0d8178fe95670af6c63845cd31dc7bc";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

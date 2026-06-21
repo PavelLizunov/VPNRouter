@@ -107,6 +107,56 @@ public partial class AndroidApp
         _lifecycleEventsAttached = true;
         MainActivity.IntentChanged += OnIntentChanged;
         MainActivity.TunnelErrorReported += OnTunnelErrorReported;
+        MainActivity.StatsReported += OnStatsReported;   // P1: live tunnel stats
+    }
+
+    // P1 (2026-06-21) — live tunnel stats. VpnRouterService polls clash_api via a
+    // PROTECTED socket (the app's own loopback is captured by the tun under a full
+    // tunnel) and broadcasts cumulative down/up totals + conn count every 2s; we
+    // derive the rate here and render it on the status card. Change-only write +
+    // marshalled to the UI thread (the broadcast fires on a binder thread).
+    private long _statsPrevDown, _statsPrevUp;
+    private DateTime _statsPrevAt;
+    private string? _lastStatsSubtitle;
+
+    private void OnStatsReported(long down, long up, int conn)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                if (_connectionStartedAt is null || _statusCard is null) return;
+                var now = DateTime.UtcNow;
+                string? subtitle = null;
+                if (_statsPrevAt != default)
+                {
+                    var dt = (now - _statsPrevAt).TotalSeconds;
+                    if (dt > 0.1)
+                    {
+                        var dRate = Math.Max(0, down - _statsPrevDown) / dt;
+                        var uRate = Math.Max(0, up - _statsPrevUp) / dt;
+                        subtitle = $"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {conn} conn";
+                    }
+                }
+                _statsPrevDown = down; _statsPrevUp = up; _statsPrevAt = now;
+                // Change-only (Bug-AND-006): skip the setter when identical.
+                if (subtitle is not null && !string.Equals(subtitle, _lastStatsSubtitle, StringComparison.Ordinal))
+                {
+                    _lastStatsSubtitle = subtitle;
+                    _statusCard.Subtitle = subtitle;
+                }
+            }
+            catch { /* never disturb the UI */ }
+        });
+    }
+
+    private static string HumanRate(double bytesPerSec)
+    {
+        string[] u = { "B", "KB", "MB", "GB" };
+        double v = bytesPerSec; int i = 0;
+        while (v >= 1024 && i < u.Length - 1) { v /= 1024; i++; }
+        return (i >= 2 ? v.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+                       : v.ToString("0", System.Globalization.CultureInfo.InvariantCulture)) + " " + u[i] + "/s";
     }
 
     private void UpdateConnectionState(bool connected)
@@ -133,6 +183,7 @@ public partial class AndroidApp
             // pump. Set _connectionStartedAt FIRST so the immediate first
             // tick (which renders uptime) sees a non-null value.
             _connectionStartedAt = DateTime.UtcNow;
+            _statsPrevAt = default; _lastStatsSubtitle = null;   // P1: reset live-stats rate baseline
             _lastHealthLogSize = -1;
             _lastHealthLogMTime = DateTime.MinValue;
             _firstProbePending = true;

@@ -134,6 +134,11 @@ public class MainActivity : AvaloniaMainActivity
     private const string ActionTunnelDown = "com.ninitux.vpnrouter.TUNNEL_DOWN";
     private const string ActionTunnelError = "com.ninitux.vpnrouter.TUNNEL_ERROR";
     private const string ExtraErrorMessage = "error_message";
+    // P1 (2026-06-21): live stats broadcast from VpnRouterService (protected-socket clash_api poll).
+    private const string ActionStats = "com.ninitux.vpnrouter.STATS";
+    private const string ExtraStatsDown = "stats_down_total";
+    private const string ExtraStatsUp = "stats_up_total";
+    private const string ExtraStatsConn = "stats_conn";
 
     private TunnelStateReceiver? _tunnelReceiver;
 
@@ -190,6 +195,8 @@ public class MainActivity : AvaloniaMainActivity
     /// thread (the receiver runs on a binder dispatch thread).
     /// </summary>
     public static event Action<string>? TunnelErrorReported;
+    // P1 (2026-06-21): (downloadTotal, uploadTotal, activeConnections) from the clash_api poll.
+    public static event Action<long, long, int>? StatsReported;
 
     private static bool _intendedConnected;
     public static bool IntendedConnected => _intendedConnected;
@@ -333,6 +340,7 @@ public class MainActivity : AvaloniaMainActivity
         filter.AddAction(ActionTunnelUp);
         filter.AddAction(ActionTunnelDown);
         filter.AddAction(ActionTunnelError);
+        filter.AddAction(ActionStats);
         // Android 13+ requires explicit RECEIVER_NOT_EXPORTED for unprotected
         // broadcasts (we set Intent.SetPackage in the broadcaster, so this
         // is process-local — safe).
@@ -539,6 +547,20 @@ public class MainActivity : AvaloniaMainActivity
                             $"AND-DIAG: TunnelErrorReported handler threw: {ex}");
                     }
                     SetIntent(false);
+                    break;
+                case ActionStats:
+                    // P1: live stats from the protected-socket clash_api poll.
+                    try
+                    {
+                        long d = intent?.GetLongExtra(ExtraStatsDown, 0L) ?? 0L;
+                        long u = intent?.GetLongExtra(ExtraStatsUp, 0L) ?? 0L;
+                        int c = intent?.GetIntExtra(ExtraStatsConn, 0) ?? 0;
+                        StatsReported?.Invoke(d, u, c);
+                    }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("VpnRouter", $"P1: StatsReported handler threw: {ex.Message}");
+                    }
                     break;
             }
         }

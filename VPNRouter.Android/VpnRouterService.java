@@ -88,8 +88,10 @@ import androidx.core.app.NotificationCompat;
 
 import java.io.File;
 import java.net.Inet6Address;
+import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
@@ -144,6 +146,11 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_TUNNEL_UP = "com.ninitux.vpnrouter.TUNNEL_UP";
     public static final String ACTION_TUNNEL_DOWN = "com.ninitux.vpnrouter.TUNNEL_DOWN";
     public static final String ACTION_TUNNEL_ERROR = "com.ninitux.vpnrouter.TUNNEL_ERROR";
+    // P1 (2026-06-21): live tunnel stats broadcast (clash_api polled via a protected socket).
+    public static final String ACTION_STATS = "com.ninitux.vpnrouter.STATS";
+    public static final String EXTRA_STATS_DOWN = "stats_down_total";
+    public static final String EXTRA_STATS_UP = "stats_up_total";
+    public static final String EXTRA_STATS_CONN = "stats_conn";
     public static final String EXTRA_ERROR_MESSAGE = "error_message";
     // DNS-tunnel (slipstream) — when the active server is dns-tunnel the
     // service brings up the in-process Slipstream client (libslipstream_jni)
@@ -663,6 +670,7 @@ public final class VpnRouterService extends VpnService {
             persistLastGoodConfig();
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
             setTunnelLive(true);
+            startStatsPoller();   // P1: begin polling clash_api for live up/down + conn count
         } catch (Exception e) {
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + e.getMessage(), e);
             Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
@@ -1074,7 +1082,80 @@ public final class VpnRouterService extends VpnService {
      * previous BoxService/pfd/Slipstream). Bounded so a stuck native teardown can't
      * wedge the lifecycle worker.
      */
+    // ── P1 (2026-06-21): live tunnel stats ───────────────────────────────────
+    // Poll clash_api /connections via a VpnService-PROTECTED socket so the request
+    // bypasses our OWN tun. (The app's unprotected loopback to 127.0.0.1:9090 fails
+    // with "Connection failure" under a full tunnel — root-caused on device 2026-06-21;
+    // adb's shell uid bypasses the VPN, which is why external curl worked but the
+    // in-process managed HttpClient didn't.) Parse downloadTotal/uploadTotal + the
+    // connection count, broadcast to the C# UI. Every 2s while live; fully best-effort.
+    private java.util.concurrent.ScheduledExecutorService statsPoller;
+
+    private synchronized void startStatsPoller() {
+        stopStatsPoller();
+        java.util.concurrent.ScheduledExecutorService ex =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new java.util.concurrent.ThreadFactory() {
+                @Override public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "vpnrouter-stats");
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
+        statsPoller = ex;
+        ex.scheduleWithFixedDelay(new Runnable() {
+            @Override public void run() { pollStatsOnce(); }
+        }, 1500L, 2000L, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
+    private synchronized void stopStatsPoller() {
+        if (statsPoller != null) {
+            try { statsPoller.shutdownNow(); } catch (Exception ignore) { }
+            statsPoller = null;
+        }
+    }
+
+    private void pollStatsOnce() {
+        Socket sock = null;
+        try {
+            sock = new Socket();
+            protect(sock);   // bypass our own tun — the whole point of P1
+            sock.connect(new InetSocketAddress("127.0.0.1", 9090), 2000);
+            sock.setSoTimeout(2000);
+            java.io.OutputStream os = sock.getOutputStream();
+            // HTTP/1.0 + close-delimited body so we never have to de-chunk.
+            os.write("GET /connections HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n".getBytes("UTF-8"));
+            os.flush();
+            java.io.InputStream is = sock.getInputStream();
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] tmp = new byte[4096];
+            int n;
+            while ((n = is.read(tmp)) > 0) buf.write(tmp, 0, n);
+            String resp = new String(buf.toByteArray(), "UTF-8");
+            int bodyIdx = resp.indexOf("\r\n\r\n");
+            if (bodyIdx < 0) return;
+            String body = resp.substring(bodyIdx + 4);
+            int brace = body.indexOf('{');
+            int end = body.lastIndexOf('}');
+            if (brace < 0 || end <= brace) return;
+            org.json.JSONObject obj = new org.json.JSONObject(body.substring(brace, end + 1));
+            long down = obj.optLong("downloadTotal", 0L);
+            long up = obj.optLong("uploadTotal", 0L);
+            int conn = obj.has("connections") && !obj.isNull("connections")
+                       ? obj.getJSONArray("connections").length() : 0;
+            Intent it = new Intent(ACTION_STATS).setPackage(getPackageName());
+            it.putExtra(EXTRA_STATS_DOWN, down);
+            it.putExtra(EXTRA_STATS_UP, up);
+            it.putExtra(EXTRA_STATS_CONN, conn);
+            sendBroadcast(it);
+        } catch (Exception e) {
+            // best-effort — clash_api not up yet / transient; retry next tick.
+        } finally {
+            if (sock != null) { try { sock.close(); } catch (Exception ignore) { } }
+        }
+    }
+
     private boolean teardownTunnelResources() {
+        stopStatsPoller();   // P1: stop the stats poll on every teardown
         final BoxService bs = boxService;
         boxService = null;
         // LOW (double-broadcast guard): record whether anything was actually live

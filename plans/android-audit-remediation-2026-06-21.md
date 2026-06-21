@@ -49,21 +49,21 @@ Regression: 32 unit/characterization tests green; AndroidApp source-hash unchang
   guarded by it → forwards ACTION_START/STOP to the service. Attended (verify perms).
 
 ## FEATURES — peer learnings (larger; prioritized brief)
-- **P1 (live stats via clash_api)** — ATTEMPTED 2026-06-21, reverted. **Root cause found
-  (logcat, device):** clash_api IS up + reachable on Android (`/version`→200, log
-  "clash-api: restful api listening at 127.0.0.1:9090", `/connections` carries
-  downloadTotal/uploadTotal + a connections[] array) — this CORRECTS the stale
-  "libbox doesn't expose that port" comment in AndroidConfigBuilder.cs. BUT the VPN app's
-  OWN `HttpClient` to `http://127.0.0.1:9090` fails with `HttpRequestException: Connection
-  failure` while the tunnel is up — **VpnService captures the app's own loopback traffic**
-  (adb's `shell` uid bypasses the VPN, which is why external `curl` reached it but the
-  in-process poll can't). A plain managed socket can't reach the in-process clash_api
-  under a full tunnel. **Fix path (focused, Java-side):** do the clash_api HTTP from
-  `VpnRouterService.java` where the `VpnService` instance can `protect(socket)` the fd so
-  it bypasses the tun, then bridge the parsed up/down/conn numbers to C# (broadcast/extra
-  or a small JNI call) → shared Avalonia status card. The UI plumbing (1Hz pump,
-  change-only write, throttle, idle-CPU-safe) was proven working; only the data-fetch
-  socket needs protection. Was the highest-leverage item; now precisely scoped.
+- **P1 (live stats via clash_api)** — DONE 2026-06-21, device-verified on A101BM.
+  **Root cause (logcat):** the VPN app's own loopback to 127.0.0.1:9090 was captured by
+  its own tun under a full tunnel (`HttpRequestException: Connection failure`); adb's
+  `shell` uid bypasses the VPN, which is why external `curl` reached it but the in-process
+  managed `HttpClient` couldn't. **Fix shipped:** `VpnRouterService.java` polls clash_api
+  `/connections` every 2s over a `VpnService.protect(socket)`ed raw socket (HTTP/1.0,
+  close-delimited), parses `downloadTotal`/`uploadTotal` + the `connections[]` count via
+  org.json, and broadcasts `ACTION_STATS`. `MainActivity` receives → `StatsReported` event
+  → `AndroidApp.OnStatsReported` derives the rate (cumulative-delta / dt) and renders
+  `↓ {rate} ↑ {rate} · {n} conn` on the shared status card (change-only write per
+  Bug-AND-006, marshalled off the binder thread). Device-verified: conn count live (4→8→9),
+  rate non-zero & matching the log delta exactly (e.g. `↓ 12 B/s` ↔ 24-byte/2s delta;
+  `downloadTotal` observed climbing to 20 MB). 0 B/s shows honestly when the node passes
+  no traffic. This also CORRECTS the stale "libbox doesn't expose that port" comment in
+  AndroidConfigBuilder.cs — clash_api IS up on Android. Surface-hash re-pinned 3891b138.
 - **P2 (subscription user-info)** — parse the `Subscription-Userinfo` header (upload/
   download/total/expire) in `SubscriptionFetcher` → render a shared Avalonia card
   (remaining traffic + days-left). Additive; high perceived value; M effort.
