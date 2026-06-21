@@ -342,6 +342,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _reliabilityBatteryStatusLabel;
     private Avalonia.Controls.Button? _reliabilityBatteryButton;
     private Avalonia.Controls.CheckBox? _reliabilityAutoReconnect;
+    private Avalonia.Controls.CheckBox? _externalControlToggle;   // P4: allow broadcast START/STOP/TOGGLE
     private bool _settingsLoading = false;
 
     // Phase C (2026-05-10): nested side-nav for the Settings tab. Mirrors

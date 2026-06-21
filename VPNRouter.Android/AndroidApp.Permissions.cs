@@ -219,6 +219,18 @@ public partial class AndroidApp
     }
 
     /// <summary>
+    /// P4 (2026-06-21) — persist the "allow external control" opt-in. When ON, the
+    /// exported <c>VpnControlReceiver</c> acts on broadcast START/STOP/TOGGLE (Tasker /
+    /// widgets / adb); when OFF (default) it no-ops. No running-tunnel restart needed —
+    /// the receiver reads the flag fresh on each broadcast.
+    /// </summary>
+    private void OnExternalControlChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _externalControlToggle is null) return;
+        AndroidStorage.SetExternalControlEnabled(_externalControlToggle.IsChecked == true);
+    }
+
+    /// <summary>
     /// Re-read the live battery-optimization state and refresh the label
     /// + button. Called from <c>BuildSettingsAutostartSection</c> at build
     /// time (Phase C folded the old Reliability section into Autostart) AND

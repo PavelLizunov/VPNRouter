@@ -72,6 +72,14 @@ public static partial class Strings
         ? "При переключении Wi-Fi ↔ мобильная sing-box сам пересвяжет upstream-сокеты с новым интерфейсом. Отключи только если подозреваешь конфликт с внутренним монитором интерфейсов libbox."
         : "On Wi-Fi ↔ cellular handoff, sing-box re-binds upstream sockets to the new interface. Disable only if you suspect a conflict with libbox's own interface monitor.";
 
+    // P4 (2026-06-21) — external broadcast control toggle (Tasker / widgets / adb)
+    public static string ExternalControlTitle => Ru
+        ? "Разрешить внешнее управление (Tasker, виджеты)"
+        : "Allow external control (Tasker, widgets)";
+    public static string ExternalControlHint => Ru
+        ? "Другие приложения смогут включать/выключать VPN через broadcast (EXT_START / EXT_STOP / EXT_TOGGLE). По умолчанию выключено. Включайте только если доверяете автоматизации — при включении управлять туннелем сможет любое приложение."
+        : "Lets other apps start/stop the VPN via broadcast (EXT_START / EXT_STOP / EXT_TOGGLE). Off by default. Enable only if you trust your automation — while on, any app can control the tunnel.";
+
     // Leak protection — block_on_vpn_fail toggle + DNS strategy ComboBox
     public static string BlockOnVpnFailLabel => Ru
         ? "Блокировать трафик при падении VPN"

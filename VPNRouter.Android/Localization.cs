@@ -859,6 +859,8 @@ internal static class Localization
     public static string AlwaysOnNudgeBody => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeBody;
     public static string AlwaysOnNudgeOpen => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeOpen;
     public static string AlwaysOnNudgeLater => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeLater;
+    public static string ExternalControlTitle => global::VPNRouter.Core.Localization.Strings.ExternalControlTitle;
+    public static string ExternalControlHint => global::VPNRouter.Core.Localization.Strings.ExternalControlHint;
     public static string ReliabilityAutoReconnectTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectTitle;
     public static string ReliabilityAutoReconnectHint => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectHint;
     public static string BlockOnVpnFailLabel => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailLabel;

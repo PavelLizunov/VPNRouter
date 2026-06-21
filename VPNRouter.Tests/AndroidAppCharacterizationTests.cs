@@ -108,8 +108,12 @@ public class AndroidAppCharacterizationTests
     // up/down via a protected socket; AndroidApp renders the rate. Intentional drift.
     // B3 (2026-06-21): added MaybePromptAlwaysOnLockdown() in AndroidApp.Permissions.cs
     // (one-time Always-on + Lockdown kill-switch nudge) — intentional surface drift.
+    // P4 (2026-06-21): added _externalControlToggle field + OnExternalControlChanged
+    // handler (Settings toggle for the exported VpnControlReceiver broadcast control).
+    // The 6 partial EXTRACTIONS this session (Profiles/CustomConfig/SettingsHandlers/
+    // KebabMenu/PerAppFilter) were pure member MOVES — union unchanged, no re-pin.
     private const string PinnedHash =
-        "b7c9b8aa6d1dc93c3b61c66a66eb5c8a4da6b86d7323b27ddde29ba0bb3e3222";
+        "f75c7a465b7ca368004e2ef684d185e0833e1ebea44ec1a51cff91cde9d3b658";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

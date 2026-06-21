@@ -954,6 +954,20 @@ public partial class AndroidApp
             Localization.ReliabilityAutoReconnectTitle,
             Localization.ReliabilityAutoReconnectHint);
 
+        // ── P4: external broadcast control (Tasker / widgets), default OFF ──
+        _externalControlToggle = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetExternalControlEnabled(),
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        _externalControlToggle.IsCheckedChanged += OnExternalControlChanged;
+        var externalControlCard = MakeCheckboxCard(_externalControlToggle,
+            Localization.ExternalControlTitle,
+            Localization.ExternalControlHint);
+
         // ── Boot toggles (Windows-Service parity scaffolding) ──
         // Pre-Phase-C these were the ENTIRE Autostart section. After Phase C
         // they're a separate sub-block under the Always-on / battery /
@@ -1021,6 +1035,7 @@ public partial class AndroidApp
                 alwaysOnRow,
                 batteryRow,
                 autoReconnectCard,
+                externalControlCard,
             }
         };
         return WrapSection(stack);

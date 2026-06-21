@@ -828,6 +828,7 @@ public static class AndroidStorage
     private const string KeyAutoSelectBest = "auto_select_best_server"; // bool (A: urltest auto-select)
     private const string KeyPostNotifPrompt = "post_notif_prompt_shown"; // bool (B1: POST_NOTIFICATIONS asked once)
     private const string KeyAlwaysOnPrompt = "alwayson_lockdown_prompt_shown"; // bool (B3: kill-switch nudge shown once)
+    private const string KeyExternalControl = "external_control_enabled"; // bool (P4: allow broadcast START/STOP/TOGGLE; default OFF)
     private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
     private const string KeyAutostartVpn = "autostart_vpn";            // bool
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
@@ -923,6 +924,11 @@ public static class AndroidStorage
     // B3 (2026-06-21): Always-on + Lockdown kill-switch nudge shown-once gate.
     public static bool GetAlwaysOnPromptShown() => GetBool(KeyAlwaysOnPrompt, defaultValue: false);
     public static bool SetAlwaysOnPromptShown(bool value) => SetBool(KeyAlwaysOnPrompt, value);
+
+    // P4 (2026-06-21): allow external broadcast control (Tasker/widgets). Default OFF
+    // (secure-by-default); the VpnControlReceiver no-ops unless the user opts in here.
+    public static bool GetExternalControlEnabled() => GetBool(KeyExternalControl, defaultValue: false);
+    public static bool SetExternalControlEnabled(bool value) => SetBool(KeyExternalControl, value);
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");
