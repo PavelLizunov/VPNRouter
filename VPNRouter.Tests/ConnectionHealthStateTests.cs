@@ -53,6 +53,19 @@ public sealed class ConnectionHealthStateTests
     public void FailureRate_NoAttempts_IsZero()
         => Assert.Equal(0.0, NewState(() => DateTimeOffset.UnixEpoch).Snapshot().FailureRate, 3);
 
+    [Fact]
+    public void FailureRate_ClampedToOne_WhenFailsExceedAttempts()
+    {
+        // Classifier marker asymmetry (e.g. a UDP relay-open failure counted while
+        // its "packet connection" attempt wording isn't) can leave fails > attempts
+        // at a window edge. The rate must clamp to 1.0, never render a >100% value.
+        var now = DateTimeOffset.UnixEpoch;
+        var s = NewState(() => now);
+        s.Record(Ev(ConnHealthCategory.RelayOpenAttempt));
+        for (int i = 0; i < 3; i++) s.Record(Ev(ConnHealthCategory.RelayOpenFail));
+        Assert.Equal(1.0, s.Snapshot().FailureRate, 3);
+    }
+
     // Benign local closes must never trip WouldWarn: a flood of LocalClose with no
     // real relay-open failures stays calm. This is the false-positive the review warned of.
     [Fact]

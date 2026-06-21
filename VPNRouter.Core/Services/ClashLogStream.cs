@@ -90,7 +90,11 @@ public sealed class ClashLogStream : IDisposable
     /// already running is ignored.</summary>
     public void Start()
     {
-        if (_loop is not null)
+        // Only no-op if a loop is genuinely still RUNNING. After Stop() the loop
+        // task completes but _loop stays non-null; gating on `is not null` would
+        // then make a later Start() a silent no-op against a cancelled token (a
+        // fail-silent dead stream). Allow restart once the prior loop finished.
+        if (_loop is { IsCompleted: false })
             return;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;

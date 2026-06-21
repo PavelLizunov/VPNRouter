@@ -135,7 +135,11 @@ public sealed class ConnectionHealthState
             }
         }
 
-        double rate = attempts > 0 ? (double)fails / attempts : 0.0;
+        // Clamp to [0,1]: classifier marker asymmetry (e.g. a UDP relay-open
+        // failure counted while its "packet connection" attempt wording isn't)
+        // can leave fails > attempts at a window edge, which would otherwise
+        // render a nonsensical >100% rate. No-op for the normal fails<=attempts.
+        double rate = attempts > 0 ? Math.Min(1.0, (double)fails / attempts) : 0.0;
         bool wouldWarn = attempts >= _minSample && rate >= _warnThreshold;
         return new ConnHealthSnapshot(node, attempts, fails, streamErrors, locals, other, rate, wouldWarn);
     }
