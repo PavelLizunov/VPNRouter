@@ -855,6 +855,10 @@ internal static class Localization
     public static string ReliabilityBatteryOptHint => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptHint;
     public static string ReliabilityBatteryOptButtonGrant => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptButtonGrant;
     public static string ReliabilityBatteryOptButtonOpen => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptButtonOpen;
+    public static string AlwaysOnNudgeTitle => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeTitle;
+    public static string AlwaysOnNudgeBody => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeBody;
+    public static string AlwaysOnNudgeOpen => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeOpen;
+    public static string AlwaysOnNudgeLater => global::VPNRouter.Core.Localization.Strings.AlwaysOnNudgeLater;
     public static string ReliabilityAutoReconnectTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectTitle;
     public static string ReliabilityAutoReconnectHint => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectHint;
     public static string BlockOnVpnFailLabel => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailLabel;

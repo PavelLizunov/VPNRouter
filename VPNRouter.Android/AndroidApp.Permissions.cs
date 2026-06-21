@@ -173,6 +173,41 @@ public partial class AndroidApp
         }
     }
 
+    /// <summary>
+    /// B3 (2026-06-21) — one-time kill-switch awareness nudge. Android only
+    /// guarantees a fail-closed block when the user sets VPNRouter as the
+    /// Always-on VPN WITH "Block connections without VPN" (Lockdown); a
+    /// non-privileged app can't enforce that itself, and there's no grant intent
+    /// to request it. So this shows a one-time dialog explaining the benefit +
+    /// deep-links to the system VPN settings (<see cref="OnReliabilityAlwaysOnClicked"/>).
+    /// Gated by the <c>alwayson_lockdown_prompt_shown</c> flag and staggered behind
+    /// the battery prompt (see the call site) so a first connect isn't a double
+    /// dialog. Best-effort + guarded — never bubbles into the connect UI path.
+    /// </summary>
+    private void MaybePromptAlwaysOnLockdown()
+    {
+        try
+        {
+            if (AndroidStorage.GetAlwaysOnPromptShown()) return;
+            var activity = MainActivity.Instance;
+            if (activity is null) return;
+            // Set BEFORE showing so a re-entrant connect can't double-fire the dialog.
+            AndroidStorage.SetAlwaysOnPromptShown(true);
+            new global::Android.App.AlertDialog.Builder(activity)
+                .SetTitle(Localization.AlwaysOnNudgeTitle)
+                ?.SetMessage(Localization.AlwaysOnNudgeBody)
+                ?.SetPositiveButton(Localization.AlwaysOnNudgeOpen, (s, e) => OnReliabilityAlwaysOnClicked(this, null!))
+                ?.SetNegativeButton(Localization.AlwaysOnNudgeLater, (s, e) => { })
+                ?.Show();
+            global::Android.Util.Log.Info("VpnRouter", "AND-KILLSWITCH: Always-on+Lockdown nudge shown (one-time)");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"AND-KILLSWITCH: always-on nudge failed — {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     private void OnReliabilityAutoReconnectChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_settingsLoading || _reliabilityAutoReconnect is null) return;

@@ -106,8 +106,10 @@ public class AndroidAppCharacterizationTests
     // (_statsPrevDown/_statsPrevUp/_statsPrevAt/_lastStatsSubtitle +
     // OnStatsReported / HumanRate) — VpnRouterService broadcasts clash_api
     // up/down via a protected socket; AndroidApp renders the rate. Intentional drift.
+    // B3 (2026-06-21): added MaybePromptAlwaysOnLockdown() in AndroidApp.Permissions.cs
+    // (one-time Always-on + Lockdown kill-switch nudge) — intentional surface drift.
     private const string PinnedHash =
-        "3891b138b3bbb1ca0e9d32a0d5dbcfd7e0d8178fe95670af6c63845cd31dc7bc";
+        "b7c9b8aa6d1dc93c3b61c66a66eb5c8a4da6b86d7323b27ddde29ba0bb3e3222";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

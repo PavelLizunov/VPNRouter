@@ -204,7 +204,12 @@ public partial class AndroidApp
             // bucket. Fires the native grant dialog exactly once; no-op if
             // already exempt or already asked. Self-guarded — can't throw into
             // this UI path.
+            // B3: capture whether battery was already prompted BEFORE this connect,
+            // so the one-time kill-switch nudge staggers to a LATER connect rather
+            // than stacking a 2nd dialog on the first connect's battery prompt.
+            var batteryPreviouslyPrompted = AndroidStorage.GetBatteryOptPromptShown();
             MaybePromptBatteryOptimizationExemption();
+            if (batteryPreviouslyPrompted) MaybePromptAlwaysOnLockdown();
         }
         else
         {

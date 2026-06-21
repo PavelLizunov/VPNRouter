@@ -53,6 +53,16 @@ public static partial class Strings
         ? "Открыть настройки энергосбережения"
         : "Open battery settings";
 
+    // B3 (2026-06-21) — one-time Always-on + Lockdown kill-switch nudge
+    public static string AlwaysOnNudgeTitle => Ru
+        ? "Включить kill-switch?"
+        : "Enable a kill-switch?";
+    public static string AlwaysOnNudgeBody => Ru
+        ? "Чтобы трафик не утекал, если VPN отвалится, включите VPNRouter как «Always-on VPN» с «Блокировкой» (Lockdown) в системных настройках VPN. Без этого Android не гарантирует блокировку при разрыве туннеля."
+        : "To stop traffic from leaking if the VPN drops, set VPNRouter as your Always-on VPN with \"Block connections without VPN\" (Lockdown) in system VPN settings. Without it, Android can't guarantee a block when the tunnel fails.";
+    public static string AlwaysOnNudgeOpen => Ru ? "Открыть настройки VPN" : "Open VPN settings";
+    public static string AlwaysOnNudgeLater => Ru ? "Позже" : "Not now";
+
     // Auto-reconnect toggle row
     public static string ReliabilityAutoReconnectTitle => Ru
         ? "Авто-переподключение при смене сети"

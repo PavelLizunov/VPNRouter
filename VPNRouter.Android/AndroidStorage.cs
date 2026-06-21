@@ -827,6 +827,7 @@ public static class AndroidStorage
     private const string KeyBlockAds = "block_ads";                    // bool
     private const string KeyAutoSelectBest = "auto_select_best_server"; // bool (A: urltest auto-select)
     private const string KeyPostNotifPrompt = "post_notif_prompt_shown"; // bool (B1: POST_NOTIFICATIONS asked once)
+    private const string KeyAlwaysOnPrompt = "alwayson_lockdown_prompt_shown"; // bool (B3: kill-switch nudge shown once)
     private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
     private const string KeyAutostartVpn = "autostart_vpn";            // bool
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
@@ -918,6 +919,10 @@ public static class AndroidStorage
     // B1 (2026-06-21): POST_NOTIFICATIONS asked-once gate (Android 13+).
     public static bool GetPostNotifPromptShown() => GetBool(KeyPostNotifPrompt, defaultValue: false);
     public static bool SetPostNotifPromptShown(bool value) => SetBool(KeyPostNotifPrompt, value);
+
+    // B3 (2026-06-21): Always-on + Lockdown kill-switch nudge shown-once gate.
+    public static bool GetAlwaysOnPromptShown() => GetBool(KeyAlwaysOnPrompt, defaultValue: false);
+    public static bool SetAlwaysOnPromptShown(bool value) => SetBool(KeyAlwaysOnPrompt, value);
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");
