@@ -201,7 +201,21 @@ public static class SubscriptionFetcher
             }
         }
 
-        var lines = decoded.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // P6 (2026-06-21): Clash / Clash-Meta YAML subscriptions ship a
+        // `proxies:` sequence instead of a URI list. Detect + map each proxy to
+        // its share-link URI, then reuse the same per-line parser below (and its
+        // placeholder guard). Tolerant: unsupported proxy types are skipped.
+        string[] lines;
+        if (ClashYamlParser.LooksLikeClashYaml(decoded))
+        {
+            var clashUris = ClashYamlParser.ParseProxiesToUris(decoded, logger);
+            logger?.Information("[Subscription] Clash YAML detected — {N} proxies mapped to share URIs", clashUris.Count);
+            lines = clashUris.ToArray();
+        }
+        else
+        {
+            lines = decoded.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
 
         foreach (var line in lines)
         {

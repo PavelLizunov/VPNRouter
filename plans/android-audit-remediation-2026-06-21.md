@@ -70,8 +70,23 @@ Regression: 32 unit/characterization tests green; AndroidApp source-hash unchang
 - **B6 (god-class extraction)** — extract the diagnostics pump + chip state machine from
   AndroidApp into injected collaborator classes with their own tests (cuts the 5k-LOC core
   file + the brittle source-hash churn). Maintainability; L; do incrementally.
-- **P6** — multi-tier latency (TCP/HTTP/real-delay) per node + tolerant multi-format
-  subscription parser (Clash/v2rayN/sing-box). M; refines existing surfaces.
+- **P6a (tolerant Clash-YAML subscription parser)** — DONE 2026-06-21. New
+  `ClashYamlParser` (Core) detects a `proxies:` document and maps each proxy to its
+  share-link URI (vless/hysteria2/tuic/ss), then reuses the existing `ServerUriParser`
+  (+ placeholder guard) — one mapping layer, zero duplicated protocol logic. Tolerant:
+  unsupported types (trojan/vmess) + malformed entries are skipped, never thrown. Wired
+  into `SubscriptionFetcher.ParseBody` ahead of the URI-line loop, so it benefits every
+  platform (desktop + Android share the Core). Unlocks Hiddify/Clash-Meta/Mihomo-format
+  providers that previously imported as zero servers. 6 new tests (ClashYamlParserTests),
+  all green. v2rayN is base64-of-URIs → already covered; sing-box native JSON is rare for
+  subscriptions and left out by design.
+- **P6b (multi-tier latency: TCP/HTTP/real-delay per node)** — DEFERRED. Separate, larger
+  effort: a new real-delay tester (proxied round-trip, not just TCP reach) + per-platform
+  UI columns on the desktop ServersPage AND the Android server list. Lower value than the
+  parser (refines an existing surface vs unlocking new providers) and doesn't bundle
+  cleanly with Core-only work. Brief when picked: extend the server-test path to record
+  TCP-ping / HTTP-ping / real-delay tiers; show the most meaningful (real-delay) with the
+  others on hover/expand.
 
 ## Recommended order for the next attended session
 P1 (leverage) → P2 (value) → B7 + P4 (bounded) → B4 (measure-then-enable) → B3 nudge.
