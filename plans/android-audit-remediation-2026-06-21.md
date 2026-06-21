@@ -49,13 +49,21 @@ Regression: 32 unit/characterization tests green; AndroidApp source-hash unchang
   guarded by it → forwards ACTION_START/STOP to the service. Attended (verify perms).
 
 ## FEATURES — peer learnings (larger; prioritized brief)
-- **P1 (re-adopt libbox Clash-API)** — highest leverage (SFA-proven, same libbox).
-  `clash_api` is already emitted in the Android config. **Approach (additive, read-only
-  first):** a C# `CommandClient` over `ws://127.0.0.1:9090` subscribing to
-  status/groups/connections → C# observables → bound into the shared Avalonia UI on all
-  platforms (live traffic/mem stats, urltest-delay group view, active-connections list).
-  Then action RPCs (SelectOutbound/URLTest/CloseConnection). L effort; design + device
-  test; keep it observe-only behind a flag until proven, so it never destabilizes the tunnel.
+- **P1 (live stats via clash_api)** — ATTEMPTED 2026-06-21, reverted. **Root cause found
+  (logcat, device):** clash_api IS up + reachable on Android (`/version`→200, log
+  "clash-api: restful api listening at 127.0.0.1:9090", `/connections` carries
+  downloadTotal/uploadTotal + a connections[] array) — this CORRECTS the stale
+  "libbox doesn't expose that port" comment in AndroidConfigBuilder.cs. BUT the VPN app's
+  OWN `HttpClient` to `http://127.0.0.1:9090` fails with `HttpRequestException: Connection
+  failure` while the tunnel is up — **VpnService captures the app's own loopback traffic**
+  (adb's `shell` uid bypasses the VPN, which is why external `curl` reached it but the
+  in-process poll can't). A plain managed socket can't reach the in-process clash_api
+  under a full tunnel. **Fix path (focused, Java-side):** do the clash_api HTTP from
+  `VpnRouterService.java` where the `VpnService` instance can `protect(socket)` the fd so
+  it bypasses the tun, then bridge the parsed up/down/conn numbers to C# (broadcast/extra
+  or a small JNI call) → shared Avalonia status card. The UI plumbing (1Hz pump,
+  change-only write, throttle, idle-CPU-safe) was proven working; only the data-fetch
+  socket needs protection. Was the highest-leverage item; now precisely scoped.
 - **P2 (subscription user-info)** — parse the `Subscription-Userinfo` header (upload/
   download/total/expire) in `SubscriptionFetcher` → render a shared Avalonia card
   (remaining traffic + days-left). Additive; high perceived value; M effort.
