@@ -175,9 +175,25 @@ public class UpdateChecker : IDesktopInstaller
 
         StatusChanged?.Invoke($"Downloading {label}...");
 
-        if (Directory.Exists(_stagingDir))
-            Directory.Delete(_stagingDir, true);
+        // v2.44.1-r5 race fix (user report 2026-06-22): stage into a UNIQUE
+        // per-attempt subdir instead of deleting+recreating the SHARED dir.
+        // A second / looping update attempt used to delete the shared dir
+        // mid-copy while a previous attempt's detached helper.cmd was still
+        // xcopying from it -> empty/partial SRC -> a failed copy that had
+        // ALREADY killed sing-box (disconnect) -> .update-failed -> relaunch
+        // -> retry (the "kill-loop" the user hit). A unique subdir per call
+        // can't be clobbered by a concurrent/looping attempt. Stale subdirs
+        // (>2h: no detached helper lives that long) are swept best-effort.
+        // The helper.cmd is UNCHANGED: ApplyUpdate(extractedDir) takes this
+        // dir as %SRC% (ApplyUpdateWindows uses the passed param, not a static
+        // path), so the per-attempt path flows through intact. The CI
+        // Auto-Update gate (--staged-dir) bypasses this method, so it still
+        // exercises the known-good helper.
+        TrySweepStaleStagingDirs();
         Directory.CreateDirectory(_stagingDir);
+        var stagingDir = Path.Combine(
+            _stagingDir, Guid.NewGuid().ToString("N").Substring(0, 8));
+        Directory.CreateDirectory(stagingDir);
 
         // v2.22.2: derive extension from the download URL, NOT hardcode .zip.
         // Linux releases ship as .tar.gz. If we save the tarball as .zip,
@@ -190,7 +206,7 @@ public class UpdateChecker : IDesktopInstaller
             downloadUrl.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? ".tar.gz"
             : downloadUrl.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)  ? ".tgz"
             : ".zip";
-        var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
+        var zipPath = Path.Combine(stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
 
         // v3.0 Phase 4 (2026-05-18): SendStreamingAsync replaces the
         // legacy `_legacyHttp.GetAsync(..., ResponseHeadersRead)` call.
@@ -273,7 +289,7 @@ public class UpdateChecker : IDesktopInstaller
 
         StatusChanged?.Invoke("Extracting update...");
 
-        var extractDir = Path.Combine(_stagingDir, "extracted");
+        var extractDir = Path.Combine(stagingDir, "extracted");
         // v2.21.8: on Linux we ship the update as .tar.gz (to preserve Unix
         // execute bits). ZipFile.ExtractToDirectory doesn't understand
         // gzip-tar — it only reads PKZIP format, so calling it on a
@@ -323,12 +339,12 @@ public class UpdateChecker : IDesktopInstaller
 
     public void CleanupStagingDir()
     {
-        try
-        {
-            if (Directory.Exists(_stagingDir))
-                Directory.Delete(_stagingDir, true);
-        }
-        catch { }
+        // v2.44.1-r5: sweep only STALE per-attempt subdirs (>2h) instead of
+        // nuking the whole base. With the unique-subdir scheme a previous
+        // session's detached helper.cmd could still be reading a FRESH subdir;
+        // deleting the whole base out from under it would abort an otherwise-
+        // valid update. Runs on startup (CheckOnStartupAsync).
+        TrySweepStaleStagingDirs();
 
         try
         {
@@ -339,6 +355,32 @@ public class UpdateChecker : IDesktopInstaller
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// v2.44.1-r5 — best-effort removal of stale per-attempt staging subdirs
+    /// (older than 2h: a detached update helper.cmd waits at most ~30 s for the
+    /// parent to exit, then proceeds or times out, so nothing live is that old).
+    /// Keeps the unique-subdir staging scheme from accumulating orphans without
+    /// ever deleting a subdir a live helper might still be reading.
+    /// </summary>
+    private void TrySweepStaleStagingDirs()
+    {
+        try
+        {
+            if (!Directory.Exists(_stagingDir)) return;
+            var cutoff = DateTime.UtcNow - TimeSpan.FromHours(2);
+            foreach (var dir in Directory.GetDirectories(_stagingDir))
+            {
+                try
+                {
+                    if (Directory.GetLastWriteTimeUtc(dir) < cutoff)
+                        Directory.Delete(dir, true);
+                }
+                catch { /* in use / perms — skip, retry next launch */ }
+            }
+        }
+        catch { /* base dir gone / perms — non-fatal */ }
     }
 
     /// <summary>
