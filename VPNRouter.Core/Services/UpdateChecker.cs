@@ -175,18 +175,9 @@ public class UpdateChecker : IDesktopInstaller
 
         StatusChanged?.Invoke($"Downloading {label}...");
 
-        // v2.44.1-r2 REGRESSION FIX (user report 2026-06-22): stage into a
-        // UNIQUE per-attempt subdir instead of deleting+recreating the SHARED
-        // staging dir. A second / looping update attempt used to delete the
-        // shared dir mid-copy while a previous attempt's detached helper.cmd was
-        // still xcopying from it → empty/partial SRC → xcopy exit 4 (user
-        // disconnected) or a mixed-version install. A unique subdir per call
-        // can't be clobbered by a concurrent attempt. Stale subdirs (>2h — no
-        // live helper that old) are swept best-effort so they don't accumulate.
-        TrySweepStaleStagingDirs();
-        var stagingDir = Path.Combine(
-            _stagingDir, $"stage-{Environment.ProcessId}-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(stagingDir);
+        if (Directory.Exists(_stagingDir))
+            Directory.Delete(_stagingDir, true);
+        Directory.CreateDirectory(_stagingDir);
 
         // v2.22.2: derive extension from the download URL, NOT hardcode .zip.
         // Linux releases ship as .tar.gz. If we save the tarball as .zip,
@@ -199,7 +190,7 @@ public class UpdateChecker : IDesktopInstaller
             downloadUrl.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? ".tar.gz"
             : downloadUrl.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)  ? ".tgz"
             : ".zip";
-        var zipPath = Path.Combine(stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
+        var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
 
         // v3.0 Phase 4 (2026-05-18): SendStreamingAsync replaces the
         // legacy `_legacyHttp.GetAsync(..., ResponseHeadersRead)` call.
@@ -282,7 +273,7 @@ public class UpdateChecker : IDesktopInstaller
 
         StatusChanged?.Invoke("Extracting update...");
 
-        var extractDir = Path.Combine(stagingDir, "extracted");
+        var extractDir = Path.Combine(_stagingDir, "extracted");
         // v2.21.8: on Linux we ship the update as .tar.gz (to preserve Unix
         // execute bits). ZipFile.ExtractToDirectory doesn't understand
         // gzip-tar — it only reads PKZIP format, so calling it on a
@@ -332,13 +323,12 @@ public class UpdateChecker : IDesktopInstaller
 
     public void CleanupStagingDir()
     {
-        // v2.44.1-r2: sweep only STALE per-attempt subdirs (>2h) instead of
-        // nuking the whole base. With the unique-subdir scheme, a previous
-        // session's detached helper.cmd may still be reading a FRESH subdir;
-        // deleting the whole base out from under it would abort an otherwise-
-        // valid update (now caught by the helper's empty-SRC guard, but better
-        // not to provoke it). This runs on startup (CheckOnStartupAsync).
-        TrySweepStaleStagingDirs();
+        try
+        {
+            if (Directory.Exists(_stagingDir))
+                Directory.Delete(_stagingDir, true);
+        }
+        catch { }
 
         try
         {
@@ -349,32 +339,6 @@ public class UpdateChecker : IDesktopInstaller
             }
         }
         catch { }
-    }
-
-    /// <summary>
-    /// v2.44.1-r2 — best-effort removal of stale per-attempt staging subdirs
-    /// (older than 2h: no detached update helper.cmd lives that long — it waits
-    /// at most ~30 s for the parent to exit, then proceeds or times out). Keeps
-    /// the unique-subdir staging scheme from accumulating orphans without ever
-    /// deleting a subdir a live helper might still be reading.
-    /// </summary>
-    private void TrySweepStaleStagingDirs()
-    {
-        try
-        {
-            if (!Directory.Exists(_stagingDir)) return;
-            var cutoff = DateTime.UtcNow - TimeSpan.FromHours(2);
-            foreach (var dir in Directory.GetDirectories(_stagingDir))
-            {
-                try
-                {
-                    if (Directory.GetLastWriteTimeUtc(dir) < cutoff)
-                        Directory.Delete(dir, true);
-                }
-                catch { /* in use / perms — skip, retry next launch */ }
-            }
-        }
-        catch { /* base dir gone / perms — non-fatal */ }
     }
 
     /// <summary>
@@ -591,31 +555,7 @@ public class UpdateChecker : IDesktopInstaller
             "ping -n 1 -w 500 127.0.0.1 >nul",
             "goto waitloop",
             ":parentgone",
-            // v2.44.1-r2 REGRESSION FIX (user report 2026-06-22): abort BEFORE
-            // any destructive step if the staging SRC is empty/missing. A second
-            // / looping update attempt deletes the shared staging dir this
-            // detached helper is about to read → pre-fix the helper then killed
-            // sing-box + stopped the Service and ran xcopy over an empty SRC
-            // (xcopy exit 4 / "File not found - *") — a no-op that DISCONNECTED
-            // the user, wrote .update-failed, relaunched → re-attempt → loop.
-            // Now: if SRC has no entries, log + marker + relaunch, leaving
-            // sing-box / Service / install dir untouched (user stays connected).
-            // No variables are SET inside this if-block, so %-expansion is
-            // parser-safe (the EnableDelayedExpansion / !VAR! discipline only
-            // applies to block-local SETs like TRIES / SVC_TRIES / XCOPY_EXIT).
-            "echo [%TIME%] parent gone — verifying staging has files before any destructive step >>\"%LOG%\"",
-            "dir /b \"%SRC%\\*\" 2>nul | findstr /r /c:\".\" >nul",
-            "if errorlevel 1 (",
-            "  echo [%TIME%] staging SRC empty/missing — aborting update, leaving sing-box + Service + install intact >>\"%LOG%\"",
-            "  > \"%DST%\\.update-failed\" echo staging-empty abort at %DATE% %TIME%",
-            skipRelaunchForCi
-                ? "  rem CI mode: relaunch suppressed"
-                : $"  start \"\" \"{guiExe}\"",
-            "  echo [%TIME%] helper done (no-op: staging empty, user left connected) >>\"%LOG%\"",
-            "  del /Q \"%~f0\" >nul 2>&1",
-            "  exit /b 0",
-            ")",
-            "echo [%TIME%] checking VPNRouter Windows Service >>\"%LOG%\"",
+            "echo [%TIME%] parent gone, checking VPNRouter Windows Service >>\"%LOG%\"",
             // v2.31.7-r1: stop the Windows Service if it's running before
             // the file copy, otherwise the Service holds locks on
             // VPNRouter.Service.dll, VPNRouter.Core.dll and friends. xcopy
