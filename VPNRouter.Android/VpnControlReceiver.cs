@@ -41,7 +41,16 @@ public class VpnControlReceiver : BroadcastReceiver
     public const string ActExtToggle = "com.ninitux.vpnrouter.EXT_TOGGLE";
 
     // Mirrors VpnRouterService.java's intent contract (same strings MainActivity uses).
-    private const string SvcActionStart = "com.ninitux.vpnrouter.START";
+    // Broadcast-triggered START maps to the service's ACTION_RESTART, NOT ACTION_START:
+    // ACTION_START requires the App to pass the freshly-built config_json as an extra
+    // (the UI Connect path). A bare broadcast can't supply it, so the service throws
+    // "config_json missing" and the tunnel never comes up (device-found 2026-06-22).
+    // ACTION_RESTART falls through to the service's last-good-config restore branch
+    // (same path as Always-on / boot / swipe-recovery) and rebuilds from the persisted
+    // last_good_config_json — exactly what an automation-triggered start needs, and it
+    // matches the documented "START requires a prior manual connect" (that first
+    // connect is what persists the last-good config the restore branch reuses).
+    private const string SvcActionStart = "com.ninitux.vpnrouter.RESTART";
     private const string SvcActionStop = "com.ninitux.vpnrouter.STOP";
     private const string SvcClass = "com.ninitux.vpnrouter.VpnRouterService";
 
