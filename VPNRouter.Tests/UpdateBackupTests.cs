@@ -281,13 +281,44 @@ public sealed class UpdateBackupTests
         // C# search-literal).
         var checkIdx = src.IndexOf("if not \\\"!XCOPY_EXIT!\\\"==\\\"0\\\"",
             StringComparison.Ordinal);
-        var markerIdx = src.IndexOf(".update-failed", StringComparison.Ordinal);
         Assert.True(checkIdx > 0,
             "expected !XCOPY_EXIT! non-zero check in helper.cmd template");
+        // v2.44.1-r2: a SECOND, EARLIER ".update-failed" write now lives in the
+        // staging-empty abort guard near :parentgone (Fix 1). Search for the
+        // marker write of the xcopy-fail branch — i.e. the one AFTER the
+        // XCOPY_EXIT check — so this pin still targets the intended line.
+        var markerIdx = src.IndexOf(".update-failed", checkIdx, StringComparison.Ordinal);
         Assert.True(markerIdx > checkIdx,
             "marker write must follow the xcopy-fail branch in the template");
         Assert.True(markerIdx - checkIdx < 800,
             "xcopy-fail check and marker write should be within the same template block");
+    }
+
+    /// <summary>
+    /// v2.44.1-r2 REGRESSION GUARD (user report 2026-06-22): the helper.cmd must
+    /// verify the staging SRC has files and ABORT before the destructive
+    /// "killing sing-box and copying files" step. A second/looping update attempt
+    /// could delete the shared staging dir mid-copy → empty SRC → pre-fix the
+    /// helper killed sing-box + ran xcopy over nothing (exit 4), disconnecting
+    /// the user for a no-op. The guard must precede the kill so a raced/failed
+    /// download leaves the user connected.
+    /// </summary>
+    [Fact]
+    public void HelperCmdTemplate_AbortsOnEmptyStagingBeforeKillingSingBox()
+    {
+        var sourcePath = FindUpdateCheckerSource();
+        if (sourcePath == null) return;
+
+        var src = StripLineComments(File.ReadAllText(sourcePath));
+        var guardIdx = src.IndexOf("staging SRC empty/missing", StringComparison.Ordinal);
+        var killIdx = src.IndexOf("killing sing-box and copying files", StringComparison.Ordinal);
+        Assert.True(guardIdx > 0,
+            "expected an empty-staging abort guard in the helper.cmd template");
+        Assert.True(killIdx > 0,
+            "expected the sing-box kill step in the helper.cmd template");
+        Assert.True(guardIdx < killIdx,
+            "the empty-staging abort guard MUST come before killing sing-box — " +
+            "otherwise a raced/failed update disconnects the user for a no-op xcopy");
     }
 
     /// <summary>
