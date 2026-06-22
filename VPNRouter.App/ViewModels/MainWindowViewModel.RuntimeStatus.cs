@@ -208,7 +208,15 @@ public partial class MainWindowViewModel
         // Don't disturb state during an explicit connect/disconnect transition
         if (IsConnecting) return;
 
-        if (vpnRunning && !IsConnected)
+        // v2.44.1-r2 (user report 2026-06-22): also reconcile when we already
+        // think we're connected but the status drifted to "Failed to start VPN".
+        // A late-phase start throw (post-start probe / AutoFailover) can clobber
+        // StatusText AFTER an earlier OnEngineStatus("Connected") set IsConnected
+        // true — leaving a stale failure on screen while the tunnel is actually
+        // up. The original `!IsConnected`-only condition never refreshed that.
+        if (vpnRunning &&
+            (!IsConnected ||
+             StatusText.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal)))
         {
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;

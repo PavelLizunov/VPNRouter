@@ -4265,8 +4265,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 _logger.Error(ex, "Failed to start VPN");
                 IsConnecting = false;
-                StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
-                ConnectButtonText = Strings.StartVPN;
+                // v2.44.1-r2 (user report 2026-06-22): a late-phase throw
+                // (post-start probe / AutoFailover re-entry) AFTER sing-box
+                // already came up must NOT leave "Failed to start VPN" on screen
+                // while the tunnel is actually running. Trust the engine's real
+                // state: if it's running, keep the connected status (the 2 s
+                // runtime-status poll + any later OnEngineStatus("Connected")
+                // reconcile the rest); only show the failure when genuinely down.
+                if (_engine.IsRunning)
+                {
+                    IsConnected = true;
+                    ConnectButtonText = Strings.StopVPN;
+                    _logger.Warning("[VM] start path threw but engine is running — keeping connected status instead of a stale 'Failed to start VPN'");
+                }
+                else
+                {
+                    StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
+                    ConnectButtonText = Strings.StartVPN;
+                }
                 return;
             }
         }
