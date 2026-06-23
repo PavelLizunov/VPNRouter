@@ -321,6 +321,51 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         }
     }
 
+    /// <summary>
+    /// v2.44.1-r6 — for a urltest / selector GROUP, return the member outbound
+    /// it is currently routing through (Clash API <c>GET /proxies/{group}</c> →
+    /// the <c>"now"</c> field). When <c>AutoSelectBestServer</c> builds the
+    /// <c>proxy</c> outbound as a urltest over the subscription pool, this is the
+    /// ONLY way to know which server traffic actually exits through (the stored
+    /// active-server is irrelevant — urltest picks the fastest at runtime). The
+    /// desktop status line / list highlight resolve this so they show the REAL
+    /// server instead of the stale first-in-list. Returns null on any failure
+    /// (caller falls back to a generic "auto-select" label). Parsed with
+    /// <see cref="JsonDocument"/> (no source-gen DTO needed).
+    /// </summary>
+    public async Task<string?> GetGroupNowAsync(string group, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(group)) return null;
+        try
+        {
+            using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadlineCts.CancelAfter(PingDeadline);
+
+            var encodedGroup = Uri.EscapeDataString(group);
+            using var response = await _http
+                .GetAsync($"{_baseUrl}/proxies/{encodedGroup}", deadlineCts.Token)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) return null;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(deadlineCts.Token).ConfigureAwait(false);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: deadlineCts.Token).ConfigureAwait(false);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("now", out var nowEl) &&
+                nowEl.ValueKind == JsonValueKind.String)
+            {
+                var now = nowEl.GetString();
+                return string.IsNullOrEmpty(now) ? null : now;
+            }
+            return null;
+        }
+        catch
+        {
+            // Best-effort only — a missing/failed selection just means the
+            // caller shows the generic auto-select label. Never throws.
+            return null;
+        }
+    }
+
     /// <inheritdoc/>
     public async Task<IReadOnlyList<ProxyInfo>> ListProxiesAsync(CancellationToken ct = default)
     {

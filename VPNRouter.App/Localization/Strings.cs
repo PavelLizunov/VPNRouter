@@ -93,6 +93,11 @@ public static class Strings
         return $"{prefix} → {name}{ip}";
     }
 
+    // v2.44.1-r6 — connected-status label shown when AutoSelectBestServer's
+    // urltest hasn't yet reported which member it picked (brief clash_api race
+    // right after connect). Once resolved, the real server name replaces it.
+    public static string AutoSelectStatusLabel => Ru ? "авто-выбор" : "auto-select";
+
     // ── Action states ──
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
     public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;

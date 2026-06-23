@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -31,6 +32,13 @@ public partial class MainWindowViewModel
     private long _statsPrevDown, _statsPrevUp;
     private DateTimeOffset? _statsPrevAt;
     private int _statsInFlight;
+
+    // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy" group, the
+    // REAL member it routes through (resolved from clash_api /proxies/proxy ->
+    // "now" by the ConnStats poll). Consumed by DeriveConnectedServerLabel +
+    // RefreshActiveIndicator so the status line + list highlight show the actual
+    // server instead of the stale first-in-list. Null until resolved / non-auto.
+    private ServerViewModel? _autoSelectedServer;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasConnectionStats))]
@@ -66,6 +74,7 @@ public partial class MainWindowViewModel
             try { _statsApi?.Dispose(); } catch { /* best-effort */ }
             _statsApi = null;
             _statsPrevAt = null;
+            _autoSelectedServer = null;
             ConnectionStatsText = string.Empty;
         }
     }
@@ -87,6 +96,14 @@ public partial class MainWindowViewModel
         {
             var api = _statsApi;
             if (api is null) return;
+
+            // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy"
+            // group, resolve which member it's actually routing through so the
+            // status line + list highlight show the REAL server (not the stale
+            // first-in-list). Independent of + before the traffic poll so it
+            // runs even on an idle tunnel (which skips the traffic tick below).
+            await MaybeRefreshAutoSelectedAsync(api).ConfigureAwait(false);
+
             var snap = await api.GetConnectionsAsync().ConfigureAwait(false);
             var now = snap.CapturedAt;
 
@@ -130,6 +147,47 @@ public partial class MainWindowViewModel
         }
         catch { /* poll failures non-fatal — line just stops updating */ }
         finally { Interlocked.Exchange(ref _statsInFlight, 0); }
+    }
+
+    /// <summary>
+    /// v2.44.1-r6: refresh <see cref="_autoSelectedServer"/> from the urltest
+    /// "proxy" group's current member (clash_api <c>/proxies/proxy</c> →
+    /// <c>"now"</c>) when AutoSelectBestServer is on, then push a status + list
+    /// highlight refresh on the UI thread if it changed. Best-effort: a null /
+    /// failed query keeps the prior pick (status falls back to a generic label).
+    /// </summary>
+    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
+    {
+        if (!AutoSelectBestServer || !IsSubscribeMode)
+            return;
+
+        var nowTag = await api.GetGroupNowAsync("proxy").ConfigureAwait(false);
+        var resolved = ResolveAutoSelectedServer(nowTag);
+        if (resolved is null) return; // unresolved → keep the prior pick
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!IsConnected) return;
+            if (ReferenceEquals(_autoSelectedServer, resolved)) return;
+            _autoSelectedServer = resolved;
+            RestoreConnectedStatus();
+            RefreshActiveIndicator();
+        });
+    }
+
+    /// <summary>
+    /// Map a urltest member tag (e.g. <c>"vless-Iceland VLESS ~main-brat"</c>)
+    /// back to its subscription row. The member tag is
+    /// <c>"&lt;protocol&gt;-&lt;ServerName&gt;"</c>; server names can contain
+    /// '-', so the row whose Name is the longest matching suffix wins.
+    /// </summary>
+    private ServerViewModel? ResolveAutoSelectedServer(string? nowTag)
+    {
+        if (string.IsNullOrEmpty(nowTag)) return null;
+        return SubscriptionServers
+            .Where(s => !string.IsNullOrEmpty(s.Name) && nowTag.EndsWith(s.Name, StringComparison.Ordinal))
+            .OrderByDescending(s => s.Name!.Length)
+            .FirstOrDefault();
     }
 
     private static string HumanRate(double bytesPerSec)

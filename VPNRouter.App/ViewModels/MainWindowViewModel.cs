@@ -2795,12 +2795,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (isActive) active = s;
         }
 
+        // v2.44.1-r6: under AutoSelectBestServer the "proxy" outbound is a
+        // urltest — there is no single stored active server, so the old
+        // ActiveSubscriptionServer/IP match lit NO row while traffic ran (user
+        // report 2026-06-23). Highlight the REAL member resolved from clash_api
+        // (_autoSelectedServer, refreshed by the ConnStats poll) instead.
+        var autoSelect = isSubscribeMode && AutoSelectBestServer;
         foreach (var s in SubscriptionServers)
         {
-            var isActive = isSubscribeMode
-                && IsConnected
-                && !string.IsNullOrEmpty(activeIp)
-                && IsRowActive(s, activeIp, subscriptionActiveName);
+            bool isActive;
+            if (autoSelect)
+                isActive = IsConnected
+                    && _autoSelectedServer is not null
+                    && ReferenceEquals(s, _autoSelectedServer);
+            else
+                isActive = isSubscribeMode
+                    && IsConnected
+                    && !string.IsNullOrEmpty(activeIp)
+                    && IsRowActive(s, activeIp, subscriptionActiveName);
             s.IsActive = isActive;
             if (isActive) active = s;
         }
@@ -3280,18 +3292,40 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void RestoreConnectedStatus()
     {
         if (!IsConnected) return;
-        var serverIp = _engine.ActiveServerAddress;
-        string? serverName = null;
-        if (IsSubscribeMode)
-            serverName = (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName;
-        else
-            serverName = (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName;
+        var (serverName, serverIp) = DeriveConnectedServerLabel();
 
         var configLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
         var tunnelLabel = IsSplitTunnel ? "split" : "full";
         var modeLabel = $"{configLabel}/{tunnelLabel}";
 
         StatusText = Strings.Connected(modeLabel, serverName, serverIp);
+    }
+
+    /// <summary>
+    /// v2.44.1-r6: derive the (name, ip) for the connected-status line, shared by
+    /// <see cref="RestoreConnectedStatus"/> + the OnEngineStatus "Connected"
+    /// handler so the two can't drift. When AutoSelectBestServer builds a urltest
+    /// "proxy" group the active member is chosen by sing-box at runtime, so show
+    /// the REAL server resolved from clash_api (<c>_autoSelectedServer</c>,
+    /// refreshed by the ConnStats poll) — or a generic auto-select label until
+    /// it's known — NOT the stale first-in-list that lit "Germany" while traffic
+    /// exited via Iceland (user report 2026-06-23).
+    /// </summary>
+    private (string? name, string? ip) DeriveConnectedServerLabel()
+    {
+        var serverIp = _engine.ActiveServerAddress;
+        if (IsSubscribeMode)
+        {
+            if (AutoSelectBestServer)
+                return _autoSelectedServer is not null
+                    ? (_autoSelectedServer.DisplayName, _autoSelectedServer.Server)
+                    : (Strings.AutoSelectStatusLabel, null);
+            return ((SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName, serverIp);
+        }
+        if (IsVlessMode)
+            return ((SelectedServer ?? Servers.FirstOrDefault())?.DisplayName, serverIp);
+        var c = CustomConfigs.FirstOrDefault(x => x.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault();
+        return (c?.Name, serverIp);
     }
 
     /// <summary>
@@ -3889,25 +3923,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 RefreshActiveIndicator();
                 // Use engine's actual runtime state — not stale ViewModel cache.
                 // This prevents "status says 104 but actually running 194" mismatch.
-                var serverIp = _engine.ActiveServerAddress;
-                string? serverName;
-                if (IsSubscribeMode)
-                {
-                    var s = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
-                    serverName = s?.DisplayName;
-                }
-                else if (IsVlessMode)
-                {
-                    var s = SelectedServer ?? Servers.FirstOrDefault();
-                    serverName = s?.DisplayName;
-                }
-                else
-                {
-                    var c = CustomConfigs.FirstOrDefault(x => x.IsActive)
-                        ?? SelectedCustomConfig
-                        ?? CustomConfigs.FirstOrDefault();
-                    serverName = c?.Name;
-                }
+                // v2.44.1-r6: shared with RestoreConnectedStatus — also resolves
+                // the REAL urltest member when AutoSelectBestServer is on (the
+                // autostart "says Germany, exits Iceland" report 2026-06-23).
+                var (serverName, serverIp) = DeriveConnectedServerLabel();
                 var modeLabel = IsSplitTunnel ? "split" : "full";
                 StatusText = Strings.Connected(modeLabel, serverName, serverIp);
             }

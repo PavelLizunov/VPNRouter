@@ -217,7 +217,11 @@ public class MainWindowViewModelCharacterizationTests
         // MaybePollConnStats/PollConnStatsAsync/HumanRate + _statsApi/_statsPrev*/_statsInFlight
         // (MainWindowViewModel.ConnStats.cs). Cross-platform → Linux pin drifts in lock-step
         // (soft-fail; capture from next ubuntu CI run).
-        "02fa85446b73b331d62716aba86e5077fa3fb3568c588f63fbc49442e7ae6c0c";
+        // v2.44.1-r6 (2026-06-23 auto-select status fix): + DeriveConnectedServerLabel +
+        // MaybeRefreshAutoSelectedAsync/ResolveAutoSelectedServer + _autoSelectedServer
+        // (show the REAL urltest member, not the stale first-in-list). Cross-platform →
+        // Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI run).
+        "2a7333a5754dddebee5ebca5e466bd32525b7f60766819fc1bd1a4d67a5c93bc";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
