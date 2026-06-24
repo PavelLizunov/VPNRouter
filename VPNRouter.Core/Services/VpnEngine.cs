@@ -49,6 +49,17 @@ public class VpnEngine : IDisposable
     // queued probe doesn't fire failover after the user manually disconnects.
     private CancellationTokenSource? _probeCts;
 
+    // v2.44.2 (P0): set true by the TUN warmup probe's success branch
+    // (IStartupHost.OnConnected) and reset on every StartAsync / Stop. The
+    // post-start Clash-API delay-test probe consults it: once warmup has
+    // fetched gstatic THROUGH the tunnel, the outbound is provably reachable,
+    // so a later delay-test 503 ("An error occurred in the delay test" — a
+    // known sing-box urltest-group / transient quirk) is a FALSE POSITIVE and
+    // must not trigger auto-failover that tears down a working connection
+    // (regression in v2.44.0/.1, diag 20260624-235243). Volatile: written on
+    // the warmup task, read on the probe task.
+    private volatile bool _warmupConfirmed;
+
     // DNS-tunnel (slipstream) transport sidecar. Created lazily by the startup
     // host ONLY when the active server is dns-tunnel; null for every other
     // server type. Stopped in Stop() after sing-box. See
@@ -221,12 +232,32 @@ public class VpnEngine : IDisposable
     /// downstream with the wintun «file already exists» error — recoverable,
     /// not destructive.
     /// </param>
+    /// <summary>
+    /// v2.44.2 (P0) — decide whether the post-start Clash delay-test probe
+    /// should trigger auto-failover. Suppressed once the TUN warmup probe has
+    /// confirmed connectivity (it fetched gstatic THROUGH the tunnel, so the
+    /// outbound is provably reachable); a later delay-test failure is then a
+    /// known false positive — Clash-API HTTP 503 "An error occurred in the
+    /// delay test" on urltest groups, or a transient RST — and must NOT tear
+    /// down a working connection (regression in v2.44.0/.1, diag
+    /// 20260624-235243). Pure + static so the decision is unit-testable
+    /// without a live engine/Clash API. The periodic HealthMonitor still
+    /// covers genuine sing-box crashes regardless of this gate.
+    /// </summary>
+    internal static bool ShouldAutoFailoverAfterProbe(
+        bool probeIsDead, bool probeCancelled, bool warmupConfirmed)
+        => probeIsDead && !probeCancelled && !warmupConfirmed;
+
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
         // Remember the conflict-skip for the session so internal re-entries (the
         // AutoFailover restart delegates) honour the user's "Ignore" too — a
         // failover after an ignored conflict must not re-block on Phase 0.
         _skipVpnConflictCheck = skipVpnConflictCheck;
+        // v2.44.2 (P0): a fresh connect attempt has not yet confirmed TUN
+        // connectivity. Cleared here so a prior session's warmup-confirm can't
+        // suppress this attempt's post-start failover safety net.
+        _warmupConfirmed = false;
         // Phase 3C (2026-05-18): the 750-LOC inline sequence that used to
         // live here moved into StartupPipeline. The pipeline walks the 8
         // canonical phases (Resolve -> Scan -> Generate -> PreStartChecks
@@ -441,6 +472,7 @@ public class VpnEngine : IDisposable
         // Timer) so doing it first costs nothing on the user-visible
         // disconnect path.
         try { _probeCts?.Cancel(); } catch { }
+        _warmupConfirmed = false;   // v2.44.2 (P0): stopped engine carries no warmup confirmation
         // P0 leak fix (H-1/M-1, perf audit 2026-06-11): Dispose (not Stop) so the
         // SingBoxManager unhooks its AppDomain.ProcessExit handler — otherwise
         // every connect cycle roots a NEW SingBoxManager + its HealthMonitor (via
@@ -1004,7 +1036,14 @@ public class VpnEngine : IDisposable
         // "Connected (PID N)" StatusChanged string for back-compat, but
         // the typed event stays silent — that's the invariant Stage 2's
         // App-side two-phase timer depends on).
-        public void OnConnected(int pid) => _engine.Connected?.Invoke(pid);
+        public void OnConnected(int pid)
+        {
+            // v2.44.2 (P0): warmup fetched gstatic THROUGH the tunnel — the
+            // outbound is provably reachable. Record it so the post-start
+            // delay-test probe won't false-positive-failover a working link.
+            _engine._warmupConfirmed = true;
+            _engine.Connected?.Invoke(pid);
+        }
 
         public void OnRestartAttempted(int attempt, int max) =>
             _engine.RestartAttempted?.Invoke(attempt, max);
@@ -1124,7 +1163,18 @@ public class VpnEngine : IDisposable
                     try
                     {
                         _engine.Stop();
-                        await _engine.StartAsync(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
+                        // v2.44.2 (P0): Stop() cancels _engine._probeCts — the
+                        // SAME token chain this delegate runs under via innerCt
+                        // (the post-start probe calls HandleDeadConfigAsync with
+                        // probeCt). Re-entering StartAsync under innerCt threw
+                        // OperationCanceledException instantly ("F-E probe-driven
+                        // restart threw" -> "Restart delegate returned false" ->
+                        // engine left STOPPED: failover killed the working link and
+                        // never started the replacement; diag 20260624-235243). The
+                        // failover restart owns a fresh lifetime and installs its
+                        // own _probeCts, so it must not inherit the cancelled probe
+                        // token.
+                        await _engine.StartAsync(CapturedSettings(), CancellationToken.None, _engine._skipVpnConflictCheck);
                         return true;
                     }
                     catch (Exception ex)
@@ -1180,7 +1230,8 @@ public class VpnEngine : IDisposable
                     await Task.Delay(TimeSpan.FromSeconds(15), probeCt);
                     var clashPort = ParseClashApiPort(settings.SingBox.ClashApi);
                     var probe = await sanityCheck.ProbeAsync(clashPort, probeCt);
-                    if (probe.IsDead && !probeCt.IsCancellationRequested)
+                    if (ShouldAutoFailoverAfterProbe(
+                            probe.IsDead, probeCt.IsCancellationRequested, _engine._warmupConfirmed))
                     {
                         _engine._logger?.Warning(
                             "[VpnEngine] F-E post-start probe failed: {Reason}",
@@ -1191,6 +1242,17 @@ public class VpnEngine : IDisposable
                             probe.Reason ?? "probe failed", probeCt);
                         if (outcome.UserFacingMessage != null)
                             _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
+                    }
+                    else if (probe.IsDead && !probeCt.IsCancellationRequested && _engine._warmupConfirmed)
+                    {
+                        // v2.44.2 (P0 false-positive fix): the delay-test failed
+                        // but warmup already proved the tunnel works — do NOT
+                        // tear down a working connection. Log for telemetry.
+                        _engine._logger?.Warning(
+                            "[VpnEngine] F-E post-start probe reported dead ({Reason}) but TUN " +
+                            "warmup already confirmed connectivity — treating as false positive, " +
+                            "NOT failing over.",
+                            probe.Reason);
                     }
                 }
                 catch (OperationCanceledException) { /* Stop() cancelled — fine */ }
