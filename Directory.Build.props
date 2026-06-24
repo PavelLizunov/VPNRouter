@@ -1,0 +1,21 @@
+<Project>
+  <!-- Methodology audit (plans/methodology-audit-2026-06-25.md, item 2).
+
+       NuGet vulnerability auditing: the build now surfaces NU1901-1904 for
+       known-CVE direct AND transitive packages (a VPN client's crypto / parsing
+       / HTTP dependency surface). Warning-level by design - it informs without
+       blocking the build; pair with Dependabot alerts (audit item 6).
+
+       DENY-WARNINGS is intentionally NOT enabled here yet. The Release build
+       currently carries ~194 warnings (incl. ~68 CS8602 null-deref). Flipping
+       them to errors at the root would break every build immediately. The
+       burndown - fix the warnings, then enable <TreatWarningsAsErrors> (or a
+       <WarningsAsErrors> subset) - is tracked as a follow-up in the audit plan
+       (P0 item 2). Adding the props file now makes that flip a one-line change
+       once the backlog is clear. -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+  </PropertyGroup>
+</Project>
