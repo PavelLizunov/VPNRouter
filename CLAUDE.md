@@ -27,6 +27,11 @@ Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
 | Per-platform install scripts + APT/winget | `packaging/CLAUDE.md` |
 | Roadmap / handoff plans convention | `plans/CLAUDE.md` |
 
+**Mirror trees**: в корне есть параллельные `AGENTS.md` + `.agents/skills/*/SKILL.md`
+— зеркало этого файла и `.claude/skills/`. Канонична версия в `.claude/` (+ этот
+`CLAUDE.md`); при правке правила/скилла синхронизируй `.agents/`/`AGENTS.md` следом.
+Они уже расходились (audit P1-3, 2026-06-25) — не правь только одну копию.
+
 ## Quick reference commands
 
 ```bash
@@ -40,7 +45,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
 # Ship a rolling candidate (skill: ship-rolling-candidate)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y-rN" -Upload
 
-# Cut stable (skill: cut-stable, autonomous когда -rN прошёл verification)
+# Cut stable (skill: cut-stable — НЕ autonomous: по явной команде user после verification, см. rule #6)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y" -Upload
 
 # Push to both remotes

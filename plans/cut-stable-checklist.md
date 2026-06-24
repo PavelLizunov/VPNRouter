@@ -6,6 +6,13 @@
 pre-cut live update gate». Этот файл — standalone версия, доступная даже
 если skill layer не подгружен.
 
+> **CANONICAL SOURCE = `.claude/skills/cut-stable/SKILL.md`.** Этот standalone-файл
+> — fallback; если команда здесь расходится со skill'ом, **skill ПОБЕЖДАЕТ**.
+> Known-stale места исправлены 2026-06-25 (audit P1-1):
+> - install ZIP glob = **`VPNRouter-v*-win.zip`** (НЕ `*-windows-x64.zip`, который матчит НИЧЕГО).
+> - версию после update проверять через CLI **`doctor`** / receipt `.update-installed-version` / InformationalVersion git-SHA flip — НЕ через `ProductVersion` (он ВСЕГДА `1.0.0+<gitsha>`, build не передаёт `-p:Version`).
+> - assets = **14 desktop (16 с Android)**, НЕ 12.
+
 ---
 
 ## Why this exists

@@ -39,7 +39,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
 # Ship a rolling candidate (skill: ship-rolling-candidate)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y-rN" -Upload
 
-# Cut stable (skill: cut-stable, autonomous когда -rN прошёл verification)
+# Cut stable (skill: cut-stable — НЕ autonomous: по явной команде user после verification, см. rule #6)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y" -Upload
 
 # Push to both remotes

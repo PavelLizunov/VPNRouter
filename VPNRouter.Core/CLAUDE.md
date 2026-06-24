@@ -35,6 +35,9 @@ AppVersion.cs   единая версия — обновлять перед ка
 | `ProcessQuery.cs` | Handle-safe `GetProcessesByName` wrappers: `AnyAlive` / `CountAlive` dispose the `Process[]` в `finally`. `RuntimeStatusDetector.AnyProcessAlive` делегирует сюда. P0 handle-leak fix (v2.40.0-r3); `.githooks/pre-commit` Gate 7 hard-fails staged product `GetProcessesByName(...).Length`. |
 | `RoutingAppListEditor.cs` | Static helper для split-tunnel routing app lists: `TryAddProcessName` / `TryRemoveProcessName` + `IsStillRoutedByAnother` (survivor-guard — UI scrub `MainWindowViewModel.ScrubRoutingForApp` не удаляет process_name, который другая group ещё routes; v2.40.0-r2). |
 | `FirewallManager.cs` | Windows Firewall rules через `netsh.exe`. block_on_vpn_fail. |
+| `IFirewallManager` | Общий интерфейс firewall-менеджеров (Win/Linux/macOS), fail-closed kill-switch. |
+| `Platform/Linux/LinuxFirewallManager.cs` | **Fail-closed kill-switch, Linux (nftables через `nft`)**, v2.44.0. ОПАСНО: пустой `processNames` трактуется как full-tunnel → глобальный egress-drop; split-tunnel + 30s scan-timeout может забрить ВЕСЬ хост (audit P1-6, deferred). IPv6-drop hazard. |
+| `Platform/macOS/MacFirewallManager.cs` | **Fail-closed kill-switch, macOS (pf)**, v2.44.0. Те же empty-list / IPv6-drop hazard'ы. |
 | `ProfileManager.cs` | GitHub > Local > Built-in source priority. Merging multiple profiles (union processes, strictest DNS wins). |
 | `SettingsLoader.cs` | YAML load/save через YamlDotNet. Auto-create defaults. |
 | `SettingsMigrator.cs` | Schema migrations (legacy → current). |
