@@ -116,9 +116,24 @@ fi
 needs_tests=$(git diff --cached --name-only --diff-filter=AM | grep -E '^(VPNRouter\.Core/|VPNRouter\.Tests/)' | head -1 || true)
 if [ -n "$needs_tests" ]; then
   echo -e "${YELLOW}Gate 2: Running scoped test suite...${NC}"
-  # Filter to commonly-impacted classes. Full suite runs in CI.
+  # Base: commonly-impacted classes. Full suite runs in CI.
+  TEST_FILTER="FullyQualifiedName~PlaceholderGuard|FullyQualifiedName~GetEffective|FullyQualifiedName~Subscription|FullyQualifiedName~LeakProtection|FullyQualifiedName~Resolver"
+  # audit item 5 (2026-06-25): the static allowlist EXCLUDED the failover/firewall
+  # suites, so editing VpnEngine.cs ran Resolver tests but never the failover tests
+  # (a probe-gate regression would pass the local gate green). When that source is
+  # staged, append the matching PURE-logic suites. Env-dependent suites
+  # (VpnEngine*Lifecycle, HealthMonitorTunOrphanRestart — they write
+  # %ProgramData%\VPNRouter\config\current.json and throw UnauthorizedAccess on a
+  # dev box with VPNRouter installed) stay CI-only on purpose.
+  staged_cs=$(git diff --cached --name-only --diff-filter=AM | grep -E '\.cs$' || true)
+  if echo "$staged_cs" | grep -qE 'VpnEngine|AutoFailover|ConfigSanityCheck|StartupPipeline|HealthMonitor'; then
+    TEST_FILTER="$TEST_FILTER|FullyQualifiedName~VpnEngineProbeFailoverGate|FullyQualifiedName~AutoFailover|FullyQualifiedName~ConfigSanityCheck"
+  fi
+  if echo "$staged_cs" | grep -qE 'Firewall|/Platform/'; then
+    TEST_FILTER="$TEST_FILTER|FullyQualifiedName~Firewall"
+  fi
   if ! dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --nologo --verbosity quiet \
-       --filter "FullyQualifiedName~PlaceholderGuard|FullyQualifiedName~GetEffective|FullyQualifiedName~Subscription|FullyQualifiedName~LeakProtection|FullyQualifiedName~Resolver" 2>&1 | tail -3; then
+       --filter "$TEST_FILTER" 2>&1 | tail -3; then
     ERRORS+=("Gate 2: scoped tests failed. Fix before commit.")
   else
     echo -e "${GREEN}Gate 2: scoped tests green.${NC}"
