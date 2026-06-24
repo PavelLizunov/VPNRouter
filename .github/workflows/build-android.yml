@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       # Wave 26 (Phase 6, 2026-05-18) — bumped to multi-version setup so
       # both 8.0 + 10.0 SDKs are available. Wave 23 (commit c33e372,
@@ -87,7 +87,7 @@ jobs:
       # head restores hundreds of MB of packages on cold runs. Keyed on the
       # union hash of every .csproj so any package version bump invalidates
       # cleanly. Q11 will pin actions/cache to a commit SHA.
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8  # v6.0.0
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -98,7 +98,7 @@ jobs:
       # android` below takes 3–4 min on a cold runner (large SDK download).
       # Caching ~/.dotnet/workloads keyed on global.json (where SDK + workload
       # versions are pinned) avoids repeating that download on warm runs.
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8  # v6.0.0
         with:
           path: ~/.dotnet/workloads
           key: dotnet-workloads-${{ runner.os }}-${{ hashFiles('**/global.json') }}
@@ -109,7 +109,7 @@ jobs:
       # tools. Temurin matches the developer-VM toolchain documented in
       # plans/vpnrouter-android-handbook.md §3.5.
       - name: Setup JDK 17 (Temurin)
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287  # v5.3.0
         with:
           distribution: temurin
           java-version: "17"
