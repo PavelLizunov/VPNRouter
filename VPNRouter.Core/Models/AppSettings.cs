@@ -511,7 +511,6 @@ public class AppConfig
     public string PlaceholderPruneAtUtc_Str { get; set; } = string.Empty;
 }
 
-/// <summary>A single VLESS subscription source (URL + its servers).</summary>
 /// <summary>A saved custom sing-box config entry.</summary>
 public class CustomConfigEntry
 {

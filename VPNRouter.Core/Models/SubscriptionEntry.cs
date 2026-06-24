@@ -3,6 +3,7 @@ using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Models;
 
+/// <summary>A single VLESS subscription source (URL + its servers).</summary>
 public class SubscriptionEntry
 {
     [YamlMember(Alias = "id")]
