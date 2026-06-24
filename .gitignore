@@ -45,6 +45,8 @@ tools/*
 !tools/check-methodology.sh
 # v2.37.0-r19: CI gate verifier (pre-push hook). Re-add per CLAUDE.md rule #11.
 !tools/verify-last-commit-ci.ps1
+# audit item 7 (2026-06-25): open-defect ledger gate for cut-stable (pre-flight 6.5).
+!tools/check-open-p0.ps1
 # vpn-diag: reusable network diagnostic suite (egress/DNS/ping/HTTP/throughput/MTU).
 !tools/vpn-diag.sh
 !tools/vpn-diag.ps1
