@@ -512,19 +512,6 @@ public class AppConfig
 }
 
 /// <summary>A single VLESS subscription source (URL + its servers).</summary>
-/// <summary>A user-created Applications category.</summary>
-public class CustomCategory
-{
-    [YamlMember(Alias = "name")]
-    public string Name { get; set; } = string.Empty;
-
-    [YamlMember(Alias = "apps")]
-    public List<string> Apps { get; set; } = new();
-
-    [YamlMember(Alias = "enabled")]
-    public bool Enabled { get; set; } = true;
-}
-
 /// <summary>
 /// v2.30.0: user-defined custom routing rule with explicit Action
 /// (direct / proxy / block). Replaces the v2.29.0
