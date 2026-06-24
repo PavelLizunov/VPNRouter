@@ -1163,18 +1163,18 @@ public class VpnEngine : IDisposable
                     try
                     {
                         _engine.Stop();
-                        // v2.44.2 (P0): Stop() cancels _engine._probeCts — the
-                        // SAME token chain this delegate runs under via innerCt
-                        // (the post-start probe calls HandleDeadConfigAsync with
-                        // probeCt). Re-entering StartAsync under innerCt threw
-                        // OperationCanceledException instantly ("F-E probe-driven
-                        // restart threw" -> "Restart delegate returned false" ->
-                        // engine left STOPPED: failover killed the working link and
-                        // never started the replacement; diag 20260624-235243). The
-                        // failover restart owns a fresh lifetime and installs its
-                        // own _probeCts, so it must not inherit the cancelled probe
-                        // token.
-                        await _engine.StartAsync(CapturedSettings(), CancellationToken.None, _engine._skipVpnConflictCheck);
+                        // KNOWN (v2.44.2): Stop() cancels _probeCts (== innerCt),
+                        // so this restart self-cancels — on a GENUINE outage the
+                        // auto-failover tears the dead link down but does not bring
+                        // up the replacement (diag 20260624-235243). Left as-is in
+                        // this P0 hotfix: the warmup gate above already prevents the
+                        // FALSE-POSITIVE failover this fix targets, and a correct
+                        // restart needs the concurrency rework (working restart +
+                        // user-disconnect guard so a CancellationToken.None restart
+                        // can't resurrect the tunnel after Disconnect + ResetCycle +
+                        // SemaphoreSlim sync) which needs VM integration testing.
+                        // Tracked for v2.44.3; see plans/v2.44-bug-hunt-deferred.
+                        await _engine.StartAsync(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
                         return true;
                     }
                     catch (Exception ex)
