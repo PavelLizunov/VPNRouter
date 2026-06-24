@@ -59,6 +59,37 @@ if ($TolerateFailure) {
     }
 }
 
+# audit P2-3 (2026-06-25): TOLERATE_FAILURE is allowlist-restricted + audited.
+# Pre-fix it could silently wave through ANY named red check with no trace (the
+# r24..r29 red-X streak the hook was built to prevent). Now: only known-flaky
+# checks, only with the corroborating sentinel, only with a logged reason.
+if ($failOk.Count -gt 0) {
+    $allowedTolerate = @('test')   # Linux MVM characterization hash-drift only
+    $repoRoot = (git rev-parse --show-toplevel 2>$null)
+    if ($repoRoot) { $repoRoot = $repoRoot.Trim() }
+    $sentinel = if ($repoRoot) { Join-Path $repoRoot '.git-suggested-hash-bump.txt' } else { $null }
+    $reason = $env:TOLERATE_REASON
+    foreach ($k in @($failOk.Keys)) {
+        if ($allowedTolerate -notcontains $k) {
+            Write-Host "REFUSED TOLERATE_FAILURE='$k': not in allowlist ($($allowedTolerate -join ',')). Fix the failure." -ForegroundColor Red
+            $failOk.Remove($k)
+        }
+        elseif (-not ($sentinel -and (Test-Path $sentinel))) {
+            Write-Host "REFUSED TOLERATE_FAILURE='$k': requires the Linux hash-drift sentinel (.git-suggested-hash-bump.txt)." -ForegroundColor Red
+            $failOk.Remove($k)
+        }
+        elseif ([string]::IsNullOrWhiteSpace($reason)) {
+            Write-Host "REFUSED TOLERATE_FAILURE='$k': set `$env:TOLERATE_REASON='<why>' to audit the waiver." -ForegroundColor Red
+            $failOk.Remove($k)
+        }
+    }
+    if ($failOk.Count -gt 0 -and $repoRoot) {
+        $log = Join-Path $repoRoot ".ci-tolerated-$($head.Substring(0,8)).txt"
+        "commit=$head tolerated=$($failOk.Keys -join ',') reason=$reason" | Out-File -FilePath $log -Encoding utf8
+        Write-Host "::warning::CI failure TOLERATED for [$($failOk.Keys -join ',')]: $reason (audit log: $log)" -ForegroundColor Yellow
+    }
+}
+
 $hardRed = New-Object System.Collections.ArrayList
 $inProgress = New-Object System.Collections.ArrayList
 $tolerated = New-Object System.Collections.ArrayList
@@ -80,7 +111,12 @@ foreach ($c in $checks) {
         if ($skipOk.ContainsKey($name)) {
             [void]$tolerated.Add("$name [skipped, expected]")
         } else {
-            [void]$tolerated.Add("$name [skipped, unexpected]")
+            # audit P2-3: an UNEXPECTED skipped (path filter narrowed / `if:`
+            # flipped) on a check that should have run must not silently read as
+            # green. Surfaced loudly (not hard-red, which would break legit
+            # conditional jobs).
+            [void]$tolerated.Add("$name [skipped, UNEXPECTED - confirm it should skip]")
+            Write-Host "::warning::Unexpected skipped check '$name' on $head - confirm it was meant to skip." -ForegroundColor Yellow
         }
     }
     elseif ($conclusion -eq "failure") {

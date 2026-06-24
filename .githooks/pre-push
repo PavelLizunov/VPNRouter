@@ -59,6 +59,14 @@ fi
 echo "[pre-push] Verifying previous commit CI via tools/verify-last-commit-ci.ps1..."
 if powershell -ExecutionPolicy Bypass -File "$SCRIPT" -Commit "HEAD^1" 2>&1 | tee /tmp/vpnrouter-ci-check.log | tail -3 | grep -qE "^OK[: -]"; then
     echo "[pre-push] CI green — push allowed."
+    # audit P2-4 (2026-06-25): launch the post-push CI watcher on EVERY real push,
+    # not only via the opt-in `git pushw` alias the documented flow never used
+    # (which left the Linux-hash-drift auto-bump dormant). Best-effort + detached;
+    # never blocks the push.
+    WATCHER="$REPO_ROOT/tools/watch-after-push.ps1"
+    if [ -f "$WATCHER" ]; then
+        ( powershell -ExecutionPolicy Bypass -File "$WATCHER" >/dev/null 2>&1 & ) || true
+    fi
     exit 0
 fi
 
