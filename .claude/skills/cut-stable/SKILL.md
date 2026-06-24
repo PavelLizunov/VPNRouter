@@ -12,7 +12,7 @@ prerelease flag.
 
 ## Pre-flight (verification gate, autonomous)
 
-Все 6 чек-боксов должны быть зелёные:
+Все hard чек-боксы зелёные (1-6 ниже + 6.5 open-defect gate):
 1. `dotnet build -c Release` → 0 errors
 2. Regression tests зелёные (`VlessServersResolverTests`, `ConfigGeneratorEmptyServersGuardTests`, `FreeConfigAggregatorPreserveTests`)
 3. Mac CI на последнем -rN — `success`
@@ -23,6 +23,12 @@ prerelease flag.
    usually attached at the stable cut (Step 5.6), but a `-rN` may already carry it — so
    accept both 14 and 16 here, just confirm the desktop 14 are all present.
 6. **Live update gate PASS** (см. секцию ниже) — обязательная mandatory.
+6.5. **Open-defect ledger clear** (audit item 7, 2026-06-25) — `pwsh tools/check-open-p0.ps1`
+   exits 0 (нет открытых `- [ ]` P0/P1 в `plans/OPEN-DEFECTS.md`), ИЛИ перезапусти с
+   `-Waive '<reason>'` и зафиксируй причину в cut-сообщении. **BLOCKS cut иначе.** Скилл
+   `bug-hunt` дописывает survivors в этот ledger — это гейт, который остановил бы
+   отложенный auto-failover P0 от попадания в stable (diag 20260624-235243). Tiny /
+   config-only cuts — waive с однострочной причиной.
 7. (soft) No user-reported regressions за ~24h после shipping последнего -rN
 
 Если все зелёные — ждём explicit user команду "cut" / "ok" / "promote" (rule 6
