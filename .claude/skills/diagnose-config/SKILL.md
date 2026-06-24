@@ -108,6 +108,26 @@ v2.28.3-r5 fixed: `FreeConfigAggregator.PreservePreviousValidation` сохран
 ### "ConfigMode='custom' без custom_config — VPN не запускается"
 v2.28.2-r2 fix: SaveSettings guard. Manual recovery: открыть config.yaml, line 9 → `config_mode: subscribe` (или generated, в зависимости от того что есть).
 
+## Close the loop — pin the repro as a test (mandatory)
+
+Audit item 14 (2026-06-25). A user diag that reproduces a bug MUST become a
+failing test BEFORE the fix ships (METHODOLOGY §6.1/6.2 — pin the contract in the
+same commit). Once root cause is isolated:
+
+1. Extract the minimal repro from the diag fixture (config.yaml / current.json /
+   the proving log line) into a characterization or contract test under
+   `VPNRouter.Tests/` — e.g. a `ConfigSanityCheck` / `LeakProtection` / parser
+   case, or a pure-function pin like `VpnEngineProbeFailoverGateTests`.
+2. Confirm it goes RED on the current code (proves it captures the bug).
+3. The fix commit turns it GREEN. Make sure it runs in the right pre-commit
+   Gate 2 path-scope (see `.githooks/pre-commit`), not only in CI.
+4. If the bug is real-but-deferred, append it to `plans/OPEN-DEFECTS.md` so the
+   cut-stable gate (`tools/check-open-p0.ps1`) blocks on it.
+
+Без этого user-reported P0 фиксятся по log-string-match и молча регрессят — это и
+случилось с auto-failover (regression-тест появился только ПОСЛЕ второго
+инцидента, diag 20260624-235243).
+
 ## Tools
 
 - `singbox.exe check -c file.json` — validate sing-box JSON schema.

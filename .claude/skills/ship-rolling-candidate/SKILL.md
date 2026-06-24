@@ -7,8 +7,8 @@ when: Code change closed (plan item done, build/tests green) — ship autonomous
 # Ship a rolling release candidate
 
 VPNRouter ships iterations as `vX.Y.Z-r1`, `vX.Y.Z-r2`, etc. Only one
-prerelease visible at a time. Stable cut autonomous когда -rN passes
-verification gate (см. `cut-stable` skill).
+prerelease visible at a time. Stable cut **НЕ autonomous** — по явной команде
+user после verification gate (см. `cut-stable` skill, rule #6).
 
 ## HARD PRECONDITION (added 2026-05-25 after r7..r18 red-CI streak)
 
@@ -35,6 +35,32 @@ The script enforces this check so the AI can't silently skip it. Even
 if you "remember to check" 95% of the time, the 5% miss is what
 caused the r7→r18 debt. Make the verification a hard gate, not a
 mental TODO.
+
+## HARD PRECONDITION 2 — independent review-agent over the diff (added 2026-06-25, audit P0 item 3)
+
+METHODOLOGY §5/§7.1: an independent review-agent is the FIRST blocking layer —
+a green build/test gate is NOT "done". This ship path had NO review (self-review
+only, §18 self-preference bias), which is exactly how the auto-failover P0
+reached stable. Before bumping AppVersion:
+
+```bash
+git diff --name-only HEAD~1..HEAD   # (or the staged diff if not yet committed)
+git diff HEAD~1..HEAD
+```
+
+Spawn an INDEPENDENT reviewer with `docs/REVIEW_AGENT_PROMPT.md` — paste the FULL
+diff + invariants verbatim (brief like a new colleague, never "as discussed"):
+
+```
+Agent(subagent_type: "general-purpose",
+      prompt: <docs/REVIEW_AGENT_PROMPT.md block with the diff pasted in>)
+```
+
+- `critical` / `important` → FIX before shipping, then re-review.
+- `minor` → opt-in. Real-but-deferred survivors → append to `plans/OPEN-DEFECTS.md`.
+
+**Hotfix short-circuit** (§5): skip ONLY for a true ≤5-line, single-surface
+change with no contract/behaviour drift — and say so in the ship report.
 
 ## Pre-flight checks
 
