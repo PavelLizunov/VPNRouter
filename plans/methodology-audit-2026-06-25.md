@@ -16,6 +16,26 @@ independent review-agent — is absent from every gate on the path that reaches 
 
 ---
 
+## Implementation status (2026-06-25)
+
+Installed this session — commits `072763f9..567d28a8` on main, each gate-passing + CI green:
+- [x] 1 global.json SDK pin · [x] 2 Directory.Build.props NuGetAudit · [x] 3 doc fixes ·
+  [x] 4 cut-stable-checklist re-sync · [x] 5 broaden pre-commit Gate 2 ·
+  [x] 6 Dependabot alerts + security updates (gh api) · [x] 7 OPEN-DEFECTS ledger +
+  check-open-p0.ps1 + cut-stable 6.5 gate · [x] 8 REVIEW_AGENT_PROMPT.md + ship review-diff
+  HARD step · [x] 9 bug-hunt skill · [x] 10 tests on `v*` tags + cut-stable Step 5 wait ·
+  [x] 12 Windows characterization CI job · [x] 13 TOLERATE_FAILURE allowlist + pre-push
+  watcher · [x] 14 diagnose-config pin-as-test step · [x] 15 CodeQL advisory.
+- [ ] **11 Harden mac/linux sing-box smoke to a HARD failure — DEFERRED.** Modifies the
+  release build scripts (`build-mac.sh` / `build-linux.yml`), unverifiable on this dev box;
+  making a release-path check hard-fail blind is the exact untested-critical-path
+  anti-pattern this methodology forbids. Do it with a `workflow_dispatch` run on a real
+  mac/linux runner to confirm the check passes BEFORE making it blocking.
+- [ ] **16 Behavioral/concurrency fixes — DEFERRED to v2.44.3.** Failover restart (fresh
+  token), `_isStopping`/SemaphoreSlim guard, AutoFailover ResetCycle-on-good-connect + flap
+  rate-limit, LinuxFirewallManager explicit `isFullTunnel`. Needs VM integration testing;
+  these are the substance the #7 ledger gate blocks on (`plans/OPEN-DEFECTS.md`).
+
 ## P0
 
 **1. No gate links open deferred-P0s to the cut-stable decision** *(all 7 lenses)*
