@@ -27,6 +27,13 @@ name: dotnet test
 on:
   push:
     branches: [main, v3.0-prep]
+    # audit item 10 (2026-06-25): also run the full suite on release tags. A
+    # stable `vX.Y.Z` tag previously triggered only build+upload (build-mac/linux)
+    # and verify-release-integrity (string/hash/count) -- ZERO behavioral tests --
+    # so a defect on a cut SHA differing from the last green -rN shipped to stable.
+    # cut-stable Step 5 now waits for this `test` job on the stable tag before
+    # un-drafting. (Re-runs on -rN tags too; redundant but ties tag -> green suite.)
+    tags: ['v*']
   pull_request:
     branches: [main, v3.0-prep]
   workflow_dispatch:
@@ -37,8 +44,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      # Floating @v4 for now; Q11 will pin to a full commit SHA across
-      # every workflow in one sweep.
+      # Actions are pinned to full commit SHAs; Dependabot (github-actions) bumps them.
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 

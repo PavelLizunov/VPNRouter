@@ -210,9 +210,17 @@ git push origin vX.Y.Z          # mirror в Forgejo
 If the local tag is missing, create it only after the GitHub API SHA matches
 the intended `HEAD`.
 
-## Step 5 — Mac + Linux CI (auto-triggered tag push)
+## Step 5 — Mac + Linux CI + full test suite (auto-triggered tag push)
 
-Wait for both runs. Verify the desktop assets:
+Wait for both build runs AND the **`dotnet test` job on the stable tag** (audit
+item 10: `test.yml` now triggers on `v*` tags — a stable cut on a SHA differing
+from the last green -rN previously ran ZERO behavioral tests). The tag's `test`
+must be `success` before Step 5.5 / un-draft:
+```bash
+TAGSHA=$(gh api repos/PavelLizunov/VPNRouter/git/refs/tags/vX.Y.Z --jq .object.sha)
+gh api repos/PavelLizunov/VPNRouter/commits/$TAGSHA/check-runs --jq '.check_runs[]|select(.name=="test")|.conclusion'
+```
+Then verify the desktop assets:
 ```bash
 gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json assets --jq '.assets | length'
 ```

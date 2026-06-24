@@ -1,0 +1,49 @@
+name: CodeQL
+
+# Audit item 15 (2026-06-25): advisory C# SAST for a public network-security
+# tool (untrusted subscription YAML / vless URIs, helper.cmd generation, the
+# update ZIP extractor). ADVISORY ONLY - alerts surface in the Security tab;
+# this is NOT a required branch-protection check and NOT part of the cut-stable
+# gate. Weekly + manual so it never blocks the ship/cut loop.
+
+on:
+  schedule:
+    - cron: '23 4 * * 1'   # Mondays 04:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (csharp)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Actions pinned to full commit SHAs; Dependabot (github-actions) bumps them.
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3
+        with:
+          languages: csharp
+
+      # Manual build via the test project graph (Core + App + CLI/Service refs).
+      # Same target test.yml builds on ubuntu, so Android (NU1102) and the
+      # Windows-only MCP tool are excluded -> a clean restore+build for tracing.
+      - name: Build
+        run: |
+          dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj
+          dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3
+        with:
+          category: "/language:csharp"
