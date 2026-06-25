@@ -22,6 +22,9 @@ logs/
 # deploy-to-testpc.ps1 cached WinRM credential (DPAPI-encrypted, machine-bound)
 .testpc-cred-*.xml
 
+# tools/testvm-control.ps1 scoped Proxmox API token (DPAPI-encrypted, this-user)
+.pve-api-token.xml
+
 # OS
 Thumbs.db
 Desktop.ini
