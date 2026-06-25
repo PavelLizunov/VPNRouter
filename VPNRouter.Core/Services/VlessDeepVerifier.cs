@@ -184,8 +184,8 @@ public sealed class VlessDeepVerifier
             SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
         }
 
-        var socksPort = FindFreePort();
-        var clashPort = FindFreePort();
+        var socksPort = NetPortUtil.FindFreePort();
+        var clashPort = NetPortUtil.FindFreePort();
         string? tmpConfigPath = null;
         IProcessHandle? handle = null;
         var stderrBuffer = new StringBuilder(capacity: 2048);
@@ -372,15 +372,6 @@ public sealed class VlessDeepVerifier
         // tries to serialize the alpn array entries (TUIC). Defaults are already
         // WriteIndented=false so behaviour is identical.
         return root.ToJsonString();
-    }
-
-    internal static int FindFreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
     private static async Task<bool> WaitForPortBoundAsync(int port, TimeSpan maxWait, CancellationToken ct)

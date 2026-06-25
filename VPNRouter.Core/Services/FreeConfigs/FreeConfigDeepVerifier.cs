@@ -90,8 +90,8 @@ public sealed class FreeConfigDeepVerifier
     {
         cfg.LastTestedAt = DateTime.UtcNow;
 
-        var socksPort = FindFreePort();
-        var clashPort = FindFreePort();
+        var socksPort = NetPortUtil.FindFreePort();
+        var clashPort = NetPortUtil.FindFreePort();
         string? tmpConfigPath = null;
         Process? process = null;
         var stderrBuffer = new System.Text.StringBuilder(capacity: 2048);
@@ -465,16 +465,6 @@ public sealed class FreeConfigDeepVerifier
         // parameterless overload sidesteps the .NET 10 "options must
         // specify a TypeInfoResolver" throw without any wire-format change.
         return root.ToJsonString();
-    }
-
-    /// <summary>Find a random free TCP port on loopback.</summary>
-    private static int FindFreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 
     /// <summary>Poll the loopback port until something accepts a connection, or timeout.</summary>

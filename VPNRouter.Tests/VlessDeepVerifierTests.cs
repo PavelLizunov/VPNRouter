@@ -235,7 +235,7 @@ public sealed class VlessDeepVerifierTests
         // loopback. The probe path uses two FindFreePort calls (SOCKS +
         // Clash) — they MUST differ in production, but that's a separate
         // race-condition concern; here we pin that the call succeeds.
-        var port = VlessDeepVerifier.FindFreePort();
+        var port = NetPortUtil.FindFreePort();
         Assert.InRange(port, 1, 65535);
     }
 
