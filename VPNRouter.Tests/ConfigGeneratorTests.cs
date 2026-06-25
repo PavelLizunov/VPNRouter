@@ -164,36 +164,44 @@ public class ConfigGeneratorTests
         Assert.Equal("proxy", config.Route.Final);
     }
 
-    // TODO(post-subscription-refactor): these two tests assume the pre-subscription
-    // multi-server generator that emitted a urltest parent outbound with child
-    // vless-main/vless-backup entries. ConfigGenerator now selects a single
-    // ActiveServer and emits a single vless outbound tagged "proxy", which is
-    // what subscribe-mode + GUI server picker expect. Rewrite to test
-    // ActiveServer selection semantics instead of urltest fan-out.
-    [Fact(Skip = "Pre-subscription multi-server urltest — ConfigGenerator now selects a single ActiveServer. See TODO above.")]
-    public void MultiServer_ProxyOutboundIsUrltest()
+    // v2.44.3: rewritten from the pre-subscription multi-server urltest tests.
+    // ConfigGenerator now emits a SINGLE ActiveServer outbound by default; the
+    // urltest fan-out is opt-in via Vless.AutoSelectBestServer ("Авто-выбор
+    // лучшего сервера"). These pin the current contract both ways + the exact
+    // urltest shape that lets sing-box auto-select / re-select the fastest node.
+
+    [Fact]
+    public void AutoSelect_On_MultiSameProtocol_ProxyIsUrltestWithShape()
     {
         var settings = CreateSettings(serverCount: 2);
+        settings.Vless.AutoSelectBestServer = true;
         var profile = CreateProfile();
-        var processes = new[] { "Discord.exe", "firefox.exe" };
 
-        var config = ConfigGenerator.Generate(profile, processes, settings);
+        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
 
         var proxy = config.Outbounds.First(o => o.Tag == "proxy");
         Assert.Equal("urltest", proxy.Type);
+        Assert.NotNull(proxy.Outbounds);
         Assert.Equal(2, proxy.Outbounds!.Count);
         Assert.Contains("vless-main", proxy.Outbounds);
         Assert.Contains("vless-backup", proxy.Outbounds);
+        // The shape that lets sing-box pick the fastest reachable node AND
+        // re-select when the active one dies — pinned so a future change can't
+        // silently break auto-select / failover-by-urltest.
+        Assert.Equal("http://www.gstatic.com/generate_204", proxy.Url);
+        Assert.Equal("3m", proxy.Interval);
+        Assert.Equal(150, proxy.Tolerance);
+        Assert.False(proxy.InterruptExistConnections);
     }
 
-    [Fact(Skip = "Pre-subscription multi-server urltest — ConfigGenerator now selects a single ActiveServer. See TODO above.")]
-    public void MultiServer_ChildVlessOutboundsExist()
+    [Fact]
+    public void AutoSelect_On_ChildVlessOutboundsExist()
     {
         var settings = CreateSettings(serverCount: 2);
+        settings.Vless.AutoSelectBestServer = true;
         var profile = CreateProfile();
-        var processes = new[] { "Discord.exe" };
 
-        var config = ConfigGenerator.Generate(profile, processes, settings);
+        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
 
         var main = config.Outbounds.First(o => o.Tag == "vless-main");
         Assert.Equal("vless", main.Type);
@@ -204,6 +212,23 @@ public class ConfigGeneratorTests
         Assert.Equal("vless", backup.Type);
         Assert.Equal("5.6.7.8", backup.Server);
         Assert.Equal("uuid-2", backup.Uuid);
+    }
+
+    [Fact]
+    public void AutoSelect_Off_MultiServer_ProxyIsSingleActive_NotUrltest()
+    {
+        // Default (opt-out): with 2 servers configured the generator routes through
+        // the single ActiveServer (here the first, "main") — NOT a urltest fan-out.
+        // This is the contract that retired the old always-urltest multi-server path.
+        var settings = CreateSettings(serverCount: 2);
+        var profile = CreateProfile();
+
+        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
+
+        var proxy = config.Outbounds.First(o => o.Tag == "proxy");
+        Assert.Equal("vless", proxy.Type);            // single outbound, not urltest
+        Assert.Equal("1.2.3.4", proxy.Server);        // the active server "main"
+        Assert.DoesNotContain(config.Outbounds, o => o.Type == "urltest");
     }
 
     [Fact]
