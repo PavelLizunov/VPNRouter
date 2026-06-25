@@ -87,15 +87,16 @@ public class WgturnUpdater
     // put the binary in AppPaths.BinDir (the legacy v2.32.1 layout), since
     // W-2 will migrate from BinDir → wgturn/bin/.
 
-    private static string DefaultWgturnDir =>
-        Path.Combine(AppPaths.DataDir, "wgturn");
-
-    public static string WgturnDir => DefaultWgturnDir;
-    public static string BinDir => Path.Combine(WgturnDir, "bin");
-    public static string CliExePath => Path.Combine(BinDir,
-        OperatingSystem.IsWindows() ? "wgturn-cli.exe" : "wgturn-cli");
-    public static string VersionFilePath => Path.Combine(WgturnDir, "version.txt");
-    public static string VariantFilePath => Path.Combine(WgturnDir, "variant.txt");
+    // T2-D dedup: forward to AppPaths.Wgturn* (the single source of truth)
+    // instead of re-declaring the same Path.Combine logic. Names are kept as
+    // thin forwarders rather than deleted because the bare `BinDir` identifier
+    // would collide with AppPaths.BinDir (the shared bin/ dir) at repoint sites.
+    // Values are byte-identical to the previous local declarations.
+    public static string WgturnDir => AppPaths.WgturnDir;
+    public static string BinDir => AppPaths.WgturnBinDir;
+    public static string CliExePath => AppPaths.WgturnCliExePath;
+    public static string VersionFilePath => AppPaths.WgturnVersionPath;
+    public static string VariantFilePath => AppPaths.WgturnVariantPath;
 
     // ─── Public probe API ────────────────────────────────────────────────
 
