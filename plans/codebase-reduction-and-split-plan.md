@@ -333,7 +333,7 @@ the start of each step and tick section 7 at the end.
 ## 7. Progress ledger (tick on completion, with commit SHA)
 
 - [x] Baseline green: `dotnet build -c Release` 0 errors + regression 20/20 on clean main `ce05b2c9`. Working directly on `main` per project convention + the protocol's `push HEAD:main` (no separate branch); each item is its own atomic commit through the blocking gate. Remote `github`/Forgejo not configured this session — `origin` = GitHub is canonical. — SHA: ce05b2c9
-- [ ] T1-A AppSettings split (per-type commits) — SHA(s): ____
+- [x] T1-A AppSettings split DONE — AppSettings.cs 1390 -> 118 lines (root class only), 14 file-per-type extractions + 1 doc-cleanup, every diff a review-agent-confirmed pure move, build 0 err, full serialization/resolver/migrator suite 104/104. SHAs: fcc2051d EmergencyChannelSettings · 6820839c SubscriptionEntry · 6f32d176 CustomCategory · e8ce2f9b CustomRule · 6f36fd45 CustomDirectRule · 0d70036c SubscriptionEntry-doc-cleanup · 2d52eb54 CustomConfigEntry · c028b075 ProfileSource · 10a66cff VlessTransportConfigs · af4833c3 EngineSettings · e7a7c41b UserFreeSource · 8ba3ffde AppConfig · eb791b32 VlessConfig · a278b5ef VlessServerEntry · aa1d8d9f TunSettings
 - [ ] T1-B SingBoxManager partials — SHA: ____
 - [ ] T2-A/B DeepVerify constants — SHA: ____
 - [ ] T2-C FindFreePort helper — SHA: ____
