@@ -390,6 +390,33 @@ public class VpnEngine : IDisposable
                 "[VpnEngine] Failover restart aborted — engine disposed during shutdown");
             return false;
         }
+        catch (Exception ex)
+        {
+            // v2.44.3-r2 (concurrency audit): a non-cancellation bring-up failure
+            // (e.g. the swapped-in candidate never reached IsRunning within the
+            // start window, so StartupPipeline throws a plain Exception) leaves a
+            // live-but-unhealthy _singBox already assigned by StartSingBoxPhase.
+            // No user Stop is coming to reap it, and Dispose's IsRunning==false
+            // branch skips _singBox — so without cleanup the SingBoxManager (TUN
+            // lock + ProcessExit subscription) leaks until process exit. Tear
+            // down ONLY a failed bring-up; if sing-box actually came up and a
+            // LATER phase threw, leave the running tunnel for Stop/Dispose to
+            // reap (its IsRunning==true branch does) rather than killing a
+            // working connection. Either way let the failover caller observe the
+            // throw exactly as before.
+            if (!IsRunning)
+            {
+                _logger?.Warning(ex,
+                    "[VpnEngine] Failover restart failed to bring up replacement — tearing down partial state");
+                try { TeardownInternal(); } catch { }
+            }
+            else
+            {
+                _logger?.Warning(ex,
+                    "[VpnEngine] Failover restart bring-up threw after sing-box came up — leaving live tunnel for Stop/Dispose");
+            }
+            throw;
+        }
         finally
         {
             // Tolerate the gate being disposed under us during app shutdown.

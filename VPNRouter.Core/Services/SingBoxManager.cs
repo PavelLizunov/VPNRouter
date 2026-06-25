@@ -282,6 +282,14 @@ public partial class SingBoxManager : IDisposable
     /// </summary>
     public void ReloadConfigJson(string configJson, bool forceRestart = false)
     {
+        // v2.44.3-r2 (concurrency audit): same disposed-manager guard as
+        // Restart() — a post-teardown HealthMonitor continuation must not write
+        // config or relaunch sing-box on a disposed manager.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
+            return;
+        }
         _logger.Information("[SingBoxManager] Reloading config{Mode}",
             forceRestart ? " (force restart, no hot-reload attempt)" : "");
         _currentConfigPath = WriteJsonToDisk(configJson);

@@ -389,6 +389,18 @@ public partial class SingBoxManager
 
     public void Restart()
     {
+        // v2.44.3-r2 (concurrency audit): a HealthMonitor AttemptRestart
+        // continuation can reach Restart() AFTER TeardownInternal disposed this
+        // manager — the lifecycle gate that serialises the failover restart does
+        // NOT extend to that threadpool continuation. Relaunching sing-box on a
+        // disposed manager spawns a second process that contends with the new
+        // manager for the wintun adapter (orphan TUN). A disposed manager must
+        // never relaunch.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            _logger.Debug("[SingBoxManager] Restart ignored — manager already disposed");
+            return;
+        }
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
 
@@ -689,6 +701,23 @@ public partial class SingBoxManager
             Arguments: spawnArgs,
             CaptureStdout: true,
             CaptureStderr: true);
+
+        // v2.44.3-r2 (concurrency audit): last-moment disposed re-check at the
+        // spawn chokepoint. The top-of-Restart/ReloadConfigJson guard catches a
+        // dispose that PRECEDES entry, but a stale HealthMonitor AttemptRestart
+        // continuation can pass that guard and then race a Dispose during
+        // StopInternal + the Windows Thread.Sleep(750) settle inside Restart().
+        // Re-checking here — immediately before _runner.Start — shrinks that
+        // window to ~0 so a disposed manager never spawns a second sing-box that
+        // would contend with the freshly-built manager for the wintun adapter
+        // (orphan TUN). EVERY launch path (initial StartWithJson, Restart,
+        // HealthMonitor recovery) funnels through here; a non-disposed manager
+        // (_disposed==0) is unaffected.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            _logger.Debug("[SingBoxManager] LaunchProcess aborted — manager disposed before spawn");
+            return;
+        }
 
         _handle = _runner.Start(request);
 
