@@ -192,14 +192,22 @@ public sealed class AutoFailoverEngine
         _settings.Vless.ActiveServer = newName;
         _settings.App.ActiveSubscriptionServer = newName;
 
-        // 6. Persist. ISettingsStore.Save is best-effort — if it throws we
-        // still proceed with the in-memory swap so the user gets the
-        // failover for THIS session. Next launch will re-pick the dead
-        // server unless persistence succeeded, but the user will at least
-        // see the symptom (not a silent leak).
+        // 6. Persist the active-server selection. v2.44.3 (P1 subscription-leak):
+        // persist via a RELOAD-FRESH of the on-disk settings + only the two
+        // selector fields — NOT _store.Save(_settings). In subscribe mode the
+        // resolver populated the in-memory _settings.Vless.Servers with a transient
+        // aggregate; saving _settings directly serializes that aggregate into
+        // vless.servers YAML (the v2.28.2 / v2.30.0-r8 silent-leak class). Reloading
+        // fresh keeps the on-disk vless.servers as the user set it (empty in
+        // subscribe mode) while the in-memory _settings keeps the aggregate for
+        // THIS session's restart. Best-effort: on throw we still proceed with the
+        // in-memory swap so the user gets the failover for this session.
         try
         {
-            _store.Save(_settings);
+            var onDisk = _store.Load();
+            onDisk.Vless.ActiveServer = newName;
+            onDisk.App.ActiveSubscriptionServer = newName;
+            _store.Save(onDisk);
             _logger?.Information(
                 "[AutoFailover] Switched ActiveServer '{Old}' → '{New}' and persisted",
                 oldActive, newName);

@@ -1164,6 +1164,12 @@ public class VpnEngine : IDisposable
             // outbound is provably reachable. Record it so the post-start
             // delay-test probe won't false-positive-failover a working link.
             _engine._warmupConfirmed = true;
+            // v2.44.3 (P1): a confirmed warmup means THIS server works — reset the
+            // failover cycle so a later mid-session failure can use the full server
+            // pool again. Without this, _tried accumulated across the whole session
+            // and after MaxAttempts lifetime failovers auto-failover gave up
+            // permanently ("Все серверы недоступны") until app restart.
+            _engine._failover?.ResetCycle();
             _engine.Connected?.Invoke(pid);
         }
 
