@@ -24,13 +24,13 @@ public sealed class FreeConfigDeepVerifier
     private readonly string _singBoxPath;
 
     /// <summary>URL probed for verification. Cloudflare's trace endpoint — small, fast, globally distributed.</summary>
-    private const string ProbeUrl = "https://www.cloudflare.com/cdn-cgi/trace";
+    private const string ProbeUrl = DeepVerifyConstants.ProbeUrl;
 
     /// <summary>Time to wait for sing-box to bind SOCKS before we attempt HTTP.</summary>
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
 
     /// <summary>Overall per-config timeout.</summary>
-    private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(12);
+    private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
 
     /// <summary>HTTP request timeout (through SOCKS proxy).</summary>
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(8);

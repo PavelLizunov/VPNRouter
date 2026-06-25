@@ -36,9 +36,9 @@ public sealed class VlessDeepVerifier
     private readonly string _singBoxPath;
     private readonly IProcessRunner _runner;
 
-    private const string ProbeUrl = "https://www.cloudflare.com/cdn-cgi/trace";
+    private const string ProbeUrl = DeepVerifyConstants.ProbeUrl;
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
-    private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(12);
+    private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(8);
 
     public int MaxConcurrency { get; set; } = 5;
