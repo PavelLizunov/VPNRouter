@@ -13,7 +13,7 @@ namespace VPNRouter.Tests;
 /// auto-restart loop's interaction with TUN adapter cleanup.
 ///
 /// <para>Bug context: <see cref="SingBoxManager.LaunchProcess"/>
-/// previously called <see cref="TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent"/>
+/// previously called <c>TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent</c>
 /// (a pure pre-enable via <c>netsh admin=enabled</c>) on every launch
 /// path including HealthMonitor's crash-recovery restart. On Windows
 /// builds where wintun teardown stalls, the orphan device record

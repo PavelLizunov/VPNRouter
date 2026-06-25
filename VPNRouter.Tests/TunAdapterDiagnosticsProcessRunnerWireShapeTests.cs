@@ -106,39 +106,6 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
         });
     }
 
-#pragma warning disable CS0618 // Type or member is obsolete
-    [Fact]
-    public void EnsureAdapterEnabledOrAbsent_EmitsNetshAdminEnabled()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-
-        // Mirror of the disable test — wire shape uses admin=enabled. The
-        // method is [Obsolete] but the static method must remain callable
-        // for backward compat (see TunAdapterReadinessTests
-        // EnsureAdapterEnabledOrAbsent_StillCallable_ForBackcompat).
-        var fake = new FakeProcessRunner();
-        fake.OnRun(_ => true,
-            new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
-
-        WithFakeRunner(fake, () =>
-        {
-            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                logger: null, interfaceName: "VPNRouter-TUN",
-                context: "test.enable");
-        });
-
-        Assert.Single(fake.RunCalls);
-        var call = fake.RunCalls[0];
-        Assert.Equal("netsh", call.ExecutablePath);
-        Assert.Equal(new[]
-        {
-            "interface", "set", "interface",
-            "name=VPNRouter-TUN",
-            "admin=enabled",
-        }, call.Arguments);
-    }
-#pragma warning restore CS0618
-
     [Fact]
     public async Task PreStartCleanupAsync_NoAdapters_OnlyNetshEnumerationCalled()
     {

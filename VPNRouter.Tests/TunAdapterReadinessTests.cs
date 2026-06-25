@@ -14,7 +14,7 @@ namespace VPNRouter.Tests;
 /// The device is not ready for use" 16 seconds after Apply triggered
 /// a restart of sing-box. Root cause: pre-r4 only
 /// <see cref="VpnEngine.StartAsync"/> called
-/// <see cref="TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent"/> —
+/// <c>TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent</c> —
 /// the auto-restart paths (Apply hot-reload-fallback, HealthMonitor
 /// crash recovery) bypassed the pre-enable, so a wintun adapter left
 /// in admin=disabled state by a prior r5 cleanup remained disabled
@@ -26,51 +26,6 @@ namespace VPNRouter.Tests;
 /// </summary>
 public sealed class TunAdapterReadinessTests
 {
-    [Fact]
-    public void EnsureAdapterEnabledOrAbsent_NonWindows_NoOp()
-    {
-        // On Linux/macOS the call should silently no-op, not throw.
-        // This pins the OperatingSystem.IsWindows() guard at the top of
-        // the method.
-        var ex = Record.Exception(() =>
-            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                logger: null, interfaceName: "VPNRouter-TUN", context: "test.non-windows"));
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public void EnsureAdapterEnabledOrAbsent_EmptyInterfaceName_NoOp()
-    {
-        var ex = Record.Exception(() =>
-            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                logger: null, interfaceName: "", context: "test.empty"));
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public void EnsureAdapterEnabledOrAbsent_NullInterfaceName_NoOp()
-    {
-        var ex = Record.Exception(() =>
-            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                logger: null, interfaceName: null!, context: "test.null"));
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public void EnsureAdapterEnabledOrAbsent_NonExistentAdapter_NoThrow()
-    {
-        // On Windows: this exercises netsh against an adapter that does
-        // not exist. netsh exits 1 with "not found" — our code treats
-        // that as success ("nothing to clean"). On non-Windows this is
-        // the same no-op as the guard test above.
-        var ex = Record.Exception(() =>
-            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                logger: null,
-                interfaceName: "VPNRouter-Test-DoesNotExist-" + Guid.NewGuid().ToString("N"),
-                context: "test.nonexistent"));
-        Assert.Null(ex);
-    }
-
     [Fact]
     public void DisableOrphanedAdapter_NonExistentAdapter_NoThrow()
     {
@@ -421,37 +376,6 @@ public sealed class TunAdapterReadinessTests
         var esResult = TunAdapterDiagnostics.ExtractStaleAdapterNames(esOutput);
         Assert.Single(esResult);
         Assert.Equal("VPNRouter-TUN", esResult[0], ignoreCase: true);
-    }
-
-    [Fact]
-    public void EnsureAdapterEnabledOrAbsent_StillCallable_ForBackcompat()
-    {
-        // Wave-38 retires EnsureAdapterEnabledOrAbsent's place in the
-        // launch path (Agent 1 may mark it [Obsolete] or remove the
-        // call from LaunchProcess), but the static method itself must
-        // remain callable + reachable so external callers don't break.
-        // Any callsite that currently invokes
-        // <see cref="TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent"/>
-        // — including any worktrees / downstream code / older release
-        // branches that share this Core assembly — should still compile
-        // and run safely.
-        //
-        // This test PASSES against both pre- and post-Wave-38 because
-        // the method signature is unchanged.
-        var method = typeof(TunAdapterDiagnostics).GetMethod(
-            nameof(TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent),
-            BindingFlags.Public | BindingFlags.Static);
-        Assert.NotNull(method);
-
-        // Direct invocation must not throw — same idempotency contract
-        // as the pre-existing non-existent-adapter test, just framed as
-        // a backcompat pin.
-        var ex = Record.Exception(() =>
-            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                logger: null,
-                interfaceName: "VPNRouter-Test-Backcompat-" + Guid.NewGuid().ToString("N"),
-                context: "test.backcompat"));
-        Assert.Null(ex);
     }
 
     [Fact]
