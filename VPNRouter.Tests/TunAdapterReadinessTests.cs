@@ -713,7 +713,7 @@ public sealed class TunAdapterReadinessTests
             var candidate = Path.Combine(
                 dir.FullName,
                 "VPNRouter.Core", "Services", "SingBoxManager.cs");
-            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+            if (File.Exists(candidate)) return SingBoxSourceText.ReadAll(candidate);
         }
         return null;
     }

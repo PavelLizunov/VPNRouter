@@ -77,7 +77,7 @@ public sealed class SingBoxManagerCleanupPathTests
         Assert.True(File.Exists(sourcePath),
             $"SingBoxManager.cs source not found. Tried: {sourcePath}");
 
-        var source = File.ReadAllText(sourcePath);
+        var source = SingBoxSourceText.ReadAll(sourcePath);
 
         // The expected CompareExchange call shape on the _disposed field.
         Assert.Contains("Interlocked.CompareExchange(ref _disposed, 1, 0)", source);
@@ -92,7 +92,7 @@ public sealed class SingBoxManagerCleanupPathTests
         // path cleanup pattern.
 
         var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        var source = File.ReadAllText(sourcePath);
+        var source = SingBoxSourceText.ReadAll(sourcePath);
 
         // Both the read and the conditional gate must be present.
         Assert.Contains("Volatile.Read(ref _disposed)", source);
@@ -111,7 +111,7 @@ public sealed class SingBoxManagerCleanupPathTests
         // is self-contained.
 
         var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        var source = File.ReadAllText(sourcePath);
+        var source = SingBoxSourceText.ReadAll(sourcePath);
 
         // The Dispose body emits _tunLock.Dispose() — find the call
         // and verify it's inside the Dispose method (after the

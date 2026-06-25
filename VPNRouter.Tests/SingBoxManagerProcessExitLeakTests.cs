@@ -95,7 +95,7 @@ public sealed class SingBoxManagerProcessExitLeakTests
         // unsubscribe (or reverts to an unremovable lambda) trips here.
         var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
         Assert.True(File.Exists(sourcePath), $"SingBoxManager.cs not found at {sourcePath}");
-        var source = File.ReadAllText(sourcePath);
+        var source = SingBoxSourceText.ReadAll(sourcePath);
 
         Assert.Contains("AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit", source);
         Assert.Contains("AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit", source);

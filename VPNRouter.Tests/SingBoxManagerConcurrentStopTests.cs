@@ -91,7 +91,7 @@ public sealed class SingBoxManagerConcurrentStopTests
         Assert.True(File.Exists(sourcePath),
             $"SingBoxManager.cs source not found near assembly. Tried: {sourcePath}");
 
-        var source = File.ReadAllText(sourcePath);
+        var source = SingBoxSourceText.ReadAll(sourcePath);
 
         // The exact CompareExchange call shape we expect to find. Tied
         // to the `_stopState` field name + the 1/0 sentinel values used
