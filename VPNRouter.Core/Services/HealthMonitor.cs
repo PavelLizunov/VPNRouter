@@ -424,7 +424,13 @@ public class HealthMonitor : IDisposable
                 }
             }
 
-            if (!isHealthy && _vpnWasRunning)
+            // v2.44.3: also gate on !_isStopping (parity with the recovery branch
+            // below). The VpnEngine lifecycle gate can now block a user Stop() while
+            // a failover restart holds it, widening the window in which this tick
+            // could fire a false AttemptRestart against a half-rebuilt sing-box;
+            // checking _isStopping closes it instead of relying solely on the BR-6a
+            // monitor-before-sing-box dispose ordering.
+            if (!isHealthy && _vpnWasRunning && !_isStopping)
             {
                 _logger.Warning("[HealthMonitor] Health check failed — sing-box is not healthy");
                 AttemptRestart();

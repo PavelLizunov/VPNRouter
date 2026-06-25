@@ -492,4 +492,26 @@ public sealed class VpnEngineStartAsyncSeamTests
             await engine.StartAsync(settings, TestContext.Current.CancellationToken));
         // No assert on engine state — already covered by other tests.
     }
+
+    // ─── 8. v2.44.3 failover-restart resurrection guard (cross-platform) ──
+
+    [Fact]
+    public async Task ExecuteProbeFailoverRestart_NeverConnected_ReturnsFalse_NoBringUp()
+    {
+        // v2.44.3 (P0): the production failover-restart seam must NOT bring a
+        // tunnel up when there is no live session. A never-connected engine has
+        // a null session CTS, so ExecuteProbeFailoverRestartAsync hits the
+        // resurrection guard and returns false BEFORE reaching StartAsyncInternal
+        // — no pipeline, no ProgramData I/O — which lets this pin the production
+        // seam's guard cross-platform (the Windows-only VpnEngineLifecycleTests
+        // pin the full cancelled-probe-token bring-up + the after-Stop abort).
+        var settings = BuildSafePreStartSettings(configMode: "generated");
+        using var engine = BuildEngine();
+
+        var ok = await engine.ExecuteProbeFailoverRestartAsync(
+            settings, TestContext.Current.CancellationToken);
+
+        Assert.False(ok, "failover restart must not bring up a tunnel with no live session");
+        Assert.False(engine.IsRunning);
+    }
 }

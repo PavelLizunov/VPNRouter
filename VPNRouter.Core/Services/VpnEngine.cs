@@ -49,6 +49,18 @@ public class VpnEngine : IDisposable
     // queued probe doesn't fire failover after the user manually disconnects.
     private CancellationTokenSource? _probeCts;
 
+    // v2.44.3 (P0): lifecycle serialization — fixes the self-cancel + resurrection
+    // race (diag 20260624-235243). _lifecycleGate makes public StartAsync, public
+    // Stop(), and the post-start failover restart mutually exclusive so they cannot
+    // interleave teardown/bring-up. _sessionCts encodes "the user wants to be
+    // connected": created fresh by public StartAsync, cancelled by public Stop().
+    // The failover restart runs StartAsyncInternal under _sessionCts.Token — NOT the
+    // probe token that Stop() cancels (that WAS the self-cancel) — so a genuine
+    // outage actually brings the replacement up; a user Disconnect cancels
+    // _sessionCts and the restart aborts (no tunnel resurrection after disconnect).
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
+    private CancellationTokenSource? _sessionCts;
+
     // v2.44.2 (P0): set true by the TUN warmup probe's success branch
     // (IStartupHost.OnConnected) and reset on every StartAsync / Stop. The
     // post-start Clash-API delay-test probe consults it: once warmup has
@@ -248,7 +260,36 @@ public class VpnEngine : IDisposable
         bool probeIsDead, bool probeCancelled, bool warmupConfirmed)
         => probeIsDead && !probeCancelled && !warmupConfirmed;
 
+    /// <summary>
+    /// Public connect entry point. Serializes against Stop()/failover-restart via
+    /// _lifecycleGate and (re)creates the session token, then delegates to
+    /// <see cref="StartAsyncInternal"/> (which the failover restarts re-enter
+    /// directly, without re-taking the non-reentrant gate). v2.44.3.
+    /// </summary>
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
+    {
+        await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // Fresh session: a new connect supersedes any prior disconnect intent.
+            _sessionCts?.Dispose();
+            _sessionCts = new CancellationTokenSource();
+            await StartAsyncInternal(settings, ct, skipVpnConflictCheck).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The actual connect sequence (StartupPipeline + EarlyReturn handling + Unix
+    /// DNS hardening). NOT gated: every caller (public StartAsync, the pre-start
+    /// F-E restart that runs inside an already-gated StartAsync frame, and the
+    /// post-start failover restart that holds the gate) must NOT re-take the
+    /// non-reentrant gate. internal for the failover-restart seam test. v2.44.3.
+    /// </summary>
+    internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck)
     {
         // Remember the conflict-skip for the session so internal re-entries (the
         // AutoFailover restart delegates) honour the user's "Ignore" too — a
@@ -306,6 +347,53 @@ public class VpnEngine : IDisposable
             {
                 _logger?.Warning(ex, "[VpnEngine] Unix DNS hardening Apply failed (non-fatal)");
             }
+        }
+    }
+
+    /// <summary>
+    /// v2.44.3 (P0): the post-start failover restart. Holds the lifecycle gate,
+    /// tears the dead link down, and — unless the user has disconnected — brings
+    /// the swapped-in server up under the SESSION token (never the dying probe
+    /// token that Stop() cancels: that was the self-cancel, diag 20260624-235243).
+    /// Returns false (no bring-up) if the user disconnected before or during the
+    /// restart, so a Disconnect can never be resurrected. <paramref name="probeCt"/>
+    /// is the already-teardown-cancelled probe token; intentionally ignored for the
+    /// bring-up. internal for the seam test.
+    /// </summary>
+    internal async Task<bool> ExecuteProbeFailoverRestartAsync(AppSettings captured, CancellationToken probeCt)
+    {
+        await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            TeardownInternal();
+            var session = _sessionCts;
+            if (session == null || session.IsCancellationRequested)
+            {
+                _logger?.Information(
+                    "[VpnEngine] Failover restart aborted — session cancelled (user disconnect)");
+                return false;
+            }
+            await StartAsyncInternal(captured, session.Token, _skipVpnConflictCheck).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger?.Information(
+                "[VpnEngine] Failover restart cancelled mid-flight by user disconnect — not resurrecting");
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            // v2.44.3: engine disposed (app shutdown) raced the restart — session.Token
+            // threw after the cancelled-check. Benign: nothing to bring up, no resurrection.
+            _logger?.Information(
+                "[VpnEngine] Failover restart aborted — engine disposed during shutdown");
+            return false;
+        }
+        finally
+        {
+            // Tolerate the gate being disposed under us during app shutdown.
+            try { _lifecycleGate.Release(); } catch (ObjectDisposedException) { }
         }
     }
 
@@ -448,6 +536,36 @@ public class VpnEngine : IDisposable
     // ─── Stop ────────────────────────────────────────────────────────────────
 
     public void Stop()
+    {
+        // v2.44.3 (P0): signal disconnect intent + cancel any in-flight failover
+        // restart BEFORE taking the gate, so a restart mid-flight (holding the gate,
+        // running under _sessionCts.Token) is cancelled and aborts instead of
+        // resurrecting the tunnel after the user disconnected.
+        try { _sessionCts?.Cancel(); } catch { }
+        // Stop the HealthMonitor's timer up-front (before a possibly gate-blocked
+        // teardown) so it cannot fire a false AttemptRestart against a half-rebuilt
+        // sing-box during a blocked-Stop window. Idempotent with TeardownInternal's
+        // Dispose; keeps "monitor dies before sing-box" (BR-6a) true across the wait.
+        try { _healthMonitor?.Stop(); } catch { }
+        _lifecycleGate.Wait();
+        try
+        {
+            TeardownInternal();
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The actual teardown (NOT gated). Called by public Stop() (under the gate) and
+    /// by the post-start failover restart (which already holds the gate) before it
+    /// brings the replacement up. MUST keep the _warmupConfirmed=false reset — a
+    /// stopped/restarting engine carries no warmup confirmation, which is load-
+    /// bearing for the v2.44.2 false-positive failover gate. v2.44.3.
+    /// </summary>
+    private void TeardownInternal()
     {
         OnStatus("Stopping...");
 
@@ -596,6 +714,10 @@ public class VpnEngine : IDisposable
         try { _probeCts?.Cancel(); } catch { }
         try { _probeCts?.Dispose(); } catch { }
         _probeCts = null;
+        try { _sessionCts?.Cancel(); } catch { }
+        try { _sessionCts?.Dispose(); } catch { }
+        _sessionCts = null;
+        try { _lifecycleGate.Dispose(); } catch { }
         GC.SuppressFinalize(this);
     }
 
@@ -1133,13 +1255,16 @@ public class VpnEngine : IDisposable
                 {
                     try
                     {
-                        await _engine.StartAsync(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
+                        // v2.44.3: pre-start F-E re-entry runs INSIDE an already-gated
+                        // public StartAsync frame — call StartAsyncInternal so it does
+                        // NOT re-take the non-reentrant lifecycle gate (deadlock).
+                        await _engine.StartAsyncInternal(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
                         return true;
                     }
                     catch (Exception ex)
                     {
                         _engine._logger?.Warning(ex,
-                            "[VpnEngine] F-E restart delegate threw inside StartAsync");
+                            "[VpnEngine] F-E restart delegate threw inside StartAsyncInternal");
                         return false;
                     }
                 },
@@ -1158,32 +1283,15 @@ public class VpnEngine : IDisposable
             _engine._failover ??= new AutoFailoverEngine(
                 CapturedSettings(),
                 sanityCheck,
-                restart: async (innerCt) =>
-                {
-                    try
-                    {
-                        _engine.Stop();
-                        // KNOWN (v2.44.2): Stop() cancels _probeCts (== innerCt),
-                        // so this restart self-cancels — on a GENUINE outage the
-                        // auto-failover tears the dead link down but does not bring
-                        // up the replacement (diag 20260624-235243). Left as-is in
-                        // this P0 hotfix: the warmup gate above already prevents the
-                        // FALSE-POSITIVE failover this fix targets, and a correct
-                        // restart needs the concurrency rework (working restart +
-                        // user-disconnect guard so a CancellationToken.None restart
-                        // can't resurrect the tunnel after Disconnect + ResetCycle +
-                        // SemaphoreSlim sync) which needs VM integration testing.
-                        // Tracked for v2.44.3; see plans/v2.44-bug-hunt-deferred.
-                        await _engine.StartAsync(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        _engine._logger?.Warning(ex,
-                            "[VpnEngine] F-E probe-driven restart threw");
-                        return false;
-                    }
-                },
+                // v2.44.3 (P0): the self-cancel + resurrection rework. The restart
+                // runs through ExecuteProbeFailoverRestartAsync, which holds the
+                // lifecycle gate, tears the dead link down, and brings the replacement
+                // up under the SESSION token (not innerCt/_probeCts, which teardown
+                // cancels — that was the self-cancel, diag 20260624-235243). A user
+                // Disconnect cancels the session and the restart aborts instead of
+                // resurrecting the tunnel.
+                restart: (innerCt) =>
+                    _engine.ExecuteProbeFailoverRestartAsync(CapturedSettings(), innerCt),
                 logger: _engine._logger);
             return _engine._failover;
         }
@@ -1240,7 +1348,10 @@ public class VpnEngine : IDisposable
                         var failover = WireFailoverWithStop(sanityCheck);
                         var outcome = await failover.HandleDeadConfigAsync(
                             probe.Reason ?? "probe failed", probeCt);
-                        if (outcome.UserFacingMessage != null)
+                        // v2.44.3: don't surface a failover message if the user
+                        // disconnected (session cancelled) while the swap was running.
+                        if (outcome.UserFacingMessage != null
+                            && _engine._sessionCts?.IsCancellationRequested != true)
                             _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
                     }
                     else if (probe.IsDead && !probeCt.IsCancellationRequested && _engine._warmupConfirmed)

@@ -392,6 +392,86 @@ public sealed class VpnEngineLifecycleTests
         }
     }
 
+    // ─── Group 0: v2.44.3 failover-restart seam (Windows-only) ───────────
+
+    /// <summary>
+    /// v2.44.3: variant of StartHappyPathAsync that also surfaces the captured
+    /// AppSettings (needed to re-enter the engine via the failover-restart seam).
+    /// Same isolated ColdStart otherwise.
+    /// </summary>
+    private static async Task<(VpnEngine engine, AppSettings settings, IDisposable cleanup)>
+        StartHappyPathWithSettingsAsync()
+    {
+        var prevSingBoxRunner = SingBoxManager.Runner;
+        var prevTunDiagRunner = TunAdapterDiagnostics.Runner;
+        TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
+
+        var (singBoxRunner, _) = BuildSingBoxSpawnFake();
+        SingBoxManager.Runner = singBoxRunner;
+        TunAdapterDiagnostics.Runner = BuildTunCleanupFake();
+
+        var stubExe = CreateStubExe();
+        var dns = new NullWindowsDnsHardening();
+        var engine = BuildEngine(dns, out _, out _);
+        var settings = BuildHappyPathSettings(stubExe);
+        var cleanup = new LifecycleCleanup(engine, stubExe, prevSingBoxRunner, prevTunDiagRunner);
+
+        try { await engine.StartAsync(settings, default, skipVpnConflictCheck: true); }
+        catch { cleanup.Dispose(); throw; }
+
+        return (engine, settings, cleanup);
+    }
+
+    /// <summary>
+    /// P0 self-cancel fix (diag 20260624-235243): the post-start failover restart
+    /// must bring the replacement up even though teardown cancelled the probe
+    /// token. Pre-fix the restart ran under that cancelled token and self-cancelled
+    /// — the replacement never came up. Drives the real ExecuteProbeFailoverRestartAsync.
+    /// </summary>
+    [Fact]
+    public async Task ProbeFailoverRestart_UnderCancelledProbeToken_BringsReplacementUp()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Drives SingBoxManager's Windows spawn path (see lifecycle harness).");
+
+        var (engine, settings, cleanup) = await StartHappyPathWithSettingsAsync();
+        using var lifecycleDispose = cleanup;
+        Assert.True(engine.IsRunning);
+
+        // Model teardown having cancelled the probe token (the self-cancel trigger).
+        using var probeCts = new CancellationTokenSource();
+        probeCts.Cancel();
+
+        var ok = await engine.ExecuteProbeFailoverRestartAsync(settings, probeCts.Token);
+
+        Assert.True(ok, "failover restart self-cancelled — no replacement came up");
+        Assert.True(engine.IsRunning, "replacement is not running after the failover restart");
+    }
+
+    /// <summary>
+    /// P0 resurrection guard: a failover restart that fires AFTER the user
+    /// disconnected (session cancelled) must NOT bring the tunnel back up.
+    /// </summary>
+    [Fact]
+    public async Task ProbeFailoverRestart_AfterUserStop_DoesNotResurrect()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Drives SingBoxManager's Windows spawn path (see lifecycle harness).");
+
+        var (engine, settings, cleanup) = await StartHappyPathWithSettingsAsync();
+        using var lifecycleDispose = cleanup;
+        Assert.True(engine.IsRunning);
+
+        engine.Stop();                 // user disconnect — cancels the session
+        Assert.False(engine.IsRunning);
+
+        var ok = await engine.ExecuteProbeFailoverRestartAsync(settings, CancellationToken.None);
+
+        Assert.False(ok, "failover restart resurrected the tunnel after Disconnect");
+        Assert.False(engine.IsRunning, "tunnel resurrected after Disconnect");
+    }
+
     // ─── Group 1: Happy-path lifecycle (3 tests, Windows-only) ───────────
 
     [Fact]
