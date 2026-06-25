@@ -214,12 +214,31 @@ public sealed class SingBoxManagerSuppressExitedEventTests
         while (dir != null)
         {
             var candidate = Path.Combine((new[] { dir.FullName }).Concat(segments).ToArray());
-            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+            if (File.Exists(candidate)) return ReadAllParts(candidate);
             dir = dir.Parent;
         }
         var fallback = Path.Combine((new[] { Environment.CurrentDirectory }).Concat(segments).ToArray());
         if (!File.Exists(fallback))
             throw new FileNotFoundException($"Source file not found: {string.Join("/", segments)}");
-        return File.ReadAllText(fallback);
+        return ReadAllParts(fallback);
+    }
+
+    // Reads the named source file PLUS any partial-class sibling files
+    // (e.g. SingBoxManager.cs + SingBoxManager.CrashDetect.cs + ...) in the
+    // same directory, concatenated. Keeps source-characterization assertions
+    // stable across a partial-class split: the asserted method may live in any
+    // partial, so we search the whole class source, not just the anchor file.
+    private static string ReadAllParts(string primaryPath)
+    {
+        var dir = Path.GetDirectoryName(primaryPath)!;
+        var stem = Path.GetFileNameWithoutExtension(primaryPath);
+        var parts = Directory.GetFiles(dir, stem + "*.cs")
+            .Where(p =>
+            {
+                var fn = Path.GetFileName(p);
+                return fn == stem + ".cs" || fn.StartsWith(stem + ".", StringComparison.Ordinal);
+            })
+            .OrderBy(p => p, StringComparer.Ordinal);
+        return string.Join("\n", parts.Select(File.ReadAllText));
     }
 }
