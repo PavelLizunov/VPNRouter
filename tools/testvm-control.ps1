@@ -79,9 +79,15 @@ function Get-PveToken {
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
+$TokenId = 'root@pam!claude-testvm'
+
 function Invoke-Pve {
     param([string]$Method, [string]$Path)
-    $headers = @{ Authorization = "PVEAPIToken=$(Get-PveToken)" }
+    # Accept either the full 'user@realm!tokenid=secret' form OR a bare secret
+    # UUID (the common store-token paste mistake) — prepend the known token id.
+    $tok = Get-PveToken
+    if ($tok -notmatch '!') { $tok = "${TokenId}=$tok" }
+    $headers = @{ Authorization = "PVEAPIToken=$tok" }
     Invoke-RestMethod -Method $Method -Uri "https://${PveHost}:8006/api2/json$Path" -Headers $headers -TimeoutSec 20
 }
 
