@@ -499,6 +499,22 @@ internal sealed class StartupPipeline
                     $"Only one VPN can hold the TUN adapter at a time. " +
                     $"Stop {first.ProcessName} before launching VPNRouter.");
             }
+
+            // Soft notice (2026-06-26): coexisting VPN clients (WireGuard /
+            // AmneziaVPN) run their own separate tunnel adapter and coexist with
+            // VPNRouter-TUN via route_exclude_address — surface a warning but do
+            // NOT block. The old hard-block threw on the user's AmneziaVPN even
+            // though the connect then succeeds on retry (diag 20260626-212741).
+            var coexisting = ConflictingVpnDetector.DetectCoexistingVpnProcesses(_host.Logger);
+            if (coexisting.Count > 0)
+            {
+                var c = coexisting[0];
+                _host.Logger?.Warning(
+                    "[StartupPipeline] Coexisting VPN detected: {Name} (PID {Pid}) — VPNRouter " +
+                    "excludes its subnet from TUN routing so they run side-by-side; proceeding. " +
+                    "If routed apps lose internet, stop it and reconnect.",
+                    c.ProcessName, c.Pid);
+            }
         }
         else
         {

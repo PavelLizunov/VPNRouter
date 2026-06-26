@@ -51,21 +51,56 @@ public sealed class ConflictingVpnDetectorTests
     [Fact]
     public void DetectConflictingVpnProcesses_KnownVpnProcessNames_Curated()
     {
-        // Lock the curated list — adding/removing entries should be a
-        // deliberate, reviewable change (each is correlated with a
+        // Lock the curated HARD-conflict list — these create their OWN wintun
+        // and collide with sing-box adapter creation. Adding/removing entries
+        // should be a deliberate, reviewable change (each is correlated with a
         // wild-field report). Avoid silent drift.
         var names = ConflictingVpnDetector.KnownVpnProcessNames.ToList();
 
         Assert.Contains("xraycore", names);
-        Assert.Contains("wireguard", names);
         Assert.Contains("openvpn", names);
         Assert.Contains("hiddify", names);
-        Assert.Contains("amneziavpn", names);
         Assert.Contains("qv2ray", names);
         Assert.Contains("nekoray", names);
 
+        // wireguard + amneziavpn moved to the COEXISTING (soft-warn) list
+        // (2026-06-26): they run their own separate adapter and coexist via
+        // route_exclude_address, so they must NOT hard-block startup anymore.
+        Assert.DoesNotContain("wireguard", names);
+        Assert.DoesNotContain("amneziavpn", names);
+
         // Sanity: no duplicates from a future copy-paste accident.
         Assert.Equal(names.Count, names.Distinct().Count());
+    }
+
+    [Fact]
+    public void CoexistingVpnProcessNames_AreSeparateAdapterClients_Curated()
+    {
+        // The soft-warn list: WireGuard / AmneziaVPN run their own tunnel
+        // adapter and coexist with VPNRouter-TUN via route_exclude_address. A
+        // match here is a WARNING, never a startup blocker (the user's diag
+        // 20260626-212741 connected fine with AmneziaVPN running).
+        var coexisting = ConflictingVpnDetector.CoexistingVpnProcessNames.ToList();
+
+        Assert.Contains("wireguard", coexisting);
+        Assert.Contains("amneziavpn", coexisting);
+
+        // The wintun-grabbing forks must NOT be on the soft list.
+        Assert.DoesNotContain("xraycore", coexisting);
+        Assert.DoesNotContain("hiddify", coexisting);
+
+        Assert.Equal(coexisting.Count, coexisting.Distinct().Count());
+    }
+
+    [Fact]
+    public void HardConflictAndCoexistingLists_AreDisjoint()
+    {
+        // A name on BOTH lists would be ambiguous (block AND warn). Guard the
+        // split: the two sets must never overlap.
+        var hard = ConflictingVpnDetector.KnownVpnProcessNames;
+        var soft = ConflictingVpnDetector.CoexistingVpnProcessNames;
+
+        Assert.Empty(hard.Intersect(soft, StringComparer.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -189,6 +224,71 @@ public sealed class ConflictingVpnDetectorTests
             try { spawned?.WaitForExit(2000); } catch { }
             spawned?.Dispose();
             try { File.Delete(fakeVpn); } catch { }
+            try { Directory.Delete(temp, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void DetectCoexistingVpnProcesses_SpawnedFakeWireGuard_SoftDetectedNotHardBlocked()
+    {
+        // The split's behavioural pin: a running "wireguard" process is seen by
+        // the SOFT detector (DetectCoexistingVpnProcesses) but NOT by the HARD
+        // detector (DetectConflictingVpnProcesses) — so startup warns instead of
+        // throwing ConflictingVpnException. Mirrors the xraycore spawn test.
+        if (!OperatingSystem.IsWindows()) return;
+
+        var preExisting = ConflictingVpnDetector.KnownVpnProcessNames
+            .Concat(ConflictingVpnDetector.CoexistingVpnProcessNames)
+            .Any(n => Process.GetProcessesByName(n).Length > 0);
+        if (preExisting) return;
+
+        var systemCmd = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+        if (!File.Exists(systemCmd)) return;
+
+        var temp = Path.Combine(Path.GetTempPath(),
+            $"vpnrouter-coexist-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(temp);
+        var fakeWg = Path.Combine(temp, "wireguard.exe");
+        File.Copy(systemCmd, fakeWg);
+
+        Process? spawned = null;
+        try
+        {
+            spawned = Process.Start(new ProcessStartInfo
+            {
+                FileName = fakeWg,
+                Arguments = "/K rem vpnrouter-test-placeholder",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+
+            Assert.NotNull(spawned);
+
+            for (int i = 0; i < 20; i++)
+            {
+                if (Process.GetProcessesByName("wireguard").Length > 0) break;
+                System.Threading.Thread.Sleep(50);
+            }
+
+            // Soft detector SEES it...
+            var coexisting = ConflictingVpnDetector.DetectCoexistingVpnProcesses();
+            Assert.Contains(coexisting, c => c.ProcessName == "wireguard" && c.Pid == spawned!.Id);
+
+            // ...but the HARD detector does NOT — so the pre-flight gate would
+            // warn-and-proceed, never throw on a coexisting WireGuard/AmneziaVPN.
+            var hard = ConflictingVpnDetector.DetectConflictingVpnProcesses();
+            Assert.DoesNotContain(hard, c => c.ProcessName == "wireguard");
+        }
+        finally
+        {
+            try { spawned?.Kill(entireProcessTree: true); } catch { }
+            try { spawned?.WaitForExit(2000); } catch { }
+            spawned?.Dispose();
+            try { File.Delete(fakeWg); } catch { }
             try { Directory.Delete(temp, recursive: true); } catch { }
         }
     }
