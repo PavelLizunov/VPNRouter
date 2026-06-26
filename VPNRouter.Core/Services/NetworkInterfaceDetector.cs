@@ -6,22 +6,26 @@ using Serilog;
 namespace VPNRouter.Core.Services;
 
 /// <summary>
-/// Detects WireGuard / AmneziaWG network interfaces and returns their IPv4 subnets
-/// so VPNRouter can exclude them from TUN routing (route_exclude_address).
-/// This allows both VPNs to coexist without route conflicts.
+/// Detects WireGuard / AmneziaWG / Tailscale network interfaces and returns their
+/// IPv4 subnets so VPNRouter can exclude them from TUN routing
+/// (route_exclude_address). This lets the VPNs coexist without route conflicts.
+/// For Tailscale the whole CGNAT range (100.64.0.0/10) is excluded so every
+/// tailnet peer stays reachable while VPNRouter's tunnel is up.
 /// </summary>
 public static class NetworkInterfaceDetector
 {
     /// <summary>
     /// Keywords to match in interface Description (case-insensitive).
-    /// Covers: WireGuard, AmneziaWG, and common WG tunnel adapters.
+    /// Covers: WireGuard, AmneziaWG, common WG tunnel adapters, and Tailscale
+    /// (adapter description "Tailscale Tunnel").
     /// </summary>
     private static readonly string[] WgKeywords =
     {
         "WireGuard",
         "Amnezia",
         "AWG",
-        "WG Tunnel"
+        "WG Tunnel",
+        "Tailscale"
     };
 
     /// <summary>
@@ -53,8 +57,14 @@ public static class NetworkInterfaceDetector
                 if (!IsWireGuardInterface(iface))
                     continue;
 
-                logger?.Debug("[NetDetect] Found WG/AWG interface: {Name} ({Desc}), Status: {Status}",
+                logger?.Debug("[NetDetect] Found WG/AWG/Tailscale interface: {Name} ({Desc}), Status: {Status}",
                     iface.Name, iface.Description, iface.OperationalStatus);
+
+                // Only a real Tailscale adapter gets the whole-/10 CGNAT exclusion
+                // below; a WG/AWG tunnel that happens to be numbered out of 100.64.x
+                // still gets its own /24, never the full /10 (avoids over-excluding
+                // ISP CGNAT traffic — review nit, 2026-06-26).
+                var isTailscale = IsTailscaleName(iface.Name, iface.Description);
 
                 // Extract IPv4 subnets
                 try
@@ -65,7 +75,15 @@ public static class NetworkInterfaceDetector
                         if (unicast.Address.AddressFamily != AddressFamily.InterNetwork)
                             continue; // Skip IPv6
 
-                        var subnet = CalculateSubnet(unicast.Address, unicast.IPv4Mask);
+                        // Tailscale hands out CGNAT 100.64.0.0/10 (RFC 6598) addresses with
+                        // /32 masks; the whole tailnet lives in that /10, so for a Tailscale
+                        // adapter exclude the full CGNAT range (the /24-widening below would
+                        // miss peers outside the local /24, e.g. the Mac host at 100.116.x).
+                        // Gated on isTailscale so a CGNAT-numbered WG/AWG tunnel can't
+                        // over-exclude the /10 and leak real ISP-CGNAT traffic direct.
+                        var subnet = (isTailscale && IsTailscaleCgnat(unicast.Address))
+                            ? "100.64.0.0/10"
+                            : CalculateSubnet(unicast.Address, unicast.IPv4Mask);
                         if (subnet != null)
                         {
                             subnets.Add(subnet);
@@ -113,6 +131,31 @@ public static class NetworkInterfaceDetector
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True when the interface name/description identifies a Tailscale adapter
+    /// (description "Tailscale Tunnel"). Distinct from <see cref="IsWireGuardName"/>
+    /// — which also matches Tailscale via the shared keyword list — because ONLY a
+    /// real Tailscale adapter may trigger the whole-/10 CGNAT exclusion; a WG/AWG
+    /// tunnel numbered out of 100.64.x must keep its own /24. internal for tests.
+    /// </summary>
+    internal static bool IsTailscaleName(string? name, string? description)
+        => (description != null && description.Contains("Tailscale", StringComparison.OrdinalIgnoreCase))
+        || (name != null && name.Contains("Tailscale", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// True when <paramref name="address"/> is in Tailscale's CGNAT range
+    /// (RFC 6598, 100.64.0.0/10 = 100.64.0.0 – 100.127.255.255). Used so a
+    /// detected Tailscale adapter excludes the WHOLE tailnet, not just the local
+    /// peer's /24. internal for unit-test coverage.
+    /// </summary>
+    internal static bool IsTailscaleCgnat(IPAddress address)
+    {
+        if (address.AddressFamily != AddressFamily.InterNetwork)
+            return false;
+        var b = address.GetAddressBytes();
+        return b.Length == 4 && b[0] == 100 && b[1] >= 64 && b[1] <= 127;
     }
 
     /// <summary>

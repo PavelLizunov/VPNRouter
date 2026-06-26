@@ -53,11 +53,12 @@ public sealed class NetworkInterfaceDetectorTests
     [InlineData("Amnezia VPN Service", "amnezia-tun")]
     [InlineData("AWG Tunnel", "awg-iface")]
     [InlineData("WG Tunnel", "wg-tunnel")]
+    [InlineData("Tailscale Tunnel", "Tailscale")]
     public void IsWireGuardName_MatchesAllKnownKeywords(string description, string name)
     {
-        // The 4 keywords in NetworkInterfaceDetector.WgKeywords cover the
-        // common adapter naming pattern for WireGuard, AmneziaWG, and their
-        // GUI-installed variants. Each row above should match positively
+        // The keywords in NetworkInterfaceDetector.WgKeywords cover the
+        // common adapter naming pattern for WireGuard, AmneziaWG, Tailscale,
+        // and their GUI-installed variants. Each row above should match positively
         // via either description (typical) or name (fallback) — both paths
         // are tested by virtue of mixing them in the inline data.
         Assert.True(NetworkInterfaceDetector.IsWireGuardName(name, description));
@@ -115,6 +116,75 @@ public sealed class NetworkInterfaceDetectorTests
             name: "my-WireGuard-iface",
             description: "Unknown Network Adapter")); // matches via name
     }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // IsTailscaleCgnat — Tailscale CGNAT range (100.64.0.0/10) detection
+    // ───────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("100.64.0.0")]      // range start
+    [InlineData("100.64.0.1")]
+    [InlineData("100.116.97.112")]  // the Mac host on the tailnet
+    [InlineData("100.100.100.100")]
+    [InlineData("100.127.255.255")] // range end
+    public void IsTailscaleCgnat_AcceptsCgnatRange(string ip)
+    {
+        // Tailscale assigns addresses from the RFC 6598 CGNAT block
+        // 100.64.0.0/10 (100.64.0.0 – 100.127.255.255). A detected Tailscale
+        // adapter must exclude the WHOLE /10 so every tailnet peer is reachable
+        // while VPNRouter's full-tunnel is up (the /24-widening would miss peers
+        // outside the local /24).
+        Assert.True(NetworkInterfaceDetector.IsTailscaleCgnat(IPAddress.Parse(ip)));
+    }
+
+    [Theory]
+    [InlineData("100.63.255.255")] // one below the /10 (100.x but < .64)
+    [InlineData("100.128.0.0")]    // one above the /10 (> .127)
+    [InlineData("100.0.0.1")]
+    [InlineData("99.64.0.1")]      // wrong first octet
+    [InlineData("10.9.1.2")]       // WireGuard subnet — must NOT read as CGNAT
+    [InlineData("192.168.1.1")]
+    [InlineData("104.194.156.93")] // a VLESS server IP
+    public void IsTailscaleCgnat_RejectsOutsideRange(string ip)
+    {
+        Assert.False(NetworkInterfaceDetector.IsTailscaleCgnat(IPAddress.Parse(ip)));
+    }
+
+    [Fact]
+    public void IsTailscaleCgnat_IPv6_ReturnsFalse()
+    {
+        // The CGNAT check is IPv4-only; an IPv6 address (Tailscale also assigns
+        // fd7a:115c:a1e0::/48) must return false safely rather than misclassify.
+        Assert.False(NetworkInterfaceDetector.IsTailscaleCgnat(IPAddress.Parse("fd7a:115c:a1e0::1")));
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // IsTailscaleName — scopes the whole-/10 exclusion to Tailscale adapters only
+    // ───────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Tailscale Tunnel", "Tailscale")]
+    [InlineData("tailscale tunnel", "ts0")]
+    public void IsTailscaleName_MatchesTailscaleAdapters(string description, string name)
+        => Assert.True(NetworkInterfaceDetector.IsTailscaleName(name, description));
+
+    [Theory]
+    [InlineData("WireGuard Tunnel", "wg0")]
+    [InlineData("AmneziaWG Adapter", "awg0")]
+    [InlineData("AWG Tunnel", "awg-iface")]
+    [InlineData("Intel(R) Ethernet Connection", "Ethernet")]
+    public void IsTailscaleName_RejectsNonTailscale(string description, string name)
+    {
+        // LEAK-SCOPE GUARD: a WG/AWG adapter (which the shared WgKeywords list DOES
+        // match) must NOT read as Tailscale, so a CGNAT-numbered WG tunnel keeps its
+        // own /24 via CalculateSubnet and never triggers the whole-100.64.0.0/10
+        // exclusion that could over-exclude real ISP-CGNAT traffic.
+        Assert.False(NetworkInterfaceDetector.IsTailscaleName(name, description));
+    }
+
+    [Fact]
+    public void IsTailscaleName_NullsAreNoMatch()
+        => Assert.False(NetworkInterfaceDetector.IsTailscaleName(null, null));
 
     // ───────────────────────────────────────────────────────────────────────
     // CalculateSubnet — IP + mask → CIDR notation
