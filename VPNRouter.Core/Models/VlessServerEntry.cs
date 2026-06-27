@@ -137,6 +137,22 @@ public class VlessServerEntry
     public string ObfsPassword { get; set; } = string.Empty;
 
     /// <summary>
+    /// Hysteria2 Brutal congestion-control bandwidth, Mbit/s. 0 = unset -> sing-box
+    /// falls back to BBR. When &gt;0, Brutal is engaged: it ignores loss and paces to
+    /// this ceiling, masking access-leg loss/jitter — the lever that stabilises
+    /// realtime game UDP (Roblox 277) on a TSPU-throttled RU path. MUST be calibrated
+    /// to ~70-80% of the MEASURED client-&gt;server goodput: over-declaring self-induces
+    /// the very loss it's meant to mask. Parsed from the hysteria2 URI (?up=&amp;down=).
+    /// See plans/roblox-tester-vps-spec-2026-06-27.md.
+    /// </summary>
+    [YamlMember(Alias = "hysteria_up_mbps")]
+    public int HysteriaUpMbps { get; set; }
+
+    /// <summary>Hysteria2 Brutal down bandwidth, Mbit/s. 0 = unset (BBR). See <see cref="HysteriaUpMbps"/>.</summary>
+    [YamlMember(Alias = "hysteria_down_mbps")]
+    public int HysteriaDownMbps { get; set; }
+
+    /// <summary>
     /// Shadowsocks plugin name (e.g. <c>shadow-tls</c> for ShadowTLS v3).
     /// Empty = no plugin.
     /// </summary>

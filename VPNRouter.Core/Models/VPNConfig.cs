@@ -427,6 +427,16 @@ public class SingBoxOutbound
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Hysteria2Obfs? Obfs { get; set; }
 
+    /// <summary>Hysteria2 Brutal up bandwidth, Mbit/s. Null = omit -> sing-box uses BBR.</summary>
+    [JsonPropertyName("up_mbps")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UpMbps { get; set; }
+
+    /// <summary>Hysteria2 Brutal down bandwidth, Mbit/s. Null = omit -> sing-box uses BBR.</summary>
+    [JsonPropertyName("down_mbps")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DownMbps { get; set; }
+
     /// <summary>Shadowsocks plugin name (e.g. <c>shadow-tls</c>).</summary>
     [JsonPropertyName("plugin")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -1490,6 +1490,17 @@ public static class ConfigGenerator
             };
         }
 
+        // T2 (2026-06-27): Brutal CC calibration. When both up/down are set (>0), engage
+        // Brutal — it ignores loss and paces to the declared ceiling, masking the access-leg
+        // loss/jitter that times RakNet out (Roblox 277) on a TSPU-throttled RU path. Both
+        // required (sing-box wants the pair); 0/unset -> omit -> BBR (prior behaviour). The
+        // value MUST be ~70-80% of measured goodput — over-declaring self-induces loss.
+        if (entry.HysteriaUpMbps > 0 && entry.HysteriaDownMbps > 0)
+        {
+            ob.UpMbps   = entry.HysteriaUpMbps;
+            ob.DownMbps = entry.HysteriaDownMbps;
+        }
+
         return ob;
     }
 

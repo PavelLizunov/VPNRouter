@@ -412,7 +412,21 @@ public static class ServerUriParser
             entry.ObfsPassword = query["obfs-password"] ?? string.Empty;
         }
 
+        // Hysteria2 Brutal CC bandwidth (Mbit/s). Accept ?up=&down= (also upmbps/downmbps).
+        // Calibrate to ~70-80% of measured goodput; over-declaring self-induces loss. 0/absent
+        // -> sing-box falls back to BBR (the pre-calibration default). RU realtime-game lever.
+        entry.HysteriaUpMbps = ParseMbps(query["up"] ?? query["upmbps"] ?? query["up_mbps"]);
+        entry.HysteriaDownMbps = ParseMbps(query["down"] ?? query["downmbps"] ?? query["down_mbps"]);
+
         return entry;
+    }
+
+    /// <summary>Parse a Mbit/s value from a query param ("50", "50mbps", " 50 "). Invalid/absent -> 0.</summary>
+    private static int ParseMbps(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return 0;
+        var digits = new string(raw.TrimStart().TakeWhile(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var v) && v > 0 ? v : 0;
     }
 
     // ─── TUIC v5 ───────────────────────────────────────────────────────────
