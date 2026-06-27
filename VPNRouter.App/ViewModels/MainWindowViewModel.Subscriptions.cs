@@ -294,6 +294,15 @@ public partial class MainWindowViewModel
             // Snapshot current aggregated UUIDs
             var beforeUuids = SubscriptionServers.Select(s => s.Uuid).OrderBy(u => u).ToList();
 
+            // G3 (2026-06-27): snapshot the ACTIVE server's identity so we only
+            // reconnect when IT specifically changed — a rotation of some OTHER
+            // server in the pool must not drop the tunnel (the hourly-refresh
+            // reconnect that killed long-lived TCP conns like claude.exe).
+            var activeName = SelectedSubscriptionServer?.Name;
+            var activeSigBefore = SelectedSubscriptionServer == null
+                ? null
+                : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+
             // Parallel refresh, ignore per-entry failures
             await Task.WhenAll(enabled.Select(async s =>
             {
@@ -357,8 +366,32 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            _logger.Information("[SubRefresh] Servers changed, rebuilding pool and reconnecting...");
-            RebuildSubscriptionPool();
+            // G3: the server SET changed — but only RECONNECT if the ACTIVE
+            // server's identity changed. Refresh the in-memory pool either way so
+            // the UI reflects new servers, guarded by _isLoadingUI so the
+            // SelectedSubscriptionServer re-assignment inside RebuildSubscriptionPool
+            // doesn't fire OnSelectedSubscriptionServerChanged -> a spurious
+            // reconnect (we decide that explicitly below).
+            var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
+                enabled.SelectMany(s => s.UnderlyingEntry.Servers
+                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
+                activeName);
+            var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
+
+            var prevLoadingUi = _isLoadingUI;
+            _isLoadingUI = true;
+            try { RebuildSubscriptionPool(); }
+            finally { _isLoadingUI = prevLoadingUi; }
+
+            if (!activeChanged)
+            {
+                _logger.Information(
+                    "[SubRefresh] Server set changed but active '{Active}' unchanged — pool refreshed, no reconnect",
+                    activeName ?? "(none)");
+                return;
+            }
+
+            _logger.Information("[SubRefresh] Active server changed, reconnecting...");
             var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
             await ReconnectAsync(reconnectName);
         }
