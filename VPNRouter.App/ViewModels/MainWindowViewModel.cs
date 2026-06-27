@@ -3230,11 +3230,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var serverIp = _engine.ActiveServerAddress;
         if (IsSubscribeMode)
         {
-            if (AutoSelectBestServer)
-                return _autoSelectedServer is not null
-                    ? (_autoSelectedServer.DisplayName, _autoSelectedServer.Server)
-                    : (Strings.AutoSelectStatusLabel, null);
-            return ((SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName, serverIp);
+            return AutoSelectStatus.ResolveSubscribeLabel(
+                AutoSelectBestServer,
+                _autoSelectedServer is not null,
+                _autoSelectedServer?.DisplayName,
+                _autoSelectedServer?.Server,
+                Strings.AutoSelectStatusLabel,
+                (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName,
+                serverIp);
         }
         if (IsVlessMode)
             return ((SelectedServer ?? Servers.FirstOrDefault())?.DisplayName, serverIp);

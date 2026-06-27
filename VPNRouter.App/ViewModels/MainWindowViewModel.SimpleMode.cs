@@ -168,10 +168,9 @@ public partial class MainWindowViewModel
         get
         {
             if (!IsConnected) return string.Empty;
-            string? name = IsSubscribeMode
-                ? (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName
-                : (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName;
-            var ip = _engine?.ActiveServerAddress;
+            // G2: use the shared label resolver so auto-select shows the REAL
+            // node (clash_api), not the nominal pick — name & ip stay consistent.
+            var (name, ip) = DeriveConnectedServerLabel();
             if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(ip)) return string.Empty;
             if (string.IsNullOrEmpty(name)) return $"{Strings.SmpActiveThrough} {ip}";
             if (string.IsNullOrEmpty(ip))   return $"{Strings.SmpActiveThrough} {name}";
@@ -261,12 +260,9 @@ public partial class MainWindowViewModel
             if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
             {
-                // Reuse the SmpActiveServerLine logic but strip the "Through:"
-                // prefix since the status card uses its own verb.
-                string? name = IsSubscribeMode
-                    ? (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName
-                    : (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName;
-                var ip = _engine?.ActiveServerAddress;
+                // G2: shared resolver — auto-select shows the REAL node, not the
+                // nominal pick (name & ip consistent).
+                var (name, ip) = DeriveConnectedServerLabel();
                 var via = Strings.SmpStatusConnectedVia;
                 if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}";
                 if (!string.IsNullOrEmpty(name)) return $"{via} {name}";
