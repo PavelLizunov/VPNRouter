@@ -623,6 +623,24 @@ public class TransportConfig
     [JsonPropertyName("headers")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string>? Headers { get; set; }
+
+    // ── XHTTP (sing-box-lx with_awg/with_xhttp) — only emitted for type=xhttp.
+    // Schema verified vs `sing-box-lx check` 2026-06-27 (host is top-level, not in headers).
+    [JsonPropertyName("mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Mode { get; set; }
+
+    [JsonPropertyName("host")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Host { get; set; }
+
+    [JsonPropertyName("x_padding_bytes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? XPaddingBytes { get; set; }
+
+    [JsonPropertyName("no_grpc_header")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool NoGrpcHeader { get; set; }
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────

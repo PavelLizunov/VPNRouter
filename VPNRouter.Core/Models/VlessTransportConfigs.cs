@@ -48,7 +48,7 @@ public class VlessTlsConfig
 
 public class VlessTransportConfig
 {
-    /// <summary>tcp | ws | grpc</summary>
+    /// <summary>tcp | ws | grpc | xhttp</summary>
     [YamlMember(Alias = "type")]
     public string Type { get; set; } = "tcp";
 
@@ -57,4 +57,21 @@ public class VlessTransportConfig
 
     [YamlMember(Alias = "headers")]
     public Dictionary<string, string> Headers { get; set; } = new();
+
+    // ── XHTTP (sing-box-lx with_xhttp) — only for type=xhttp ─────────────────
+    /// <summary>XHTTP mode: auto | packet-up | stream-up | stream-one. Empty = auto.</summary>
+    [YamlMember(Alias = "mode")]
+    public string Mode { get; set; } = string.Empty;
+
+    /// <summary>XHTTP Host-header override (top-level field, not in headers). Empty = none.</summary>
+    [YamlMember(Alias = "host")]
+    public string Host { get; set; } = string.Empty;
+
+    /// <summary>XHTTP X-Padding byte range, e.g. "100-1000". Empty = sing-box default.</summary>
+    [YamlMember(Alias = "x_padding_bytes")]
+    public string XPaddingBytes { get; set; } = string.Empty;
+
+    /// <summary>XHTTP: omit Xray gRPC-style headers (forward-compat). Default false.</summary>
+    [YamlMember(Alias = "no_grpc_header")]
+    public bool NoGrpcHeader { get; set; }
 }

@@ -1475,7 +1475,11 @@ public static class ConfigGenerator
             Server     = entry.Server,
             ServerPort = entry.Port,
             Uuid       = entry.Uuid,
-            Flow       = string.IsNullOrEmpty(entry.Flow) ? null : entry.Flow,
+            // XHTTP is incompatible with XTLS-Vision (protocol limitation) — drop the flow
+            // even if a stray one is present, so a VLESS+XHTTP+Reality config is valid.
+            Flow       = (string.IsNullOrEmpty(entry.Flow)
+                          || transportType.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
+                ? null : entry.Flow,
             Tls        = BuildTlsConfig(entry),
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
@@ -1690,6 +1694,23 @@ public static class ConfigGenerator
     private static TransportConfig BuildTransportConfig(string type, VlessTransportConfig source)
     {
         var isGrpc = type.Equals("grpc", StringComparison.OrdinalIgnoreCase);
+
+        // XHTTP (sing-box-lx with_xhttp): VLESS over plain HTTP/2, composes with Reality,
+        // incompatible with XTLS-Vision. host is a TOP-LEVEL field (not in headers). Schema
+        // verified vs `sing-box-lx check`. See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
+        if (type.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TransportConfig
+            {
+                Type          = "xhttp",
+                Mode          = string.IsNullOrEmpty(source.Mode) ? "auto" : source.Mode,
+                Path          = string.IsNullOrEmpty(source.Path) ? "/" : source.Path,
+                Host          = string.IsNullOrEmpty(source.Host) ? null : source.Host,
+                XPaddingBytes = string.IsNullOrEmpty(source.XPaddingBytes) ? null : source.XPaddingBytes,
+                NoGrpcHeader  = source.NoGrpcHeader,
+                Headers       = source.Headers?.Count > 0 ? source.Headers : null,
+            };
+        }
 
         return new TransportConfig
         {

@@ -75,8 +75,21 @@ public static class VlessUriParser
         };
 
         var host = query["host"];
-        if (!string.IsNullOrEmpty(host))
+        if (transportType.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
+        {
+            // XHTTP (sing-box-lx): host is a top-level transport field (not a header);
+            // plus mode + x_padding. Needs a sing-box-lx (with_xhttp) client.
+            entry.Transport.Mode = query["mode"] ?? string.Empty;
+            entry.Transport.XPaddingBytes = query["x_padding_bytes"] ?? query["xpad"] ?? string.Empty;
+            entry.Transport.NoGrpcHeader =
+                string.Equals(query["no_grpc_header"], "true", StringComparison.OrdinalIgnoreCase)
+                || query["no_grpc_header"] == "1";
+            if (!string.IsNullOrEmpty(host)) entry.Transport.Host = host;
+        }
+        else if (!string.IsNullOrEmpty(host))
+        {
             entry.Transport.Headers = new Dictionary<string, string> { ["Host"] = host };
+        }
 
         // Reality config (when security=reality)
         if (entry.Security.Equals("reality", StringComparison.OrdinalIgnoreCase))
