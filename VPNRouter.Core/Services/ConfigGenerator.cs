@@ -22,6 +22,14 @@ public static class ConfigGenerator
         "RobloxPlayerLauncher.exe",
     };
 
+    // T4: domains whose DNS can be resolved off the congested proxy detour (real-NIC
+    // Cloudflare DoH) when AppConfig.ResolveGameDnsOffProxy is on. Suffix-matched.
+    private static readonly List<string> RealtimeGameDnsSuffixes = new()
+    {
+        "roblox.com",
+        "rbxcdn.com",
+    };
+
     // v2.44.4 (2026-06-27): hard ceiling on the TUN MTU at generation time.
     // A jumbo 9000 (the pre-v2.42 default) can get STUCK in a persisted config:
     // the 9000->1280 fix lives in the v5->v6 migration, so a config that already
@@ -1036,6 +1044,18 @@ public static class ConfigGenerator
         {
             // Full tunnel: all DNS goes through vpn-dns (via Final above).
             // No per-process rules needed.
+            // T4 (opt-in): resolve game domains via the real-NIC DoH (local-dns) instead
+            // of the congested proxy detour, so a stalled proxy DoH doesn't hang Roblox
+            // joins. DoH is encrypted -> not RU-poisoned. The connection still goes proxy.
+            if (settings.App.ResolveGameDnsOffProxy)
+            {
+                dns.Rules.Add(new DnsRule
+                {
+                    DomainSuffix = RealtimeGameDnsSuffixes,
+                    Action       = "route",
+                    Server       = "local-dns"
+                });
+            }
         }
         else if (isExcludeMode)
         {

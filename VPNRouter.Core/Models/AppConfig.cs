@@ -227,6 +227,18 @@ public class AppConfig
     public bool ForceIpv4Only { get; set; } = true;
 
     /// <summary>
+    /// T4 (2026-06-27), opt-in (default FALSE): in full-tunnel, resolve known realtime-game
+    /// domains (roblox.com / rbxcdn.com) via the real-NIC <c>local-dns</c> (Cloudflare DoH)
+    /// instead of the proxy-detour <c>vpn-dns</c>. DoH is encrypted, so the answer is NOT
+    /// RU-poisoned, and it skips the congested proxy that stalls game joins (diag 20260627:
+    /// 1023 DNS exchanges &gt;=10s). The game's actual CONNECTION still goes through the proxy.
+    /// Default off + un-RU-verifiable (depends on Cloudflare-DoH reachability from the line),
+    /// so it stays an A/B lever, not a default. See plans/roblox-277-rca-2026-06-27.md (T4).
+    /// </summary>
+    [YamlMember(Alias = "resolve_game_dns_off_proxy")]
+    public bool ResolveGameDnsOffProxy { get; set; }
+
+    /// <summary>
     /// When true (default), reject QUIC (HTTP/3 over UDP) whenever the active
     /// proxy is TCP-only — i.e. a VLESS+Reality outbound with no UDP-capable
     /// (TUIC/Hysteria2) sibling. QUIC carried over a reliable VLESS-over-TCP
