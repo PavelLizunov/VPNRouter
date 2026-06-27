@@ -231,4 +231,31 @@ app:
         Assert.DoesNotContain("mySecretValue123", outp);
         Assert.DoesNotContain("dXNlcjpwYXNzd29yZA==", outp);
     }
+
+    // AmneziaWG keys are credentials. The allowlist redacts them by default (not in
+    // SafeKeys); these lock that in so a future SafeKeys change can't leak them.
+    [Fact]
+    public void RedactConfigYaml_RedactsAwgSecrets_KeepsHostPort()
+    {
+        var yaml =
+            "vless:\n  servers:\n    - name: AWG\n      protocol: amneziawg\n" +
+            "      server: 1.2.3.4\n      port: 51820\n      awg:\n" +
+            "        private_key: SECRETAWGPRIV\n        preshared_key: SECRETAWGPSK\n";
+        var outp = DiagnosticsRedactor.RedactConfigYaml(yaml);
+        Assert.DoesNotContain("SECRETAWGPRIV", outp);
+        Assert.DoesNotContain("SECRETAWGPSK", outp);
+        Assert.Contains("1.2.3.4", outp);  // server host kept (safe key)
+        Assert.Contains("51820", outp);    // port kept (number)
+    }
+
+    [Fact]
+    public void RedactSingboxJson_RedactsWireguardPrivateKey_KeepsPeerPublicKey()
+    {
+        var json = "{\"endpoints\":[{\"type\":\"wireguard\",\"tag\":\"proxy\"," +
+                   "\"private_key\":\"SECRETAWGPRIV\"," +
+                   "\"peers\":[{\"address\":\"1.2.3.4\",\"port\":51820,\"public_key\":\"PUBOK\"}]}]}";
+        var outp = DiagnosticsRedactor.RedactSingboxJson(json);
+        Assert.DoesNotContain("SECRETAWGPRIV", outp);
+        Assert.Contains("1.2.3.4", outp);  // peer address (host) kept
+    }
 }
