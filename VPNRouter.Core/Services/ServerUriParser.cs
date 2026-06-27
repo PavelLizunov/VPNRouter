@@ -109,7 +109,19 @@ public static class ServerUriParser
         }
         else if (uri.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
                  uri.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+        {
+            // Runtime gate (mirror naive / dns-tunnel): AmneziaWG needs the
+            // sing-box-lx fork (with_awg). Official builds bundle upstream
+            // sing-box, which FATALs on an `endpoints` wireguard block. Refuse
+            // at intake so a hostile / stale subscription line can't brick an
+            // official-build tunnel. ParseMultiple pre-filters via
+            // IsSupportedScheme; this guards the direct / manual-paste path.
+            if (!SingBoxFeatures.AwgAvailable)
+                throw new FormatException(
+                    "AmneziaWG requires a sing-box-lx (with_awg) build. This build bundles " +
+                    "upstream sing-box — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
             entry = ParseAmneziaWg(uri);
+        }
         else
             throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg://. Got: {Truncate(uri, 40)}");
 
@@ -182,13 +194,19 @@ public static class ServerUriParser
         if (line.StartsWith("dns-tunnel://", StringComparison.OrdinalIgnoreCase))
             return SlipstreamRuntimeAvailable;
 
+        // AmneziaWG — only where the sing-box-lx fork (with_awg) is bundled.
+        // On an official build this returns false so subscription parsing
+        // (SubscriptionFetcher / ParseMultiple) silently drops awg:// lines
+        // instead of feeding a tunnel-bricking endpoint into config-gen.
+        if (line.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+            return SingBoxFeatures.AwgAvailable;
+
         return line.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("awg://",       StringComparison.OrdinalIgnoreCase);
+               line.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase);
     }
 
     // ─── DNS-tunnel (slipstream) ───────────────────────────────────────────

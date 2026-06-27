@@ -12,9 +12,16 @@ namespace VPNRouter.Tests;
 /// plain HTTP/2, composes with Reality, and is INCOMPATIBLE with XTLS-Vision (so no flow).
 /// The emitted transport shape (host top-level, mode, x_padding_bytes, no_grpc_header) was
 /// verified vs the real `sing-box-lx check`. Needs a sing-box-lx (with_xhttp) client.
+/// <para>Forces <see cref="SingBoxFeatures.OverrideXhttp"/> = true so the type=xhttp
+/// intake gate (default-closed on official builds) lets these fork tests run; shares the
+/// serial collection with the other fork tests.</para>
 /// </summary>
-public sealed class XhttpTransportTests
+[Collection("SingBoxFeaturesSerial")]
+public sealed class XhttpTransportTests : IDisposable
 {
+    public XhttpTransportTests() => SingBoxFeatures.OverrideXhttp = true;
+    public void Dispose() => SingBoxFeatures.ResetForTests();
+
     [Fact]
     public void Parse_VlessXhttpUri_SetsTransport()
     {

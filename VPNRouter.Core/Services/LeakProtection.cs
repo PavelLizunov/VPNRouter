@@ -281,8 +281,13 @@ public static class LeakProtection
                     $"'{expectedFinal}' — possible routing inversion (traffic/DNS may leak)");
         }
 
-        // 5. Proxy outbound must exist
-        var hasProxy = config.Outbounds.Any(o => o.Tag == "proxy");
+        // 5. Proxy must exist — as an outbound OR as an endpoint. AmneziaWG
+        // (sing-box-lx) emits the "proxy" tag as a top-level wireguard ENDPOINT,
+        // not an outbound (ConfigGenerator BuildOutbounds AWG branch). Without
+        // the Endpoints check this hard-errors "No proxy outbound defined" on
+        // every AWG config, and Strict validation then aborts the connect 100%.
+        var hasProxy = config.Outbounds.Any(o => o.Tag == "proxy")
+            || (config.Endpoints?.Any(e => e.Tag == "proxy") ?? false);
         if (!hasProxy)
             errors.Add("No 'proxy' outbound defined");
 

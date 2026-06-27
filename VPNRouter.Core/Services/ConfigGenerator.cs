@@ -137,7 +137,7 @@ public static class ConfigGenerator
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
             Endpoints = endpoints, // AmneziaWG "proxy" endpoint (sing-box-lx); null otherwise
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, settings.App.RouteGamesDirect),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, settings.App.RouteGamesDirect, proxyIsUdpNative: endpoints != null && endpoints.Count > 0),
             Experimental = new SingBoxExperimental()
         };
 
@@ -1193,8 +1193,10 @@ public static class ConfigGenerator
         // AmneziaWG: a single AWG active server is a full WireGuard tunnel that carries ALL
         // traffic (TCP+UDP) natively — no UDP split, no proxy-udp. Emit it as a "proxy"
         // ENDPOINT (sing-box-lx with_awg); routes reference "proxy" (the endpoint tag) exactly
-        // like an outbound, so BuildRoute is unchanged. Requires a sing-box-lx client; official
-        // sing-box would reject the AWG fields (only reachable once an AWG entry is in the pool).
+        // like an outbound. hasUdpProxy stays false (no separate proxy-udp outbound), but
+        // BuildRoute is told proxyIsUdpNative so it does NOT QUIC-reject this UDP-native tunnel.
+        // Requires a sing-box-lx client; gated at intake (SingBoxFeatures.AwgAvailable) so an
+        // official build never sees an AWG endpoint.
         var awgActive = servers.FirstOrDefault(s =>
             "amneziawg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)
             || "awg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase));
@@ -1801,7 +1803,8 @@ public static class ConfigGenerator
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
         bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
-        List<string>? dnsTunnelResolverIps = null, bool routeGamesDirect = true)
+        List<string>? dnsTunnelResolverIps = null, bool routeGamesDirect = true,
+        bool proxyIsUdpNative = false)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -1874,8 +1877,11 @@ public static class ConfigGenerator
         // fallback to HTTP/2-over-TCP, which rides VLESS cleanly. The sniff rule
         // above identifies QUIC; private-IP traffic is already routed direct, so
         // LAN QUIC is untouched. Skipped when a UDP-capable outbound exists
-        // (proxy-udp) — there we honour the user's deliberate UDP routing.
-        if (blockQuicOnTcpProxy && !hasUdpProxy)
+        // (proxy-udp) — there we honour the user's deliberate UDP routing. Also
+        // skipped for a UDP-native tunnel (AmneziaWG / WireGuard endpoint): it
+        // carries QUIC over real UDP, so there is no TCP-over-TCP meltdown to
+        // pre-empt — rejecting QUIC would needlessly force HTTP/3 apps to TCP.
+        if (blockQuicOnTcpProxy && !hasUdpProxy && !proxyIsUdpNative)
         {
             if (isFullTunnel || isExcludeMode)
             {

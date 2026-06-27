@@ -77,8 +77,19 @@ public static class VlessUriParser
         var host = query["host"];
         if (transportType.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
         {
+            // Runtime gate (mirror awg / naive): the XHTTP transport needs the
+            // sing-box-lx fork (with_xhttp). Official builds bundle upstream
+            // sing-box, which FATALs on an `xhttp` transport block. Refuse at
+            // intake so a hostile / stale subscription line can't brick an
+            // official-build tunnel. SubscriptionFetcher catches this per-line
+            // (it wraps Parse in try/catch) and drops the entry.
+            if (!SingBoxFeatures.XhttpAvailable)
+                throw new FormatException(
+                    "XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles " +
+                    "upstream sing-box — use a tcp / ws / grpc VLESS server instead.");
+
             // XHTTP (sing-box-lx): host is a top-level transport field (not a header);
-            // plus mode + x_padding. Needs a sing-box-lx (with_xhttp) client.
+            // plus mode + x_padding.
             entry.Transport.Mode = query["mode"] ?? string.Empty;
             entry.Transport.XPaddingBytes = query["x_padding_bytes"] ?? query["xpad"] ?? string.Empty;
             entry.Transport.NoGrpcHeader =

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -12,9 +14,17 @@ namespace VPNRouter.Tests;
 /// promoted obfuscation fields + a peer using `persistent_keepalive_interval`. Zero/empty
 /// AWG fields are omitted so a plain WireGuard endpoint stays byte-identical to upstream.
 /// See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
+/// <para>The class forces <see cref="SingBoxFeatures.OverrideAwg"/> = true so the awg://
+/// intake gate (which defaults closed on an official build) lets these fork tests run.
+/// Shares the serial collection with the other fork tests so the static override can't
+/// race a class that asserts the gate is closed.</para>
 /// </summary>
-public sealed class AmneziaWgEndpointTests
+[Collection("SingBoxFeaturesSerial")]
+public sealed class AmneziaWgEndpointTests : IDisposable
 {
+    public AmneziaWgEndpointTests() => SingBoxFeatures.OverrideAwg = true;
+    public void Dispose() => SingBoxFeatures.ResetForTests();
+
     private static VlessServerEntry Entry() => new()
     {
         Protocol = "amneziawg", Server = "1.2.3.4", Port = 51820,
@@ -112,6 +122,30 @@ public sealed class AmneziaWgEndpointTests
     {
         Assert.True(ServerUriParser.IsSupportedScheme("awg://x@1.2.3.4:51820"));
         Assert.True(ServerUriParser.IsSupportedScheme("amneziawg://x@1.2.3.4:51820"));
+    }
+
+    [Fact]
+    public void Generate_AwgConfig_PassesLeakProtection()
+    {
+        // bug-hunt P1: LeakProtection.ValidateConfig must recognise the "proxy"
+        // ENDPOINT (not just an outbound) or it hard-errors "No proxy outbound
+        // defined" and Strict validation aborts every AWG connect.
+        var cfg = ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
+        var result = LeakProtection.ValidateConfig(cfg);
+        Assert.True(result.IsValid, "AWG config rejected by LeakProtection: " + string.Join("; ", result.Errors));
+        Assert.DoesNotContain(result.Errors, e => e.Contains("proxy outbound"));
+    }
+
+    [Fact]
+    public void Generate_AwgFullTunnel_DoesNotRejectQuic()
+    {
+        // bug-hunt P1: an AmneziaWG tunnel is UDP-native, so the TCP-only-proxy
+        // QUIC-reject must NOT fire (it would needlessly force HTTP/3 apps to TCP).
+        var cfg = ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
+        Assert.DoesNotContain(cfg.Route.Rules,
+            r => r.Protocol == "quic" && r.Action == "reject");
     }
 
     private static AppSettings AwgSettings() => new()

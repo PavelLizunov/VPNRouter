@@ -22,6 +22,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P1** — clash_api exposed with no `secret`: on Android any installed app can read live connection metadata / issue control calls — `VPNRouter.Core/Models/VPNConfig.cs:710` — TBD
 - [ ] **P1** — LinuxFirewallManager / MacFirewallManager treat an EMPTY processNames list as "arm global kill-switch": a split-tunnel user with a 30s scan timeout can have the whole host egress dropped — `Platform/Linux/LinuxFirewallManager.cs` — TBD
 - [ ] **P1** — AutoFailover persists the resolver-aggregated server list (subscription-leak class): `_store.Save(_settings)` serializes the aggregate into `vless.servers` YAML — `AutoFailoverEngine.cs:202` — TBD
+- [ ] **P2** — build-singbox-lx.ps1 doesn't assert the wireguard-go fork HEAD == `$WG_COMMIT` / the go.mod `replace => ./submodules/wireguard-go` path (mostly mitigated 2026-06-28 by the new with_awg/with_xhttp Tags + `check` smoke assertion, but the explicit pin is still absent) — `tools/build-singbox-lx.ps1:58` — TBD
+- [ ] **P2** — No SHA256 integrity pin of the bundled sing-box-lx.exe; build.ps1 `-SingBoxPath` override copies the binary with zero version/tag/checksum validation before bundling — `tools/build-singbox-lx.ps1:29` / `build.ps1:311` — TBD
+- [ ] **P2** — LeakProtection.ValidateOutboundServersScopeAware never cross-checks the AWG peer endpoint IP (iterates only `config.Outbounds`; the AWG egress peer lives in `config.Endpoints[].Peers[]`) — defense-in-depth only, benign today — `VPNRouter.Core/Services/LeakProtection.cs:527` — TBD
 
 ## Resolved (history)
 

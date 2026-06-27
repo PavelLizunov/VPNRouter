@@ -73,6 +73,33 @@ New-Item -ItemType Directory -Force -Path (Split-Path $OutputPath) | Out-Null
 Copy-Item (Join-Path $src 'sing-box.exe') $OutputPath -Force
 
 Write-Host "[4/4] Verify" -ForegroundColor Yellow
-& $OutputPath version | Select-Object -First 1
+# The version STRING is forged via -ldflags -X (line above), so it proves
+# nothing about the build. The "Tags:" line is what Go derives from the REAL
+# build tags and is NOT forgeable — assert with_awg + with_xhttp are actually
+# compiled in. Go silently ignores unknown -tags, so without this a dropped tag
+# / unresolved wireguard-go replace yields a forged-but-feature-less binary that
+# ships green and then FATALs every AWG/xhttp config at runtime.
+$verOut = & $OutputPath version 2>&1 | Out-String
+Write-Host $verOut.Trim()
+$tagsLine = ($verOut -split "`n" | Where-Object { $_ -match '^\s*Tags:' }) -join ''
+foreach ($needed in @('with_awg', 'with_xhttp')) {
+    if ($tagsLine -notmatch [regex]::Escape($needed)) {
+        throw "FATAL: built sing-box-lx is MISSING build tag '$needed' (Tags line: '$($tagsLine.Trim())'). " +
+              "The binary would reject AWG/XHTTP configs at runtime. Do NOT bundle it. " +
+              "Check the wireguard-go replace path + that `$TAGS includes $needed."
+    }
+}
+# Belt-and-suspenders: a feature-less binary also FATALs `check` on an AWG config.
+$awgProbe = Join-Path ([System.IO.Path]::GetTempPath()) "awg-probe-$PID.json"
+@'
+{"endpoints":[{"type":"wireguard","tag":"proxy","mtu":1280,"address":["10.0.0.2/32"],
+"private_key":"aGVsbG8taGVsbG8taGVsbG8taGVsbG8taGVsbG8tMDA=","peers":[{"address":"127.0.0.1",
+"port":51820,"public_key":"aGVsbG8taGVsbG8taGVsbG8taGVsbG8taGVsbG8tMDA=","allowed_ips":["0.0.0.0/0"]}]}]}
+'@ | Set-Content -Path $awgProbe -Encoding utf8
+try {
+    & $OutputPath check -c $awgProbe 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "FATAL: sing-box-lx rejected a minimal AWG endpoint config (exit $LASTEXITCODE) — with_awg not functional." }
+    Write-Host "Verified: with_awg + with_xhttp present; AWG endpoint config accepted." -ForegroundColor Green
+} finally { Remove-Item -Force $awgProbe -ErrorAction SilentlyContinue }
 Write-Host "Built: $OutputPath" -ForegroundColor Green
 Write-Host "Bundle it:  powershell -File build.ps1 -Version <X.Y.Z-rN> -SingBoxPath `"$OutputPath`" -Upload" -ForegroundColor Cyan
