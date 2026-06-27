@@ -502,6 +502,7 @@ public sealed class StartupPipelineTests : IDisposable
         public List<int> ConnectedPids { get; } = new();
         public void OnConnected(int pid) => ConnectedPids.Add(pid);
         public void OnRestartAttempted(int attempt, int max) { }
+        public void OnFailoverRequested(string reason) { }
         public void OnAutoFailoverTriggered(string message) =>
             AutoFailoverInvoked = true;
         public void OnProcessDetected(string name, int pid) { }

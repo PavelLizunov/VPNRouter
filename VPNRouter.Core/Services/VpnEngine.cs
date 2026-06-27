@@ -1206,6 +1206,34 @@ public class VpnEngine : IDisposable
         public void OnAutoFailoverTriggered(string message) =>
             _engine.AutoFailoverTriggered?.Invoke(message);
 
+        public void OnFailoverRequested(string reason)
+        {
+            // G4 (2026-06-27): HealthMonitor exhausted restarts on the current
+            // server (dial i/o-timeout storm). Run the same failover path the
+            // post-start probe uses, under the SESSION token so a user Disconnect
+            // aborts it. Fire-and-forget + try/catch: if anything is missing
+            // (no captured settings yet, etc.) it degrades to the prior "give up".
+            _ = Task.Run(async () =>
+            {
+                var token = _engine._sessionCts?.Token ?? CancellationToken.None;
+                try
+                {
+                    if (token.IsCancellationRequested) return;
+                    var sanity = new ConfigSanityCheck(_engine._logger);
+                    var failover = WireFailoverWithStop(sanity);
+                    var outcome = await failover.HandleDeadConfigAsync(reason, token);
+                    if (outcome.UserFacingMessage != null
+                        && _engine._sessionCts?.IsCancellationRequested != true)
+                        _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
+                }
+                catch (Exception ex)
+                {
+                    _engine._logger?.Warning(ex,
+                        "[VpnEngine] HealthMonitor-requested failover failed — leaving VPN stopped");
+                }
+            });
+        }
+
         public void OnProcessDetected(string name, int pid) =>
             _engine.ProcessDetected?.Invoke(name, pid);
 

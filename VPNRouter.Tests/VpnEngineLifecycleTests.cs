@@ -970,6 +970,7 @@ public sealed class VpnEngineLifecycleTests
         public void OnSingBoxStarted(int pid) { }
         public void OnConnected(int pid) { }
         public void OnRestartAttempted(int attempt, int max) { }
+        public void OnFailoverRequested(string reason) { }
         public void OnAutoFailoverTriggered(string message) { }
         public void OnProcessDetected(string name, int pid) { }
         public void SetActiveServerAddress(string address) { }

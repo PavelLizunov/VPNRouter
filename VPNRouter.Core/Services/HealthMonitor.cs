@@ -95,6 +95,11 @@ public class HealthMonitor : IDisposable
     // See plans/release-notes-v2.31.5-r2.md for the full timeline.
     private bool _shouldBeRunning;
 
+    // G4 (2026-06-27): set once when the restart ceiling is hit and a failover
+    // has been requested, so we don't re-raise FailoverRequested on every
+    // subsequent dead tick. Reset on Start() and on a confirmed "VPN is up".
+    private volatile bool _failoverRequested;
+
     // Cancels any pending AttemptRestart Task.Delay — prevents stale restarts
     // from firing after a successful reload has already happened.
     private CancellationTokenSource? _restartCts;
@@ -250,6 +255,7 @@ public class HealthMonitor : IDisposable
         _activeProfile = profile;
         _appSettings = appSettings;
         _restartAttempts = 0;
+        _failoverRequested = false; // G4: fresh session, re-arm failover
         _isStopping = false;
         _shouldBeRunning = true;   // v2.31.5-r2: arms the OnHealthTick recovery path
         _lastScan = initialScan; // baseline — prevents reload on first debounce if nothing changed
@@ -466,6 +472,7 @@ public class HealthMonitor : IDisposable
                 // backoff budget — the user shouldn't pay for previous
                 // restart history once they're connected again.
                 _restartAttempts = 0;
+                _failoverRequested = false; // G4: re-arm failover for a future degradation
                 _logger.Information("[HealthMonitor] VPN is up");
                 VpnStarted?.Invoke(this, EventArgs.Empty);
             }
@@ -536,6 +543,17 @@ public class HealthMonitor : IDisposable
     /// (arg=false). The App may surface a toast; Core only logs.
     /// </summary>
     public event EventHandler<bool>? StrictDnsFailoverChanged;
+
+    /// <summary>
+    /// G4 (2026-06-27): raised once when sing-box restarts have hit the ceiling
+    /// (<see cref="HealthMonitorSettings.MaxRestartAttempts"/>) for the current
+    /// server — i.e. it won't come back (the dial i/o-timeout restart-storm in
+    /// user diags that never tripped the Clash-API post-start probe). The engine
+    /// subscribes and runs AutoFailover to swap to a healthy server instead of
+    /// silently giving up. Arg = the reason string. Raised at most once per
+    /// session until a "VPN is up" resets the latch.
+    /// </summary>
+    public event EventHandler<string>? FailoverRequested;
 
     /// <summary>
     /// True when StrictDns is the SOLE reason DNS is forced through the tunnel —
@@ -669,38 +687,69 @@ public class HealthMonitor : IDisposable
         int attempt;
         CancellationToken ct;
         int delayMs;
+        bool requestFailover = false;
         lock (_attemptRestartLock)
         {
             if (_restartAttempts >= _settings.MaxRestartAttempts)
             {
-                _logger.Error("[HealthMonitor] Max restart attempts ({Max}) reached — giving up",
-                    _settings.MaxRestartAttempts);
-                return;
+                // G4: the ceiling means THIS server won't come back. Prefer a
+                // failover to a healthy server over silently giving up — this is
+                // the dial i/o-timeout restart-storm path that never reaches the
+                // Clash-API post-start probe. Raise once per session (latched);
+                // if nothing is subscribed, fall through to the original give-up.
+                if (FailoverRequested != null && !_failoverRequested)
+                {
+                    _failoverRequested = true;
+                    requestFailover = true;
+                }
+                else
+                {
+                    _logger.Error("[HealthMonitor] Max restart attempts ({Max}) reached — giving up",
+                        _settings.MaxRestartAttempts);
+                    return;
+                }
             }
 
-            _restartAttempts++;
-            attempt = _restartAttempts;
-
-            // Cancel any previously scheduled restart — only the latest one matters.
-            // v2.31.0-r1 (CO-2 audit fix): the previous code reassigned _restartCts
-            // without disposing the old one — one CancellationTokenSource leaked
-            // per restart attempt. Long-running sessions with many crash-restart
-            // cycles accumulated CTS instances. Now: Cancel + Dispose the previous
-            // before swapping in the new one.
-            // v2.31.6-r8: the swap is now under the lock so a concurrent caller
-            // can't observe a half-published CTS (read after our write to
-            // _restartCts but before we Cancel/Dispose oldCts).
-            var oldCts = _restartCts;
-            _restartCts = new CancellationTokenSource();
-            ct = _restartCts.Token;
-            if (oldCts != null)
+            if (requestFailover)
             {
-                try { oldCts.Cancel(); } catch (ObjectDisposedException) { /* already disposed elsewhere */ }
-                oldCts.Dispose();
+                // Failover path: leave the restart counter / CTS / backoff alone.
+                attempt = _restartAttempts;
+                ct = CancellationToken.None;
+                delayMs = 0;
             }
+            else
+            {
+                _restartAttempts++;
+                attempt = _restartAttempts;
 
-            // Exponential backoff: 5s, 10s, 20s, 40s, 80s
-            delayMs = (int)Math.Pow(2, attempt - 1) * 5000;
+                // Cancel any previously scheduled restart — only the latest one
+                // matters. v2.31.0-r1 (CO-2): Cancel + Dispose the previous before
+                // swapping in the new one (was leaking one CTS per attempt).
+                // v2.31.6-r8: swap under the lock so a concurrent caller can't
+                // observe a half-published CTS.
+                var oldCts = _restartCts;
+                _restartCts = new CancellationTokenSource();
+                ct = _restartCts.Token;
+                if (oldCts != null)
+                {
+                    try { oldCts.Cancel(); } catch (ObjectDisposedException) { /* already disposed elsewhere */ }
+                    oldCts.Dispose();
+                }
+
+                // Exponential backoff: 5s, 10s, 20s, 40s, 80s
+                delayMs = (int)Math.Pow(2, attempt - 1) * 5000;
+            }
+        }
+
+        // G4: ceiling reached — hand off to AutoFailover (swap to a healthy
+        // server) instead of restart-storming a dead one. Raised OUTSIDE the lock.
+        if (requestFailover)
+        {
+            _logger.Error(
+                "[HealthMonitor] Max restart attempts ({Max}) reached — requesting failover to a healthy server",
+                _settings.MaxRestartAttempts);
+            FailoverRequested?.Invoke(this, "max restart attempts reached");
+            return;
         }
 
         RestartAttempted?.Invoke(this, attempt);

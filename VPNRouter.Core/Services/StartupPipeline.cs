@@ -205,6 +205,13 @@ internal interface IStartupHost
     /// <summary>Forward HealthMonitor restart-attempt notifications.</summary>
     void OnRestartAttempted(int attempt, int max);
 
+    /// <summary>
+    /// G4 (2026-06-27): HealthMonitor hit the restart ceiling for the current
+    /// server — run AutoFailover to swap to a healthy one instead of giving up.
+    /// Host-owned because it needs the failover scaffolding + StartAsync closure.
+    /// </summary>
+    void OnFailoverRequested(string reason);
+
     /// <summary>Forward an F-E failover user-facing message.</summary>
     void OnAutoFailoverTriggered(string message);
 
@@ -1333,6 +1340,10 @@ internal sealed class StartupPipeline
 
         healthMonitor.RestartAttempted += (_, attempt) =>
             _host.OnRestartAttempted(attempt, settings.Monitoring.MaxRestartAttempts);
+
+        // G4 (2026-06-27): when restarts hit the ceiling, hand off to AutoFailover
+        // (swap to a healthy server) instead of silently giving up.
+        healthMonitor.FailoverRequested += (_, reason) => _host.OnFailoverRequested(reason);
 
         etw.Start();
         healthMonitor.Start(profile, settings, scanResult);
