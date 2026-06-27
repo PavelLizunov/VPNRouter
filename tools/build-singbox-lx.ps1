@@ -90,12 +90,16 @@ foreach ($needed in @('with_awg', 'with_xhttp')) {
     }
 }
 # Belt-and-suspenders: a feature-less binary also FATALs `check` on an AWG config.
+# Include AWG-only fields (jc/jmin/jmax) so `check` exercises with_awg, not just the
+# base wireguard endpoint. Write UTF-8 WITHOUT BOM — PS5.1 `Set-Content -Encoding utf8`
+# prepends a BOM that some JSON loaders reject, false-failing a good binary.
 $awgProbe = Join-Path ([System.IO.Path]::GetTempPath()) "awg-probe-$PID.json"
-@'
-{"endpoints":[{"type":"wireguard","tag":"proxy","mtu":1280,"address":["10.0.0.2/32"],
+$awgProbeJson = @'
+{"endpoints":[{"type":"wireguard","tag":"proxy","mtu":1280,"jc":4,"jmin":40,"jmax":70,"address":["10.0.0.2/32"],
 "private_key":"aGVsbG8taGVsbG8taGVsbG8taGVsbG8taGVsbG8tMDA=","peers":[{"address":"127.0.0.1",
 "port":51820,"public_key":"aGVsbG8taGVsbG8taGVsbG8taGVsbG8taGVsbG8tMDA=","allowed_ips":["0.0.0.0/0"]}]}]}
-'@ | Set-Content -Path $awgProbe -Encoding utf8
+'@
+[System.IO.File]::WriteAllText($awgProbe, $awgProbeJson, (New-Object System.Text.UTF8Encoding $false))
 try {
     & $OutputPath check -c $awgProbe 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "FATAL: sing-box-lx rejected a minimal AWG endpoint config (exit $LASTEXITCODE) — with_awg not functional." }

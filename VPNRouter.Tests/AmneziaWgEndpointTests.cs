@@ -125,6 +125,98 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     }
 
     [Fact]
+    public void Parse_AwgUri_PreservesPlusInKeys()
+    {
+        // bug-hunt (Codex): WireGuard keys are standard base64 ('+' common).
+        // HttpUtility.ParseQueryString would corrupt '+' to a space.
+        var e = ServerUriParser.Parse(
+            "awg://PEER@1.2.3.4:51820?private_key=ab+cd/ef==&preshared_key=gh+ij/kl==&address=10.13.13.2/32#H");
+        Assert.Equal("ab+cd/ef==", e.Awg!.PrivateKey);
+        Assert.Equal("gh+ij/kl==", e.Awg.PresharedKey);
+    }
+
+    [Fact]
+    public void Parse_AwgUri_MissingPrivateKey_Throws()
+    {
+        Assert.Throws<FormatException>(() => ServerUriParser.Parse(
+            "awg://PEER@1.2.3.4:51820?address=10.13.13.2/32#H"));
+    }
+
+    [Fact]
+    public void Parse_AwgUri_MissingAddress_Throws()
+    {
+        Assert.Throws<FormatException>(() => ServerUriParser.Parse(
+            "awg://PEER@1.2.3.4:51820?private_key=PRIV#H"));
+    }
+
+    [Fact]
+    public void ConfigSanityCheck_AwgEndpointConfig_IsNotDead()
+    {
+        // bug-hunt (Codex): CheckBeforeStart scans only outbounds; for AWG the
+        // proxy is an endpoint, so without endpoint-awareness it FATALs every
+        // AWG connect before sing-box launches.
+        var cfg = ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
+        var node = System.Text.Json.Nodes.JsonNode.Parse(
+            System.Text.Json.JsonSerializer.Serialize(cfg))!.AsObject();
+        var result = new ConfigSanityCheck().CheckBeforeStart(node);
+        Assert.False(result.IsDead, "AWG endpoint config flagged dead: " + result.Reason);
+    }
+
+    [Fact]
+    public void Generate_ActiveVless_SameHostAwgSibling_DoesNotEmitEndpoint()
+    {
+        // bug-hunt (Codex): a same-host AWG sibling must NOT hijack a selected
+        // VLESS server. Active = vless -> VLESS proxy outbound, no endpoint.
+        var cfg = ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(),
+            SameHostMixed("v"));
+        Assert.Null(cfg.Endpoints);
+        Assert.Contains(cfg.Outbounds, o => o.Tag == "proxy" && o.Type == "vless");
+    }
+
+    [Fact]
+    public void Generate_ActiveAwg_SameHostVlessSibling_EmitsEndpoint()
+    {
+        var cfg = ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(),
+            SameHostMixed("awg"));
+        Assert.NotNull(cfg.Endpoints);
+        Assert.Equal("proxy", Assert.Single(cfg.Endpoints!).Tag);
+    }
+
+    private static AppSettings SameHostMixed(string active) => new()
+    {
+        App = new AppConfig { LogLevel = "info", RoutingMode = "full" },
+        Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
+        SingBox = new SingBoxSettings(),
+        Tun = new TunSettings(),
+        Vless = new VlessConfig
+        {
+            ActiveServer = active,
+            Servers = new List<VlessServerEntry>
+            {
+                new()
+                {
+                    Name = "v", Protocol = "vless", Server = "1.2.3.4", Port = 443,
+                    Uuid = "11111111-1111-1111-1111-111111111111",
+                    Security = "reality", Flow = "xtls-rprx-vision",
+                    Reality = new VlessRealityConfig { PublicKey = "KEY", ShortId = "01ab" },
+                },
+                new()
+                {
+                    Name = "awg", Protocol = "amneziawg", Server = "1.2.3.4", Port = 51820,
+                    Awg = new AwgConfig
+                    {
+                        PrivateKey = "PRIV", Address = new() { "10.13.13.2/32" },
+                        PeerPublicKey = "PUB", Jc = 4, H1 = "1234567890",
+                    },
+                },
+            },
+        },
+    };
+
+    [Fact]
     public void Generate_AwgConfig_PassesLeakProtection()
     {
         // bug-hunt P1: LeakProtection.ValidateConfig must recognise the "proxy"

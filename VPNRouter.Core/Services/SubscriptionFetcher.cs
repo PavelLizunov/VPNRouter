@@ -264,7 +264,12 @@ public static class SubscriptionFetcher
             }
             catch (Exception ex)
             {
-                logger?.Warning(ex, "[Subscription] Failed to parse line: {Line}", line);
+                // Scrub before logging: a failing awg:// / vless:// line carries
+                // private_key / uuid / keys, and the raw vpnrouter.log is written
+                // BEFORE diagnostics-export redaction runs. ScrubSecrets collapses
+                // the proxy URI (incl. awg://) so no secret reaches the log file.
+                logger?.Warning(ex, "[Subscription] Failed to parse line: {Line}",
+                    CrashReporter.ScrubSecrets(line));
             }
         }
 

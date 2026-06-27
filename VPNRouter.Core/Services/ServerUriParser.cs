@@ -476,9 +476,18 @@ public static class ServerUriParser
             throw new FormatException("Invalid amneziawg URI: host missing");
         var port = parsed.Port > 0 ? parsed.Port : 51820;
 
-        var query = HttpUtility.ParseQueryString(parsed.Query);
+        // WireGuard/AWG keys are STANDARD base64 (frequently contain '+'), and
+        // HttpUtility.ParseQueryString decodes '+' as a space — silently
+        // corrupting private_key / preshared_key. Parse preserving literal '+'
+        // (Uri.UnescapeDataString only decodes %XX, never '+'->space).
+        var query = ParseQueryPreservingPlus(parsed.Query);
         var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
         var addr = query["address"] ?? query["addr"] ?? string.Empty;
+        var privateKey = query["private_key"] ?? query["pk"] ?? string.Empty;
+        if (string.IsNullOrEmpty(privateKey))
+            throw new FormatException("Invalid amneziawg URI: private_key is required");
+        if (string.IsNullOrWhiteSpace(addr))
+            throw new FormatException("Invalid amneziawg URI: address is required (e.g. address=10.13.13.2/32)");
 
         return new VlessServerEntry
         {
@@ -489,7 +498,7 @@ public static class ServerUriParser
             Awg = new AwgConfig
             {
                 PeerPublicKey = peerPub,
-                PrivateKey    = query["private_key"] ?? query["pk"] ?? string.Empty,
+                PrivateKey    = privateKey,
                 Address       = addr.Length == 0 ? new List<string>()
                                   : addr.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0).ToList(),
                 PresharedKey  = query["preshared_key"] ?? query["psk"] ?? string.Empty,
@@ -503,6 +512,28 @@ public static class ServerUriParser
                 I4   = query["i4"] ?? string.Empty, I5 = query["i5"] ?? string.Empty,
             },
         };
+    }
+
+    /// <summary>
+    /// Parse a URI query into a case-insensitive collection, decoding %XX but
+    /// PRESERVING a literal '+'. Unlike <see cref="HttpUtility.ParseQueryString"/>
+    /// (which treats '+' as a space), this keeps standard-base64 WireGuard/AWG
+    /// keys (private_key / preshared_key) intact.
+    /// </summary>
+    private static System.Collections.Specialized.NameValueCollection ParseQueryPreservingPlus(string query)
+    {
+        var nv = new System.Collections.Specialized.NameValueCollection(StringComparer.OrdinalIgnoreCase);
+        var q = (query ?? string.Empty).TrimStart('?');
+        if (q.Length == 0) return nv;
+        foreach (var pair in q.Split('&'))
+        {
+            if (pair.Length == 0) continue;
+            var eq = pair.IndexOf('=');
+            var key = eq < 0 ? pair : pair.Substring(0, eq);
+            var val = eq < 0 ? string.Empty : pair.Substring(eq + 1);
+            nv[Uri.UnescapeDataString(key)] = Uri.UnescapeDataString(val);
+        }
+        return nv;
     }
 
     // ─── TUIC v5 ───────────────────────────────────────────────────────────

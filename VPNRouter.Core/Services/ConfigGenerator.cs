@@ -1215,9 +1215,22 @@ public static class ConfigGenerator
         // BuildRoute is told proxyIsUdpNative so it does NOT QUIC-reject this UDP-native tunnel.
         // Requires a sing-box-lx client; gated at intake (SingBoxFeatures.AwgAvailable) AND by
         // the config-gen backstop above, so an official build never reaches this branch.
-        var awgActive = servers.FirstOrDefault(s =>
-            "amneziawg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)
-            || "awg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase));
+        // Only treat AWG as active when the SELECTED entry itself is AWG.
+        // GetActiveServers() can return same-host siblings (active + same-IP
+        // TCP/UDP pair), so a `FirstOrDefault(amneziawg)` would let an AWG
+        // sibling HIJACK a selected VLESS/HY2/TUIC server on the same host —
+        // silently swapping protocol, credentials and route semantics. Mirror
+        // GetActiveServers' own active-resolution (by name, fallback first).
+        var awgActiveName = settings.Vless.ActiveServer;
+        var awgActiveEntry = !string.IsNullOrEmpty(awgActiveName)
+            ? servers.FirstOrDefault(s =>
+                string.Equals(s.Name, awgActiveName, StringComparison.OrdinalIgnoreCase))
+            : null;
+        awgActiveEntry ??= servers.FirstOrDefault();
+        var awgActive = (awgActiveEntry != null
+            && ("amneziawg".Equals(awgActiveEntry.Protocol, StringComparison.OrdinalIgnoreCase)
+                || "awg".Equals(awgActiveEntry.Protocol, StringComparison.OrdinalIgnoreCase)))
+            ? awgActiveEntry : null;
         if (awgActive != null)
         {
             endpoints = new List<SingBoxEndpoint> { BuildAmneziaWgEndpoint(awgActive, "proxy") };
@@ -1230,6 +1243,13 @@ public static class ConfigGenerator
                 new() { Type = "direct", Tag = "dns-direct", UdpFragment = true },
             };
         }
+
+        // Active server is NOT AWG (the branch above returned otherwise): drop any
+        // same-host AWG siblings GetActiveServers may have included, so they can't
+        // be mis-built as a VLESS outbound (AWG has no uuid/transport).
+        servers = servers.Where(s =>
+            !"amneziawg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)
+            && !"awg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)).ToList();
 
         // DNS-tunnel detection — the single source of truth for the route-layer
         // slipstream self-exclusion (see BuildRoute). When the active proxy is a

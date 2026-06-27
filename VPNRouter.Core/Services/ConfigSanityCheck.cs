@@ -106,6 +106,14 @@ public sealed class ConfigSanityCheck
 
         if (proxy == null)
         {
+            // AmneziaWG (sing-box-lx): the "proxy" is a wireguard ENDPOINT, not
+            // an outbound. A proxy-tagged endpoint is a valid proxy target — the
+            // outbound-shaped server/server_port checks below don't apply, and
+            // runtime reachability rides the tunnel. Don't declare it dead, else
+            // every AWG config aborts here before sing-box even launches.
+            if (HasProxyEndpoint(singboxConfig))
+                return new PreStartCheckResult(false, "proxy is a wireguard endpoint (AmneziaWG)", null);
+
             // No proxy outbound at all — this is fatal for generated mode
             // (the route rules would point at a non-existent tag). Same
             // class of bug LeakProtection catches separately.
@@ -199,6 +207,20 @@ public sealed class ConfigSanityCheck
     /// </summary>
     internal static JsonObject? FindFirstProxyOutbound(JsonArray outbounds) =>
         PlaceholderDefense.LayerE_RuntimeSanity.FindFirstProxyOutbound(outbounds);
+
+    /// <summary>
+    /// True when the config carries a top-level <c>endpoints[]</c> entry tagged
+    /// <c>proxy</c> (the AmneziaWG wireguard endpoint, sing-box-lx). Used so the
+    /// pre-start check treats an endpoint-based proxy as valid instead of dead.
+    /// </summary>
+    private static bool HasProxyEndpoint(JsonObject singboxConfig)
+    {
+        if (singboxConfig["endpoints"] is not JsonArray endpoints) return false;
+        foreach (var e in endpoints)
+            if (e is JsonObject o && StjNodeHelpers.AsString(o["tag"]) == "proxy")
+                return true;
+        return false;
+    }
 
     /// <summary>
     /// Back-compat forwarder — inspects a single sing-box proxy outbound

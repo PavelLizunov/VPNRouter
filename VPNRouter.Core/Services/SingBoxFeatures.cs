@@ -64,8 +64,8 @@ public static class SingBoxFeatures
             if (_probed) return (_awg, _xhttp);
             try
             {
-                var path = AppPaths.SingBoxExePath;
-                if (File.Exists(path))
+                var path = ResolveBinaryPath();
+                if (path != null && File.Exists(path))
                 {
                     var tags = ReadTagsLine(path);
                     // The Tags line is a comma-separated list, e.g.
@@ -84,6 +84,24 @@ public static class SingBoxFeatures
             _probed = true;
             return (_awg, _xhttp);
         }
+    }
+
+    private static string ResolveBinaryPath()
+    {
+        // Probe the BUNDLED binary (AppContext.BaseDirectory) — that's what
+        // StartupPipeline.DeploySingBoxBinary copies to the runtime path and
+        // actually runs. Reading the runtime path (AppPaths.SingBoxExePath) can
+        // be stale BEFORE the deploy phase, or hold a leftover from a previous
+        // install, caching the wrong capability for the whole process. Fall back
+        // to the runtime path when the bundle isn't resolvable (dev / tests).
+        try
+        {
+            var bundled = Path.Combine(AppContext.BaseDirectory,
+                OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
+            if (File.Exists(bundled)) return bundled;
+        }
+        catch { /* AppContext.BaseDirectory unavailable -> fall back */ }
+        return AppPaths.SingBoxExePath;
     }
 
     private static string ReadTagsLine(string path)
