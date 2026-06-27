@@ -161,8 +161,15 @@ public static class VlessUriParser
         foreach (var line in text.Split('\n', '\r'))
         {
             var trimmed = line.Trim();
-            if (trimmed.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
-                entries.Add(Parse(trimmed));
+            if (!trimmed.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+                continue;
+            // Drop-on-throw — match ServerUriParser.ParseMultiple's forgiving
+            // contract. A single malformed line, or a fork-only type=xhttp line
+            // that now throws on an official build (no with_xhttp), must not
+            // abort the whole bulk parse and drop every other server.
+            try { entries.Add(Parse(trimmed)); }
+            catch (FormatException) { /* skip malformed / fork-unavailable */ }
+            catch (PlaceholderConfigException) { /* skip placeholder bait */ }
         }
 
         return entries;

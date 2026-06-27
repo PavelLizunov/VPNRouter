@@ -99,12 +99,26 @@ public static class SingBoxFeatures
         };
         using var p = Process.Start(psi);
         if (p == null) return string.Empty;
-        var stdout = p.StandardOutput.ReadToEnd();
+        // Drain BOTH pipes concurrently BEFORE WaitForExit. Reading stdout to
+        // end first while stderr stays undrained deadlocks if the child fills
+        // the stderr pipe buffer (~4KB) — exactly the anti-pattern already fixed
+        // in MacProcessScanner / UpdateChecker.RunWithCapture. The async reads
+        // let the 5s ceiling actually bound the call; a hang here would hold
+        // _gate forever and wedge every later AwgAvailable/XhttpAvailable reader.
+        var outTask = p.StandardOutput.ReadToEndAsync();
+        var errTask = p.StandardError.ReadToEndAsync();
         if (!p.WaitForExit(5000))
         {
             try { p.Kill(true); } catch { /* best effort */ }
             return string.Empty;
         }
+        string stdout;
+        try
+        {
+            stdout = outTask.GetAwaiter().GetResult();
+            _ = errTask.GetAwaiter().GetResult(); // drained + observed, discarded
+        }
+        catch { return string.Empty; }
         foreach (var line in stdout.Split('\n'))
             if (line.TrimStart().StartsWith("Tags:", StringComparison.OrdinalIgnoreCase))
                 return line;

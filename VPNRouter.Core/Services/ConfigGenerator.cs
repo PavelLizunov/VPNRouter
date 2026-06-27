@@ -1164,6 +1164,24 @@ public static class ConfigGenerator
             servers = servers.Where(s =>
                 !"naive".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)).ToList();
 
+        // AmneziaWG / XHTTP backstop (bug-hunt 2026-06-28, defense-in-depth).
+        // The URI parsers gate these fork-only features at intake, but a
+        // PERSISTED server reaches generation without re-entering a parser — a
+        // stale / hand-edited config.yaml (protocol: amneziawg or
+        // transport.type: xhttp) deserialized by SettingsLoader, or
+        // VlessServersResolver aggregation. On an OFFICIAL build the emitted
+        // `endpoints` wireguard block / `xhttp` transport FATALs upstream
+        // sing-box at config load. Drop them when the bundled binary lacks the
+        // fork (mirrors the naive backstop above); if that empties the pool the
+        // hard guard below fails loud — fail-closed, never a bricking config.
+        if (!SingBoxFeatures.AwgAvailable)
+            servers = servers.Where(s =>
+                !"amneziawg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)
+                && !"awg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!SingBoxFeatures.XhttpAvailable)
+            servers = servers.Where(s =>
+                !"xhttp".Equals(s.Transport?.Type, StringComparison.OrdinalIgnoreCase)).ToList();
+
         // v2.28.2 hard guard: if we got here with no servers, the resulting
         // sing-box JSON would have route rules referencing a "proxy" outbound
         // tag that we never emit (because AddOutboundGroup short-circuits on
@@ -1195,8 +1213,8 @@ public static class ConfigGenerator
         // ENDPOINT (sing-box-lx with_awg); routes reference "proxy" (the endpoint tag) exactly
         // like an outbound. hasUdpProxy stays false (no separate proxy-udp outbound), but
         // BuildRoute is told proxyIsUdpNative so it does NOT QUIC-reject this UDP-native tunnel.
-        // Requires a sing-box-lx client; gated at intake (SingBoxFeatures.AwgAvailable) so an
-        // official build never sees an AWG endpoint.
+        // Requires a sing-box-lx client; gated at intake (SingBoxFeatures.AwgAvailable) AND by
+        // the config-gen backstop above, so an official build never reaches this branch.
         var awgActive = servers.FirstOrDefault(s =>
             "amneziawg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)
             || "awg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase));

@@ -9,6 +9,15 @@ using Xunit;
 namespace VPNRouter.Tests;
 
 /// <summary>
+/// Serializes the fork-feature test classes (they mutate the process-global
+/// <see cref="SingBoxFeatures"/> overrides). A real definition — not just
+/// xunit.runner.json's parallelism-off — so the serialization survives any
+/// future re-enable of test parallelization.
+/// </summary>
+[CollectionDefinition("SingBoxFeaturesSerial", DisableParallelization = true)]
+public sealed class SingBoxFeaturesSerialCollection { }
+
+/// <summary>
 /// bug-hunt P0 (2026-06-28): fork-only protocols (awg:// / amneziawg:// and a VLESS
 /// type=xhttp transport) MUST be refused at intake on an official sing-box build, else a
 /// hostile / stale subscription line produces an `endpoints` wireguard block / `xhttp`
@@ -101,6 +110,53 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
         var redacted = DiagnosticsRedactor.RedactLogText("peer preshared_key=shortpsk42 configured");
         Assert.DoesNotContain("shortpsk42", redacted);
     }
+
+    [Fact]
+    public void Generate_PersistedAwgServer_Refused_WhenForkUnavailable()
+    {
+        // bug-hunt 2nd-pass P0: the intake gate doesn't cover a PERSISTED
+        // amneziawg server (stale/hand-edited config.yaml, resolver aggregation)
+        // reaching config-gen. The BuildOutbounds backstop must drop it on an
+        // official build; the only server gone -> empty pool -> fail-closed guard
+        // throws, instead of emitting an endpoints block upstream sing-box FATALs.
+        Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), AwgOnlySettings()));
+    }
+
+    [Fact]
+    public void Generate_PersistedXhttpServer_Refused_WhenForkUnavailable()
+    {
+        // same backstop for a persisted VLESS server with a type=xhttp transport.
+        Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), XhttpOnlySettings()));
+    }
+
+    private static AppSettings AwgOnlySettings() => SettingsWith(new VlessServerEntry
+    {
+        Name = "awg", Protocol = "amneziawg", Server = "1.2.3.4", Port = 51820,
+        Awg = new AwgConfig
+        {
+            PrivateKey = "PRIV", Address = new() { "10.13.13.2/32" },
+            PeerPublicKey = "PUB", Jc = 4, H1 = "1234567890",
+        },
+    }, "awg");
+
+    private static AppSettings XhttpOnlySettings() => SettingsWith(new VlessServerEntry
+    {
+        Name = "x", Protocol = "vless", Server = "example.com", Port = 443,
+        Uuid = "11111111-1111-1111-1111-111111111111", Security = "reality",
+        Reality = new VlessRealityConfig { PublicKey = "KEY", ShortId = "01ab" },
+        Transport = new VlessTransportConfig { Type = "xhttp", Path = "/p", Host = "cdn.example.com" },
+    }, "x");
+
+    private static AppSettings SettingsWith(VlessServerEntry entry, string active) => new()
+    {
+        App = new AppConfig { LogLevel = "info", RoutingMode = "full" },
+        Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
+        SingBox = new SingBoxSettings(),
+        Tun = new TunSettings(),
+        Vless = new VlessConfig { ActiveServer = active, Servers = new List<VlessServerEntry> { entry } },
+    };
 
     private static AppSettings PlainVlessSettings() => new()
     {
