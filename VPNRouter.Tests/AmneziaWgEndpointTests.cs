@@ -150,6 +150,20 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     }
 
     [Fact]
+    public void Parse_AwgUri_PeerPubkeyWithSlash_NotTruncated()
+    {
+        // pre-flight regression (2026-06-28, vpnctl lx-test string): the peer
+        // public key is STANDARD base64 and routinely contains '/'. System.Uri
+        // treats '/' as the authority terminator and truncates the userinfo, so
+        // ParseAmneziaWg must split the authority manually.
+        var e = ServerUriParser.Parse(
+            "awg://aB/cD+eF/gH0=@104.194.156.93:51820?private_key=PRIV&address=10.66.0.22/32#n");
+        Assert.Equal("aB/cD+eF/gH0=", e.Awg!.PeerPublicKey);
+        Assert.Equal("104.194.156.93", e.Server);
+        Assert.Equal(51820, e.Port);
+    }
+
+    [Fact]
     public void ConfigSanityCheck_AwgEndpointConfig_IsNotDead()
     {
         // bug-hunt (Codex): CheckBeforeStart scans only outbounds; for AWG the

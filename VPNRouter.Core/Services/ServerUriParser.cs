@@ -460,28 +460,63 @@ public static class ServerUriParser
     // (sing-box-lx has no AWG inbound). h1-h4/i1-i5 are kept as raw strings (ranges/CPS).
     private static VlessServerEntry ParseAmneziaWg(string uri)
     {
-        var normalized = uri;
-        if (normalized.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
-            normalized = "amneziawg://" + normalized.Substring("awg://".Length);
-        var fake = "https://" + normalized.Substring("amneziawg://".Length);
-        Uri parsed;
-        try { parsed = new Uri(fake); }
-        catch { throw new FormatException("Invalid amneziawg URI: cannot parse"); }
+        // DON'T use System.Uri here: the peer public key is STANDARD base64 and
+        // frequently contains '/', which Uri treats as the authority terminator
+        // — truncating the userinfo to empty ("peer public key missing"). Split
+        // the components manually: strip scheme, peel the fragment, then the
+        // query, then authority on the LAST '@' (base64 has no '@'), then
+        // host:port. Uri.UnescapeDataString decodes %XX but preserves '/'/'+'/'='.
+        var rest = uri.Trim();
+        if (rest.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+            rest = rest.Substring("awg://".Length);
+        else if (rest.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase))
+            rest = rest.Substring("amneziawg://".Length);
 
-        var peerPub = Uri.UnescapeDataString(parsed.UserInfo);
+        var hashIdx = rest.IndexOf('#');
+        var fragment = hashIdx >= 0 ? rest.Substring(hashIdx + 1) : string.Empty;
+        if (hashIdx >= 0) rest = rest.Substring(0, hashIdx);
+
+        var qIdx = rest.IndexOf('?');
+        var rawQuery = qIdx >= 0 ? rest.Substring(qIdx + 1) : string.Empty;
+        if (qIdx >= 0) rest = rest.Substring(0, qIdx);
+
+        var atIdx = rest.LastIndexOf('@');
+        if (atIdx < 0)
+            throw new FormatException("Invalid amneziawg URI: peer public key missing (expected awg://<peer_public_key>@host:port)");
+        var peerPub = Uri.UnescapeDataString(rest.Substring(0, atIdx));
         if (string.IsNullOrEmpty(peerPub))
             throw new FormatException("Invalid amneziawg URI: peer public key missing (expected awg://<peer_public_key>@host:port)");
-        var server = parsed.Host;
+
+        var hostPort = rest.Substring(atIdx + 1);
+        string server;
+        var port = 51820;
+        if (hostPort.StartsWith("["))
+        {
+            // [IPv6]:port
+            var close = hostPort.IndexOf(']');
+            server = close > 0 ? hostPort.Substring(1, close - 1) : hostPort;
+            var after = close >= 0 ? hostPort.Substring(close + 1) : string.Empty;
+            if (after.StartsWith(":") && int.TryParse(after.Substring(1), out var p6) && p6 > 0) port = p6;
+        }
+        else
+        {
+            var colonIdx = hostPort.LastIndexOf(':');
+            if (colonIdx >= 0)
+            {
+                server = hostPort.Substring(0, colonIdx);
+                if (int.TryParse(hostPort.Substring(colonIdx + 1), out var p) && p > 0) port = p;
+            }
+            else server = hostPort;
+        }
         if (string.IsNullOrEmpty(server))
             throw new FormatException("Invalid amneziawg URI: host missing");
-        var port = parsed.Port > 0 ? parsed.Port : 51820;
 
         // WireGuard/AWG keys are STANDARD base64 (frequently contain '+'), and
         // HttpUtility.ParseQueryString decodes '+' as a space — silently
         // corrupting private_key / preshared_key. Parse preserving literal '+'
         // (Uri.UnescapeDataString only decodes %XX, never '+'->space).
-        var query = ParseQueryPreservingPlus(parsed.Query);
-        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+        var query = ParseQueryPreservingPlus(rawQuery);
+        var name = Uri.UnescapeDataString(fragment);
         var addr = query["address"] ?? query["addr"] ?? string.Empty;
         var privateKey = query["private_key"] ?? query["pk"] ?? string.Empty;
         if (string.IsNullOrEmpty(privateKey))
