@@ -1525,6 +1525,45 @@ public static class ConfigGenerator
     }
 
     /// <summary>
+    /// AmneziaWG (AWG2) endpoint for a sing-box-lx (with_awg) client. The schema —
+    /// a <c>wireguard</c> endpoint with promoted obfuscation fields + peer with
+    /// <c>persistent_keepalive_interval</c> — was verified against <c>sing-box-lx check</c>
+    /// (2026-06-27). Server/Port are the peer endpoint; obfuscation params must match the
+    /// server. See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
+    /// </summary>
+    internal static SingBoxEndpoint BuildAmneziaWgEndpoint(VlessServerEntry entry, string tag)
+    {
+        var awg = entry.Awg ?? new AwgConfig();
+        static string? NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
+        return new SingBoxEndpoint
+        {
+            Type       = "wireguard",
+            Tag        = tag,
+            System     = false,
+            Mtu        = 1280,
+            Address    = awg.Address.Count > 0 ? new List<string>(awg.Address) : new List<string> { "10.13.13.2/32" },
+            PrivateKey = awg.PrivateKey,
+            Jc = awg.Jc, Jmin = awg.Jmin, Jmax = awg.Jmax,
+            S1 = awg.S1, S2 = awg.S2, S3 = awg.S3, S4 = awg.S4,
+            H1 = NullIfEmpty(awg.H1), H2 = NullIfEmpty(awg.H2), H3 = NullIfEmpty(awg.H3), H4 = NullIfEmpty(awg.H4),
+            I1 = NullIfEmpty(awg.I1), I2 = NullIfEmpty(awg.I2), I3 = NullIfEmpty(awg.I3),
+            I4 = NullIfEmpty(awg.I4), I5 = NullIfEmpty(awg.I5),
+            Peers = new List<WireGuardPeer>
+            {
+                new()
+                {
+                    Address                     = entry.Server,
+                    Port                        = entry.Port,
+                    PublicKey                   = awg.PeerPublicKey,
+                    PreSharedKey                = NullIfEmpty(awg.PresharedKey),
+                    AllowedIps                  = new List<string> { "0.0.0.0/0" },
+                    PersistentKeepaliveInterval = awg.Keepalive > 0 ? awg.Keepalive : 25,
+                }
+            }
+        };
+    }
+
+    /// <summary>
     /// TUIC v5 outbound. ALPN defaults to <c>["h3"]</c> per TUIC spec.
     /// </summary>
     private static SingBoxOutbound BuildTuicOutbound(VlessServerEntry entry, string tag)

@@ -153,6 +153,16 @@ public class VlessServerEntry
     public int HysteriaDownMbps { get; set; }
 
     /// <summary>
+    /// AmneziaWG (AWG2) parameters when <see cref="Protocol"/> = "amneziawg" (or "awg").
+    /// Null for non-AWG servers. Requires a client bundling sing-box-lx (build tag
+    /// with_awg); official sing-box rejects the AWG fields. <see cref="Server"/>/<see
+    /// cref="Port"/> are the peer endpoint; <see cref="AwgConfig.PeerPublicKey"/> the
+    /// server key. See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
+    /// </summary>
+    [YamlMember(Alias = "awg")]
+    public AwgConfig? Awg { get; set; }
+
+    /// <summary>
     /// Shadowsocks plugin name (e.g. <c>shadow-tls</c> for ShadowTLS v3).
     /// Empty = no plugin.
     /// </summary>
@@ -256,4 +266,51 @@ public class VlessServerEntry
     /// </summary>
     [YamlMember(Alias = "dns_leaf_fingerprint")]
     public string DnsLeafFingerprint { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// AmneziaWG (AWG2) client parameters. Maps to a sing-box-lx <c>wireguard</c> endpoint
+/// (build tag with_awg). Both ends must share IDENTICAL obfuscation params (Jc..H4, I1-I5).
+/// </summary>
+public class AwgConfig
+{
+    /// <summary>Client interface private key (base64).</summary>
+    [YamlMember(Alias = "private_key")]
+    public string PrivateKey { get; set; } = string.Empty;
+
+    /// <summary>Client tunnel address(es), e.g. ["10.13.13.2/32"].</summary>
+    [YamlMember(Alias = "address")]
+    public List<string> Address { get; set; } = new();
+
+    /// <summary>Server (peer) public key (base64).</summary>
+    [YamlMember(Alias = "peer_public_key")]
+    public string PeerPublicKey { get; set; } = string.Empty;
+
+    /// <summary>Optional pre-shared key (base64). Empty = none.</summary>
+    [YamlMember(Alias = "preshared_key")]
+    public string PresharedKey { get; set; } = string.Empty;
+
+    /// <summary>Persistent keepalive seconds (0 = default 25 applied at build).</summary>
+    [YamlMember(Alias = "keepalive")]
+    public int Keepalive { get; set; }
+
+    // AWG obfuscation — must match the server. 0/empty = unset.
+    [YamlMember(Alias = "jc")]   public int Jc { get; set; }
+    [YamlMember(Alias = "jmin")] public int Jmin { get; set; }
+    [YamlMember(Alias = "jmax")] public int Jmax { get; set; }
+    [YamlMember(Alias = "s1")]   public int S1 { get; set; }
+    [YamlMember(Alias = "s2")]   public int S2 { get; set; }
+    [YamlMember(Alias = "s3")]   public int S3 { get; set; }
+    [YamlMember(Alias = "s4")]   public int S4 { get; set; }
+    /// <summary>Magic headers h1-h4: a uint32 or "min-max" range string (AWG2). Empty = unset.</summary>
+    [YamlMember(Alias = "h1")] public string H1 { get; set; } = string.Empty;
+    [YamlMember(Alias = "h2")] public string H2 { get; set; } = string.Empty;
+    [YamlMember(Alias = "h3")] public string H3 { get; set; } = string.Empty;
+    [YamlMember(Alias = "h4")] public string H4 { get; set; } = string.Empty;
+    /// <summary>AWG2 CPS decoy strings i1-i5. Empty = unset.</summary>
+    [YamlMember(Alias = "i1")] public string I1 { get; set; } = string.Empty;
+    [YamlMember(Alias = "i2")] public string I2 { get; set; } = string.Empty;
+    [YamlMember(Alias = "i3")] public string I3 { get; set; } = string.Empty;
+    [YamlMember(Alias = "i4")] public string I4 { get; set; } = string.Empty;
+    [YamlMember(Alias = "i5")] public string I5 { get; set; } = string.Empty;
 }

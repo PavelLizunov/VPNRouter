@@ -103,12 +103,84 @@ public class SingBoxConfig
     [JsonPropertyName("outbounds")]
     public List<SingBoxOutbound> Outbounds { get; set; } = new();
 
+    // sing-box 1.11+ moved WireGuard from an outbound to a top-level "endpoint".
+    // AmneziaWG (sing-box-lx, build tag with_awg) is a wireguard endpoint with extra
+    // promoted obfuscation fields. Routes reference an endpoint by its tag exactly like
+    // an outbound. Omitted (null) on configs that don't use any endpoint, so official
+    // sing-box builds are unaffected. See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
+    [JsonPropertyName("endpoints")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<SingBoxEndpoint>? Endpoints { get; set; }
+
     [JsonPropertyName("route")]
     public SingBoxRoute Route { get; set; } = new();
 
     [JsonPropertyName("experimental")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SingBoxExperimental? Experimental { get; set; }
+}
+
+// ─── Endpoint (WireGuard / AmneziaWG) ────────────────────────────────────────
+// Schema EMPIRICALLY VERIFIED against sing-box-lx (with_awg) `check` 2026-06-27:
+// a `wireguard` endpoint with promoted AWG obfuscation fields. AWG fields are
+// omitted when zero/null so a plain WireGuard endpoint stays byte-identical to
+// upstream. Routes reference an endpoint by its tag like an outbound.
+public class SingBoxEndpoint
+{
+    [JsonPropertyName("type")] public string Type { get; set; } = "wireguard";
+    [JsonPropertyName("tag")] public string Tag { get; set; } = string.Empty;
+    [JsonPropertyName("system")] public bool System { get; set; }
+
+    [JsonPropertyName("mtu")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Mtu { get; set; }
+
+    [JsonPropertyName("address")] public List<string> Address { get; set; } = new();
+    [JsonPropertyName("private_key")] public string PrivateKey { get; set; } = string.Empty;
+
+    // AmneziaWG obfuscation (sing-box-lx with_awg). int fields omitted when 0.
+    [JsonPropertyName("jc")]   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int Jc { get; set; }
+    [JsonPropertyName("jmin")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int Jmin { get; set; }
+    [JsonPropertyName("jmax")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int Jmax { get; set; }
+    [JsonPropertyName("s1")]   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int S1 { get; set; }
+    [JsonPropertyName("s2")]   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int S2 { get; set; }
+    [JsonPropertyName("s3")]   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int S3 { get; set; }
+    [JsonPropertyName("s4")]   [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int S4 { get; set; }
+    // h1-h4: a uint32 OR an inclusive "min-max" range string (AWG2). Stored as a string
+    // (the binary accepts both forms as strings, verified). Omitted when null/empty.
+    [JsonPropertyName("h1")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? H1 { get; set; }
+    [JsonPropertyName("h2")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? H2 { get; set; }
+    [JsonPropertyName("h3")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? H3 { get; set; }
+    [JsonPropertyName("h4")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? H4 { get; set; }
+    // i1-i5: AWG2 CPS decoy strings. Omitted when empty.
+    [JsonPropertyName("i1")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I1 { get; set; }
+    [JsonPropertyName("i2")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I2 { get; set; }
+    [JsonPropertyName("i3")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I3 { get; set; }
+    [JsonPropertyName("i4")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I4 { get; set; }
+    [JsonPropertyName("i5")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I5 { get; set; }
+
+    [JsonPropertyName("peers")] public List<WireGuardPeer> Peers { get; set; } = new();
+}
+
+public class WireGuardPeer
+{
+    [JsonPropertyName("address")] public string Address { get; set; } = string.Empty;
+    [JsonPropertyName("port")] public int Port { get; set; }
+    [JsonPropertyName("public_key")] public string PublicKey { get; set; } = string.Empty;
+
+    [JsonPropertyName("pre_shared_key")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PreSharedKey { get; set; }
+
+    [JsonPropertyName("allowed_ips")] public List<string> AllowedIps { get; set; } = new() { "0.0.0.0/0" };
+
+    [JsonPropertyName("persistent_keepalive_interval")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int PersistentKeepaliveInterval { get; set; }
+
+    [JsonPropertyName("reserved")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<int>? Reserved { get; set; }
 }
 
 // ─── Log ─────────────────────────────────────────────────────────────────────
