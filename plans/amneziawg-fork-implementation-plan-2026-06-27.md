@@ -26,15 +26,17 @@ open).
 - Risk register: third-party-fork trust, upstream-rebase lag, maintainer dependency.
 
 ## Step 2 — Build pipeline (per desktop platform)
-Today the build downloads official sing-box. Change to build sing-box-lx from Go source
-(or its release, but source is safer):
-- **Windows** `build.ps1`: replace the sing-box download with `go build` of pinned lx for
-  win-amd64 (+ arm64 if shipped). Needs Go in CI.
-- **macOS** `build-mac.sh`: `go build` lx for darwin-amd64 + arm64.
-- **Linux** `build-linux.yml`: `go build` lx for linux-amd64 (+ arm64).
-- Update the bundled-binary version string + the `sing-box version` checks. Keep the same
-  build tags as today (with_quic / with_clash_api / with_utls) + whatever AWG2 needs.
-- Verify `sing-box-lx check` passes on a generated config containing an awg outbound.
+**Low-risk approach (DONE for Windows):** don't touch build.ps1's download path. build.ps1
+already has a `-SingBoxPath` override to bundle a custom binary. So:
+- `tools/build-singbox-lx.ps1` builds the lx binary from source at PINNED commits
+  (sing-box-lx `c7a2592e`, wireguard-go-awg2-lx `0c0c10b5`) with the canonical tag set
+  (incl `with_awg`) — verified 2026-06-27 on Go 1.26.1; the AWG endpoint it produces passes
+  `check`. Clones the wireguard-go fork DIRECTLY into `submodules/wireguard-go` (the fork's
+  own `git submodule update` trips on its apple/android client submodules).
+- Build the AWG candidate: `build.ps1 -Version X.Y.Z-rN -SingBoxPath <lx-exe> -Upload`.
+- **Windows-first because the tester is on Windows.** macOS/Linux lx builds (mirror the same
+  go-build in `build-mac.sh` / `build-linux.yml`) are DEFERRED until AWG goes cross-platform.
+- Vet: the lx diff is thin (XHTTP + AWG2); build from source; pins recorded above.
 
 ## Step 3 — ConfigGenerator: AmneziaWG outbound (client config support)
 - `VlessServerEntry`: add awg fields — `PrivateKey`, peer `PublicKey`, `Endpoint`(server:port),

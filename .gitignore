@@ -43,6 +43,8 @@ tools/*
 !tools/testvm-control.ps1
 # Re-include: smoke-update.ps1 (v2.29.0-r7 ship-time pre-tag verification).
 !tools/smoke-update.ps1
+# Re-include: build-singbox-lx.ps1 (reproducible AmneziaWG sing-box-lx builder).
+!tools/build-singbox-lx.ps1
 # Re-include: VpnRouterTestMcp (in-tree MCP server — Claude GUI testing).
 !tools/VpnRouterTestMcp/
 !tools/VpnRouterTestMcp/**
