@@ -66,4 +66,48 @@ public sealed class AmneziaWgEndpointTests
         var ep = ConfigGenerator.BuildAmneziaWgEndpoint(e, "proxy");
         Assert.Equal(25, ep.Peers[0].PersistentKeepaliveInterval);
     }
+
+    [Fact]
+    public void Generate_AwgActiveServer_EmitsProxyEndpoint_NotVlessOutbound()
+    {
+        var cfg = ConfigGenerator.Generate(
+            new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
+
+        // the AWG server becomes a "proxy" ENDPOINT (carries TCP+UDP natively)
+        Assert.NotNull(cfg.Endpoints);
+        var ep = Assert.Single(cfg.Endpoints!);
+        Assert.Equal("wireguard", ep.Type);
+        Assert.Equal("proxy", ep.Tag);
+        Assert.Equal(4, ep.Jc);
+        // no vless/hy2 "proxy" OUTBOUND — only the base direct ones
+        Assert.DoesNotContain(cfg.Outbounds, o => o.Tag == "proxy");
+        Assert.DoesNotContain(cfg.Outbounds, o => o.Tag == "proxy-udp");
+        Assert.Contains(cfg.Outbounds, o => o.Tag == "direct");
+        // full-tunnel routes everything at the "proxy" endpoint tag
+        Assert.Equal("proxy", cfg.Route.Final);
+    }
+
+    private static AppSettings AwgSettings() => new()
+    {
+        App = new AppConfig { LogLevel = "info", RoutingMode = "full" },
+        Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
+        SingBox = new SingBoxSettings(),
+        Tun = new TunSettings(),
+        Vless = new VlessConfig
+        {
+            ActiveServer = "awg",
+            Servers = new List<VlessServerEntry>
+            {
+                new()
+                {
+                    Name = "awg", Protocol = "amneziawg", Server = "1.2.3.4", Port = 51820,
+                    Awg = new AwgConfig
+                    {
+                        PrivateKey = "PRIV", Address = new() { "10.13.13.2/32" }, PeerPublicKey = "PUB",
+                        Jc = 4, Jmin = 40, Jmax = 70, S1 = 86, S2 = 574, H1 = "1234567890",
+                    },
+                },
+            },
+        },
+    };
 }

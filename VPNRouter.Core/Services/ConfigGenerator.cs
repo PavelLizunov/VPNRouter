@@ -123,7 +123,7 @@ public static class ConfigGenerator
         var logPath = AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy,
-            out bool isDnsTunnel, out var dnsTunnelResolverIps, isServerAlive);
+            out bool isDnsTunnel, out var dnsTunnelResolverIps, out var endpoints, isServerAlive);
 
         var config = new SingBoxConfig
         {
@@ -136,6 +136,7 @@ public static class ConfigGenerator
             Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode, strictDnsOverride),
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
+            Endpoints = endpoints, // AmneziaWG "proxy" endpoint (sing-box-lx); null otherwise
             Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, settings.App.RouteGamesDirect),
             Experimental = new SingBoxExperimental()
         };
@@ -1146,8 +1147,10 @@ public static class ConfigGenerator
     /// </summary>
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy,
         out bool isDnsTunnel, out List<string> dnsTunnelResolverIps,
+        out List<SingBoxEndpoint>? endpoints,
         Func<VlessServerEntry, bool>? isServerAlive = null)
     {
+        endpoints = null; // default: no endpoints -> official-sing-box-compatible config
         var servers = settings.Vless.GetActiveServers();
 
         // macOS / Android naive backstop. The parser refuses naive at intake on
@@ -1185,6 +1188,27 @@ public static class ConfigGenerator
                 "Caller must populate settings.Vless.Servers (via VlessServersResolver.Resolve) " +
                 "before calling Generate(). " +
                 "See plans/vpnrouter-v2.28-flow-mismatch.md for context.");
+        }
+
+        // AmneziaWG: a single AWG active server is a full WireGuard tunnel that carries ALL
+        // traffic (TCP+UDP) natively — no UDP split, no proxy-udp. Emit it as a "proxy"
+        // ENDPOINT (sing-box-lx with_awg); routes reference "proxy" (the endpoint tag) exactly
+        // like an outbound, so BuildRoute is unchanged. Requires a sing-box-lx client; official
+        // sing-box would reject the AWG fields (only reachable once an AWG entry is in the pool).
+        var awgActive = servers.FirstOrDefault(s =>
+            "amneziawg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)
+            || "awg".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase));
+        if (awgActive != null)
+        {
+            endpoints = new List<SingBoxEndpoint> { BuildAmneziaWgEndpoint(awgActive, "proxy") };
+            hasUdpProxy = false;
+            isDnsTunnel = false;
+            dnsTunnelResolverIps = new List<string>();
+            return new List<SingBoxOutbound>
+            {
+                new() { Type = "direct", Tag = "direct" },
+                new() { Type = "direct", Tag = "dns-direct", UdpFragment = true },
+            };
         }
 
         // DNS-tunnel detection — the single source of truth for the route-layer
