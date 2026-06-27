@@ -41,15 +41,27 @@ public static class NaivePairing
     /// Returns null when no UDP-capable sibling exists (caller keeps naive
     /// TCP-only).
     /// </summary>
-    public static VlessServerEntry? FindUdpSibling(VlessServerEntry naive, IEnumerable<VlessServerEntry> pool)
+    /// <param name="isAlive">
+    /// RB1 (2026-06-27): optional liveness predicate from a pre-connect probe.
+    /// When supplied, DEAD candidates are skipped at every step — a NAIVE server
+    /// must never pair its UDP onto a dead sibling (the Latvia-HY2 "no recent
+    /// network activity" Roblox drops). It also enables a final fallback: if the
+    /// paired/same-name sibling is dead, route UDP through ANY alive UDP-capable
+    /// server (prefer Hysteria2/TUIC) rather than a dead one. When null, behaviour
+    /// is identical to before (no probe available -> trust the pairing tags).
+    /// </param>
+    public static VlessServerEntry? FindUdpSibling(
+        VlessServerEntry naive, IEnumerable<VlessServerEntry> pool,
+        Func<VlessServerEntry, bool>? isAlive = null)
     {
         if (naive == null || pool == null) return null;
         var list = pool as IReadOnlyList<VlessServerEntry> ?? pool.ToList();
+        bool Alive(VlessServerEntry s) => isAlive == null || isAlive(s);
 
-        // 1. PairGroup tag.
+        // 1. PairGroup tag (alive only).
         if (!string.IsNullOrWhiteSpace(naive.PairGroup))
         {
-            var byTag = list.Where(s => !IsNaive(s)
+            var byTag = list.Where(s => !IsNaive(s) && Alive(s)
                 && string.Equals(s.PairGroup, naive.PairGroup, StringComparison.OrdinalIgnoreCase));
             var pick = PreferUdp(byTag);
             if (pick != null) return pick;
@@ -63,10 +75,22 @@ public static class NaivePairing
         var baseName = StripProtocolToken(naive.Name);
         if (!string.IsNullOrWhiteSpace(baseName))
         {
-            var byName = list.Where(s => !IsNaive(s) && IsUdpCapable(s)
+            var byName = list.Where(s => !IsNaive(s) && IsUdpCapable(s) && Alive(s)
                 && string.Equals(StripProtocolToken(s.Name), baseName, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (byName.Count == 1) return byName[0];
+        }
+
+        // 3. RB1 liveness fallback — only when a probe is available. The paired /
+        // same-name sibling is dead (or absent), so rather than carry UDP on a
+        // dead node, route it through ANY alive UDP-capable server (prefer Hy2/TUIC).
+        // Different exit IP than the naive TCP path, but a working game beats a
+        // dead one; gated on isAlive so default behaviour is unchanged.
+        if (isAlive != null)
+        {
+            var anyAlive = list.Where(s => !IsNaive(s) && IsUdpCapable(s) && Alive(s));
+            var pick = PreferUdp(anyAlive);
+            if (pick != null) return pick;
         }
         return null;
     }

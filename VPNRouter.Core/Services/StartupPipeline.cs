@@ -395,6 +395,15 @@ internal sealed class StartupPipeline
         // Phase 3 — ScanProcesses
         var scanResult = await ScanProcessesPhaseAsync(profile, settings, ct).ConfigureAwait(false);
 
+        // RB1 (2026-06-27): when a NAIVE server will pair its UDP onto a sibling,
+        // probe the UDP-capable candidates so a DEAD sibling is never chosen (the
+        // Latvia-HY2 "no recent network activity" Roblox drops). Tightly scoped +
+        // best-effort: only fires for the NAIVE case, short deadline, failure ->
+        // null (config-gen keeps the tag-based pairing). HotReload skips it.
+        Func<VlessServerEntry, bool>? isServerAlive = context.Mode == StartupMode.HotReload
+            ? null
+            : await TryProbeUdpForNaivePairingAsync(settings, ct).ConfigureAwait(false);
+
         // Phase 4 — GenerateConfig
         var configJson = GenerateConfigPhase(
             profile,
@@ -402,7 +411,8 @@ internal sealed class StartupPipeline
             settings,
             isCustomConfig,
             customConfigJson,
-            context.Mode);
+            context.Mode,
+            isServerAlive);
 
         ct.ThrowIfCancellationRequested();
 
@@ -908,13 +918,59 @@ internal sealed class StartupPipeline
     /// <see cref="CustomConfigInjector"/>; generated mode routes through
     /// <see cref="ConfigPipeline.Generate"/> (the Phase 2F canonical helper).
     /// </summary>
+    /// <summary>
+    /// RB1 (2026-06-27): when the active set has a NAIVE server (which can't
+    /// carry UDP and must pair its UDP onto a sibling), probe the UDP-capable
+    /// candidates so config-gen never selects a DEAD sibling for the UDP path
+    /// (the Latvia-HY2 Roblox drops). Returns a liveness predicate (dead names
+    /// excluded), or null when not applicable / all alive / probe failed —
+    /// in which case config-gen keeps the existing tag-based pairing.
+    /// </summary>
+    private async Task<Func<VlessServerEntry, bool>?> TryProbeUdpForNaivePairingAsync(
+        AppSettings settings, CancellationToken ct)
+    {
+        try
+        {
+            var active = settings.Vless.GetActiveServers();
+            if (active == null || !active.Any(NaivePairing.IsNaive))
+                return null; // RB1 only matters when a NAIVE server pairs its UDP
+
+            var udpCandidates = (settings.Vless.Servers ?? new List<VlessServerEntry>())
+                .Where(NaivePairing.IsUdpCapable)
+                .ToList();
+            if (udpCandidates.Count == 0)
+                return null;
+
+            _host.OnStatus("Проверяем UDP-серверы для игр…");
+            var probe = new ServerHealthProbe(_host.Logger);
+            var results = await probe.ProbeAllAsync(udpCandidates, TimeSpan.FromSeconds(3), ct)
+                .ConfigureAwait(false);
+            var dead = new HashSet<string>(
+                results.Where(r => !r.Alive).Select(r => r.Server.Name ?? string.Empty),
+                StringComparer.Ordinal);
+            if (dead.Count == 0)
+                return null; // all UDP candidates alive — no filtering needed
+
+            _host.Logger?.Information(
+                "[StartupPipeline] RB1: {Dead}/{Total} UDP candidate(s) dead — excluding from UDP pairing",
+                dead.Count, udpCandidates.Count);
+            return s => !dead.Contains(s.Name ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            _host.Logger?.Debug("[StartupPipeline] RB1 UDP probe failed (non-fatal): {Err}", ex.Message);
+            return null;
+        }
+    }
+
     private string GenerateConfigPhase(
         Profile profile,
         ScanResult scanResult,
         AppSettings settings,
         bool isCustomConfig,
         string? rawCustomJson,
-        StartupMode mode)
+        StartupMode mode,
+        Func<VlessServerEntry, bool>? isServerAlive = null)
     {
         if (isCustomConfig)
         {
@@ -953,7 +1009,8 @@ internal sealed class StartupPipeline
             settings,
             ConfigPipeline.ValidationMode.Strict,
             warningSink: msg => _host.OnWarning(msg),
-            logger: _host.Logger);
+            logger: _host.Logger,
+            isServerAlive: isServerAlive);
         return json;
     }
 

@@ -88,7 +88,8 @@ internal static class ConfigPipeline
         ValidationMode validationMode = ValidationMode.Strict,
         Action<string>? warningSink = null,
         ILogger? logger = null,
-        bool? strictDnsOverride = null)
+        bool? strictDnsOverride = null,
+        Func<VlessServerEntry, bool>? isServerAlive = null)
     {
         // ── Step 1: Resolve servers ───────────────────────────────────────
         // VlessServersResolver mutates settings.Vless.Servers in-place
@@ -117,7 +118,7 @@ internal static class ConfigPipeline
         // "all DNS via tunnel" when the proxy is unreachable (StrictDns
         // failover); null = honour the persisted setting. Only the generated
         // path consumes it — custom mode keeps its own StrictDns handling.
-        var sbConfig = ConfigGenerator.Generate(profile, resolvedProcessNames, settings, strictDnsOverride);
+        var sbConfig = ConfigGenerator.Generate(profile, resolvedProcessNames, settings, strictDnsOverride, isServerAlive);
 
         // ── Step 4: Validate for leaks ───────────────────────────────────
         // Bug-r9-F-DEFENSIVE: settings passed so outbound IPs are cross-

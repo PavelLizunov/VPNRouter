@@ -20,7 +20,8 @@ public static class ConfigGenerator
         Profile profile,
         IEnumerable<string> resolvedProcessNames,
         AppSettings settings,
-        bool? strictDnsOverride = null)
+        bool? strictDnsOverride = null,
+        Func<VlessServerEntry, bool>? isServerAlive = null)
     {
         // Filter out wildcard patterns — sing-box process_name doesn't support globs
         // Only pass exact .exe names (no * or ?)
@@ -92,7 +93,7 @@ public static class ConfigGenerator
         var logPath = AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy,
-            out bool isDnsTunnel, out var dnsTunnelResolverIps);
+            out bool isDnsTunnel, out var dnsTunnelResolverIps, isServerAlive);
 
         var config = new SingBoxConfig
         {
@@ -1101,7 +1102,8 @@ public static class ConfigGenerator
     /// - If all servers have same flow config → single "proxy" outbound
     /// </summary>
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy,
-        out bool isDnsTunnel, out List<string> dnsTunnelResolverIps)
+        out bool isDnsTunnel, out List<string> dnsTunnelResolverIps,
+        Func<VlessServerEntry, bool>? isServerAlive = null)
     {
         var servers = settings.Vless.GetActiveServers();
 
@@ -1170,7 +1172,7 @@ public static class ConfigGenerator
         // sibling (proxy-udp) while TCP stays on naive (proxy). The existing
         // hasUdpProxy route machinery then sends UDP → proxy-udp and skips the
         // QUIC block. Same physical node → same exit IP, no leak.
-        var udpSibling = FindNaiveUdpSibling(servers, settings.Vless.Servers);
+        var udpSibling = FindNaiveUdpSibling(servers, settings.Vless.Servers, isServerAlive);
         // r6 #2: the TCP "proxy" group must contain ONLY naive/TCP entries —
         // never the UDP sibling. GetActiveServers() returns every same-host
         // entry, so when naive and its paired HY2 share one host the sibling
@@ -1201,6 +1203,11 @@ public static class ConfigGenerator
             // Auto-detect: split servers by flow presence (VLESS-vision TCP vs UDP)
             var flowServers = servers.Where(s => !string.IsNullOrEmpty(s.Flow)).ToList();
             var noFlowServers = servers.Where(s => string.IsNullOrEmpty(s.Flow)).ToList();
+            // RB1: the UDP group must be ALIVE — drop dead no-flow servers when a
+            // probe is available (never carry UDP on a dead node). If that empties
+            // the group, fall through to a single outbound (UDP rides the flow proxy).
+            if (isServerAlive != null)
+                noFlowServers = noFlowServers.Where(isServerAlive).ToList();
             hasUdpProxy = flowServers.Count > 0 && noFlowServers.Count > 0;
 
             if (hasUdpProxy)
@@ -1241,13 +1248,15 @@ public static class ConfigGenerator
     /// falls back to the standard flow/no-flow logic).
     /// </summary>
     private static VlessServerEntry? FindNaiveUdpSibling(
-        List<VlessServerEntry> activeServers, List<VlessServerEntry> pool)
+        List<VlessServerEntry> activeServers, List<VlessServerEntry> pool,
+        Func<VlessServerEntry, bool>? isServerAlive = null)
     {
         // r8 #6: pairing logic lives in NaivePairing so config-gen and the UI
         // ("naive + hy2" label) share ONE source of truth — the label can never
         // claim a pairing the generator wouldn't make.
+        // RB1: pass the liveness probe so a dead UDP sibling is never selected.
         var naive = activeServers.FirstOrDefault(NaivePairing.IsNaive);
-        return naive == null ? null : NaivePairing.FindUdpSibling(naive, pool);
+        return naive == null ? null : NaivePairing.FindUdpSibling(naive, pool, isServerAlive);
     }
 
     /// <summary>
