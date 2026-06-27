@@ -78,6 +78,41 @@ T1 + T2 are the load-bearing pair (UDP-native/WG exit + route the game through i
 (exit rotation) runs tonight in parallel as a free datapoint. T3/T4/T5 harden. T6 is the
 server-side enabler for T1/T2.
 
+## Status (2026-06-27 — autonomous code complete)
+- **T2 — DONE** (93b338b5): Hysteria2 Brutal calibration via `?up=&down=`. + verified the
+  other A/B transports are already optimal: **TUIC `udp_relay_mode=native`**, **VLESS leaves
+  `packet_encoding` at the sing-box xudp default (never empty)**. So the A/B test is VALID.
+- **T6 — DONE**: `plans/roblox-tester-vps-spec-2026-06-27.md`.
+- **T3 — already correct, no change**: `ApplyAsync` only forces a full restart on a genuine
+  structural change (RoutingMode flip / TUN-fingerprint change — hot-reload can't re-lay TUN
+  routes; Brat-2026-05-04 incident). The diag's mid-game restarts were the tester *changing
+  MTU/server/routing during testing* — necessary, not a normal-play bug. Transient health
+  restarts already covered by the landed 2-consecutive-fail debounce. Server/route changes
+  hot-reload (don't restart). No safe gap to widen.
+- **T4 — deferred (downstream + risky-blind)**: in full-tunnel Roblox DNS rides `vpn-dns`
+  (DoH via the congested proxy). It CAN move to `local-dns` (Cloudflare DoH on the real NIC —
+  encrypted, so NOT RU-poisoned), which would skip the proxy. But that depends on Cloudflare-
+  DoH reachability from RU (un-verifiable blind) and is a behavior change for ALL users, and
+  the stall is downstream of the proxy congestion that T1/T2 fix. Hold as a gated opt-in if
+  the transport fix doesn't fully clear it.
+- **T5 — blocked on T1**: cross-transport failover needs a non-QUIC (WG) outbound to fail
+  over to (all QUIC shares the RU throttle), which doesn't exist until T1; and a clean
+  inner-stream jitter signal isn't readily available. Revisit once T1 lands.
+- **T1 — needs YOU**: provision the VPS (I can't rent/pay). Spec ready.
+- **T7 — needs the tester**: live RU A/B.
+
+### Two validation tracks (T7)
+- **Track A (fast, NO new VPS):** add a **calibrated Hysteria2** entry (`?up=&down=` ~75% of
+  the tester's measured speed + Salamander) and a **TUIC** entry to the EXISTING subscription
+  server (T6 spec §3/§4). The tester A/B-tests them via VPNRouter *today* — this directly
+  tests whether T2 (calibrated HY2) / TUIC clears the 277 without any new infra.
+- **Track B (new VPS):** closer/cleaner-IP exit + AmneziaWG (validate via the Amnezia app
+  once). Needed only if Track A doesn't clear it.
+
+**Critical path to "tester works": Track A first (you add HY2-calibrated/TUIC to the existing
+subscription → tester tests) — it needs no new VPS and exercises the code that's already
+shipped.** Track B + the AmneziaWG-fork decision only if Track A fails.
+
 ## Constraints
 - I cannot rent a VPS or pay / create accounts — user does the financial/account steps; I
   provide specs, scripts, and configs.
