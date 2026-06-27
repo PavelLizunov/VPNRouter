@@ -282,6 +282,27 @@ public class AppConfig
     public bool StrictDns { get; set; } = false;
 
     /// <summary>
+    /// G6 (2026-06-27) — resolve private / LAN domain suffixes (.local, .lan,
+    /// home.arpa, .internal + <see cref="LanDnsSuffixes"/>) via the SYSTEM
+    /// resolver instead of the remote DoH, so split-tunnel DIRECT apps can still
+    /// reach LAN devices (nas.local, printer.lan). Public domains stay on the
+    /// encrypted DoH path (no ISP leak). Automatically suppressed when
+    /// <see cref="StrictDns"/> is on (the user explicitly wants ALL DNS via the
+    /// VPN, accepting LAN-name breakage — see StrictDns tradeoffs above).
+    /// </summary>
+    [YamlMember(Alias = "resolve_lan_via_system_dns")]
+    public bool ResolveLanViaSystemDns { get; set; } = true;
+
+    /// <summary>
+    /// Extra private/LAN domain suffixes (beyond the built-in .local / .lan /
+    /// home.arpa / .internal) to resolve via the system resolver when
+    /// <see cref="ResolveLanViaSystemDns"/> is on. e.g. "corp", "home". Stored
+    /// without a leading dot; matching is suffix-based on label boundaries.
+    /// </summary>
+    [YamlMember(Alias = "lan_dns_suffixes")]
+    public List<string> LanDnsSuffixes { get; set; } = new();
+
+    /// <summary>
     /// Block ads, trackers and malware at DNS + routing level.
     /// When enabled: VPN DNS switches to AdGuard DNS + adblock rule_set is added.
     /// </summary>

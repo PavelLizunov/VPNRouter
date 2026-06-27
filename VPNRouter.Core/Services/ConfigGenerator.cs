@@ -883,6 +883,18 @@ public static class ConfigGenerator
 
     // ─── DNS (sing-box 1.12+ format) ──────────────────────────────────────────
 
+    /// <summary>
+    /// Common public TLDs refused as bare LAN suffixes (G6 leak guard) — adding
+    /// one would route every lookup under it to the system/ISP resolver in
+    /// plaintext. Not exhaustive; just the obvious foot-guns.
+    /// </summary>
+    private static readonly HashSet<string> PublicTldDenyList =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "com", "net", "org", "io", "co", "dev", "app", "ru", "info", "biz",
+            "online", "xyz", "me", "tv", "cc", "us", "uk", "de", "edu", "gov"
+        };
+
     private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings, bool isExcludeMode = false, bool? strictDnsOverride = null)
     {
         var routingMode = settings.App.RoutingMode ?? "split";
@@ -910,7 +922,11 @@ public static class ConfigGenerator
             // ipv4_only protects from IPv6 leaks (when VPN tunnels only IPv4) AND
             // skips slow AAAA queries (+100-300ms each). Disable only if user
             // explicitly wants IPv6 via dns.strategy in config.yaml.
-            Strategy = settings.App.ForceIpv4Only ? "ipv4_only" : null,
+            // G5 (2026-06-27): also force ipv4_only whenever the TUN itself carries
+            // no IPv6 — an AAAA answer can't traverse an IPv4-only tunnel, so
+            // skipping it avoids the "address not valid in its context" dial-fails
+            // and the per-query stall, independent of ForceIpv4Only.
+            Strategy = (settings.App.ForceIpv4Only || !settings.Tun.Ipv6Enabled) ? "ipv4_only" : null,
             // Strict DNS: all queries via VPN (no leaks possible).
             // Full tunnel: all DNS through VPN by default.
             // Exclude mode (AM-1): unmatched apps go via VPN, so DNS final = vpn-dns.
@@ -945,6 +961,52 @@ public static class ConfigGenerator
             },
             Rules = new List<DnsRule>()
         };
+
+        // G6 (2026-06-27): split-DNS for private / LAN domains. Without this,
+        // sing-box's blanket DNS hijack (route protocol=dns -> hijack-dns) sends
+        // EVERY app's lookups — including DIRECT (non-routed) apps in split
+        // tunnel — to the remote DoH (local-dns / vpn-dns), which cannot answer
+        // LAN names (nas.local, printer.lan). Route private suffixes to the
+        // SYSTEM resolver instead; public domains don't match and fall through to
+        // dns.final unchanged (no ISP leak). Suppressed under StrictDns (the user
+        // opted into all-DNS-via-VPN, accepting LAN breakage).
+        if (settings.App.ResolveLanViaSystemDns && !strictDns)
+        {
+            dns.Servers.Add(new DnsServer
+            {
+                Tag  = "dns-system",
+                Type = "local" // OS resolver — knows LAN/mDNS names, bypasses TUN
+            });
+
+            var lanSuffixes = new List<string> { "local", "lan", "home.arpa", "internal" };
+            if (settings.App.LanDnsSuffixes != null)
+            {
+                foreach (var s in settings.App.LanDnsSuffixes)
+                {
+                    var t = s?.Trim().TrimStart('.');
+                    if (string.IsNullOrEmpty(t)) continue;
+                    // Leak guard (review nit, 2026-06-27): a bare PUBLIC TLD as a
+                    // LAN suffix would route every lookup under it to the system /
+                    // ISP resolver in plaintext — the exact leak DoH prevents.
+                    // Refuse single-label public TLDs; legit private suffixes
+                    // ("corp", "lan") and specific multi-label internal domains
+                    // ("corp.example.com") are still allowed.
+                    if (!t!.Contains('.') && PublicTldDenyList.Contains(t))
+                        continue;
+                    if (!lanSuffixes.Contains(t, StringComparer.OrdinalIgnoreCase))
+                        lanSuffixes.Add(t);
+                }
+            }
+
+            // LAN rule precedes the per-process rules (so a LAN name beats them);
+            // adblock/reject rules may still Insert(0) ahead — correct, reject wins.
+            dns.Rules.Add(new DnsRule
+            {
+                DomainSuffix = lanSuffixes,
+                Action       = "route",
+                Server       = "dns-system"
+            });
+        }
 
         if (isFullTunnel)
         {

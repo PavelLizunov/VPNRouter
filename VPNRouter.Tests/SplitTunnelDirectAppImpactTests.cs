@@ -44,9 +44,15 @@ public class SplitTunnelDirectAppImpactTests
                 {
                     new()
                     {
-                        Name = "main", Server = "1.2.3.4", Port = 443, Uuid = "u",
+                        Name = "main", Server = "1.2.3.4", Port = 443,
+                        Uuid = "b25684c3-90d6-454a-a911-4e0abba568b0",
                         Flow = "xtls-rprx-vision", Security = "reality",
-                        Reality = new VlessRealityConfig { PublicKey = "k", ShortId = "ab" }
+                        Reality = new VlessRealityConfig
+                        {
+                            Enabled = true, ServerName = "www.microsoft.com", Fingerprint = "chrome",
+                            PublicKey = "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
+                            ShortId = "d86e92a0c6dd2271"
+                        }
                     }
                 }
             }
@@ -122,20 +128,79 @@ public class SplitTunnelDirectAppImpactTests
 
     // ── Mechanism 1c (gap G6): no split-DNS path for LAN/intranet names ──────
 
+    // G6 FIX (2026-06-27): this test previously pinned the GAP (no system
+    // resolver => LAN names unresolvable). It now pins the FIX: LAN suffixes
+    // route to a type:local system resolver, public domains stay on DoH.
     [Fact]
-    public void SplitMode_HasNoLocalSystemResolver_SoLanNamesCannotResolve()
+    public void SplitMode_LanSuffixes_RouteToSystemResolver_PublicStaysOnDoH()
     {
         var cfg = GenerateSplit();
 
-        // The ONLY DNS servers are vpn-dns (DoH via proxy) and local-dns (DoH
-        // via direct). Neither is type:"local" (the system resolver that could
-        // answer LAN/mDNS/intranet names). And no DNS rule routes private/LAN
-        // domains to such a resolver. => a direct app resolving "nas.local"
-        // hits Cloudflare DoH, which cannot answer it. This is gap G6.
+        // A type:local (system) resolver now exists for LAN/mDNS names.
+        var sys = cfg.Dns.Servers.SingleOrDefault(s => s.Type == "local");
+        Assert.NotNull(sys);
+        Assert.Equal("dns-system", sys!.Tag);
+
+        // A DNS rule routes the private suffixes to it, and it PRECEDES the
+        // per-process rules so a LAN name beats any per-process rule (geo/adblock
+        // rule_set rules may sit ahead of it, but they don't match LAN suffixes).
+        var lanIdx = cfg.Dns.Rules.FindIndex(r => r.Server == "dns-system" && r.DomainSuffix != null);
+        Assert.True(lanIdx >= 0, "LAN split-DNS rule must exist");
+        var procIdx = cfg.Dns.Rules.FindIndex(r => r.ProcessName != null);
+        if (procIdx >= 0)
+            Assert.True(lanIdx < procIdx, "LAN rule must precede per-process DNS rules");
+        var lanRule = cfg.Dns.Rules[lanIdx];
+        Assert.Contains("local", lanRule.DomainSuffix!);
+        Assert.Contains("lan", lanRule.DomainSuffix!);
+        Assert.Contains("home.arpa", lanRule.DomainSuffix!);
+        Assert.Contains("internal", lanRule.DomainSuffix!);
+
+        // Public domains do NOT match the suffix rule => still fall through to
+        // dns.final = local-dns (Cloudflare DoH). No ISP leak for public names.
+        Assert.Equal("local-dns", cfg.Dns.Final);
+        Assert.DoesNotContain("com", lanRule.DomainSuffix!);
+    }
+
+    [Fact]
+    public void SplitMode_StrictDns_SuppressesLanSplit_AllDnsViaVpn()
+    {
+        var settings = SplitSettings();
+        settings.App.StrictDns = true;
+        var cfg = ConfigGenerator.Generate(SplitProfile(), new[] { RoutedDiscord, RoutedFirefox }, settings);
+
+        // StrictDns = user explicitly wants ALL DNS via the VPN; the LAN split
+        // must be suppressed (LAN-name breakage is the documented tradeoff).
         Assert.DoesNotContain(cfg.Dns.Servers, s => s.Type == "local");
-        Assert.DoesNotContain(cfg.Dns.Rules,
-            r => r.Server != null && r.Server.Contains("local", StringComparison.OrdinalIgnoreCase)
-                 && (r.DomainSuffix != null || r.Domain != null));
+        Assert.DoesNotContain(cfg.Dns.Rules, r => r.Server == "dns-system");
+        Assert.Equal("vpn-dns", cfg.Dns.Final);
+    }
+
+    [Fact]
+    public void SplitMode_UserLanSuffixes_AreIncluded_DotStripped()
+    {
+        var settings = SplitSettings();
+        settings.App.LanDnsSuffixes = new List<string> { ".corp", "home" };
+        var cfg = ConfigGenerator.Generate(SplitProfile(), new[] { RoutedDiscord }, settings);
+
+        var lanRule = cfg.Dns.Rules.First(r => r.Server == "dns-system" && r.DomainSuffix != null);
+        Assert.Contains("corp", lanRule.DomainSuffix!);   // leading dot stripped
+        Assert.Contains("home", lanRule.DomainSuffix!);
+        Assert.Contains("local", lanRule.DomainSuffix!);  // built-ins preserved
+    }
+
+    [Fact]
+    public void SplitMode_UserLanSuffix_BarePublicTld_IsRejected_NoLeak()
+    {
+        var settings = SplitSettings();
+        // "com" bare would route ALL *.com to the system/ISP resolver — must be
+        // refused. A specific multi-label internal domain is still allowed.
+        settings.App.LanDnsSuffixes = new List<string> { "com", "corp.example.com" };
+        var cfg = ConfigGenerator.Generate(SplitProfile(), new[] { RoutedDiscord }, settings);
+
+        var lanRule = cfg.Dns.Rules.First(r => r.Server == "dns-system" && r.DomainSuffix != null);
+        Assert.DoesNotContain("com", lanRule.DomainSuffix!);              // bare public TLD blocked
+        Assert.Contains("corp.example.com", lanRule.DomainSuffix!);       // specific internal kept
+        Assert.Contains("local", lanRule.DomainSuffix!);                  // built-ins intact
     }
 
     // ── Mechanism 2: the TUN captures ALL traffic (direct apps included) ─────
@@ -177,6 +242,34 @@ public class SplitTunnelDirectAppImpactTests
     }
 
     // ── Contrast: full tunnel differs, proving the above is split-specific ───
+
+    // De-risk G6: the generated split config (type:local dns-system + LAN rule +
+    // ipv4_only) must be valid sing-box JSON. Skips on CI without the binary.
+    [Fact]
+    public void SplitWithLanDns_PassesSingBoxCheck()
+    {
+        var singBox = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!System.IO.File.Exists(singBox)) return;
+
+        var json = ConfigGenerator.Serialize(GenerateSplit());
+        var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            $"vpnrouter-lan-dns-{System.Guid.NewGuid()}.json");
+        try
+        {
+            System.IO.File.WriteAllText(tmp, json);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBox, Arguments = $"check -c \"{tmp}\"",
+                RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true
+            };
+            using var p = System.Diagnostics.Process.Start(psi)!;
+            var err = p.StandardError.ReadToEnd();
+            p.WaitForExit(10000);
+            Assert.True(p.ExitCode == 0,
+                $"sing-box check failed on split+LAN-DNS config (exit {p.ExitCode}):\n{err}\n\n{json}");
+        }
+        finally { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); }
+    }
 
     [Fact]
     public void Contrast_FullTunnel_DnsFinalIsVpnDns_RouteFinalIsProxy()
