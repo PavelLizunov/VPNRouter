@@ -373,31 +373,29 @@ public class FirewallManager : IFirewallManager
 
     /// <summary>
     /// Resolve the full path to an executable.
-    /// 1) Check running processes (most reliable — gives actual filesystem path)
+    /// 1) Running process image path via <see cref="ProcessImagePath"/>
+    ///    (QueryFullProcessImageName / PROCESS_QUERY_LIMITED_INFORMATION) — most
+    ///    reliable, gives the real filesystem path + casing, AND works from
+    ///    session 0 / a SYSTEM Windows Service to a user-session target. That
+    ///    cross-session case is the whole reason this changed: the previous
+    ///    <c>Process.MainModule.FileName</c> returned null for EVERY routed
+    ///    process under the autostart Service (session-0 isolation / WOW64), so
+    ///    <see cref="CreateBlockRules"/> created zero rules and the kill-switch
+    ///    failed OPEN. See <see cref="ProcessImagePath"/> for the full rationale.
     /// 2) Fall back to where.exe (finds exe on PATH, e.g. for system processes)
     /// 3) Return null if not found — caller should skip this rule
     /// </summary>
     private string? ResolveProcessPath(string processName)
     {
-        var nameNoExt = Path.GetFileNameWithoutExtension(processName);
-
-        // 1. Try running processes — gives the real path with correct casing
-        try
+        // 1. Running process → image path. Cross-session safe (unlike
+        //    MainModule), so the Service/SYSTEM autostart path resolves the
+        //    user-session apps it previously could not — the fail-OPEN fix.
+        if (OperatingSystem.IsWindows())
         {
-            var procs = Process.GetProcessesByName(nameNoExt);
-            foreach (var proc in procs)
-            {
-                try
-                {
-                    var path = proc.MainModule?.FileName;
-                    if (!string.IsNullOrEmpty(path) && File.Exists(path))
-                        return path;
-                }
-                catch { /* access denied for some processes — try next */ }
-                finally { proc.Dispose(); }
-            }
+            var running = ProcessImagePath.ResolveRunningPath(processName);
+            if (!string.IsNullOrEmpty(running))
+                return running;
         }
-        catch { /* GetProcessesByName itself can fail */ }
 
         // 2. Try where.exe — finds executables on PATH
         try
