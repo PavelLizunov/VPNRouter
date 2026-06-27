@@ -88,9 +88,13 @@ _process.Kill(entireProcessTree: true);
   (или использовать VpnEngine, который делает это сам).
 
 ### sing-box версия
-1.13.10 upstream бандлится во все 3 платформы. **Не custom rebuild**.
+**1.13.14** upstream бандлится в desktop (Win `build.ps1` / Mac `build-mac.sh` /
+Linux `build-linux.yml`). **Android libbox пока 1.13.10** (`tooling-libbox-singbox-1.13.10`)
+— rotation deferred, см. `plans/goal-roblox-dns-singbox-1.13.14-2026-06-27.md`.
+**Не custom rebuild**.
 - `with_utls`, `with_clash_api`, `with_quic` теги — стандартные с 1.13+.
-- `process_name` regression в 1.13.9 был — fixed в 1.13.10.
+- `process_name` regression в 1.13.9 был — fixed в 1.13.10; 1.13.11 добил
+  "process searcher failure". Держим desktop на актуальном stable.
 
 ## Тестирование
 

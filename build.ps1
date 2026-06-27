@@ -45,7 +45,7 @@ param(
     # SingBoxVersion: upstream sing-box release to bundle (v2.27.2+).
     # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
     # and build-mac.sh — all three platforms ship the same sing-box release.
-    [string]$SingBoxVersion = "1.13.13",
+    [string]$SingBoxVersion = "1.13.14",
     # Optional override: pre-existing sing-box.exe to bundle instead of
     # downloading upstream. Used for local testing of custom builds.
     # Empty string means "auto-download upstream $SingBoxVersion".

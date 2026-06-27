@@ -97,7 +97,7 @@ jobs:
       - name: Bundle sing-box-linux-amd64
         run: |
           set -euo pipefail
-          SINGBOX_VER="1.13.13"
+          SINGBOX_VER="1.13.14"
           curl -sSL -o /tmp/singbox.tar.gz \
             "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
           tar -xzf /tmp/singbox.tar.gz -C /tmp
