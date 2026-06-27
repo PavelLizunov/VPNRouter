@@ -85,6 +85,26 @@ public sealed class ServerHealthProbe
             .Select(r => r.Server)
             .FirstOrDefault();
 
+    /// <summary>
+    /// G1 connect decision: KEEP the currently-active server if it's alive
+    /// (respect an explicit pick), otherwise the fastest LIVE server, otherwise
+    /// null — all dead, so the caller surfaces an honest error instead of
+    /// connecting blind to a dead server. Pure / unit-tested.
+    /// </summary>
+    public static VlessServerEntry? PickForConnect(IEnumerable<ServerLiveness> results, string? activeName)
+    {
+        var list = results?.ToList();
+        if (list == null || list.Count == 0) return null;
+
+        if (!string.IsNullOrEmpty(activeName))
+        {
+            var active = list.FirstOrDefault(r =>
+                r.Alive && string.Equals(r.Server.Name, activeName, StringComparison.Ordinal));
+            if (active != null) return active.Server; // explicit pick is alive — keep it
+        }
+        return PickBest(list); // else fastest live (or null if none alive)
+    }
+
     /// <summary>The alive servers, fastest-first — for building a live-only
     /// urltest pool (G1: pool excludes dead nodes).</summary>
     public static List<VlessServerEntry> AliveRanked(IEnumerable<ServerLiveness> results)

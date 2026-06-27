@@ -495,6 +495,54 @@ public partial class MainWindowViewModel
             }
         }
 
+        // G1 Smart Connect: probe the subscription pool and land on a LIVE
+        // server before bringing the tunnel up — never connect blind to a dead
+        // one (the Latvia-HY2 i/o-timeout that caused "часто теряется"). Keeps
+        // the active pick if it's alive; else fastest live; else honest error.
+        // Inlined (no new VM member) so the characterization surface is unchanged;
+        // the pick decision is unit-tested in ServerHealthProbe.PickForConnect.
+        if (IsSubscribeMode)
+        {
+            var candidates = (_settings.App.Subscriptions
+                    ?? new System.Collections.Generic.List<SubscriptionEntry>())
+                .Where(s => s.Enabled)
+                .SelectMany(s => s.Servers ?? Enumerable.Empty<VlessServerEntry>())
+                .ToList();
+
+            if (candidates.Count > 0)
+            {
+                StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
+                try
+                {
+                    var results = await new ServerHealthProbe(_logger)
+                        .ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                    var chosen = ServerHealthProbe.PickForConnect(
+                        results, _settings.App.ActiveSubscriptionServer);
+
+                    if (chosen == null)
+                    {
+                        SmpErrorText = IsRussian
+                            ? "Все серверы недоступны — проверь подписку или интернет."
+                            : "All servers are unreachable — check your subscription or internet.";
+                        return;
+                    }
+
+                    if (!string.Equals(chosen.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal))
+                    {
+                        _logger.Information(
+                            "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
+                        _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
+                        SaveSettings();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Probe failure must never block connect — fall through.
+                    _logger.Warning(ex, "[SmartConnect] probe failed — connecting without pre-flight");
+                }
+            }
+        }
+
         // Hand off to the shared Connect path — it already handles mode
         // dispatch, TUN conflicts, service-managed warnings, etc.
         await ToggleConnectionAsync();

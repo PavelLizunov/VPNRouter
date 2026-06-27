@@ -145,6 +145,38 @@ public class ServerHealthProbeTests
         Assert.Equal(900, results.Single().LatencyMs);
     }
 
+    // ── PickForConnect (G1 connect decision) ─────────────────────────────────
+
+    [Fact]
+    public void PickForConnect_ActiveAlive_KeepsActive_EvenIfSlower()
+    {
+        var results = new[] { Live("DE", "1", true, 100), Live("IS", "2", true, 40) };
+        // Active = DE, which is alive (though slower) — respect the explicit pick.
+        Assert.Equal("DE", ServerHealthProbe.PickForConnect(results, "DE")!.Name);
+    }
+
+    [Fact]
+    public void PickForConnect_ActiveDead_SwitchesToFastestLive()
+    {
+        var results = new[] { Live("DE", "1", false, 0), Live("IS", "2", true, 40), Live("NL", "3", true, 200) };
+        Assert.Equal("IS", ServerHealthProbe.PickForConnect(results, "DE")!.Name);
+    }
+
+    [Fact]
+    public void PickForConnect_AllDead_ReturnsNull()
+    {
+        var results = new[] { Live("DE", "1", false, 0), Live("IS", "2", false, 0) };
+        Assert.Null(ServerHealthProbe.PickForConnect(results, "DE"));
+    }
+
+    [Fact]
+    public void PickForConnect_ActiveNotInPool_OrNoActive_PicksFastestLive()
+    {
+        var results = new[] { Live("DE", "1", true, 100), Live("IS", "2", true, 40) };
+        Assert.Equal("IS", ServerHealthProbe.PickForConnect(results, "GONE")!.Name);
+        Assert.Equal("IS", ServerHealthProbe.PickForConnect(results, null)!.Name);
+    }
+
     [Fact]
     public async Task ProbeAllAsync_ProbeThrows_TreatedAsDead_NotFatalToOthers()
     {
