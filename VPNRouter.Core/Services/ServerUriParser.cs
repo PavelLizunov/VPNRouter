@@ -107,8 +107,11 @@ public static class ServerUriParser
                     "This platform can't use dns-tunnel servers — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
             entry = ParseDnsTunnel(uri);
         }
+        else if (uri.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
+                 uri.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+            entry = ParseAmneziaWg(uri);
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel://. Got: {Truncate(uri, 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg://. Got: {Truncate(uri, 40)}");
 
         // v2.32.3 input gate (2026-05-17) — placeholder fingerprints can
         // surface in any protocol's server IP. Reject before the entry
@@ -183,7 +186,9 @@ public static class ServerUriParser
                line.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||
-               line.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase);
+               line.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("awg://",       StringComparison.OrdinalIgnoreCase);
     }
 
     // ─── DNS-tunnel (slipstream) ───────────────────────────────────────────
@@ -427,6 +432,59 @@ public static class ServerUriParser
         if (string.IsNullOrWhiteSpace(raw)) return 0;
         var digits = new string(raw.TrimStart().TakeWhile(char.IsDigit).ToArray());
         return int.TryParse(digits, out var v) && v > 0 ? v : 0;
+    }
+
+    // ─── AmneziaWG (AWG2) ────────────────────────────────────────────────────
+    //   awg://<peer_public_key>@<server>:<port>?private_key=..&address=10.13.13.2/32
+    //        &preshared_key=..&keepalive=25&jc=4&jmin=40&jmax=70&s1=86&s2=574
+    //        &h1=..&h2=..&h3=..&h4=..&i1=..#Name
+    // Requires a sing-box-lx (with_awg) client. The server side is native amneziawg-tools
+    // (sing-box-lx has no AWG inbound). h1-h4/i1-i5 are kept as raw strings (ranges/CPS).
+    private static VlessServerEntry ParseAmneziaWg(string uri)
+    {
+        var normalized = uri;
+        if (normalized.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+            normalized = "amneziawg://" + normalized.Substring("awg://".Length);
+        var fake = "https://" + normalized.Substring("amneziawg://".Length);
+        Uri parsed;
+        try { parsed = new Uri(fake); }
+        catch { throw new FormatException("Invalid amneziawg URI: cannot parse"); }
+
+        var peerPub = Uri.UnescapeDataString(parsed.UserInfo);
+        if (string.IsNullOrEmpty(peerPub))
+            throw new FormatException("Invalid amneziawg URI: peer public key missing (expected awg://<peer_public_key>@host:port)");
+        var server = parsed.Host;
+        if (string.IsNullOrEmpty(server))
+            throw new FormatException("Invalid amneziawg URI: host missing");
+        var port = parsed.Port > 0 ? parsed.Port : 51820;
+
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+        var addr = query["address"] ?? query["addr"] ?? string.Empty;
+
+        return new VlessServerEntry
+        {
+            Name = name.Length > 0 ? name : $"amneziawg-{server}-{port}",
+            Protocol = "amneziawg",
+            Server = server,
+            Port = port,
+            Awg = new AwgConfig
+            {
+                PeerPublicKey = peerPub,
+                PrivateKey    = query["private_key"] ?? query["pk"] ?? string.Empty,
+                Address       = addr.Length == 0 ? new List<string>()
+                                  : addr.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0).ToList(),
+                PresharedKey  = query["preshared_key"] ?? query["psk"] ?? string.Empty,
+                Keepalive     = ParseMbps(query["keepalive"] ?? query["ka"]),
+                Jc   = ParseMbps(query["jc"]),  Jmin = ParseMbps(query["jmin"]), Jmax = ParseMbps(query["jmax"]),
+                S1   = ParseMbps(query["s1"]),  S2   = ParseMbps(query["s2"]),
+                S3   = ParseMbps(query["s3"]),  S4   = ParseMbps(query["s4"]),
+                H1   = query["h1"] ?? string.Empty, H2 = query["h2"] ?? string.Empty,
+                H3   = query["h3"] ?? string.Empty, H4 = query["h4"] ?? string.Empty,
+                I1   = query["i1"] ?? string.Empty, I2 = query["i2"] ?? string.Empty, I3 = query["i3"] ?? string.Empty,
+                I4   = query["i4"] ?? string.Empty, I5 = query["i5"] ?? string.Empty,
+            },
+        };
     }
 
     // ─── TUIC v5 ───────────────────────────────────────────────────────────

@@ -87,6 +87,33 @@ public sealed class AmneziaWgEndpointTests
         Assert.Equal("proxy", cfg.Route.Final);
     }
 
+    [Fact]
+    public void Parse_AwgUri_PopulatesEntry()
+    {
+        var e = ServerUriParser.Parse(
+            "awg://PEERPUB@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32&keepalive=25" +
+            "&jc=4&jmin=40&jmax=70&s1=86&s2=574&h1=43613244-384550127#Helsinki");
+        Assert.Equal("amneziawg", e.Protocol);
+        Assert.Equal("1.2.3.4", e.Server);
+        Assert.Equal(51820, e.Port);
+        Assert.Equal("Helsinki", e.Name);
+        Assert.NotNull(e.Awg);
+        Assert.Equal("PEERPUB", e.Awg!.PeerPublicKey);
+        Assert.Equal("PRIV", e.Awg.PrivateKey);
+        Assert.Equal(new[] { "10.13.13.2/32" }, e.Awg.Address);
+        Assert.Equal(25, e.Awg.Keepalive);
+        Assert.Equal(4, e.Awg.Jc);
+        Assert.Equal(574, e.Awg.S2);
+        Assert.Equal("43613244-384550127", e.Awg.H1); // range kept as raw string
+    }
+
+    [Fact]
+    public void IsSupportedScheme_AcceptsAwg()
+    {
+        Assert.True(ServerUriParser.IsSupportedScheme("awg://x@1.2.3.4:51820"));
+        Assert.True(ServerUriParser.IsSupportedScheme("amneziawg://x@1.2.3.4:51820"));
+    }
+
     private static AppSettings AwgSettings() => new()
     {
         App = new AppConfig { LogLevel = "info", RoutingMode = "full" },
