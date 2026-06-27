@@ -157,6 +157,7 @@ public class YamlStaticContextRoundTripTests : IDisposable
                 RoutingAppsMode = "exclude",
                 BypassRussianTraffic = false,
                 BlockAds = true,
+                RouteGamesDirect = false,
                 StrictMode = true,
                 StrictDns = true,
                 ZapretEnabled = true,
@@ -307,6 +308,7 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal(original.App.RoutingAppsMode, roundTripped.App.RoutingAppsMode);
         Assert.Equal(original.App.BypassRussianTraffic, roundTripped.App.BypassRussianTraffic);
         Assert.Equal(original.App.BlockAds, roundTripped.App.BlockAds);
+        Assert.Equal(original.App.RouteGamesDirect, roundTripped.App.RouteGamesDirect);
         Assert.Equal(original.App.StrictMode, roundTripped.App.StrictMode);
         Assert.Equal(original.App.StrictDns, roundTripped.App.StrictDns);
         Assert.Equal(original.App.ZapretEnabled, roundTripped.App.ZapretEnabled);
@@ -458,6 +460,7 @@ app:
   active_custom_config: brat-pc
   bypass_russian_traffic: false
   block_ads: true
+  route_games_direct: false
   strict_mode: true
   autostart_vpn: true
   custom_configs:
@@ -550,6 +553,7 @@ update:
         Assert.Equal("brat-pc", settings.App.ActiveCustomConfig);
         Assert.False(settings.App.BypassRussianTraffic);
         Assert.True(settings.App.BlockAds);
+        Assert.False(settings.App.RouteGamesDirect);
         Assert.True(settings.App.StrictMode);
         Assert.True(settings.App.AutostartVpn);
         Assert.Equal("custom_first", settings.App.CustomRulesPriority);
@@ -596,7 +600,7 @@ update:
         Assert.Equal("Wire-TUN", settings.Tun.InterfaceName);
         Assert.Equal("10.0.0.1/24", settings.Tun.Ipv4Address);
         Assert.True(settings.Tun.Ipv6Enabled);
-        Assert.Equal(1500, settings.Tun.Mtu);
+        Assert.Equal(1280, settings.Tun.Mtu);
         Assert.False(settings.Tun.AutoRoute);
         Assert.True(settings.Tun.StrictRoute);
         Assert.Single(settings.Tun.RouteExcludeAddress);

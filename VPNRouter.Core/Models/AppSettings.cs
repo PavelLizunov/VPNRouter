@@ -36,8 +36,12 @@ public class AppSettings
     /// routes app DNS via VLESS:443 (DoH), so the firewall block is
     /// belt-and-suspenders defense-in-depth, not a baseline requirement.
     /// See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
+    ///
+    /// <para>v7 bump (2026-06-27, Roblox realtime UDP): clamps only the
+    /// known legacy <c>tun.mtu: 1500</c> value to 1280 for existing configs.
+    /// Other explicit MTU values are preserved.</para>
     /// </summary>
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;

@@ -158,13 +158,11 @@ public class HealthMonitorRecoveryGapTests
     }
 
     [Fact]
-    public void OnHealthTick_OriginalBranch_StillTriggersWhenVpnWasRunning()
+    public void OnHealthTick_OriginalBranch_RestartsAfterTwoConsecutiveFailures()
     {
-        // Regression check that the original "sing-box stuck but alive
-        // → restart" path (`!isHealthy && _vpnWasRunning`) still fires.
-        // Different from recovery branch — this matches when sing-box
-        // is silently unhealthy (e.g. Clash API hung) without an
-        // OnSingBoxCrashed event having reset _vpnWasRunning yet.
+        // Realtime UDP games drop on any TUN bounce. A single failed health
+        // probe can be transient, so the original "sing-box stuck but alive"
+        // path waits for two consecutive probe failures before restarting.
         var hm = BuildHm();
         var attempts = 0;
         hm.RestartAttempted += (_, n) => attempts = n;
@@ -173,6 +171,9 @@ public class HealthMonitorRecoveryGapTests
         {
             hm.Start(new Profile { Name = "test" }, new AppSettings());
             SetField(hm, "_vpnWasRunning", true);
+
+            InvokeOnHealthTick(hm);
+            Assert.Equal(0, attempts);
 
             InvokeOnHealthTick(hm);
 

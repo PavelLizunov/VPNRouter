@@ -41,6 +41,7 @@ public static class SettingsMigrator
                 3 => Migrate_3_to_4(settings, logger),
                 4 => Migrate_4_to_5(settings, logger),
                 5 => Migrate_5_to_6(settings, logger),
+                6 => Migrate_6_to_7(settings, logger),
                 _ => throw new InvalidOperationException(
                     $"No SettingsMigrator step defined for schema v{v} -> v{v + 1}. " +
                     $"This means the config file schema is newer than the running app — " +
@@ -653,6 +654,32 @@ public static class SettingsMigrator
                 "[SettingsMigrator] v5->v6: lowered TUN MTU 9000 -> 1280 (jumbo MTU broke " +
                 "HTTP/2 over TCP-only proxies -> browser ERR_CONNECTION_CLOSED on YouTube; " +
                 "1280 = IPv6 minimum, traverses any path)");
+        }
+        return s;
+    }
+
+    /// <summary>
+    /// v2.44.4 (2026-06-27): lower the legacy 1500 AND the stuck jumbo 9000 TUN
+    /// MTU that older configs can still carry. 1500 is fine on a bare NIC but too
+    /// optimistic once VLESS/Reality/Hysteria2/TUIC encapsulation is added; large
+    /// UDP packets can exceed the real path MTU and disappear. 9000 is the pre-v2.42
+    /// jumbo default — its 9000->1280 fix lives in the v5->v6 step, so a config that
+    /// already passed v5->v6 on an older build never re-ran it and is STUCK at 9000
+    /// (diag 20260627-203104: tester on schema v6 + mtu 9000 -> PMTUD blackhole ->
+    /// stalled DoH/joins -> Roblox Error 277). Both known-bad defaults are rewritten;
+    /// deliberate custom values such as 1400 stay. (ConfigGenerator.NormalizeTunMtu
+    /// is the belt-and-suspenders clamp at generation time.)
+    /// </summary>
+    private static AppSettings Migrate_6_to_7(AppSettings s, ILogger? logger)
+    {
+        if (s.Tun != null && (s.Tun.Mtu == 1500 || s.Tun.Mtu == 9000))
+        {
+            var old = s.Tun.Mtu;
+            s.Tun.Mtu = 1280;
+            logger?.Information(
+                "[SettingsMigrator] v6->v7: lowered legacy/stuck TUN MTU {Old} -> 1280 " +
+                "(jumbo/large MTU blackholes PMTUD on the encapsulated path -> stalled " +
+                "DoH/joins -> Roblox 277; deliberate custom values are preserved)", old);
         }
         return s;
     }

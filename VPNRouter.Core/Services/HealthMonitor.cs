@@ -54,6 +54,8 @@ public class HealthMonitor : IDisposable
     private int _strictDnsHealthyStreak;
     private const string StrictDnsProbeUrl = "http://www.gstatic.com/generate_204";
     private const int StrictDnsProbeTimeoutMs = 3000;
+    private const int HealthProbeRestartFailThreshold = 2;
+    private int _unhealthyHealthProbeStreak;
     private const int StrictDnsFailThreshold = 2;     // consecutive failed probes → fail open
     private const int StrictDnsRecoverThreshold = 2;  // consecutive healthy probes → re-arm
 
@@ -255,6 +257,7 @@ public class HealthMonitor : IDisposable
         _activeProfile = profile;
         _appSettings = appSettings;
         _restartAttempts = 0;
+        _unhealthyHealthProbeStreak = 0;
         _failoverRequested = false; // G4: fresh session, re-arm failover
         _isStopping = false;
         _shouldBeRunning = true;   // v2.31.5-r2: arms the OnHealthTick recovery path
@@ -286,6 +289,7 @@ public class HealthMonitor : IDisposable
     {
         _isStopping = true;
         _shouldBeRunning = false;  // v2.31.5-r2: disarm OnHealthTick recovery
+        _unhealthyHealthProbeStreak = 0;
 
         // v2.40.0 Phase C (C3-1): clear the r10 #3 deferred-kill-switch-lift
         // state so it can't leak across a Stop()/Start() (reconnect). Without
@@ -439,6 +443,8 @@ public class HealthMonitor : IDisposable
             if (!isHealthy && _vpnWasRunning && !_isStopping)
             {
                 _logger.Warning("[HealthMonitor] Health check failed — sing-box is not healthy");
+                if (!ShouldRestartAfterHealthProbeFailure())
+                    return;
                 AttemptRestart();
             }
             else if (!isHealthy && _shouldBeRunning && !_isStopping)
@@ -465,6 +471,7 @@ public class HealthMonitor : IDisposable
             }
             else if (isHealthy && !_vpnWasRunning)
             {
+                _unhealthyHealthProbeStreak = 0;
                 _vpnWasRunning = true;
                 // v2.31.5-r2: a successful health observation after a crash
                 // gap means recovery worked. Reset the attempt counter so
@@ -475,6 +482,10 @@ public class HealthMonitor : IDisposable
                 _failoverRequested = false; // G4: re-arm failover for a future degradation
                 _logger.Information("[HealthMonitor] VPN is up");
                 VpnStarted?.Invoke(this, EventArgs.Empty);
+            }
+            else if (isHealthy)
+            {
+                _unhealthyHealthProbeStreak = 0;
             }
 
             // v2.42.0: DnsLeakLockdown "Auto" (fail-open) reconcile. The
@@ -652,6 +663,7 @@ public class HealthMonitor : IDisposable
         if (_isStopping)
             return; // graceful shutdown in progress — ignore
 
+        _unhealthyHealthProbeStreak = 0;
         _vpnWasRunning = false;
         VpnStopped?.Invoke(this, EventArgs.Empty);
 
@@ -675,6 +687,21 @@ public class HealthMonitor : IDisposable
 
         if (_settings.RestartOnFailure)
             AttemptRestart();
+    }
+
+    private bool ShouldRestartAfterHealthProbeFailure()
+    {
+        _unhealthyHealthProbeStreak++;
+        if (_unhealthyHealthProbeStreak < HealthProbeRestartFailThreshold)
+        {
+            _logger.Warning(
+                "[HealthMonitor] Health failure {Count}/{Threshold} - delaying restart to avoid dropping active realtime UDP sessions on a transient probe blip",
+                _unhealthyHealthProbeStreak,
+                HealthProbeRestartFailThreshold);
+            return false;
+        }
+
+        return true;
     }
 
     private void AttemptRestart()

@@ -23,9 +23,9 @@ public class SettingsMigratorMtuTests
     }
 
     [Fact]
-    public void CurrentSchemaVersion_Is6()
+    public void CurrentSchemaVersion_Is7()
     {
-        Assert.Equal(6, AppSettings.CurrentSchemaVersion);
+        Assert.Equal(7, AppSettings.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -62,5 +62,41 @@ public class SettingsMigratorMtuTests
         var r = SettingsMigrator.Migrate(s, 5, 6);
 
         Assert.Equal(1280, r.Tun.Mtu);
+    }
+
+    [Fact]
+    public void Migrate_6_to_7_LowersLegacy1500Mtu()
+    {
+        var s = new AppSettings { SchemaVersion = 6 };
+        s.Tun.Mtu = 1500;
+
+        var r = SettingsMigrator.Migrate(s, 6, 7);
+
+        Assert.Equal(1280, r.Tun.Mtu);
+        Assert.Equal(7, r.SchemaVersion);
+    }
+
+    [Fact]
+    public void Migrate_6_to_7_KeepsCustomMtu()
+    {
+        var s = new AppSettings { SchemaVersion = 6 };
+        s.Tun.Mtu = 1400;
+
+        var r = SettingsMigrator.Migrate(s, 6, 7);
+
+        Assert.Equal(1400, r.Tun.Mtu);
+        Assert.Equal(7, r.SchemaVersion);
+    }
+
+    [Fact]
+    public void Migrate_5_to_7_LowersLegacy1500Mtu()
+    {
+        var s = new AppSettings { SchemaVersion = 5 };
+        s.Tun.Mtu = 1500;
+
+        var r = SettingsMigrator.Migrate(s, 5, 7);
+
+        Assert.Equal(1280, r.Tun.Mtu);
+        Assert.Equal(7, r.SchemaVersion);
     }
 }

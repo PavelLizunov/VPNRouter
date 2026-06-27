@@ -171,6 +171,7 @@ public class ConfigGeneratorExcludeModeTests
             mode: "exclude",
             exclude: new List<string> { "Steam.exe" });
         settings.App.RoutingMode = "full";
+        settings.App.RouteGamesDirect = false;
 
         var config = ConfigGenerator.Generate(EmptyProfile(),
             resolvedProcessNames: System.Array.Empty<string>(), settings);

@@ -16,6 +16,28 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class ConfigGenerator
 {
+    private static readonly string[] RealtimeUdpGameProcessNames =
+    {
+        "RobloxPlayerBeta.exe",
+        "RobloxPlayerLauncher.exe",
+    };
+
+    // v2.44.4 (2026-06-27): hard ceiling on the TUN MTU at generation time.
+    // A jumbo 9000 (the pre-v2.42 default) can get STUCK in a persisted config:
+    // the 9000->1280 fix lives in the v5->v6 migration, so a config that already
+    // passed v5->v6 on an older build never re-runs it, and Migrate_6_to_7 only
+    // caught 1500 — so the value survives. A 9000 TUN MTU over a ~1500 proxied
+    // path blackholes PMTUD: oversized DoH/HTTPS/HTTP2 segments silently vanish,
+    // which stalls Roblox DNS + joins -> Error 277 (diag 20260627-203104: tester
+    // on schema v6 + mtu 9000 + 1023 DNS exchanges >=10s; same subscription is
+    // fine for users on the 1280 default). Clamp here so a stuck persisted value
+    // can never reach sing-box, independent of migration state. 1280 = IPv6
+    // minimum, traverses any VLESS/Reality/Hysteria2/TUIC encapsulation.
+    private const int MaxSafeTunMtu = 1500;
+    private const int SafeTunMtuFallback = 1280;
+    internal static int NormalizeTunMtu(int mtu)
+        => (mtu <= 0 || mtu > MaxSafeTunMtu) ? SafeTunMtuFallback : mtu;
+
     public static SingBoxConfig Generate(
         Profile profile,
         IEnumerable<string> resolvedProcessNames,
@@ -106,7 +128,7 @@ public static class ConfigGenerator
             Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode, strictDnsOverride),
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, settings.App.RouteGamesDirect),
             Experimental = new SingBoxExperimental()
         };
 
@@ -123,8 +145,9 @@ public static class ConfigGenerator
         //   4. BlockAds rule_set → reject (toggle, ApplyAdBlock)
         //   5. BypassRussianTraffic geosite-ru → direct (toggle, ApplyGeoBypass)
         //   6. CustomRules in user-declared order (this call)
-        //   7. process_name → proxy (auto, BuildRoute)
-        //   8. final = direct (split) / proxy (full)
+        //   7. full-tunnel realtime game process_name → direct (toggle, BuildRoute)
+        //   8. process_name → proxy (auto, BuildRoute)
+        //   9. final = direct (split) / proxy (full)
         //
         // Toggles (#4, #5) inserted AFTER this CustomRules block in code
         // — but each Apply* function inserts at the same "after sniff/
@@ -1075,7 +1098,7 @@ public static class ConfigGenerator
                 Tag                     = "tun-in",
                 InterfaceName           = OperatingSystem.IsMacOS() ? "utun99" : settings.Tun.InterfaceName,
                 Address                 = new List<string> { settings.Tun.Ipv4Address },
-                Mtu                     = settings.Tun.Mtu,
+                Mtu                     = NormalizeTunMtu(settings.Tun.Mtu),
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors
                 RouteExcludeAddress     = routeExcludes.Count > 0
@@ -1663,7 +1686,7 @@ public static class ConfigGenerator
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
         bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
-        List<string>? dnsTunnelResolverIps = null)
+        List<string>? dnsTunnelResolverIps = null, bool routeGamesDirect = true)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -1716,6 +1739,16 @@ public static class ConfigGenerator
             Action      = "route",
             Outbound    = "direct"
         });
+
+        if (routeGamesDirect && isFullTunnel)
+        {
+            rules.Add(new RouteRule
+            {
+                ProcessName = RealtimeUdpGameProcessNames.ToList(),
+                Action      = "route",
+                Outbound    = "direct"
+            });
+        }
 
         // YouTube / QUIC fix: when the proxy is TCP-only (VLESS+Reality+Vision
         // with no UDP-capable TUIC/Hysteria2 sibling), QUIC (HTTP/3 over UDP/443)
