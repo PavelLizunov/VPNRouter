@@ -96,22 +96,39 @@ $allocNew = 'if controlSize > 0 { msgs[i].OOB = make([]byte, controlSize) }'
 # non-nil empty OOB reaching WriteMsgUDP regardless of the pool state).
 $sendOld = '_, _, err = conn.WriteMsgUDP(msg.Buffers[0], msg.OOB, msg.Addr.(*net.UDPAddr))'
 $sendNew = 'oob := msg.OOB; if len(oob) == 0 { oob = nil }; _, _, err = conn.WriteMsgUDP(msg.Buffers[0], oob, msg.Addr.(*net.UDPAddr))'
+# (3) AWG H4 transport-header clobber. The Leadaxe fork kept sagernet's
+# Cloudflare-WARP "reserved bytes" feature: receiveIP UNCONDITIONALLY zeroes
+# bytes [1:4] of every inbound datagram BEFORE classification. AmneziaWG
+# repurposes those bytes as the uint32 transport magic header H4 (at offset s4;
+# s4=0 here so H4 sits at byte 0). So a received transport packet H4=1028816851
+# (LE d3 7f 52 3d) becomes d3 00 00 00 = 211, fails headers.transport.Validate,
+# and is logged "received message with unknown type" -> no data flows, the
+# session re-handshakes (windows-brat r5 live test: handshake OK, keepaliveRecv=0,
+# 8x unknown type). The SEND side is already gated `if loaded` (reservedForEndpoint
+# is never set for AWG), so only the receive clear corrupts. Fix: gate the receive
+# clear the same way -- only zero reserved bytes when a reserved value is actually
+# configured for that peer (WARP), which is NEVER for AWG. Canonical
+# amnezia-vpn/amneziawg-go has no such clear. Matches the diagnosis workflow
+# (wf_5a9efb1a) byte-math + ref-bind diff.
+$clearOld = 'common.ClearArray(bufs[i][1:4])'
+$clearNew = 'if _, resvLoaded := s.reservedForEndpoint[M.AddrPortFromNet(msg.Addr)]; resvLoaded { common.ClearArray(bufs[i][1:4]) }'
 
 foreach ($pair in @(
     @{ o = $allocOld; n = $allocNew; name = 'pooled-OOB allocation (send+recv root fix)' },
-    @{ o = $sendOld;  n = $sendNew;  name = 'WriteMsgUDP send site' })) {
+    @{ o = $sendOld;  n = $sendNew;  name = 'WriteMsgUDP send site' },
+    @{ o = $clearOld; n = $clearNew; name = 'reserved-byte receive clear (AWG H4 clobber)' })) {
     $cnt = ([regex]::Matches($bindSrc, [regex]::Escape($pair.o))).Count
     if ($cnt -ne 1) {
-        throw "FATAL: expected exactly 1 '$($pair.name)' in conn/bind_std.go, found $cnt. The fork source changed -- re-vet the golang/go#77875 (WSAEFAULT) patch before building."
+        throw "FATAL: expected exactly 1 '$($pair.name)' in conn/bind_std.go, found $cnt. The fork source changed -- re-vet the AWG-on-Windows patches (golang/go#77875 + reserved-byte H4 clobber) before building."
     }
     $bindSrc = $bindSrc.Replace($pair.o, $pair.n)
 }
 [System.IO.File]::WriteAllText($bindStd, $bindSrc, (New-Object System.Text.UTF8Encoding $false))
 $bindChk = Get-Content -Raw $bindStd
-if (($bindChk -notmatch [regex]::Escape($allocNew)) -or ($bindChk -notmatch [regex]::Escape($sendNew))) {
-    throw "FATAL: conn/bind_std.go WSAEFAULT patch did not apply."
+if (($bindChk -notmatch [regex]::Escape($allocNew)) -or ($bindChk -notmatch [regex]::Escape($sendNew)) -or ($bindChk -notmatch [regex]::Escape($clearNew))) {
+    throw "FATAL: conn/bind_std.go AWG-on-Windows patch did not apply."
 }
-Write-Host "Patched: empty-OOB nil-guard on send (WriteMsgUDP) + receive (ReadMsgUDP) (golang/go#77875)." -ForegroundColor Green
+Write-Host "Patched: empty-OOB nil-guard send+recv (golang/go#77875) + AWG H4 reserved-byte receive-clear gate." -ForegroundColor Green
 
 Write-Host "[3/4] go build -tags $TAGS" -ForegroundColor Yellow
 $ldflags = "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=$VER"
