@@ -5126,9 +5126,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
+#if PLATFORM_WINDOWS
     // M1 (v2.45.0): named TgProxy stats handler so it can be detached in Dispose().
+    // TgProxy is Windows-only, so the handler is gated too (keeps the Linux
+    // member-set — and its characterization hash — unchanged).
     private void OnTgProxyStats(string stats)
         => Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
+#endif
 
     private void StartZapretProbeElapsedTimer()
     {
@@ -7169,7 +7173,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // events / probe timer / toast continuations below would otherwise keep
         // this disposed VM rooted and post UI mutations after disposal (M1–M4).
 
+#if PLATFORM_WINDOWS
         // 6. M1: detach the TgProxy stats handler + dispose the manager.
+        // (_tgProxy / _zapret are Windows-only fields — guard the whole block.)
         try
         {
             if (_tgProxy != null)
@@ -7192,6 +7198,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _zapret cleanup failed"); }
+#endif
 
         // 8. M3: stop the Zapret probe-elapsed timer (its callback captures the VM).
         try { StopZapretProbeElapsedTimer(); }
