@@ -119,9 +119,19 @@ public partial class MainWindowViewModel
             var vpnRunning = RuntimeStatusDetector.IsVpnRunning();
             var zapretRunning = RuntimeStatusDetector.IsZapretRunning();
 
-            var tgPort = _settings?.App?.TgProxyPort ?? 0;
-            if (tgPort <= 0) tgPort = 1443;
-            var tgProxyRunning = RuntimeStatusDetector.IsTgProxyRunning(tgPort);
+            // F1 (v2.45.0): only probe the TgProxy listener when TgProxy is
+            // actually configured. IsTgProxyRunning calls GetActiveTcpListeners
+            // (a full OS TCP-table snapshot + IPEndPoint[] alloc); it previously
+            // ran on EVERY 2s tick even for users who never used TgProxy, because
+            // a connected VPN keeps the poll hot and tgPort defaulted to 1443.
+            // No secret => TgProxy can't be running => skip the probe entirely.
+            var tgProxyRunning = false;
+            if (!string.IsNullOrEmpty(TgProxySecret))
+            {
+                var tgPort = _settings?.App?.TgProxyPort ?? 0;
+                if (tgPort <= 0) tgPort = 1443;
+                tgProxyRunning = RuntimeStatusDetector.IsTgProxyRunning(tgPort);
+            }
 
             if (vpnRunning || zapretRunning || tgProxyRunning)
             {
