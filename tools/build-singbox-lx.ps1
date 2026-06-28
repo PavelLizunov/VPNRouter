@@ -60,6 +60,37 @@ if (Test-Path $wg) { Remove-Item -Recurse -Force $wg }
 Invoke-Git @('clone', '--quiet', '-b', $WG_BRANCH, $WG_REPO, $wg)
 Invoke-Git @('-C', $wg, 'checkout', '--quiet', $WG_COMMIT)
 
+# ── Patch: Go 1.26 Windows WSASendMsg regression (golang/go#77875) ──
+# On Windows the wireguard-go StdNetBind send loop calls net.UDPConn.WriteMsgUDP
+# with a NON-NIL, zero-length OOB (conn/control_default.go controlSize==0 ->
+# msgsPool allocates make([]byte,0)). Go 1.26's internal/poll newWSAMsg lost the
+# historic empty-OOB nil guard, so WSAMSG.Control.Buf becomes a non-nil zerobase
+# pointer with Len==0 and WSASendMsg rejects the call with WSAEFAULT
+# ("The system detected an invalid pointer address ..."). Every AmneziaWG
+# handshake-initiation send then fails and the tunnel never establishes on
+# Windows (diag 2026-06-28: 0 handshakes, repeated wsasendmsg WSAEFAULT every 5s).
+# sing-box-lx uses conn.NewStdNetBind directly for a detour-less AWG endpoint
+# (transport/wireguard/endpoint.go), so this path is ALWAYS hit. Fix per
+# golang/go#77875: pass nil for an empty OOB so Control.Buf is NULL. Verified
+# end-to-end (handshake send no longer WSAEFAULTs). Remove once the bundled Go
+# toolchain carries the upstream fix (>=1.26.2 / 1.27) or the fork guards it.
+Write-Host "[2.5/4] Patch conn/bind_std.go (golang/go#77875 WSAEFAULT)" -ForegroundColor Yellow
+$bindStd = Join-Path $wg 'conn\bind_std.go'
+if (-not (Test-Path $bindStd)) { throw "FATAL: $bindStd not found (fork layout changed); re-vet the WSAEFAULT patch." }
+$bindSrc = Get-Content -Raw $bindStd
+$awgSendOld = '_, _, err = conn.WriteMsgUDP(msg.Buffers[0], msg.OOB, msg.Addr.(*net.UDPAddr))'
+$awgSendNew = 'oob := msg.OOB; if len(oob) == 0 { oob = nil }; _, _, err = conn.WriteMsgUDP(msg.Buffers[0], oob, msg.Addr.(*net.UDPAddr))'
+$hits = ([regex]::Matches($bindSrc, [regex]::Escape($awgSendOld))).Count
+if ($hits -ne 1) {
+    throw "FATAL: expected exactly 1 WriteMsgUDP send site in conn/bind_std.go, found $hits. The fork source changed -- re-vet the golang/go#77875 (WSAEFAULT) patch before building."
+}
+$bindSrc = $bindSrc.Replace($awgSendOld, $awgSendNew)
+[System.IO.File]::WriteAllText($bindStd, $bindSrc, (New-Object System.Text.UTF8Encoding $false))
+if (((Get-Content -Raw $bindStd) -notmatch [regex]::Escape($awgSendNew))) {
+    throw "FATAL: conn/bind_std.go WSAEFAULT patch did not apply."
+}
+Write-Host "Patched: WSASendMsg empty-OOB nil-guard applied (golang/go#77875)." -ForegroundColor Green
+
 Write-Host "[3/4] go build -tags $TAGS" -ForegroundColor Yellow
 $ldflags = "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=$VER"
 Push-Location $src
@@ -105,5 +136,45 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "FATAL: sing-box-lx rejected a minimal AWG endpoint config (exit $LASTEXITCODE) -- with_awg not functional." }
     Write-Host "Verified: with_awg + with_xhttp present; AWG endpoint config accepted." -ForegroundColor Green
 } finally { Remove-Item -Force $awgProbe -ErrorAction SilentlyContinue }
+
+# Runtime handshake-send smoke — catches the golang/go#77875 WSAEFAULT regression
+# that `check` CANNOT (check is static; it never exercises the Windows UDP send
+# path). This actually RUNS the AWG endpoint against a black-hole peer for a few
+# seconds and asserts the handshake initiation SENDS. Pre-patch (or built on an
+# affected Go without the bind_std.go fix) the log carries
+# "failed to send handshake initiation: ... wsasendmsg ... invalid pointer
+# address" and the tunnel can never establish on Windows (the bug that silently
+# broke v2.45.0-r1..r3). Post-patch it logs "sending handshake initiation" +
+# "Handshake did not complete after 5 seconds" (send OK, black-hole peer mute).
+Write-Host "[4.5/4] Runtime handshake-send smoke (golang/go#77875)" -ForegroundColor Yellow
+$hsLog = Join-Path ([System.IO.Path]::GetTempPath()) "awg-hssmoke-$PID.log"
+$hsCfg = Join-Path ([System.IO.Path]::GetTempPath()) "awg-hssmoke-$PID.json"
+$hsLogFwd = $hsLog.Replace('\', '/')
+$hsJson = @"
+{ "log": { "level": "debug", "output": "$hsLogFwd" },
+  "inbounds": [ { "type": "socks", "listen": "127.0.0.1", "listen_port": 21766 } ],
+  "endpoints": [ { "type":"wireguard","tag":"proxy","system":false,"mtu":1280,"address":["10.66.0.2/32"],
+    "private_key":"aGVsbG8taGVsbG8taGVsbG8taGVsbG8taGVsbG8tMDA=","jc":4,"jmin":40,"jmax":70,"s1":50,"s2":50,
+    "peers":[{"address":"192.0.2.1","port":51820,"public_key":"aGVsbG8taGVsbG8taGVsbG8taGVsbG8taGVsbG8tMDA=","allowed_ips":["0.0.0.0/0"],"persistent_keepalive_interval":25}] } ],
+  "outbounds": [ { "type":"direct","tag":"direct" } ],
+  "route": { "final":"proxy" } }
+"@
+[System.IO.File]::WriteAllText($hsCfg, $hsJson, (New-Object System.Text.UTF8Encoding $false))
+$hsProc = Start-Process -FilePath $OutputPath -ArgumentList @('run', '-c', $hsCfg) -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+try { Invoke-WebRequest -Uri 'http://192.0.2.9/' -Proxy 'socks5://127.0.0.1:21766' -TimeoutSec 2 -UseBasicParsing | Out-Null } catch { }
+Start-Sleep -Seconds 7
+try { $hsProc.Kill() } catch { }
+Start-Sleep -Milliseconds 500
+$hsOut = if (Test-Path $hsLog) { Get-Content $hsLog -Raw } else { '' }
+Remove-Item -Force $hsCfg, $hsLog -ErrorAction SilentlyContinue
+if ($hsOut -match 'wsasendmsg') {
+    throw "FATAL: AWG handshake send hit WSASendMsg WSAEFAULT -- the golang/go#77875 bind_std.go patch is NOT effective. Do NOT bundle this binary (this is the bug that broke AWG on Windows in v2.45.0-r1..r3)."
+}
+if ($hsOut -match 'andshake did not complete' -or $hsOut -match 'ending handshake initiation') {
+    Write-Host "Verified: AWG handshake initiation SENDS without WSAEFAULT (send-path patch effective)." -ForegroundColor Green
+} else {
+    Write-Host "WARN: handshake-send smoke saw no WSAEFAULT, but also no send attempt logged -- inspect manually before trusting." -ForegroundColor Yellow
+}
 Write-Host "Built: $OutputPath" -ForegroundColor Green
 Write-Host "Bundle it:  powershell -File build.ps1 -Version <X.Y.Z-rN> -SingBoxPath `"$OutputPath`" -Upload" -ForegroundColor Cyan
