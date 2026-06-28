@@ -32,7 +32,7 @@ $LX_COMMIT = 'c7a2592e750406ade9ebaae1d0fdb7482fc0773e'
 $WG_REPO   = 'https://github.com/Leadaxe/wireguard-go-awg2-lx'
 $WG_BRANCH = 'lx'
 $WG_COMMIT = '0c0c10b5d3236796bd3832a6813223d6dc7d0bb1'
-# Canonical lx tag set (see Makefile.lx / SPECS/004) — feature tags + our two downstream.
+# Canonical lx tag set (see Makefile.lx / SPECS/004) -- feature tags + our two downstream.
 $TAGS = 'with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg'
 $VER  = '1.13.13-lx-awg'
 
@@ -75,7 +75,7 @@ Copy-Item (Join-Path $src 'sing-box.exe') $OutputPath -Force
 Write-Host "[4/4] Verify" -ForegroundColor Yellow
 # The version STRING is forged via -ldflags -X (line above), so it proves
 # nothing about the build. The "Tags:" line is what Go derives from the REAL
-# build tags and is NOT forgeable — assert with_awg + with_xhttp are actually
+# build tags and is NOT forgeable -- assert with_awg + with_xhttp are actually
 # compiled in. Go silently ignores unknown -tags, so without this a dropped tag
 # / unresolved wireguard-go replace yields a forged-but-feature-less binary that
 # ships green and then FATALs every AWG/xhttp config at runtime.
@@ -91,7 +91,7 @@ foreach ($needed in @('with_awg', 'with_xhttp')) {
 }
 # Belt-and-suspenders: a feature-less binary also FATALs `check` on an AWG config.
 # Include AWG-only fields (jc/jmin/jmax) so `check` exercises with_awg, not just the
-# base wireguard endpoint. Write UTF-8 WITHOUT BOM — PS5.1 `Set-Content -Encoding utf8`
+# base wireguard endpoint. Write UTF-8 WITHOUT BOM -- PS5.1 `Set-Content -Encoding utf8`
 # prepends a BOM that some JSON loaders reject, false-failing a good binary.
 $awgProbe = Join-Path ([System.IO.Path]::GetTempPath()) "awg-probe-$PID.json"
 $awgProbeJson = @'
@@ -102,7 +102,7 @@ $awgProbeJson = @'
 [System.IO.File]::WriteAllText($awgProbe, $awgProbeJson, (New-Object System.Text.UTF8Encoding $false))
 try {
     & $OutputPath check -c $awgProbe 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "FATAL: sing-box-lx rejected a minimal AWG endpoint config (exit $LASTEXITCODE) — with_awg not functional." }
+    if ($LASTEXITCODE -ne 0) { throw "FATAL: sing-box-lx rejected a minimal AWG endpoint config (exit $LASTEXITCODE) -- with_awg not functional." }
     Write-Host "Verified: with_awg + with_xhttp present; AWG endpoint config accepted." -ForegroundColor Green
 } finally { Remove-Item -Force $awgProbe -ErrorAction SilentlyContinue }
 Write-Host "Built: $OutputPath" -ForegroundColor Green
