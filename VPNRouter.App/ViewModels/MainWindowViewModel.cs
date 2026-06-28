@@ -5126,6 +5126,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
+    // M1 (v2.45.0): named TgProxy stats handler so it can be detached in Dispose().
+    private void OnTgProxyStats(string stats)
+        => Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
+
     private void StartZapretProbeElapsedTimer()
     {
         _zapretProbeStartTime = DateTime.UtcNow;
@@ -5133,6 +5137,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _zapretProbeElapsedTimer?.Dispose();
         _zapretProbeElapsedTimer = new System.Threading.Timer(_ =>
         {
+            if (_disposed) return; // M3 (v2.45.0): a tick after Dispose() is a no-op
             try
             {
                 var elapsed = (int)(DateTime.UtcNow - _zapretProbeStartTime).TotalSeconds;
@@ -6181,9 +6186,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 "[VM] ToggleTgProxyAsync: secret configured (len {SecretLen}), port {Port}, calling TgProxyManager.Start",
                 TgProxySecret.Length, TgProxyPort);
 
-            _tgProxy ??= new TgProxyManager(_logger);
-            _tgProxy.StatsUpdated += stats =>
-                Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
+            if (_tgProxy == null)
+            {
+                _tgProxy = new TgProxyManager(_logger);
+                // M1 (v2.45.0): subscribe ONCE per manager lifetime via a named
+                // handler. The old `+= lambda` ran on EVERY toggle start with no
+                // matching `-=`, so handlers accumulated (duplicate UI updates) and
+                // rooted the VM; Dispose() now detaches it + disposes the manager.
+                _tgProxy.StatsUpdated += OnTgProxyStats;
+            }
             _tgProxy.Start(TgProxyPort, TgProxySecret);
 
             // v2.36 (MVP one-button task C): pre-flight scheme check
@@ -7153,6 +7164,52 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _statsApi = null;
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _statsApi cleanup failed"); }
+
+        // The X-close path calls Dispose() directly (not Quit()), so the manager
+        // events / probe timer / toast continuations below would otherwise keep
+        // this disposed VM rooted and post UI mutations after disposal (M1–M4).
+
+        // 6. M1: detach the TgProxy stats handler + dispose the manager.
+        try
+        {
+            if (_tgProxy != null)
+            {
+                _tgProxy.StatsUpdated -= OnTgProxyStats;
+                _tgProxy.Dispose();
+                _tgProxy = null;
+            }
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _tgProxy cleanup failed"); }
+
+        // 7. M2: detach the Zapret immediate-exit handler + dispose the manager.
+        try
+        {
+            if (_zapret != null)
+            {
+                _zapret.ImmediateExitDetected -= OnZapretImmediateExit;
+                _zapret.Dispose();
+                _zapret = null;
+            }
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _zapret cleanup failed"); }
+
+        // 8. M3: stop the Zapret probe-elapsed timer (its callback captures the VM).
+        try { StopZapretProbeElapsedTimer(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: StopZapretProbeElapsedTimer failed"); }
+
+        // 9. M4: cancel + dispose active toast CTS and invalidate the TgProxy toast
+        // token so a pending delayed continuation no-ops instead of posting to a dead VM.
+        try
+        {
+            _zapretAvBlockToastCts?.Cancel();
+            _zapretAvBlockToastCts?.Dispose();
+            _zapretAvBlockToastCts = null;
+            _rulesToastCts?.Cancel();
+            _rulesToastCts?.Dispose();
+            _rulesToastCts = null;
+            _tgProxyToastToken++;
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: toast CTS cleanup failed"); }
     }
 
     // ── Theme ──

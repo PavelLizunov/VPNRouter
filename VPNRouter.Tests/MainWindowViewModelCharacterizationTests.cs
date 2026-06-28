@@ -221,7 +221,10 @@ public class MainWindowViewModelCharacterizationTests
         // MaybeRefreshAutoSelectedAsync/ResolveAutoSelectedServer + _autoSelectedServer
         // (show the REAL urltest member, not the stale first-in-list). Cross-platform →
         // Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI run).
-        "2a7333a5754dddebee5ebca5e466bd32525b7f60766819fc1bd1a4d67a5c93bc";
+        // v2.45.0 M1 (2026-06-28 lifecycle leak fix): + OnTgProxyStats (named TgProxy
+        // stats handler so Dispose() can detach it). Cross-platform → Linux pin drifts
+        // in lock-step (soft-fail; capture from next ubuntu CI run).
+        "a6807f416565ac4d6c6911530b543237212ee4e53e9df81098bad6000273e8c0";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
