@@ -240,17 +240,20 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             if (!response.IsSuccessStatusCode)
                 return failureSnapshot;
 
-            await using var stream = await response.Content.ReadAsStreamAsync(deadlineCts.Token).ConfigureAwait(false);
-            var dto = await JsonSerializer.DeserializeAsync(
-                stream, Json.AppJsonContext.Default.ConnectionsDto, deadlineCts.Token).ConfigureAwait(false);
-
-            if (dto is null)
+            // F2 (v2.45.0): this poll runs ~every 2s while connected. The old
+            // DeserializeAsync<ConnectionsDto> materialized a List<JsonElement>
+            // (one JsonElement per active connection) purely to take .Count —
+            // allocation scaling with connection count. Stream the summary
+            // instead: read downloadTotal/uploadTotal + the connections array
+            // LENGTH via Utf8JsonReader, no per-element allocation.
+            var bytes = await response.Content.ReadAsByteArrayAsync(deadlineCts.Token).ConfigureAwait(false);
+            if (!ParseConnectionsSummary(bytes, out var down, out var up, out var count))
                 return failureSnapshot;
 
             return new ConnectionsSnapshot(
-                ActiveCount: dto.Connections?.Count ?? 0,
-                TotalUploadBytes: dto.UploadTotal,
-                TotalDownloadBytes: dto.DownloadTotal,
+                ActiveCount: count,
+                TotalUploadBytes: up,
+                TotalDownloadBytes: down,
                 CapturedAt: DateTimeOffset.UtcNow);
         }
         catch (OperationCanceledException)
@@ -524,6 +527,55 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     {
         [JsonPropertyName("version")]
         public string? Version { get; set; }
+    }
+
+    /// <summary>
+    /// F2 (v2.45.0): read downloadTotal / uploadTotal + the connections array
+    /// LENGTH from a /connections body via Utf8JsonReader, WITHOUT materializing
+    /// a List&lt;JsonElement&gt; per connection. Tolerant of property order and
+    /// missing fields; <c>reader.Skip()</c> walks past each connection element
+    /// without descending into it. Returns false only on a malformed body.
+    /// </summary>
+    internal static bool ParseConnectionsSummary(
+        ReadOnlySpan<byte> json, out long download, out long upload, out int activeCount)
+    {
+        download = 0; upload = 0; activeCount = 0;
+        try
+        {
+            var reader = new Utf8JsonReader(json);
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName) continue;
+
+                if (reader.ValueTextEquals("downloadTotal"))
+                {
+                    reader.Read();
+                    if (reader.TokenType == JsonTokenType.Number) download = reader.GetInt64();
+                }
+                else if (reader.ValueTextEquals("uploadTotal"))
+                {
+                    reader.Read();
+                    if (reader.TokenType == JsonTokenType.Number) upload = reader.GetInt64();
+                }
+                else if (reader.ValueTextEquals("connections"))
+                {
+                    reader.Read();
+                    if (reader.TokenType == JsonTokenType.StartArray)
+                    {
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                        {
+                            activeCount++;
+                            reader.Skip(); // past this element's whole subtree (no alloc)
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     // sing-box's /connections returns { "downloadTotal":N, "uploadTotal":N, "connections":[...] }.

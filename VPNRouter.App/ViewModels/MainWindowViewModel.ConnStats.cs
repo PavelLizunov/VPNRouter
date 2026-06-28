@@ -183,11 +183,10 @@ public partial class MainWindowViewModel
     /// </summary>
     private ServerViewModel? ResolveAutoSelectedServer(string? nowTag)
     {
-        if (string.IsNullOrEmpty(nowTag)) return null;
-        return SubscriptionServers
-            .Where(s => !string.IsNullOrEmpty(s.Name) && nowTag.EndsWith(s.Name, StringComparison.Ordinal))
-            .OrderByDescending(s => s.Name!.Length)
-            .FirstOrDefault();
+        // F3 (v2.45.0): single-pass longest-suffix match instead of a per-poll
+        // LINQ Where + OrderByDescending allocation/sort over SubscriptionServers.
+        var idx = SuffixMatch.LongestSuffixIndex(SubscriptionServers, static s => s.Name, nowTag);
+        return idx >= 0 ? SubscriptionServers[idx] : null;
     }
 
     private static string HumanRate(double bytesPerSec)
