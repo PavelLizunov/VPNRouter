@@ -53,6 +53,24 @@ public sealed class ProcessOwnershipTests
         => Assert.False(ProcessOwnership.IsUnderDirectory(path, dir));
 
     [Fact]
+    public void IsSamePath_RecognisesCustomExecutablePath()
+    {
+        // S1 review fix: a custom executable_path OUTSIDE the bin dir is owned
+        // when it matches the registered ConfiguredExePath (IsSamePath), even
+        // though IsUnderDirectory(binDir) is false.
+        var custom = Path.Combine(Path.GetTempPath(), "custom-loc", "sing-box.exe");
+        var binDir = Path.Combine(Path.GetTempPath(), "vpnr-bin");
+        Assert.True(ProcessOwnership.IsSamePath(custom, custom));
+        Assert.False(ProcessOwnership.IsUnderDirectory(custom, binDir));   // not the default dir
+        // normalises ".." segments + (Windows) casing
+        Assert.True(ProcessOwnership.IsSamePath(
+            Path.Combine(Path.GetTempPath(), "custom-loc", "..", "custom-loc", "sing-box.exe"), custom));
+        Assert.False(ProcessOwnership.IsSamePath(custom, Path.Combine(Path.GetTempPath(), "other", "sing-box.exe")));
+        Assert.False(ProcessOwnership.IsSamePath(null, custom));
+        Assert.False(ProcessOwnership.IsSamePath(custom, null));
+    }
+
+    [Fact]
     public void CaseInsensitiveOnWindows()
     {
         if (!OperatingSystem.IsWindows()) return; // Linux/macOS paths are case-sensitive

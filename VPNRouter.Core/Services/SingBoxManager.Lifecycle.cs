@@ -33,6 +33,12 @@ public partial class SingBoxManager
             ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
             : AppPaths.SingBoxExePath;
 
+        // S1 (v2.45.0): register where WE launch sing-box so ProcessOwnership
+        // recognises a custom executable_path (outside the default bin dir) as
+        // ours — otherwise the takeover sweep would skip a genuinely-owned
+        // sing-box and the next start couldn't acquire the TUN.
+        ProcessOwnership.ConfiguredExePath = exePath;
+
         if (!File.Exists(exePath))
         {
             _tunLock.Release();

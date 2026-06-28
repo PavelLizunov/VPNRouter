@@ -572,8 +572,12 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             }
             return true;
         }
-        catch (JsonException)
+        catch
         {
+            // Malformed body OR a downloadTotal/uploadTotal that isn't an Int64
+            // (float / out-of-range -> GetInt64 throws FormatException) — honour
+            // the "false on bad body" contract; the caller maps that to a zeroed
+            // snapshot (one stale tick, no crash).
             return false;
         }
     }

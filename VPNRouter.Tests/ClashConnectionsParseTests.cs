@@ -76,4 +76,15 @@ public sealed class ClashConnectionsParseTests
         Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
             Encoding.UTF8.GetBytes("{not valid json"), out _, out _, out _));
     }
+
+    [Fact]
+    public void NonInt64Total_ReturnsFalse()
+    {
+        // review fix: a float / out-of-range total makes GetInt64 throw
+        // FormatException — the widened catch honours the "false on bad body"
+        // contract (caller -> zeroed tick, no crash) instead of escaping.
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes("{\"downloadTotal\":1.5,\"uploadTotal\":2,\"connections\":[]}"),
+            out _, out _, out _));
+    }
 }

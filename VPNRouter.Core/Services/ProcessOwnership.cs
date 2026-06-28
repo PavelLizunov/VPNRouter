@@ -67,9 +67,31 @@ internal static class ProcessOwnership
         }
     }
 
-    /// <summary>True when <paramref name="p"/> is a VPNRouter-managed sing-box
-    /// (its image lives under the VPNRouter bin dir).</summary>
-    public static bool IsOwnedSingBox(Process p) => IsUnderDirectory(ImagePathOf(p), BinDir);
+    /// <summary>Where the running tunnel's sing-box was actually launched from
+    /// (the configured <c>EngineSettings.ExecutablePath</c>, expanded). Registered
+    /// by <see cref="SingBoxManager"/> on start so a CUSTOM <c>executable_path</c>
+    /// outside the default bin dir is still recognised as VPNRouter-owned (else the
+    /// takeover sweep couldn't kill it -> TUN conflict). Null until first start.</summary>
+    internal static string? ConfiguredExePath { get; set; }
+
+    /// <summary>Pure: two paths resolve to the same file (full-path normalised;
+    /// case-insensitive on Windows). Null/empty either side -> false.</summary>
+    internal static bool IsSamePath(string? a, string? b)
+    {
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+        var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        try { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), cmp); }
+        catch { return string.Equals(a, b, cmp); }
+    }
+
+    /// <summary>True when <paramref name="p"/> is a VPNRouter-managed sing-box —
+    /// its image lives under the default bin dir OR is the configured
+    /// (custom) <see cref="ConfiguredExePath"/>.</summary>
+    public static bool IsOwnedSingBox(Process p)
+    {
+        var path = ImagePathOf(p);
+        return IsUnderDirectory(path, BinDir) || IsSamePath(path, ConfiguredExePath);
+    }
 
     /// <summary>True when at least one alive <c>sing-box</c> process is
     /// VPNRouter-owned. Handle-safe: the <c>Process[]</c> snapshot is disposed in
