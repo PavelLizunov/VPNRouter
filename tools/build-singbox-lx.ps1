@@ -74,22 +74,44 @@ Invoke-Git @('-C', $wg, 'checkout', '--quiet', $WG_COMMIT)
 # golang/go#77875: pass nil for an empty OOB so Control.Buf is NULL. Verified
 # end-to-end (handshake send no longer WSAEFAULTs). Remove once the bundled Go
 # toolchain carries the upstream fix (>=1.26.2 / 1.27) or the fork guards it.
-Write-Host "[2.5/4] Patch conn/bind_std.go (golang/go#77875 WSAEFAULT)" -ForegroundColor Yellow
+Write-Host "[2.5/4] Patch conn/bind_std.go (golang/go#77875 WSAEFAULT, send+recv)" -ForegroundColor Yellow
 $bindStd = Join-Path $wg 'conn\bind_std.go'
 if (-not (Test-Path $bindStd)) { throw "FATAL: $bindStd not found (fork layout changed); re-vet the WSAEFAULT patch." }
 $bindSrc = Get-Content -Raw $bindStd
-$awgSendOld = '_, _, err = conn.WriteMsgUDP(msg.Buffers[0], msg.OOB, msg.Addr.(*net.UDPAddr))'
-$awgSendNew = 'oob := msg.OOB; if len(oob) == 0 { oob = nil }; _, _, err = conn.WriteMsgUDP(msg.Buffers[0], oob, msg.Addr.(*net.UDPAddr))'
-$hits = ([regex]::Matches($bindSrc, [regex]::Escape($awgSendOld))).Count
-if ($hits -ne 1) {
-    throw "FATAL: expected exactly 1 WriteMsgUDP send site in conn/bind_std.go, found $hits. The fork source changed -- re-vet the golang/go#77875 (WSAEFAULT) patch before building."
+
+# (1) ROOT FIX for BOTH directions. The pooled per-message OOB is allocated as
+# make([]byte, controlSize); on Windows (and macOS) controlSize==0, so it is a
+# NON-NIL zero-length slice. Go 1.26 WSASendMsg AND WSARecvMsg reject that
+# (golang/go#77875: unsafe.SliceData(make([]byte,0)) is a non-nil pointer with
+# Len 0). Leave OOB nil when there is no control data so Control.Buf is NULL.
+# This single change fixes the send loop (WriteMsgUDP) AND the receive routines
+# (ReadMsgUDP) -- the v4/v6 receive workers were dying on startup with
+# "wsarecvmsg ... invalid pointer address", so the server's handshake RESPONSE
+# could never be read and the tunnel never completed (windows-brat r4 live test).
+# Linux keeps make([]byte, controlSize) (controlSize>0). The receive path
+# re-slices OOB[:cap()] -> nil stays nil; setSrcControl is a no-op on Windows.
+$allocOld = 'msgs[i].OOB = make([]byte, controlSize)'
+$allocNew = 'if controlSize > 0 { msgs[i].OOB = make([]byte, controlSize) }'
+# (2) Belt-and-suspenders on the send call site (cheap; guards any future
+# non-nil empty OOB reaching WriteMsgUDP regardless of the pool state).
+$sendOld = '_, _, err = conn.WriteMsgUDP(msg.Buffers[0], msg.OOB, msg.Addr.(*net.UDPAddr))'
+$sendNew = 'oob := msg.OOB; if len(oob) == 0 { oob = nil }; _, _, err = conn.WriteMsgUDP(msg.Buffers[0], oob, msg.Addr.(*net.UDPAddr))'
+
+foreach ($pair in @(
+    @{ o = $allocOld; n = $allocNew; name = 'pooled-OOB allocation (send+recv root fix)' },
+    @{ o = $sendOld;  n = $sendNew;  name = 'WriteMsgUDP send site' })) {
+    $cnt = ([regex]::Matches($bindSrc, [regex]::Escape($pair.o))).Count
+    if ($cnt -ne 1) {
+        throw "FATAL: expected exactly 1 '$($pair.name)' in conn/bind_std.go, found $cnt. The fork source changed -- re-vet the golang/go#77875 (WSAEFAULT) patch before building."
+    }
+    $bindSrc = $bindSrc.Replace($pair.o, $pair.n)
 }
-$bindSrc = $bindSrc.Replace($awgSendOld, $awgSendNew)
 [System.IO.File]::WriteAllText($bindStd, $bindSrc, (New-Object System.Text.UTF8Encoding $false))
-if (((Get-Content -Raw $bindStd) -notmatch [regex]::Escape($awgSendNew))) {
+$bindChk = Get-Content -Raw $bindStd
+if (($bindChk -notmatch [regex]::Escape($allocNew)) -or ($bindChk -notmatch [regex]::Escape($sendNew))) {
     throw "FATAL: conn/bind_std.go WSAEFAULT patch did not apply."
 }
-Write-Host "Patched: WSASendMsg empty-OOB nil-guard applied (golang/go#77875)." -ForegroundColor Green
+Write-Host "Patched: empty-OOB nil-guard on send (WriteMsgUDP) + receive (ReadMsgUDP) (golang/go#77875)." -ForegroundColor Green
 
 Write-Host "[3/4] go build -tags $TAGS" -ForegroundColor Yellow
 $ldflags = "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=$VER"
@@ -168,13 +190,13 @@ try { $hsProc.Kill() } catch { }
 Start-Sleep -Milliseconds 500
 $hsOut = if (Test-Path $hsLog) { Get-Content $hsLog -Raw } else { '' }
 Remove-Item -Force $hsCfg, $hsLog -ErrorAction SilentlyContinue
-if ($hsOut -match 'wsasendmsg') {
-    throw "FATAL: AWG handshake send hit WSASendMsg WSAEFAULT -- the golang/go#77875 bind_std.go patch is NOT effective. Do NOT bundle this binary (this is the bug that broke AWG on Windows in v2.45.0-r1..r3)."
+if ($hsOut -match 'wsasendmsg' -or $hsOut -match 'wsarecvmsg') {
+    throw "FATAL: AWG hit WSASendMsg/WSARecvMsg WSAEFAULT -- the golang/go#77875 bind_std.go patch is NOT effective (send OR receive path). Do NOT bundle this binary (this is the bug that broke AWG on Windows in v2.45.0-r1..r4). The receive-path failure silently stops the handshake RESPONSE from being read."
 }
 if ($hsOut -match 'andshake did not complete' -or $hsOut -match 'ending handshake initiation') {
-    Write-Host "Verified: AWG handshake initiation SENDS without WSAEFAULT (send-path patch effective)." -ForegroundColor Green
+    Write-Host "Verified: AWG handshake SENDS + receive routines stay up, no WSAEFAULT (send+recv patch effective)." -ForegroundColor Green
 } else {
-    Write-Host "WARN: handshake-send smoke saw no WSAEFAULT, but also no send attempt logged -- inspect manually before trusting." -ForegroundColor Yellow
+    Write-Host "WARN: handshake smoke saw no WSAEFAULT, but also no send attempt logged -- inspect manually before trusting." -ForegroundColor Yellow
 }
 Write-Host "Built: $OutputPath" -ForegroundColor Green
 Write-Host "Bundle it:  powershell -File build.ps1 -Version <X.Y.Z-rN> -SingBoxPath `"$OutputPath`" -Upload" -ForegroundColor Cyan
