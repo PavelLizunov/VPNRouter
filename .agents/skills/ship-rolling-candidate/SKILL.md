@@ -148,6 +148,31 @@ powershell -ExecutionPolicy Bypass -File "C:\Project\VPNRouter\build.ps1" -Versi
 
 **Запускать в background** через `run_in_background: true` — займёт ~90 секунд.
 
+### sing-box-lx core (AmneziaWG / XHTTP кандидаты — иначе пропусти)
+
+Если кандидат несёт **lx-ядро** (что-либо про `awg://` / AmneziaWG или VLESS
+`type=xhttp`) — обычный `build.ps1` выше НЕ подходит: он бандлит upstream
+sing-box (AWG/XHTTP выключены fail-closed). Вместо этого:
+
+1. Сначала собрать пропатченный lx-бинарь:
+   ```bash
+   powershell -ExecutionPolicy Bypass -File tools/build-singbox-lx.ps1
+   ```
+   Клонит запиненные `Leadaxe/sing-box-lx` + `wireguard-go-awg2-lx`, накладывает
+   3 build-time патча (Go-1.26 WSAEFAULT send+recv golang/go#77875 + гейт WARP
+   reserved-byte H4 на receive), проверяет Tags `with_awg`/`with_xhttp` + runtime
+   handshake-smoke, пишет `publish/sing-box-lx.exe`. Fail-closed: если исходник
+   форка сдвинулся — сборка падает (перепроверить патчи).
+2. Забандлить через `-SingBoxPath`:
+   ```bash
+   powershell -File build.ps1 -Version "X.Y.Z-rN" -SingBoxPath "publish/sing-box-lx.exe" -Upload
+   ```
+
+lx только в Windows desktop; Mac/Linux/Android — upstream sing-box (AWG/XHTTP
+off). AmneziaWG-на-Windows полностью починен в v2.45.0-r6 (verified на
+windows-brat). Полный контекст + когда выпиливать патчи: memory
+`awg-windows-lx-patches.md` + `plans/OPEN-DEFECTS.md`.
+
 ## Step 4 — пока Windows билдится, write release notes
 
 Создать `plans/release-notes-vX.Y.Z-rN.md`:

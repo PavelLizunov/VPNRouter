@@ -91,8 +91,21 @@ _process.Kill(entireProcessTree: true);
 **1.13.14** upstream бандлится в desktop (Win `build.ps1` / Mac `build-mac.sh` /
 Linux `build-linux.yml`). **Android libbox пока 1.13.10** (`tooling-libbox-singbox-1.13.10`)
 — rotation deferred, см. `plans/goal-roblox-dns-singbox-1.13.14-2026-06-27.md`.
-**Не custom rebuild**.
+**Не custom rebuild** — КРОМЕ Windows-desktop с AmneziaWG/XHTTP (см. ниже).
 - `with_utls`, `with_clash_api`, `with_quic` теги — стандартные с 1.13+.
+
+### sing-box-lx core (AmneziaWG + XHTTP, Windows desktop only) — v2.45.0+
+Для `awg://` (AmneziaWG) и VLESS `type=xhttp` upstream sing-box не подходит, поэтому
+Windows-desktop бандлит **sing-box-lx** — форк `Leadaxe/sing-box-lx` +
+`Leadaxe/wireguard-go-awg2-lx` (build tags `with_awg`,`with_xhttp`), собранный из
+`tools/build-singbox-lx.ps1` с **3 build-time патчами** поверх запиненных коммитов
+(не свой форк-репо, патчи в build-скрипте, fail-closed): Go-1.26 WSAEFAULT на send+recv
+(golang/go#77875) + гейт WARP reserved-byte clear, который иначе затирает AWG H4
+transport-заголовок. Бандлится через `build.ps1 -SingBoxPath publish/sing-box-lx.exe`.
+Gating fail-closed: `SingBoxFeatures` пробит Tags-строку бинаря (`AwgAvailable`/
+`XhttpAvailable`), parser-гейты роняют awg://xhttp если ядро не lx. Mac/Linux/Android —
+upstream (AWG/XHTTP off). Полный разбор: memory `awg-windows-lx-patches.md`,
+`plans/OPEN-DEFECTS.md` (когда выпиливать патчи).
 - `process_name` regression в 1.13.9 был — fixed в 1.13.10; 1.13.11 добил
   "process searcher failure". Держим desktop на актуальном stable.
 
