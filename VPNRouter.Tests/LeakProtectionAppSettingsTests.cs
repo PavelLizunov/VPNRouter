@@ -49,6 +49,45 @@ public class LeakProtectionAppSettingsTests
     }
 
     [Fact]
+    public void Generated_AwgActiveServer_EmptyServerSnapshot_Passes()
+    {
+        // v2.45.0-r2 (AWG live-test regression): a generated-mode config whose
+        // active server is AmneziaWG — with Vless.Servers empty at this pre-resolve
+        // guard — must NOT be rejected "no VLESS server configured". The
+        // VlessServersResolver populates the pool one step later in the pipeline.
+        var settings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = "generated" },
+            Vless = new VlessConfig
+            {
+                ActiveServer = "main-brat",
+                Servers = new List<VlessServerEntry>(),
+            },
+        };
+
+        var result = LeakProtection.ValidateAppSettings(settings);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void Generated_NothingConfigured_NoActiveServer_StillFails()
+    {
+        // The genuine empty case stays caught: no servers, no legacy scalar, no
+        // enabled sub with servers, AND no active-server selection.
+        var settings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = "generated", ActiveSubscriptionServer = "" },
+            Vless = new VlessConfig { ActiveServer = "", Servers = new List<VlessServerEntry>() },
+        };
+
+        var result = LeakProtection.ValidateAppSettings(settings);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("no VLESS server", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Subscribe_WithoutAnySubscriptions_Fails()
     {
         // The F-12 silent-flip scenario: ConfigMode says "subscribe" but

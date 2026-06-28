@@ -111,7 +111,21 @@ public static class LeakProtection
         }
         else if (isGenerated)
         {
-            if (manualServerCount == 0 && !hasLegacyVlessServer && enabledSubsWithServers.Count == 0)
+            // v2.45.0-r2 (AWG live-test fix): this guard runs BEFORE
+            // VlessServersResolver.Resolve (StartupPipeline) on the RAW settings,
+            // so it sees Vless.Servers as the pre-resolve snapshot (empty for a
+            // subscription-backed generated config, or for a manually-selected
+            // server not yet flushed). It was protocol-blind only by accident —
+            // and active-server-BLIND by design — so a generated-mode config whose
+            // active server is AmneziaWG / Hysteria2 / TUIC (or whose Vless.Servers
+            // snapshot is momentarily empty) was wrongly rejected "no VLESS server
+            // configured". An active-server selection means the resolver WILL
+            // produce a server one step later; if it can't, the ConfigGenerator
+            // empty-servers hard guard (v2.28.2) still fails closed downstream.
+            var hasActiveServer = !string.IsNullOrWhiteSpace(settings.Vless?.ActiveServer)
+                || !string.IsNullOrWhiteSpace(settings.App?.ActiveSubscriptionServer);
+            if (manualServerCount == 0 && !hasLegacyVlessServer
+                && enabledSubsWithServers.Count == 0 && !hasActiveServer)
             {
                 errors.Add(
                     "ConfigMode=generated but no VLESS server is configured. " +
