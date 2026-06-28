@@ -85,7 +85,11 @@ public static class OrphanCleanup
         // the engine will spawn its own sing-box if needed.
         if (!skipSingBoxKill)
         {
-            KillByName("sing-box", null);
+            // S1 (v2.45.0): only kill a VPNRouter-OWNED sing-box (image path under
+            // our bin dir). "sing-box" is a common third-party process name; the
+            // takeover sweep (respectTunLock:false) used to Kill(entireProcessTree)
+            // any of them — clobbering an unrelated user/dev/CTF tunnel.
+            KillByName("sing-box", null, killOnly: ProcessOwnership.IsOwnedSingBox);
 
             // M-2 (perf audit 2026-06-11): also sweep an orphaned
             // slipstream-client (the dns-tunnel transport). It binds the fixed
@@ -122,7 +126,7 @@ public static class OrphanCleanup
     /// </summary>
     public static void KillOrphans() => KillOrphans(null);
 
-    private static void KillByName(string processName, int? exceptPid)
+    private static void KillByName(string processName, int? exceptPid, Func<Process, bool>? killOnly = null)
     {
         try
         {
@@ -131,6 +135,10 @@ public static class OrphanCleanup
                 try
                 {
                     if (exceptPid.HasValue && proc.Id == exceptPid.Value) continue;
+                    // S1: when a predicate is supplied, only kill processes it
+                    // approves (e.g. VPNRouter-owned sing-box) — never a
+                    // same-named third-party process.
+                    if (killOnly != null && !killOnly(proc)) continue;
                     proc.Kill(entireProcessTree: true);
                     proc.WaitForExit(2000);
                 }

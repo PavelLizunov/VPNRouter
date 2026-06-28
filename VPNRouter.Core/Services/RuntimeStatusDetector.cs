@@ -28,9 +28,11 @@ public enum ComponentRuntimeStatus
 /// </summary>
 public static class RuntimeStatusDetector
 {
-    /// <summary>True if any sing-box.exe process is running on this machine.</summary>
+    /// <summary>True if a VPNRouter-managed sing-box is running. S1 (v2.45.0):
+    /// gated on ownership (image path under the VPNRouter bin dir) so a
+    /// third-party / dev sing-box no longer shows the UI as "connected".</summary>
     public static bool IsVpnRunning()
-        => AnyProcessAlive("sing-box");
+        => ProcessOwnership.AnySingBoxOwned();
 
     /// <summary>True if any winws.exe process is running (Zapret DPI bypass).</summary>
     public static bool IsZapretRunning()
