@@ -34,8 +34,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P2** — (Codex review) UX: `SimpleInputDetector` doesn't classify `awg://`/`amneziawg://` and `ServerViewModel` has no AWG subtitle branch (shows AWG as generic tcp+reality) — `VPNRouter.App/SimpleInputDetector.cs` / `ServerViewModel.cs:345` — TBD
 - [ ] **P2** — (Codex review) QUIC-reject suppression keyed to `endpoints.Count>0` not "active proxy is UDP-native"; works only because AWG is the sole endpoint type today — `VPNRouter.Core/Services/ConfigGenerator.cs:140` — TBD
 - [ ] **P2** — (Codex review) ops script `plans/roblox-tester-exit-setup.sh`: `curl|bash` installers unpinned, UFW can lock out non-22 SSH, secrets to stdout + default umask — harden (pin/checksum, detect SSH port, umask 077/chmod 600, secrets to root-only file) — TBD
-- [ ] **P1** — (Codex perf/stability hunt, validated) External/3rd-party sing-box treated as VPNRouter: `RuntimeStatusDetector.IsVpnRunning` is name-only -> false "connected", and user-takeover `OrphanCleanup.KillByName("sing-box", respectTunLock:false)` (`MainWindowViewModel.cs:3897/3961`) `Kill`s an unrelated tunnel — `RuntimeStatusDetector.cs:32` / `OrphanCleanup.cs:88` — v2.45.0 (goal: `plans/goal-perf-mem-stability-lx-candidate-2026-06-28.md` S1)
-- [ ] **P1** — (Codex perf/stability hunt, validated) StrictDNS failover commits `_strictDnsFailedOver` + fires `StrictDnsFailoverChanged` BEFORE/regardless of `TryHotReloadViaApi` success; a failed reload silently desyncs running sing-box from UI/policy and `Decide` then returns None (no retry) — `VPNRouter.Core/Services/HealthMonitor.cs:635` — v2.45.0 (goal S2)
+- [x] **P1** — (Codex perf/stability hunt, validated) External/3rd-party sing-box treated as VPNRouter (false "connected" + takeover kills an unrelated tunnel) — RESOLVED v2.45.0 (`ProcessOwnership` image-path gate; commit b60d33fe)
+- [x] **P1** — (Codex perf/stability hunt, validated) StrictDNS failover commits state + event before hot-reload success — RESOLVED v2.45.0 (commit-only-on-reload-success reorder; commit f22b7351)
+
+- [ ] **P2** — (perf hunt F2 follow-up) Conn-stats poll has no visibility/minimized throttle — it polls `/connections` every 2s even when the stats line is off-screen or the window is minimized (streaming parse already landed in F2) — `VPNRouter.App/ViewModels/MainWindowViewModel.ConnStats.cs` — TBD
+- [ ] **P2** — (perf hunt F3 follow-up) AutoSelect still does a `GetGroupNowAsync("proxy")` round-trip every stats poll; throttle it to ~every 3rd poll (deferred from F3 — needs a VM field, which churns the characterization hash) — `VPNRouter.App/ViewModels/MainWindowViewModel.ConnStats.cs` — TBD
 
 ## Resolved (history)
 

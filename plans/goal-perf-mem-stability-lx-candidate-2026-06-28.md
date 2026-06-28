@@ -119,6 +119,22 @@ try/catch-with-debug pattern. The X-close path calls `Dispose()` directly (not
 - The 2 ship-blocking P1s (S1, S2) are added to `plans/OPEN-DEFECTS.md` so the
   cut-stable gate blocks a stable promotion until they're fixed + marked resolved.
 
+## Outcome (2026-06-28)
+**Phases 1–3 implemented + tested + pushed (all CI-green on main):**
+- S2 StrictDNS failover reorder — `f22b7351`
+- S1 sing-box ownership (ProcessOwnership) — `b60d33fe`
+- M1–M4 Dispose hygiene — `aacb393b` (+ Linux `#if` fix `086c1438`)
+- F1 TgProxy probe gate — `6c2994a6`
+- F2/F3 streaming `/connections` + single-pass auto-select — `69affadd`
+- F4 FreeConfigs cap-before-VM — `d18002cf`
+- The two ship-blocking P1s (S1, S2) marked RESOLVED in `OPEN-DEFECTS.md`.
+- Deferred micro-opts (F2 visibility throttle, F3 HTTP throttle) → `OPEN-DEFECTS.md`.
+
+**Remaining: Phase 4** — build the lx core (`tools/build-singbox-lx.ps1`) and ship
+the `-rN` candidate (`build.ps1 -SingBoxPath`) bundling the new core + all these
+fixes. Gated on the user's "собирай кандидат" + (for the AWG pilot) vpnctl's
+UA-gate + `hidden=0`.
+
 ## Cross-refs
 - Source report: `plans/claude-code-readonly-bughunt-perf-memory-stability-2026-06-28.md`
 - AWG/XHTTP fork: `plans/amneziawg-fork-implementation-plan-2026-06-27.md`, `plans/OPEN-DEFECTS.md`
