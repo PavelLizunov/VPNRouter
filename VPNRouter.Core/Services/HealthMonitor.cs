@@ -632,23 +632,41 @@ public class HealthMonitor : IDisposable
             return;
 
         bool failOpen = action == StrictDnsAction.FailOpen;
-        _strictDnsFailedOver = failOpen;
 
         try
         {
-            // GenerateConfigJson reads _strictDnsFailedOver; reuse the last
-            // scan's process list so only dns.final changes.
-            var configJson = GenerateConfigJson(scan.ProcessNames.ToList());
+            // S2 (v2.45.0): build the config for the TARGET state WITHOUT
+            // committing _strictDnsFailedOver, and hot-reload FIRST. Only commit
+            // the flag + fire StrictDnsFailoverChanged if the reload actually
+            // applied — otherwise the running sing-box keeps the OLD StrictDns
+            // config while HealthMonitor/UI believe failover happened, and
+            // Decide() (keyed off the flag) returns None on later steady-state
+            // ticks, stranding the user in broken DNS with no retry. Reuse the
+            // last scan's process list so only dns.final changes.
+            var configJson = GenerateConfigJson(scan.ProcessNames.ToList(),
+                strictDnsFailedOverOverride: failOpen);
             var reloaded = TryHotReloadViaApi(configJson);
+
+            if (!reloaded)
+            {
+                // Leave _strictDnsFailedOver unchanged so the next healthy tick
+                // re-attempts (the streak counters persist). No state/event commit.
+                _logger.Warning(
+                    "[HealthMonitor] StrictDns failover hot-reload FAILED (target fail-open={FailOpen}) — leaving state unchanged; will retry next tick",
+                    failOpen);
+                return;
+            }
+
+            _strictDnsFailedOver = failOpen;
 
             if (failOpen)
                 _logger.Warning(
-                    "[HealthMonitor] StrictDns auto-disabled (fail-open) — proxy unreachable after {N} probes; DNS failed over to direct resolver (local-dns) so the machine keeps internet (reload={Ok})",
-                    _strictDnsUnhealthyStreak, reloaded);
+                    "[HealthMonitor] StrictDns auto-disabled (fail-open) — proxy unreachable after {N} probes; DNS failed over to direct resolver (local-dns) so the machine keeps internet",
+                    _strictDnsUnhealthyStreak);
             else
                 _logger.Information(
-                    "[HealthMonitor] StrictDns re-armed — proxy reachable again after {N} probes; all DNS back through the tunnel (reload={Ok})",
-                    _strictDnsHealthyStreak, reloaded);
+                    "[HealthMonitor] StrictDns re-armed — proxy reachable again after {N} probes; all DNS back through the tunnel",
+                    _strictDnsHealthyStreak);
 
             StrictDnsFailoverChanged?.Invoke(this, failOpen);
         }
@@ -1008,8 +1026,17 @@ public class HealthMonitor : IDisposable
     /// </summary>
     /// <returns><c>true</c> if hot-reload was accepted; <c>false</c>
     /// otherwise (caller picks the fallback policy).</returns>
+    /// <summary>Test seam: when set, replaces the real disk-write + Clash-API
+    /// hot-reload so StrictDns-failover tests are deterministic regardless of
+    /// environment (the dev box locks the ProgramData config path, which the
+    /// S2 commit-only-on-reload-success path now depends on).</summary>
+    internal Func<string, bool>? HotReloadHookForTests { get; set; }
+
     private bool TryHotReloadViaApi(string configJson)
     {
+        if (HotReloadHookForTests is { } hook)
+            return hook(configJson);
+
         var path = _singBox.WriteConfigToDisk(configJson);
         try
         {
@@ -1115,7 +1142,7 @@ public class HealthMonitor : IDisposable
     /// Generates sing-box config JSON. Uses CustomConfigInjector for custom mode,
     /// ConfigGenerator for generated mode. Handles both transparently.
     /// </summary>
-    private string GenerateConfigJson(List<string> processNames)
+    private string GenerateConfigJson(List<string> processNames, bool? strictDnsFailedOverOverride = null)
     {
         var isCustom = (_appSettings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
@@ -1178,8 +1205,11 @@ public class HealthMonitor : IDisposable
             // v2.42.0 StrictDns failover: while the proxy is unreachable we
             // suppress "all DNS via tunnel" (dns.final → local-dns) so the
             // machine keeps DNS. The flag persists across regens (process
-            // rescans, restarts) until a healthy tick re-arms it.
-            strictDnsOverride: _strictDnsFailedOver ? false : (bool?)null);
+            // rescans, restarts) until a healthy tick re-arms it. The optional
+            // override lets ReconcileStrictDnsFailover build a TARGET-state
+            // config without committing _strictDnsFailedOver until the reload
+            // actually applies (v2.45.0 S2).
+            strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null);
     }
 
     /// <summary>

@@ -95,6 +95,9 @@ public class HealthMonitorStrictDnsFailoverTests
     private static HealthMonitor Started(FakeSingBoxApi api, AppSettings settings)
     {
         var hm = BuildHm(api);
+        // Deterministic hot-reload via the fake (no real ProgramData disk write,
+        // which the dev box's lock would fail) — reflects ReloadResultOverride/TunnelHealthy.
+        hm.HotReloadHookForTests = _ => api.ReloadResultOverride ?? api.TunnelHealthy;
         hm.Start(new Profile { Name = "test" }, settings);
         // The reconcile reuses the last scan's process list; give it one.
         SetField(hm, "_lastScan", new ScanResult { ProcessNames = new List<string> { "Discord.exe" } });
@@ -115,6 +118,50 @@ public class HealthMonitorStrictDnsFailoverTests
             // Second consecutive failure → fail open.
             Reconcile(hm);
             Assert.True(GetFailedOver(hm));
+        }
+        finally { hm.Stop(); hm.Dispose(); }
+    }
+
+    [Fact]
+    public void FailOpen_ReloadFails_LeavesFlagUnset_NoEvent()
+    {
+        // S2 (v2.45.0): proxy unreachable (fail-open decided) but the hot-reload
+        // fails — the flag must NOT commit and StrictDnsFailoverChanged must NOT
+        // fire, else running sing-box keeps the old StrictDns config while the
+        // UI/policy believe failover happened and Decide() stops retrying.
+        var api = new FakeSingBoxApi { ProxyDelayMs = null, ReloadResultOverride = false };
+        var hm = Started(api, Settings(strictDns: true));
+        var fired = new List<bool>();
+        hm.StrictDnsFailoverChanged += (_, v) => fired.Add(v);
+        try
+        {
+            Reconcile(hm);
+            Reconcile(hm); // past the fail threshold — decides fail-open
+            Assert.False(GetFailedOver(hm)); // reload failed → flag NOT committed
+            Assert.Empty(fired);             // no event raised
+        }
+        finally { hm.Stop(); hm.Dispose(); }
+    }
+
+    [Fact]
+    public void FailOpen_ReloadSucceedsAfterEarlierFail_Applies()
+    {
+        // The retry path: a failed reload leaves the flag unset; a later tick
+        // whose reload succeeds commits the flag + fires the event.
+        var api = new FakeSingBoxApi { ProxyDelayMs = null, ReloadResultOverride = false };
+        var hm = Started(api, Settings(strictDns: true));
+        var fired = new List<bool>();
+        hm.StrictDnsFailoverChanged += (_, v) => fired.Add(v);
+        try
+        {
+            Reconcile(hm); Reconcile(hm);    // fail-open decided, reload fails
+            Assert.False(GetFailedOver(hm));
+            Assert.Empty(fired);
+
+            api.ReloadResultOverride = true; // hot-reload now works
+            Reconcile(hm);                   // proxy still unreachable → retry commits
+            Assert.True(GetFailedOver(hm));
+            Assert.Equal(new[] { true }, fired);
         }
         finally { hm.Stop(); hm.Dispose(); }
     }

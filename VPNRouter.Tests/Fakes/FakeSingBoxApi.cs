@@ -28,6 +28,13 @@ public sealed class FakeSingBoxApi : ISingBoxApi
     /// </summary>
     public bool TunnelHealthy { get; set; } = true;
 
+    /// <summary>Optional override for <see cref="ReloadConfigAsync"/> result,
+    /// decoupled from the proxy-reachability probe (which keys off
+    /// <see cref="TunnelHealthy"/> / <see cref="ProxyDelayMs"/>). Null = use
+    /// <see cref="TunnelHealthy"/>. Lets a test exercise "proxy unreachable AND
+    /// the hot-reload fails" independently (StrictDns failover S2, v2.45.0).</summary>
+    public bool? ReloadResultOverride { get; set; }
+
     /// <summary>Version string returned by <see cref="GetVersionAsync"/>
     /// when <see cref="TunnelHealthy"/> is true. Default mirrors the
     /// currently-bundled sing-box upstream.</summary>
@@ -114,7 +121,7 @@ public sealed class FakeSingBoxApi : ISingBoxApi
         ct.ThrowIfCancellationRequested();
         Record("Reload", configPath);
         if (FaultToThrow is not null) throw FaultToThrow;
-        return Task.FromResult(TunnelHealthy);
+        return Task.FromResult(ReloadResultOverride ?? TunnelHealthy);
     }
 
     /// <inheritdoc/>
