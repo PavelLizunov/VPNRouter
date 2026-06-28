@@ -47,6 +47,51 @@ public class ServerViewModelSubtitleTests
     }
 
     [Fact]
+    public void HostSubtitle_AmneziaWg_ShowsAmneziaWg_NotTcpReality()
+    {
+        // v2.45.0-r3: an awg:// entry carries empty Uuid + default
+        // Security="reality", so without a field-based check it fell into the
+        // VLESS default branch and rendered "tcp + reality" — the exact thing
+        // the user reported ("при добавлении AWG пишет что это vless").
+        var entry = new VlessServerEntry
+        {
+            Name = "main-brat",
+            Protocol = "amneziawg",
+            Server = "104.194.156.93",
+            Port = 51820,
+            Security = "reality", // default field the AWG endpoint ignores
+            Awg = new AwgConfig
+            {
+                PrivateKey = "XJRWW/WbfydGk7/7Kn3LLn+70XoT6se7SX9zUztOuKU=",
+                PeerPublicKey = "iLtvwNI8UxIFHB9wNjyMud7/nofHJ5IBZaMC/knnWT0=",
+                Address = new System.Collections.Generic.List<string> { "10.66.0.23/32" },
+                Jc = 7,
+            },
+        };
+        var vm = new ServerViewModel(entry);
+        Assert.Equal("amneziawg + obfs", vm.HostSubtitle);
+    }
+
+    [Fact]
+    public void HostSubtitle_AmneziaWg_DetectedByFieldEvenIfProtocolDropped()
+    {
+        // Field-based robustness: even if a serialization round-trip reset
+        // Protocol to the "vless" default, the Awg payload still identifies
+        // this as AmneziaWG (mirrors the dns-tunnel IsDnsTunnel approach).
+        var entry = new VlessServerEntry
+        {
+            Name = "main-brat",
+            Protocol = "vless", // simulate dropped discriminator
+            Server = "93.95.226.167",
+            Port = 51822,
+            Security = "reality",
+            Awg = new AwgConfig { PeerPublicKey = "abc=", PrivateKey = "def=" }, // Jc=0 -> no obfs hint
+        };
+        var vm = new ServerViewModel(entry);
+        Assert.Equal("amneziawg", vm.HostSubtitle);
+    }
+
+    [Fact]
     public void HostSubtitle_Hysteria2_Unaffected()
     {
         var entry = new VlessServerEntry

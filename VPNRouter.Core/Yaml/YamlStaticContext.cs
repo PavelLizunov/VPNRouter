@@ -85,6 +85,7 @@ namespace VPNRouter.Core.Yaml;
 [YamlStaticContext]
 [YamlSerializable(typeof(AppConfig))]
 [YamlSerializable(typeof(AppSettings))]
+[YamlSerializable(typeof(AwgConfig))]
 [YamlSerializable(typeof(CustomCategory))]
 [YamlSerializable(typeof(CustomConfigEntry))]
 [YamlSerializable(typeof(CustomDirectRule))]

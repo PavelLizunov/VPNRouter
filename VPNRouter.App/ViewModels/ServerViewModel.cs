@@ -333,9 +333,17 @@ public partial class ServerViewModel : ViewModelBase
             // Protocol string — Android's JSON cache can drop Protocol back to
             // "vless" while the dns fields survive, which mislabeled a working
             // dns-tunnel server as "tcp + reality". IsDnsTunnel is field-based.
-            var protocol = (_originalEntry?.IsDnsTunnel == true)
-                ? "dns-tunnel"
-                : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
+            // v2.45.0-r3: same treatment for AmneziaWG — an awg entry carries an
+            // Awg block (and empty Uuid / default Security="reality"), so without
+            // a field check it fell through to the VLESS default and showed
+            // "tcp + reality" (user-reported: "при добавлении AWG пишет что это
+            // vless"). Detect by the Awg payload so the label is right even if a
+            // future round-trip drops Protocol.
+            var protocol = (_originalEntry?.Awg != null)
+                ? "amneziawg"
+                : (_originalEntry?.IsDnsTunnel == true)
+                    ? "dns-tunnel"
+                    : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
             var parts = new System.Collections.Generic.List<string>();
 
             // v2.30.1-r3: for non-VLESS protocols (Hysteria2 / TUIC / SS),
@@ -381,6 +389,16 @@ public partial class ServerViewModel : ViewModelBase
                     // subtitle must show the real transport so users can tell this
                     // last-resort server apart from a normal one.
                     parts.Add("dns-tunnel");
+                    break;
+
+                case "amneziawg":
+                case "awg":
+                    // AmneziaWG (WireGuard + obfuscation). Show the protocol plus
+                    // a hint that obfuscation is active when junk-packet params
+                    // are set, so it reads distinctly from a plain VLESS row.
+                    parts.Add("amneziawg");
+                    if (_originalEntry?.Awg != null && _originalEntry.Awg.Jc > 0)
+                        parts.Add("obfs");
                     break;
 
                 default:

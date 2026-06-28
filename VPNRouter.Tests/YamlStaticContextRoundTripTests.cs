@@ -634,4 +634,95 @@ update:
         Assert.False(settings.Update.AutoCheck);
         Assert.Equal("experimental", settings.Update.Channel);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 4. AmneziaWG round-trip — v2.45.0-r3 regression pin.
+    //
+    //    v2.45.0-r1/r2 shipped the AWG client (AwgConfig added to
+    //    VlessServerEntry.Awg) WITHOUT registering AwgConfig in
+    //    YamlStaticContext. The static serializer therefore couldn't see
+    //    AwgConfig's properties and emitted `awg: {}` — which corrupted the
+    //    whole `servers:` sequence so that on reload Vless.Servers came back
+    //    EMPTY and ActiveServer was cleared. LeakProtection.ValidateAppSettings
+    //    then rejected the (now serverless) generated config with
+    //    "ConfigMode=generated but no VLESS server is configured", so a
+    //    manually-added awg:// server could never connect — and any other
+    //    server in the same list was wiped too. Every in-memory unit test
+    //    passed because they never hit the YAML round-trip.
+    //
+    //    This pins the contract: an AWG entry survives Save → Parse with its
+    //    AwgConfig (keys + obfuscation params) intact and the server NOT
+    //    dropped. If a future model change adds another nested DTO under the
+    //    persisted surface and forgets to register it here, THIS test fails
+    //    loudly instead of the field silently vanishing in production.
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Awg_RoundTrip_PreservesAwgConfigAndServer()
+    {
+        var original = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = "generated", RoutingMode = "full" },
+            Vless = new VlessConfig
+            {
+                ActiveServer = "main-brat",
+                Servers = new List<VlessServerEntry>
+                {
+                    new()
+                    {
+                        Name = "main-brat",
+                        Protocol = "amneziawg",
+                        Server = "104.194.156.93",
+                        Port = 51820,
+                        Awg = new AwgConfig
+                        {
+                            PrivateKey = "XJRWW/WbfydGk7/7Kn3LLn+70XoT6se7SX9zUztOuKU=",
+                            PeerPublicKey = "iLtvwNI8UxIFHB9wNjyMud7/nofHJ5IBZaMC/knnWT0=",
+                            Address = new List<string> { "10.66.0.23/32" },
+                            Keepalive = 25,
+                            Jc = 7, Jmin = 52, Jmax = 166,
+                            S1 = 101, S2 = 115, S3 = 0, S4 = 0,
+                            H1 = "1707807384", H2 = "2109836464",
+                            H3 = "1317844350", H4 = "1028816851",
+                        },
+                    },
+                },
+            },
+        };
+
+        var path = TempYamlPath();
+        SettingsLoader.Save(original, path);
+        var roundTripped = SettingsLoader.Parse(File.ReadAllText(path));
+
+        // The server must NOT be dropped on reload, and the active selection
+        // must survive (both were lost pre-fix).
+        Assert.Single(roundTripped.Vless.Servers);
+        Assert.Equal("main-brat", roundTripped.Vless.ActiveServer);
+
+        var s = roundTripped.Vless.Servers[0];
+        Assert.Equal("main-brat", s.Name);
+        Assert.Equal("amneziawg", s.Protocol);
+        Assert.Equal("104.194.156.93", s.Server);
+        Assert.Equal(51820, s.Port);
+
+        // AwgConfig must round-trip non-empty with every field intact — the
+        // exact thing `awg: {}` destroyed.
+        Assert.NotNull(s.Awg);
+        Assert.Equal("XJRWW/WbfydGk7/7Kn3LLn+70XoT6se7SX9zUztOuKU=", s.Awg!.PrivateKey);
+        Assert.Equal("iLtvwNI8UxIFHB9wNjyMud7/nofHJ5IBZaMC/knnWT0=", s.Awg.PeerPublicKey);
+        Assert.Single(s.Awg.Address);
+        Assert.Equal("10.66.0.23/32", s.Awg.Address[0]);
+        Assert.Equal(25, s.Awg.Keepalive);
+        Assert.Equal(7, s.Awg.Jc);
+        Assert.Equal(52, s.Awg.Jmin);
+        Assert.Equal(166, s.Awg.Jmax);
+        Assert.Equal(101, s.Awg.S1);
+        Assert.Equal("1707807384", s.Awg.H1);
+        Assert.Equal("1028816851", s.Awg.H4);
+
+        // And the generated-config guard must now accept it (the user-visible
+        // symptom: "no VLESS server configured" must be gone).
+        var validation = LeakProtection.ValidateAppSettings(roundTripped);
+        Assert.True(validation.IsValid, string.Join("; ", validation.Errors));
+    }
 }
