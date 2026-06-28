@@ -79,17 +79,25 @@ public partial class FreeConfigItemViewModel : ObservableObject
         _                             => "—",
     };
 
-    public int LatencySortKey => Entry.Status switch
+    public int LatencySortKey => SortKeyFor(Entry);
+
+    /// <summary>
+    /// The latency/status sort key derived purely from the entry. F4 (v2.45.0):
+    /// lifted off the instance so the FreeConfigs list can dedup-by-host + order
+    /// + cap on raw <see cref="FreeConfigEntry"/> BEFORE allocating a VM per entry
+    /// (previously every filtered entry got a VM, then sort/group/Take(300)).
+    /// </summary>
+    public static int SortKeyFor(FreeConfigEntry entry) => entry.Status switch
     {
         // v2.31.3-r1: Verified entries with LatencyMs<=0 (post-migration "needs
         // re-verify" state) sort AFTER Verified entries with real RTTs but
         // BEFORE Ok/Slow — keeps the "freshly verified, real ping" entries on
         // top of the Saved tab while still showing the unmeasured ones above
         // failed ones.
-        FreeConfigStatus.Verified when Entry.LatencyMs <= 0 => 90_000,
-        FreeConfigStatus.Verified                     => Entry.LatencyMs, // best rank
-        FreeConfigStatus.Ok when Entry.LatencyMs > 0 => Entry.LatencyMs + 100_000,
-        FreeConfigStatus.Slow                         => Entry.LatencyMs + 200_000,
+        FreeConfigStatus.Verified when entry.LatencyMs <= 0 => 90_000,
+        FreeConfigStatus.Verified                     => entry.LatencyMs, // best rank
+        FreeConfigStatus.Ok when entry.LatencyMs > 0 => entry.LatencyMs + 100_000,
+        FreeConfigStatus.Slow                         => entry.LatencyMs + 200_000,
         FreeConfigStatus.Implausible                  => 400_000,
         FreeConfigStatus.TlsFailed                    => 500_000,
         FreeConfigStatus.Timeout                      => 1_000_000,

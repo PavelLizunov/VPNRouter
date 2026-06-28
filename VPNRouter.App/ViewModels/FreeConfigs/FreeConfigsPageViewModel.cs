@@ -1898,13 +1898,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // latency). The aggregator-level entries are still all retained
             // in _allConfigs so cache + Deep Verify still see them; only the
             // visible list is collapsed.
+            // F4 (v2.45.0): dedup-by-host + order + cap on the RAW entries BEFORE
+            // building any VM, so we allocate (and sort/group) at most ~300
+            // FreeConfigItemViewModel instead of one per filtered entry. The sort
+            // key is the same FreeConfigItemViewModel.SortKeyFor(entry) the VM
+            // exposed — identical ordering, computed without the VM.
             var items = q
-                .Select(c => new FreeConfigItemViewModel(c))
-                .OrderBy(vm => vm.LatencySortKey)
-                .GroupBy(vm => vm.Entry.Host ?? string.Empty,
-                         StringComparer.OrdinalIgnoreCase)
+                .OrderBy(FreeConfigItemViewModel.SortKeyFor)
+                .GroupBy(c => c.Host ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
                 .Take(300) // cap at 300 visible to keep ListBox responsive with emoji flags
+                .Select(c => new FreeConfigItemViewModel(c))
                 .ToList();
 
             DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
