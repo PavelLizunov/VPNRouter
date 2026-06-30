@@ -276,6 +276,13 @@ public sealed class VpnEngineHotReloadLifecycleTests
                                 IDisposable cleanup)>
         StartHappyPathAsync()
     {
+        var previousDataDir = AppPaths.DataDir;
+        var tempDataDir = Path.Combine(
+            Path.GetTempPath(),
+            $"vpnrouter-hot-reload-data-{Guid.NewGuid():N}");
+        AppPaths.OverrideDataDir(tempDataDir);
+        AppPaths.EnsureDirectories();
+
         var prevSingBoxRunner = SingBoxManager.Runner;
         var prevTunDiagRunner = TunAdapterDiagnostics.Runner;
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
@@ -294,6 +301,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
         var cleanup = new HotReloadCleanup(
             engine,
             stubExe,
+            previousDataDir,
+            tempDataDir,
             prevSingBoxRunner,
             prevTunDiagRunner);
 
@@ -314,6 +323,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
     {
         private readonly VpnEngine _engine;
         private readonly string _stubExe;
+        private readonly string _previousDataDir;
+        private readonly string _tempDataDir;
         private readonly IProcessRunner _prevSingBoxRunner;
         private readonly IProcessRunner _prevTunDiagRunner;
         private bool _disposed;
@@ -321,11 +332,15 @@ public sealed class VpnEngineHotReloadLifecycleTests
         public HotReloadCleanup(
             VpnEngine engine,
             string stubExe,
+            string previousDataDir,
+            string tempDataDir,
             IProcessRunner prevSingBoxRunner,
             IProcessRunner prevTunDiagRunner)
         {
             _engine = engine;
             _stubExe = stubExe;
+            _previousDataDir = previousDataDir;
+            _tempDataDir = tempDataDir;
             _prevSingBoxRunner = prevSingBoxRunner;
             _prevTunDiagRunner = prevTunDiagRunner;
         }
@@ -339,6 +354,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
             SingBoxManager.Runner = _prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+            AppPaths.OverrideDataDir(_previousDataDir);
+            try { Directory.Delete(_tempDataDir, recursive: true); } catch { /* best-effort */ }
             try { File.Delete(_stubExe); } catch { /* best-effort */ }
         }
     }
@@ -390,6 +407,28 @@ public sealed class VpnEngineHotReloadLifecycleTests
         // The most recent handle is alive — engine is running again.
         var latestHandle = spawnedHandles[^1];
         Assert.False(latestHandle.HasExited);
+        Assert.True(engine.IsRunning);
+    }
+
+    [Fact]
+    public async Task StartAsync_WhenAlreadyRunning_IsNoOp_NotSecondSpawn()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart prerequisite is Windows-only.");
+
+        var (engine, dnsHardening, spawnedHandles, firewall, monitor, settings, cleanup) =
+            await StartHappyPathAsync();
+        using var _ = cleanup;
+
+        Assert.True(engine.IsRunning);
+        Assert.Single(spawnedHandles);
+        var initialHandle = spawnedHandles[0];
+        Assert.False(initialHandle.HasExited);
+
+        await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
+
+        Assert.Single(spawnedHandles);
+        Assert.False(initialHandle.HasExited);
         Assert.True(engine.IsRunning);
     }
 

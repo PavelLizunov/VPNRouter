@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -73,10 +74,11 @@ public sealed class SingBoxManagerProcessExitLeakTests
         // the test flake at "3-4/25 alive" even though Dispose correctly
         // unsubscribes. Looping clears the stragglers without masking a leak.
         int alive = refs.Count;
-        for (int round = 0; round < 8 && alive > 0; round++)
+        for (int round = 0; round < 20 && alive > 0; round++)
         {
             GC.Collect(2, GCCollectionMode.Forced, blocking: true);
             GC.WaitForPendingFinalizers();
+            Thread.Sleep(10);
             GC.Collect(2, GCCollectionMode.Forced, blocking: true);
             alive = refs.Count(r => r.IsAlive);
         }

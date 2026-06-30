@@ -3865,6 +3865,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task ToggleConnectionAsync()
     {
+        if (IsConnecting || _isReconnecting)
+        {
+            _logger.Debug(
+                "[VM] ToggleConnectionAsync ignored - connection transition already in progress (IsConnecting={IsConnecting}, IsReconnecting={IsReconnecting})",
+                IsConnecting,
+                _isReconnecting);
+            return;
+        }
+
         if (IsConnected || _engine.IsRunning)
         {
             IsConnecting = true;
@@ -6849,8 +6858,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // Stop current VPN
-            await Task.Run(() => _engine.Stop());
+            var applyInPlace = _engine.IsRunning;
+            if (!applyInPlace)
+            {
+                // Stop current VPN when this VM is not the live engine owner.
+                await Task.Run(() => _engine.Stop());
+            }
 
             // v2.30.2-r1 Bug 2C fix: when the user explicitly clicked a
             // manual VLESS row, force the VM flags to manual mode BEFORE
@@ -6932,6 +6945,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 _logger?.Information(
                     "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
                     aggregated.Count, _settings.Vless.ActiveServer);
+            }
+
+            if (applyInPlace)
+            {
+                _logger?.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
+                var applied = await Task.Run(() => _engine.ApplyAsync(
+                    _settings,
+                    CancellationToken.None,
+                    forceRestart: true));
+                if (applied)
+                {
+                    RestoreConnectedStatus();
+                    try { RefreshActiveIndicator(); }
+                    catch (Exception ex) { _logger?.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
+                    return;
+                }
+
+                _logger?.Warning("[VM] ReconnectAsync ApplyAsync returned false; falling back to Stop+Start");
+                await Task.Run(() => _engine.Stop());
             }
 
             // Start with new config. Retry up to 3 times because Windows Service

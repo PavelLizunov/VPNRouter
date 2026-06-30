@@ -228,7 +228,7 @@ public class AppConfig
 
     /// <summary>
     /// T4 (2026-06-27), opt-in (default FALSE): in full-tunnel, resolve known realtime-game
-    /// domains (roblox.com / rbxcdn.com) via the real-NIC <c>local-dns</c> (Cloudflare DoH)
+    /// domains (Roblox / Steam / Dota) via the real-NIC <c>local-dns</c> (Cloudflare DoH)
     /// instead of the proxy-detour <c>vpn-dns</c>. DoH is encrypted, so the answer is NOT
     /// RU-poisoned, and it skips the congested proxy that stalls game joins (diag 20260627:
     /// 1023 DNS exchanges &gt;=10s). The game's actual CONNECTION still goes through the proxy.

@@ -271,6 +271,15 @@ public class VpnEngine : IDisposable
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            if (HasLiveOrStartingSingBox())
+            {
+                _logger?.Warning(
+                    "[VpnEngine] StartAsync ignored - sing-box already {State} (PID {Pid}); use ApplyAsync/ReloadConfigJson for reconfigure",
+                    _singBox?.State,
+                    SingBoxPid);
+                return;
+            }
+
             // Fresh session: a new connect supersedes any prior disconnect intent.
             _sessionCts?.Dispose();
             _sessionCts = new CancellationTokenSource();
@@ -280,6 +289,17 @@ public class VpnEngine : IDisposable
         {
             _lifecycleGate.Release();
         }
+    }
+
+    private bool HasLiveOrStartingSingBox()
+    {
+        var singBox = _singBox;
+        if (singBox == null) return false;
+
+        if (singBox.State is SingBoxState.Starting or SingBoxState.Restarting)
+            return true;
+
+        return singBox.IsRunning();
     }
 
     /// <summary>

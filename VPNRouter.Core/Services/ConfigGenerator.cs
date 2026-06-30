@@ -28,6 +28,10 @@ public static class ConfigGenerator
     {
         "roblox.com",
         "rbxcdn.com",
+        "steamserver.net",
+        "steampowered.com",
+        "steamstatic.com",
+        "dota2.com",
     };
 
     // v2.44.4 (2026-06-27): hard ceiling on the TUN MTU at generation time.

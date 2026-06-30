@@ -23,6 +23,10 @@ public sealed class GameDnsOffProxyTests
             r.Server == "local-dns" && r.DomainSuffix != null && r.DomainSuffix.Contains("roblox.com"));
         Assert.NotNull(rule);
         Assert.Contains("rbxcdn.com", rule!.DomainSuffix!);
+        Assert.Contains("steamserver.net", rule.DomainSuffix!);
+        Assert.Contains("steampowered.com", rule.DomainSuffix!);
+        Assert.Contains("steamstatic.com", rule.DomainSuffix!);
+        Assert.Contains("dota2.com", rule.DomainSuffix!);
     }
 
     [Fact]

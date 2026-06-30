@@ -21,6 +21,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -40,8 +41,27 @@ namespace VPNRouter.Tests;
 /// (<see cref="SingBoxManagerRestartTunHandshakeTests"/>) and isn't
 /// re-tested here.
 /// </summary>
-public sealed class SingBoxManagerProcessRunnerTests
+public sealed class SingBoxManagerProcessRunnerTests : IDisposable
 {
+    private readonly string _previousDataDir;
+    private readonly string _tempDataDir;
+
+    public SingBoxManagerProcessRunnerTests()
+    {
+        _previousDataDir = AppPaths.DataDir;
+        _tempDataDir = Path.Combine(
+            Path.GetTempPath(),
+            $"vpnrouter-sbm-runner-{Guid.NewGuid():N}");
+        AppPaths.OverrideDataDir(_tempDataDir);
+        AppPaths.EnsureDirectories();
+    }
+
+    public void Dispose()
+    {
+        AppPaths.OverrideDataDir(_previousDataDir);
+        try { Directory.Delete(_tempDataDir, recursive: true); } catch { /* best-effort */ }
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────
 
     private static SingBoxSettings DefaultSettings(string exePath) => new()
@@ -133,6 +153,35 @@ public sealed class SingBoxManagerProcessRunnerTests
     }
 
     // ─── 2. Exited → Crashed event mapping ──────────────────────────────
+
+    [Fact]
+    public void StartWithJson_WhenHandleAlive_IsNoOp_NotRestart()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        var fakeHandle = new FakeProcessHandle(pid: 4242);
+        fake.OnStart(_ => true, _ => fakeHandle);
+
+        var exe = CreateStubExe();
+        try
+        {
+            using var manager = BuildManager(fake, exe);
+
+            manager.StartWithJson("{\"log\":{\"level\":\"info\"}}");
+            manager.StartWithJson("{\"log\":{\"level\":\"debug\"}}");
+
+            Assert.Single(fake.StartCalls);
+            Assert.False(fakeHandle.HasExited);
+            Assert.Equal(0, fakeHandle.KillCallCount);
+            Assert.Equal(SingBoxState.Running, manager.State);
+            Assert.Equal(4242, manager.Pid);
+        }
+        finally
+        {
+            try { File.Delete(exe); } catch { /* best-effort */ }
+        }
+    }
 
     [Fact]
     public void Handle_Exited_FiresCrashed_EventBubblesToSubscriber()

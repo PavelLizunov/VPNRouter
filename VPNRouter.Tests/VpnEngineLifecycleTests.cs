@@ -310,6 +310,21 @@ public sealed class VpnEngineLifecycleTests
         return (runner, handle);
     }
 
+    private static (FakeProcessRunner runner, List<FakeProcessHandle> handles)
+        BuildFreshSingBoxSpawnFake(int startPid = 99001)
+    {
+        var handles = new List<FakeProcessHandle>();
+        var runner = new FakeProcessRunner();
+        var nextPid = startPid;
+        runner.OnStart(_ => true, _ =>
+        {
+            var handle = new FakeProcessHandle(nextPid++);
+            handles.Add(handle);
+            return handle;
+        });
+        return (runner, handles);
+    }
+
     /// <summary>
     /// Drive a full ColdStart against an isolated test environment.
     /// Returns the running engine + capture surfaces. Caller MUST call
@@ -407,7 +422,7 @@ public sealed class VpnEngineLifecycleTests
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
 
-        var (singBoxRunner, _) = BuildSingBoxSpawnFake();
+        var (singBoxRunner, _) = BuildFreshSingBoxSpawnFake();
         SingBoxManager.Runner = singBoxRunner;
         TunAdapterDiagnostics.Runner = BuildTunCleanupFake();
 

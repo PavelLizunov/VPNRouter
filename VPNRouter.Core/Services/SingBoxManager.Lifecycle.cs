@@ -13,9 +13,18 @@ public partial class SingBoxManager
 
     public void StartWithJson(string configJson)
     {
+        if (State == SingBoxState.Starting || _handle is { HasExited: false })
+        {
+            _logger.Warning(
+                "[SingBoxManager] StartWithJson ignored - sing-box already {State} (PID {Pid}); use Restart/ReloadConfigJson for reconfigure",
+                State,
+                Pid);
+            return;
+        }
+
         if (State == SingBoxState.Running)
         {
-            _logger.Warning("[SingBoxManager] Already running (PID {Pid}), stopping first", Pid);
+            _logger.Warning("[SingBoxManager] Running state without live handle before StartWithJson; cleaning up stale state first");
             Stop();
         }
 
@@ -57,6 +66,7 @@ public partial class SingBoxManager
         }
         catch
         {
+            State = SingBoxState.Failed;
             _tunLock.Release();
             throw;
         }
