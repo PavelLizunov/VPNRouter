@@ -1135,7 +1135,18 @@ public static class ConfigGenerator
                 RouteExcludeAddress     = routeExcludes.Count > 0
                                             ? routeExcludes
                                             : null,
-                EndpointIndependentNat  = false,
+                // v2.45.0-r10 (2026-07-01): full-cone (endpoint-independent) UDP NAT.
+                // Relay/P2P game netcode (Steam Datagram Relay = Dota/CS2, WebRTC,
+                // RakNet) pings a mesh of relays and receives replies/coordination
+                // from a DIFFERENT address than the one it sent to. With EIN=false
+                // sing-box keys the UDP session by (src,dst) and DROPS the reply from
+                // the other relay -> Dota "Задержка: ОШИБКА" on every region, on EVERY
+                // transport (it's a TUN-level NAT trait, not transport-specific — which
+                // is why Dota failed on VLESS+AWG+Hy2 alike while single-server UDP like
+                // Roblox worked). EIN=true keys by src only, so cross-relay replies are
+                // delivered. Strict superset of the old behaviour (only ADDS delivered
+                // packets), so it can't break DNS/QUIC/single-server UDP.
+                EndpointIndependentNat  = true,
                 Stack                   = "system"
                 // sniff + sniff_override_destination removed — deprecated since 1.11
                 // Sniffing now handled by route rule: action="sniff"

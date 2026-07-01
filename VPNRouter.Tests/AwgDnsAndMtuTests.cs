@@ -121,6 +121,21 @@ public sealed class AwgDnsAndMtuTests : IDisposable
         Assert.Equal(ConfigGenerator.AwgEndpointMtu, endpoint.Mtu);
     }
 
+    // ─── endpoint-independent (full-cone) NAT for relay/P2P game UDP ────────────
+
+    [Fact]
+    public void Tun_EndpointIndependentNat_Enabled_TransportIndependent()
+    {
+        // r10: full-cone UDP NAT so Steam Datagram Relay (Dota/CS2) cross-relay
+        // replies aren't dropped. It's a TUN trait, so it must hold on EVERY
+        // transport — assert via VLESS to prove it's not AWG-specific.
+        var vless = Assert.Single(Generate(VlessSettings()).Inbounds, i => i.Type == "tun");
+        Assert.True(vless.EndpointIndependentNat);
+
+        var awg = Assert.Single(Generate(AwgSettings()).Inbounds, i => i.Type == "tun");
+        Assert.True(awg.EndpointIndependentNat);
+    }
+
     // ─── helpers ──────────────────────────────────────────────────────────────
 
     private static SingBoxConfig Generate(AppSettings settings) =>
