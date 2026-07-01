@@ -47,7 +47,6 @@ internal static class AppListLoader
     {
         public string PackageName { get; set; } = string.Empty;
         public string Label       { get; set; } = string.Empty;
-        public Drawable? Icon     { get; set; }
         // v3.0 v2.32.0 (2026-05-07) — converted via AppIconCache so the
         // per-app picker can render real app icons (handbook §5.5
         // follow-up). Null when the package returned no icon or the
@@ -214,7 +213,6 @@ internal static class AppListLoader
             {
                 PackageName = pkgName,
                 Label = label,
-                Icon = icon,
                 IconBitmap = iconBitmap,
                 IsSystem = isSystem,
             });

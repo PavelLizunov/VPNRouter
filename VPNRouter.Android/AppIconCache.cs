@@ -121,32 +121,6 @@ internal static class AppIconCache
         return converted;
     }
 
-    public static Bitmap? GetCached(string packageName)
-    {
-        if (string.IsNullOrEmpty(packageName)) return null;
-        lock (_lock)
-        {
-            if (!_index.TryGetValue(packageName, out var node)) return null;
-            _order.Remove(node);
-            _order.AddFirst(node);
-            return node.Value.Bitmap;
-        }
-    }
-
-    public static void Clear()
-    {
-        lock (_lock)
-        {
-            _index.Clear();
-            _order.Clear();
-        }
-    }
-
-    public static int Count
-    {
-        get { lock (_lock) return _order.Count; }
-    }
-
     private static Bitmap? ConvertDrawable(Drawable drawable)
     {
         int w = drawable.IntrinsicWidth > 0 ? drawable.IntrinsicWidth : 48;
