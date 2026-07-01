@@ -345,5 +345,3 @@ offscreen-render для PNG snapshots.
 
 Полный inventory + visual-diff baseline refresh workflow —
 `VPNRouter.Tests/CLAUDE.md`.
-
-Manual repro для UI bugs где удобнее — `tools/live-test-r1.ps1`.

@@ -12,14 +12,9 @@ public enum SmpInputKind
     /// Single-server share-link URI in any supported scheme:
     /// <c>vless://</c> / <c>hysteria2://</c> / <c>hy2://</c> /
     /// <c>tuic://</c> / <c>ss://</c>.
-    /// (Renamed from <c>Vless</c> for v2.30.1-r3 multi-protocol support;
-    /// <c>Vless</c> kept as a back-compat alias below.)
+    /// (Renamed from <c>Vless</c> for v2.30.1-r3 multi-protocol support.)
     /// </summary>
     ServerUri,
-
-    /// <summary>Back-compat alias for <see cref="ServerUri"/>.</summary>
-    [System.Obsolete("Use ServerUri — Simple input now accepts any share-link scheme, not only VLESS.")]
-    Vless = ServerUri,
 
     /// <summary>http(s)://... — subscription URL returning base64 or newline-delimited share-link URIs.</summary>
     SubscriptionUrl,

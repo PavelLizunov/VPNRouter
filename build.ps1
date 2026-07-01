@@ -302,11 +302,9 @@ Write-Host "       Cleaned PDB, locale, debug, WPF, and unused files" -Foregroun
 Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives $([math]::Round($nativeRemoved/1MB,1)) MB + design $([math]::Round($designRemoved/1MB,1)) MB = $([math]::Round($totalSaved,1)) MB saved" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
-# v2.27.2: auto-download upstream sing-box prebuild by default. Previously
-# required -SingBoxPath pointing at a pre-installed copy (%ProgramData%\VPNRouter\bin\)
-# which in turn was populated via build-singbox.ps1 (custom Go rebuild).
-# Now falls back to upstream download, keeping manual rebuild as an opt-in
-# override via -SingBoxPath. See build-singbox.ps1 header for rationale.
+# v2.27.2: auto-download upstream sing-box prebuild by default. Pass
+# -SingBoxPath to bundle a custom build instead (e.g. the AmneziaWG/XHTTP
+# lx core from tools/build-singbox-lx.ps1 at publish/sing-box-lx.exe).
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
 if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
     Copy-Item $SingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
