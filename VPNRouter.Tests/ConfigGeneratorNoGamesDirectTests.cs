@@ -1,51 +1,22 @@
+#nullable enable
+
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Xunit;
 
 namespace VPNRouter.Tests;
 
-public sealed class ConfigGeneratorRealtimeGamesDirectTests
+public sealed class ConfigGeneratorNoGamesDirectTests
 {
     [Fact]
-    public void DefaultSettings_RouteGamesDirectDisabled()
+    public void FullTunnel_WithUdpProxy_DoesNotEmitRobloxDirectRule()
     {
-        // Default-OFF: the rule is whole-process (TCP+UDP), so in censored regions
-        // it breaks login and worsens Error 277. See plans/roblox-277-rca-2026-06-27.md.
-        Assert.False(new AppSettings().App.RouteGamesDirect);
-    }
-
-    [Fact]
-    public void FullTunnel_WithUdpProxy_RoutesRobloxDirectBeforeGenericUdpProxy()
-    {
-        var settings = CreateFullTunnelUdpSplitSettings(routeGamesDirect: true);
-
-        var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
+        var config = ConfigGenerator.Generate(
+            new Profile { Name = "Games", DnsMode = "vpn_only" },
+            Array.Empty<string>(),
+            CreateFullTunnelUdpSplitSettings());
 
         Assert.Contains(config.Outbounds, o => o.Tag == "proxy-udp");
-        var rules = config.Route.Rules;
-        var gameRuleIndex = rules.FindIndex(IsRobloxDirectRule);
-        var genericUdpIndex = rules.FindIndex(r =>
-            string.Equals(r.Network, "udp", StringComparison.OrdinalIgnoreCase)
-            && r.Action == "route"
-            && r.Outbound == "proxy-udp");
-
-        Assert.True(gameRuleIndex >= 0, "Roblox direct route rule should be present.");
-        Assert.True(genericUdpIndex >= 0, "Full-tunnel UDP proxy rule should be present.");
-        Assert.True(gameRuleIndex < genericUdpIndex,
-            $"Roblox direct rule at {gameRuleIndex} must precede generic UDP proxy rule at {genericUdpIndex}.");
-
-        var gameRule = rules[gameRuleIndex];
-        Assert.Equal(new[] { "RobloxPlayerBeta.exe", "RobloxPlayerLauncher.exe" }, gameRule.ProcessName);
-        Assert.Equal("direct", gameRule.Outbound);
-    }
-
-    [Fact]
-    public void FullTunnel_WhenToggleDisabled_DoesNotEmitRobloxDirectRule()
-    {
-        var settings = CreateFullTunnelUdpSplitSettings(routeGamesDirect: false);
-
-        var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
-
         Assert.DoesNotContain(config.Route.Rules, IsRobloxDirectRule);
         Assert.Contains(config.Route.Rules, r =>
             string.Equals(r.Network, "udp", StringComparison.OrdinalIgnoreCase)
@@ -58,19 +29,12 @@ public sealed class ConfigGeneratorRealtimeGamesDirectTests
         && rule.Outbound == "direct"
         && rule.ProcessName?.Contains("RobloxPlayerBeta.exe") == true;
 
-    private static Profile CreateProfile() => new()
-    {
-        Name = "Games",
-        DnsMode = "vpn_only",
-    };
-
-    private static AppSettings CreateFullTunnelUdpSplitSettings(bool routeGamesDirect) => new()
+    private static AppSettings CreateFullTunnelUdpSplitSettings() => new()
     {
         App = new AppConfig
         {
             LogLevel = "info",
             RoutingMode = "full",
-            RouteGamesDirect = routeGamesDirect,
             BlockQuicOnTcpProxy = true,
         },
         Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },

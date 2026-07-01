@@ -6585,8 +6585,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             try
             {
                 var entry = ServerUriParser.Parse(line);
-                // Check duplicate by name (same IP+port with different name/uuid is OK)
-                if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server))
+                // Check duplicate by name+IP+port (same IP+port with different
+                // name/uuid is OK). Port is part of the comparison — without it,
+                // two different transports on the same host (e.g. an AmneziaWG
+                // endpoint and an xhttp VLESS server, both named "main-brat" on
+                // the same IP but different ports) collide and the second paste
+                // silently does nothing.
+                if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
                     continue;
                 Servers.Add(new ServerViewModel(entry));
                 SaveSettings();

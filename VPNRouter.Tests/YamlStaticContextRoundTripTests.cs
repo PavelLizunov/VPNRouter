@@ -157,7 +157,6 @@ public class YamlStaticContextRoundTripTests : IDisposable
                 RoutingAppsMode = "exclude",
                 BypassRussianTraffic = false,
                 BlockAds = true,
-                RouteGamesDirect = false,
                 StrictMode = true,
                 StrictDns = true,
                 ZapretEnabled = true,
@@ -308,7 +307,6 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal(original.App.RoutingAppsMode, roundTripped.App.RoutingAppsMode);
         Assert.Equal(original.App.BypassRussianTraffic, roundTripped.App.BypassRussianTraffic);
         Assert.Equal(original.App.BlockAds, roundTripped.App.BlockAds);
-        Assert.Equal(original.App.RouteGamesDirect, roundTripped.App.RouteGamesDirect);
         Assert.Equal(original.App.StrictMode, roundTripped.App.StrictMode);
         Assert.Equal(original.App.StrictDns, roundTripped.App.StrictDns);
         Assert.Equal(original.App.ZapretEnabled, roundTripped.App.ZapretEnabled);
@@ -460,7 +458,6 @@ app:
   active_custom_config: brat-pc
   bypass_russian_traffic: false
   block_ads: true
-  route_games_direct: false
   strict_mode: true
   autostart_vpn: true
   custom_configs:
@@ -553,7 +550,6 @@ update:
         Assert.Equal("brat-pc", settings.App.ActiveCustomConfig);
         Assert.False(settings.App.BypassRussianTraffic);
         Assert.True(settings.App.BlockAds);
-        Assert.False(settings.App.RouteGamesDirect);
         Assert.True(settings.App.StrictMode);
         Assert.True(settings.App.AutostartVpn);
         Assert.Equal("custom_first", settings.App.CustomRulesPriority);
@@ -633,6 +629,25 @@ update:
         Assert.Equal("Test/Repo", settings.Update.GitHubRepo);
         Assert.False(settings.Update.AutoCheck);
         Assert.Equal("experimental", settings.Update.Channel);
+    }
+
+    [Fact]
+    public void WireFormat_RemovedRouteGamesDirectKey_IsIgnored()
+    {
+        const string yaml = @"schema_version: 5
+app:
+  routing_mode: full
+  route_games_direct: true
+vless:
+  server: vpn.test.example
+  port: 443
+  uuid: 11111111-1111-1111-1111-111111111111
+";
+
+        var settings = SettingsLoader.Parse(yaml);
+
+        Assert.Equal(AppSettings.CurrentSchemaVersion, settings.SchemaVersion);
+        Assert.Equal("full", settings.App.RoutingMode);
     }
 
     // ─────────────────────────────────────────────────────────────────────

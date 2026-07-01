@@ -253,20 +253,6 @@ public class AppConfig
     public bool BlockQuicOnTcpProxy { get; set; } = true;
 
     /// <summary>
-    /// Opt-in (default FALSE): route well-known realtime UDP game clients
-    /// (RobloxPlayerBeta.exe etc.) to the DIRECT outbound in full-tunnel mode.
-    /// <para>Default is false because the rule is whole-process (TCP+UDP): in
-    /// censored regions like Russia it would send the game's TCP login/web direct
-    /// — which is blocked (roblox.com), breaking login — AND push realtime UDP onto
-    /// the path Russia's TSPU DPI freezes for foreign IPs (net4people/bbs #490),
-    /// making Roblox Error 277 worse, not better (RCA: plans/roblox-277-rca-2026-06-27.md).
-    /// Only enable where the game is NOT censored and a direct path is genuinely
-    /// faster.</para>
-    /// </summary>
-    [YamlMember(Alias = "route_games_direct")]
-    public bool RouteGamesDirect { get; set; } = false;
-
-    /// <summary>
     /// "Strict mode" — when true, HealthMonitor polls sing-box every 5 seconds
     /// instead of 30, so a crash is detected faster and the firewall kill switch
     /// activates sooner. Reduces the leak window from ~30s to ~5s.

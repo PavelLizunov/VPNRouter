@@ -16,12 +16,6 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class ConfigGenerator
 {
-    private static readonly string[] RealtimeUdpGameProcessNames =
-    {
-        "RobloxPlayerBeta.exe",
-        "RobloxPlayerLauncher.exe",
-    };
-
     // T4: domains whose DNS can be resolved off the congested proxy detour (real-NIC
     // Cloudflare DoH) when AppConfig.ResolveGameDnsOffProxy is on. Suffix-matched.
     private static readonly List<string> RealtimeGameDnsSuffixes = new()
@@ -141,7 +135,7 @@ public static class ConfigGenerator
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
             Endpoints = endpoints, // AmneziaWG "proxy" endpoint (sing-box-lx); null otherwise
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, settings.App.RouteGamesDirect, proxyIsUdpNative: endpoints != null && endpoints.Count > 0),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: endpoints != null && endpoints.Count > 0),
             Experimental = new SingBoxExperimental()
         };
 
@@ -158,9 +152,8 @@ public static class ConfigGenerator
         //   4. BlockAds rule_set → reject (toggle, ApplyAdBlock)
         //   5. BypassRussianTraffic geosite-ru → direct (toggle, ApplyGeoBypass)
         //   6. CustomRules in user-declared order (this call)
-        //   7. full-tunnel realtime game process_name → direct (toggle, BuildRoute)
-        //   8. process_name → proxy (auto, BuildRoute)
-        //   9. final = direct (split) / proxy (full)
+        //   7. process_name → proxy (auto, BuildRoute)
+        //   8. final = direct (split) / proxy (full)
         //
         // Toggles (#4, #5) inserted AFTER this CustomRules block in code
         // — but each Apply* function inserts at the same "after sniff/
@@ -981,7 +974,10 @@ public static class ConfigGenerator
                     Server     = settings.App.BlockAds ? "dns.adguard-dns.com" : ParseDohHost(settings.Dns.VpnDns),
                     ServerPort = settings.App.BlockAds ? 443 : ParseDohPort(settings.Dns.VpnDns),
                     Path       = settings.App.BlockAds ? "/dns-query" : ParseDohPath(settings.Dns.VpnDns),
-                    Detour     = "proxy"
+                    Detour     = "proxy",
+                    // Bootstrap the DoH hostname without asking vpn-dns to resolve
+                    // itself. The DoH exchange still rides the proxy via Detour.
+                    DomainResolver = "local-dns"
                 },
                 // Local DNS — Cloudflare DoH via dns-direct outbound (real NIC).
                 // type:local would call getaddrinfo() → system resolver → ISP DNS,
@@ -1845,8 +1841,7 @@ public static class ConfigGenerator
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
         bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
-        List<string>? dnsTunnelResolverIps = null, bool routeGamesDirect = true,
-        bool proxyIsUdpNative = false)
+        List<string>? dnsTunnelResolverIps = null, bool proxyIsUdpNative = false)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -1899,16 +1894,6 @@ public static class ConfigGenerator
             Action      = "route",
             Outbound    = "direct"
         });
-
-        if (routeGamesDirect && isFullTunnel)
-        {
-            rules.Add(new RouteRule
-            {
-                ProcessName = RealtimeUdpGameProcessNames.ToList(),
-                Action      = "route",
-                Outbound    = "direct"
-            });
-        }
 
         // YouTube / QUIC fix: when the proxy is TCP-only (VLESS+Reality+Vision
         // with no UDP-capable TUIC/Hysteria2 sibling), QUIC (HTTP/3 over UDP/443)

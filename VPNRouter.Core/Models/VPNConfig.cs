@@ -252,6 +252,16 @@ public class DnsServer
     [JsonPropertyName("detour")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Detour { get; set; }
+
+    /// <summary>
+    /// sing-box dial field for resolving a DNS server hostname. HTTPS DNS
+    /// servers that use a domain name need an explicit resolver, otherwise
+    /// a proxy-detour resolver can recurse into itself.
+    /// </summary>
+    [JsonPropertyName("domain_resolver")]
+    [JsonConverter(typeof(DomainResolverValueConverter))]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DomainResolverValue? DomainResolver { get; set; }
 }
 
 /// <summary>sing-box 1.12+ new DNS rule format with action</summary>
