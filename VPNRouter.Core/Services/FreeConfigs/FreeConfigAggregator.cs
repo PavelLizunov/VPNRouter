@@ -2,26 +2,15 @@ using System.Security.Cryptography;
 using System.Text;
 using Serilog;
 using VPNRouter.Core.Models;
-using VPNRouter.Core.Services.FreeConfigs.Stages;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
 /// <summary>
-/// Orchestrates the full Free Configs pipeline. Phase 3E (2026-05-18)
-/// refactored the inline 6-step pipeline into composable
-/// <see cref="IFreeConfigStage"/> instances under
-/// <see cref="Stages"/>; this class is now a thin orchestrator that runs
-/// the stage list under a per-stage <see cref="StageRetryPolicy"/>.
-///
-/// <para>Stage order (each stage's own file documents what it does):</para>
-/// <list type="number">
-///   <item><see cref="FetchStage"/> — pool.json short-circuit OR per-source fan-out</item>
-///   <item><see cref="ParseStage"/> — raw URIs → FreeConfigEntry (skipped via pool short-circuit)</item>
-///   <item><see cref="DedupeStage"/> — cross-source dedupe (skipped via pool short-circuit)</item>
-///   <item><see cref="GeoIpStage"/> — ip-api.com country codes (skipped via pool short-circuit)</item>
-///   <item><see cref="CacheMergeStage"/> — inherit + preserve from on-disk cache</item>
-///   <item><see cref="TestStage"/> — TCP+TLS probe + skip-recent gate + incremental save</item>
-/// </list>
+/// Orchestrates the Free Configs pipeline: fetch pool/sources, dedupe, GeoIP
+/// enrich, and TCP+TLS test. The UI drives it via <see cref="FetchPoolAsync"/>
+/// (fetch+enrich, no test — the VM tests each ~500-entry slice itself) and
+/// <see cref="RetestAsync"/>, reporting progress through
+/// <see cref="OnStageChanged"/> / <see cref="OnTestProgress"/>.
 /// </summary>
 public sealed class FreeConfigAggregator
 {
@@ -31,9 +20,8 @@ public sealed class FreeConfigAggregator
     private readonly FreeConfigCache _cache;
     private readonly FreeConfigPoolFetcher _poolFetcher;
     private readonly ILogger _logger;
-    private readonly StageRetryPolicy _retryPolicy;
 
-    public FreeConfigAggregator(ILogger logger, StageRetryPolicy? retryPolicy = null)
+    public FreeConfigAggregator(ILogger logger)
     {
         _logger = logger;
         _fetcher = new FreeConfigFetcher(logger);
@@ -41,7 +29,6 @@ public sealed class FreeConfigAggregator
         _geoIp = new FreeConfigGeoIp(logger);
         _cache = new FreeConfigCache(logger);
         _poolFetcher = new FreeConfigPoolFetcher(logger);
-        _retryPolicy = retryPolicy ?? StageRetryPolicy.Default;
     }
 
     /// <summary>v2.14.1: whether to prefer server-side pool.json over direct source fetch.</summary>
@@ -75,151 +62,6 @@ public sealed class FreeConfigAggregator
     /// </summary>
     public event Action<string>? OnStageChanged;
     public event Action<int, int>? OnTestProgress; // (done, total)
-
-    /// <summary>
-    /// Full refresh: fetch → parse → dedupe → geoip → cache-merge → test.
-    /// Returns the fresh list of configs.
-    ///
-    /// <para>Phase 3E (2026-05-18): the inline 6-step pipeline was replaced
-    /// by a stage loop. Per-stage retry policy is configurable via the
-    /// constructor (defaults to <see cref="StageRetryPolicy.Default"/>),
-    /// so callers can tune fetch retries / test retries independently.</para>
-    ///
-    /// <paramref name="maxTestCount"/> caps how many configs are actually TCP-tested.
-    /// Default = int.MaxValue (test everything). Set lower to limit first-run time.
-    /// Incremental cache saves every 50 tests / 5 seconds, so Cancel preserves progress.
-    /// </summary>
-    public async Task<List<FreeConfigEntry>> RefreshAsync(
-        IReadOnlyList<FreeConfigSource>? sources = null,
-        int maxTestCount = int.MaxValue,
-        int skipRecentHours = 6,
-        int? goalTargetCount = null,
-        int? goalMaxLatencyMs = null,
-        CancellationToken ct = default)
-    {
-        sources ??= FreeConfigSources.Default;
-
-        // ── Build the stage list ──
-        var fetchStage = new FetchStage(_fetcher, _poolFetcher, useServerPool: UseServerPool);
-        var parseStage = new ParseStage(fetchStage);
-        var dedupeStage = new DedupeStage();
-        var geoIpStage = new GeoIpStage(_geoIp);
-        var cacheMergeStage = new CacheMergeStage();
-        var testStage = new TestStage(_tester);
-
-        var stages = new IFreeConfigStage[]
-        {
-            fetchStage, parseStage, dedupeStage, geoIpStage, cacheMergeStage, testStage,
-        };
-
-        var ctx = new StageContext(
-            Input: Array.Empty<FreeConfigEntry>(),
-            Settings: new AppSettings(), // settings stub — Phase 4 lifts up to caller
-            Cache: _cache,
-            Sources: sources,
-            Logger: _logger,
-            StageNotice: OnStageChanged,
-            TestProgress: OnTestProgress != null
-                ? (done, total) => OnTestProgress?.Invoke(done, total)
-                : null,
-            MaxTestCount: maxTestCount,
-            SkipRecentHours: skipRecentHours,
-            GoalTargetCount: goalTargetCount,
-            GoalMaxLatencyMs: goalMaxLatencyMs);
-
-        // ── Run stages in order, honouring short-circuit + retry policy ──
-        var skipStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var stage in stages)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            if (skipStages.Contains(stage.Name))
-            {
-                _logger.Debug("FreeConfigAggregator: short-circuit skipping stage {name}", stage.Name);
-                continue;
-            }
-
-            var result = await RunWithRetryAsync(stage, ctx, _retryPolicy.For(stage.Name), ct);
-
-            if (!result.Success && !stage.Optional)
-            {
-                _logger.Warning(
-                    "FreeConfigAggregator: stage {name} failed (reason: {reason}) — aborting pipeline",
-                    stage.Name, result.FailureReason ?? "(unknown)");
-                break;
-            }
-
-            ctx = ctx with { Input = result.Output };
-
-            if (result.ShortCircuit && result.ShortCircuitStages != null)
-            {
-                foreach (var s in result.ShortCircuitStages)
-                    skipStages.Add(s);
-            }
-        }
-
-        // ── Final UI notice mirrors pre-3E "Done" / "Goal reached" message ──
-        OnStageChanged?.Invoke(testStage.GoalReached
-            ? $"Goal reached: {testStage.FoundMatching} configs with ping < {goalMaxLatencyMs}ms"
-            : "Done");
-
-        // The final Output is whatever TestStage produced (or upstream
-        // stage if test was skipped on short-circuit). Materialise as
-        // List<T> for back-compat with the previous return type.
-        return ctx.Input.ToList();
-    }
-
-    /// <summary>
-    /// Per-stage retry wrapper. Runs the stage up to
-    /// <see cref="StageRetry.Count"/> times with exponential back-off,
-    /// returning the FIRST successful StageResult. <see cref="OperationCanceledException"/>
-    /// always propagates without retry (user cancel never retries).
-    /// </summary>
-    private async Task<StageResult> RunWithRetryAsync(
-        IFreeConfigStage stage,
-        StageContext ctx,
-        StageRetry retry,
-        CancellationToken ct)
-    {
-        StageResult? last = null;
-        for (var attempt = 1; attempt <= Math.Max(1, retry.Count); attempt++)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                last = await stage.RunAsync(ctx, ct);
-                if (last.Success) return last;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex,
-                    "FreeConfigAggregator: stage {name} threw on attempt {n}/{max}",
-                    stage.Name, attempt, retry.Count);
-                last = new StageResult(
-                    Success: false,
-                    Output: ctx.Input,
-                    FailureReason: ex.Message,
-                    Duration: TimeSpan.Zero);
-            }
-
-            if (attempt < retry.Count)
-            {
-                var delay = retry.BaseDelayMs * (int)Math.Pow(2, attempt - 1);
-                if (delay > 0)
-                    await Task.Delay(delay, ct);
-            }
-        }
-        return last ?? new StageResult(
-            Success: false,
-            Output: ctx.Input,
-            FailureReason: "stage produced no result",
-            Duration: TimeSpan.Zero);
-    }
 
     /// <summary>
     /// v2.28.5-r2: fetch + parse + dedupe + GeoIP enrichment, but skip
