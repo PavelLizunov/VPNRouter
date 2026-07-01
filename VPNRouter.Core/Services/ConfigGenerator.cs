@@ -44,6 +44,19 @@ public static class ConfigGenerator
     internal static int NormalizeTunMtu(int mtu)
         => (mtu <= 0 || mtu > MaxSafeTunMtu) ? SafeTunMtuFallback : mtu;
 
+    // v2.45.0-r8 (2026-07-01): AmneziaWG/WireGuard endpoints carry a FIXED inner
+    // MTU (1280 = IPv6 minimum; survives WG + AWG-obfuscation encapsulation over
+    // any ~1500 underlay). Unlike a VLESS/Reality TCP tunnel — where TCP MSS
+    // auto-clamps to the path — a UDP WireGuard endpoint has NO adaptive clamp, so
+    // an oversized segment (a TUN packet, or a DoH TLS ServerHello flight) larger
+    // than the endpoint MTU blackholes on a PMTUD hole exactly like the mtu-9000
+    // incident above. Diag 20260701-122336: TUN 1337 over a 1280 AWG endpoint ->
+    // 548 DNS exchanges >=5s (cold DoH handshakes up to 56s) -> Dota region pings
+    // all time out. So when a UDP-native endpoint is active we (a) cap the TUN MTU
+    // to this, and (b) resolve via plain UDP DNS inside the tunnel (BuildVpnDnsServer)
+    // instead of a fragile DoH handshake. Also the AWG endpoint's own mtu.
+    internal const int AwgEndpointMtu = 1280;
+
     public static SingBoxConfig Generate(
         Profile profile,
         IEnumerable<string> resolvedProcessNames,
@@ -123,6 +136,10 @@ public static class ConfigGenerator
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy,
             out bool isDnsTunnel, out var dnsTunnelResolverIps, out var endpoints, isServerAlive);
 
+        // A UDP-native proxy (AmneziaWG / WireGuard endpoint tagged "proxy") drives
+        // the TUN MTU cap AND the plain-UDP DNS path — see AwgEndpointMtu.
+        var proxyIsUdpNative = endpoints != null && endpoints.Count > 0;
+
         var config = new SingBoxConfig
         {
             Log = new SingBoxLog
@@ -131,11 +148,11 @@ public static class ConfigGenerator
                 Timestamp = true,
                 Output = logPath
             },
-            Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode, strictDnsOverride),
-            Inbounds = BuildInbounds(settings),
+            Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode, strictDnsOverride, proxyIsUdpNative),
+            Inbounds = BuildInbounds(settings, proxyIsUdpNative),
             Outbounds = outbounds,
             Endpoints = endpoints, // AmneziaWG "proxy" endpoint (sing-box-lx); null otherwise
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: endpoints != null && endpoints.Count > 0),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyIsUdpNative),
             Experimental = new SingBoxExperimental()
         };
 
@@ -925,7 +942,7 @@ public static class ConfigGenerator
             "online", "xyz", "me", "tv", "cc", "us", "uk", "de", "edu", "gov"
         };
 
-    private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings, bool isExcludeMode = false, bool? strictDnsOverride = null)
+    private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings, bool isExcludeMode = false, bool? strictDnsOverride = null, bool proxyIsUdpNative = false)
     {
         var routingMode = settings.App.RoutingMode ?? "split";
         var isFullTunnel = routingMode.Equals("full", StringComparison.OrdinalIgnoreCase);
@@ -964,21 +981,9 @@ public static class ConfigGenerator
             Final = defaultVpnDns ? "vpn-dns" : "local-dns",
             Servers = new List<DnsServer>
             {
-                // Remote DoH server routed through VPN proxy.
-                // When BlockAds is on, use AdGuard DNS (blocks ads + trackers + malware).
-                // Otherwise use user-configured VPN DNS.
-                new()
-                {
-                    Tag        = "vpn-dns",
-                    Type       = "https",
-                    Server     = settings.App.BlockAds ? "dns.adguard-dns.com" : ParseDohHost(settings.Dns.VpnDns),
-                    ServerPort = settings.App.BlockAds ? 443 : ParseDohPort(settings.Dns.VpnDns),
-                    Path       = settings.App.BlockAds ? "/dns-query" : ParseDohPath(settings.Dns.VpnDns),
-                    Detour     = "proxy",
-                    // Bootstrap the DoH hostname without asking vpn-dns to resolve
-                    // itself. The DoH exchange still rides the proxy via Detour.
-                    DomainResolver = "local-dns"
-                },
+                // Tunnelled resolver (Detour="proxy"). DoH over a TCP tunnel, plain
+                // UDP over a UDP-native (AmneziaWG) tunnel — see BuildVpnDnsServer.
+                BuildVpnDnsServer(settings, proxyIsUdpNative),
                 // Local DNS — Cloudflare DoH via dns-direct outbound (real NIC).
                 // type:local would call getaddrinfo() → system resolver → ISP DNS,
                 // which leaks queries to ISP for any process not in the routed list
@@ -1105,7 +1110,7 @@ public static class ConfigGenerator
 
     // ─── Inbounds ─────────────────────────────────────────────────────────────
 
-    private static List<SingBoxInbound> BuildInbounds(AppSettings settings)
+    private static List<SingBoxInbound> BuildInbounds(AppSettings settings, bool proxyIsUdpNative = false)
     {
         // Effective = persisted user list + freshly auto-detected WG/AWG subnets
         // (deduped). The auto subnets are runtime-only and never persisted; see
@@ -1119,7 +1124,12 @@ public static class ConfigGenerator
                 Tag                     = "tun-in",
                 InterfaceName           = OperatingSystem.IsMacOS() ? "utun99" : settings.Tun.InterfaceName,
                 Address                 = new List<string> { settings.Tun.Ipv4Address },
-                Mtu                     = NormalizeTunMtu(settings.Tun.Mtu),
+                // A UDP-native (AmneziaWG) endpoint carries a fixed 1280 inner MTU
+                // and cannot MSS-clamp; a larger TUN MTU blackholes oversized
+                // segments (diag 20260701-122336). Cap the TUN to the endpoint MTU.
+                Mtu                     = proxyIsUdpNative
+                                            ? Math.Min(NormalizeTunMtu(settings.Tun.Mtu), AwgEndpointMtu)
+                                            : NormalizeTunMtu(settings.Tun.Mtu),
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors
                 RouteExcludeAddress     = routeExcludes.Count > 0
@@ -1608,7 +1618,7 @@ public static class ConfigGenerator
             Type       = "wireguard",
             Tag        = tag,
             System     = false,
-            Mtu        = 1280,
+            Mtu        = AwgEndpointMtu,
             Address    = awg.Address.Count > 0 ? new List<string>(awg.Address) : new List<string> { "10.13.13.2/32" },
             PrivateKey = awg.PrivateKey,
             Jc = awg.Jc, Jmin = awg.Jmin, Jmax = awg.Jmax,
@@ -2005,6 +2015,62 @@ public static class ConfigGenerator
             DefaultDomainResolver   = "local-dns"
         };
     }
+    // ─── vpn-dns resolver (tunnelled; Detour="proxy") ────────────────────────────
+
+    /// <summary>
+    /// The resolver whose queries ride the proxy tunnel. For a TCP tunnel
+    /// (VLESS/Reality) we use DoH — extra privacy from the exit, and TCP MSS
+    /// auto-clamps so the TLS handshake survives the path. For a UDP-native tunnel
+    /// (AmneziaWG/WireGuard) the DoH TLS handshake's large ServerHello flight
+    /// blackholes on the fixed 1280 endpoint MTU (diag 20260701-122336: cold DoH
+    /// exchanges 12-56s -> Dota region pings time out), so we resolve via PLAIN UDP
+    /// inside the already-encrypted tunnel: one small packet each way, no handshake,
+    /// no DoH-hostname bootstrap, leak-safe (never leaves the tunnel). AdGuard's
+    /// plain-DNS IP keeps ad-blocking when BlockAds is on.
+    /// </summary>
+    private static DnsServer BuildVpnDnsServer(AppSettings settings, bool proxyIsUdpNative)
+    {
+        if (proxyIsUdpNative)
+        {
+            return new DnsServer
+            {
+                Tag    = "vpn-dns",
+                Type   = "udp",
+                // AdGuard "Default" plain-DNS (ad + tracker + malware blocking) when
+                // BlockAds is on; else the user's VPN DNS reduced to a literal IP.
+                Server = settings.App.BlockAds ? "94.140.14.14" : ToPlainDnsIp(settings.Dns.VpnDns),
+                Detour = "proxy"
+            };
+        }
+
+        // Remote DoH server routed through VPN proxy.
+        // When BlockAds is on, use AdGuard DNS (blocks ads + trackers + malware).
+        // Otherwise use user-configured VPN DNS.
+        return new DnsServer
+        {
+            Tag        = "vpn-dns",
+            Type       = "https",
+            Server     = settings.App.BlockAds ? "dns.adguard-dns.com" : ParseDohHost(settings.Dns.VpnDns),
+            ServerPort = settings.App.BlockAds ? 443 : ParseDohPort(settings.Dns.VpnDns),
+            Path       = settings.App.BlockAds ? "/dns-query" : ParseDohPath(settings.Dns.VpnDns),
+            Detour     = "proxy",
+            // Bootstrap the DoH hostname without asking vpn-dns to resolve
+            // itself. The DoH exchange still rides the proxy via Detour.
+            DomainResolver = "local-dns"
+        };
+    }
+
+    /// <summary>
+    /// Reduce a DoH URL to a literal IP for plain-UDP DNS (which cannot bootstrap
+    /// a hostname over the tunnel without a loop). Falls back to Cloudflare 1.1.1.1
+    /// when the configured VPN DNS is a hostname rather than an IP literal.
+    /// </summary>
+    private static string ToPlainDnsIp(string dohUrl)
+    {
+        var host = ParseDohHost(dohUrl);
+        return System.Net.IPAddress.TryParse(host, out _) ? host : "1.1.1.1";
+    }
+
     // ─── DoH URL parsing helpers ──────────────────────────────────────────────────
 
     /// <summary>Extract hostname from a DoH URL like https://1.1.1.1/dns-query</summary>

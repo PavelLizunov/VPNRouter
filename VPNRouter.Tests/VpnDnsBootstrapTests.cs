@@ -52,20 +52,31 @@ public sealed class VpnDnsBootstrapTests : IDisposable
     }
 
     [Fact]
-    public void AwgFullTunnel_BlockAdsVpnDnsHostnameBootstrapsViaLocalDns()
+    public void AwgFullTunnel_BlockAds_UsesPlainUdpDnsInsideTunnel()
     {
+        // r8 (2026-07-01): over a UDP-native AmneziaWG tunnel the DoH TLS handshake
+        // blackholes on the fixed 1280 endpoint MTU (diag 20260701-122336: cold DoH
+        // exchanges 12-56s -> Dota region pings time out). vpn-dns therefore switches
+        // to PLAIN UDP inside the already-encrypted tunnel — no handshake, no
+        // DoH-hostname bootstrap. AdGuard's plain-DNS IP keeps ad-blocking.
         var config = ConfigGenerator.Generate(
             new Profile { Name = "awg", DnsMode = "vpn_only" },
             Array.Empty<string>(),
             AwgSettings());
 
-        AssertVpnDnsBootstrapsViaLocalDns(config, expectedServer: "dns.adguard-dns.com");
+        var vpnDns = Assert.Single(config.Dns.Servers, s => s.Tag == "vpn-dns");
+        Assert.Equal("udp", vpnDns.Type);
+        Assert.Equal("94.140.14.14", vpnDns.Server);       // AdGuard plain-DNS (ad-block)
+        Assert.Equal("proxy", vpnDns.Detour);
+        Assert.Null(vpnDns.DomainResolver);                // literal IP => no bootstrap
+        Assert.Null(vpnDns.Path);
+        Assert.Equal("vpn-dns", config.Dns.Final);
         Assert.NotNull(config.Endpoints);
         Assert.Equal("proxy", Assert.Single(config.Endpoints!).Tag);
     }
 
     [Fact]
-    public void AwgFullTunnel_VpnDnsBootstrap_PassesSingBoxLxCheck()
+    public void AwgFullTunnel_PlainUdpDns_PassesSingBoxLxCheck()
     {
         var singBoxLxPath = FindSingBoxLx();
         if (singBoxLxPath == null)
@@ -76,7 +87,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
             Array.Empty<string>(),
             AwgSettings());
 
-        AssertSingBoxCheckPasses(singBoxLxPath, config, "awg-vpn-dns-bootstrap");
+        AssertSingBoxCheckPasses(singBoxLxPath, config, "awg-plain-udp-dns");
     }
 
     private static void AssertVpnDnsBootstrapsViaLocalDns(SingBoxConfig config, string expectedServer)
