@@ -42,7 +42,7 @@ public static class SubscriptionFetcher
     /// <summary>
     /// Same as <see cref="FetchAsync"/> but also returns the number of
     /// entries that were silently dropped because they matched a known
-    /// placeholder fingerprint (<see cref="PlaceholderGuard"/>). Used by
+    /// placeholder fingerprint (<see cref="PlaceholderDefense"/>). Used by
     /// <see cref="RefreshEntryAsync"/> to surface a dedicated warning so
     /// users understand *why* their fetched server count is lower than
     /// the provider's apparent list size.
@@ -139,7 +139,7 @@ public static class SubscriptionFetcher
     /// <summary>
     /// Overload of <see cref="ParseBody(string, ILogger?)"/> that also reports
     /// how many entries were silently dropped because they matched a known
-    /// placeholder fingerprint (<see cref="PlaceholderGuard"/>). The caller
+    /// placeholder fingerprint (<see cref="PlaceholderDefense"/>). The caller
     /// (e.g. <see cref="RefreshEntryAsync"/>) can use this count to log a
     /// dedicated warning so users see *why* a subscription "lost" entries.
     ///
@@ -246,7 +246,7 @@ public static class SubscriptionFetcher
                 // this explicit check in case a future protocol parser is
                 // added without the upstream gate, or the parser path is
                 // bypassed by a future shortcut.
-                if (PlaceholderGuard.IsPlaceholder(entry))
+                if (PlaceholderDefense.IsPlaceholder(entry))
                 {
                     droppedPlaceholders++;
                     continue;

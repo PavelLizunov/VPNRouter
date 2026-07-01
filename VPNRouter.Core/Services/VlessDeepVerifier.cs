@@ -153,8 +153,8 @@ public sealed class VlessDeepVerifier
         // on TCP/443 but the Reality handshake never completes. Reject up
         // front so the verdict surface is honest. Same fingerprint list the
         // settings migrator + resolver scope guard use — single source of
-        // truth at <see cref="PlaceholderGuard"/>.
-        var placeholderField = PlaceholderGuard.Inspect(entry);
+        // truth at <see cref="PlaceholderDefense"/>.
+        var placeholderField = PlaceholderDefense.Inspect(entry);
         if (placeholderField != null)
         {
             _logger.Warning(

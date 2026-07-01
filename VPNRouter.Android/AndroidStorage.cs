@@ -378,7 +378,7 @@ public static class AndroidStorage
     /// <summary>
     /// v2.32.3 (2026-05-17, Z:\kanareik incident) — one-shot cleanup of
     /// placeholder Reality credentials in storage. The fingerprint set is
-    /// the same one <see cref="PlaceholderGuard"/> uses everywhere; this
+    /// the same one <see cref="PlaceholderDefense"/> uses everywhere; this
     /// method is the Android-side equivalent of desktop's
     /// <c>SettingsMigrator.PruneKnownPlaceholders</c>.
     ///
@@ -410,7 +410,7 @@ public static class AndroidStorage
             // (a) Standalone list — KeyServersJson.
             var standalone = GetServers();
             int beforeStandalone = standalone.Count;
-            standalone.RemoveAll(s => PlaceholderGuard.IsPlaceholder(s));
+            standalone.RemoveAll(s => PlaceholderDefense.IsPlaceholder(s));
             int removedStandalone = beforeStandalone - standalone.Count;
             if (removedStandalone > 0)
             {
@@ -446,7 +446,7 @@ public static class AndroidStorage
                     {
                         if (sub?.Servers == null) continue;
                         var before = sub.Servers.Count;
-                        sub.Servers.RemoveAll(s => PlaceholderGuard.IsPlaceholder(s));
+                        sub.Servers.RemoveAll(s => PlaceholderDefense.IsPlaceholder(s));
                         removedFromSubs += before - sub.Servers.Count;
                     }
                     if (removedFromSubs > 0)

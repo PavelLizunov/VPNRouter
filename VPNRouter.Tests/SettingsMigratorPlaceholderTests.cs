@@ -9,7 +9,7 @@ namespace VPNRouter.Tests;
 /// v2.32.3 (2026-05-17): pin the load-time placeholder-fingerprint sweep
 /// that <see cref="SettingsMigrator.PruneKnownPlaceholders"/> performs on
 /// every yaml load. The pass is aggressive — any entry tagged by
-/// <see cref="PlaceholderGuard"/> as a known-bad fingerprint is removed
+/// <see cref="PlaceholderDefense"/> as a known-bad fingerprint is removed
 /// outright from the legacy scalar trio, manual server list, and every
 /// subscription. False-positive bans are worse than false negatives here
 /// (a banned valid server kills VPN), so the tests double-check that

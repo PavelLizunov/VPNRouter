@@ -56,7 +56,7 @@ public static class SettingsMigrator
     /// <summary>
     /// v2.32.3 (2026-05-17): aggressive one-shot sweep that strips
     /// <i>any</i> entry tagged as a known-bad placeholder by
-    /// <see cref="PlaceholderGuard"/> from the persisted settings tree.
+    /// <see cref="PlaceholderDefense"/> from the persisted settings tree.
     /// Targets the legacy <see cref="VlessConfig.Server"/> scalar trio,
     /// the manual <see cref="VlessConfig.Servers"/> list, and every
     /// <see cref="SubscriptionEntry.Servers"/> list on every
@@ -70,7 +70,7 @@ public static class SettingsMigrator
     /// entry in the Servers tab.</para>
     ///
     /// <para>Conservative wipe semantics — never touches an entry that
-    /// <see cref="PlaceholderGuard"/> reports as clean. For the scalar
+    /// <see cref="PlaceholderDefense"/> reports as clean. For the scalar
     /// trio (<see cref="VlessConfig.Server"/> +
     /// <see cref="VlessConfig.Reality"/>), a single hit zeroes the
     /// related fields atomically (server, port, uuid, reality) because
@@ -98,7 +98,7 @@ public static class SettingsMigrator
         var vless = settings.Vless;
         if (vless != null)
         {
-            var scalarHit = PlaceholderGuard.Inspect(
+            var scalarHit = PlaceholderDefense.Inspect(
                 vless.Reality?.PublicKey,
                 vless.Reality?.ShortId,
                 vless.Server);
@@ -123,7 +123,7 @@ public static class SettingsMigrator
                 var initial = vless.Servers.Count;
                 vless.Servers.RemoveAll(entry =>
                 {
-                    var field = PlaceholderGuard.Inspect(entry);
+                    var field = PlaceholderDefense.Inspect(entry);
                     if (field == null) return false;
                     var truncated = TruncateForLog(MatchedEntryValue(entry, field));
                     logger?.Warning(
@@ -147,7 +147,7 @@ public static class SettingsMigrator
                 var initial = sub.Servers.Count;
                 sub.Servers.RemoveAll(entry =>
                 {
-                    var field = PlaceholderGuard.Inspect(entry);
+                    var field = PlaceholderDefense.Inspect(entry);
                     if (field == null) return false;
                     var truncated = TruncateForLog(MatchedEntryValue(entry, field));
                     logger?.Warning(

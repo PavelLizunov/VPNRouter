@@ -105,7 +105,7 @@ public partial class AndroidApp
         }
         catch (PlaceholderConfigException ex)
         {
-            // v2.32.3 (Z:\kanareik incident) — input gate via PlaceholderGuard
+            // v2.32.3 (Z:\kanareik incident) — input gate via PlaceholderDefense
             // rejected the scanned QR because it carries leftover Android
             // smoke-test credentials (pubkey=DnT9hI...nckU or its short_id /
             // server IP). User probably scanned a "sample" QR from a forum

@@ -57,7 +57,7 @@ public static class CustomConfigInjector
     /// <para>v2.32.3-r1 (2026-05-17): throws <see cref="PlaceholderConfigException"/>
     /// when the first proxy-typed outbound in <paramref name="rawJson"/> carries
     /// a known placeholder fingerprint (Reality public_key, Reality short_id,
-    /// or server IP — see <see cref="PlaceholderGuard"/>). This is the
+    /// or server IP — see <see cref="PlaceholderDefense"/>). This is the
     /// custom-config equivalent of F-A/B/D's input gates: we want users who
     /// paste a sing-box JSON containing the Android smoke-test placeholder
     /// (the <c>DnT9...</c> pubkey) to get an actionable error at paste time

@@ -29,7 +29,7 @@ namespace VPNRouter.Core.Services;
 /// <para>v2.32.3 input gate (2026-05-17): the vless:// branch inherits
 /// placeholder rejection from <see cref="VlessUriParser.Parse"/>. The
 /// Hysteria2 / TUIC / Shadowsocks branches additionally pipe their
-/// output through <see cref="PlaceholderGuard.Inspect(VlessServerEntry?)"/>
+/// output through <see cref="PlaceholderDefense.Inspect(VlessServerEntry?)"/>
 /// — placeholder server-IPs in particular can land in non-VLESS URIs
 /// too (Z:\kanareik-class incident).</para>
 /// </summary>
@@ -130,7 +130,7 @@ public static class ServerUriParser
         // escapes the parser. Z:\kanareik-class incident: placeholder
         // credential leaked through subscription cache, F-E (runtime)
         // caught it at Connect but user was already stuck.
-        var offendingField = PlaceholderGuard.Inspect(entry);
+        var offendingField = PlaceholderDefense.Inspect(entry);
         if (offendingField != null)
         {
             var offendingValue = offendingField switch

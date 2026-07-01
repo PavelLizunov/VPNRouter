@@ -275,7 +275,7 @@ public class CustomConfigPlaceholderTests
     public void ConfigSanityCheck_InspectOutbound_PublicHelperMatches()
     {
         // The extracted helper must return the same field name as
-        // PlaceholderGuard.Inspect for each placeholder field. This pins
+        // PlaceholderDefense.Inspect for each placeholder field. This pins
         // the "single source of truth" promise: both layers agree on what
         // a placeholder looks like and what the field name is.
         var pubkeyOutbound = new JsonObject
@@ -338,13 +338,13 @@ public class CustomConfigPlaceholderTests
 
         // Cross-check against PlaceholderGuard directly — same field names.
         Assert.Equal(
-            PlaceholderGuard.Inspect(PlaceholderPubkey, CleanShortId, CleanServer),
+            PlaceholderDefense.Inspect(PlaceholderPubkey, CleanShortId, CleanServer),
             ConfigSanityCheck.InspectOutbound(pubkeyOutbound));
         Assert.Equal(
-            PlaceholderGuard.Inspect(CleanPubkey, PlaceholderShortId, CleanServer),
+            PlaceholderDefense.Inspect(CleanPubkey, PlaceholderShortId, CleanServer),
             ConfigSanityCheck.InspectOutbound(shortIdOutbound));
         Assert.Equal(
-            PlaceholderGuard.Inspect(CleanPubkey, CleanShortId, PlaceholderServer),
+            PlaceholderDefense.Inspect(CleanPubkey, CleanShortId, PlaceholderServer),
             ConfigSanityCheck.InspectOutbound(serverOutbound));
     }
 }

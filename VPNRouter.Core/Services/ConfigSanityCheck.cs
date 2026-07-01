@@ -148,7 +148,7 @@ public sealed class ConfigSanityCheck
                     "outbound.uuid");
         }
 
-        // ── Placeholder fingerprint match (delegated to PlaceholderGuard) ──
+        // ── Placeholder fingerprint match (delegated to PlaceholderDefense) ──
         // v2.32.3-r1 (2026-05-17): inspection logic moved to InspectOutbound
         // so CustomConfigInjector and any future caller share the same
         // single-source-of-truth check. Kept the per-field log lines here

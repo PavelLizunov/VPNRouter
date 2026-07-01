@@ -96,9 +96,9 @@
 //     LeakProtection, ConfigSanityCheck, VlessDeepVerifier) remain in place
 //     — they now forward to the centralized sub-class. The layer logic is
 //     identical, just relocated.
-//   - `PlaceholderGuard` becomes a thin one-line forwarder for every public
-//     method/property it currently exposes. Existing call sites compile
-//     unchanged.
+//   - `PlaceholderGuard` was a thin one-line forwarder to this file; it was
+//     removed in the 2026-07-01 cleanup and all call sites now use
+//     `PlaceholderDefense` directly.
 //
 // Drift verification (CI follow-up in Phase 4): grep for the placeholder
 // pubkey string "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU" — after
@@ -164,9 +164,7 @@ public sealed record PlaceholderFingerprint
 /// (<see cref="VlessServersResolver"/>, <see cref="SettingsMigrator"/>, etc.)
 /// stay put but now forward to the relevant sub-class.</para>
 ///
-/// <para>Back-compat — <see cref="PlaceholderGuard"/> is preserved as a
-/// one-line-per-member forwarder so the ~13 existing call sites compile
-/// unchanged. The original <see cref="ConfigSanityCheck.KnownPlaceholderPubkeys"/>
+/// <para>Back-compat — the original <see cref="ConfigSanityCheck.KnownPlaceholderPubkeys"/>
 /// / <see cref="ConfigSanityCheck.KnownPlaceholderShortIds"/> /
 /// <see cref="ConfigSanityCheck.KnownPlaceholderServers"/> static sets are
 /// also kept (now sourced from this file's <see cref="KnownFingerprints"/>

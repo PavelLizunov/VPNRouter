@@ -14,7 +14,7 @@ public class VlessUriParserTests
     // Reality fingerprint so VlessUriParser.Parse() doesn't reject the
     // fixture as placeholder bait. The synthesized pbk is base64url-shaped
     // 43 chars (matches what real X25519 pubkeys look like) and is NOT in
-    // PlaceholderGuard.KnownPubkeys / KnownShortIds.
+    // PlaceholderDefense.KnownPubkeys / KnownShortIds.
     private const string RealityUri =
         "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443" +
         "?security=reality&sni=yahoo.com&fp=firefox" +

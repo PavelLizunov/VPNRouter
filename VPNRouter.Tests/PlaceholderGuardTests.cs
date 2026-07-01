@@ -10,7 +10,7 @@ namespace VPNRouter.Tests;
 // Foundation for the "kill placeholder credentials for every user" project.
 // Each test pins one path through PlaceholderGuard so we can't regress when
 // adding more fingerprint entries (the lists are intentionally narrow — see
-// PlaceholderGuard.cs class-level doc).
+// PlaceholderDefense.cs class-level doc).
 
 public class PlaceholderGuardTests
 {
@@ -21,7 +21,7 @@ public class PlaceholderGuardTests
     [Fact]
     public void Inspect_NullEntry_ReturnsNull()
     {
-        Assert.Null(PlaceholderGuard.Inspect((VlessServerEntry?)null));
+        Assert.Null(PlaceholderDefense.Inspect((VlessServerEntry?)null));
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class PlaceholderGuardTests
                 ShortId = "deadbeef",
             },
         };
-        Assert.Null(PlaceholderGuard.Inspect(clean));
+        Assert.Null(PlaceholderDefense.Inspect(clean));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class PlaceholderGuardTests
                 ShortId = "deadbeef",
             },
         };
-        Assert.Equal("reality.public_key", PlaceholderGuard.Inspect(dirty));
+        Assert.Equal("reality.public_key", PlaceholderDefense.Inspect(dirty));
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class PlaceholderGuardTests
                 ShortId = KnownBadShortId,
             },
         };
-        Assert.Equal("reality.short_id", PlaceholderGuard.Inspect(dirty));
+        Assert.Equal("reality.short_id", PlaceholderDefense.Inspect(dirty));
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class PlaceholderGuardTests
                 ShortId = "deadbeef",
             },
         };
-        Assert.Equal("server", PlaceholderGuard.Inspect(dirty));
+        Assert.Equal("server", PlaceholderDefense.Inspect(dirty));
     }
 
     [Fact]
@@ -122,28 +122,28 @@ public class PlaceholderGuardTests
                 ShortId = KnownBadShortId,
             },
         };
-        Assert.Equal("reality.public_key", PlaceholderGuard.Inspect(dirty));
+        Assert.Equal("reality.public_key", PlaceholderDefense.Inspect(dirty));
     }
 
     [Fact]
     public void InspectTriField_NullsTreatedAsClean()
     {
-        Assert.Null(PlaceholderGuard.Inspect(null, null, null));
+        Assert.Null(PlaceholderDefense.Inspect(null, null, null));
     }
 
     [Fact]
     public void InspectTriField_PlaceholderPubkey_Detected()
     {
         Assert.Equal("reality.public_key",
-            PlaceholderGuard.Inspect(KnownBadPubkey, null, null));
+            PlaceholderDefense.Inspect(KnownBadPubkey, null, null));
     }
 
     [Fact]
     public void IsPlaceholder_BoolConvenience_Matches()
     {
-        Assert.True(PlaceholderGuard.IsPlaceholder(KnownBadPubkey, null, null));
-        Assert.False(PlaceholderGuard.IsPlaceholder("vJgL_realPubkey", null, null));
-        Assert.False(PlaceholderGuard.IsPlaceholder((VlessServerEntry?)null));
+        Assert.True(PlaceholderDefense.IsPlaceholder(KnownBadPubkey, null, null));
+        Assert.False(PlaceholderDefense.IsPlaceholder("vJgL_realPubkey", null, null));
+        Assert.False(PlaceholderDefense.IsPlaceholder((VlessServerEntry?)null));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class PlaceholderGuardTests
         // placeholder pbk → guard rejects before persistence.
         var uri = $"vless://352714f4-7ecc-4c22-805f-ed5c5239f5bb@example.com:443" +
                   $"?security=reality&pbk={KnownBadPubkey}&sni=yahoo.com&fp=firefox&type=tcp";
-        Assert.Equal("reality.public_key", PlaceholderGuard.InspectUri(uri));
+        Assert.Equal("reality.public_key", PlaceholderDefense.InspectUri(uri));
     }
 
     [Fact]
@@ -163,9 +163,9 @@ public class PlaceholderGuardTests
         // Garbage strings shouldn't crash the guard — they fail parsing
         // upstream and surface as a separate "couldn't parse" error to
         // the user. Guard returning null here = "not my problem".
-        Assert.Null(PlaceholderGuard.InspectUri("not-a-uri"));
-        Assert.Null(PlaceholderGuard.InspectUri(""));
-        Assert.Null(PlaceholderGuard.InspectUri(null));
+        Assert.Null(PlaceholderDefense.InspectUri("not-a-uri"));
+        Assert.Null(PlaceholderDefense.InspectUri(""));
+        Assert.Null(PlaceholderDefense.InspectUri(null));
     }
 
     [Fact]

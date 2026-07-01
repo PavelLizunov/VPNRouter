@@ -12,7 +12,7 @@ public static class VlessUriParser
     /// <summary>Parse a single vless:// URI into a VlessServerEntry.</summary>
     /// <remarks>
     /// v2.32.3 input gate (2026-05-17): after successful structural parse,
-    /// the produced entry is routed through <see cref="PlaceholderGuard"/>.
+    /// the produced entry is routed through <see cref="PlaceholderDefense"/>.
     /// If any field matches a known-bad placeholder fingerprint (pubkey /
     /// short_id / server), the parser throws
     /// <see cref="PlaceholderConfigException"/> instead of returning a
@@ -132,9 +132,9 @@ public static class VlessUriParser
         // parse time. See Z:\kanareik incident: stas's android-port
         // placeholder pubkey "DnT9..." leaked into a real user config via
         // subscription cache, F-E caught it at Connect but the user
-        // couldn't dial out. Routing every entry through PlaceholderGuard
+        // couldn't dial out. Routing every entry through PlaceholderDefense
         // here means the bad credential never makes it into storage.
-        var offendingField = PlaceholderGuard.Inspect(entry);
+        var offendingField = PlaceholderDefense.Inspect(entry);
         if (offendingField != null)
         {
             var offendingValue = offendingField switch

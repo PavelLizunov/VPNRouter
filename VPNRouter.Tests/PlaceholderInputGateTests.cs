@@ -12,7 +12,7 @@ namespace VPNRouter.Tests;
 /// <see cref="ServerUriParser.Parse"/> throw
 /// <see cref="PlaceholderConfigException"/> when ingested credentials
 /// match a known-bad fingerprint
-/// (see <see cref="PlaceholderGuard.KnownPubkeys"/>), and that the
+/// (see <see cref="PlaceholderDefense.KnownPubkeys"/>), and that the
 /// <c>TryParse</c> / <c>ParseMultiple</c> variants drop those URIs the
 /// same way they drop malformed input.</para>
 ///
@@ -24,7 +24,7 @@ namespace VPNRouter.Tests;
 /// </summary>
 public class PlaceholderInputGateTests
 {
-    // The placeholder pubkey lives in PlaceholderGuard.KnownPubkeys (which
+    // The placeholder pubkey lives in PlaceholderDefense.KnownPubkeys (which
     // mirrors ConfigSanityCheck.KnownPlaceholderPubkeys). Hard-coded here
     // so the test catches future accidental changes to the fingerprint
     // list — the constant should ONLY shrink, never silently change.
