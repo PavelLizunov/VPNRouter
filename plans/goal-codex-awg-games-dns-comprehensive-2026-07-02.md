@@ -39,10 +39,25 @@
 
 ## Фаза 1 — Core/config-gen фиксы (C#, низкий риск, БЕЗ пересборки ядра)
 
-- [ ] **1A (P1) DNS-leak lockdown авто-arm в full-tunnel** (finding B, OPEN-DEFECTS
-  строка ~43). Живой AWG-тест: IP=Iceland ок, но DNS-панель browserleaks показала 3
-  RU-резолвера (`195.2.238.4/…` Trytek LLC, 300/300) при `dns_leak_lockdown:false` —
-  Windows smart multi-homed resolution шлёт :53 мимо туннеля. Фича `DnsLeakLockdown`
+- [ ] **1A (P1) DNS-leak — DIAGNOSTIC-FIRST, НЕ слепой firewall auto-arm** (finding B).
+  Живой AWG-тест: IP=Iceland ок, но browserleaks показал 3 RU-резолвера
+  (`195.2.238.4/…` Trytek LLC) при `dns_leak_lockdown:false`.
+  **КРИТИЧНО (investigation 2026-07-02):** registry SMHNR-disable (+ParallelAAAA
+  +TUN-metric) идёт **безусловно** на каждом connect (`WindowsDnsHardening.Apply:103`,
+  НЕ gated на DnsLeakLockdown). Т.е. тестер утёк RU-резолверами **несмотря** на уже
+  применённый хирургический SMHNR-фикс → значит либо registry не взлетел на его машине,
+  либо механизм утечки НЕ SMHNR. **Единственный оставшийся рычаг — firewall :53-блок**,
+  но он (a) override'ит документированное BR-10-решение default-off (ломает full-tunnel
+  LAN-DNS-proxy юзеров: dnscrypt/AdGuard Home на sibling-NIC, private-IP резолвер идёт
+  direct даже в full-tunnel), (b) НЕ подтверждён что чинит ЭТУ утечку (SMHNR-disable не
+  починил). **Слепой auto-arm = blind fix неизвестного механизма + override продукт-
+  решения — методология запрещает.** ПРАВИЛЬНЫЙ next step: **tester diagnostic** —
+  включить СУЩЕСТВУЮЩИЙ тумблер (Settings → Leak Protection → DNS Leak Lockdown),
+  переподключить AWG full-tunnel, re-run browserleaks. Если RU-резолверы исчезли →
+  firewall-блок работает → ТОГДА scoped auto-arm (с BR-10 caveat: exempt private-IP :53).
+  Если НЕ исчезли → механизм другой (NRPT/DoH-bootstrap/app-direct), нужен свежий diag.
+  Только ПОСЛЕ этого — код. (Ниже — прежний спек auto-arm helper'а, валиден лишь если
+  diagnostic подтвердит firewall-блок как фикс.) Фича `DnsLeakLockdown`
   УЖЕ есть (Wave-39): TUN-gated arm/lift через `WindowsDnsHardening`, allow-rule на
   TUN-CIDR (`Tun.Ipv4Address` = `172.19.0.1/30`, populated для AWG → tunnel-DNS выживает),
   fail-open на outage. Дефолт `false`. **Precise fix (r12, own live-verify — НЕ бандлить
