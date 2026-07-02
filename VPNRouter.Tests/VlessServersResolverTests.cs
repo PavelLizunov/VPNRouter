@@ -88,6 +88,48 @@ public class VlessServersResolverTests
     }
 
     [Fact]
+    public void SubscribeMode_StaleVlessActiveServer_HonoursSubscriptionSelection_NotScopedZero()
+    {
+        // diag 20260703-002353: user selected "Germany AWG" but a stale, truncated
+        // vless.active_server ("main-brat", matching no scoped name) survived, so the
+        // r10 stale-check fell back to scoped[0] ("Germany VLESS") on the coexist-VPN
+        // route-exclude re-apply — silently switching the user off AWG onto a throttled
+        // protocol. In subscribe mode App.ActiveSubscriptionServer must win.
+        var vless = new VlessServerEntry
+        {
+            Name = "Germany VLESS ~main-brat", Protocol = "vless",
+            Server = "104.194.156.93", Port = 443, Uuid = "u1", Flow = "xtls-rprx-vision",
+        };
+        var awg = new VlessServerEntry
+        {
+            Name = "Germany AWG ~main-brat", Protocol = "amneziawg",
+            Server = "104.194.156.93", Port = 51820,
+        };
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                ActiveSubscriptionServer = "Germany AWG ~main-brat",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new()
+                    {
+                        Name = "sub", Url = "https://example.com/x", Enabled = true,
+                        Servers = new List<VlessServerEntry> { vless, awg }, // vless is scoped[0]
+                    }
+                }
+            },
+            Vless = new VlessConfig { ActiveServer = "main-brat" } // stale / truncated
+        };
+
+        VlessServersResolver.Resolve(settings);
+
+        // Must stay on the user's real selection (AWG), NOT fall back to scoped[0] (VLESS).
+        Assert.Equal("Germany AWG ~main-brat", settings.Vless.ActiveServer);
+    }
+
+    [Fact]
     public void SubscribeMode_SkipsDisabledSubscriptions()
     {
         var settings = new AppSettings

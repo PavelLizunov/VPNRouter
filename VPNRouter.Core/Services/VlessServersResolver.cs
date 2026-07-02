@@ -111,10 +111,16 @@ public static class VlessServersResolver
         {
             settings.Vless.Servers = subscriptionAggregated;
 
-            // Carry over the active selection from the subscribe-mode
-            // setting if the manual one isn't set.
-            if (string.IsNullOrEmpty(settings.Vless.ActiveServer)
-                && !string.IsNullOrEmpty(settings.App.ActiveSubscriptionServer))
+            // Carry over the active selection from the subscribe-mode setting.
+            // In SUBSCRIBE mode App.ActiveSubscriptionServer is authoritative and
+            // must OVERRIDE a stale vless.active_server — diag 20260703-002353: a
+            // truncated stale value ("main-brat", matching no scoped name) survived
+            // here, so the r10 stale-check below fell back to scoped[0], silently
+            // switching a user on "Germany AWG" onto "Germany VLESS" (a throttled
+            // protocol) during the coexist-VPN route-exclude re-apply. In the
+            // generated-mode fallback we still only fill when the manual pick is empty.
+            if (!string.IsNullOrEmpty(settings.App.ActiveSubscriptionServer)
+                && (isSubscribe || string.IsNullOrEmpty(settings.Vless.ActiveServer)))
             {
                 settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
             }
