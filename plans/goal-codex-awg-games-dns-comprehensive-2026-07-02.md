@@ -1,5 +1,10 @@
 # GOAL (Codex): AmneziaWG — реалтайм-игры (Dota/SDR) + DNS-корректность + AWG-гигиена — большой фикс-пасс
 
+> **STATUS 2026-07-02 — AUTONOMOUS PHASE CLOSED (по команде user'а):** автономный
+> фикс-пасс завершён и отгружен в **v2.45.0-r11**; живая приёмка (Dota + browserleaks)
+> честно остаётся за тестером — см. секцию «Внешняя приёмка» в конце (НЕ фабрикуется,
+> НЕ часть автономного gate). Разбор ниже:
+>
 > **STATUS 2026-07-02 (v2.45.0-r11):** DONE — Фаза 0 (MTU endpoint 1420 + r10 comment,
 > `b4116041`); **1E** AWG TUN=1420 (`bbcd500d` — fixed the incomplete Phase-0 min-clamp);
 > **1B** game-DNS-off-proxy band-aid deleted (`bbcd500d`); **1C** already satisfied by the
@@ -145,24 +150,27 @@
 - [ ] **Опц. дожать вилку:** tcpdump на exit (handoff 2) формально закрывает H2, но
   WSAENOBUFS-свидетельство уже достаточно для Фазы 2.
 
-## Acceptance (комплексно)
+## Автономный gate приёмки — ВСЕ MET на r11 (2026-07-02) — ЦИКЛ ЗАКРЫТ
 
-**Self-verifiable — ВСЕ MET на r11 (2026-07-02):**
+Это единственный gate, достижимый автономным агентом; все пункты зелёные:
 - [x] Build+CI зелёные (`a1a8997d` check-runs 0 failures); 14 desktop assets; win.zip URL 200.
 - [x] lx-ядро с `with_awg,with_xhttp` в win.zip; 4 build-патча целы (WSAEFAULT×2 + H4 + WSAENOBUFS), handshake-send smoke прошёл.
 - [x] r11 binary integrity: `VPNRouter.CLI.exe doctor` → `Version: 2.45.0-r11`.
 - [x] AWG-конфиг (1420 MTU + plain-UDP DNS, game-DNS-костыль удалён) проходит РЕАЛЬНЫЙ `sing-box-lx check` (`AwgDnsAndMtuTests` + `VpnDnsBootstrapTests` 10/10).
 - [x] StrictDns больше не обходится game-DNS-костылём (ветка + `GameDnsOffProxyTests` удалены; `AwgDnsAndMtuTests` подтверждает единый DNS-путь).
+- [x] Install/deploy-path подтверждён на живой тест-VM (r11 zip с GitHub → extract поверх install → `doctor` = 2.45.0-r11).
 
-**Tester-gated — HANDED OFF (я не могу self-verify: нет игры, нет RU-пути, нет AWG-exit creds):**
-- [ ] Dota на **AWG**: регионы показывают пинги (`Relays≥20 valid`), матч 10 мин без «connection lost». ← корневой WSAENOBUFS-эффект подтверждается ТОЛЬКО живым burst'ом.
-- [ ] **DNS-leak** browserleaks: только exit/vpn-dns, ноль RU-резолверов. ← это **1A** (DEFERRED — full-tunnel-scoped, отдельный ship после подтверждения Dota; блант-флип сломал бы split-tunnel).
-- [ ] **Не сломано:** Roblox + браузинг на 1420; VLESS/Hy2 без регрессий. ← Roblox уже работал на 1280; 1420 нужно подтвердить живьём.
+**Автономная фаза закрыта по команде user'а (2026-07-02).** Весь код отгружён в r11.
 
-**Терминальное состояние моей части:** весь код отгружен в r11, всё self-verifiable — зелёное.
-Дальше — живой тест тестера. Порядок: r11 → тестер подтверждает Dota → тогда либо stable,
-либо 1A (DNS-lockdown) отдельным ship'ом со своим live-verify. Не бандлю 1A в r11 — риск
-split-tunnel-регресса без живой проверки перевесил бы чистоту теста WSAENOBUFS-фикса.
+## Внешняя приёмка тестером — ВНЕ автономного scope (pending, НЕ фабрикуется)
+
+Поведенческие критерии; закрываются ТОЛЬКО живым тестом из RU через AWG — недостижимы
+для автономного агента (нет игры, нет RU-пути, нет AWG-exit creds). Честно остаются pending:
+- [ ] **A. Dota на AWG**: регионы показывают пинги (`Relays≥20 valid`), матч 10 мин без «connection lost». ← корневой WSAENOBUFS-эффект подтверждается ТОЛЬКО живым burst'ом.
+- [ ] **B. DNS-leak** browserleaks: только exit/vpn-dns, ноль RU-резолверов. ← сначала diagnostic (включить СУЩЕСТВУЮЩИЙ тумблер DnsLeakLockdown → browserleaks), потом код 1A по результату (см. Фаза-1 1A).
+- [ ] **Не сломано:** Roblox + браузинг на 1420; VLESS/Hy2 без регрессий. ← Roblox уже работал на 1280; 1420 подтвердить живьём.
+
+Когда будут A/B от тестера → либо stable-cut (по команде user'а), либо точечный DNS-фикс по данным B.
 
 ## Порядок / оценка
 | Фаза | Риск | Пересборка ядра | Оценка |
