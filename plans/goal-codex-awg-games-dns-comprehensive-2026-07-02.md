@@ -39,14 +39,29 @@
 
 ## Фаза 1 — Core/config-gen фиксы (C#, низкий риск, БЕЗ пересборки ядра)
 
-- [ ] **1A (P1) DNS-leak lockdown по умолчанию в full-tunnel** (finding B, OPEN-DEFECTS
+- [ ] **1A (P1) DNS-leak lockdown авто-arm в full-tunnel** (finding B, OPEN-DEFECTS
   строка ~43). Живой AWG-тест: IP=Iceland ок, но DNS-панель browserleaks показала 3
   RU-резолвера (`195.2.238.4/…` Trytek LLC, 300/300) при `dns_leak_lockdown:false` —
-  Windows smart multi-homed resolution шлёт :53 мимо туннеля. **Fix (минимум):**
-  дефолт `App.DnsLeakLockdown=true` в full-tunnel (firewall port-53 backstop);
-  **правильно (если время):** NRPT-правило / блок исходящего :53 на физ-NIC / DoH-
-  редирект. Тест: browserleaks DNS-панель показывает ТОЛЬКО exit/vpn-dns.
-  — `VPNRouter.Core/Models/AppConfig.cs` (default) + `FirewallManager`/DNS-hardening.
+  Windows smart multi-homed resolution шлёт :53 мимо туннеля. Фича `DnsLeakLockdown`
+  УЖЕ есть (Wave-39): TUN-gated arm/lift через `WindowsDnsHardening`, allow-rule на
+  TUN-CIDR (`Tun.Ipv4Address` = `172.19.0.1/30`, populated для AWG → tunnel-DNS выживает),
+  fail-open на outage. Дефолт `false`. **Precise fix (r12, own live-verify — НЕ бандлить
+  в r11 Dota-кандидат: firewall :53-блок при мисфайре замаскирует Dota-тест):**
+  1. `AppConfig.EffectiveDnsLeakLockdown` computed: `DnsLeakLockdown || (RoutingMode=="full"
+     && !isDnsTunnel)`. BR в full-tunnel — no-op (AppConfig:43 doc), НЕ исключать по нему.
+  2. Скоуп СТРОГО `"full"` (не `"exclude"` — там excluded-apps идут direct, нужен физ-:53;
+     не `"split"`). `RoutingMode.Equals("full", OrdinalIgnoreCase)` — идиома ConfigGenerator:939.
+  3. **Исключить dns-tunnel/slipstream** (VpnEngine:1277 — эмердженси-транспорту нужен
+     off-tunnel DNS до резолверов; lockdown его убьёт). Сигнал `isDnsTunnel` сейчас НЕ
+     доступен в `WindowsDnsHardening` — пробросить через settings или arm-context.
+  4. Consumers на effective: `WindowsDnsHardening.ReconcileLockdownForHealth:184` (arm)
+     + `HealthMonitor.cs:505` gate (иначе fail-open lift не re-arm'ится → на outage
+     firewall держит :53-блок → юзер теряет интернет). Mac path (VpnEngine:357) —
+     оставить raw (opt-in, отдельная платформа/sudoers).
+  5. Unit-тесты: truth-table (full→arm, split→no, exclude→no, full+dns-tunnel→no,
+     explicit-true→always). Live: browserleaks ноль RU-резолверов + браузинг цел +
+     эмердженси-канал (если testable) не сломан.
+  — `AppConfig.cs` (helper) + `WindowsDnsHardening.cs:184` + `HealthMonitor.cs:505`.
 - [ ] **1B (P2) game-DNS-off-proxy ломает StrictDns** (OPEN-DEFECTS строка ~34).
   `ResolveGameDnsOffProxy` заворачивает roblox/rbxcdn/steam* → local-dns даже при
   `StrictDns=true`, ломая «весь DNS через VPN». Теперь, когда DNS-корень починен
