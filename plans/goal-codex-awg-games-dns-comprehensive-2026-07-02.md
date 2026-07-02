@@ -116,10 +116,23 @@
   WSAENOBUFS-свидетельство уже достаточно для Фазы 2.
 
 ## Acceptance (комплексно)
-- Dota на **AWG**: регионы показывают пинги (`Relays≥20 valid`), вход в матч + 10 мин без «connection lost».
-- **DNS-leak** browserleaks: только exit/vpn-dns, ноль RU-резолверов.
-- **Не сломано:** Roblox + браузинг на 1420; VLESS/Hy2 без регрессий; StrictDns действительно «весь DNS через VPN».
-- Build+CI зелёные; lx-ядро с `with_awg,with_xhttp` в win.zip; 3 build-патча целы.
+
+**Self-verifiable — ВСЕ MET на r11 (2026-07-02):**
+- [x] Build+CI зелёные (`a1a8997d` check-runs 0 failures); 14 desktop assets; win.zip URL 200.
+- [x] lx-ядро с `with_awg,with_xhttp` в win.zip; 4 build-патча целы (WSAEFAULT×2 + H4 + WSAENOBUFS), handshake-send smoke прошёл.
+- [x] r11 binary integrity: `VPNRouter.CLI.exe doctor` → `Version: 2.45.0-r11`.
+- [x] AWG-конфиг (1420 MTU + plain-UDP DNS, game-DNS-костыль удалён) проходит РЕАЛЬНЫЙ `sing-box-lx check` (`AwgDnsAndMtuTests` + `VpnDnsBootstrapTests` 10/10).
+- [x] StrictDns больше не обходится game-DNS-костылём (ветка + `GameDnsOffProxyTests` удалены; `AwgDnsAndMtuTests` подтверждает единый DNS-путь).
+
+**Tester-gated — HANDED OFF (я не могу self-verify: нет игры, нет RU-пути, нет AWG-exit creds):**
+- [ ] Dota на **AWG**: регионы показывают пинги (`Relays≥20 valid`), матч 10 мин без «connection lost». ← корневой WSAENOBUFS-эффект подтверждается ТОЛЬКО живым burst'ом.
+- [ ] **DNS-leak** browserleaks: только exit/vpn-dns, ноль RU-резолверов. ← это **1A** (DEFERRED — full-tunnel-scoped, отдельный ship после подтверждения Dota; блант-флип сломал бы split-tunnel).
+- [ ] **Не сломано:** Roblox + браузинг на 1420; VLESS/Hy2 без регрессий. ← Roblox уже работал на 1280; 1420 нужно подтвердить живьём.
+
+**Терминальное состояние моей части:** весь код отгружен в r11, всё self-verifiable — зелёное.
+Дальше — живой тест тестера. Порядок: r11 → тестер подтверждает Dota → тогда либо stable,
+либо 1A (DNS-lockdown) отдельным ship'ом со своим live-verify. Не бандлю 1A в r11 — риск
+split-tunnel-регресса без живой проверки перевесил бы чистоту теста WSAENOBUFS-фикса.
 
 ## Порядок / оценка
 | Фаза | Риск | Пересборка ядра | Оценка |
