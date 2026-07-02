@@ -125,11 +125,18 @@ public static class ConfigGenerator
         var logPath = AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy,
-            out bool isDnsTunnel, out var dnsTunnelResolverIps, out var endpoints, isServerAlive);
+            out bool isDnsTunnel, out var dnsTunnelResolverIps, out var endpoints,
+            out bool proxyIsUdpNativeOutbound, isServerAlive);
 
-        // A UDP-native proxy (AmneziaWG / WireGuard endpoint tagged "proxy") drives
-        // the TUN MTU cap AND the plain-UDP DNS path — see AwgEndpointMtu.
+        // A UDP-native ENDPOINT (AmneziaWG / WireGuard tagged "proxy") drives the TUN
+        // MTU cap AND the plain-UDP DNS path — see AwgEndpointMtu. A Hy2/TUIC sole
+        // proxy wants NEITHER (QUIC self-clamps its packets; DoH rides QUIC fine), so
+        // those two stay gated on the endpoint signal only.
         var proxyIsUdpNative = endpoints != null && endpoints.Count > 0;
+        // Whether the active "proxy" carries UDP natively — AWG endpoint OR a selected
+        // Hy2/TUIC sole outbound. Used ONLY to suppress the QUIC-reject in BuildRoute
+        // (rejecting QUIC on a UDP-native tunnel needlessly forces HTTP/3 apps to TCP).
+        var proxyCarriesUdpNatively = proxyIsUdpNative || proxyIsUdpNativeOutbound;
 
         var config = new SingBoxConfig
         {
@@ -143,7 +150,7 @@ public static class ConfigGenerator
             Inbounds = BuildInbounds(settings, proxyIsUdpNative),
             Outbounds = outbounds,
             Endpoints = endpoints, // AmneziaWG "proxy" endpoint (sing-box-lx); null otherwise
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyIsUdpNative),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyCarriesUdpNatively),
             Experimental = new SingBoxExperimental()
         };
 
@@ -1156,9 +1163,16 @@ public static class ConfigGenerator
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy,
         out bool isDnsTunnel, out List<string> dnsTunnelResolverIps,
         out List<SingBoxEndpoint>? endpoints,
+        out bool proxyIsUdpNativeOutbound,
         Func<VlessServerEntry, bool>? isServerAlive = null)
     {
         endpoints = null; // default: no endpoints -> official-sing-box-compatible config
+        // Set true only when the SOLE "proxy" outbound is a UDP-native transport
+        // (Hy2/TUIC over QUIC) carrying TCP+UDP — so BuildRoute does NOT QUIC-reject
+        // it. Distinct from the endpoints-based AWG signal (which also drives the
+        // TUN-MTU cap + plain-UDP DNS; Hy2 wants neither — QUIC self-clamps + DoH
+        // rides QUIC fine).
+        proxyIsUdpNativeOutbound = false;
         var servers = settings.Vless.GetActiveServers();
 
         // macOS / Android naive backstop. The parser refuses naive at intake on
@@ -1307,7 +1321,34 @@ public static class ConfigGenerator
         // invariant, emitting "proxy-udp" with no "proxy" would leave route rules
         // referencing a missing outbound -> silent leak. Falling through to the
         // standard split guarantees a "proxy" outbound is always built.
-        if (udpSibling != null && tcpNaiveServers.Count > 0)
+        // Selected Hy2/TUIC → SOLE "proxy": these tunnel BOTH TCP and UDP over one
+        // QUIC transport, so a single outbound carries everything. Honour the user's
+        // explicit UDP-native pick instead of letting the flow-split hand TCP to a
+        // same-host VLESS-Reality sibling — that rides VLESS-over-TCP, throttled by
+        // RU TSPU, the very reason to choose Hy2. Mirrors the AWG "selected entry
+        // wins" name-resolution above (by name, fallback first) so a sibling can't
+        // hijack the selection. Diagnosed 2026-07-02 (diag 20260702-183129): browser
+        // 696x i/o-timeout on outbound/vless[proxy] while active = "Germany HY2".
+        var udpNativeActiveName = settings.Vless.ActiveServer;
+        var udpNativeActiveEntry = !string.IsNullOrEmpty(udpNativeActiveName)
+            ? servers.FirstOrDefault(s =>
+                string.Equals(s.Name, udpNativeActiveName, StringComparison.OrdinalIgnoreCase))
+            : servers.FirstOrDefault();
+        var udpNativeActive = (udpNativeActiveEntry != null
+            && ("hysteria2".Equals(udpNativeActiveEntry.Protocol, StringComparison.OrdinalIgnoreCase)
+                || "tuic".Equals(udpNativeActiveEntry.Protocol, StringComparison.OrdinalIgnoreCase)))
+            ? udpNativeActiveEntry : null;
+
+        if (udpNativeActive != null)
+        {
+            // Sole UDP-native proxy: no proxy-udp split, no VLESS TCP sibling, and
+            // proxyIsUdpNativeOutbound tells BuildRoute NOT to QUIC-reject (Hy2/TUIC
+            // carry QUIC over real UDP — no TCP-over-TCP meltdown to pre-empt).
+            AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpNativeActive }, "proxy", "vless");
+            hasUdpProxy = false;
+            proxyIsUdpNativeOutbound = true;
+        }
+        else if (udpSibling != null && tcpNaiveServers.Count > 0)
         {
             AddOutboundGroup(outbounds, tcpNaiveServers, "proxy", "vless");                                     // naive → TCP/all
             AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpSibling }, "proxy-udp", "vless-udp"); // sibling → UDP
