@@ -44,18 +44,20 @@ public static class ConfigGenerator
     internal static int NormalizeTunMtu(int mtu)
         => (mtu <= 0 || mtu > MaxSafeTunMtu) ? SafeTunMtuFallback : mtu;
 
-    // v2.45.0-r8 (2026-07-01): AmneziaWG/WireGuard endpoints carry a FIXED inner
-    // MTU (1280 = IPv6 minimum; survives WG + AWG-obfuscation encapsulation over
-    // any ~1500 underlay). Unlike a VLESS/Reality TCP tunnel — where TCP MSS
-    // auto-clamps to the path — a UDP WireGuard endpoint has NO adaptive clamp, so
-    // an oversized segment (a TUN packet, or a DoH TLS ServerHello flight) larger
-    // than the endpoint MTU blackholes on a PMTUD hole exactly like the mtu-9000
-    // incident above. Diag 20260701-122336: TUN 1337 over a 1280 AWG endpoint ->
-    // 548 DNS exchanges >=5s (cold DoH handshakes up to 56s) -> Dota region pings
-    // all time out. So when a UDP-native endpoint is active we (a) cap the TUN MTU
-    // to this, and (b) resolve via plain UDP DNS inside the tunnel (BuildVpnDnsServer)
-    // instead of a fragile DoH handshake. Also the AWG endpoint's own mtu.
-    internal const int AwgEndpointMtu = 1280;
+    // v2.45.0-r11 (2026-07-02): AmneziaWG/WireGuard endpoint MTU = 1420 (the
+    // wireguard-go DefaultMTU for a ~1500 underlay; AWG transport overhead == WG,
+    // the obfuscation junk is handshake-only). A UDP WireGuard endpoint has NO
+    // adaptive clamp, and the sing-box system stack DROPS IP fragments
+    // (sing-tun stack_system.go:571-575) with no PMTUD signaling — so the TUN MTU
+    // must fit the largest DF-UDP an app sends WITHOUT fragmentation.
+    // WHY NOT 1280 (the r8 value — it was a regression): SDR (Dota/CS2) sends UDP
+    // payloads up to 1300 B (1328 B IP) with NO PMTUD (GameNetworkingSockets#22);
+    // a 1280 cap silently drops them -> match-connect dies even once region pings
+    // work. The r8 "1280 fixes DNS" belief was wrong — the real DNS fix was plain-
+    // UDP DNS (BuildVpnDnsServer), not this cap. TUN is clamped to min(user, this);
+    // endpoint >= TUN (no inversion). Underlay < 1500 (PPPoE/mobile) may need lower
+    // — see plans/mtu-fragmentation-robustness-2026-07-02.md.
+    internal const int AwgEndpointMtu = 1420;
 
     public static SingBoxConfig Generate(
         Profile profile,
@@ -1135,17 +1137,17 @@ public static class ConfigGenerator
                 RouteExcludeAddress     = routeExcludes.Count > 0
                                             ? routeExcludes
                                             : null,
-                // v2.45.0-r10 (2026-07-01): full-cone (endpoint-independent) UDP NAT.
-                // Relay/P2P game netcode (Steam Datagram Relay = Dota/CS2, WebRTC,
-                // RakNet) pings a mesh of relays and receives replies/coordination
-                // from a DIFFERENT address than the one it sent to. With EIN=false
-                // sing-box keys the UDP session by (src,dst) and DROPS the reply from
-                // the other relay -> Dota "Задержка: ОШИБКА" on every region, on EVERY
-                // transport (it's a TUN-level NAT trait, not transport-specific — which
-                // is why Dota failed on VLESS+AWG+Hy2 alike while single-server UDP like
-                // Roblox worked). EIN=true keys by src only, so cross-relay replies are
-                // delivered. Strict superset of the old behaviour (only ADDS delivered
-                // packets), so it can't break DNS/QUIC/single-server UDP.
+                // NOTE: this is a NO-OP on the system stack and its r10 RCA was WRONG.
+                // The lx fork parses endpoint_independent_nat (option/tun.go:62) but
+                // never passes it into StackOptions; it was removed from sing-box in
+                // 1.11. The system stack's udpnat2 is source-keyed with no inbound
+                // filtering = full cone (EIM+EIF) BY CONSTRUCTION already. And SDR does
+                // NOT send cross-relay replies (Valve opens one socket per relay, reply
+                // is same-address) — so the r10 "full-cone fixes Dota" mechanism is
+                // doubly refuted. The real Dota/SDR cause is the AWG single-socket
+                // WSAENOBUFS burst-choke (H1); full research in
+                // plans/sdr-research-realtime-games-nat-2026-07-02.md. Value kept true:
+                // harmless, and would apply if we ever switch to the gVisor stack.
                 EndpointIndependentNat  = true,
                 Stack                   = "system"
                 // sniff + sniff_override_destination removed — deprecated since 1.11

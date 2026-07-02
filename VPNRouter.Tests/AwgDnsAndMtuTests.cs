@@ -86,11 +86,11 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     [Fact]
     public void Awg_TunMtuClampedToEndpointMtu()
     {
-        // 1337 is what the live diag carried; it exceeds the 1280 AWG endpoint MTU.
-        var config = Generate(AwgSettings(tunMtu: 1337));
+        // A user MTU above the AWG endpoint MTU (1420) is capped to it.
+        var config = Generate(AwgSettings(tunMtu: 1500));
 
         var tun = Assert.Single(config.Inbounds, i => i.Type == "tun");
-        Assert.Equal(ConfigGenerator.AwgEndpointMtu, tun.Mtu);   // 1280
+        Assert.Equal(ConfigGenerator.AwgEndpointMtu, tun.Mtu);   // 1420
     }
 
     [Fact]
