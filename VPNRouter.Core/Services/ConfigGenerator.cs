@@ -16,17 +16,6 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class ConfigGenerator
 {
-    // T4: domains whose DNS can be resolved off the congested proxy detour (real-NIC
-    // Cloudflare DoH) when AppConfig.ResolveGameDnsOffProxy is on. Suffix-matched.
-    private static readonly List<string> RealtimeGameDnsSuffixes = new()
-    {
-        "roblox.com",
-        "rbxcdn.com",
-        "steamserver.net",
-        "steampowered.com",
-        "steamstatic.com",
-        "dota2.com",
-    };
 
     // v2.44.4 (2026-06-27): hard ceiling on the TUN MTU at generation time.
     // A jumbo 9000 (the pre-v2.42 default) can get STUCK in a persisted config:
@@ -1051,19 +1040,11 @@ public static class ConfigGenerator
         if (isFullTunnel)
         {
             // Full tunnel: all DNS goes through vpn-dns (via Final above).
-            // No per-process rules needed.
-            // T4 (opt-in): resolve game domains via the real-NIC DoH (local-dns) instead
-            // of the congested proxy detour, so a stalled proxy DoH doesn't hang Roblox
-            // joins. DoH is encrypted -> not RU-poisoned. The connection still goes proxy.
-            if (settings.App.ResolveGameDnsOffProxy)
-            {
-                dns.Rules.Add(new DnsRule
-                {
-                    DomainSuffix = RealtimeGameDnsSuffixes,
-                    Action       = "route",
-                    Server       = "local-dns"
-                });
-            }
+            // No per-process rules needed. (The T4 "resolve game domains off-proxy"
+            // band-aid was removed 2026-07-02: the DNS root cause is fixed — plain-UDP
+            // vpn-dns, not congested DoH — and it broke StrictDns by sending game DNS
+            // to the real NIC. Dota's failure is WSAENOBUFS, not DNS; see
+            // plans/goal-codex-awg-games-dns-comprehensive-2026-07-02.md.)
         }
         else if (isExcludeMode)
         {
@@ -1126,11 +1107,15 @@ public static class ConfigGenerator
                 Tag                     = "tun-in",
                 InterfaceName           = OperatingSystem.IsMacOS() ? "utun99" : settings.Tun.InterfaceName,
                 Address                 = new List<string> { settings.Tun.Ipv4Address },
-                // A UDP-native (AmneziaWG) endpoint carries a fixed 1280 inner MTU
-                // and cannot MSS-clamp; a larger TUN MTU blackholes oversized
-                // segments (diag 20260701-122336). Cap the TUN to the endpoint MTU.
+                // AmneziaWG is a native WireGuard tunnel: its TUN MTU IS the endpoint
+                // MTU (1420, the WG standard). Do NOT derive it from the generic
+                // Tun.Mtu (default 1280, tuned for the VLESS/TCP-proxy jumbo-avoidance
+                // path) — a 1280 TUN silently drops SDR's 1328-byte DF-UDP game
+                // packets (no MSS-clamp, no fragment, no PMTUD on this stack; see
+                // plans/mtu-fragmentation-robustness-2026-07-02.md). Per-underlay
+                // tuning (<1500) is a future AWG-specific setting.
                 Mtu                     = proxyIsUdpNative
-                                            ? Math.Min(NormalizeTunMtu(settings.Tun.Mtu), AwgEndpointMtu)
+                                            ? AwgEndpointMtu
                                             : NormalizeTunMtu(settings.Tun.Mtu),
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors

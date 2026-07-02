@@ -94,13 +94,14 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     }
 
     [Fact]
-    public void Awg_TunMtuLowerThanEndpoint_Preserved()
+    public void Awg_TunMtu_IsEndpointMtu_IgnoresGenericSetting()
     {
-        // The clamp is a ceiling (Math.Min): a smaller user value survives.
+        // AWG TUN MTU = the endpoint MTU (1420, WG standard), NOT the generic
+        // Tun.Mtu — the 1280-default VLESS value would drop SDR's 1328B game UDP.
         var config = Generate(AwgSettings(tunMtu: 1200));
 
         var tun = Assert.Single(config.Inbounds, i => i.Type == "tun");
-        Assert.Equal(1200, tun.Mtu);
+        Assert.Equal(ConfigGenerator.AwgEndpointMtu, tun.Mtu);  // 1420, not 1200
     }
 
     [Fact]
