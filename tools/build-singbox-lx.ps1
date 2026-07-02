@@ -94,8 +94,19 @@ $allocOld = 'msgs[i].OOB = make([]byte, controlSize)'
 $allocNew = 'if controlSize > 0 { msgs[i].OOB = make([]byte, controlSize) }'
 # (2) Belt-and-suspenders on the send call site (cheap; guards any future
 # non-nil empty OOB reaching WriteMsgUDP regardless of the pool state).
+# (2b) v2.45.0-r11: RETRY-ON-WSAENOBUFS. Under a UDP burst (Steam Datagram
+# Relay pings ~330 flows in a moment, all multiplexed into this single physical
+# AWG socket) WriteMsgUDP returns WSAENOBUFS (10055) "queue was full"; upstream
+# wireguard-go then DROPS the whole batch with no retry (device/send.go) -> the
+# game's outbound pings never leave -> Dota "all regions ОШИБКА" (live-confirmed
+# 2026-07-02, config=OK anyrelay=Failed). WSAENOBUFS is transient (the send
+# buffer drains in µs as the NIC transmits), so retry the same datagram a few
+# times with a tiny backoff instead of dropping. errors+syscall already imported;
+# time added below. Full RCA: plans/sdr-research-realtime-games-nat-2026-07-02.md.
+$timeOld = "`t`"syscall`""
+$timeNew = "`t`"syscall`"`n`t`"time`""
 $sendOld = '_, _, err = conn.WriteMsgUDP(msg.Buffers[0], msg.OOB, msg.Addr.(*net.UDPAddr))'
-$sendNew = 'oob := msg.OOB; if len(oob) == 0 { oob = nil }; _, _, err = conn.WriteMsgUDP(msg.Buffers[0], oob, msg.Addr.(*net.UDPAddr))'
+$sendNew = 'oob := msg.OOB; if len(oob) == 0 { oob = nil }; for _rn := 0; ; _rn++ { _, _, err = conn.WriteMsgUDP(msg.Buffers[0], oob, msg.Addr.(*net.UDPAddr)); if err == nil || _rn >= 8 || !errors.Is(err, syscall.Errno(10055)) { break }; time.Sleep(time.Duration(80*(_rn+1)) * time.Microsecond) }'
 # (3) AWG H4 transport-header clobber. The Leadaxe fork kept sagernet's
 # Cloudflare-WARP "reserved bytes" feature: receiveIP UNCONDITIONALLY zeroes
 # bytes [1:4] of every inbound datagram BEFORE classification. AmneziaWG
@@ -114,8 +125,9 @@ $clearOld = 'common.ClearArray(bufs[i][1:4])'
 $clearNew = 'if _, resvLoaded := s.reservedForEndpoint[M.AddrPortFromNet(msg.Addr)]; resvLoaded { common.ClearArray(bufs[i][1:4]) }'
 
 foreach ($pair in @(
+    @{ o = $timeOld;  n = $timeNew;  name = 'time import (ENOBUFS backoff)' },
     @{ o = $allocOld; n = $allocNew; name = 'pooled-OOB allocation (send+recv root fix)' },
-    @{ o = $sendOld;  n = $sendNew;  name = 'WriteMsgUDP send site' },
+    @{ o = $sendOld;  n = $sendNew;  name = 'WriteMsgUDP send site + WSAENOBUFS retry' },
     @{ o = $clearOld; n = $clearNew; name = 'reserved-byte receive clear (AWG H4 clobber)' })) {
     $cnt = ([regex]::Matches($bindSrc, [regex]::Escape($pair.o))).Count
     if ($cnt -ne 1) {
@@ -125,10 +137,10 @@ foreach ($pair in @(
 }
 [System.IO.File]::WriteAllText($bindStd, $bindSrc, (New-Object System.Text.UTF8Encoding $false))
 $bindChk = Get-Content -Raw $bindStd
-if (($bindChk -notmatch [regex]::Escape($allocNew)) -or ($bindChk -notmatch [regex]::Escape($sendNew)) -or ($bindChk -notmatch [regex]::Escape($clearNew))) {
+if (($bindChk -notmatch [regex]::Escape($allocNew)) -or ($bindChk -notmatch [regex]::Escape($sendNew)) -or ($bindChk -notmatch [regex]::Escape($clearNew)) -or ($bindChk -notmatch [regex]::Escape($timeNew))) {
     throw "FATAL: conn/bind_std.go AWG-on-Windows patch did not apply."
 }
-Write-Host "Patched: empty-OOB nil-guard send+recv (golang/go#77875) + AWG H4 reserved-byte receive-clear gate." -ForegroundColor Green
+Write-Host "Patched: empty-OOB nil-guard send+recv (golang/go#77875) + AWG H4 reserved-byte receive-clear gate + WSAENOBUFS send-retry." -ForegroundColor Green
 
 Write-Host "[3/4] go build -tags $TAGS" -ForegroundColor Yellow
 $ldflags = "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=$VER"
