@@ -45,6 +45,8 @@ tools/*
 !tools/smoke-update.ps1
 # Re-include: build-singbox-lx.ps1 (reproducible AmneziaWG sing-box-lx builder).
 !tools/build-singbox-lx.ps1
+# Re-include: build-singbox-lx.sh (darwin/linux port — Mac/Linux AWG+XHTTP core).
+!tools/build-singbox-lx.sh
 # Re-include: VpnRouterTestMcp (in-tree MCP server — Claude GUI testing).
 !tools/VpnRouterTestMcp/
 !tools/VpnRouterTestMcp/**
