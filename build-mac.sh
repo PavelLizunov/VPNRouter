@@ -46,40 +46,22 @@ cp -R "$PUBLISH_DIR/." "$APP/Contents/MacOS/"
 chmod +x "$APP/Contents/MacOS/VPNRouter.App"
 cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
-# v2.27.2: bundle upstream sing-box inside Contents/MacOS/ so first-run
-# DeployBundledProfiles (in MainWindowViewModel.cs) can copy it from
-# AppContext.BaseDirectory to ~/Library/Application Support/VPNRouter/bin/
-# and chmod +x. Previously Mac users had to install sing-box manually
-# (brew install sing-box) — the stale comment in MainWindowViewModel
-# claimed it was bundled but the build script wasn't actually doing it.
-#
-# Matching Linux workflow: we use GitHub's prebuilt upstream binary
-# (1.13.14) rather than the custom VPNRouter rebuild. Upstream includes
-# with_clash_api + with_utls + with_quic by default, and eliminates
-# "custom build" as a variable when diagnosing issues.
-# NOTE: the macOS upstream archive ships NO libcronet (SagerNet builds no
-# Cronet for Darwin), so NaiveProxy is gated off on macOS in ServerUriParser;
-# the mac bundle is just the sing-box binary (nothing to "not cut" here).
-SINGBOX_VER="1.13.14"
-# macos-latest on Actions is arm64; local dev Macs are usually arm64
-# too. Fall back to amd64 if running on Intel for the rare local case.
-ARCH="arm64"
-if [ "$(uname -m)" = "x86_64" ]; then
-    ARCH="amd64"
-fi
-echo "    sing-box: fetching v${SINGBOX_VER} darwin-${ARCH}..."
-curl -sSL -o /tmp/singbox.tar.gz \
-    "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-darwin-${ARCH}.tar.gz"
-tar -xzf /tmp/singbox.tar.gz -C /tmp
-cp "/tmp/sing-box-${SINGBOX_VER}-darwin-${ARCH}/sing-box" "$APP/Contents/MacOS/sing-box"
+# v2.45.x: bundle the sing-box-lx FORK (with_awg + with_xhttp) so AmneziaWG and
+# XHTTP work on macOS too — SAME fork / pinned commits / patches as Windows (see
+# tools/build-singbox-lx.ps1), built natively for darwin via tools/build-singbox-lx.sh.
+# SingBoxFeatures tag-probes the bundled binary at runtime, so AWG/XHTTP auto-enable
+# once the core carries the tags — no app-code platform gate. Previously macOS shipped
+# GitHub's UPSTREAM sing-box 1.13.14 = NO AWG/XHTTP. Trade-off: macOS now rides the
+# custom fork (1.13.13-base), exactly as Windows already does. Still no libcronet on
+# Darwin (NaiveProxy stays gated off in ServerUriParser).
+# Requires Go >=1.24.7 + git + python3 on the builder (build-mac.yml pins Go via setup-go;
+# locally set GO=~/sdk/go1.25.x/bin/go if `go` on PATH is older).
+echo "    sing-box-lx: building darwin fork (with_awg + with_xhttp)..."
+bash "$REPO_DIR/tools/build-singbox-lx.sh" "$VERSION" "$APP/Contents/MacOS/sing-box"
 chmod +x "$APP/Contents/MacOS/sing-box"
-# Strip macOS quarantine xattr so Gatekeeper doesn't refuse to launch
-# the helper binary on first run. (The .app bundle itself gets the
-# quarantine bit from Safari on download; the nested sing-box binary
-# would inherit it and get blocked.)
+# Strip the Gatekeeper quarantine xattr from the nested helper binary so it launches.
 xattr -d com.apple.quarantine "$APP/Contents/MacOS/sing-box" 2>/dev/null || true
-"$APP/Contents/MacOS/sing-box" version | head -1
-echo "    sing-box bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
+echo "    sing-box-lx bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
 
 # ── Bundle wgturn-cli (Phase 1 of emergency channel integration) ──
 # Built from PavelLizunov/wgturn-core. Provides the wgturn-cli binary
