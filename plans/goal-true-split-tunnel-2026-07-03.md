@@ -16,28 +16,43 @@ macOS (пока только W0). Каждая фаза проверяема о�
 
 ---
 
-## Phase W0 — fast-teardown митигация (ДЕЛАТЬ ПЕРВОЙ; дни; без драйвера)
-**Цель:** excluded оживают за секунды вместо «до ручного вмешательства». Нужен и ПОСЛЕ W1
-(драйвер сам не чинит DNS через мёртвый TUN). Всё в существующих файлах.
+## Phase W0 — Windows wedge-kill (ДЕЛАТЬ ПЕРВОЙ; ~40 строк)
+Полный дизайн + verified findings: [`plans/w0-hang-detection-design-2026-07-03.md`](w0-hang-detection-design-2026-07-03.md)
+(Fable-5, 2026-07-03; поправил stale-research). **Единственная реальная работа — W0.1.**
+Grounding-корректировки: crash самозалечивается (адаптер умирает с процессом → ОС
+возвращает маршруты); на Windows `IsHealthy()` = только liveness → **hang (живой но не
+форвардит) НЕ детектится вообще** → бесконечная чёрная дыра; macOS уже kill'ит hang (его
+IsHealthy API-based) — Windows аутлайер.
 
-- [ ] **W0.1 Hang-case hard-teardown** (`HealthMonitor.cs`): при 2 фейлах probe —
-  `Kill(entireProcessTree:true)` ПЕРВЫМ (wintun-адаптер умирает с процессом → ОС
-  возвращает NIC-маршруты + DNS), потом backoff/restart. Post-kill assert: адаптер
-  `Tun.InterfaceName` исчез из `GetIfTable2`; если zombie — явно снести маршруты
-  (`DeleteIpForwardEntry2` P/Invoke или `netsh interface ipv4 delete route`).
-- [ ] **W0.2 Cheap TCP-canary** (опц., сокращает detection latency): 2-3s TCP-проба
-  через TUN, чтобы ловить hang быстрее probe-интервала.
-- [ ] **W0.3 Scope Wave-39 DNS-lockdown** (`FirewallManager.cs:46-70`): в exclude-split
-  профилях либо skip DNS-block-правил, либо временный disable в crash-окне (хуки
-  `EnableBlockRules`/`DisableBlockRules` уже есть в HealthMonitor lifecycle). Сейчас они
-  душат DNS excluded-приложений в down-окне — главный остаточный симптом crash-case.
-- [ ] **W0.4 Flap dampening**: в restart-backoff НЕ пересоздавать TUN, пока health-probe
-  предыдущей попытки не отработал → excluded видят один gap, не пять.
-- **Acceptance W0:** exclude-профиль, убить `sing-box.exe` → excluded-приложение (напр.
-  браузер/Discord) восстанавливает сеть+DNS за ~1-2s; hang-кейс (SIGSTOP-эмуляция) →
-  восстановление в пределах probe-интервала, не бесконечно. Routed-приложения остаются
-  fail-closed. Honesty: hang-window (до detection) W0 полностью не убирает — только W1.
-- **Риск:** LOW (правки в existing lifecycle). **Оценка:** дни.
+- [ ] **W0.1 Windows wedge-kill** = детект hang'а + kill-first (превращаем hang в crash,
+  дальше весь проверенный crash-путь применяется без изменений). Правки:
+  1. `SingBoxManager.Lifecycle.cs`: `+KillWedgedForRecovery() => StopInternal(releaseLock:false)`
+     (~10 строк) — убивает дерево, НЕ релизит TUN-lock (ровно состояние после реального
+     crash'а; relaunch его не переполучает — только StartWithJson).
+  2. `HealthMonitor.cs` (после line 402): +2 поля (`_servingConfirmed` latch, `_wedgeStreak`)
+     + const threshold=2. Wedge-блок с мемоизированным `Serving()` (шарится с 2 существующими
+     probe-сайтами — lines 418/507, probe уже 1s/per-tick при DnsLeakLockdown). Reset в
+     `Start()`/`OnSingBoxCrashed`. На триггер (alive + !serving ≥2 тика, latch armed):
+     `KillWedgedForRecovery()` + прямой `OnSingBoxCrashed(this, EventArgs.Empty)` + return.
+  3. Safety: **serving-confirmed latch** (арм только после 1-го успешного probe/lifecycle —
+     против false-kill в TUN-warmup ~16s + restart-storm на кастомных clash_api-портах).
+  4. (опц.) `WedgeKillPolicy` ~12 строк pure → Linux-CI matrix-покрытие.
+- **W0.2 (TCP-canary) — ОТКЛОНЁН** (путает dead-server с local-wedge → false-kill; домен G4).
+- **W0.3 (DNS-lockdown) — УЖЕ DONE** (v2.42.0 `ReconcileLockdownForHealth` гейтит по флагу, НЕ
+  по режиму → exclude-mode покрыт; `StrictDnsIsSoleDriver` — другая фича). Ничего не делать.
+- **W0.4 (flap dampening) — УЖЕ ЕСТЬ** (MaxRestartAttempts + backoff + IsRunning-skip; kill-first
+  делает skip корректно-false).
+- **Тесты:** `+HealthMonitorWedgeKillTests` (recipe `FakeProcessRunner`+`FakeSingBoxApi`); прогнать
+  full HealthMonitor+SingBoxManager suites (design §5) — не сломать `HealthMonitorTimerRaceTests`,
+  `HealthMonitorRecoveryGapTests`, `HealthMonitorDnsLockdownTests`.
+- **Acceptance:** hang-эмуляция (процесс жив, Clash-API мёртв) → после 2 тиков kill → excluded
+  оживают (~11-15s strict / ~62-70s normal vs бесконечность); crash по-прежнему самозалечивается;
+  routed остаются fail-closed; существующие suites зелёные; паритет с macOS.
+- **Риски (accept/guard):** (1) false-kill на >2-tick API-stall → 1 bounded TUN-bounce (latch+
+  threshold+1s cap); (2) repeated-wedge ресетит `_restartAttempts` → G4-failover не трипается
+  (accepted, как slow-crash-loop; W1 obsolete'ит); (3) memoized-probe short-circuit на 418/507 —
+  guard `HealthMonitorDnsLockdownTests`.
+- **Риск:** LOW-MED. **Оценка:** ~40 строк + тесты.
 
 ## Phase W1 — true split через Mullvad WFP-драйвер (Windows; главная фича; 2-4 нед)
 **Что:** забандлить пребилд `mullvad-split-tunnel.sys`+.cat+.inf (GPL-3.0-or-later ИЛИ
