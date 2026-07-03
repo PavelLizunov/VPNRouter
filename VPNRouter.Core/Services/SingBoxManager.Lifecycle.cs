@@ -84,6 +84,17 @@ public partial class SingBoxManager
         StopInternal(releaseLock: true);
     }
 
+    /// <summary>
+    /// W0.1 (true-split): kill a WEDGED sing-box (process alive but the Clash API stopped
+    /// serving — the TUN no longer forwards) so the wintun adapter dies with the process
+    /// and the OS restores physical-NIC routes + DNS (split-EXCLUDED apps recover instead
+    /// of black-holing forever). Leaves exactly the state a real crash leaves — dead
+    /// process, TUN lock still HELD — so HealthMonitor's OnSingBoxCrashed recovery
+    /// relaunches without re-acquiring the lock. Same primitive Restart() uses, minus the
+    /// immediate relaunch (recovery owns the backoff). NOT Stop() (that releases the lock).
+    /// </summary>
+    public void KillWedgedForRecovery() => StopInternal(releaseLock: false);
+
     private void StopInternal(bool releaseLock)
     {
         // B2 (v2.36 SingBoxManager lifecycle hardening): atomic

@@ -97,6 +97,14 @@ public class HealthMonitor : IDisposable
     // See plans/release-notes-v2.31.5-r2.md for the full timeline.
     private bool _shouldBeRunning;
 
+    // W0.1 (true-split): Windows wedge detection. _servingConfirmed latches true once the
+    // Clash API has served at least once this lifecycle (so we never kill during the TUN
+    // warm-up window or on a non-default clash_api port); _wedgeStreak counts consecutive
+    // alive-but-not-serving ticks. Both reset on Start()/OnSingBoxCrashed (new lifecycle).
+    private bool _servingConfirmed;
+    private int _wedgeStreak;
+    private const int WedgeKillThreshold = 2;   // consecutive not-serving ticks → kill
+
     // G4 (2026-06-27): set once when the restart ceiling is hit and a failover
     // has been requested, so we don't re-raise FailoverRequested on every
     // subsequent dead tick. Reset on Start() and on a confirmed "VPN is up".
@@ -261,6 +269,7 @@ public class HealthMonitor : IDisposable
         _failoverRequested = false; // G4: fresh session, re-arm failover
         _isStopping = false;
         _shouldBeRunning = true;   // v2.31.5-r2: arms the OnHealthTick recovery path
+        _servingConfirmed = false; _wedgeStreak = 0;   // W0.1: re-arm wedge latch for the new lifecycle
         _lastScan = initialScan; // baseline — prevents reload on first debounce if nothing changed
 
         // Strict mode: poll every 5 seconds instead of the configured interval
@@ -401,6 +410,36 @@ public class HealthMonitor : IDisposable
         {
             var isHealthy = _singBox.IsHealthy();
 
+            // Memoize this tick's Clash-API serving probe (~1s cap, PingDeadline) — shared
+            // by the wedge detector below and the deferred-disable + DnsLeakLockdown
+            // reconcile sites, so a tick probes the API at most once.
+            bool? _servingThisTick = null;
+            bool Serving() { _servingThisTick ??= ClashApiResponds(); return _servingThisTick.Value; }
+
+            // W0.1 (true-split): Windows HANG detection. On Windows IsHealthy() is
+            // process-liveness only, so a WEDGED sing-box (alive but the Clash API stopped
+            // serving == the TUN no longer forwards) reads healthy and is NEVER restarted →
+            // the wintun adapter + default route black-hole ALL traffic, including
+            // split-EXCLUDED apps, until the process dies or the user reconnects. Detect it
+            // (alive but not serving for WedgeKillThreshold consecutive ticks, once serving
+            // was confirmed this lifecycle — the latch avoids false kills during TUN
+            // warm-up / a non-default clash_api port) and kill it: the adapter dies with the
+            // process, the OS restores physical-NIC routes + DNS (excluded apps recover),
+            // and we drive the SAME crash-recovery path as a real crash (backoff, G4 ceiling,
+            // deferred-disable all apply unchanged). macOS is unaffected — its IsHealthy()
+            // is API-based, so a wedge already reads unhealthy and takes the normal restart
+            // branch below.
+            if (isHealthy && _vpnWasRunning && !_isStopping && _singBox.IsRunning()
+                && WedgeKillPolicy.ShouldKill(Serving(), ref _servingConfirmed, ref _wedgeStreak, WedgeKillThreshold))
+            {
+                _logger.Warning("[HealthMonitor] sing-box WEDGED (alive, Clash API not serving {N} ticks) — killing to free the TUN adapter so excluded apps recover", _wedgeStreak);
+                _wedgeStreak = 0;
+                try { _singBox.KillWedgedForRecovery(); }
+                catch (Exception kex) { _logger.Error(kex, "[HealthMonitor] wedge kill failed"); }
+                OnSingBoxCrashed(this, EventArgs.Empty);   // reuse the crash-recovery path (backoff, G4, deferred-disable)
+                return;
+            }
+
             // v2.40.0-r10 #3 (core-audit): consume the deferred kill-switch
             // lift requested by the full-restart path. The leak window we're
             // closing is "fresh TUN re-created but not routing yet", so we must
@@ -415,7 +454,7 @@ public class HealthMonitor : IDisposable
             if (isHealthy && System.Threading.Volatile.Read(ref _deferredBlockRuleDisable) == 1)
             {
                 var sinceRestart = DateTime.UtcNow - _lastFullRestart;
-                var clashServing = ClashApiResponds();
+                var clashServing = Serving();   // W0.1: memoized — shared with the wedge probe
                 var fallbackElapsed = sinceRestart >= DeferredDisableMaxWait;
                 if ((clashServing || fallbackElapsed)
                     && System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0) == 1)
@@ -504,7 +543,7 @@ public class HealthMonitor : IDisposable
             // transition (see DnsLockdownPolicy).
             if (_appSettings?.App?.DnsLeakLockdown == true)
             {
-                bool serving = isHealthy && ClashApiResponds();
+                bool serving = isHealthy && Serving();   // W0.1: memoized — shared with the wedge probe
                 _dnsHardening.ReconcileLockdownForHealth(serving, _appSettings, _logger);
             }
 
@@ -682,6 +721,7 @@ public class HealthMonitor : IDisposable
             return; // graceful shutdown in progress — ignore
 
         _unhealthyHealthProbeStreak = 0;
+        _servingConfirmed = false; _wedgeStreak = 0;   // W0.1: new lifecycle after crash/wedge-kill → re-arm latch
         _vpnWasRunning = false;
         VpnStopped?.Invoke(this, EventArgs.Empty);
 
