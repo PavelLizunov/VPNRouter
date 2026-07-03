@@ -82,6 +82,10 @@ IsHealthy API-based) — Windows аутлайер.
   не хуже slow-crash-loop, obsolete'ится W1.
 
 ## Phase W1 — true split через Mullvad WFP-драйвер (Windows; главная фича; 2-4 нед)
+**Отдельный actionable goal (детальный, фазы W1.0-W1.4 + gate):**
+[`plans/goal-w1-mullvad-split-driver-2026-07-03.md`](goal-w1-mullvad-split-driver-2026-07-03.md).
+Ниже — краткая версия.
+
 **Что:** забандлить пребилд `mullvad-split-tunnel.sys`+.cat+.inf (GPL-3.0-or-later ИЛИ
 MPL-2.0 — с нашим GPL ок; .cat подписан MS WHCP → грузится с Secure Boot; **подписывать
 ничего не надо**). Порт user-mode агента на C#. Чинит **exclude-режим** by construction
