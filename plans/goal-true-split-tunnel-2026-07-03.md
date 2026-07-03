@@ -24,7 +24,11 @@ Grounding-корректировки: crash самозалечивается (а
 форвардит) НЕ детектится вообще** → бесконечная чёрная дыра; macOS уже kill'ит hang (его
 IsHealthy API-based) — Windows аутлайер.
 
-- [ ] **W0.1 Windows wedge-kill** = детект hang'а + kill-first (превращаем hang в crash,
+- [x] **W0.1 Windows wedge-kill — DONE 2026-07-03 (`28bb4c0b`)**: `KillWedgedForRecovery` в
+  Lifecycle + wedge-блок в OnHealthTick + pure `WedgeKillPolicy` (+4 теста) + мемоизированный
+  Serving() шарится с 2 probe-сайтами. Build 0 errors, 15/15 логик-тестов зелёные (baseline
+  ProgramData-фейлы env-only). Ниже — оригинальный план (реализован как описано):
+- [ ] ~~W0.1 план~~ = детект hang'а + kill-first (превращаем hang в crash,
   дальше весь проверенный crash-путь применяется без изменений). Правки:
   1. `SingBoxManager.Lifecycle.cs`: `+KillWedgedForRecovery() => StopInternal(releaseLock:false)`
      (~10 строк) — убивает дерево, НЕ релизит TUN-lock (ровно состояние после реального
@@ -53,6 +57,29 @@ IsHealthy API-based) — Windows аутлайер.
   (accepted, как slow-crash-loop; W1 obsolete'ит); (3) memoized-probe short-circuit на 418/507 —
   guard `HealthMonitorDnsLockdownTests`.
 - **Риск:** LOW-MED. **Оценка:** ~40 строк + тесты.
+
+### Outcome W0.1 (2026-07-03) — PASS
+- **Status:** PASS (реализовано ровно по дизайну; ре-юз проверенного crash-пути).
+- **Commits:** `28bb4c0b` (feat) + `88dc46d5` (review cleanup). Пушнуто в оба remote.
+- **Files:** `SingBoxManager.Lifecycle.cs` (+`KillWedgedForRecovery`), `HealthMonitor.cs`
+  (wedge-блок + 2 поля + мемо `Serving()` + 2 probe-сайта), new `WedgeKillPolicy.cs`,
+  new `WedgeKillPolicyTests.cs` (4 pure). ~40 строк прод + 54 теста.
+- **Gate 1 build:** 0 errors. **Gate 2 tests:** 15/15 (4 WedgeKillPolicy + 11
+  HealthMonitor timer-race/recovery/dns-lockdown); baseline ProgramData-фейлы env-only.
+- **Gate 4 self-review:** 2 независимых adversarial-ревьюера на реальном диффе —
+  корректность/concurrency + leak-safety/fail-closed. Оба **CLEAN** (ни P0, ни P1).
+  Подтверждено на коде: тик сериализован `_onHealthTickInProgress` Interlocked-гейтом;
+  `SuppressExitedEvent`+`_stopInProgress` глушат двойной `OnSingBoxCrashed`; kill-switch
+  block-rules переживают kill (отдельны от TUN, `EnableBlockRules` синхронно на kill-тике);
+  DnsLeakLockdown reconcile'ится fail-open на том же тике (инвариант v2.42.0 цел); routed
+  fail-closed; латч ресетится до relaunch. Единственный P2 (оба ревьюера) — dead-store +
+  log-arg — пофикшен в `88dc46d5`.
+- **Gate 5 MCP:** отложен — wedge (процесс жив, Clash-API мёртв) трудно эмулировать вживую;
+  low-value "app launches" verify не делаем. Live-верификация — когда W0.1 поедет в
+  кандидате, бандл с дальнейшей true-split работой (НЕ отдельный -rN на один internal tweak
+  сразу после v2.45.0 stable).
+- **Follow-ups:** нет. Residual risk #2 (repeated-wedge не трипает G4-failover) — accepted,
+  не хуже slow-crash-loop, obsolete'ится W1.
 
 ## Phase W1 — true split через Mullvad WFP-драйвер (Windows; главная фича; 2-4 нед)
 **Что:** забандлить пребилд `mullvad-split-tunnel.sys`+.cat+.inf (GPL-3.0-or-later ИЛИ
