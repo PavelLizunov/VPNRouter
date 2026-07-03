@@ -103,9 +103,13 @@ Windows-desktop бандлит **sing-box-lx** — форк `Leadaxe/sing-box-lx
 (golang/go#77875) + гейт WARP reserved-byte clear, который иначе затирает AWG H4
 transport-заголовок. Бандлится через `build.ps1 -SingBoxPath publish/sing-box-lx.exe`.
 Gating fail-closed: `SingBoxFeatures` пробит Tags-строку бинаря (`AwgAvailable`/
-`XhttpAvailable`), parser-гейты роняют awg://xhttp если ядро не lx. Mac/Linux/Android —
-upstream (AWG/XHTTP off). Полный разбор: memory `awg-windows-lx-patches.md`,
-`plans/OPEN-DEFECTS.md` (когда выпиливать патчи).
+`XhttpAvailable`), parser-гейты роняют awg://xhttp если ядро не lx — **гейт по тегам
+бинаря, НЕ по платформе**, так что бандл lx-ядра включает AWG/XHTTP сам. **С v2.45.x
+Mac + Linux тоже несут lx-форк** — `tools/build-singbox-lx.sh` (darwin/linux-порт .ps1,
+те же коммиты + 4 патча; Winsock-патчи на не-Windows мёртвый код, H4-гейт обязателен)
+через `build-mac.sh` / `build-linux.yml` (+ upstream `libcronet.so` на Linux для naive).
+**Android** — пока upstream libbox (AWG/XHTTP off). Полный разбор: memory
+`awg-windows-lx-patches.md`, `plans/OPEN-DEFECTS.md` (когда выпиливать патчи).
 - `process_name` regression в 1.13.9 был — fixed в 1.13.10; 1.13.11 добил
   "process searcher failure". Держим desktop на актуальном stable.
 

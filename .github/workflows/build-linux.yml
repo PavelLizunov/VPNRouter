@@ -35,6 +35,13 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      # v2.45.x: the Linux bundle now ships the sing-box-lx FORK (with_awg +
+      # with_xhttp) built via tools/build-singbox-lx.sh, which needs Go >=1.24.7.
+      - name: Setup Go (for sing-box-lx fork build)
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: "1.25"
+
       # Phase 1 Q9 — NuGet package cache. `dotnet publish` restores packages
       # from nuget.org on cold runs (~30–60 s). Caching ~/.nuget/packages
       # keyed on the union hash of every .csproj keeps the cache fresh
@@ -76,42 +83,37 @@ jobs:
             -c Release -r linux-x64 --self-contained true \
             -o publish/linux-x64
 
-      # Bundle sing-box-linux-amd64 next to VPNRouter.App so the first-run
-      # Deploy step (in MainWindowViewModel.cs) can copy it into
-      # ~/.config/vpnrouter/bin/ and chmod +x it. Same pattern macOS uses.
+      # Bundle sing-box next to VPNRouter.App so the first-run Deploy step (in
+      # MainWindowViewModel.cs) can copy it into ~/.config/vpnrouter/bin/ + chmod +x.
       #
-      # v2.27.2: bumped to upstream 1.13.10 (from 1.13.3). Upstream's official
-      # Linux builds ship with-clash-api + with-utls + with-quic baked in by
-      # default — the tags we rely on for Reality fingerprinting and hot-reload.
-      # We dropped the custom VPNRouter rebuild (build-singbox.ps1) and use
-      # GitHub's prebuilt binaries on all three platforms now. Rationale:
-      #   - Eliminates "custom build" as a variable when diagnosing weird
-      #     sing-box behaviour (was biting us on YouTube drops in v2.27.1).
-      #   - Picks up 1.13.4 → 1.13.10 bug fixes we'd otherwise have to
-      #     backport manually, at the cost of ~12 MB per-platform (acceptable).
-      #   - Upstream releases are signed and reproducible, custom rebuild
-      #     wasn't signed or reproducible.
-      # CI pins the version rather than using "latest" so builds are
-      # reproducible; bump deliberately when a new upstream point release
-      # is verified against our test suite.
-      - name: Bundle sing-box-linux-amd64
+      # v2.45.x: switched from upstream sing-box to the sing-box-lx FORK (with_awg +
+      # with_xhttp) so AmneziaWG + XHTTP work on Linux too — SAME fork / pinned commits
+      # / patches as Windows (tools/build-singbox-lx.ps1), built natively for
+      # linux-amd64 via tools/build-singbox-lx.sh. SingBoxFeatures tag-probes the binary,
+      # so AWG/XHTTP auto-enable once the core carries the tags (no app-code platform
+      # gate). Trade-off vs the old "upstream eliminates custom-build as a variable":
+      # Linux now rides the fork (1.13.13-base) exactly as Windows already does — the
+      # AWG/XHTTP support the app needs isn't in upstream. libcronet.so is NOT built by
+      # the fork, so it's still fetched from the upstream archive (NaiveProxy dlopen's it).
+      - name: Bundle sing-box-lx-linux-amd64 (fork with_awg + with_xhttp) + libcronet
         run: |
           set -euo pipefail
+          bash tools/build-singbox-lx.sh "${{ steps.version.outputs.version }}" publish/linux-x64/sing-box
+          chmod +x publish/linux-x64/sing-box
+          # libcronet.so — still from upstream (fork doesn't build it; NaiveProxy
+          # dlopen's it at runtime). The deb/AppImage/tar.gz all `cp -R publish/linux-x64/.`,
+          # so it rides into every Linux artifact automatically.
           SINGBOX_VER="1.13.14"
           curl -sSL -o /tmp/singbox.tar.gz \
             "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
           tar -xzf /tmp/singbox.tar.gz -C /tmp
-          cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/sing-box" publish/linux-x64/sing-box
-          chmod +x publish/linux-x64/sing-box
-          # v2.41.1: bundle libcronet.so (Cronet runtime sing-box dlopen's for
-          # NaiveProxy). Ships in the same upstream archive; copy it verbatim next
-          # to sing-box. The deb/AppImage/tar.gz all `cp -R publish/linux-x64/.`,
-          # so it rides into every Linux artifact automatically.
           cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/libcronet.so" publish/linux-x64/libcronet.so
           ls -lh publish/linux-x64/sing-box publish/linux-x64/libcronet.so
-          # Sanity check — fail the build early if the binary doesn't
-          # respond to `version` (bad download, corrupt tarball, etc.).
+          # Sanity: build-singbox-lx.sh already asserts with_awg+with_xhttp via
+          # `go version -m`, but re-check the installed copy runs + carries with_awg
+          # (a feature-less core would ship green then FATAL every AWG config).
           publish/linux-x64/sing-box version
+          publish/linux-x64/sing-box version | grep -q with_awg
 
       # ── AppImage ────────────────────────────────────────────────────────
       # AppImage layout:
