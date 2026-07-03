@@ -35,6 +35,14 @@ if [ "$(printf '%s\n%s\n' "$MINGO" "$HAVEGO" | sort -V | head -1)" != "$MINGO" ]
   echo "FATAL: Go >=$MINGO required for the fork (have '${HAVEGO:-none}'). Set GO=/path/to/newer/go."; exit 1
 fi
 
+# Resolve OUT to an ABSOLUTE path now, while pwd is still the caller's dir. `go build`
+# runs after `cd "$SRC"` (a temp workdir), so a relative OUT (e.g. the Linux CI's
+# publish/linux-x64/sing-box) would land inside $WORK and get rm'd by the EXIT trap —
+# the binary built fine but vanished (r14 Linux CI). Mac passed an absolute path so it
+# was unaffected. Also ensure the target dir exists.
+case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
+mkdir -p "$(dirname "$OUT")"
+
 SRC="$WORK/sing-box-lx"
 echo "[1/4] Clone sing-box-lx @ $LX_COMMIT"
 git clone --quiet "$LX_REPO" "$SRC"
