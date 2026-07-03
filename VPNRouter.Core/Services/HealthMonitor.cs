@@ -432,11 +432,10 @@ public class HealthMonitor : IDisposable
             if (isHealthy && _vpnWasRunning && !_isStopping && _singBox.IsRunning()
                 && WedgeKillPolicy.ShouldKill(Serving(), ref _servingConfirmed, ref _wedgeStreak, WedgeKillThreshold))
             {
-                _logger.Warning("[HealthMonitor] sing-box WEDGED (alive, Clash API not serving {N} ticks) — killing to free the TUN adapter so excluded apps recover", _wedgeStreak);
-                _wedgeStreak = 0;
+                _logger.Warning("[HealthMonitor] sing-box WEDGED (alive, Clash API not serving {N} ticks) — killing to free the TUN adapter so excluded apps recover", WedgeKillThreshold);
                 try { _singBox.KillWedgedForRecovery(); }
                 catch (Exception kex) { _logger.Error(kex, "[HealthMonitor] wedge kill failed"); }
-                OnSingBoxCrashed(this, EventArgs.Empty);   // reuse the crash-recovery path (backoff, G4, deferred-disable)
+                OnSingBoxCrashed(this, EventArgs.Empty);   // reuse the crash-recovery path (backoff, G4, deferred-disable) — resets _wedgeStreak/_servingConfirmed for the new lifecycle
                 return;
             }
 
