@@ -31,9 +31,16 @@ defense-in-depth → fallback стоит ноль кода). **Никогда н
 
 ## Фазы (жёсткий порядок; каждая = `phase-task-launcher` 6-gate unit)
 
-- [ ] **W1.1-P1 — `SplitTunnelDriverProtocol` + `Interop` + юнит-тесты** (~1д, LOW). Порт спайковых
-  builders/P-Invoke в pure+static; golden-vector тесты буферов, DOS→NT path, event-parser, policy-
-  decisions (план §4). **Acceptance:** build 0 err; unit-тесты зелёные в CI; ноль live/Windows-зависимостей.
+- [x] **W1.1-P1 — DONE 2026-07-04.** `SplitTunnelDriverProtocol.cs` (pure, cross-platform, no
+  P/Invoke → CI-testable), `SplitTunnelDriverInterop.cs` (`[SupportedOSPlatform]` Native P/Invoke +
+  overlapped primitives + `SafeDeviceHandle`, compile-only), `SplitTunnelProtocolTests.cs` (**66 green**).
+  Build solution 0 err; gate 81/81. Byte-exact порт спайковых builders, event-parser offsets 30/26/22
+  (header 16 + body 14/10/6, сверено с ABI §2.3). **Verify в P3 live:** (1) event image-offsets 30/26/22 —
+  единственный не-spike layout, подтвердить живым START_SPLITTING. **Wire в P2/W1.2:** (2) `ShouldEngage`
+  apps-mode принимает `exclude`/`exclude-apps`/`excludeapps` — подставить реальный settings-enum, лишние
+  алиасы убрать; (3) overlapped P/Invoke на `IntPtr` (AllowUnsafeBlocks off) — P2 пинит OVERLAPPED
+  через GCHandle. Прочие judgment calls (config USHORT-overflow throw, ParseEvent clamp-not-throw,
+  BuildAddresses family-guard, NIC type-rank eth<wifi<other) — в норме.
 - [ ] **W1.1-P2 — `SplitTunnelDriverManager`** (~1-1.5д, MED — единственный реально новый код). Sealed:
   SCM idempotent + collision-guard, overlapped-IOCTL обвязка (один exclusive handle, `SemaphoreSlim`),
   engage/disengage (Disengage=RESET, сервис не стопаем), sublayers create/delete, crash-sweep,
