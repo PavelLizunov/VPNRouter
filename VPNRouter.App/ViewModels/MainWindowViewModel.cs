@@ -97,6 +97,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // ── Observable state ──
 
     [ObservableProperty] private string _statusText = Strings.NotConnected;
+
+    // W1.3: "True split active" badge — fed by VpnEngine.TrueSplitEngagedChanged (the kernel driver
+    // engaged, so excluded apps are bound past the TUN). Bound to a small status-zone badge + tooltip.
+    [ObservableProperty] private bool _isTrueSplitActive;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonText))]
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonBrush))]
@@ -2563,6 +2567,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // successful connect. Now it overwrites the connection status line
         // with the honest warning.
         _engine.AutoFailoverTriggered += OnAutoFailoverMessage;
+        // W1.3: reflect the true-split driver's engaged state into the badge (marshalled to the UI
+        // thread — the driver raises this from its own control-plane thread).
+        _engine.TrueSplitEngagedChanged += OnTrueSplitEngagedChanged;
 
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
@@ -3824,6 +3831,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _logger?.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
         });
     }
+
+    // W1.3: drive the "True split active" badge from the driver's engaged↔disengaged transitions.
+    private void OnTrueSplitEngagedChanged(bool engaged) =>
+        Dispatcher.UIThread.Post(() => IsTrueSplitActive = engaged);
 
     private void OnEngineStatus(string status)
     {

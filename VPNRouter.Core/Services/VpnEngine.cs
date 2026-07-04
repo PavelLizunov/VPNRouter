@@ -183,6 +183,15 @@ public class VpnEngine : IDisposable
     /// user understands why the active server changed mid-connect.</summary>
     public event Action<string>? AutoFailoverTriggered;
 
+    /// <summary>W1.3: raised when the true-split kernel driver engages (true) / disengages (false),
+    /// forwarded from the driver so the App can show a "True split active" badge. Never fires on
+    /// non-Windows / when no driver is wired.</summary>
+    public event Action<bool>? TrueSplitEngagedChanged;
+
+    /// <summary>W1.3: whether the true-split driver is currently ENGAGED (excluded apps bound past
+    /// the TUN). False when no driver is wired (non-Windows / not exclude-mode).</summary>
+    public bool IsTrueSplitEngaged => _splitDriver?.IsEngaged ?? false;
+
     /// <summary>
     /// Construct a <see cref="VpnEngine"/> with explicit dependencies.
     ///
@@ -218,6 +227,9 @@ public class VpnEngine : IDisposable
         _monitorFactory = monitorFactory;
         _logger = logger;
         _splitDriver = splitDriver;   // W1.2: null on non-Windows / tests without a fake
+        // W1.3: forward the driver's engaged↔disengaged transitions so the App can show a badge.
+        if (_splitDriver is not null)
+            _splitDriver.EngagedChanged += engaged => TrueSplitEngagedChanged?.Invoke(engaged);
         // Task #36-A (Phase 4): the DNS-hardening seam. Defaults to the
         // back-compat singleton that wraps the static WindowsDnsHardening
         // facade (no-op on non-Windows). Tests pass NullWindowsDnsHardening

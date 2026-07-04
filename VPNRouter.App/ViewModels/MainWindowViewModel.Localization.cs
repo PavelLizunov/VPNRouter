@@ -20,6 +20,8 @@ public partial class MainWindowViewModel
     public string L_AboutBrandName => Strings.AboutBrandName;
     public string L_AboutCloseBtn => Strings.AboutCloseBtn;
     public string L_AboutCreatorLabel => Strings.AboutCreatorLabel;
+    public string L_TrueSplitBadge => Strings.TrueSplitBadge;      // W1.3 status-zone badge
+    public string L_TrueSplitTooltip => Strings.TrueSplitTooltip;  // W1.3 caveats tooltip
     public string L_AboutRepoLabel => Strings.AboutRepoLabel;
     public string L_AboutSingBoxLabel => Strings.AboutSingBoxLabel;
     public string L_AboutTagline => Strings.AboutTagline;

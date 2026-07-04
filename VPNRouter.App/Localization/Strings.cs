@@ -98,6 +98,17 @@ public static class Strings
     // right after connect). Once resolved, the real server name replaces it.
     public static string AutoSelectStatusLabel => Ru ? "авто-выбор" : "auto-select";
 
+    // W1.3 — "True split" badge shown in the status zone when the kernel split-tunnel driver is
+    // ENGAGED (exclude-mode on Windows). Tooltip lists the honest bind-redirect caveats (goal Scope).
+    public static string TrueSplitBadge => Ru ? "True split: активен" : "True split: active";
+    public static string TrueSplitTooltip => Ru
+        ? "Исключённые приложения идут мимо VPN на уровне ОС и переживают перезапуск sing-box.\n" +
+          "Ограничения: DNS через svchost может уходить в туннель; localhost-UDP (127.0.0.1) у " +
+          "исключённых может ломаться; multicast-приём и UWP/Store-приложения исключить нельзя."
+        : "Excluded apps bypass the VPN at the OS level and survive a sing-box restart.\n" +
+          "Caveats: DNS via svchost may still tunnel; excluded apps' localhost-UDP (127.0.0.1) may " +
+          "break; multicast receive and UWP/Store apps can't be excluded.";
+
     // ── Action states ──
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
     public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;

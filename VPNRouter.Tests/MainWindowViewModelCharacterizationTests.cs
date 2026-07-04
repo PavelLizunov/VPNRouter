@@ -224,7 +224,10 @@ public class MainWindowViewModelCharacterizationTests
         // v2.45.0 M1 (2026-06-28 lifecycle leak fix): + OnTgProxyStats (named TgProxy
         // stats handler so Dispose() can detach it). Cross-platform → Linux pin drifts
         // in lock-step (soft-fail; capture from next ubuntu CI run).
-        "a6807f416565ac4d6c6911530b543237212ee4e53e9df81098bad6000273e8c0";
+        // W1.3 true-split (2026-07-05): + IsTrueSplitActive + L_TrueSplitBadge + L_TrueSplitTooltip
+        // + OnTrueSplitEngagedChanged (status-zone "True split active" badge fed by the driver).
+        // Cross-platform → Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI run).
+        "a8d490eb51653ca7fdf3ff499610def8205ad8af8b6dd3e7fa14eb69ce5e3569";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

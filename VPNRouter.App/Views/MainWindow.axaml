@@ -822,6 +822,17 @@
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
+                    <!-- W1.3 "True split active" badge — visible only while the kernel split-tunnel
+                         driver is ENGAGED (Windows exclude-mode). Tooltip carries the honest caveats. -->
+                    <Border IsVisible="{Binding IsTrueSplitActive}"
+                            Background="{DynamicResource SuccessBgBrush}"
+                            BorderBrush="{DynamicResource SuccessBorderBrush}"
+                            BorderThickness="1" CornerRadius="{DynamicResource RadiusPill}"
+                            Padding="7,1" VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding L_TrueSplitTooltip}">
+                        <TextBlock Text="{Binding L_TrueSplitBadge}" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                    </Border>
                 </StackPanel>
 
                 <!-- Right: inline Start/Stop. Text toggles via ConnectButtonText
