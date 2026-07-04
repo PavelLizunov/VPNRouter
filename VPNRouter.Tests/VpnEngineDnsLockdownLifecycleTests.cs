@@ -109,13 +109,60 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         public void Dispose() => DisposeCount++;
     }
 
+    // ─── W1.2 split-tunnel driver wiring (reuses BuildEngine + the stubs) ────
+
+    // Drives the engage hook directly (internal helper) — no ProgramData-touching StartAsync needed.
+    [Fact]
+    public async Task SplitDriver_StartHook_EngagesInWindowsExcludeMode()
+    {
+        var fake = new Fakes.FakeSplitTunnelDriver();
+        var engine = BuildEngine(new Fakes.NullWindowsDnsHardening(), out _, out _, splitDriver: fake);
+        var s = BuildHappyPathSettings("x");
+        s.App.RoutingMode = "split";
+        s.App.RoutingAppsMode = "exclude";
+        s.App.RoutingAppsExclude = new List<string> { "curl.exe" };
+
+        await engine.TryEngageSplitDriverAsync(s, default);
+
+        // ShouldEngage gates on OperatingSystem.IsWindows() — engage only fires on Windows (fail-open
+        // no-op elsewhere). Both branches are a real assertion of the wiring.
+        Assert.Equal(OperatingSystem.IsWindows() ? 1 : 0, fake.EngageCount);
+    }
+
+    [Fact]
+    public async Task SplitDriver_StartHook_SkipsIncludeMode()
+    {
+        var fake = new Fakes.FakeSplitTunnelDriver();
+        var engine = BuildEngine(new Fakes.NullWindowsDnsHardening(), out _, out _, splitDriver: fake);
+        var s = BuildHappyPathSettings("x");
+        s.App.RoutingMode = "split";
+        s.App.RoutingAppsMode = "include";       // include-mode never engages, any platform
+        s.App.RoutingAppsExclude = new List<string> { "curl.exe" };
+
+        await engine.TryEngageSplitDriverAsync(s, default);
+
+        Assert.Equal(0, fake.EngageCount);
+    }
+
+    [Fact]
+    public void SplitDriver_Dispose_ReleasesDriver()
+    {
+        var fake = new Fakes.FakeSplitTunnelDriver();
+        var engine = BuildEngine(new Fakes.NullWindowsDnsHardening(), out _, out _, splitDriver: fake);
+
+        engine.Dispose();   // hook 4
+
+        Assert.Equal(1, fake.DisposeCount);
+    }
+
     // ─── Engine + Settings factories ─────────────────────────────────────
 
 #pragma warning disable CS0618
     private static VpnEngine BuildEngine(
         IWindowsDnsHardening dnsHardening,
         out StubFirewallManager firewall,
-        out StubProcessMonitor monitor)
+        out StubProcessMonitor monitor,
+        ISplitTunnelDriver? splitDriver = null)
     {
         var fw = new StubFirewallManager();
         var mon = new StubProcessMonitor();
@@ -126,7 +173,8 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
             firewallFactory: () => fw,
             monitorFactory: () => mon,
             logger: null,
-            dnsHardening: dnsHardening);
+            dnsHardening: dnsHardening,
+            splitDriver: splitDriver);
     }
 #pragma warning restore CS0618
 

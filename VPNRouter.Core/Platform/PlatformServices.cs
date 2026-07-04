@@ -69,6 +69,12 @@ public static class PlatformServices
         return NullUnixDnsHardening.Default;
     }
 
+    /// <summary>W1.2: the true-split kernel-driver manager on Windows (null on macOS/Linux). The
+    /// manager is <c>[SupportedOSPlatform("windows")]</c>; the OS guard keeps CA1416 quiet while the
+    /// returned <see cref="ISplitTunnelDriver"/> interface stays cross-platform for VpnEngine to hold.</summary>
+    public static ISplitTunnelDriver? CreateSplitTunnelDriver(ILogger? logger = null)
+        => OperatingSystem.IsWindows() ? new SplitTunnelDriverManager(logger: logger) : null;
+
     /// <summary>
     /// Convenience: create a fully wired VpnEngine with platform services.
     ///
@@ -89,7 +95,8 @@ public static class PlatformServices
             CreateFirewallFactory(logger),
             CreateMonitorFactory(logger),
             logger,
-            unixDnsHardening: CreateUnixDnsHardening(logger));
+            unixDnsHardening: CreateUnixDnsHardening(logger),
+            splitDriver: CreateSplitTunnelDriver(logger));
 #pragma warning restore CS0618
     }
 

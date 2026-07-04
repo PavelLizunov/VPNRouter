@@ -29,6 +29,10 @@ public class VpnEngine : IDisposable
     // no-op; PlatformServices supplies MacDnsHardening on macOS. Gated behind
     // the DnsLeakLockdown setting in StartAsync (opt-in leak protection).
     private readonly IUnixDnsHardening _unixDns;
+    // W1.2: true-split driver seam (Windows exclude-mode only; null everywhere else). Cross-platform
+    // interface so this field needs no #if / CA1416 dance. Fail-open: a null or failing driver just
+    // leaves the post-capture process_name->direct rules doing the routing.
+    private readonly ISplitTunnelDriver? _splitDriver;
     private readonly ILogger? _logger;
 
     // F-E (2026-05-11): runtime safety net for dead/placeholder configs.
@@ -206,12 +210,14 @@ public class VpnEngine : IDisposable
         Func<IProcessMonitor> monitorFactory,
         ILogger? logger = null,
         IWindowsDnsHardening? dnsHardening = null,
-        IUnixDnsHardening? unixDnsHardening = null)
+        IUnixDnsHardening? unixDnsHardening = null,
+        ISplitTunnelDriver? splitDriver = null)
     {
         _scanner = scanner;
         _firewallFactory = firewallFactory;
         _monitorFactory = monitorFactory;
         _logger = logger;
+        _splitDriver = splitDriver;   // W1.2: null on non-Windows / tests without a fake
         // Task #36-A (Phase 4): the DNS-hardening seam. Defaults to the
         // back-compat singleton that wraps the static WindowsDnsHardening
         // facade (no-op on non-Windows). Tests pass NullWindowsDnsHardening
@@ -368,6 +374,48 @@ public class VpnEngine : IDisposable
                 _logger?.Warning(ex, "[VpnEngine] Unix DNS hardening Apply failed (non-fatal)");
             }
         }
+
+        // W1.2 hook 1 — engage the true-split driver after sing-box is up + routes are laid. Idempotent,
+        // so failover restarts (which re-enter StartAsyncInternal) re-engage cleanly. Hot-apply changes
+        // to the excluded set / TUN IP / mode reach the driver via hook 2 in ApplyAsync's forceRestart
+        // branch (that path restarts the sing-box process, NOT StartAsyncInternal, so this hook wouldn't fire).
+        await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// W1.2: engage (or, if we've flipped out of exclude-mode, disengage) the true-split driver for
+    /// the current settings. Fail-open — the manager never throws and returns false on any failure,
+    /// leaving the post-capture rules in charge. No-op when no driver is wired (non-Windows / tests).
+    /// internal for a direct wiring test that doesn't need a full ProgramData-touching StartAsync.
+    /// </summary>
+    internal async Task TryEngageSplitDriverAsync(AppSettings settings, CancellationToken ct)
+    {
+        if (_splitDriver is null) return;
+        var app = settings.App;
+        bool hasExcluded = app.RoutingAppsExclude is { Count: > 0 };
+        // ponytail: driverSetting hardcoded "auto" — add an AppConfig.TrueSplitDriver off-switch only
+        // when support actually needs to disable the driver without leaving exclude-mode.
+        if (!SplitTunnelPolicy.ShouldEngage(OperatingSystem.IsWindows(), app.RoutingMode, app.RoutingAppsMode, hasExcluded, "auto"))
+        {
+            if (_splitDriver.IsEngaged) await _splitDriver.DisengageAsync(ct).ConfigureAwait(false); // flipped to include/full
+            return;
+        }
+
+        var dosPaths = new List<string>();
+        foreach (var name in app.RoutingAppsExclude)
+        {
+            // ponytail: reuse ResolveRunningPath (running apps). Unresolved (not launched yet) → the
+            // post-capture process_name rule still routes it; ETW-driven late re-engage is a follow-up.
+            var p = ProcessImagePath.ResolveRunningPath(name);
+            if (!string.IsNullOrEmpty(p)) dosPaths.Add(p!);
+            else _logger?.Information("[VpnEngine] Split-tunnel: '{Name}' not running/unresolved — post-capture rule covers it", name);
+        }
+
+        // ponytail: TUN is v4-only (TunSettings has no Ipv6Address); the driver zeroes the v6 slot,
+        // and v4-only engage is live-proven (P3). Wire v6 through only if a v6 TUN setting ever lands.
+        var req = new SplitTunnelEngageRequest(dosPaths, settings.Tun?.Ipv4Address, TunnelIpv6: null);
+        bool ok = await _splitDriver.EngageAsync(req, ct).ConfigureAwait(false);
+        _logger?.Information("[VpnEngine] True-split driver engage={Ok} ({N} excluded path(s) resolved)", ok, dosPaths.Count);
     }
 
     /// <summary>
@@ -570,6 +618,14 @@ public class VpnEngine : IDisposable
             ActiveRoutingMode = newRoutingMode;
             TunFingerprint = newTunFingerprint;
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
+
+            // W1.2 hook 2 — re-engage the true-split driver after a structural hot-apply. forceRestart
+            // restarts the sing-box PROCESS (SingBoxManager.Restart), NOT StartAsyncInternal, so hook 1
+            // does not re-fire — this is the ONLY place an excluded-set / TUN-IP / mode change reaches the
+            // driver while connected (re-resolves paths + re-engages; disengages if we flipped out of
+            // exclude). Idempotent. (A bare hot-reload above has no split delta — the process-list change
+            // that an excluded-set edit makes always forces this restart branch.)
+            await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
@@ -652,6 +708,12 @@ public class VpnEngine : IDisposable
         // rode it is already gone). No-op for every non-dns-tunnel session
         // (_slipstream stays null unless a dns-tunnel server was started).
         try { _slipstream?.Stop(); } catch { }
+
+        // W1.2 hook 3 — disengage the true-split driver AFTER sing-box is gone: excluded apps stay on
+        // their NIC binds until this instant, then the TUN is down so their new binds hit the same
+        // physical NIC (0-gap). RESET-to-inert only; the kernel service is left running by design.
+        // Sync-bridged with a bounded wait — the manager never throws and disengage is ms-scale.
+        try { _splitDriver?.DisengageAsync(CancellationToken.None).Wait(TimeSpan.FromSeconds(5)); } catch { }
 
         // B0 connection-health telemetry: stop the Clash /logs subscriber. No-op
         // unless the VPNROUTER_CONN_HEALTH env flag started it. Observe-only — its
@@ -758,6 +820,9 @@ public class VpnEngine : IDisposable
             try { _firewall?.Dispose(); } catch { }   // Dispose -> DeleteAllRules
             _firewall = null;
         }
+        // W1.2 hook 4 — release the split-tunnel driver (best-effort RESET + close handle). Idempotent
+        // after a hook-3 disengage on the IsRunning path; the sole teardown on partial-start Dispose.
+        try { _splitDriver?.Dispose(); } catch { }
         try { _probeCts?.Cancel(); } catch { }
         try { _probeCts?.Dispose(); } catch { }
         _probeCts = null;

@@ -32,7 +32,9 @@ namespace VPNRouter.Core.Services;
 /// ever <i>adds</i> an OS-level bind redirect; losing it degrades to the prior behaviour,
 /// never breaks the network.</para>
 /// </summary>
-internal interface ISplitTunnelDriver : IDisposable
+// public (not internal) so VpnEngine's public ctor + the PlatformServices factory can take it —
+// same reason IWindowsDnsHardening is public. The manager impl below stays internal.
+public interface ISplitTunnelDriver : IDisposable
 {
     /// <summary>True while the driver is in the ENGAGED state (excluded sockets bind to the
     /// physical NIC past the TUN).</summary>
@@ -60,7 +62,7 @@ internal interface ISplitTunnelDriver : IDisposable
 /// already-resolved DOS paths (e.g. <c>C:\Program Files\Discord\Discord.exe</c>) — the manager
 /// converts each to its NT device form. TUN addresses come from settings; the physical internet
 /// NIC is auto-detected.</summary>
-internal sealed record SplitTunnelEngageRequest(
+public sealed record SplitTunnelEngageRequest(
     IReadOnlyList<string> ExcludedDosPaths,
     string? TunnelIpv4,
     string? TunnelIpv6);
