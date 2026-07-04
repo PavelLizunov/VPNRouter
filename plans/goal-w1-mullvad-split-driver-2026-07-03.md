@@ -102,6 +102,40 @@ defense-in-depth). Никогда не блокируем и не теряем �
 
 **Риск фазы:** это и есть де-риск всего W1. **Оценка:** 2-3 дня.
 
+### Outcome W1.0 (2026-07-03) — PARTIAL: механика доказана, traffic-redirect gate ОТКРЫТ
+Живой прогон на windows-brat (vmid 100). Спайк-код + ABI: memory-scratch (throwaway),
+пины/структуры зафиксированы в [`w1-driver-abi-reference-2026-07-03.md`](w1-driver-abi-reference-2026-07-03.md).
+
+**Доказано (главные unknowns закрыты):**
+- **Драйвер грузится** через bare `CreateService(type=kernel)` + `StartService` (как в Mullvad
+  `service.rs`) — подпись принята, **DSE-вопрос снят** (`.sys` несёт MS-attestation
+  countersignature; каталог/PnP не нужны). Это был риск №1.
+- **Полный IOCTL-протокол агента на C# работает** → `GET_STATE(STARTED)` → RESET → INITIALIZE →
+  REGISTER_PROCESSES (реальный снапшот, NT-пути через `QueryFullProcessImageName(NATIVE)`) →
+  REGISTER_IP_ADDRESSES → SET_CONFIGURATION → **ENGAGED(4)**. Все ручные буферы приняты.
+- **WFP-sublayer prerequisite найден и решён**: `SET_CONFIGURATION`→`EnterEngagedState` требует
+  чтобы baseline+dns sublayers УЖЕ существовали (иначе `FWP_E_SUBLAYER_NOT_FOUND`). Их создаёт
+  Mullvad `winfw`; мы его не поставляем → **W1.1 сам создаёт 2 sublayer'а** (`FwpmSubLayerAdd0`,
+  weights `0xFFFF`/`0xFFFE`). Спайк-`wfp-init` создал их, после чего engage прошёл.
+
+**НЕ доказано — traffic-redirect (open-q #1), gate ОСТАЁТСЯ ОТКРЫТ:**
+- Синтетический harness (sing-box full-tunnel `reject`-all + принудительный TUN
+  `InterfaceMetric=1`) НЕ смог честно проверить перенаправление: при захвате дефолт-роута TUN'ом
+  excluded-curl тоже не дошёл до WAN (exit 28 timeout; non-excluded — exit 6 DNS-fail; разница
+  показывает что драйвер на excluded влияет, но connect ушёл в TUN). Причина —
+  **Windows по умолчанию weak-host model**: bind excluded-сокета к IP физ-NIC НЕ форсит egress
+  через NIC когда TUN выигрывает дефолт-роут. Драйвер у Mullvad-юзеров это преодолевает
+  (connect-redirect/interface), значит МОЖЕТ — но с TUN'ом sing-box + нашим auto_route это
+  **непроверено**. После смерти sing-box excluded мгновенно ожил (83.97.108.34), т.е. вне
+  форсированного захвата путь excluded рабочий.
+
+**Вывод / go-no-go:** механику интеграции де-рискнули (грузится, драйвится, sublayers решены —
+большой прогресс), но САМ gate (реально ли excluded уходит мимо VPN при живом туннеле) требует
+**теста на РЕАЛЬНОМ full-tunnel** (VPNRouter + подписка → exit-IP contrast), не на синтетике.
+Пока open-q #1 открыт — **НЕ коммитим 2-4 недели W1.1**; следующий шаг = один сфокусированный
+real-VPN traffic-тест (excluded=реальный IP, non-excluded=exit-IP, + kill-survival). Weak-host
+наблюдение — реальный флаг риска для этого теста, не приговор.
+
 ---
 
 ## Phase W1.1 — `SplitTunnelDriverManager.cs` (Core, агент)

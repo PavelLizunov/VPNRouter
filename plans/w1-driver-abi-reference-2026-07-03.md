@@ -99,6 +99,25 @@ SIZE_T EventSize@8; UCHAR EventData[] }`; ids `START/STOP_SPLITTING_PROCESS=0/1`
 - **config app DOS path** → split drive `C:` → `QueryDosDevice("C:")` = `\Device\HarddiskVolumeN`
   → prepend to the remainder. (Reference `get_device_path`.)
 
+## WFP sublayer prerequisite (discovered in the W1.0 live spike, 2026-07-03)
+
+The driver does NOT self-create the WFP sublayers it installs filters into. On
+`SET_CONFIGURATION` while VPN-active, the driver's `EnterEngagedState` adds its callout
+filters into the **baseline + dns sublayers** whose GUIDs were passed to INITIALIZE; if
+they don't exist it returns **`0x80320007` = `FWP_E_SUBLAYER_NOT_FOUND`**. In the Mullvad
+app these are created by the separate `winfw` firewall module (`mullvadobjects.cpp`). **We
+don't ship winfw, so W1.1 must create both sublayers itself** (user-mode WFP:
+`FwpmEngineOpen0` → `FwpmSubLayerAdd0` ×2 → `FwpmEngineClose0`) before engaging, and remove
+them on disengage:
+- Baseline: key `{21E068A2-2851-43C5-8A29-7AFE3F260384}`, weight `0xFFFF`.
+- Dns: key `{E65841B6-82F6-4D55-BDE2-61F84D4508D4}`, weight `0xFFFE`.
+- provider = NULL is fine (the driver resolves the sublayer by GUID, not by provider).
+
+Live-verified on windows-brat (2026-07-03): driver loads via bare kernel-service create (no
+catalog/PnP install needed — the `.sys` carries the MS attestation countersignature); the
+IOCTL sequence INITIALIZE → REGISTER_PROCESSES → REGISTER_IP_ADDRESSES all succeed; only
+SET_CONFIGURATION needed the sublayers.
+
 ## Spike (W1.0) minimal path
 install service → open device → GET_STATE/RESET → INITIALIZE → REGISTER_PROCESSES →
 REGISTER_IP_ADDRESSES(NIC+TUN) → SET_CONFIGURATION(one excluded, e.g. `curl.exe` NT path) →
