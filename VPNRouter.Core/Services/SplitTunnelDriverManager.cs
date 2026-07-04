@@ -85,6 +85,11 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private static readonly TimeSpan NetChangeDebounce = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ReRegisterRetryDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DisposeGateTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan PumpJoinTimeout = TimeSpan.FromSeconds(2);
+    // ImageNameLength is a USHORT (<= 65535 b) and the headers are fixed, so a DEQUEUE_EVENT
+    // payload can't exceed this — overflow is impossible by construction (arch §2.2).
+    private const int PumpBufferSize = 64 * 1024 + 64;
+    private const int PumpMaxErrorStreak = 3;   // consecutive DEQUEUE errors → pump degraded, stops
 
     private readonly string _sysPath;
     private readonly string _ownTunName;
@@ -96,13 +101,23 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private SafeDeviceHandle? _device;
-    private SafeWaitHandle? _controlEvent;   // per control-IOCTL wait (own event; pump gets its own in P3)
+    private SafeWaitHandle? _controlEvent;   // per control-IOCTL wait (its own event, distinct from the pump's)
 
     private volatile bool _engaged;
-    private volatile bool _pumpHealthy = true;   // ponytail: real pump-health flag lands in P3
+    private volatile bool _pumpHealthy = true;
     private bool _sublayersCreated;
     private bool _netChangeSubscribed;
     private bool _disposed;
+
+    // Event pump (P3): a dedicated bg thread draining DEQUEUE_EVENT. Observability only — its death
+    // never touches _engaged (splitting is in-kernel, arch §2.1). Its OVERLAPPED needs its OWN event
+    // (the control plane and the pump run concurrent overlapped I/O on the same handle).
+    private Thread? _pumpThread;
+    private SafeWaitHandle? _pumpEvent;
+    private byte[]? _pumpBuffer;
+    private GCHandle _pumpBufferHandle;
+    private volatile bool _pumpStop;
+    private int _pumpErrorStreak;
 
     private SplitTunnelEngageRequest? _lastRequest;
     private (IPAddress? tunV4, IPAddress? inetV4, IPAddress? tunV6, IPAddress? inetV6) _lastAddrs;
@@ -271,8 +286,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         _lastRequest = request;
         _lastAddrs = addrs;
         _engaged = true;
-        _pumpHealthy = true;
         SubscribeNetworkChangeLocked();
+        StartPumpLocked();   // observability only — never gates engaged state
         _log.Information("[SplitTunnel] ENGAGED — {N} excluded path(s) bind to internet NIC {Inet}",
             request.ExcludedDosPaths.Count, addrs.inetV4);
         return true;
@@ -280,6 +295,9 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private void DisengageLocked()
     {
+        // Order (arch §2.2): stop the pump FIRST (cancel its pended DEQUEUE + join) so it isn't
+        // holding I/O on the handle when we RESET and close it.
+        StopPumpLocked();
         UnsubscribeNetworkChangeLocked();
         if (_device is { IsInvalid: false })
             TryResetLocked();          // driver → inert STARTED; service is LEFT running (design decision #3)
@@ -298,6 +316,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     // took a driver filter would leave FWP_E_IN_USE junk). That's why this isn't DisengageLocked.
     private void BestEffortResetAndCloseLocked()
     {
+        StopPumpLocked();   // a prior engage's pump could be live if this is a failed re-engage
         try { if (_device is { IsInvalid: false }) TryResetLocked(); } catch { /* best effort */ }
         CloseDeviceLocked();
         _engaged = false;
@@ -731,6 +750,168 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return true;
         }
         catch (Exception ex) { _log.Warning(ex, "[SplitTunnel] REGISTER_IP_ADDRESSES re-register failed"); return false; }
+    }
+
+    // ─── Event pump (P3): inverted-call DEQUEUE_EVENT drain — observability only ─────
+
+    private void StartPumpLocked()
+    {
+        if (_pumpThread is { IsAlive: true }) return;   // a re-engage keeps the running pump
+
+        // Reclaim any orphaned event/buffer left by a PRIOR pump that exited on its own (the 3-error
+        // degrade path never runs StopPumpLocked) or a timed-out-and-since-died one. Safe here because
+        // the guard above proved no pump thread is alive — so we can't unpin a buffer still in use.
+        // Without this we'd leak a pinned 64 KB GCHandle + an event handle per degrade→re-engage cycle.
+        FreePumpResourcesLocked();
+        _pumpThread = null;
+
+        var evt = Native.CreateEventW(IntPtr.Zero, bManualReset: true, bInitialState: false, null);
+        if (evt.IsInvalid)
+        {
+            // Pump is observability-only; failing to start it must NOT fail the engage (§2.1).
+            _log.Warning("[SplitTunnel] Pump event create failed (err={Err}) — ENGAGED without the event pump (split still active, diag degraded)",
+                Marshal.GetLastWin32Error());
+            evt.Dispose();
+            _pumpHealthy = false;
+            return;
+        }
+
+        _pumpEvent = evt;
+        _pumpBuffer = new byte[PumpBufferSize];
+        _pumpBufferHandle = GCHandle.Alloc(_pumpBuffer, GCHandleType.Pinned);
+        _pumpStop = false;
+        _pumpErrorStreak = 0;
+        _pumpHealthy = true;
+        _pumpThread = new Thread(PumpLoop) { IsBackground = true, Name = "split-tunnel-events" };
+        _pumpThread.Start();
+    }
+
+    private void StopPumpLocked()
+    {
+        var thread = _pumpThread;
+        if (thread is null) { FreePumpResourcesLocked(); return; }
+
+        _pumpStop = true;
+        // CancelIoEx(handle, NULL) aborts the pump's pended DEQUEUE (only I/O outstanding at this
+        // point in Disengage) → its GetOverlappedResult returns ERROR_OPERATION_ABORTED → clean exit.
+        if (_device is { IsInvalid: false })
+            Native.CancelIoEx(_device, IntPtr.Zero);
+
+        if (thread.Join(PumpJoinTimeout))
+        {
+            _pumpThread = null;
+            FreePumpResourcesLocked();
+        }
+        else
+        {
+            // Vanishingly rare (CancelIoEx reliably aborts a simple pended IOCTL). Do NOT free the
+            // buffer/event the abandoned thread may still be writing, and KEEP _pumpThread pointing at
+            // it so a later StartPumpLocked's IsAlive guard won't repin/free those resources. They're
+            // reclaimed once it finally dies (next StartPumpLocked) or when CloseDeviceLocked cancels
+            // its IRP; the pump's own try/catch absorbs the closed-handle error.
+            _log.Warning("[SplitTunnel] Event pump did not join in {Sec}s — abandoning it (resources reclaimed when it exits)",
+                PumpJoinTimeout.TotalSeconds);
+        }
+    }
+
+    private void FreePumpResourcesLocked()
+    {
+        if (_pumpBufferHandle.IsAllocated) _pumpBufferHandle.Free();
+        _pumpBuffer = null;
+        _pumpEvent?.Dispose();
+        _pumpEvent = null;
+    }
+
+    private void PumpLoop()
+    {
+        var dev = _device;
+        var evt = _pumpEvent;
+        if (dev is null || evt is null || _pumpBuffer is null) return;
+        IntPtr outPtr = _pumpBufferHandle.AddrOfPinnedObject();
+        uint outLen = (uint)_pumpBuffer.Length;
+
+        try
+        {
+            while (!_pumpStop)
+            {
+                Native.ResetEvent(evt);
+                var overlapped = new NativeOverlapped { EventHandle = evt.DangerousGetHandle() };
+                var ovH = GCHandle.Alloc(overlapped, GCHandleType.Pinned);
+                try
+                {
+                    IntPtr ovPtr = ovH.AddrOfPinnedObject();
+                    bool started = Native.DeviceIoControlOverlapped(
+                        dev, Proto.IoctlDequeueEvent, IntPtr.Zero, 0, outPtr, outLen, IntPtr.Zero, ovPtr);
+                    if (!started)
+                    {
+                        int err = Marshal.GetLastWin32Error();
+                        if (err != Native.ERROR_IO_PENDING)
+                        {
+                            if (!ContinueAfterPumpError(err)) return;
+                            continue;
+                        }
+                    }
+                    if (!Native.GetOverlappedResult(dev, ovPtr, out uint bytes, bWait: true))
+                    {
+                        if (!ContinueAfterPumpError(Marshal.GetLastWin32Error())) return;
+                        continue;
+                    }
+                    _pumpErrorStreak = 0;
+                    DispatchEvent(bytes);
+                }
+                finally { if (ovH.IsAllocated) ovH.Free(); }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Fail-open both ways: a dead pump is degraded telemetry, NOT a reason to drop the split.
+            _log.Warning(ex, "[SplitTunnel] Event pump crashed — marking degraded (split stays active in-kernel)");
+            _pumpHealthy = false;
+        }
+        GC.KeepAlive(evt);
+    }
+
+    /// <summary>After a DEQUEUE error: returns false to EXIT the loop (cancelled, or too many
+    /// consecutive errors → degraded), true to keep pumping.</summary>
+    private bool ContinueAfterPumpError(int err)
+    {
+        if (_pumpStop || err == Native.ERROR_OPERATION_ABORTED)
+            return false;   // cancelled by StopPumpLocked / a RESET — clean exit, not a degrade
+        if (++_pumpErrorStreak >= PumpMaxErrorStreak)
+        {
+            _log.Warning("[SplitTunnel] Event pump: {N} consecutive DEQUEUE errors (last err={Err}) — degraded, stopping pump (split unaffected)",
+                _pumpErrorStreak, err);
+            _pumpHealthy = false;
+            return false;
+        }
+        _log.Debug("[SplitTunnel] Event pump DEQUEUE error (err={Err}, streak={N})", err, _pumpErrorStreak);
+        return true;
+    }
+
+    private void DispatchEvent(uint bytes)
+    {
+        if (_pumpBuffer is null || bytes == 0) return;
+        int len = (int)Math.Min(bytes, (uint)_pumpBuffer.Length);
+        var ev = Proto.ParseEventBuffer(_pumpBuffer.AsSpan(0, len));
+        switch (ev.Kind)
+        {
+            case Proto.SplitTunnelEventKind.Splitting:
+                _log.Information("[SplitTunnel] {Id} pid={Pid} reason={Reason} image={Image}",
+                    ev.Id, ev.Pid, ev.Reason, ev.Image);
+                break;
+            case Proto.SplitTunnelEventKind.SplittingError:
+                _log.Warning("[SplitTunnel] {Id} pid={Pid} image={Image}", ev.Id, ev.Pid, ev.Image);
+                break;
+            case Proto.SplitTunnelEventKind.ErrorMessage:
+                _log.Warning("[SplitTunnel] driver error 0x{Status:X8}: {Msg}", ev.Status, ev.Image);
+                break;
+            case Proto.SplitTunnelEventKind.Unknown:
+                _log.Debug("[SplitTunnel] unknown driver event id=0x{Id:X8} (forward-compat skip)", ev.UnknownId);
+                break;
+            case Proto.SplitTunnelEventKind.Malformed:
+                _log.Debug("[SplitTunnel] malformed driver event ({Bytes}b) — skipped", bytes);
+                break;
+        }
     }
 
     private void RaiseEngagedChanged(bool engaged)

@@ -116,8 +116,9 @@ public class SplitTunnelManagerTests
 
         bool engaged = await mgr.EngageAsync(req, CancellationToken.None);
 
-        Assert.False(engaged);        // fail-path #1 — .sys absent, returns before any syscall
-        Assert.False(mgr.IsEngaged);  // fail-open: no state mutated, network untouched
+        Assert.False(engaged);          // fail-path #1 — .sys absent, returns before any syscall
+        Assert.False(mgr.IsEngaged);    // fail-open: no state mutated, network untouched
+        Assert.True(mgr.IsPumpHealthy); // pump (P3) never started — health flag holds its default
     }
 
     [Fact]
