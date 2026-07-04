@@ -56,6 +56,13 @@ public interface ISplitTunnelDriver : IDisposable
     /// <summary>RESET the driver to inert (kernel service is left running, per design). Idempotent;
     /// never throws.</summary>
     Task DisengageAsync(CancellationToken ct);
+
+    /// <summary>Best-effort crash-recovery, called once at engine start: RESET a stale ENGAGED driver
+    /// left by a crashed prior session (the kernel service is never stopped, so its stale config can
+    /// bind a just-launched excluded app to a dead IP after an include-mode restart — the engage hook
+    /// can't catch this because a fresh manager's <see cref="IsEngaged"/> is false). No-op when nothing
+    /// is wired / the driver isn't loaded / we're already engaged. Never throws.</summary>
+    Task SweepStaleStateAsync(CancellationToken ct);
 }
 
 /// <summary>Everything needed for a full (re)engage. <paramref name="ExcludedDosPaths"/> are the
@@ -211,10 +218,10 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     /// session in a <c>&gt; STARTED</c> state (we never stop the service) while we are NOT engaged,
     /// its stale IP/config would keep splitting excluded apps to a dead address — RESET it. Opens
     /// the device only if the driver is already loaded (never creates the service just to sweep);
-    /// a device held by a real Mullvad daemon is skipped. P2 provides this; <b>W1.2 wires the
-    /// startup call.</b> Never throws.
+    /// a device held by a real Mullvad daemon is skipped. Wired at <c>VpnEngine.StartAsyncInternal</c>
+    /// start (W1.2). Never throws.
     /// </summary>
-    internal async Task SweepStaleStateAsync(CancellationToken ct = default)
+    public async Task SweepStaleStateAsync(CancellationToken ct = default)
     {
         if (!OperatingSystem.IsWindows() || !File.Exists(_sysPath)) return;
 

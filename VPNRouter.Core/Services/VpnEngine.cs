@@ -339,6 +339,12 @@ public class VpnEngine : IDisposable
         // propagate down to phase 7 (BR-7 deferred lockdown) + phase 8
         // (Apply) without separate wiring.
         var pipeline = new StartupPipeline(host, dnsHardening: _dnsHardening);
+        // W1.2 — crash-recovery sweep at engine start (before we maybe engage): RESET a stale ENGAGED
+        // driver left by a crashed prior session, so a just-launched excluded app can't bind to a dead
+        // IP after an include-mode restart. Best-effort, never throws; no-op off Windows / no driver.
+        if (_splitDriver is not null)
+            await _splitDriver.SweepStaleStateAsync(ct).ConfigureAwait(false);
+
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.ColdStart, skipVpnConflictCheck),
             ct);

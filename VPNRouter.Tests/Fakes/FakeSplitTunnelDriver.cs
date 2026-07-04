@@ -43,5 +43,12 @@ internal sealed class FakeSplitTunnelDriver : ISplitTunnelDriver
         return Task.CompletedTask;
     }
 
+    public int SweepCount { get; private set; }
+    public Task SweepStaleStateAsync(CancellationToken ct)
+    {
+        SweepCount++;
+        return Task.CompletedTask;
+    }
+
     public void Dispose() => DisposeCount++;
 }
