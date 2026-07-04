@@ -102,9 +102,10 @@ defense-in-depth). Никогда не блокируем и не теряем �
 
 **Риск фазы:** это и есть де-риск всего W1. **Оценка:** 2-3 дня.
 
-### Outcome W1.0 (2026-07-03) — PARTIAL: механика доказана, traffic-redirect gate ОТКРЫТ
+### Outcome W1.0 (2026-07-03) — **PASS**: механика + traffic-redirect доказаны на РЕАЛЬНОМ full-tunnel
 Живой прогон на windows-brat (vmid 100). Спайк-код + ABI: memory-scratch (throwaway),
 пины/структуры зафиксированы в [`w1-driver-abi-reference-2026-07-03.md`](w1-driver-abi-reference-2026-07-03.md).
+**GATE ЗЕЛЁНЫЙ → W1.1 greenlit.**
 
 **Доказано (главные unknowns закрыты):**
 - **Драйвер грузится** через bare `CreateService(type=kernel)` + `StartService` (как в Mullvad
@@ -118,23 +119,26 @@ defense-in-depth). Никогда не блокируем и не теряем �
   Mullvad `winfw`; мы его не поставляем → **W1.1 сам создаёт 2 sublayer'а** (`FwpmSubLayerAdd0`,
   weights `0xFFFF`/`0xFFFE`). Спайк-`wfp-init` создал их, после чего engage прошёл.
 
-**НЕ доказано — traffic-redirect (open-q #1), gate ОСТАЁТСЯ ОТКРЫТ:**
-- Синтетический harness (sing-box full-tunnel `reject`-all + принудительный TUN
-  `InterfaceMetric=1`) НЕ смог честно проверить перенаправление: при захвате дефолт-роута TUN'ом
-  excluded-curl тоже не дошёл до WAN (exit 28 timeout; non-excluded — exit 6 DNS-fail; разница
-  показывает что драйвер на excluded влияет, но connect ушёл в TUN). Причина —
-  **Windows по умолчанию weak-host model**: bind excluded-сокета к IP физ-NIC НЕ форсит egress
-  через NIC когда TUN выигрывает дефолт-роут. Драйвер у Mullvad-юзеров это преодолевает
-  (connect-redirect/interface), значит МОЖЕТ — но с TUN'ом sing-box + нашим auto_route это
-  **непроверено**. После смерти sing-box excluded мгновенно ожил (83.97.108.34), т.е. вне
-  форсированного захвата путь excluded рабочий.
+**ДОКАЗАНО — traffic-redirect (open-q #1 ЗАКРЫТ) на реальном full-tunnel:**
+Full-tunnel из подписки (VPNRouter dry-run → `current.json`: 3 VLESS-Reality + urltest,
+`route.final=proxy`), sing-box запущен из writable-dir, драйвер engaged (exclude `curl.exe`).
+Все замеры одновременно, туннель UP:
+- baseline non-excluded curl → **`104.194.156.93`** (exit-IP → туннель реально захватывает+форвардит).
+- **EXCLUDED** `w1spike\curl` → **`83.97.108.34`** (реальный WAN физ-NIC — **ушёл мимо VPN**).
+- NON-excluded `System32\curl` → **`104.194.156.93`** (остался в туннеле).
+- **kill sing-box → excluded всё ещё `83.97.108.34`** (переживает смерть VPN, 0 gap).
 
-**Вывод / go-no-go:** механику интеграции де-рискнули (грузится, драйвится, sublayers решены —
-большой прогресс), но САМ gate (реально ли excluded уходит мимо VPN при живом туннеле) требует
-**теста на РЕАЛЬНОМ full-tunnel** (VPNRouter + подписка → exit-IP contrast), не на синтетике.
-Пока open-q #1 открыт — **НЕ коммитим 2-4 недели W1.1**; следующий шаг = один сфокусированный
-real-VPN traffic-тест (excluded=реальный IP, non-excluded=exit-IP, + kill-survival). Weak-host
-наблюдение — реальный флаг риска для этого теста, не приговор.
+Тот же бинарь, тот же dest, тот же момент — единственная разница `--exclude`-путь → NIC, всё
+остальное → exit. **Weak-host «риск» из синтетики был артефактом harness'а** (принудительный
+TUN metric=1 ломал selectable NIC-route); при нормальном auto_route драйвер корректно
+bind/connect-redirect'ит excluded на физ-NIC.
+
+**Вывод / go-no-go: GATE PASS.** Все 4 unknown'а закрыты — драйвер грузится, C#-агент драйвит
+протокол → ENGAGED, sublayers создаём сами, **реальное OS-level исключение работает с TUN'ом
+sing-box + переживает падение VPN**. **W1.1 (2-4 нед) greenlit.** Harness-гочи для W1.1-verify:
+sing-box из writable cwd (embedded TUN `VPNRouter-TUN`), force-kill оставляет phantom
+`SWD\WINTUN` device (переживает reboot, но по имени пула не конфликтует), WinRM-Start-Process
+дети умирают на session-close → весь traffic-тест одним сеансом.
 
 ---
 
