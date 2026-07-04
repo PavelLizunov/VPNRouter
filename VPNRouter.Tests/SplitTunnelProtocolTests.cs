@@ -674,11 +674,15 @@ public class SplitTunnelProtocolTests
     }
 
     [Fact]
-    public void ShouldEngage_CaseInsensitive_AndExcludeAppsAlias()
+    public void ShouldEngage_CaseInsensitive_ExcludeOnly_AliasesRejected()
     {
-        // Casing shouldn't matter, and the yaml enum spelling "exclude-apps" is accepted.
-        Assert.True(SplitTunnelPolicy.ShouldEngage(true, "SPLIT", "Exclude-Apps", true, "AUTO"));
+        // Casing shouldn't matter for the real settings value "exclude"...
+        Assert.True(SplitTunnelPolicy.ShouldEngage(true, "SPLIT", "Exclude", true, "AUTO"));
         Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "exclude", true, "OFF"));
+        // ...but the old "exclude-apps"/"excludeapps" aliases are gone (P1 wire-in #2):
+        // AppSettingsSane canonicalises RoutingAppsMode to "include"/"exclude", never hyphenated.
+        Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "exclude-apps", true, "auto"));
+        Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "excludeapps", true, "auto"));
     }
 
     // ───────────────────────────────────────────────────────────────────────

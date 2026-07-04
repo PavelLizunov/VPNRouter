@@ -108,6 +108,83 @@ public static class NetworkInterfaceDetector
     }
 
     /// <summary>
+    /// Picks the physical internet-facing NIC's addresses for the split-tunnel driver's
+    /// REGISTER_IP_ADDRESSES (excluded sockets bind to <paramref name="ownTunName"/>'s
+    /// replacement — the returned v4). Enumerates the live interfaces into
+    /// <see cref="NicSnapshot"/>s (skipping our own TUN by name), then defers the choice to the
+    /// pure <see cref="SplitTunnelDriverProtocol.PickInternetInterface"/> (Ethernet &gt; Wi-Fi &gt;
+    /// other; WG/AWG/Tailscale filtered). Returns the picked NIC's first IPv4 unicast + first
+    /// global-unicast IPv6 (v6 null when the NIC has none — the spike proved v4-only engages).
+    /// (null, null) when no candidate exists. Never throws.
+    /// </summary>
+    public static (IPAddress? V4, IPAddress? V6) GetInternetInterfaceAddresses(string ownTunName, ILogger? logger)
+    {
+        var snapshots = new List<NicSnapshot>();
+        try
+        {
+            foreach (var iface in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                // Our own TUN never carries a WG-keyword description (wintun), so filter it by
+                // name here — the pure picker only knows how to drop WG/AWG/Tailscale.
+                if (iface.Name.Equals(ownTunName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                IPAddress? v4 = null, v6 = null;
+                bool hasV4Gateway = false;
+                try
+                {
+                    var ipProps = iface.GetIPProperties();
+                    foreach (var g in ipProps.GatewayAddresses)
+                    {
+                        if (g.Address.AddressFamily == AddressFamily.InterNetwork &&
+                            !g.Address.Equals(IPAddress.Any))
+                        {
+                            hasV4Gateway = true;
+                            break;
+                        }
+                    }
+                    foreach (var u in ipProps.UnicastAddresses)
+                    {
+                        var a = u.Address;
+                        if (v4 is null && a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a))
+                            v4 = a;
+                        // Global-unicast IPv6 only: skip link-local (fe80::) and loopback.
+                        else if (v6 is null && a.AddressFamily == AddressFamily.InterNetworkV6 &&
+                                 !a.IsIPv6LinkLocal && !IPAddress.IsLoopback(a))
+                            v6 = a;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.Debug("[SplitTunnel] NIC {Name} IP-props read failed: {Err}", iface.Name, ex.Message);
+                    continue;
+                }
+
+                snapshots.Add(new NicSnapshot(
+                    iface.Name, iface.Description, iface.NetworkInterfaceType,
+                    IsUp: iface.OperationalStatus == OperationalStatus.Up,
+                    HasV4Gateway: hasV4Gateway, V4: v4, V6: v6));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning("[SplitTunnel] Failed to enumerate NICs for internet-pick: {Err}", ex.Message);
+            return (null, null);
+        }
+
+        var pick = SplitTunnelDriverProtocol.PickInternetInterface(snapshots);
+        if (pick is null)
+        {
+            logger?.Warning("[SplitTunnel] No internet-facing NIC found for split-tunnel bind");
+            return (null, null);
+        }
+
+        logger?.Information("[SplitTunnel] Internet NIC for split-bind: {Name} ({Desc}) v4={V4} v6={V6}",
+            pick.Value.Name, pick.Value.Description, pick.Value.V4, pick.Value.V6);
+        return (pick.Value.V4, pick.Value.V6);
+    }
+
+    /// <summary>
     /// Checks if a network interface is a WireGuard or AmneziaWG adapter.
     /// Matches against known keywords in both Name and Description.
     /// </summary>

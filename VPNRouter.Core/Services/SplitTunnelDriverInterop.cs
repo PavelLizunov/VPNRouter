@@ -40,7 +40,6 @@ internal static class SplitTunnelDriverInterop
     public const uint SERVICE_KERNEL_DRIVER = 0x00000001;
     public const uint SERVICE_DEMAND_START = 0x00000003;
     public const uint SERVICE_ERROR_NORMAL = 0x00000001;
-    public const uint SERVICE_CONTROL_STOP = 0x00000001;
 
     // ChangeServiceConfig "no change" sentinels (self-heal binPath, ABI §1.3 p.3).
     public const uint SERVICE_NO_CHANGE = 0xFFFFFFFF;
@@ -48,11 +47,11 @@ internal static class SplitTunnelDriverInterop
     public const int ERROR_SERVICE_EXISTS = 1073;
     public const int ERROR_SERVICE_ALREADY_RUNNING = 1056;
     public const int ERROR_SERVICE_DOES_NOT_EXIST = 1060;
-    public const int ERROR_SERVICE_NOT_ACTIVE = 1062;
     public const int ERROR_FILE_NOT_FOUND = 2;
     public const int ERROR_ACCESS_DENIED = 5;
     public const int ERROR_IO_PENDING = 997;
     public const int ERROR_OPERATION_ABORTED = 995;
+    public const int ERROR_INSUFFICIENT_BUFFER = 122;   // QueryServiceConfig first-call sizing probe
 
     // ── fwpuclnt: WFP sublayer management ─────────────────────────────────────
     public const uint RPC_C_AUTHN_WINNT = 10;
@@ -98,6 +97,12 @@ internal static class SplitTunnelDriverInterop
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern SafeWaitHandle CreateEventW(
         IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string? lpName);
+
+    /// <summary>Resets a manual-reset event to non-signaled. The control-IOCTL wrapper resets
+    /// its event before every request so a prior op's leftover signal can't make
+    /// <see cref="GetOverlappedResult"/> return prematurely on the next (event-reuse hazard).</summary>
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool ResetEvent(SafeWaitHandle hEvent);
 
     /// <summary>Cancels the pending overlapped IOCTL on <paramref name="hDevice"/> (pump
     /// shutdown / disengage). Pass the address of the same OVERLAPPED to cancel just that
@@ -173,16 +178,11 @@ internal static class SplitTunnelDriverInterop
         IntPtr hService, IntPtr lpServiceConfig, uint cbBufSize, out uint pcbBytesNeeded);
 
     [DllImport("advapi32.dll", SetLastError = true)]
-    public static extern bool ControlService(IntPtr hService, uint dwControl, ref SERVICE_STATUS lpServiceStatus);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    public static extern bool QueryServiceStatus(IntPtr hService, ref SERVICE_STATUS lpServiceStatus);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
-    public static extern bool DeleteService(IntPtr hService);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
     public static extern bool CloseServiceHandle(IntPtr hSCObject);
+
+    // NB: no ControlService / DeleteService P/Invoke by design — the manager NEVER stops or deletes
+    // the kernel service (Disengage = RESET-to-inert only). Service removal is uninstall.ps1's job
+    // (sc.exe stop/delete, W1.4). Omitting the primitives makes "never stop the service" structural.
 
     // ───────────────────────────────────────────────────────────────────────
     // fwpuclnt — WFP sublayer management
@@ -246,16 +246,22 @@ internal static class SplitTunnelDriverInterop
         public string szExeFile;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct SERVICE_STATUS
+    /// <summary>QUERY_SERVICE_CONFIGW — output of <see cref="QueryServiceConfig"/>, read by the
+    /// collision guard (§3 #3) to compare the existing service's binPath against ours. The LPWStr
+    /// fields point into the caller-supplied buffer; <see cref="Marshal.PtrToStructure{T}(IntPtr)"/>
+    /// copies them out to managed strings.</summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct QUERY_SERVICE_CONFIGW
     {
         public uint dwServiceType;
-        public uint dwCurrentState;
-        public uint dwControlsAccepted;
-        public uint dwWin32ExitCode;
-        public uint dwServiceSpecificExitCode;
-        public uint dwCheckPoint;
-        public uint dwWaitHint;
+        public uint dwStartType;
+        public uint dwErrorControl;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpBinaryPathName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpLoadOrderGroup;
+        public uint dwTagId;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpDependencies;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpServiceStartName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpDisplayName;
     }
 }
 

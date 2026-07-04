@@ -135,6 +135,23 @@ internal static class SplitTunnelDriverProtocol
         Debug,
     }
 
+    /// <summary>
+    /// What the manager should do when the <c>mullvad-split-tunnel</c> kernel service
+    /// already exists (collision guard, fail-path §3 #3). Decided purely from the two
+    /// binPaths by <see cref="SplitTunnelPolicy.ClassifyServiceBinPath"/>.
+    /// </summary>
+    public enum ServiceCollisionAction
+    {
+        /// <summary>Existing binPath is exactly ours — just StartService it.</summary>
+        StartExisting,
+        /// <summary>Ours but relocated (our install moved) — <c>ChangeServiceConfig</c> to the new
+        /// binPath, then start. Self-heal, mirrors Mullvad's install_driver_if_required.</summary>
+        AdoptMovedInstall,
+        /// <summary>Not ours (a real Mullvad daemon, or an unknown squatter on the name) —
+        /// do NOT touch it; log and fall back to post-capture. Never break a coexisting VPN.</summary>
+        BailForeign,
+    }
+
     /// <summary>Discriminates the <see cref="SplitTunnelEvent"/> payload shape.</summary>
     public enum SplitTunnelEventKind
     {
@@ -550,12 +567,10 @@ internal static class SplitTunnelPolicy
         return true;
     }
 
-    // The exclude apps-mode is spelled a couple of equivalent ways across the settings
-    // surface ("exclude" and the yaml enum "exclude-apps"); accept both.
+    // AppConfig.RoutingAppsMode is the settings enum; AppSettingsSane canonicalises it to
+    // lowercase "include"/"exclude", so "exclude" is the only spelling we ever see (P1 wire-in #2).
     private static bool IsExcludeMode(string routingAppsMode)
-        => string.Equals(routingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(routingAppsMode, "exclude-apps", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(routingAppsMode, "excludeapps", StringComparison.OrdinalIgnoreCase);
+        => string.Equals(routingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Maps an event id to a log severity: splitting → Information, any error-flag
     /// id → Warning, an unrecognised id → Debug (skip / forward-compat).</summary>
@@ -591,5 +606,43 @@ internal static class SplitTunnelPolicy
     {
         if (a is null) return b is null;
         return a.Equals(b);
+    }
+
+    /// <summary>
+    /// Collision guard (fail-path §3 #3): decides what to do when the
+    /// <c>mullvad-split-tunnel</c> service already exists, from its current binPath vs the
+    /// one we would install. Deliberately conservative — we only ever mutate a service whose
+    /// binPath is recognisably OURS (contains a "VPNRouter" segment); anything else (a real
+    /// Mullvad daemon, or an unknown service squatting the name) is left untouched so a
+    /// coexisting VPN is never broken. The excluded apps just fall back to post-capture routing.
+    /// </summary>
+    public static SplitTunnelDriverProtocol.ServiceCollisionAction ClassifyServiceBinPath(string existingBinPath, string ourBinPath)
+    {
+        string existing = NormalizeBinPath(existingBinPath);
+        string ours = NormalizeBinPath(ourBinPath);
+
+        if (existing.Length != 0 && existing == ours)
+            return SplitTunnelDriverProtocol.ServiceCollisionAction.StartExisting;
+
+        // Only self-heal a path that is unmistakably our own install (relocated). Match a whole
+        // "vpnrouter" PATH SEGMENT (\vpnrouter\), not a raw substring — so a squatter under
+        // "…\NotVpnRouterApp\…" can't false-match and get its binPath rewritten. Real Mullvad
+        // installs under "…\Mullvad VPN\…" and carries no such segment, so this can't hijack their
+        // driver either. Anything without our segment correctly bails to post-capture.
+        if (existing.Contains(@"\vpnrouter\", StringComparison.Ordinal))
+            return SplitTunnelDriverProtocol.ServiceCollisionAction.AdoptMovedInstall;
+
+        return SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign;
+    }
+
+    /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
+    /// leading NT object-manager prefix (<c>\??\</c>), trims, lowercases (paths are
+    /// case-insensitive on Windows). Empty/whitespace → empty string.</summary>
+    private static string NormalizeBinPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        string p = path.Trim().Trim('"').Trim();
+        if (p.StartsWith(@"\??\", StringComparison.Ordinal)) p = p.Substring(4);
+        return p.ToLowerInvariant();
     }
 }
