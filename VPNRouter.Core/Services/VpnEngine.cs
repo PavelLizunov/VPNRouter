@@ -622,6 +622,11 @@ public class VpnEngine : IDisposable
             {
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
                 _logger?.Information("[VpnEngine] Applied via hot-reload");
+                // W1.2 hook 2 (bug-hunt P1-3): an excluded-set edit reaches here as a bare hot-reload
+                // (it never enters _scanResult.ProcessNames, so it doesn't force a restart). Re-engage so
+                // the driver's SET_CONFIGURATION tracks it — a de-excluded app stops bypassing the VPN.
+                // Idempotent + cheap-skips when the excluded set is unchanged (see EngageLocked).
+                await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
                 return true;
             }
 

@@ -197,6 +197,10 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     {
         if (_disposed) return;
         _disposed = true;
+        // Cancel any in-flight NIC-debounce task BEFORE _gate.Dispose() below — else a task waking from
+        // its 5 s retry-delay would re-acquire a disposed _gate (bug-hunt P1-1). Its own finally disposes
+        // the CTS. Unconditional here so it fires even when a prior Disengage already unsubscribed.
+        Interlocked.Exchange(ref _debounceCts, null)?.Cancel();
 
         if (!OperatingSystem.IsWindows()) { _gate.Dispose(); return; }
 
@@ -267,9 +271,21 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         // #4 — the single exclusive overlapped handle.
         if (!EnsureDeviceOpenLocked()) return false;
 
+        var addrs = ResolveAddresses(request);
+        var initial = GetStateLocked();
+
+        // Idempotent cheap-skip (bug-hunt P1-3): a re-engage from a hot-apply that changed neither the
+        // excluded set nor the addresses is a no-op — skip the RESET→re-init so we don't briefly un-split
+        // excluded apps for nothing. Only when the driver is already ENGAGED for this exact config.
+        if (initial == Proto.DriverState.Engaged && _engaged && _lastRequest is not null
+            && _lastRequest.ExcludedDosPaths.SequenceEqual(request.ExcludedDosPaths, StringComparer.OrdinalIgnoreCase)
+            && !SplitTunnelPolicy.ShouldReRegister(_lastAddrs, addrs))
+        {
+            return true;
+        }
+
         // Engage state machine (ABI §"State machine"). A non-STARTED state here is either a stale
         // prior-session tail or a re-engage — RESET brings the driver back to STARTED to re-init.
-        var initial = GetStateLocked();
         if (initial != Proto.DriverState.Started)
         {
             _log.Information("[SplitTunnel] Driver state {State} — RESET before (re)initialise", initial);
@@ -278,8 +294,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
         IoctlLocked(Proto.IoctlInitialize, Proto.BuildSublayerGuids(Proto.SublayerBaseline, Proto.SublayerDns), null);
         IoctlLocked(Proto.IoctlRegisterProcesses, BuildProcessSnapshotBuffer(), null);
-
-        var addrs = ResolveAddresses(request);
         IoctlLocked(Proto.IoctlRegisterIpAddresses,
             Proto.BuildAddresses(addrs.tunV4, addrs.inetV4, addrs.tunV6, addrs.inetV6), null);
         IoctlLocked(Proto.IoctlSetConfiguration, BuildConfigBuffer(request.ExcludedDosPaths), null);
@@ -703,7 +717,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     {
         // NIC flaps fire a burst — debounce 2 s of quiet, then re-check under the gate.
         var fresh = new CancellationTokenSource();
-        Interlocked.Exchange(ref _debounceCts, fresh)?.Cancel();
+        Interlocked.Exchange(ref _debounceCts, fresh)?.Cancel();   // supersede the prior; its Task disposes it
         _ = Task.Run(async () =>
         {
             try
@@ -711,13 +725,18 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 await Task.Delay(NetChangeDebounce, fresh.Token).ConfigureAwait(false);
                 await ReRegisterIfChangedAsync(fresh.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { /* superseded by a newer change */ }
+            catch (OperationCanceledException) { /* superseded by a newer change / disposed */ }
+            catch (ObjectDisposedException) { /* _gate disposed during teardown — benign */ }
             catch (Exception ex) { _log.Debug(ex, "[SplitTunnel] NetworkChange handler error (ignored)"); }
+            // This Task is the sole user of fresh's token, so disposing here (leak fix, bug-hunt P1-2)
+            // can't race a WaitAsync/Delay registration on another thread.
+            finally { fresh.Dispose(); }
         });
     }
 
     private async Task ReRegisterIfChangedAsync(CancellationToken ct)
     {
+        if (_disposed) return;   // bug-hunt P1-1: don't touch a _gate that Dispose may be disposing
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -735,6 +754,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         try { await Task.Delay(ReRegisterRetryDelay, ct).ConfigureAwait(false); }
         catch (OperationCanceledException) { return; }
 
+        if (_disposed) return;   // bug-hunt P1-1: Dispose may have raced the retry wait
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {

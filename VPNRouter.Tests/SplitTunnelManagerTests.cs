@@ -85,6 +85,16 @@ public class SplitTunnelManagerTests
     }
 
     [Fact]
+    public void ClassifyServiceBinPath_VpnRouterSegmentButWrongTail_BailForeign()
+    {
+        // Has a real \vpnrouter\ segment but NOT our \driver\mullvad-split-tunnel.sys layout tail —
+        // a squatter that must NOT be adopted (bug-hunt: keying on the segment alone would rewrite it).
+        const string existing = @"C:\Program Files\VpnRouterClone\vpnrouter\weird\thing.sys";
+        Assert.Equal(P.ServiceCollisionAction.BailForeign,
+            SplitTunnelPolicy.ClassifyServiceBinPath(existing, Ours));
+    }
+
+    [Fact]
     public void ClassifyServiceBinPath_UnreadableConfig_BailForeign()
     {
         // Service exists but we couldn't read its binPath → treat as foreign (conservative).

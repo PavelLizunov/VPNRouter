@@ -624,12 +624,13 @@ internal static class SplitTunnelPolicy
         if (existing.Length != 0 && existing == ours)
             return SplitTunnelDriverProtocol.ServiceCollisionAction.StartExisting;
 
-        // Only self-heal a path that is unmistakably our own install (relocated). Match a whole
-        // "vpnrouter" PATH SEGMENT (\vpnrouter\), not a raw substring — so a squatter under
-        // "…\NotVpnRouterApp\…" can't false-match and get its binPath rewritten. Real Mullvad
-        // installs under "…\Mullvad VPN\…" and carries no such segment, so this can't hijack their
-        // driver either. Anything without our segment correctly bails to post-capture.
-        if (existing.Contains(@"\vpnrouter\", StringComparison.Ordinal))
+        // Only self-heal a path that is unmistakably a RELOCATED VPNRouter install of THIS driver:
+        // a whole "\vpnrouter\" path segment (not a raw substring — defeats "…\NotVpnRouterApp\…")
+        // AND our exact layout tail "\driver\mullvad-split-tunnel.sys" (bug-hunt: keying on the segment
+        // alone would ChangeServiceConfig any "…\vpnrouter\…\foo.sys" squatter). Real Mullvad
+        // ("…\Mullvad VPN\resources\mullvad-split-tunnel.sys") has no "\vpnrouter\" segment → bails.
+        if (existing.Contains(@"\vpnrouter\", StringComparison.Ordinal)
+            && existing.EndsWith(@"\driver\mullvad-split-tunnel.sys", StringComparison.Ordinal))
             return SplitTunnelDriverProtocol.ServiceCollisionAction.AdoptMovedInstall;
 
         return SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign;

@@ -7183,6 +7183,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             _engine.StatusChanged -= OnEngineStatus;
             _engine.AutoFailoverTriggered -= OnAutoFailoverMessage;
+            _engine.TrueSplitEngagedChanged -= OnTrueSplitEngagedChanged;   // W1.3 (bug-hunt): don't leak a recreated VM
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: engine StatusChanged unhook failed"); }
 

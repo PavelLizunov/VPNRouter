@@ -606,6 +606,19 @@ if (Test-Path $slipInDist) {
     $slipVcrInDist = Join-Path $DistDir "VCRUNTIME140.dll"
     if (Test-Path $slipVcrInDist) { Copy-Item $slipVcrInDist $BootstrapDir; $updateFileCount++ }
 }
+# W1.4 true-split: the driver/ subdir must travel in the update payload too (bug-hunt P1), else an
+# auto-updated user keeps a STALE .sys while the app's ABI moves forward -> runic kernel error. The
+# top-level file loop above (Get-ChildItem -File) skips subdirs, so copy it explicitly. No-op for
+# normal ships (dist\driver only exists when built with -BundleSplitDriver).
+$driverInDist = Join-Path $DistDir "driver"
+if (Test-Path $driverInDist) {
+    $UpdateDriverDst = Join-Path $BootstrapDir "driver"
+    New-Item -ItemType Directory -Force -Path $UpdateDriverDst | Out-Null
+    Copy-Item "$driverInDist\*" $UpdateDriverDst -Recurse -Force
+    $stLicInDist = Join-Path $DistDir "LICENSE.split-tunnel"
+    if (Test-Path $stLicInDist) { Copy-Item $stLicInDist $BootstrapDir -Force }
+    Write-Host "       split-tunnel driver/ included in update (under _bootstrap/)" -ForegroundColor Gray
+}
 # wgturn-cli: downloaded on demand (v2.32.1-r3+, see plans/wgturn-on-demand-download.md)
 # Zapret: downloaded on demand, not in update package
 # Also include profiles and README under _bootstrap/.
