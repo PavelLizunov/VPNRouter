@@ -200,9 +200,14 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         // Cancel any in-flight NIC-debounce task BEFORE _gate.Dispose() below — else a task waking from
         // its 5 s retry-delay would re-acquire a disposed _gate (bug-hunt P1-1). Its own finally disposes
         // the CTS. Unconditional here so it fires even when a prior Disengage already unsubscribed.
-        // Same cancel-after-dispose guard as OnNetworkAddressChanged: the debounce Task disposes its own
-        // CTS, so the value here may already be disposed — swallow so Dispose() itself never throws.
-        try { Interlocked.Exchange(ref _debounceCts, null)?.Cancel(); } catch (ObjectDisposedException) { }
+        // The Task no longer disposes its own CTS (see OnNetworkAddressChanged), so cancel + dispose the
+        // last one here. Guard the cancel so Dispose() itself never throws on a teardown race.
+        var lastCts = Interlocked.Exchange(ref _debounceCts, null);
+        if (lastCts is not null)
+        {
+            try { lastCts.Cancel(); } catch (ObjectDisposedException) { }
+            lastCts.Dispose();
+        }
 
         if (!OperatingSystem.IsWindows()) { _gate.Dispose(); return; }
 
@@ -727,25 +732,32 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (!_netChangeSubscribed) return;
         NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         _netChangeSubscribed = false;
-        // Cancel-after-dispose throws: the debounce Task disposes its own CTS, so a completed/superseded
-        // _debounceCts here is already disposed and moot — swallow the ObjectDisposedException.
-        try { _debounceCts?.Cancel(); } catch (ObjectDisposedException) { }
+        // The Task no longer disposes its own CTS (see OnNetworkAddressChanged), so cancel + dispose the
+        // current one here and null it out. Guard the cancel against a teardown race.
+        var cts = Interlocked.Exchange(ref _debounceCts, null);
+        if (cts is not null)
+        {
+            try { cts.Cancel(); } catch (ObjectDisposedException) { }
+            cts.Dispose();
+        }
     }
 
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
     {
         // NIC flaps fire a burst — debounce 2 s of quiet, then re-check under the gate.
         var fresh = new CancellationTokenSource();
-        // Supersede the prior debounce. Its Task disposes its own CTS in a finally, so once that Task has
-        // completed the reference we get back here is ALREADY DISPOSED — Cancel() then throws
-        // ObjectDisposedException synchronously on THIS NetworkChange callback thread, outside the Task's
-        // try/catch, crashing the whole daemon on a NIC-change burst (found live on brat, r2). A disposed/
-        // completed prior has nothing left to cancel, so swallow it.
-        var prevCts = Interlocked.Exchange(ref _debounceCts, fresh);
-        if (prevCts is not null)
+        // The SUPERSEDER owns the prior CTS's lifetime: cancel it (so its Task unwinds), THEN dispose it.
+        // The Task must NOT dispose its own CTS — that was the r2 daemon crash: the Task's finally-dispose
+        // ran while _debounceCts still referenced the CTS, so the NEXT event's Cancel() hit a disposed CTS
+        // -> ObjectDisposedException thrown synchronously on the NetworkChange callback thread, outside the
+        // Task's try/catch -> whole-daemon crash (found live on brat, r2). With disposal owned here,
+        // _debounceCts never references a disposed CTS. The try/catch stays as belt-and-suspenders.
+        var prior = Interlocked.Exchange(ref _debounceCts, fresh);
+        if (prior is not null)
         {
-            try { prevCts.Cancel(); }
+            try { prior.Cancel(); }
             catch (ObjectDisposedException) { }
+            finally { prior.Dispose(); }
         }
         _ = Task.Run(async () =>
         {
@@ -754,14 +766,19 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 await Task.Delay(NetChangeDebounce, fresh.Token).ConfigureAwait(false);
                 await ReRegisterIfChangedAsync(fresh.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { /* superseded by a newer change / disposed */ }
-            catch (ObjectDisposedException) { /* _gate disposed during teardown — benign */ }
+            catch (OperationCanceledException) { /* superseded by a newer change */ }
+            catch (ObjectDisposedException) { /* our CTS was disposed by a superseder/teardown — benign */ }
             catch (Exception ex) { _log.Debug(ex, "[SplitTunnel] NetworkChange handler error (ignored)"); }
-            // This Task is the sole user of fresh's token, so disposing here (leak fix, bug-hunt P1-2)
-            // can't race a WaitAsync/Delay registration on another thread.
-            finally { fresh.Dispose(); }
+            // NB: NO finally-dispose here — the next superseder (or Dispose / UnsubscribeNetworkChangeLocked)
+            // disposes `fresh`. Disposing here (the old bug-hunt-P1-2 "leak fix") is what caused the r2
+            // use-after-dispose crash. Every CTS is still disposed exactly once, so there is no leak.
         });
     }
+
+    // Test seam (InternalsVisibleTo): synchronously fire the NetworkChange handler — the exact path that
+    // threw ObjectDisposedException on a NIC-change burst in r2. Lets a unit test stress the CTS
+    // supersede/dispose lifecycle without a real NIC event.
+    internal void RaiseNetworkAddressChangedForTest() => OnNetworkAddressChanged(this, EventArgs.Empty);
 
     private async Task ReRegisterIfChangedAsync(CancellationToken ct)
     {
