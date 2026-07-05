@@ -200,7 +200,9 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         // Cancel any in-flight NIC-debounce task BEFORE _gate.Dispose() below — else a task waking from
         // its 5 s retry-delay would re-acquire a disposed _gate (bug-hunt P1-1). Its own finally disposes
         // the CTS. Unconditional here so it fires even when a prior Disengage already unsubscribed.
-        Interlocked.Exchange(ref _debounceCts, null)?.Cancel();
+        // Same cancel-after-dispose guard as OnNetworkAddressChanged: the debounce Task disposes its own
+        // CTS, so the value here may already be disposed — swallow so Dispose() itself never throws.
+        try { Interlocked.Exchange(ref _debounceCts, null)?.Cancel(); } catch (ObjectDisposedException) { }
 
         if (!OperatingSystem.IsWindows()) { _gate.Dispose(); return; }
 
@@ -725,14 +727,26 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (!_netChangeSubscribed) return;
         NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         _netChangeSubscribed = false;
-        _debounceCts?.Cancel();
+        // Cancel-after-dispose throws: the debounce Task disposes its own CTS, so a completed/superseded
+        // _debounceCts here is already disposed and moot — swallow the ObjectDisposedException.
+        try { _debounceCts?.Cancel(); } catch (ObjectDisposedException) { }
     }
 
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
     {
         // NIC flaps fire a burst — debounce 2 s of quiet, then re-check under the gate.
         var fresh = new CancellationTokenSource();
-        Interlocked.Exchange(ref _debounceCts, fresh)?.Cancel();   // supersede the prior; its Task disposes it
+        // Supersede the prior debounce. Its Task disposes its own CTS in a finally, so once that Task has
+        // completed the reference we get back here is ALREADY DISPOSED — Cancel() then throws
+        // ObjectDisposedException synchronously on THIS NetworkChange callback thread, outside the Task's
+        // try/catch, crashing the whole daemon on a NIC-change burst (found live on brat, r2). A disposed/
+        // completed prior has nothing left to cancel, so swallow it.
+        var prevCts = Interlocked.Exchange(ref _debounceCts, fresh);
+        if (prevCts is not null)
+        {
+            try { prevCts.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
         _ = Task.Run(async () =>
         {
             try
