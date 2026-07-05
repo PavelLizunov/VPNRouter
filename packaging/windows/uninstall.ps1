@@ -139,6 +139,21 @@ if ($svc) {
     }
 }
 
+# == Uninstall the split-tunnel kernel driver service (W1.4 true-split) ===
+# Best-effort. The manager RESETs the driver to inert on disconnect, but a hard
+# app crash can leave it loaded. `sc stop` unloads it (freeing app\driver\*.sys so
+# the install-dir removal below can delete it); `sc delete` removes the SCM entry.
+# RESET-before-stop isn't available from here (app already gone) — the driver's
+# known callback-leak-until-reboot is accepted for the uninstall path. A still-locked
+# .sys is tolerated: the install-dir remove already tells the user to re-run after reboot.
+$stSvc = Get-Service -Name "mullvad-split-tunnel" -ErrorAction SilentlyContinue
+if ($stSvc) {
+    Say "Removing split-tunnel driver service (mullvad-split-tunnel)..."
+    & sc.exe stop mullvad-split-tunnel 2>&1 | ForEach-Object { Write-Host "    $_" }
+    Start-Sleep -Milliseconds 500
+    & sc.exe delete mullvad-split-tunnel 2>&1 | ForEach-Object { Write-Host "    $_" }
+}
+
 # == Remove install dir ==================================================
 if (Test-Path $InstallRoot) {
     Say "Removing $InstallRoot..."

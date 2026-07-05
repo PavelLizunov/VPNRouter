@@ -61,7 +61,12 @@ param(
     # Build a local Android APK alongside the Windows artifacts. See
     # PARAMETER AndroidAlso for prereqs. Falls back to a clear warning
     # (not a hard failure) when prereqs are missing.
-    [switch]$AndroidAlso
+    [switch]$AndroidAlso,
+    # W1.4 true-split: bundle the Mullvad win-split-tunnel kernel driver (3 files, sha256-pinned)
+    # into dist\driver\. GATED (default off) so -rN candidates don't auto-ship+activate the feature —
+    # the manager engages lazily only when the .sys is present, so its ABSENCE is fail-open (feature
+    # off, post-capture routing stands). Pass -BundleSplitDriver at the ship-the-feature moment.
+    [switch]$BundleSplitDriver
 )
 
 $ErrorActionPreference = "Stop"
@@ -383,6 +388,54 @@ if ($slipStreamSrc) {
     Write-Host "       Bundled slipstream-client ($slipSize MB) from $slipStreamSrc" -ForegroundColor Green
 } else {
     Write-Host "       slipstream-client: NOT bundled (no -SlipstreamPath, no tools\slipstream-cache) - dns-tunnel unavailable until built+placed" -ForegroundColor Yellow
+}
+
+# ── Bundle split-tunnel driver (W1.4, Windows-only, GATED by -BundleSplitDriver) ──
+# The Mullvad win-split-tunnel kernel driver (true OS-level exclude-mode). Files pinned to
+# mullvadvpn-app-binaries@cc0affb2 with a HARD sha256 gate (mismatch = build FAIL) so a silent
+# ABI/driver bump can't slip in. Cached under tools\driver-cache\<commit>\ like singbox-cache.
+# Bundled into dist\driver\ = the app's AppContext.BaseDirectory\driver, where SplitTunnelDriverManager
+# looks for the .sys and lazily installs the kernel service on the first exclude-mode connect.
+# The .sys carries a Microsoft attestation countersignature, so it loads on prod Win10/11 x64
+# without test-signing. Not a separate release asset (rides inside the app ZIP → 14/16-asset invariant
+# unchanged). Mac/Linux never run this script, so their builds are untouched.
+Write-Host "[6c/9] Bundling split-tunnel driver..." -ForegroundColor Yellow
+if ($BundleSplitDriver) {
+    $stCommit = "cc0affb2f06e870fb594e2dd6d61049611991586"
+    $stCache  = Join-Path $Root "tools\driver-cache\$stCommit"
+    New-Item -ItemType Directory -Force -Path $stCache | Out-Null
+    # filename -> pinned sha256 (source of truth: plans\w1-driver-abi-reference-2026-07-03.md).
+    $stPins = [ordered]@{
+        "mullvad-split-tunnel.sys" = "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201"
+        "mullvad-split-tunnel.cat" = "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d"
+        "mullvad-split-tunnel.inf" = "3dd5905e5fb98d61a942a33e8c9a5ba07c3a2de1e4f319e1fec3e54df6591608"
+    }
+    $stDst = Join-Path $DistDir "driver"
+    New-Item -ItemType Directory -Force -Path $stDst | Out-Null
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $stChecksums = @()
+    foreach ($f in $stPins.Keys) {
+        $cached = Join-Path $stCache $f
+        if (-not (Test-Path $cached)) {
+            $url = "https://github.com/mullvad/mullvadvpn-app-binaries/raw/$stCommit/x86_64-pc-windows-msvc/split-tunnel/$f"
+            Write-Host "       Downloading $f ..." -ForegroundColor Gray
+            try { Invoke-WebRequest -Uri $url -OutFile $cached -UseBasicParsing }
+            catch { if (Test-Path $cached) { Remove-Item $cached -Force }; throw "split-tunnel driver download failed for ${f}: $_" }
+        }
+        $actual = (Get-FileHash -Algorithm SHA256 $cached).Hash.ToLower()
+        if ($actual -ne $stPins[$f]) {
+            throw "SUPPLY-CHAIN GATE FAIL: $f sha256 mismatch. pinned=$($stPins[$f]) actual=$actual. Re-verify the ABI ref + driver-cache before shipping."
+        }
+        Copy-Item $cached (Join-Path $stDst $f) -Force
+        $stChecksums += "$actual  $f"
+    }
+    # sha256sum-format sidecar (lowercase, ASCII/no-BOM — matches the .githooks Gate 6 expectations).
+    $stChecksums | Set-Content -Encoding ascii (Join-Path $stDst "checksums.sha256")
+    $stLicense = Join-Path $Root "LICENSE.split-tunnel"
+    if (Test-Path $stLicense) { Copy-Item $stLicense (Join-Path $DistDir "LICENSE.split-tunnel") -Force }
+    Write-Host "       Bundled split-tunnel driver (3 files, sha256 gate OK) -> dist\driver\" -ForegroundColor Green
+} else {
+    Write-Host "       split-tunnel driver: NOT bundled (pass -BundleSplitDriver to ship true-split; absence = feature off / fail-open)" -ForegroundColor Gray
 }
 
 # ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──
