@@ -272,6 +272,17 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (!EnsureDeviceOpenLocked()) return false;
 
         var addrs = ResolveAddresses(request);
+
+        // #10 — no physical internet NIC resolved. BuildAddresses would zero the internet slot, so
+        // excluded sockets bind to 0.0.0.0 and break. Guard BEFORE the cheap-skip: a null inet means we
+        // must not stay engaged regardless of prior state. Full cleanup → fail-open to post-capture.
+        if (addrs.inetV4 is null)
+        {
+            _log.Warning("[SplitTunnel] no internet NIC resolved — cannot bind excluded apps to a real address; fail-open to post-capture");
+            BestEffortResetAndCloseLocked();
+            return false;
+        }
+
         var initial = GetStateLocked();
 
         // Idempotent cheap-skip (bug-hunt P1-3): a re-engage from a hot-apply that changed neither the
@@ -301,8 +312,12 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         var state = GetStateLocked();
         if (state != Proto.DriverState.Engaged)   // #7
         {
+            // Full cleanup, not just RESET: a failed RE-engage (after a prior success) must clear
+            // _engaged + close the handle, else IsEngaged stays true and the W1.3 badge lies while the
+            // driver is inert. BestEffortResetAndCloseLocked mirrors the exception path (#13); the
+            // EngageAsync wrapper's before/after check then raises EngagedChanged(false) → badge off.
             _log.Warning("[SplitTunnel] Engage did not reach ENGAGED (state={State}) — RESET + fall back", state);
-            TryResetLocked();
+            BestEffortResetAndCloseLocked();
             return false;
         }
 
@@ -773,6 +788,14 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private bool TryReRegisterLocked((IPAddress? tunV4, IPAddress? inetV4, IPAddress? tunV6, IPAddress? inetV6) a)
     {
+        // #10 — never register a zeroed internet slot (would bind excluded apps to 0.0.0.0). A null inet
+        // is a re-register FAILURE, not a value to write: it falls into the retry, and on a persistent
+        // null the caller disengages (excluded return to post-capture via the live TUN) rather than lie.
+        if (a.inetV4 is null)
+        {
+            _log.Warning("[SplitTunnel] Re-register skipped — no internet NIC resolved (won't bind excluded apps to 0.0.0.0)");
+            return false;
+        }
         try
         {
             IoctlLocked(Proto.IoctlRegisterIpAddresses, Proto.BuildAddresses(a.tunV4, a.inetV4, a.tunV6, a.inetV6), null);

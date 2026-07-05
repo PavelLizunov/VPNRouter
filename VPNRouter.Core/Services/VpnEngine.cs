@@ -422,11 +422,23 @@ public class VpnEngine : IDisposable
         var dosPaths = new List<string>();
         foreach (var name in app.RoutingAppsExclude)
         {
-            // ponytail: reuse ResolveRunningPath (running apps). Unresolved (not launched yet) → the
-            // post-capture process_name rule still routes it; ETW-driven late re-engage is a follow-up.
-            var p = ProcessImagePath.ResolveRunningPath(name);
+            // Running app → live image path; else a where.exe PATH search resolves a not-yet-launched app
+            // so the driver splits it the moment it starts (in-kernel process-arrival tracking). Only if
+            // BOTH miss (not running AND not on PATH, e.g. Discord in %LocalAppData%) does the post-capture
+            // process_name rule carry it — ETW-driven late re-engage for that residual is a follow-up (§5.4).
+            var p = ProcessImagePath.ResolveRunningPath(name) ?? ProcessImagePath.ResolveNameToPath(name);
             if (!string.IsNullOrEmpty(p)) dosPaths.Add(p!);
             else _logger?.Information("[VpnEngine] Split-tunnel: '{Name}' not running/unresolved — post-capture rule covers it", name);
+        }
+
+        // No path resolved → don't engage: an ENGAGED driver with zero configured paths splits nothing
+        // yet lights the badge. Disengage if we were engaged (excluded fall back to post-capture); the app
+        // still gets driver-level 0-gap once a hot-apply re-engages with a resolvable path.
+        if (dosPaths.Count == 0)
+        {
+            if (_splitDriver.IsEngaged) await _splitDriver.DisengageAsync(ct).ConfigureAwait(false);
+            _logger?.Information("[VpnEngine] True-split driver: 0 excluded path(s) resolved — not engaging (post-capture covers them)");
+            return;
         }
 
         // ponytail: TUN is v4-only (TunSettings has no Ipv6Address); the driver zeroes the v6 slot,

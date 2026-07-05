@@ -166,4 +166,55 @@ internal static class ProcessImagePath
                 }
         }
     }
+
+    /// <summary>
+    /// Resolve a process <b>name</b> (e.g. <c>"curl.exe"</c>) to a full on-disk path WITHOUT the
+    /// process running, via a <c>where.exe</c> PATH search. Lets the true-split driver register a
+    /// not-yet-launched excluded app's image path so its in-kernel process-arrival tracking splits it
+    /// the moment it launches. Returns the first <c>where.exe</c> hit that exists on disk, or null.
+    /// Handle-safe (the child <see cref="Process"/> is always disposed) and never throws.
+    ///
+    /// <para><b>Limitation:</b> apps NOT on <c>PATH</c> (e.g. Discord in <c>%LocalAppData%</c>) still
+    /// won't resolve pre-launch — that residual (ETW-driven late re-engage) is a documented follow-up
+    /// (arch plan §5.4). The post-capture <c>process_name → direct</c> rule covers them meanwhile.</para>
+    /// </summary>
+    public static string? ResolveNameToPath(string? processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return null;
+        if (!OperatingSystem.IsWindows()) return null;
+
+        Process? proc = null;
+        try
+        {
+            var psi = new ProcessStartInfo("where.exe", processName.Trim())
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,   // swallow the "not found" line off the console
+                CreateNoWindow = true,
+            };
+            proc = Process.Start(psi);
+            if (proc is null) return null;
+
+            // where.exe emits one path per line; take the first (mirrors FirewallManager.ResolveProcessPath).
+            string? firstLine = proc.StandardOutput.ReadLine();
+            if (!proc.WaitForExit(3000)) { try { proc.Kill(true); } catch { } return null; }
+            proc.StandardError.ReadToEnd();   // drain so a wedged child can't block on a full stderr pipe
+
+            firstLine = firstLine?.Trim();
+            if (proc.ExitCode == 0 && !string.IsNullOrEmpty(firstLine) && File.Exists(firstLine))
+                return firstLine;
+            return null;
+        }
+        catch
+        {
+            // where.exe missing / spawn denied / pipe error — degrade to the caller's next fallback.
+            return null;
+        }
+        finally
+        {
+            try { proc?.Dispose(); }
+            catch { /* defensive */ }
+        }
+    }
 }
