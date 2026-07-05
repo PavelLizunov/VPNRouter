@@ -1,4 +1,5 @@
 using VPNRouter.App.ViewModels;
+using VPNRouter.App.Localization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Tests;
@@ -104,6 +105,42 @@ public class ServerViewModelSubtitleTests
         };
         var vm = new ServerViewModel(entry);
         Assert.Equal("hysteria2 + salamander", vm.HostSubtitle);
+    }
+
+    [Fact]
+    public void ProtocolUseCase_ShowsUserIntent()
+    {
+        var oldLang = Strings.Lang;
+        try
+        {
+            var vless = new ServerViewModel(new VlessServerEntry
+            {
+                Protocol = "vless",
+                Transport = new VlessTransportConfig { Type = "tcp" },
+            });
+            var hy2 = new ServerViewModel(new VlessServerEntry { Protocol = "hysteria2" });
+            var dns = new ServerViewModel(new VlessServerEntry
+            {
+                Protocol = "dns-tunnel",
+                DnsDomain = "t.example",
+            });
+
+            Strings.Lang = "en";
+            Assert.Equal("Daily", vless.ProtocolUseCase);
+            Assert.Equal("Games/voice", hy2.ProtocolUseCase);
+            Assert.Equal("Emergency", dns.ProtocolUseCase);
+            Assert.Contains("UDP-friendly", hy2.ProtocolUseCaseTooltip);
+
+            Strings.Lang = "ru";
+            Assert.Equal("Повседневно", vless.ProtocolUseCase);
+            Assert.Equal("Игры/звонки", hy2.ProtocolUseCase);
+            Assert.Equal("Аварийный", dns.ProtocolUseCase);
+            Assert.Contains("UDP-friendly", hy2.ProtocolUseCaseTooltip);
+        }
+        finally
+        {
+            Strings.Lang = oldLang;
+        }
     }
 
     [Fact]

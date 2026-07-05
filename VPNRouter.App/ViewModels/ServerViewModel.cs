@@ -1,5 +1,6 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using VPNRouter.App.Localization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -48,6 +49,8 @@ public partial class ServerViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HostSubtitle))]
+    [NotifyPropertyChangedFor(nameof(ProtocolUseCase))]
+    [NotifyPropertyChangedFor(nameof(ProtocolUseCaseTooltip))]
     private bool _hasUdpSibling;
 
     // ── Connectivity test state (v2.15.2) ────────────────────────────────
@@ -162,6 +165,12 @@ public partial class ServerViewModel : ViewModelBase
     public void NotifyThemeChanged()
     {
         OnPropertyChanged(nameof(StatusDotBrush));
+    }
+
+    public void NotifyLocalizationChanged()
+    {
+        OnPropertyChanged(nameof(ProtocolUseCase));
+        OnPropertyChanged(nameof(ProtocolUseCaseTooltip));
     }
 
     /// <summary>Apply a probe result to this VM (updates PingMs, Status, Error, clears IsTesting).</summary>
@@ -318,6 +327,12 @@ public partial class ServerViewModel : ViewModelBase
 
     public string DisplayName => string.IsNullOrEmpty(Name) ? Server : Name;
 
+    private string ProtocolKey => (_originalEntry?.Awg != null)
+        ? "amneziawg"
+        : (_originalEntry?.IsDnsTunnel == true)
+            ? "dns-tunnel"
+            : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
+
     /// <summary>
     /// v2.25.3 — compact protocol/security subtitle shown in the Servers /
     /// Subscribe list design ("tcp + reality"). Helps distinguish entries
@@ -339,11 +354,7 @@ public partial class ServerViewModel : ViewModelBase
             // "tcp + reality" (user-reported: "при добавлении AWG пишет что это
             // vless"). Detect by the Awg payload so the label is right even if a
             // future round-trip drops Protocol.
-            var protocol = (_originalEntry?.Awg != null)
-                ? "amneziawg"
-                : (_originalEntry?.IsDnsTunnel == true)
-                    ? "dns-tunnel"
-                    : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
+            var protocol = ProtocolKey;
             var parts = new System.Collections.Generic.List<string>();
 
             // v2.30.1-r3: for non-VLESS protocols (Hysteria2 / TUIC / SS),
@@ -413,6 +424,46 @@ public partial class ServerViewModel : ViewModelBase
             }
 
             return string.Join(" + ", parts);
+        }
+    }
+
+    public string ProtocolUseCase
+    {
+        get
+        {
+            var protocol = ProtocolKey;
+            var transport = _originalEntry?.Transport?.Type?.ToLowerInvariant();
+            return protocol switch
+            {
+                "hysteria2" or "hy2" or "tuic" => Strings.ProtocolUseGamesVoice,
+                "naive" => HasUdpSibling ? Strings.ProtocolUseWebUdpPair : Strings.ProtocolUseWebOnly,
+                "amneziawg" or "awg" => Strings.ProtocolUseLowLatency,
+                "dns-tunnel" => Strings.ProtocolUseEmergency,
+                "shadowsocks" or "ss" => Strings.ProtocolUseFallback,
+                _ when transport is "xhttp" => Strings.ProtocolUseStealthWeb,
+                _ when transport is "ws" or "grpc" => Strings.ProtocolUseWebFallback,
+                _ => Strings.ProtocolUseDaily,
+            };
+        }
+    }
+
+    public string ProtocolUseCaseTooltip
+    {
+        get
+        {
+            var protocol = ProtocolKey;
+            var transport = _originalEntry?.Transport?.Type?.ToLowerInvariant();
+            return protocol switch
+            {
+                "hysteria2" or "hy2" or "tuic" => Strings.ProtocolUseGamesVoiceTip,
+                "naive" => HasUdpSibling ? Strings.ProtocolUseWebUdpPairTip : Strings.ProtocolUseWebOnlyTip,
+                "amneziawg" or "awg" => Strings.ProtocolUseLowLatencyTip,
+                "dns-tunnel" => Strings.ProtocolUseEmergencyTip,
+                "shadowsocks" or "ss" => Strings.ProtocolUseFallbackTip,
+                _ when transport is "xhttp" => Strings.ProtocolUseStealthWebTip,
+                _ when transport is "ws" or "grpc" => Strings.ProtocolUseWebFallbackTip,
+                _ => Strings.ProtocolUseDailyTip,
+            };
         }
     }
 

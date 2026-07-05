@@ -7404,6 +7404,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Propagate to child view models — they have their own property notifiers
         foreach (var group in AppGroups)
             group.NotifyDisplayNameChanged();
+        foreach (var server in Servers)
+            server.NotifyLocalizationChanged();
+        foreach (var server in SubscriptionServers)
+            server.NotifyLocalizationChanged();
 
         // v2.30.7-r3 — UpdateVm.CheckLinkText is computed from Strings;
         // it doesn't auto-refresh on lang change because OnPropertyChanged("")

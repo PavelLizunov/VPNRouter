@@ -69,6 +69,16 @@
       <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
       <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
+    <Style Selector="Border.srv-use">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
+      <Setter Property="Padding" Value="4,0"/>
+    </Style>
+    <Style Selector="TextBlock.srv-use-text">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
 
     <Style Selector="TextBlock.srv-cell">
       <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
@@ -154,8 +164,14 @@
 
               <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                 <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
-                <TextBlock Classes="srv-host" Text="{Binding HostSubtitle}"
-                           IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
+                  <TextBlock Grid.Column="0" Classes="srv-host" Text="{Binding HostSubtitle}"
+                             IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  <Border Grid.Column="1" Classes="srv-use"
+                          ToolTip.Tip="{Binding ProtocolUseCaseTooltip}">
+                    <TextBlock Classes="srv-use-text" Text="{Binding ProtocolUseCase}"/>
+                  </Border>
+                </Grid>
               </StackPanel>
 
               <TextBlock Grid.Column="2" Classes="srv-cell"

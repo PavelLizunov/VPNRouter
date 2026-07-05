@@ -230,6 +230,44 @@ public static class Strings
     // the "—" placeholder users see before any test has been run.
     public static string ColPingTooltip => global::VPNRouter.Core.Localization.Strings.ColPingTooltip;
 
+    // Server protocol use-case chips shown in Servers / Subscription lists.
+    public static string ProtocolUseDaily => Ru ? "Повседневно" : "Daily";
+    public static string ProtocolUseDailyTip => Ru
+        ? "Обычный выбор для браузера, приложений и стабильного TCP-трафика."
+        : "Default choice for browsing, apps, and stable TCP traffic.";
+    public static string ProtocolUseGamesVoice => Ru ? "Игры/звонки" : "Games/voice";
+    public static string ProtocolUseGamesVoiceTip => Ru
+        ? "UDP-friendly транспорт. Пробуйте для игр, Discord и голосовых звонков."
+        : "UDP-friendly transport. Try it for games, Discord, and voice calls.";
+    public static string ProtocolUseWebOnly => Ru ? "Только веб" : "Web only";
+    public static string ProtocolUseWebOnlyTip => Ru
+        ? "Хорош для web/TCP. Для игр и звонков нужен UDP-парный сервер."
+        : "Good for web/TCP. Games and calls need a paired UDP server.";
+    public static string ProtocolUseWebUdpPair => Ru ? "Веб + UDP" : "Web + UDP";
+    public static string ProtocolUseWebUdpPairTip => Ru
+        ? "Naive ведёт web/TCP, а парный HY2/TUIC сервер забирает UDP."
+        : "Naive handles web/TCP while a paired HY2/TUIC server carries UDP.";
+    public static string ProtocolUseLowLatency => Ru ? "Низкий ping" : "Low ping";
+    public static string ProtocolUseLowLatencyTip => Ru
+        ? "WireGuard/AWG-подобный транспорт. Быстрый, но проверяйте стабильность сети."
+        : "WireGuard/AWG-like transport. Fast, but check network stability.";
+    public static string ProtocolUseEmergency => Ru ? "Аварийный" : "Emergency";
+    public static string ProtocolUseEmergencyTip => Ru
+        ? "Последний шанс через DNS-туннель. Обычно медленнее обычных серверов."
+        : "Last-resort DNS tunnel. Usually slower than normal servers.";
+    public static string ProtocolUseFallback => Ru ? "Запасной" : "Fallback";
+    public static string ProtocolUseFallbackTip => Ru
+        ? "Совместимый запасной вариант, если основные протоколы не проходят."
+        : "Compatibility fallback when primary protocols do not pass.";
+    public static string ProtocolUseStealthWeb => Ru ? "Скрытный веб" : "Stealth web";
+    public static string ProtocolUseStealthWebTip => Ru
+        ? "XHTTP для жёстких сетей и web-трафика. Для игр проверяйте отдельно."
+        : "XHTTP for restrictive networks and web traffic. Test games separately.";
+    public static string ProtocolUseWebFallback => Ru ? "Веб-резерв" : "Web fallback";
+    public static string ProtocolUseWebFallbackTip => Ru
+        ? "WebSocket/gRPC вариант для сетей, где обычный TCP хуже проходит."
+        : "WebSocket/gRPC fallback for networks where plain TCP works poorly.";
+
     // v2.25.4 — Settings/Routing radio-card descriptions (Phase 4 redesign).
     // Each tunnel mode gets a one-line subtitle under the title so the user
     // understands the choice without hovering for a tooltip.
