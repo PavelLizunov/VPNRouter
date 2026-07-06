@@ -1150,7 +1150,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // were the VM's own self-OnPropertyChanged announcements at lines
     // 806-807 (also removed).
     [ObservableProperty] private bool _strictMode = false;
-    [ObservableProperty] private int _tunMtu = 1280;
+    [ObservableProperty] private int _tunMtu = TunSettings.DefaultMtu;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;

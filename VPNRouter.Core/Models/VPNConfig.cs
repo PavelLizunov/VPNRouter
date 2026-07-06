@@ -322,10 +322,10 @@ public class SingBoxInbound
     [JsonPropertyName("address")]
     public List<string> Address { get; set; } = new() { "172.19.0.1/30" };
 
-    // v2.42.0-r3: 9000 jumbo broke HTTP/2 over TCP-only proxies (browser
-    // ERR_CONNECTION_CLOSED via fragmentation). 1280 = IPv6 min, traverses any path.
+    // v2.46.0-r10: 1420 default fits observed VLESS/TUN path and avoids
+    // Steam SDR-class game UDP regressions; use 1400/1380 as explicit fallbacks.
     [JsonPropertyName("mtu")]
-    public int Mtu { get; set; } = 1280;
+    public int Mtu { get; set; } = TunSettings.DefaultMtu;
 
     [JsonPropertyName("auto_route")]
     public bool AutoRoute { get; set; } = true;

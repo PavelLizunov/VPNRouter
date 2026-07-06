@@ -162,6 +162,21 @@ public class SettingsValidatorTests
         Assert.Contains(result.Reasons, r => r.Contains("tun.mtu"));
     }
 
+    [Theory]
+    [InlineData(1200, "Steam Datagram Relay")]
+    [InlineData(1500, "PMTU")]
+    public void TunMtu_RiskyValues_WarnButStayValid(int mtu, string expectedWarning)
+    {
+        var s = NewValid();
+        s.Tun.Mtu = mtu;
+
+        var result = SettingsValidator.Validate(s);
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Reasons);
+        Assert.Contains(result.Warnings, w => w.Contains(expectedWarning));
+    }
+
     // ── Invariant 9: monitoring.health_check_interval ──────────────
     [Fact]
     public void HealthCheckInterval_NonPositive_IsInvalid()
@@ -392,7 +407,7 @@ public class SettingsValidatorTests
             },
             Tun = new TunSettings
             {
-                Mtu = 9000,
+                Mtu = TunSettings.DefaultMtu,
                 InterfaceName = "VPNRouter-TUN",
                 Ipv4Address = "172.19.0.1/30",
             },

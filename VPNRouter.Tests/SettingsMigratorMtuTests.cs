@@ -1,12 +1,11 @@
-// v2.42.0-r3 — TUN MTU 9000 -> 1280 fix + migration.
+// TUN MTU migrations: historical 9000/1500 fixes plus v8 default 1420.
 //
 // The old 9000 jumbo TUN MTU (stack=system) put oversized HTTP/2 segments on the
 // wire that the real 1500-MTU path couldn't carry; with PMTUD broken they were
 // RST, so browsers got ERR_CONNECTION_CLOSED on YouTube / Google over TCP-only
 // (VLESS) proxies (small clients + UDP/QUIC proxies were unaffected). Confirmed
-// via diagnose.ps1 on a real user (h2 FAIL + tun mtu 9000). New default is 1280
-// (IPv6 minimum, traverses any path); SettingsMigrator v5->v6 lowers existing
-// 9000 configs while leaving deliberately-customised MTUs alone.
+// v8 moves the product default to 1420: Roblox/VLESS probing showed 1420 passes,
+// while 1280 regressed Steam SDR-class game UDP.
 
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -17,15 +16,15 @@ namespace VPNRouter.Tests;
 public class SettingsMigratorMtuTests
 {
     [Fact]
-    public void NewSettings_DefaultMtuIs1280()
+    public void NewSettings_DefaultMtuIs1420()
     {
-        Assert.Equal(1280, new AppSettings().Tun.Mtu);
+        Assert.Equal(1420, new AppSettings().Tun.Mtu);
     }
 
     [Fact]
-    public void CurrentSchemaVersion_Is7()
+    public void CurrentSchemaVersion_Is8()
     {
-        Assert.Equal(7, AppSettings.CurrentSchemaVersion);
+        Assert.Equal(8, AppSettings.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -98,5 +97,27 @@ public class SettingsMigratorMtuTests
 
         Assert.Equal(1280, r.Tun.Mtu);
         Assert.Equal(7, r.SchemaVersion);
+    }
+
+    [Theory]
+    [InlineData(1280, 1420)]
+    [InlineData(1500, 1420)]
+    [InlineData(0, 1420)]
+    [InlineData(-1, 1420)]
+    [InlineData(9000, 1420)]
+    [InlineData(1332, 1332)]
+    [InlineData(1380, 1380)]
+    [InlineData(1400, 1400)]
+    [InlineData(1499, 1499)]
+    [InlineData(1200, 1200)]
+    public void Migrate_7_to_8_RewritesDefaultsAndInvalidOnly(int input, int expected)
+    {
+        var s = new AppSettings { SchemaVersion = 7 };
+        s.Tun.Mtu = input;
+
+        var r = SettingsMigrator.Migrate(s, 7, 8);
+
+        Assert.Equal(expected, r.Tun.Mtu);
+        Assert.Equal(8, r.SchemaVersion);
     }
 }

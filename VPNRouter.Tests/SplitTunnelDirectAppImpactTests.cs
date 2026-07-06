@@ -13,7 +13,7 @@ namespace VPNRouter.Tests;
 /// tunnel". So traffic from a non-routed (direct) app still:
 /// <list type="number">
 ///   <item>enters the TUN (auto_route default route, no route-include
-///   restriction) and is clamped to the 1280 TUN MTU;</item>
+///   restriction) and uses the same TUN MTU;</item>
 ///   <item>has its DNS HIJACKED (route rule protocol=dns → hijack-dns) and
 ///   resolved through Cloudflare DoH (local-dns), NOT the app's system/ISP/LAN
 ///   resolver — which breaks LAN/intranet name resolution (gap G6).</item>
@@ -220,8 +220,8 @@ public class SplitTunnelDirectAppImpactTests
         // limits capture to "only routed apps"; direct apps traverse the TUN.
         Assert.Null(tun.RouteExcludeAddress);
 
-        // And they are clamped to the 1280 TUN MTU, same as routed apps.
-        Assert.Equal(1280, tun.Mtu);
+        // And they use the same TUN MTU as routed apps.
+        Assert.Equal(TunSettings.DefaultMtu, tun.Mtu);
     }
 
     // ── Mechanism 3: direct apps exit via the direct outbound (route.final) ──

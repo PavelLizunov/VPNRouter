@@ -5,6 +5,8 @@ namespace VPNRouter.Core.Models;
 
 public class TunSettings
 {
+    public const int DefaultMtu = 1420;
+
     [YamlMember(Alias = "interface_name")]
     public string InterfaceName { get; set; } = "VPNRouter-TUN";
 
@@ -14,16 +16,12 @@ public class TunSettings
     [YamlMember(Alias = "ipv6_enabled")]
     public bool Ipv6Enabled { get; set; } = false;
 
-    // v2.42.0-r3: was 9000 (sing-box jumbo default). With stack=system that
-    // 9000-byte TUN MTU put oversized HTTP/2 segments on the wire that the real
-    // 1500-MTU path can't carry; with PMTUD broken they were RST -> browsers got
-    // ERR_CONNECTION_CLOSED on YouTube/Google over TCP-only (VLESS) proxies while
-    // small clients (curl --http1.1, PowerShell) squeaked through and UDP/QUIC
-    // proxies bypassed it. 1280 (IPv6 minimum) traverses ANY path. Confirmed via
-    // diagnose.ps1 on a real user (h2 FAIL + tun mtu 9000). SettingsMigrator
-    // v5->v6 lowers existing 9000 configs.
+    // v2.46.0-r10: default 1420. Roblox/VLESS path probing showed 1420 passes
+    // while 1423 fragments; 1280 was too low for Steam SDR-class game UDP
+    // (~1328B IP packets). Users on narrow mobile/PPPoE/nested-VPN paths can
+    // still set 1400/1380 explicitly.
     [YamlMember(Alias = "mtu")]
-    public int Mtu { get; set; } = 1280;
+    public int Mtu { get; set; } = DefaultMtu;
 
     [YamlMember(Alias = "auto_route")]
     public bool AutoRoute { get; set; } = true;

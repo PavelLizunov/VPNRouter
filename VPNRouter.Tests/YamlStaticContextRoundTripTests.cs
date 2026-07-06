@@ -125,7 +125,7 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal("advanced", roundTripped.App.UiMode);
         Assert.Equal("generated", roundTripped.App.ConfigMode);
         Assert.Equal("VPNRouter-TUN", roundTripped.Tun.InterfaceName);
-        Assert.Equal(1280, roundTripped.Tun.Mtu);   // v2.42.0-r3: was 9000 (jumbo broke HTTP/2 over TCP-only proxies)
+        Assert.Equal(1420, roundTripped.Tun.Mtu);
         Assert.Equal("ipv4_only", roundTripped.Dns.Strategy);
         Assert.Equal(30, roundTripped.Monitoring.HealthCheckInterval);
         Assert.Equal("PavelLizunov/VPNRouter", roundTripped.Update.GitHubRepo);
@@ -596,7 +596,7 @@ update:
         Assert.Equal("Wire-TUN", settings.Tun.InterfaceName);
         Assert.Equal("10.0.0.1/24", settings.Tun.Ipv4Address);
         Assert.True(settings.Tun.Ipv6Enabled);
-        Assert.Equal(1280, settings.Tun.Mtu);
+        Assert.Equal(1420, settings.Tun.Mtu);
         Assert.False(settings.Tun.AutoRoute);
         Assert.True(settings.Tun.StrictRoute);
         Assert.Single(settings.Tun.RouteExcludeAddress);

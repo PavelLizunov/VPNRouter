@@ -20,12 +20,12 @@ namespace VPNRouter.Tests;
 public sealed class MtuJumboFixTests
 {
     [Theory]
-    [InlineData(9000, 1280)]   // stuck pre-v2.42 jumbo default -> clamped
-    [InlineData(4000, 1280)]   // any > 1500 -> clamped
-    [InlineData(0, 1280)]      // invalid -> fallback
-    [InlineData(-1, 1280)]     // invalid -> fallback
+    [InlineData(9000, 1420)]   // stuck pre-v2.42 jumbo default -> clamped
+    [InlineData(4000, 1420)]   // any > 1500 -> clamped
+    [InlineData(0, 1420)]      // invalid -> fallback
+    [InlineData(-1, 1420)]     // invalid -> fallback
     [InlineData(1500, 1500)]   // legacy default passes the clamp (migration lowers it)
-    [InlineData(1280, 1280)]   // current default unchanged
+    [InlineData(1420, 1420)]   // current default unchanged
     [InlineData(1400, 1400)]   // deliberate custom preserved
     public void NormalizeTunMtu_ClampsJumboOnly(int input, int expected)
         => Assert.Equal(expected, ConfigGenerator.NormalizeTunMtu(input));
@@ -37,7 +37,7 @@ public sealed class MtuJumboFixTests
         var config = ConfigGenerator.Generate(MakeProfile(), Array.Empty<string>(), settings);
         var tun = config.Inbounds.Find(i => i.Type == "tun");
         Assert.NotNull(tun);
-        Assert.Equal(1280, tun!.Mtu); // generation-time clamp, regardless of persisted value
+        Assert.Equal(1420, tun!.Mtu); // generation-time clamp, regardless of persisted value
     }
 
     [Theory]
@@ -49,6 +49,18 @@ public sealed class MtuJumboFixTests
     {
         var s = new AppSettings { Tun = new TunSettings { Mtu = input } };
         var migrated = SettingsMigrator.Migrate(s, 6, 7);
+        Assert.Equal(expected, migrated.Tun.Mtu);
+    }
+
+    [Theory]
+    [InlineData(9000, 1420)]
+    [InlineData(1500, 1420)]
+    [InlineData(1280, 1420)]
+    [InlineData(1400, 1400)]
+    public void Migrate_7_to_8_MovesLegacyDefaultsTo1420(int input, int expected)
+    {
+        var s = new AppSettings { Tun = new TunSettings { Mtu = input } };
+        var migrated = SettingsMigrator.Migrate(s, 7, 8);
         Assert.Equal(expected, migrated.Tun.Mtu);
     }
 

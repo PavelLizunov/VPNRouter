@@ -76,7 +76,7 @@ public static class SettingsValidator
 
         ValidateApp(settings, fatal, warn);
         ValidateVless(settings, fatal);
-        ValidateTun(settings, fatal);
+        ValidateTun(settings, fatal, warn);
         ValidateDns(settings, fatal);
         ValidateMonitoring(settings, fatal);
         ValidateUpdate(settings, fatal);
@@ -221,7 +221,7 @@ public static class SettingsValidator
         }
     }
 
-    private static void ValidateTun(AppSettings s, List<string> fatal)
+    private static void ValidateTun(AppSettings s, List<string> fatal, List<string> warn)
     {
         var t = s.Tun;
         if (t == null) return;
@@ -233,6 +233,21 @@ public static class SettingsValidator
         if (t.Mtu < 576 || t.Mtu > 65535)
         {
             fatal.Add($"tun.mtu must be 576..65535, got {t.Mtu}");
+        }
+
+        if (t.Mtu < 1332)
+        {
+            warn.Add(
+                $"tun.mtu {t.Mtu} may break Dota 2 / CS2 / TF2 / Steam Datagram Relay traffic; " +
+                "1300-byte game UDP payloads need about 1328 bytes on IPv4. Prefer 1420, or 1400/1380 " +
+                "for narrow mobile/PPPoE/nested VPN paths.");
+        }
+        else if (t.Mtu > TunSettings.DefaultMtu)
+        {
+            warn.Add(
+                $"tun.mtu {t.Mtu} is above {TunSettings.DefaultMtu} and may break VPN/proxy paths due to " +
+                "PMTU or fragmentation blackholes. If Roblox or browsing disconnects on mobile/PPPoE/nested VPN, " +
+                "try 1400, then 1380.");
         }
     }
 

@@ -37,11 +37,12 @@ public class AppSettings
     /// belt-and-suspenders defense-in-depth, not a baseline requirement.
     /// See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
     ///
-    /// <para>v7 bump (2026-06-27, Roblox realtime UDP): clamps only the
-    /// known legacy <c>tun.mtu: 1500</c> value to 1280 for existing configs.
-    /// Other explicit MTU values are preserved.</para>
+    /// <para>v8 bump (2026-07-06, Roblox + Steam SDR MTU): moves generic
+    /// VLESS/TCP TUN default from 1280 to 1420. Known legacy defaults
+    /// (<c>1280</c>, <c>1500</c>) and invalid values migrate to 1420; explicit
+    /// custom values stay.</para>
     /// </summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;

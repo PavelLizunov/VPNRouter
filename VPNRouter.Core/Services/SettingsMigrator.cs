@@ -42,6 +42,7 @@ public static class SettingsMigrator
                 4 => Migrate_4_to_5(settings, logger),
                 5 => Migrate_5_to_6(settings, logger),
                 6 => Migrate_6_to_7(settings, logger),
+                7 => Migrate_7_to_8(settings, logger),
                 _ => throw new InvalidOperationException(
                     $"No SettingsMigrator step defined for schema v{v} -> v{v + 1}. " +
                     $"This means the config file schema is newer than the running app — " +
@@ -681,6 +682,31 @@ public static class SettingsMigrator
                 "(jumbo/large MTU blackholes PMTUD on the encapsulated path -> stalled " +
                 "DoH/joins -> Roblox 277; deliberate custom values are preserved)", old);
         }
+        return s;
+    }
+
+    /// <summary>
+    /// v2.46.0-r10 (2026-07-06): generic VLESS/TCP TUN default moves to 1420.
+    /// Roblox/VLESS probing showed 1420 passes while 1423 fragments, and 1280
+    /// regresses Steam Datagram Relay-class game UDP (~1328 byte IP packets).
+    /// Rewrite only known defaults/invalid values; preserve explicit custom MTUs.
+    /// </summary>
+    private static AppSettings Migrate_7_to_8(AppSettings s, ILogger? logger)
+    {
+        if (s.Tun == null) return s;
+
+        if (s.Tun.Mtu == 1280 || s.Tun.Mtu == 1500 || s.Tun.Mtu <= 0 || s.Tun.Mtu > 1500)
+        {
+            var old = s.Tun.Mtu;
+            s.Tun.Mtu = TunSettings.DefaultMtu;
+            logger?.Information(
+                "[SettingsMigrator] v7->v8: moved TUN MTU {Old} -> {New} " +
+                "(1420 fits observed VLESS/TUN path and avoids Steam SDR-class UDP regression; " +
+                "explicit custom MTUs are preserved)",
+                old,
+                s.Tun.Mtu);
+        }
+
         return s;
     }
 }

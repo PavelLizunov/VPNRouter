@@ -97,7 +97,7 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     public void Awg_TunMtu_IsEndpointMtu_IgnoresGenericSetting()
     {
         // AWG TUN MTU = the endpoint MTU (1420, WG standard), NOT the generic
-        // Tun.Mtu — the 1280-default VLESS value would drop SDR's 1328B game UDP.
+        // Tun.Mtu — AWG is pinned to the WG-standard endpoint MTU.
         var config = Generate(AwgSettings(tunMtu: 1200));
 
         var tun = Assert.Single(config.Inbounds, i => i.Type == "tun");
@@ -145,7 +145,7 @@ public sealed class AwgDnsAndMtuTests : IDisposable
             Array.Empty<string>(),
             settings);
 
-    private static AppSettings AwgSettings(bool blockAds = true, string vpnDns = "https://1.1.1.1/dns-query", int tunMtu = 1280) => new()
+    private static AppSettings AwgSettings(bool blockAds = true, string vpnDns = "https://1.1.1.1/dns-query", int tunMtu = TunSettings.DefaultMtu) => new()
     {
         App = new AppConfig { LogLevel = "info", RoutingMode = "full", BlockAds = blockAds },
         Dns = new DnsSettings { VpnDns = vpnDns },
@@ -174,7 +174,7 @@ public sealed class AwgDnsAndMtuTests : IDisposable
         },
     };
 
-    private static AppSettings VlessSettings(string vpnDns = "https://dns.google/dns-query", int tunMtu = 1280) => new()
+    private static AppSettings VlessSettings(string vpnDns = "https://dns.google/dns-query", int tunMtu = TunSettings.DefaultMtu) => new()
     {
         App = new AppConfig { LogLevel = "info", RoutingMode = "full" },
         Dns = new DnsSettings { VpnDns = vpnDns },

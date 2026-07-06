@@ -19,17 +19,17 @@ public static class ConfigGenerator
 
     // v2.44.4 (2026-06-27): hard ceiling on the TUN MTU at generation time.
     // A jumbo 9000 (the pre-v2.42 default) can get STUCK in a persisted config:
-    // the 9000->1280 fix lives in the v5->v6 migration, so a config that already
+    // the 9000->1280 fix lived in the v5->v6 migration, so a config that already
     // passed v5->v6 on an older build never re-runs it, and Migrate_6_to_7 only
     // caught 1500 — so the value survives. A 9000 TUN MTU over a ~1500 proxied
     // path blackholes PMTUD: oversized DoH/HTTPS/HTTP2 segments silently vanish,
     // which stalls Roblox DNS + joins -> Error 277 (diag 20260627-203104: tester
     // on schema v6 + mtu 9000 + 1023 DNS exchanges >=10s; same subscription is
-    // fine for users on the 1280 default). Clamp here so a stuck persisted value
-    // can never reach sing-box, independent of migration state. 1280 = IPv6
-    // minimum, traverses any VLESS/Reality/Hysteria2/TUIC encapsulation.
+    // fine for users on a sane non-jumbo MTU). Clamp here so a stuck persisted
+    // value can never reach sing-box, independent of migration state. Fallback
+    // is the current 1420 default; users on narrower paths can set 1400/1380.
     private const int MaxSafeTunMtu = 1500;
-    private const int SafeTunMtuFallback = 1280;
+    private const int SafeTunMtuFallback = TunSettings.DefaultMtu;
     internal static int NormalizeTunMtu(int mtu)
         => (mtu <= 0 || mtu > MaxSafeTunMtu) ? SafeTunMtuFallback : mtu;
 
@@ -1116,9 +1116,8 @@ public static class ConfigGenerator
                 Address                 = new List<string> { settings.Tun.Ipv4Address },
                 // AmneziaWG is a native WireGuard tunnel: its TUN MTU IS the endpoint
                 // MTU (1420, the WG standard). Do NOT derive it from the generic
-                // Tun.Mtu (default 1280, tuned for the VLESS/TCP-proxy jumbo-avoidance
-                // path) — a 1280 TUN silently drops SDR's 1328-byte DF-UDP game
-                // packets (no MSS-clamp, no fragment, no PMTUD on this stack; see
+                // Tun.Mtu — a 1280 TUN silently drops SDR's 1328-byte DF-UDP
+                // game packets (no MSS-clamp, no fragment, no PMTUD on this stack; see
                 // plans/mtu-fragmentation-robustness-2026-07-02.md). Per-underlay
                 // tuning (<1500) is a future AWG-specific setting.
                 Mtu                     = proxyIsUdpNative

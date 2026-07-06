@@ -706,12 +706,10 @@ public static class SettingsLoader
             InterfaceName = "VPNRouter-TUN",
             Ipv4Address = "172.19.0.1/30",
             Ipv6Enabled = false,
-            // v2.42.0-r3: 1280 (was 9000). The 9000 jumbo TUN MTU with
-            // stack=system fragmented HTTP/2 over TCP-only proxies → browser
-            // ERR_CONNECTION_CLOSED on YouTube. 1280 = IPv6 minimum, traverses
-            // any path. Keep in lockstep with TunSettings.Mtu default +
-            // SettingsMigrator v5->v6.
-            Mtu = 1280,
+            // v2.46.0-r10: 1420 default matches the observed VLESS/TUN path
+            // ceiling and avoids regressing Steam SDR-class game UDP. Narrow
+            // paths can still use explicit 1400/1380 fallbacks.
+            Mtu = TunSettings.DefaultMtu,
             AutoRoute = true,
             StrictRoute = false
         },
