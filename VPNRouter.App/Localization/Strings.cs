@@ -108,6 +108,18 @@ public static class Strings
         : "Excluded apps bypass the VPN at the OS level and survive a sing-box restart.\n" +
           "Caveats: DNS via svchost may still tunnel; excluded apps' localhost-UDP (127.0.0.1) may " +
           "break; multicast receive and UWP/Store apps can't be excluded.";
+    public static string TrueSplitRetry => Ru ? "Запустить True Split" : "Start True Split";
+    public static string TrueSplitStarting => Ru ? "True Split запускается..." : "True Split is starting...";
+    public static string TrueSplitActive => TrueSplitBadge;
+    public static string TrueSplitMissing => Ru
+        ? "True Split недоступен: драйвер не входит в эту сборку."
+        : "True Split unavailable: the driver is not bundled in this build.";
+    public static string TrueSplitFallback => Ru
+        ? "Обычный split активен; True Split не запустился."
+        : "Ordinary split is active; True Split did not start.";
+    public static string TrueSplitNotApplicable => Ru
+        ? "True Split доступен только для списка «Мимо VPN»."
+        : "True Split applies only to the bypass list.";
 
     // ── Action states ──
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;

@@ -342,6 +342,23 @@
               BorderBrush="{DynamicResource BorderDefaultBrush}"
               Background="{DynamicResource SurfaceSunkenBrush}">
         <StackPanel Spacing="6">
+          <Grid IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsTrueSplitStatusVisible}"
+                ColumnDefinitions="*,Auto"
+                ColumnSpacing="8">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TrueSplitStatusText}"
+                       FontSize="10"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextMutedBrush}"/>
+            <Button Grid.Column="1"
+                    Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TrueSplitRetry}"
+                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RestartTrueSplitCommand}"
+                    IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsTrueSplitRetryVisible}"
+                    FontSize="10" FontWeight="SemiBold"
+                    Padding="8,4"
+                    CornerRadius="{StaticResource RadiusSm}"/>
+          </Grid>
           <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"

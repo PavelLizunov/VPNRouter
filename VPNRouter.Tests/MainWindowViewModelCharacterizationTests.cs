@@ -231,7 +231,9 @@ public class MainWindowViewModelCharacterizationTests
         // AppsListEditorMode/IsAppsListEditorInclude/Exclude, ActiveAppGroups,
         // SelectedActiveAppGroup, SelectedBypassAppGroup.
         // v2.46.0-r9 apps bypass catalogue: + ImportSteamGamesCommand.
-        "c3dd303132840bae1f7b16e7def5e775b3c164ee3ace07060021510697d5a473";
+        // v2.46.0-r11 true-split UX: + TrueSplitStatusText, IsTrueSplitProblem,
+        // IsTrueSplitStatusVisible, IsTrueSplitRetryVisible, RestartTrueSplitCommand.
+        "f9b37d4782a2fb62a776fb5c0ec025f81ca68774e74316263994a9f43945cf42";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

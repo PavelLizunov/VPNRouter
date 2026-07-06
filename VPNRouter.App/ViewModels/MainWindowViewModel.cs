@@ -102,6 +102,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // engaged, so excluded apps are bound past the TUN). Bound to a small status-zone badge + tooltip.
     [ObservableProperty] private bool _isTrueSplitActive;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
+    private string _trueSplitStatusText = Strings.TrueSplitNotApplicable;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
+    private bool _isTrueSplitProblem;
+    public bool IsTrueSplitStatusVisible => IsConnected && IsSplitTunnel && IsRoutingAppsModeExclude;
+    public bool IsTrueSplitRetryVisible => IsTrueSplitStatusVisible && IsTrueSplitProblem && _engine.IsRunning;
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonText))]
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonBrush))]
     [NotifyPropertyChangedFor(nameof(SmpActiveServerLine))]
@@ -119,6 +129,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundIsSuspect))]
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundNormalVisible))]
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundSuspectVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
     private bool _isConnected;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
@@ -538,6 +550,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
     [NotifyPropertyChangedFor(nameof(IsFullTunnel))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
     private bool _isSplitTunnel = true;
 
     /// <summary>
@@ -575,6 +589,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsRoutingAppsModeInclude))]
     [NotifyPropertyChangedFor(nameof(IsRoutingAppsModeExclude))]
     [NotifyPropertyChangedFor(nameof(L_CurrentAppsModeHint))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
     private string _routingAppsMode = "include";
 
     [ObservableProperty]
@@ -2672,6 +2688,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // W1.3: reflect the true-split driver's engaged state into the badge (marshalled to the UI
         // thread — the driver raises this from its own control-plane thread).
         _engine.TrueSplitEngagedChanged += OnTrueSplitEngagedChanged;
+        _engine.TrueSplitStateChanged += OnTrueSplitStateChanged;
 
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
@@ -3937,6 +3954,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void OnTrueSplitEngagedChanged(bool engaged) =>
         Dispatcher.UIThread.Post(() => IsTrueSplitActive = engaged);
 
+    private void OnTrueSplitStateChanged(TrueSplitState state, string reason) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            TrueSplitStatusText = state switch
+            {
+                TrueSplitState.Active => Strings.TrueSplitActive,
+                TrueSplitState.DriverMissing => Strings.TrueSplitMissing,
+                TrueSplitState.Starting => Strings.TrueSplitStarting,
+                TrueSplitState.Fallback => Strings.TrueSplitFallback,
+                _ => Strings.TrueSplitNotApplicable,
+            };
+            IsTrueSplitProblem = state is TrueSplitState.DriverMissing or TrueSplitState.Fallback;
+            _logger?.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
+        });
+
     private void OnEngineStatus(string status)
     {
         Dispatcher.UIThread.Post(() =>
@@ -3973,6 +4005,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     // ── Commands ──
+
+    [RelayCommand]
+    private async Task RestartTrueSplitAsync()
+    {
+        if (!IsConnected || !_engine.IsRunning) return;
+        SaveSettings();
+        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+        await Task.Run(() => _engine.RestartTrueSplitAsync(_settings, CancellationToken.None));
+    }
 
     [RelayCommand]
     private async Task ToggleConnectionAsync()
@@ -7285,6 +7326,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _engine.StatusChanged -= OnEngineStatus;
             _engine.AutoFailoverTriggered -= OnAutoFailoverMessage;
             _engine.TrueSplitEngagedChanged -= OnTrueSplitEngagedChanged;   // W1.3 (bug-hunt): don't leak a recreated VM
+            _engine.TrueSplitStateChanged -= OnTrueSplitStateChanged;
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: engine StatusChanged unhook failed"); }
 

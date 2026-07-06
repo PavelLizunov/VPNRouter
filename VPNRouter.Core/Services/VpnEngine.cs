@@ -187,10 +187,12 @@ public class VpnEngine : IDisposable
     /// forwarded from the driver so the App can show a "True split active" badge. Never fires on
     /// non-Windows / when no driver is wired.</summary>
     public event Action<bool>? TrueSplitEngagedChanged;
+    public event Action<TrueSplitState, string>? TrueSplitStateChanged;
 
     /// <summary>W1.3: whether the true-split driver is currently ENGAGED (excluded apps bound past
     /// the TUN). False when no driver is wired (non-Windows / not exclude-mode).</summary>
     public bool IsTrueSplitEngaged => _splitDriver?.IsEngaged ?? false;
+    public TrueSplitState CurrentTrueSplitState { get; private set; } = TrueSplitState.NotApplicable;
 
     /// <summary>
     /// Construct a <see cref="VpnEngine"/> with explicit dependencies.
@@ -408,7 +410,12 @@ public class VpnEngine : IDisposable
     /// </summary>
     internal async Task TryEngageSplitDriverAsync(AppSettings settings, CancellationToken ct)
     {
-        if (_splitDriver is null) return;
+        if (_splitDriver is null)
+        {
+            SetTrueSplitState(TrueSplitState.NotApplicable, "No split-tunnel driver on this platform.");
+            return;
+        }
+
         var app = settings.App;
         bool hasExcluded = app.RoutingAppsExclude is { Count: > 0 };
         // ponytail: driverSetting hardcoded "auto" — add an AppConfig.TrueSplitDriver off-switch only
@@ -416,9 +423,17 @@ public class VpnEngine : IDisposable
         if (!SplitTunnelPolicy.ShouldEngage(OperatingSystem.IsWindows(), app.RoutingMode, app.RoutingAppsMode, hasExcluded, "auto"))
         {
             if (_splitDriver.IsEngaged) await _splitDriver.DisengageAsync(ct).ConfigureAwait(false); // flipped to include/full
+            SetTrueSplitState(TrueSplitState.NotApplicable, "True split applies only to Windows split/exclude mode with excluded apps.");
             return;
         }
 
+        if (!_splitDriver.IsAvailable)
+        {
+            SetTrueSplitState(TrueSplitState.DriverMissing, "True-split driver is not bundled in this build.");
+            return;
+        }
+
+        SetTrueSplitState(TrueSplitState.Starting, "Starting true split...");
         var dosPaths = new List<string>();
         foreach (var name in app.RoutingAppsExclude)
         {
@@ -438,6 +453,7 @@ public class VpnEngine : IDisposable
         {
             if (_splitDriver.IsEngaged) await _splitDriver.DisengageAsync(ct).ConfigureAwait(false);
             _logger?.Information("[VpnEngine] True-split driver: 0 excluded path(s) resolved — not engaging (post-capture covers them)");
+            SetTrueSplitState(TrueSplitState.Fallback, "True split needs a resolvable app path; ordinary split is active.");
             return;
         }
 
@@ -446,6 +462,18 @@ public class VpnEngine : IDisposable
         var req = new SplitTunnelEngageRequest(dosPaths, settings.Tun?.Ipv4Address, TunnelIpv6: null);
         bool ok = await _splitDriver.EngageAsync(req, ct).ConfigureAwait(false);
         _logger?.Information("[VpnEngine] True-split driver engage={Ok} ({N} excluded path(s) resolved)", ok, dosPaths.Count);
+        SetTrueSplitState(
+            ok ? TrueSplitState.Active : TrueSplitState.Fallback,
+            ok ? "True split active." : "True split did not start; ordinary split is active.");
+    }
+
+    public Task RestartTrueSplitAsync(AppSettings settings, CancellationToken ct = default) =>
+        TryEngageSplitDriverAsync(settings, ct);
+
+    private void SetTrueSplitState(TrueSplitState state, string reason)
+    {
+        CurrentTrueSplitState = state;
+        TrueSplitStateChanged?.Invoke(state, reason);
     }
 
     /// <summary>

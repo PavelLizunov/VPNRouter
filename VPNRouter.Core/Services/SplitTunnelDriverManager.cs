@@ -36,6 +36,9 @@ namespace VPNRouter.Core.Services;
 // same reason IWindowsDnsHardening is public. The manager impl below stays internal.
 public interface ISplitTunnelDriver : IDisposable
 {
+    /// <summary>True when the bundled driver payload is present and the engine may try to engage it.</summary>
+    bool IsAvailable { get; }
+
     /// <summary>True while the driver is in the ENGAGED state (excluded sockets bind to the
     /// physical NIC past the TUN).</summary>
     bool IsEngaged { get; }
@@ -73,6 +76,15 @@ public sealed record SplitTunnelEngageRequest(
     IReadOnlyList<string> ExcludedDosPaths,
     string? TunnelIpv4,
     string? TunnelIpv6);
+
+public enum TrueSplitState
+{
+    NotApplicable,
+    DriverMissing,
+    Starting,
+    Active,
+    Fallback
+}
 
 /// <summary>
 /// Sealed manager driving the <c>mullvad-split-tunnel</c> kernel driver: owns the SCM service
@@ -152,6 +164,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     }
 
     public bool IsEngaged => _engaged;
+    public bool IsAvailable => File.Exists(_sysPath);
     public bool IsPumpHealthy => _pumpHealthy;
 
     // ─── Public API (all fail-open, never throw) ────────────────────────────────
@@ -262,7 +275,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private bool EngageLocked(SplitTunnelEngageRequest request)
     {
         // #1 — driver file present? (build-time sha256 pin is W1.4; runtime just needs the .sys.)
-        if (!File.Exists(_sysPath))
+        if (!IsAvailable)
         {
             _log.Warning("[SplitTunnel] Driver file missing at {Path} — feature off, post-capture routing stands", _sysPath);
             return false;

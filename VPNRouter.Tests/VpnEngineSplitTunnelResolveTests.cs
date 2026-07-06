@@ -135,4 +135,41 @@ public sealed class VpnEngineSplitTunnelResolveTests
         Assert.Equal("172.19.0.2/30", driver.LastRequest.TunnelIpv4);
         Assert.Null(driver.LastRequest.TunnelIpv6);
     }
+
+    [Fact]
+    public async Task Engage_DriverMissing_ReportsMissingAndDoesNotEngage()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "TryEngageSplitDriverAsync's engage gate is Windows-only.");
+
+        var driver = new FakeSplitTunnelDriver { IsAvailable = false };
+        var engine = BuildEngine(driver);
+        var states = new List<TrueSplitState>();
+        engine.TrueSplitStateChanged += (state, _) => states.Add(state);
+
+        await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), default);
+
+        Assert.Equal(TrueSplitState.DriverMissing, engine.CurrentTrueSplitState);
+        Assert.Contains(TrueSplitState.DriverMissing, states);
+        Assert.Equal(0, driver.EngageCount);
+    }
+
+    [Fact]
+    public async Task Engage_FailedDriverEngage_ReportsFallback()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "TryEngageSplitDriverAsync's engage gate + ProcessImagePath resolvers are Windows-only.");
+
+        var driver = new FakeSplitTunnelDriver { EngageResult = false };
+        var engine = BuildEngine(driver);
+        var states = new List<TrueSplitState>();
+        engine.TrueSplitStateChanged += (state, _) => states.Add(state);
+
+        await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), default);
+
+        Assert.Equal(1, driver.EngageCount);
+        Assert.Equal(TrueSplitState.Fallback, engine.CurrentTrueSplitState);
+        Assert.Contains(TrueSplitState.Starting, states);
+        Assert.Contains(TrueSplitState.Fallback, states);
+    }
 }
