@@ -68,6 +68,7 @@ public static class DiagnosticsExporter
         {
             AddText(staging, "README.txt", BuildReadme(), entries);
             AddText(staging, "summary.txt", BuildSummary(timestamp, connected, warnings), entries);
+            AddText(staging, "windows-services.txt", BuildWindowsServicesSnapshot(warnings), entries);
 
             // config.yaml (redacted)
             AddRedactedFile(staging, AppPaths.ConfigYamlPath, "config.redacted.yaml",
@@ -147,6 +148,7 @@ public static class DiagnosticsExporter
         "",
         "Contents:",
         "  summary.txt            - version, OS, channel, connected state, health check",
+        "  windows-services.txt   - Windows service/driver state for VPNRouter + True Split",
         "  config.redacted.yaml   - your settings (secrets removed)",
         "  current.redacted.json  - the config sing-box actually loaded (secrets removed)",
         "  state.redacted.json    - runtime state (PID etc.)",
@@ -186,6 +188,51 @@ public static class DiagnosticsExporter
         return sb.ToString();
     }
 
+    private static string BuildWindowsServicesSnapshot(List<string> warnings)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Windows services and drivers");
+        sb.AppendLine("============================");
+        if (!OperatingSystem.IsWindows())
+        {
+            sb.AppendLine("(not Windows)");
+            return sb.ToString();
+        }
+
+        AppendCommand(sb, "sc qc VPNRouter", "sc.exe", "qc", "VPNRouter");
+        AppendCommand(sb, "sc query VPNRouter", "sc.exe", "query", "VPNRouter");
+        AppendCommand(sb, "sc qc mullvad-split-tunnel", "sc.exe", "qc", "mullvad-split-tunnel");
+        AppendCommand(sb, "sc query mullvad-split-tunnel", "sc.exe", "query", "mullvad-split-tunnel");
+
+        AppendCommand(sb, "matching Win32_SystemDriver rows", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "Get-CimInstance Win32_SystemDriver | " +
+            "? { $_.Name -match 'mullvad|split|vpnrouter' -or $_.PathName -match 'mullvad|split|vpnrouter' } | " +
+            "Select Name,State,Started,StartMode,PathName | Format-Table -AutoSize | Out-String -Width 4096");
+
+        AppendCommand(sb, "matching processes", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "Get-Process *mullvad*,*vpnrouter*,sing-box -ErrorAction SilentlyContinue | " +
+            "Select Id,ProcessName,Path | Format-Table -AutoSize | Out-String -Width 4096");
+
+        return sb.ToString();
+
+        void AppendCommand(StringBuilder dest, string title, string fileName, params string[] args)
+        {
+            dest.AppendLine();
+            dest.AppendLine("---- " + title + " ----");
+            try
+            {
+                dest.AppendLine(RunCapture(fileName, args));
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"{title} failed: {ex.GetType().Name}");
+                dest.AppendLine($"(failed: {ex.GetType().Name}: {ex.Message})");
+            }
+        }
+    }
+
     private static string BuildGeoManifest()
     {
         var sb = new StringBuilder();
@@ -215,6 +262,38 @@ public static class DiagnosticsExporter
             sb.AppendLine($"(could not enumerate geo dir: {ex.GetType().Name})");
         }
         return sb.ToString();
+    }
+
+    private static string RunCapture(string fileName, IReadOnlyList<string> args)
+    {
+        using var proc = new System.Diagnostics.Process();
+        proc.StartInfo.FileName = fileName;
+        proc.StartInfo.UseShellExecute = false;
+        proc.StartInfo.CreateNoWindow = true;
+        proc.StartInfo.RedirectStandardOutput = true;
+        proc.StartInfo.RedirectStandardError = true;
+        foreach (var arg in args) proc.StartInfo.ArgumentList.Add(arg);
+
+        if (!proc.Start()) return "(failed to start)";
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+        if (!proc.WaitForExit(5000))
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            return "(timed out after 5s)";
+        }
+        var stdout = stdoutTask.GetAwaiter().GetResult();
+        var stderr = stderrTask.GetAwaiter().GetResult();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"exit={proc.ExitCode}");
+        if (!string.IsNullOrWhiteSpace(stdout)) sb.AppendLine(stdout.TrimEnd());
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            sb.AppendLine("[stderr]");
+            sb.AppendLine(stderr.TrimEnd());
+        }
+        return sb.ToString().TrimEnd();
     }
 
     // ── helpers ─────────────────────────────────────────────────────────

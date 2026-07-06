@@ -3962,12 +3962,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 TrueSplitState.Active => Strings.TrueSplitActive,
                 TrueSplitState.DriverMissing => Strings.TrueSplitMissing,
                 TrueSplitState.Starting => Strings.TrueSplitStarting,
-                TrueSplitState.Fallback => Strings.TrueSplitFallback,
+                TrueSplitState.Fallback => FormatTrueSplitFallback(reason),
                 _ => Strings.TrueSplitNotApplicable,
             };
             IsTrueSplitProblem = state is TrueSplitState.DriverMissing or TrueSplitState.Fallback;
             _logger?.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
         });
+
+    private static string FormatTrueSplitFallback(string reason)
+    {
+        if (reason.Contains("err=5", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("MULLVADSPLITTUNNEL", StringComparison.OrdinalIgnoreCase))
+            return Strings.TrueSplitDeviceBusy;
+        return Strings.TrueSplitFallback;
+    }
 
     private void OnEngineStatus(string status)
     {
@@ -4092,6 +4100,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             return;
         }
+
+#if PLATFORM_WINDOWS
+        if (VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
+            && TunOwnershipLock.IsOwnedByAnyone())
+        {
+            DetectServiceManagedVpn();
+            if (IsConnected)
+            {
+                _logger.Information("[VM] Connect adopted Windows Service-owned VPN instead of starting a parallel engine");
+                return;
+            }
+        }
+#endif
 
         {
             IsConnecting = true;

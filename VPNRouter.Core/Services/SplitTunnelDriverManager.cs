@@ -39,6 +39,9 @@ public interface ISplitTunnelDriver : IDisposable
     /// <summary>True when the bundled driver payload is present and the engine may try to engage it.</summary>
     bool IsAvailable { get; }
 
+    /// <summary>Last user-actionable failure from the driver manager, if any.</summary>
+    string? LastFailureReason { get; }
+
     /// <summary>True while the driver is in the ENGAGED state (excluded sockets bind to the
     /// physical NIC past the TUN).</summary>
     bool IsEngaged { get; }
@@ -145,6 +148,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private CancellationTokenSource? _debounceCts;
 
     public event Action<bool>? EngagedChanged;
+
+    public string? LastFailureReason { get; private set; }
 
     /// <param name="driverDir">Directory holding <c>mullvad-split-tunnel.sys</c>; defaults to the
     /// bundled <c>driver/</c> beside the app (like sing-box). Injectable for tests.</param>
@@ -274,9 +279,12 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private bool EngageLocked(SplitTunnelEngageRequest request)
     {
+        LastFailureReason = null;
+
         // #1 — driver file present? (build-time sha256 pin is W1.4; runtime just needs the .sys.)
         if (!IsAvailable)
         {
+            LastFailureReason = $"True-split driver file is missing at {_sysPath}.";
             _log.Warning("[SplitTunnel] Driver file missing at {Path} — feature off, post-capture routing stands", _sysPath);
             return false;
         }
@@ -556,9 +564,17 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             int err = Marshal.GetLastWin32Error();
             handle.Dispose();
             if (err == Native.ERROR_ACCESS_DENIED)
-                _log.Warning("[SplitTunnel] Device held exclusively by another agent (a running Mullvad daemon?) — post-capture stands");
+            {
+                LastFailureReason =
+                    "True-split driver device \\\\.\\MULLVADSPLITTUNNEL is busy (CreateFile err=5). " +
+                    "Another VPNRouter Service/App or Mullvad process may hold it.";
+                _log.Warning("[SplitTunnel] CreateFile({Dev}) failed (err=5 access denied) — device held exclusively by another agent; post-capture stands", Proto.DevicePath);
+            }
             else
+            {
+                LastFailureReason = $"True-split driver device {Proto.DevicePath} could not be opened (CreateFile err={err}).";
                 _log.Warning("[SplitTunnel] CreateFile({Dev}) failed (err={Err}) — driver not loaded? post-capture stands", Proto.DevicePath, err);
+            }
             return false;
         }
 

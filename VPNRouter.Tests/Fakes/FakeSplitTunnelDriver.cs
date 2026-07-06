@@ -22,6 +22,7 @@ internal sealed class FakeSplitTunnelDriver : ISplitTunnelDriver
     /// <summary>What <see cref="EngageAsync"/> returns (flip to test the fail-open branch).</summary>
     public bool EngageResult { get; set; } = true;
     public bool IsAvailable { get; set; } = true;
+    public string? LastFailureReason { get; set; }
 
     public bool IsEngaged { get; private set; }
     public bool IsPumpHealthy => true;

@@ -233,7 +233,9 @@ public class MainWindowViewModelCharacterizationTests
         // v2.46.0-r9 apps bypass catalogue: + ImportSteamGamesCommand.
         // v2.46.0-r11 true-split UX: + TrueSplitStatusText, IsTrueSplitProblem,
         // IsTrueSplitStatusVisible, IsTrueSplitRetryVisible, RestartTrueSplitCommand.
-        "f9b37d4782a2fb62a776fb5c0ec025f81ca68774e74316263994a9f43945cf42";
+        // v2.46.0-r13 true-split diagnostics: failure reason reaches UI; service-owned
+        // VPN connect adopts the Service instead of starting a parallel engine.
+        "fa3f46cdaeb1b5ad24c1b68480ac774995d06de284873da9308879678cea04c6";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

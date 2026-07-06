@@ -93,6 +93,7 @@ vless:
             // ── expected structure ──
             Assert.Contains("README.txt", entryNames);
             Assert.Contains("summary.txt", entryNames);
+            Assert.Contains("windows-services.txt", entryNames);
             Assert.Contains("config.redacted.yaml", entryNames);
             Assert.Contains("current.redacted.json", entryNames);
             // v2.41.0: app logs are kept under their real daily filenames (last

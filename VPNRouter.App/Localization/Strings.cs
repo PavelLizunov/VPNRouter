@@ -117,6 +117,9 @@ public static class Strings
     public static string TrueSplitFallback => Ru
         ? "Обычный split активен; True Split не запустился."
         : "Ordinary split is active; True Split did not start.";
+    public static string TrueSplitDeviceBusy => Ru
+        ? "True Split не запустился: драйвер занят другим процессом или службой (err=5). Закройте Mullvad/VPNRouter Service или перезагрузите Windows."
+        : "True Split did not start: the driver is held by another process or service (err=5). Close Mullvad/VPNRouter Service or reboot Windows.";
     public static string TrueSplitNotApplicable => Ru
         ? "True Split доступен только для списка «Мимо VPN»."
         : "True Split applies only to the bypass list.";

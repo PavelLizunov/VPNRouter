@@ -160,10 +160,19 @@ public sealed class VpnEngineSplitTunnelResolveTests
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "TryEngageSplitDriverAsync's engage gate + ProcessImagePath resolvers are Windows-only.");
 
-        var driver = new FakeSplitTunnelDriver { EngageResult = false };
+        var driver = new FakeSplitTunnelDriver
+        {
+            EngageResult = false,
+            LastFailureReason = "True-split driver device \\\\.\\MULLVADSPLITTUNNEL is busy (CreateFile err=5).",
+        };
         var engine = BuildEngine(driver);
         var states = new List<TrueSplitState>();
-        engine.TrueSplitStateChanged += (state, _) => states.Add(state);
+        var reasons = new List<string>();
+        engine.TrueSplitStateChanged += (state, reason) =>
+        {
+            states.Add(state);
+            reasons.Add(reason);
+        };
 
         await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), default);
 
@@ -171,5 +180,6 @@ public sealed class VpnEngineSplitTunnelResolveTests
         Assert.Equal(TrueSplitState.Fallback, engine.CurrentTrueSplitState);
         Assert.Contains(TrueSplitState.Starting, states);
         Assert.Contains(TrueSplitState.Fallback, states);
+        Assert.Contains(reasons, reason => reason.Contains("err=5", StringComparison.OrdinalIgnoreCase));
     }
 }

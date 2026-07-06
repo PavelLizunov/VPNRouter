@@ -462,9 +462,10 @@ public class VpnEngine : IDisposable
         var req = new SplitTunnelEngageRequest(dosPaths, settings.Tun?.Ipv4Address, TunnelIpv6: null);
         bool ok = await _splitDriver.EngageAsync(req, ct).ConfigureAwait(false);
         _logger?.Information("[VpnEngine] True-split driver engage={Ok} ({N} excluded path(s) resolved)", ok, dosPaths.Count);
+        var failReason = _splitDriver.LastFailureReason;
         SetTrueSplitState(
             ok ? TrueSplitState.Active : TrueSplitState.Fallback,
-            ok ? "True split active." : "True split did not start; ordinary split is active.");
+            ok ? "True split active." : failReason ?? "True split did not start; ordinary split is active.");
     }
 
     public Task RestartTrueSplitAsync(AppSettings settings, CancellationToken ct = default) =>
