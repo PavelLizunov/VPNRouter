@@ -463,6 +463,11 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (Native.StartService(svc, 0, null)) return true;
         int err = Marshal.GetLastWin32Error();
         if (err == Native.ERROR_SERVICE_ALREADY_RUNNING) return true;
+        if (err == Native.ERROR_ALREADY_EXISTS)
+        {
+            _log.Information("[SplitTunnel] StartService returned ERROR_ALREADY_EXISTS — continuing; device open will verify driver usability");
+            return true;
+        }
         _log.Warning("[SplitTunnel] StartService failed (err={Err}) — post-capture stands", err);
         return false;
     }

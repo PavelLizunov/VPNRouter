@@ -47,6 +47,7 @@ internal static class SplitTunnelDriverInterop
     public const int ERROR_SERVICE_EXISTS = 1073;
     public const int ERROR_SERVICE_ALREADY_RUNNING = 1056;
     public const int ERROR_SERVICE_DOES_NOT_EXIST = 1060;
+    public const int ERROR_ALREADY_EXISTS = 183;
     public const int ERROR_FILE_NOT_FOUND = 2;
     public const int ERROR_ACCESS_DENIED = 5;
     public const int ERROR_IO_PENDING = 997;
