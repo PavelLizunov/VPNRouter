@@ -599,8 +599,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var canon = (value ?? "include").Trim().ToLowerInvariant();
         if (canon != "include" && canon != "exclude") canon = "include";
         _settings.App.RoutingAppsMode = canon;
-        SaveSettings();
-        if (IsConnected) HasPendingAppChanges = true;
 
         // AM-3 (2026-05-12): mode toggle keeps two independent selection
         // states (RoutingAppsInclude vs RoutingAppsExclude). When the
@@ -608,6 +606,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // AppItem.IsChecked from the now-active list — even apps that
         // haven't moved still need a notification so the binding refreshes.
         RefreshAppCheckboxes();
+
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger?.Warning(ex, "[VM] SaveSettings on apps mode change failed");
+        }
+        if (IsConnected) HasPendingAppChanges = true;
     }
 
     /// <summary>

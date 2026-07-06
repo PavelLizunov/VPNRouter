@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -56,7 +57,7 @@ public class VisualDiffTests
     // Reuse the same shared-VM trick PageScreenshotTests uses — keeps
     // MainWindowViewModel construction off the per-test critical path.
     private static MainWindowViewModel? _sharedVm;
-    private static MainWindowViewModel GetVm() => _sharedVm ??= new MainWindowViewModel();
+    private static MainWindowViewModel GetVm() => _sharedVm ??= new MainWindowViewModel(new InMemorySettingsStore());
 
     private static void AssertMatchesBaseline(
         UserControl page,

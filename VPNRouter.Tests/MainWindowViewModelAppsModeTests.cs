@@ -4,6 +4,8 @@ using System.Reflection;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 using Xunit;
 
 namespace VPNRouter.Tests;
@@ -25,6 +27,8 @@ namespace VPNRouter.Tests;
 /// </summary>
 public class MainWindowViewModelAppsModeTests
 {
+    private static MainWindowViewModel MakeVm() => new(new InMemorySettingsStore());
+
     private static AppSettings GetSettings(MainWindowViewModel vm)
     {
         var field = typeof(MainWindowViewModel).GetField(
@@ -57,7 +61,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void IsAppCheckedInCurrentMode_ReadsFromRoutingAppsInclude_WhenIncludeMode()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsMode = "include";
         settings.App.RoutingAppsInclude = new List<string> { "chrome.exe", "Firefox.exe" };
@@ -79,7 +83,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void IsAppCheckedInCurrentMode_ReadsFromRoutingAppsExclude_WhenExcludeMode()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string> { "chrome.exe", "Firefox.exe" };
         settings.App.RoutingAppsExclude = new List<string> { "Steam.exe", "bank.exe" };
@@ -96,7 +100,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void SetAppCheckedInCurrentMode_WritesToActiveMode_OnlyTouchesActiveList()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
@@ -128,7 +132,7 @@ public class MainWindowViewModelAppsModeTests
         // checkboxes for chrome + firefox are NOT seen as checked, user
         // toggles Steam → Steam is in Exclude list, flips back to Include
         // mode → chrome + firefox are still checked there, Steam is NOT.
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
@@ -171,7 +175,7 @@ public class MainWindowViewModelAppsModeTests
         // The AppItem bridge ReadMode delegates to
         // IsAppCheckedInCurrentMode. Pin that the ViewModel-level bridge
         // wiring surfaces correctly to the AppItem.IsChecked getter.
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string> { "test.exe" };
         settings.App.RoutingAppsExclude = new List<string>();
@@ -196,7 +200,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void BridgedAppItem_SetterWritesIntoActiveList()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
@@ -230,7 +234,7 @@ public class MainWindowViewModelAppsModeTests
         // AppGroup.OnIsCheckedChanged sets IsChecked = value on every
         // child. With AM-3 bridging this writes into the active list.
         // Pin that the cascade affects only the active list.
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
@@ -283,7 +287,7 @@ public class MainWindowViewModelAppsModeTests
         // Mode flip must trigger PropertyChanged on every AppItem's
         // IsChecked so XAML CheckBox bindings re-read from the now-active
         // list. The RefreshAppCheckboxes path is the wiring under test.
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string> { "x.exe" };
         settings.App.RoutingAppsExclude = new List<string>();
@@ -343,7 +347,7 @@ public class MainWindowViewModelAppsModeTests
         // Calling Set(true) on the same name twice must not produce
         // duplicate entries — the list.Add only fires if the entry
         // isn't already present.
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
@@ -358,6 +362,56 @@ public class MainWindowViewModelAppsModeTests
         // Removing also idempotent (no-op when not present).
         InvokeSetAppCheckedInCurrentMode(vm, "missing.exe", false);
         Assert.Single(settings.App.RoutingAppsInclude);
+    }
+
+    [AvaloniaFact]
+    public void ModeFlip_RefreshesCheckboxes_WhenSaveFails()
+    {
+        var vm = new MainWindowViewModel(new ThrowingSaveSettingsStore());
+        var settings = GetSettings(vm);
+        settings.App.RoutingAppsInclude = new List<string> { "x.exe" };
+        settings.App.RoutingAppsExclude = new List<string>();
+        settings.App.RoutingAppsMode = "include";
+        vm.RoutingAppsMode = "include";
+
+        var factory = typeof(MainWindowViewModel).GetMethod(
+            "CreateBridgedAppItem",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(factory);
+        var item = (AppItemViewModel)factory!.Invoke(
+            vm, new object[] { "x.exe", false, false })!;
+        var group = new AppGroupViewModel("synthetic", "", true);
+        group.Apps.Add(item);
+        vm.AppGroups.Add(group);
+
+        var notifications = new List<bool>();
+        item.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AppItemViewModel.IsChecked))
+                notifications.Add(item.IsChecked);
+        };
+
+        vm.RoutingAppsMode = "exclude";
+
+        Assert.Equal("exclude", settings.App.RoutingAppsMode);
+        Assert.Contains(false, notifications);
+        Assert.False(item.IsChecked);
+    }
+
+    private sealed class ThrowingSaveSettingsStore : ISettingsStore
+    {
+        private readonly InMemorySettingsStore _inner = new();
+
+        public AppSettings Load(string? path = null) => _inner.Load(path);
+        public void Save(AppSettings settings, string? path = null) =>
+            throw new UnauthorizedAccessException("test save failure");
+        public string? ResetToDefaults(string? path = null) => _inner.ResetToDefaults(path);
+        public string? ConsumeRecoveryNotice() => _inner.ConsumeRecoveryNotice();
+        public (int Count, string AtUtc) ConsumePlaceholderPruneNotice(AppSettings settings) =>
+            _inner.ConsumePlaceholderPruneNotice(settings);
+        public void StartWatching(string? path = null, Action<AppSettings>? onReload = null) =>
+            _inner.StartWatching(path, onReload);
+        public void StopWatching() => _inner.StopWatching();
     }
 }
 
