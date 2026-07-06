@@ -30,6 +30,7 @@ public partial class MainWindowViewModel
     public string L_AddAppHint => Strings.AddAppHint;
     public string L_AddCategory => Strings.AddCategory;
     public string L_AddCustomAppBtn => Strings.AddCustomAppBtn;
+    public string L_ImportSteamGames => IsRussian ? "Импорт Steam" : "Import Steam";
     public string L_AddSubscription => Strings.AddSubscription;
     public string L_ApplyChanges => Strings.ApplyChanges;
     public string L_ApplyNowHint => Strings.ApplyNowHint;

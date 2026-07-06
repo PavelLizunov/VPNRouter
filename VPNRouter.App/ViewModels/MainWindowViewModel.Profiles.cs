@@ -163,7 +163,6 @@ public partial class MainWindowViewModel
                             p.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
 
                         var includeGroup = new AppGroupViewModel(profile.Name, profile.Description, isActive);
-                        var excludeGroup = new AppGroupViewModel(profile.Name, profile.Description, false);
 
                         foreach (var proc in profile.Processes)
                         {
@@ -172,7 +171,6 @@ public partial class MainWindowViewModel
                             // when the group itself is active.
                             var appChecked = isActive && !excludedSet.Contains(name);
                             includeGroup.Apps.Add(CreateIncludeAppItem(name, appChecked));
-                            excludeGroup.Apps.Add(CreateExcludeAppItem(name, false));
                         }
 
                         // Merge user-added custom apps for this group
@@ -187,23 +185,32 @@ public partial class MainWindowViewModel
                                     continue;
                                 var appChecked = isActive && !excludedSet.Contains(extraName);
                                 includeGroup.Apps.Add(CreateIncludeAppItem(extraName, appChecked, isCustom: true));
-                                excludeGroup.Apps.Add(CreateExcludeAppItem(extraName, false, isCustom: true));
                             }
                         }
 
                         AppGroups.Add(includeGroup);
-                        BypassAppGroups.Add(excludeGroup);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Failed to load profiles");
+                _logger?.Warning(ex, "Failed to load profiles");
             }
         }
 
-        // Custom apps group — ALWAYS create (even empty) so SaveSettings can
-        // distinguish "loaded but empty" from "never loaded".
+        // Bypass catalogue is intentionally separate from the include catalogue.
+        var bypassProfilePath = OperatingSystem.IsWindows()
+            ? ResolveBundledProfilePath("bypass-windows.json", fallbackToDefault: false)
+            : null;
+        foreach (var profile in LoadProfileCollection(bypassProfilePath))
+        {
+            var excludeGroup = new AppGroupViewModel(profile.Name, profile.Description, false);
+            foreach (var proc in profile.Processes)
+                excludeGroup.Apps.Add(CreateExcludeAppItem(StripExe(proc.Name), false));
+            BypassAppGroups.Add(excludeGroup);
+        }
+
+        // Custom Apps exists in both editors so checked imported entries can persist.
         var customApps = _settings.CustomApps ?? new();
         var customGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", true) { IsCustomGroup = true, IsExpanded = true };
         var bypassCustomGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", false) { IsCustomGroup = true, IsExpanded = true };
@@ -240,6 +247,40 @@ public partial class MainWindowViewModel
         SelectedBypassAppGroup ??= BypassAppGroups.FirstOrDefault();
         _appsLoaded = true;
         WireAppChangeTracking();
+    }
+
+    internal static string? ResolveBundledProfilePath(string profileFile, bool fallbackToDefault)
+    {
+        var appPath = Path.Combine(AppContext.BaseDirectory, "profiles", profileFile);
+        if (File.Exists(appPath)) return appPath;
+
+        var userPath = Path.Combine(AppPaths.ProfilesDir, profileFile);
+        if (File.Exists(userPath)) return userPath;
+
+        if (!fallbackToDefault) return null;
+        var fallback = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        return File.Exists(fallback) ? fallback : null;
+    }
+
+    private IEnumerable<Profile> LoadProfileCollection(string? profilePath)
+    {
+        if (string.IsNullOrWhiteSpace(profilePath) || !File.Exists(profilePath))
+            yield break;
+
+        ProfileCollection? collection;
+        try
+        {
+            var json = File.ReadAllText(profilePath);
+            collection = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "Failed to load profiles from {Path}", profilePath);
+            yield break;
+        }
+
+        foreach (var profile in collection?.Profiles ?? new())
+            yield return profile;
     }
 
     /// <summary>
@@ -663,6 +704,59 @@ public partial class MainWindowViewModel
                 : CreateExcludeAppItem(name, legacyChecked: false, isCustom: true));
         }
         SaveSettings();
+    }
+
+    [RelayCommand]
+    private void ImportSteamGames()
+    {
+        if (!IsAppsListEditorExclude)
+            AppsListEditorMode = "exclude";
+
+        var added = 0;
+        foreach (var game in Services.SteamLibraryScanner.FindInstalledGames())
+        {
+            if (AddCustomAppCandidate(game.ProcessName))
+                added++;
+        }
+
+        if (added > 0)
+        {
+            SaveSettings();
+            ShowRulesToast(IsRussian
+                ? $"Steam: найдено {added} .exe"
+                : $"Steam: found {added} .exe files");
+        }
+        else
+        {
+            ShowRulesToast(IsRussian
+                ? "Steam-игры не найдены"
+                : "No Steam games found");
+        }
+    }
+
+    private bool AddCustomAppCandidate(string? processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return false;
+
+        var name = StripExe(processName.Trim());
+        var includeCustom = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        var bypassCustom = BypassAppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        if (includeCustom == null || bypassCustom == null) return false;
+
+        var added = false;
+        if (!includeCustom.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            includeCustom.Apps.Add(CreateIncludeAppItem(name, false, isCustom: true));
+            added = true;
+        }
+
+        if (!bypassCustom.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            bypassCustom.Apps.Add(CreateExcludeAppItem(name, false, isCustom: true));
+            added = true;
+        }
+
+        return added;
     }
 
 #if PLATFORM_WINDOWS

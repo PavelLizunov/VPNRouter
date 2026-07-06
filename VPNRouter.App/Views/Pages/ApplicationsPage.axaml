@@ -351,6 +351,13 @@
                   Background="{DynamicResource WarningSolidBrush}" Foreground="White"
                   FontSize="11" FontWeight="SemiBold"
                   Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
+          <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ImportSteamGames}"
+                  Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ImportSteamGamesCommand}"
+                  IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsAppsListEditorExclude}"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  FontSize="11" FontWeight="SemiBold"
+                  Padding="0,5" CornerRadius="{StaticResource RadiusSm}"/>
           <Grid ColumnDefinitions="*,Auto">
             <TextBox Grid.Column="0" x:Name="CustomAppInput"
                      PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"

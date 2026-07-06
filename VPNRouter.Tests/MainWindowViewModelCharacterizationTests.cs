@@ -230,7 +230,8 @@ public class MainWindowViewModelCharacterizationTests
         // v2.46.0-r7 apps dual lists (2026-07-06): + BypassAppGroups,
         // AppsListEditorMode/IsAppsListEditorInclude/Exclude, ActiveAppGroups,
         // SelectedActiveAppGroup, SelectedBypassAppGroup.
-        "879d3c659f7008553cbd17a25e3d792c2bb41f2d3b6138795b0c42a81377c878";
+        // v2.46.0-r9 apps bypass catalogue: + ImportSteamGamesCommand.
+        "c3dd303132840bae1f7b16e7def5e775b3c164ee3ace07060021510697d5a473";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

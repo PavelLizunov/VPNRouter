@@ -83,5 +83,8 @@
     <None Include="..\profiles\default-linux.json" Link="profiles\default-linux.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\profiles\bypass-windows.json" Link="profiles\bypass-windows.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

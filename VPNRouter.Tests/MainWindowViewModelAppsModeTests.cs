@@ -284,15 +284,18 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void LoadedApps_HaveSeparateIncludeAndExcludeItems()
     {
+        if (!OperatingSystem.IsWindows())
+            return;
+
         var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
 
-        var includeGroup = vm.AppGroups.First(g => g.Apps.Count > 0);
-        var excludeGroup = vm.BypassAppGroups.First(g => g.Name == includeGroup.Name);
+        var includeGroup = vm.AppGroups.First(g => g.Name == "Gaming");
+        var excludeGroup = vm.BypassAppGroups.First(g => g.Name == "Game_Launchers");
         var includeItem = includeGroup.Apps.First();
-        var excludeItem = excludeGroup.Apps.First(a => a.ProcessName == includeItem.ProcessName);
+        var excludeItem = excludeGroup.Apps.First(a => a.ProcessName == "steam.exe");
 
         includeItem.IsChecked = true;
 
@@ -312,15 +315,18 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void RoutingModeFlip_DoesNotChangeSeparateListCheckboxes()
     {
+        if (!OperatingSystem.IsWindows())
+            return;
+
         var vm = MakeVm();
         var settings = GetSettings(vm);
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
 
-        var includeGroup = vm.AppGroups.First(g => g.Apps.Count > 0);
-        var excludeGroup = vm.BypassAppGroups.First(g => g.Name == includeGroup.Name);
+        var includeGroup = vm.AppGroups.First(g => g.Name == "Gaming");
+        var excludeGroup = vm.BypassAppGroups.First(g => g.Name == "Game_Launchers");
         var includeItem = includeGroup.Apps.First();
-        var excludeItem = excludeGroup.Apps.First(a => a.ProcessName == includeItem.ProcessName);
+        var excludeItem = excludeGroup.Apps.First(a => a.ProcessName == "steam.exe");
 
         includeItem.IsChecked = true;
         excludeItem.IsChecked = true;
@@ -350,6 +356,57 @@ public class MainWindowViewModelAppsModeTests
 
         Assert.Contains(expected, settings.App.RoutingAppsExclude);
         Assert.DoesNotContain(expected, settings.App.RoutingAppsInclude);
+    }
+
+    [AvaloniaFact]
+    public void BypassCatalogue_UsesWindowsBypassProfiles_NotIncludeProfiles()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var vm = MakeVm();
+
+        Assert.Contains(vm.AppGroups, g => g.Name == "Gaming");
+        Assert.DoesNotContain(vm.BypassAppGroups, g => g.Name == "Gaming");
+        Assert.Contains(vm.BypassAppGroups, g => g.Name == "Game_Launchers");
+        Assert.Contains(
+            vm.BypassAppGroups.First(g => g.Name == "Game_Launchers").Apps,
+            a => a.ProcessName == "steam.exe");
+    }
+
+    [Fact]
+    public void ResolveBundledProfilePath_MissingBypassDoesNotFallbackToDefault()
+    {
+        var missing = MainWindowViewModel.ResolveBundledProfilePath(
+            "definitely-missing-bypass.json",
+            fallbackToDefault: false);
+
+        Assert.Null(missing);
+    }
+
+    [AvaloniaFact]
+    public void ImportedSteamCandidate_WhenSelected_WritesToExcludeOnly()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        settings.App.RoutingAppsInclude = new List<string>();
+        settings.App.RoutingAppsExclude = new List<string>();
+
+        var method = typeof(MainWindowViewModel).GetMethod(
+            "AddCustomAppCandidate",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var added = (bool)method!.Invoke(vm, new object?[] { "Dota2.exe" })!;
+        Assert.True(added);
+
+        var item = vm.BypassAppGroups
+            .First(g => g.Name == "Custom Apps")
+            .Apps
+            .First(a => a.ProcessName == "Dota2.exe");
+        item.IsChecked = true;
+
+        Assert.Contains("Dota2.exe", settings.App.RoutingAppsExclude);
+        Assert.DoesNotContain("Dota2.exe", settings.App.RoutingAppsInclude);
     }
 
     [AvaloniaFact]

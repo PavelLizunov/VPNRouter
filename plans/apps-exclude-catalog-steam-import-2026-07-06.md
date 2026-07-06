@@ -55,3 +55,23 @@ MEDIUM. The route generator already has separate include/exclude lists, so the
 risk is mostly Apps-page state wiring and adding too many bypass recommendations.
 The Steam import stays local and reviewable to avoid broad accidental bypass.
 
+## Outcome (filled 2026-07-06)
+
+**Status**: PARTIAL
+**Commits**: 94fd074b (brief), implementation pending
+**Test deltas**: +4 focused checks
+**Files changed**: app catalogue, Apps VM, Steam scanner, focused tests
+**Verification gate results**:
+- [x] Gate 1 build: `dotnet build VPNRouter.sln -c Release` passed.
+- [x] Focused tests: Apps mode + Steam scanner + characterization passed, 19/19.
+- [x] Gate 3 docs: this brief/outcome updated.
+- [x] Gate 4 self-review: ponytail/manual diff review; removed unused helper and fixed misplaced comment.
+- [-] Gate 5 MCP verify: not run pre-ship; required only on windows-brat after candidate ship.
+- [-] Gate 6 characterization diff: public surface hash updated for intentional `ImportSteamGamesCommand`.
+- [!] Gate 2 full tests: local run failed on pre-existing `C:\ProgramData\VPNRouter` permission errors in lifecycle/Wgturn tests; focused tests for this change passed.
+**Surprises encountered**:
+- Full local suite needs write access to `C:\ProgramData\VPNRouter`; current shell cannot write `config/current.json` or `wgturn/bin/wgturn-cli.exe`.
+- `tools/VpnRouterTestMcp` was holding its build output DLL; stopped that dotnet process before rebuilding.
+**Follow-ups spawned**:
+- Post-ship UI verification must run on windows-brat, never local dev box.
+**Rollback**: `git revert <implementation-commit> 94fd074b`
