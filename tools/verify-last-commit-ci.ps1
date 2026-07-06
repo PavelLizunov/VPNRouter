@@ -122,6 +122,20 @@ foreach ($c in $checks) {
     elseif ($conclusion -eq "failure") {
         if ($failOk.ContainsKey($name)) {
             [void]$tolerated.Add("$name [failure, tolerated]")
+        } elseif ($name -eq "publish") {
+            $completedAt = if ($c.completed_at) { [DateTime]$c.completed_at } else { [DateTime]::MinValue }
+            $newerSuccess = $checks | Where-Object {
+                $_.name -eq $name -and
+                $_.conclusion -eq "success" -and
+                $_.completed_at -and
+                ([DateTime]$_.completed_at) -gt $completedAt
+            } | Select-Object -First 1
+
+            if ($newerSuccess) {
+                [void]$tolerated.Add("$name [failure, superseded by later success]")
+            } else {
+                [void]$hardRed.Add("$name $($c.html_url)")
+            }
         } else {
             [void]$hardRed.Add("$name $($c.html_url)")
         }

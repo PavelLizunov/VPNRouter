@@ -202,9 +202,13 @@ jobs:
           if [ -n "$EVENT_TAG" ]; then
               TAG="$EVENT_TAG"
               echo "Triggered by release.published for tag: $TAG (prerelease=$EVENT_IS_PRERELEASE)"
-              if [ "$EVENT_IS_PRERELEASE" = "true" ]; then
+              if [ "$EVENT_IS_PRERELEASE" = "true" ] || ! is_stable_tag "$TAG"; then
                   # v2.28.0: don't EXIT the whole workflow on prerelease —
                   # we still want install.sh + landing page to publish.
+                  # v2.46.0-r6: release.published can arrive before
+                  # `gh release edit --prerelease`, so the event payload may
+                  # still say prerelease=false for rolling -rN tags. Treat the
+                  # tag shape as authoritative too.
                   # Fix v2.28.0-r1+: also re-download ALL stable .debs and
                   # re-include them, because the earlier "Lay out apt repo
                   # skeleton" step wipes apt/db / pool / dists to guard
