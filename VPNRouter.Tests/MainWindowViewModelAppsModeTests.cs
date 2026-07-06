@@ -399,14 +399,15 @@ public class MainWindowViewModelAppsModeTests
         var added = (bool)method!.Invoke(vm, new object?[] { "Dota2.exe" })!;
         Assert.True(added);
 
+        var expected = OperatingSystem.IsWindows() ? "Dota2.exe" : "Dota2";
         var item = vm.BypassAppGroups
             .First(g => g.Name == "Custom Apps")
             .Apps
-            .First(a => a.ProcessName == "Dota2.exe");
+            .First(a => a.ProcessName == expected);
         item.IsChecked = true;
 
-        Assert.Contains("Dota2.exe", settings.App.RoutingAppsExclude);
-        Assert.DoesNotContain("Dota2.exe", settings.App.RoutingAppsInclude);
+        Assert.Contains(expected, settings.App.RoutingAppsExclude);
+        Assert.DoesNotContain(expected, settings.App.RoutingAppsInclude);
     }
 
     [AvaloniaFact]
