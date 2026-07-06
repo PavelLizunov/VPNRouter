@@ -843,14 +843,14 @@ public static class Strings
     // Exclude = inverse: selected apps → direct, rest → VPN.
     // Follow-up: lift to Core once Android exposes the same toggle.
     public static string AppsModeSectionTitle => Ru
-        ? "Режим маршрутизации"
-        : "Routing mode";
+        ? "Как применять списки"
+        : "How lists are applied";
     public static string AppsModeInclude => Ru
-        ? "Только выбранные → VPN"
-        : "Selected only → VPN";
+        ? "Активен список «Через VPN»"
+        : "Use the Through VPN list";
     public static string AppsModeExclude => Ru
-        ? "Кроме выбранных → VPN"
-        : "All except selected → VPN";
+        ? "Активен список «Мимо VPN»"
+        : "Use the Bypass VPN list";
     public static string AppsModeIncludeHint => Ru
         ? "Отмеченные приложения идут через VPN, остальные — напрямую (обычный split-tunnel)."
         : "Checked apps go through VPN; everything else stays direct (regular split-tunnel).";
@@ -859,8 +859,8 @@ public static class Strings
         : "Checked apps bypass VPN (direct); everything else goes through VPN.";
 
     public static string AppsListSectionTitle => Ru
-        ? "Редактируемый список"
-        : "List to edit";
+        ? "Что редактировать"
+        : "What to edit";
     public static string AppsListInclude => Ru
         ? "Через VPN"
         : "Through VPN";
