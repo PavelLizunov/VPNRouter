@@ -49,4 +49,44 @@ facing and app list grouping touches many bindings.
 
 ## Outcome
 
-Pending.
+## Outcome (filled 2026-07-06)
+
+**Status**: PARTIAL gate, implementation ready.
+
+**Test deltas**: added focused VM/shell tests for separate include/exclude UI
+state, shell include-only behavior, mirrored custom-row removal, and updated
+the public-surface pin.
+
+**Verification gate results**:
+
+- [x] Build: `dotnet build VPNRouter.sln -c Release` exits 0.
+- [x] Focused tests: `MainWindowViewModelAppsModeTests`,
+  `ShellVerbRoutingTests`, `ScrubRoutingForAppBridgeTests`,
+  `MainWindowViewModelCharacterizationTests` pass 23/23.
+- [x] Codex catalog entry uses `Codex.exe` / `Codex*.exe`, not a versioned
+  WindowsApps path.
+- [x] Explorer shell add/remove remains include-only.
+- [x] Follow-up TZ created:
+  `plans/tz-codex-shell-menu-dual-app-lists-2026-07-06.md`.
+- [!] Full suite: with `ProgramData` redirected to `.tmp-programdata-tests`,
+  `dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build`
+  passed 2345/2352, skipped 2, failed 5 unrelated tests:
+  `SingBoxManagerProcessExitLeakTests.DisposedManagers_AreNotRetainedByProcessExitHook`,
+  two `SingBoxManagerRestartTunLockTests`, and two `VisualDiffTests`
+  baseline diffs.
+
+**Surprises encountered**:
+
+- The local `tools/VpnRouterTestMcp` process locked its own build output; it
+  was stopped before the full solution build. VPNRouter itself was not launched
+  locally.
+- Running the full suite without redirecting `ProgramData` produces unrelated
+  access-denied failures against `C:\ProgramData\VPNRouter`.
+
+**Follow-ups spawned**:
+
+- Shell submenu TZ for explicit Through VPN / Bypass VPN / Remove from lists.
+
+**Rollback**:
+
+- Revert the implementation commit for r7 apps dual lists.

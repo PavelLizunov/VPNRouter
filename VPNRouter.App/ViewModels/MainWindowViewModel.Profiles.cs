@@ -66,6 +66,7 @@ public partial class MainWindowViewModel
         // subscription per existing AppGroupViewModel + AppItemViewModel. Cumulative.
         UnwireAllAppGroups();
         AppGroups.Clear();
+        BypassAppGroups.Clear();
 
         var activeProfileStr = _settings.ActiveProfile ?? "";
         var isFirstLaunch = string.IsNullOrWhiteSpace(activeProfileStr);
@@ -161,7 +162,8 @@ public partial class MainWindowViewModel
                         var isActive = isFirstLaunch || activeProfiles.Any(p =>
                             p.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
 
-                        var group = new AppGroupViewModel(profile.Name, profile.Description, isActive);
+                        var includeGroup = new AppGroupViewModel(profile.Name, profile.Description, isActive);
+                        var excludeGroup = new AppGroupViewModel(profile.Name, profile.Description, false);
 
                         foreach (var proc in profile.Processes)
                         {
@@ -169,7 +171,8 @@ public partial class MainWindowViewModel
                             // Bug-r9-I: respect persisted per-app exclusions
                             // when the group itself is active.
                             var appChecked = isActive && !excludedSet.Contains(name);
-                            group.Apps.Add(CreateBridgedAppItem(name, appChecked));
+                            includeGroup.Apps.Add(CreateIncludeAppItem(name, appChecked));
+                            excludeGroup.Apps.Add(CreateExcludeAppItem(name, false));
                         }
 
                         // Merge user-added custom apps for this group
@@ -180,14 +183,16 @@ public partial class MainWindowViewModel
                             {
                                 if (string.IsNullOrWhiteSpace(extra)) continue;
                                 var extraName = StripExe(extra);
-                                if (group.Apps.Any(a => a.ProcessName.Equals(extraName, StringComparison.OrdinalIgnoreCase)))
+                                if (includeGroup.Apps.Any(a => a.ProcessName.Equals(extraName, StringComparison.OrdinalIgnoreCase)))
                                     continue;
                                 var appChecked = isActive && !excludedSet.Contains(extraName);
-                                group.Apps.Add(CreateBridgedAppItem(extraName, appChecked, isCustom: true));
+                                includeGroup.Apps.Add(CreateIncludeAppItem(extraName, appChecked, isCustom: true));
+                                excludeGroup.Apps.Add(CreateExcludeAppItem(extraName, false, isCustom: true));
                             }
                         }
 
-                        AppGroups.Add(group);
+                        AppGroups.Add(includeGroup);
+                        BypassAppGroups.Add(excludeGroup);
                     }
                 }
             }
@@ -201,26 +206,38 @@ public partial class MainWindowViewModel
         // distinguish "loaded but empty" from "never loaded".
         var customApps = _settings.CustomApps ?? new();
         var customGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", true) { IsCustomGroup = true, IsExpanded = true };
+        var bypassCustomGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", false) { IsCustomGroup = true, IsExpanded = true };
         foreach (var app in customApps)
         {
             if (!string.IsNullOrEmpty(app))
-                customGroup.Apps.Add(CreateBridgedAppItem(StripExe(app), true, isCustom: true));
+            {
+                var name = StripExe(app);
+                customGroup.Apps.Add(CreateIncludeAppItem(name, true, isCustom: true));
+                bypassCustomGroup.Apps.Add(CreateExcludeAppItem(name, false, isCustom: true));
+            }
         }
         AppGroups.Add(customGroup);
+        BypassAppGroups.Add(bypassCustomGroup);
 
         // User-created categories (persisted separately from default groups)
         foreach (var cat in _settings.CustomCategories ?? new())
         {
             if (string.IsNullOrWhiteSpace(cat.Name)) continue;
             var group = new AppGroupViewModel(cat.Name, "", cat.Enabled) { IsCustomCategory = true };
+            var bypassGroup = new AppGroupViewModel(cat.Name, "", false) { IsCustomCategory = true };
             foreach (var app in cat.Apps ?? new())
             {
                 if (string.IsNullOrWhiteSpace(app)) continue;
-                group.Apps.Add(CreateBridgedAppItem(StripExe(app), cat.Enabled, isCustom: true));
+                var name = StripExe(app);
+                group.Apps.Add(CreateIncludeAppItem(name, cat.Enabled, isCustom: true));
+                bypassGroup.Apps.Add(CreateExcludeAppItem(name, false, isCustom: true));
             }
             AppGroups.Add(group);
+            BypassAppGroups.Add(bypassGroup);
         }
 
+        SelectedAppGroup ??= AppGroups.FirstOrDefault();
+        SelectedBypassAppGroup ??= BypassAppGroups.FirstOrDefault();
         _appsLoaded = true;
         WireAppChangeTracking();
     }
@@ -240,6 +257,24 @@ public partial class MainWindowViewModel
         var item = new AppItemViewModel(processName, legacyChecked, isCustom);
         item.ReadMode = IsAppCheckedInCurrentMode;
         item.WriteMode = SetAppCheckedInCurrentMode;
+        return item;
+    }
+
+    private AppItemViewModel CreateIncludeAppItem(
+        string processName, bool legacyChecked, bool isCustom = false)
+    {
+        var item = new AppItemViewModel(processName, legacyChecked, isCustom);
+        item.ReadMode = IsAppCheckedInIncludeList;
+        item.WriteMode = SetAppCheckedInIncludeList;
+        return item;
+    }
+
+    private AppItemViewModel CreateExcludeAppItem(
+        string processName, bool legacyChecked, bool isCustom = false)
+    {
+        var item = new AppItemViewModel(processName, legacyChecked, isCustom);
+        item.ReadMode = IsAppCheckedInExcludeList;
+        item.WriteMode = SetAppCheckedInExcludeList;
         return item;
     }
 
@@ -333,28 +368,12 @@ public partial class MainWindowViewModel
     {
         if (!_appChangeTrackingWired)
         {
-            AppGroups.CollectionChanged += (s, e) =>
-            {
-                if (_isLoadingUI) return;
-                if (e.NewItems != null)
-                    foreach (AppGroupViewModel g in e.NewItems)
-                    {
-                        g.PropertyChanged -= OnAppGroupPropertyChanged;
-                        g.PropertyChanged += OnAppGroupPropertyChanged;
-                        g.Apps.CollectionChanged -= OnAppsCollectionChanged;
-                        g.Apps.CollectionChanged += OnAppsCollectionChanged;
-                        foreach (var a in g.Apps)
-                        {
-                            a.PropertyChanged -= OnAppItemPropertyChanged;
-                            a.PropertyChanged += OnAppItemPropertyChanged;
-                        }
-                    }
-                HasPendingAppChanges = IsConnected;
-            };
+            AppGroups.CollectionChanged += OnAppGroupsCollectionChanged;
+            BypassAppGroups.CollectionChanged += OnAppGroupsCollectionChanged;
             _appChangeTrackingWired = true;
         }
 
-        foreach (var group in AppGroups)
+        foreach (var group in AllAppGroups())
         {
             group.PropertyChanged -= OnAppGroupPropertyChanged;
             group.PropertyChanged += OnAppGroupPropertyChanged;
@@ -366,6 +385,27 @@ public partial class MainWindowViewModel
                 app.PropertyChanged += OnAppItemPropertyChanged;
             }
         }
+    }
+
+    private IEnumerable<AppGroupViewModel> AllAppGroups() => AppGroups.Concat(BypassAppGroups);
+
+    private void OnAppGroupsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_isLoadingUI) return;
+        if (e.NewItems != null)
+            foreach (AppGroupViewModel g in e.NewItems)
+            {
+                g.PropertyChanged -= OnAppGroupPropertyChanged;
+                g.PropertyChanged += OnAppGroupPropertyChanged;
+                g.Apps.CollectionChanged -= OnAppsCollectionChanged;
+                g.Apps.CollectionChanged += OnAppsCollectionChanged;
+                foreach (var a in g.Apps)
+                {
+                    a.PropertyChanged -= OnAppItemPropertyChanged;
+                    a.PropertyChanged += OnAppItemPropertyChanged;
+                }
+            }
+        HasPendingAppChanges = IsConnected;
     }
 
     private void OnAppGroupPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -391,7 +431,7 @@ public partial class MainWindowViewModel
     /// </summary>
     private void UnwireAllAppGroups()
     {
-        foreach (var group in AppGroups)
+        foreach (var group in AllAppGroups())
         {
             group.PropertyChanged -= OnAppGroupPropertyChanged;
             group.Apps.CollectionChanged -= OnAppsCollectionChanged;
@@ -467,11 +507,13 @@ public partial class MainWindowViewModel
         // safe (they carry no meaning in a category label).
         name = new string(name.Where(c => c != '%' && c != '\\' && c != '/' && c != '"').ToArray()).Trim();
         if (string.IsNullOrWhiteSpace(name)) return;
-        if (AppGroups.Any(g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return;
+        if (AllAppGroups().Any(g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return;
 
         var group = new AppGroupViewModel(name!, "", isChecked: true) { IsCustomCategory = true };
+        var bypassGroup = new AppGroupViewModel(name!, "", isChecked: false) { IsCustomCategory = true };
         AppGroups.Add(group);
-        SelectedAppGroup = group;
+        BypassAppGroups.Add(bypassGroup);
+        SelectedActiveAppGroup = IsAppsListEditorExclude ? bypassGroup : group;
         NewCategoryName = string.Empty;
         SaveSettings();
     }
@@ -486,9 +528,15 @@ public partial class MainWindowViewModel
         // an unwanted route in Include mode).
         foreach (var item in group.Apps.ToList())
             ScrubRoutingForApp(item);
-        AppGroups.Remove(group);
+        var peerGroups = AllAppGroups()
+            .Where(g => g.IsCustomCategory && g.Name.Equals(group.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        foreach (var peer in peerGroups)
+            (AppGroups.Contains(peer) ? AppGroups : BypassAppGroups).Remove(peer);
         if (SelectedAppGroup == group)
             SelectedAppGroup = AppGroups.FirstOrDefault();
+        if (SelectedBypassAppGroup == group)
+            SelectedBypassAppGroup = BypassAppGroups.FirstOrDefault();
         SaveSettings();
     }
 
@@ -562,21 +610,26 @@ public partial class MainWindowViewModel
         if (string.IsNullOrWhiteSpace(processName)) return;
 
         var name = StripExe(processName.Trim());
-        var target = SelectedAppGroup;
+        var target = SelectedActiveAppGroup;
 
         // Fallback: if no group selected, use "Custom Apps"
         if (target == null)
         {
-            target = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+            target = ActiveAppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
             if (target == null)
             {
-                target = new AppGroupViewModel("Custom Apps", "Your custom applications", true) { IsCustomGroup = true };
-                AppGroups.Add(target);
+                target = new AppGroupViewModel("Custom Apps", "Your custom applications", !IsAppsListEditorExclude) { IsCustomGroup = true };
+                ActiveAppGroups.Add(target);
             }
         }
 
-        if (target.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        var existing = target.Apps.FirstOrDefault(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (existing != null)
+        {
+            existing.IsChecked = true;
+            SaveSettings();
             return;
+        }
 
         // AM-3 (2026-05-12) — bridge-wired add so adding a custom app
         // writes into the active mode list straight away. Setting
@@ -585,9 +638,30 @@ public partial class MainWindowViewModel
         // current mode. SaveSettings inside WriteMode persists; the
         // explicit SaveSettings() below is retained for the
         // category-state side-effect (CustomCategories.Apps list).
-        var newItem = CreateBridgedAppItem(name, legacyChecked: false, isCustom: true);
+        var newItem = IsAppsListEditorExclude
+            ? CreateExcludeAppItem(name, legacyChecked: false, isCustom: true)
+            : CreateIncludeAppItem(name, legacyChecked: false, isCustom: true);
         target.Apps.Add(newItem);
         newItem.IsChecked = true;
+
+        var mirrorGroups = IsAppsListEditorExclude ? AppGroups : BypassAppGroups;
+        var mirror = mirrorGroups.FirstOrDefault(g => g.Name.Equals(target.Name, StringComparison.OrdinalIgnoreCase));
+        if (mirror == null)
+        {
+            mirror = new AppGroupViewModel(target.Name, target.Description, isChecked: false)
+            {
+                IsCustomGroup = target.IsCustomGroup,
+                IsCustomCategory = target.IsCustomCategory,
+                IsExpanded = target.IsExpanded,
+            };
+            mirrorGroups.Add(mirror);
+        }
+        if (!mirror.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            mirror.Apps.Add(IsAppsListEditorExclude
+                ? CreateIncludeAppItem(name, legacyChecked: false, isCustom: true)
+                : CreateExcludeAppItem(name, legacyChecked: false, isCustom: true));
+        }
         SaveSettings();
     }
 
@@ -620,21 +694,6 @@ public partial class MainWindowViewModel
             return;
         }
 
-        // r6 (audit finding #1): the shell verb assumes INCLUDE semantics
-        // ("add = route this app through VPN"). In the Apps "exclude" mode the
-        // AppItem bridge writes to RoutingAppsExclude instead — which would make
-        // the app BYPASS the VPN, the exact OPPOSITE of the verb's label (a
-        // silent leak). Rather than implement full mode-aware semantics in this
-        // fiddly bridge, refuse cleanly and point the user at the in-app list.
-        if (string.Equals(_settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.Information("[ShellAdd] exclude apps-mode active — refusing shell add for {Exe}", exeName);
-            ShowRulesToast(IsRussian
-                ? "Режим «исключения»: управляйте приложениями в окне VPNRouter"
-                : "Exclude mode: manage apps in the VPNRouter window");
-            return;
-        }
-
         // RoutingAppsInclude is the authoritative routed list (include mode) — dedup there.
         var routed = _settings.App.RoutingAppsInclude ?? new List<string>();
         if (routed.Any(e => string.Equals(e, exeName, StringComparison.OrdinalIgnoreCase)))
@@ -656,6 +715,8 @@ public partial class MainWindowViewModel
         target ??= AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
 
         var prevSelected = SelectedAppGroup;
+        var prevEditorMode = AppsListEditorMode;
+        AppsListEditorMode = "include";
         SelectedAppGroup = target;
         try
         {
@@ -671,7 +732,11 @@ public partial class MainWindowViewModel
             if (landedItem != null && !landedItem.IsChecked)
                 landedItem.IsChecked = true; // bridge → RoutingAppsInclude
         }
-        finally { SelectedAppGroup = prevSelected; }
+        finally
+        {
+            SelectedAppGroup = prevSelected;
+            AppsListEditorMode = prevEditorMode;
+        }
 
         // r6 (audit finding #2): base the toast on the ACTUAL post-state — never
         // claim "routed" if the write didn't take.
@@ -718,19 +783,6 @@ public partial class MainWindowViewModel
             ShowRulesToast(IsRussian
                 ? "Это Steam/Store-ярлык — процесс не определить. Запусти приложение и добавь его в разделе «Приложения»."
                 : "This is a Steam/Store shortcut — no process to read. Launch the app, then add it in the Apps section.");
-            return;
-        }
-
-        // r6 (audit finding #1): in exclude apps-mode the bridge would ADD the
-        // app to the bypass (exclude) list — i.e. it would START routing it
-        // through the VPN, the opposite of "remove from VPN". Refuse cleanly,
-        // same as the add verb.
-        if (string.Equals(_settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.Information("[ShellRemove] exclude apps-mode active — refusing shell remove for {Exe}", exeName);
-            ShowRulesToast(IsRussian
-                ? "Режим «исключения»: управляйте приложениями в окне VPNRouter"
-                : "Exclude mode: manage apps in the VPNRouter window");
             return;
         }
 
@@ -783,33 +835,32 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void RemoveCustomApps()
     {
-        var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        var customGroup = ActiveAppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
         if (customGroup == null) return;
 
         var toRemove = customGroup.Apps.Where(a => a.IsChecked).ToList();
         foreach (var app in toRemove)
-        {
-            ScrubRoutingForApp(app);   // also drop from RoutingAppsInclude/Exclude
-            customGroup.Apps.Remove(app);
-        }
-        SaveSettings();
+            RemoveCustomApp(app);
     }
 
     [RelayCommand]
     private void RemoveCustomApp(AppItemViewModel? app)
     {
         if (app == null) return;
-        // Search ALL groups — user can add custom apps to any group now
-        foreach (var group in AppGroups)
+        var matches = AllAppGroups()
+            .SelectMany(g => g.Apps.Select(a => new { Group = g, App = a }))
+            .Where(x => x.App.IsCustom &&
+                        x.App.ProcessName.Equals(app.ProcessName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matches.Count == 0) return;
+
+        ScrubRoutingForApp(app);
+        foreach (var match in matches)
         {
-            if (group.Apps.Contains(app))
-            {
-                ScrubRoutingForApp(app);   // also drop from RoutingAppsInclude/Exclude
-                group.Apps.Remove(app);
-                SaveSettings();
-                return;
-            }
+            match.Group.Apps.Remove(match.App);
         }
+        SaveSettings();
     }
 
     // ── First-run profile + sing-box deploy ──

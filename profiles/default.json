@@ -56,6 +56,11 @@
           "scan_patterns": ["ChatGPT*.exe"]
         },
         {
+          "name": "Codex.exe",
+          "include_children": true,
+          "scan_patterns": ["Codex.exe", "Codex*.exe"]
+        },
+        {
           "name": "Cursor.exe",
           "include_children": true,
           "scan_patterns": ["Cursor*.exe", "cursor*.exe"]

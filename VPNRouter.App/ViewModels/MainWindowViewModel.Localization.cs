@@ -45,6 +45,9 @@ public partial class MainWindowViewModel
     public string L_AppsModeExclude => Strings.AppsModeExclude;
     public string L_AppsModeIncludeHint => Strings.AppsModeIncludeHint;
     public string L_AppsModeExcludeHint => Strings.AppsModeExcludeHint;
+    public string L_AppsListSectionTitle => Strings.AppsListSectionTitle;
+    public string L_AppsListInclude => Strings.AppsListInclude;
+    public string L_AppsListExclude => Strings.AppsListExclude;
     /// <summary>Selects which hint to show beneath the segmented toggle
     /// based on current <see cref="RoutingAppsMode"/>.</summary>
     public string L_CurrentAppsModeHint =>

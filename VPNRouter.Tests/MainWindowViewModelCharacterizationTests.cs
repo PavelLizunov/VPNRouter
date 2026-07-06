@@ -227,7 +227,10 @@ public class MainWindowViewModelCharacterizationTests
         // W1.3 true-split (2026-07-05): + IsTrueSplitActive + L_TrueSplitBadge + L_TrueSplitTooltip
         // + OnTrueSplitEngagedChanged (status-zone "True split active" badge fed by the driver).
         // Cross-platform → Linux pin drifts in lock-step (soft-fail; capture from next ubuntu CI run).
-        "a8d490eb51653ca7fdf3ff499610def8205ad8af8b6dd3e7fa14eb69ce5e3569";
+        // v2.46.0-r7 apps dual lists (2026-07-06): + BypassAppGroups,
+        // AppsListEditorMode/IsAppsListEditorInclude/Exclude, ActiveAppGroups,
+        // SelectedActiveAppGroup, SelectedBypassAppGroup.
+        "879d3c659f7008553cbd17a25e3d792c2bb41f2d3b6138795b0c42a81377c878";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

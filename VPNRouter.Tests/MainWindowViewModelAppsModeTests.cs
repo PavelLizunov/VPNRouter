@@ -282,6 +282,97 @@ public class MainWindowViewModelAppsModeTests
     }
 
     [AvaloniaFact]
+    public void LoadedApps_HaveSeparateIncludeAndExcludeItems()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        settings.App.RoutingAppsInclude = new List<string>();
+        settings.App.RoutingAppsExclude = new List<string>();
+
+        var includeGroup = vm.AppGroups.First(g => g.Apps.Count > 0);
+        var excludeGroup = vm.BypassAppGroups.First(g => g.Name == includeGroup.Name);
+        var includeItem = includeGroup.Apps.First();
+        var excludeItem = excludeGroup.Apps.First(a => a.ProcessName == includeItem.ProcessName);
+
+        includeItem.IsChecked = true;
+
+        Assert.Contains(includeItem.ProcessName, settings.App.RoutingAppsInclude);
+        Assert.DoesNotContain(includeItem.ProcessName, settings.App.RoutingAppsExclude);
+        Assert.True(includeItem.IsChecked);
+        Assert.False(excludeItem.IsChecked);
+
+        excludeItem.IsChecked = true;
+
+        Assert.Contains(includeItem.ProcessName, settings.App.RoutingAppsInclude);
+        Assert.Contains(includeItem.ProcessName, settings.App.RoutingAppsExclude);
+        Assert.True(includeItem.IsChecked);
+        Assert.True(excludeItem.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void RoutingModeFlip_DoesNotChangeSeparateListCheckboxes()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        settings.App.RoutingAppsInclude = new List<string>();
+        settings.App.RoutingAppsExclude = new List<string>();
+
+        var includeGroup = vm.AppGroups.First(g => g.Apps.Count > 0);
+        var excludeGroup = vm.BypassAppGroups.First(g => g.Name == includeGroup.Name);
+        var includeItem = includeGroup.Apps.First();
+        var excludeItem = excludeGroup.Apps.First(a => a.ProcessName == includeItem.ProcessName);
+
+        includeItem.IsChecked = true;
+        excludeItem.IsChecked = true;
+        vm.RoutingAppsMode = "exclude";
+
+        Assert.True(includeItem.IsChecked);
+        Assert.True(excludeItem.IsChecked);
+
+        vm.RoutingAppsMode = "include";
+
+        Assert.True(includeItem.IsChecked);
+        Assert.True(excludeItem.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void AddCustomApp_InExcludeEditor_DoesNotTouchIncludeList()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        settings.App.RoutingAppsInclude = new List<string>();
+        settings.App.RoutingAppsExclude = new List<string>();
+        vm.AppsListEditorMode = "exclude";
+        vm.SelectedBypassAppGroup = vm.BypassAppGroups.First(g => g.Name == "Custom Apps");
+
+        vm.AddCustomAppCommand.Execute("OnlyBypass.exe");
+
+        Assert.Contains("OnlyBypass.exe", settings.App.RoutingAppsExclude);
+        Assert.DoesNotContain("OnlyBypass.exe", settings.App.RoutingAppsInclude);
+    }
+
+    [AvaloniaFact]
+    public void RemoveCustomApp_RemovesMirroredCustomRows()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        settings.App.RoutingAppsInclude = new List<string>();
+        settings.App.RoutingAppsExclude = new List<string>();
+        vm.AppsListEditorMode = "exclude";
+        var bypassCustom = vm.BypassAppGroups.First(g => g.Name == "Custom Apps");
+        vm.SelectedBypassAppGroup = bypassCustom;
+
+        vm.AddCustomAppCommand.Execute("OnlyBypass.exe");
+        var item = bypassCustom.Apps.First(a => a.ProcessName == "OnlyBypass.exe");
+
+        vm.RemoveCustomAppCommand.Execute(item);
+
+        Assert.DoesNotContain("OnlyBypass.exe", settings.App.RoutingAppsExclude);
+        Assert.DoesNotContain(vm.AppGroups.SelectMany(g => g.Apps), a => a.ProcessName == "OnlyBypass.exe");
+        Assert.DoesNotContain(vm.BypassAppGroups.SelectMany(g => g.Apps), a => a.ProcessName == "OnlyBypass.exe");
+    }
+
+    [AvaloniaFact]
     public void OnRoutingAppsModeChanged_FiresIsCheckedNotifications()
     {
         // Mode flip must trigger PropertyChanged on every AppItem's

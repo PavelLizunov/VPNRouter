@@ -577,6 +577,52 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(L_CurrentAppsModeHint))]
     private string _routingAppsMode = "include";
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAppsListEditorInclude))]
+    [NotifyPropertyChangedFor(nameof(IsAppsListEditorExclude))]
+    [NotifyPropertyChangedFor(nameof(ActiveAppGroups))]
+    [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
+    private string _appsListEditorMode = "include";
+
+    public bool IsAppsListEditorInclude
+    {
+        get => string.Equals(AppsListEditorMode, "include", StringComparison.OrdinalIgnoreCase);
+        set { if (value) AppsListEditorMode = "include"; }
+    }
+
+    public bool IsAppsListEditorExclude
+    {
+        get => string.Equals(AppsListEditorMode, "exclude", StringComparison.OrdinalIgnoreCase);
+        set { if (value) AppsListEditorMode = "exclude"; }
+    }
+
+    public ObservableCollection<AppGroupViewModel> ActiveAppGroups =>
+        IsAppsListEditorExclude ? BypassAppGroups : AppGroups;
+
+    public AppGroupViewModel? SelectedActiveAppGroup
+    {
+        get => IsAppsListEditorExclude ? SelectedBypassAppGroup : SelectedAppGroup;
+        set
+        {
+            if (IsAppsListEditorExclude)
+                SelectedBypassAppGroup = value;
+            else
+                SelectedAppGroup = value;
+            OnPropertyChanged();
+        }
+    }
+
+    partial void OnAppsListEditorModeChanged(string value)
+    {
+        if (value != "include" && value != "exclude")
+        {
+            AppsListEditorMode = "include";
+            return;
+        }
+        OnPropertyChanged(nameof(ActiveAppGroups));
+        OnPropertyChanged(nameof(SelectedActiveAppGroup));
+    }
+
     /// <summary>True when <see cref="RoutingAppsMode"/> = "include". Two-way
     /// bool for radio/segmented-toggle binding.</summary>
     public bool IsRoutingAppsModeInclude
@@ -670,6 +716,51 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (IsConnected) HasPendingAppChanges = true;
     }
 
+    internal bool IsAppCheckedInIncludeList(string processName) =>
+        IsAppCheckedInList(_settings.App.RoutingAppsInclude, processName);
+
+    internal bool IsAppCheckedInExcludeList(string processName) =>
+        IsAppCheckedInList(_settings.App.RoutingAppsExclude, processName);
+
+    internal void SetAppCheckedInIncludeList(string processName, bool isChecked) =>
+        SetAppCheckedInList(_settings.App.RoutingAppsInclude ??= new List<string>(), processName, isChecked);
+
+    internal void SetAppCheckedInExcludeList(string processName, bool isChecked) =>
+        SetAppCheckedInList(_settings.App.RoutingAppsExclude ??= new List<string>(), processName, isChecked);
+
+    private static bool IsAppCheckedInList(List<string>? list, string processName)
+    {
+        if (string.IsNullOrEmpty(processName) || list == null) return false;
+        return list.Any(p => string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void SetAppCheckedInList(List<string> list, string processName, bool isChecked)
+    {
+        if (string.IsNullOrEmpty(processName)) return;
+        var existing = list.FirstOrDefault(p =>
+            string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
+
+        if (isChecked)
+        {
+            if (existing != null) return;
+            list.Add(processName);
+        }
+        else
+        {
+            if (existing == null) return;
+            list.Remove(existing);
+        }
+
+        if (_isLoadingUI) return;
+
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger?.Warning(ex, "[VM] SaveSettings on per-app list toggle failed");
+        }
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
     /// <summary>
     /// AM-3 — resolve the active list from the current mode. Defaults to
     /// RoutingAppsInclude when the value is anything other than
@@ -700,7 +791,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void RefreshAppCheckboxes()
     {
-        foreach (var group in AppGroups)
+        foreach (var group in AppGroups.Concat(BypassAppGroups))
         {
             foreach (var app in group.Apps)
                 app.RaiseIsCheckedChanged();
@@ -2472,7 +2563,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
     public bool IsEmergencyChannelToolSelected => SelectedToolIndex == 2;
 
-    [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
+    private AppGroupViewModel? _selectedAppGroup;
 
     // Detail editor state — independent of SelectedServer (left click sets active, right click opens detail)
     [ObservableProperty] private ServerViewModel? _detailServer;
@@ -2511,10 +2604,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public ObservableCollection<ServerViewModel> SubscriptionServers { get; } = new();
     [ObservableProperty] private ServerViewModel? _selectedSubscriptionServer;
     public ObservableCollection<AppGroupViewModel> AppGroups { get; } = new();
+    public ObservableCollection<AppGroupViewModel> BypassAppGroups { get; } = new();
 
     // ── Selected items ──
     [ObservableProperty] private ServerViewModel? _selectedServer;
     [ObservableProperty] private CustomConfigViewModel? _selectedCustomConfig;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
+    private AppGroupViewModel? _selectedBypassAppGroup;
 
     // ── Sub-ViewModels ──
     public UpdateNotificationViewModel UpdateVm { get; }
@@ -3725,7 +3822,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
             _settings.CustomApps = customGroup?.Apps
-                .Where(a => a.IsChecked)
                 .Select(a => a.ProcessName)
                 .ToList() ?? new();
 
@@ -7407,7 +7503,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(string.Empty);
 
         // Propagate to child view models — they have their own property notifiers
-        foreach (var group in AppGroups)
+        foreach (var group in AppGroups.Concat(BypassAppGroups))
             group.NotifyDisplayNameChanged();
         foreach (var server in Servers)
             server.NotifyLocalizationChanged();

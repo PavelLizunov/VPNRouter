@@ -858,6 +858,16 @@ public static class Strings
         ? "Отмеченные приложения идут напрямую (мимо VPN), остальной трафик идёт через VPN."
         : "Checked apps bypass VPN (direct); everything else goes through VPN.";
 
+    public static string AppsListSectionTitle => Ru
+        ? "Редактируемый список"
+        : "List to edit";
+    public static string AppsListInclude => Ru
+        ? "Через VPN"
+        : "Through VPN";
+    public static string AppsListExclude => Ru
+        ? "Мимо VPN"
+        : "Bypass VPN";
+
     // ── app-only: not in Core/Localization/Strings.cs ──
     // v2.32 — ServersPage marker for orphan vless.servers entries that
     // aren't in any active subscription. After F-A/B fixes the migrator

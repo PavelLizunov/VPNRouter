@@ -4,6 +4,7 @@ using System.Reflection;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Models;
+using VPNRouter.Tests.Fakes;
 using Xunit;
 
 namespace VPNRouter.Tests;
@@ -39,6 +40,8 @@ namespace VPNRouter.Tests;
 public class ScrubRoutingForAppBridgeTests
 {
     private const string Dup = "Game.exe";
+
+    private static MainWindowViewModel MakeVm() => new(new InMemorySettingsStore());
 
     private static AppSettings GetSettings(MainWindowViewModel vm)
     {
@@ -81,6 +84,7 @@ public class ScrubRoutingForAppBridgeTests
         settings.App.RoutingAppsExclude = new List<string>();
         vm.RoutingAppsMode = "include";
         vm.AppGroups.Clear();
+        vm.BypassAppGroups.Clear();
         return settings;
     }
 
@@ -95,7 +99,7 @@ public class ScrubRoutingForAppBridgeTests
     [AvaloniaFact]
     public void RemoveCustomApp_WhenAnotherGroupStillRoutesSameName_KeepsItRoutedForSurvivor()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = ArrangeIncludeModeWithSharedEntry(vm);
 
         var bundled = new AppGroupViewModel("Discord_Privacy", "", isChecked: true);
@@ -136,7 +140,7 @@ public class ScrubRoutingForAppBridgeTests
     [AvaloniaFact]
     public void RemoveCategory_WhenAnotherGroupStillRoutesSameName_KeepsItRoutedForSurvivor()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = ArrangeIncludeModeWithSharedEntry(vm);
 
         var bundled = new AppGroupViewModel("Discord_Privacy", "", isChecked: true);
@@ -168,7 +172,7 @@ public class ScrubRoutingForAppBridgeTests
     [AvaloniaFact]
     public void RemoveCustomApp_WhenNoOtherGroupRoutesName_DropsItFromRouting()
     {
-        var vm = new MainWindowViewModel();
+        var vm = MakeVm();
         var settings = ArrangeIncludeModeWithSharedEntry(vm);
 
         var only = new AppGroupViewModel("My Games", "", isChecked: true) { IsCustomCategory = true };

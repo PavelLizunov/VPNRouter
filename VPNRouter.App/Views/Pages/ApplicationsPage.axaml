@@ -112,7 +112,7 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="Auto,Auto,*">
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
 
     <!-- Full-tunnel hint banner — shown only when IsFullTunnel -->
     <Border Grid.Row="0"
@@ -170,13 +170,39 @@
       </StackPanel>
     </Border>
 
+    <!-- Row 2: choose which persisted app list is being edited.
+         Routing mode above stays policy; this selector chooses data. -->
+    <Border Grid.Row="2"
+            IsVisible="{Binding IsSplitTunnel}"
+            Padding="14,6,14,4"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource BorderSubtleBrush}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding L_AppsListSectionTitle}"
+                   FontSize="11" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+          <ToggleButton Grid.Column="0"
+                        Classes="apps-mode-seg"
+                        IsChecked="{Binding IsAppsListEditorInclude, Mode=TwoWay}"
+                        Content="{Binding L_AppsListInclude}"
+                        AutomationProperties.Name="{Binding L_AppsListInclude}"/>
+          <ToggleButton Grid.Column="1"
+                        Classes="apps-mode-seg"
+                        IsChecked="{Binding IsAppsListEditorExclude, Mode=TwoWay}"
+                        Content="{Binding L_AppsListExclude}"
+                        AutomationProperties.Name="{Binding L_AppsListExclude}"/>
+        </Grid>
+      </StackPanel>
+    </Border>
+
     <!-- v2.30.3-r1 (BUG-36 fix): when Full Tunnel is active the sidebar
          category list looked clickable (low opacity but no cursor hint),
          users clicked categories 5+ times before realizing it's no-op.
          Now the disabled state is more pronounced + a not-allowed cursor
          appears on hover so the visual disabled-ness matches the actual
          IsHitTestVisible=false behaviour. -->
-    <Grid Grid.Row="2"
+    <Grid Grid.Row="3"
           ColumnDefinitions="120,*"
           Opacity="{Binding IsSplitTunnel, Converter={x:Static conv:BoolTo10or05Converter.Instance}}"
           IsHitTestVisible="{Binding IsSplitTunnel}"
@@ -190,8 +216,8 @@
       <Grid RowDefinitions="*,Auto,Auto">
         <ListBox Grid.Row="0"
                  Classes="cat-list"
-                 ItemsSource="{Binding AppGroups}"
-                 SelectedItem="{Binding SelectedAppGroup}"
+                 ItemsSource="{Binding ActiveAppGroups}"
+                 SelectedItem="{Binding SelectedActiveAppGroup}"
                  Background="Transparent"
                  BorderThickness="0"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -230,7 +256,7 @@
 
     <!-- ─── DETAIL (right): header + master toggle + apps + add ─── -->
     <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto"
-          DataContext="{Binding SelectedAppGroup}"
+          DataContext="{Binding SelectedActiveAppGroup}"
           x:DataType="vm:AppGroupViewModel"
           IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
@@ -348,7 +374,7 @@
                Text="{Binding L_SelectCategoryHint}"
                HorizontalAlignment="Center" VerticalAlignment="Center"
                FontSize="11" Opacity="0.5" FontStyle="Italic"
-               IsVisible="{Binding SelectedAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>
+               IsVisible="{Binding SelectedActiveAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>
     </Grid>
   </Grid>
 </UserControl>
