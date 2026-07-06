@@ -142,6 +142,22 @@ public class SplitTunnelManagerTests
         Assert.False(mgr.IsEngaged);
     }
 
+    [Fact]
+    public void CanRepairOwnStoppedServiceStartFailure_OnlyStoppedOurs()
+    {
+        Assert.True(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
+            P.ServiceCollisionAction.StartExisting, startError: 1058, serviceState: 1));
+
+        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
+            P.ServiceCollisionAction.BailForeign, startError: 1058, serviceState: 1));
+        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
+            P.ServiceCollisionAction.StartExisting, startError: 1058, serviceState: 4));
+        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
+            P.ServiceCollisionAction.StartExisting, startError: 5, serviceState: 1));
+        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
+            P.ServiceCollisionAction.StartExisting, startError: 1072, serviceState: 1));
+    }
+
     private static string NonexistentDir()
         => Path.Combine(Path.GetTempPath(), "vpnrouter-split-none-" + Guid.NewGuid().ToString("N"));
 }

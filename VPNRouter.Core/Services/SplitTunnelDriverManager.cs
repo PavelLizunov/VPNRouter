@@ -407,6 +407,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 int err = Marshal.GetLastWin32Error();
                 if (err == Native.ERROR_SERVICE_DOES_NOT_EXIST)
                     return CreateAndStartServiceLocked(scm);
+                if (err == Native.ERROR_SERVICE_MARKED_FOR_DELETE)
+                    LastFailureReason = "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split.";
                 _log.Warning("[SplitTunnel] OpenService failed (err={Err}) — post-capture stands", err);
                 return false;
             }
@@ -414,7 +416,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             {
                 // #3 — collision guard: what does the existing service point at?
                 string? existing = QueryServiceBinPath(svc);
-                switch (SplitTunnelPolicy.ClassifyServiceBinPath(existing ?? string.Empty, _sysPath))
+                var action = SplitTunnelPolicy.ClassifyServiceBinPath(existing ?? string.Empty, _sysPath);
+                switch (action)
                 {
                     case Proto.ServiceCollisionAction.BailForeign:
                         _log.Warning("[SplitTunnel] '{Svc}' exists with a foreign binPath ({Path}) — not touching it " +
@@ -432,9 +435,14 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                     case Proto.ServiceCollisionAction.StartExisting:
                         break;
                 }
-                return StartServiceLocked(svc);
+                if (StartServiceLocked(svc, out int startErr)) return true;
+                return TryRepairOwnStoppedServiceLocked(scm, ref svc, action, startErr);
             }
-            finally { Native.CloseServiceHandle(svc); }
+            finally
+            {
+                if (svc != IntPtr.Zero)
+                    Native.CloseServiceHandle(svc);
+            }
         }
         finally { Native.CloseServiceHandle(scm); }
     }
@@ -459,17 +467,20 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             else
             {
                 _log.Warning("[SplitTunnel] CreateService failed (err={Err}) — post-capture stands", err);
+                if (err == Native.ERROR_SERVICE_MARKED_FOR_DELETE)
+                    LastFailureReason = "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split.";
                 return false;
             }
         }
-        try { return StartServiceLocked(svc); }
+        try { return StartServiceLocked(svc, out _); }
         finally { Native.CloseServiceHandle(svc); }
     }
 
-    private bool StartServiceLocked(IntPtr svc)
+    private bool StartServiceLocked(IntPtr svc, out int err)
     {
+        err = 0;
         if (Native.StartService(svc, 0, null)) return true;
-        int err = Marshal.GetLastWin32Error();
+        err = Marshal.GetLastWin32Error();
         if (err == Native.ERROR_SERVICE_ALREADY_RUNNING) return true;
         if (err == Native.ERROR_ALREADY_EXISTS)
         {
@@ -477,7 +488,43 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return true;
         }
         _log.Warning("[SplitTunnel] StartService failed (err={Err}) — post-capture stands", err);
+        LastFailureReason = err == Native.ERROR_SERVICE_MARKED_FOR_DELETE
+            ? "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split."
+            : $"True-split driver service could not start (StartService err={err}).";
         return false;
+    }
+
+    private bool TryRepairOwnStoppedServiceLocked(
+        IntPtr scm,
+        ref IntPtr svc,
+        Proto.ServiceCollisionAction action,
+        int startErr)
+    {
+        uint? state = QueryServiceState(svc);
+        if (!SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(action, startErr, state))
+            return false;
+
+        _log.Warning("[SplitTunnel] Repairing stopped stale own service after StartService err={Err}: delete + recreate", startErr);
+        if (!Native.DeleteService(svc))
+        {
+            int err = Marshal.GetLastWin32Error();
+            LastFailureReason = err == Native.ERROR_SERVICE_MARKED_FOR_DELETE
+                ? "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split."
+                : $"True-split driver service repair failed (DeleteService err={err}).";
+            _log.Warning("[SplitTunnel] DeleteService repair failed (err={Err}) - post-capture stands", err);
+            return false;
+        }
+
+        Native.CloseServiceHandle(svc);
+        svc = IntPtr.Zero;
+        return CreateAndStartServiceLocked(scm);
+    }
+
+    private static uint? QueryServiceState(IntPtr svc)
+    {
+        return Native.QueryServiceStatus(svc, out var status)
+            ? status.dwCurrentState
+            : null;
     }
 
     private string? QueryServiceBinPath(IntPtr svc)

@@ -46,13 +46,17 @@ internal static class SplitTunnelDriverInterop
 
     public const int ERROR_SERVICE_EXISTS = 1073;
     public const int ERROR_SERVICE_ALREADY_RUNNING = 1056;
+    public const int ERROR_SERVICE_DISABLED = 1058;
     public const int ERROR_SERVICE_DOES_NOT_EXIST = 1060;
+    public const int ERROR_SERVICE_MARKED_FOR_DELETE = 1072;
     public const int ERROR_ALREADY_EXISTS = 183;
     public const int ERROR_FILE_NOT_FOUND = 2;
+    public const int ERROR_PATH_NOT_FOUND = 3;
     public const int ERROR_ACCESS_DENIED = 5;
     public const int ERROR_IO_PENDING = 997;
     public const int ERROR_OPERATION_ABORTED = 995;
     public const int ERROR_INSUFFICIENT_BUFFER = 122;   // QueryServiceConfig first-call sizing probe
+    public const uint SERVICE_STOPPED = 0x00000001;
 
     // ── fwpuclnt: WFP sublayer management ─────────────────────────────────────
     public const uint RPC_C_AUTHN_WINNT = 10;
@@ -179,11 +183,16 @@ internal static class SplitTunnelDriverInterop
         IntPtr hService, IntPtr lpServiceConfig, uint cbBufSize, out uint pcbBytesNeeded);
 
     [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool QueryServiceStatus(IntPtr hService, out SERVICE_STATUS lpServiceStatus);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool DeleteService(IntPtr hService);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
     public static extern bool CloseServiceHandle(IntPtr hSCObject);
 
-    // NB: no ControlService / DeleteService P/Invoke by design — the manager NEVER stops or deletes
-    // the kernel service (Disengage = RESET-to-inert only). Service removal is uninstall.ps1's job
-    // (sc.exe stop/delete, W1.4). Omitting the primitives makes "never stop the service" structural.
+    // NB: no ControlService P/Invoke by design. The manager never stops a running kernel service.
+    // DeleteService is only for a stopped, recognisably-ours stale service repair path.
 
     // ───────────────────────────────────────────────────────────────────────
     // fwpuclnt — WFP sublayer management
@@ -263,6 +272,18 @@ internal static class SplitTunnelDriverInterop
         [MarshalAs(UnmanagedType.LPWStr)] public string? lpDependencies;
         [MarshalAs(UnmanagedType.LPWStr)] public string? lpServiceStartName;
         [MarshalAs(UnmanagedType.LPWStr)] public string? lpDisplayName;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SERVICE_STATUS
+    {
+        public uint dwServiceType;
+        public uint dwCurrentState;
+        public uint dwControlsAccepted;
+        public uint dwWin32ExitCode;
+        public uint dwServiceSpecificExitCode;
+        public uint dwCheckPoint;
+        public uint dwWaitHint;
     }
 }
 

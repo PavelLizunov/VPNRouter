@@ -550,6 +550,12 @@ internal readonly record struct NicSnapshot(
 /// </summary>
 internal static class SplitTunnelPolicy
 {
+    private const uint ServiceStopped = 1;
+    private const int ErrorAccessDenied = 5;
+    private const int ErrorServiceAlreadyRunning = 1056;
+    private const int ErrorServiceMarkedForDelete = 1072;
+    private const int ErrorAlreadyExists = 183;
+
     /// <summary>
     /// True only when the driver should engage: Windows, routing mode = split, apps-mode =
     /// exclude, at least one excluded app, and the <c>true_split_driver</c> setting is not "off".
@@ -634,6 +640,20 @@ internal static class SplitTunnelPolicy
             return SplitTunnelDriverProtocol.ServiceCollisionAction.AdoptMovedInstall;
 
         return SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign;
+    }
+
+    public static bool CanRepairOwnStoppedServiceStartFailure(
+        SplitTunnelDriverProtocol.ServiceCollisionAction action,
+        int startError,
+        uint? serviceState)
+    {
+        if (action == SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign) return false;
+        if (serviceState != ServiceStopped) return false;
+        return startError != 0
+            && startError != ErrorAccessDenied
+            && startError != ErrorServiceAlreadyRunning
+            && startError != ErrorServiceMarkedForDelete
+            && startError != ErrorAlreadyExists;
     }
 
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
