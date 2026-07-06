@@ -340,6 +340,7 @@ public class MainWindowViewModelAppsModeTests
     {
         var vm = MakeVm();
         var settings = GetSettings(vm);
+        var expected = OperatingSystem.IsWindows() ? "OnlyBypass.exe" : "OnlyBypass";
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
         vm.AppsListEditorMode = "exclude";
@@ -347,8 +348,8 @@ public class MainWindowViewModelAppsModeTests
 
         vm.AddCustomAppCommand.Execute("OnlyBypass.exe");
 
-        Assert.Contains("OnlyBypass.exe", settings.App.RoutingAppsExclude);
-        Assert.DoesNotContain("OnlyBypass.exe", settings.App.RoutingAppsInclude);
+        Assert.Contains(expected, settings.App.RoutingAppsExclude);
+        Assert.DoesNotContain(expected, settings.App.RoutingAppsInclude);
     }
 
     [AvaloniaFact]
@@ -356,6 +357,7 @@ public class MainWindowViewModelAppsModeTests
     {
         var vm = MakeVm();
         var settings = GetSettings(vm);
+        var expected = OperatingSystem.IsWindows() ? "OnlyBypass.exe" : "OnlyBypass";
         settings.App.RoutingAppsInclude = new List<string>();
         settings.App.RoutingAppsExclude = new List<string>();
         vm.AppsListEditorMode = "exclude";
@@ -363,13 +365,13 @@ public class MainWindowViewModelAppsModeTests
         vm.SelectedBypassAppGroup = bypassCustom;
 
         vm.AddCustomAppCommand.Execute("OnlyBypass.exe");
-        var item = bypassCustom.Apps.First(a => a.ProcessName == "OnlyBypass.exe");
+        var item = bypassCustom.Apps.First(a => a.ProcessName == expected);
 
         vm.RemoveCustomAppCommand.Execute(item);
 
-        Assert.DoesNotContain("OnlyBypass.exe", settings.App.RoutingAppsExclude);
-        Assert.DoesNotContain(vm.AppGroups.SelectMany(g => g.Apps), a => a.ProcessName == "OnlyBypass.exe");
-        Assert.DoesNotContain(vm.BypassAppGroups.SelectMany(g => g.Apps), a => a.ProcessName == "OnlyBypass.exe");
+        Assert.DoesNotContain(expected, settings.App.RoutingAppsExclude);
+        Assert.DoesNotContain(vm.AppGroups.SelectMany(g => g.Apps), a => a.ProcessName == expected);
+        Assert.DoesNotContain(vm.BypassAppGroups.SelectMany(g => g.Apps), a => a.ProcessName == expected);
     }
 
     [AvaloniaFact]
