@@ -408,7 +408,10 @@ public class VpnEngine : IDisposable
     /// leaving the post-capture rules in charge. No-op when no driver is wired (non-Windows / tests).
     /// internal for a direct wiring test that doesn't need a full ProgramData-touching StartAsync.
     /// </summary>
-    internal async Task TryEngageSplitDriverAsync(AppSettings settings, CancellationToken ct)
+    internal async Task TryEngageSplitDriverAsync(
+        AppSettings settings,
+        CancellationToken ct,
+        bool allowForeignDriverTakeover = false)
     {
         if (_splitDriver is null)
         {
@@ -459,7 +462,11 @@ public class VpnEngine : IDisposable
 
         // ponytail: TUN is v4-only (TunSettings has no Ipv6Address); the driver zeroes the v6 slot,
         // and v4-only engage is live-proven (P3). Wire v6 through only if a v6 TUN setting ever lands.
-        var req = new SplitTunnelEngageRequest(dosPaths, settings.Tun?.Ipv4Address, TunnelIpv6: null);
+        var req = new SplitTunnelEngageRequest(
+            dosPaths,
+            settings.Tun?.Ipv4Address,
+            TunnelIpv6: null,
+            AllowForeignDriverTakeover: allowForeignDriverTakeover);
         bool ok = await _splitDriver.EngageAsync(req, ct).ConfigureAwait(false);
         _logger?.Information("[VpnEngine] True-split driver engage={Ok} ({N} excluded path(s) resolved)", ok, dosPaths.Count);
         var failReason = _splitDriver.LastFailureReason;
@@ -469,7 +476,7 @@ public class VpnEngine : IDisposable
     }
 
     public Task RestartTrueSplitAsync(AppSettings settings, CancellationToken ct = default) =>
-        TryEngageSplitDriverAsync(settings, ct);
+        TryEngageSplitDriverAsync(settings, ct, allowForeignDriverTakeover: true);
 
     private void SetTrueSplitState(TrueSplitState state, string reason)
     {

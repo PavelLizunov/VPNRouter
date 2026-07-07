@@ -37,15 +37,20 @@ internal static class SplitTunnelDriverInterop
     // ── advapi32: service control ─────────────────────────────────────────────
     public const uint SC_MANAGER_ALL_ACCESS = 0xF003F;
     public const uint SERVICE_ALL_ACCESS = 0xF01FF;
+    public const uint SERVICE_QUERY_STATUS = 0x0004;
+    public const uint SERVICE_CHANGE_CONFIG = 0x0002;
+    public const uint SERVICE_STOP = 0x0020;
     public const uint SERVICE_KERNEL_DRIVER = 0x00000001;
     public const uint SERVICE_DEMAND_START = 0x00000003;
     public const uint SERVICE_ERROR_NORMAL = 0x00000001;
+    public const uint SERVICE_CONTROL_STOP = 0x00000001;
 
     // ChangeServiceConfig "no change" sentinels (self-heal binPath, ABI §1.3 p.3).
     public const uint SERVICE_NO_CHANGE = 0xFFFFFFFF;
 
     public const int ERROR_SERVICE_EXISTS = 1073;
     public const int ERROR_SERVICE_ALREADY_RUNNING = 1056;
+    public const int ERROR_SERVICE_NOT_ACTIVE = 1062;
     public const int ERROR_SERVICE_DISABLED = 1058;
     public const int ERROR_SERVICE_DOES_NOT_EXIST = 1060;
     public const int ERROR_SERVICE_MARKED_FOR_DELETE = 1072;
@@ -186,13 +191,17 @@ internal static class SplitTunnelDriverInterop
     public static extern bool QueryServiceStatus(IntPtr hService, out SERVICE_STATUS lpServiceStatus);
 
     [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool ControlService(
+        IntPtr hService, uint dwControl, out SERVICE_STATUS lpServiceStatus);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
     public static extern bool DeleteService(IntPtr hService);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     public static extern bool CloseServiceHandle(IntPtr hSCObject);
 
-    // NB: no ControlService P/Invoke by design. The manager never stops a running kernel service.
-    // DeleteService is only for a stopped, recognisably-ours stale service repair path.
+    // ControlService is used only after the explicit True Split retry button, to unload a
+    // foreign mullvad-split-tunnel.sys driver that is already running.
 
     // ───────────────────────────────────────────────────────────────────────
     // fwpuclnt — WFP sublayer management
