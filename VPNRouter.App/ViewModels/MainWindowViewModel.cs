@@ -3976,6 +3976,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 TrueSplitState.Fallback => FormatTrueSplitFallback(reason),
                 _ => Strings.TrueSplitNotApplicable,
             };
+            IsTrueSplitActive = state is TrueSplitState.Active;
             IsTrueSplitProblem = state is TrueSplitState.DriverMissing or TrueSplitState.Fallback;
             _logger?.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
         });

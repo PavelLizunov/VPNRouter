@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -58,6 +60,17 @@ public class MainWindowViewModelAppsModeTests
         method!.Invoke(vm, new object?[] { processName, isChecked });
     }
 
+    private static async Task InvokeTrueSplitStateAsync(
+        MainWindowViewModel vm, TrueSplitState state, string reason = "")
+    {
+        var method = typeof(MainWindowViewModel).GetMethod(
+            "OnTrueSplitStateChanged",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method!.Invoke(vm, new object?[] { state, reason });
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+    }
+
     [AvaloniaFact]
     public void IsAppCheckedInCurrentMode_ReadsFromRoutingAppsInclude_WhenIncludeMode()
     {
@@ -78,6 +91,23 @@ public class MainWindowViewModelAppsModeTests
         Assert.False(InvokeIsAppCheckedInCurrentMode(vm, "Steam.exe"));
         // Unknown app — unchecked.
         Assert.False(InvokeIsAppCheckedInCurrentMode(vm, "nowhere.exe"));
+    }
+
+    [AvaloniaFact]
+    public async Task TrueSplitActiveState_HidesStatusBanner()
+    {
+        var vm = MakeVm();
+        vm.IsConnected = true;
+        vm.IsSplitTunnel = true;
+        vm.RoutingAppsMode = "exclude";
+
+        await InvokeTrueSplitStateAsync(vm, TrueSplitState.Starting);
+        Assert.True(vm.IsTrueSplitStatusVisible);
+        Assert.False(vm.IsTrueSplitActive);
+
+        await InvokeTrueSplitStateAsync(vm, TrueSplitState.Active);
+        Assert.True(vm.IsTrueSplitActive);
+        Assert.False(vm.IsTrueSplitStatusVisible);
     }
 
     [AvaloniaFact]

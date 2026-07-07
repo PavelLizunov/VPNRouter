@@ -18,7 +18,8 @@
 .PARAMETER Version
     Version string for the ZIP filename (default: "1.0")
 .PARAMETER SingBoxPath
-    Path to sing-box.exe to bundle (default: %ProgramData%\VPNRouter\bin\sing-box.exe)
+    Path to sing-box.exe to bundle. Empty uses publish\sing-box-lx.exe when present;
+    otherwise non-upload local builds fall back to upstream sing-box.
 .PARAMETER Upload
     Upload the ZIPs to GitHub Releases using gh CLI
 .PARAMETER GitHubRepo
@@ -42,13 +43,14 @@
 #>
 param(
     [string]$Version = "1.0",
-    # SingBoxVersion: upstream sing-box release to bundle (v2.27.2+).
+    # SingBoxVersion: upstream sing-box release used only for non-upload local builds
+    # when publish\sing-box-lx.exe is missing.
     # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
     # and build-mac.sh — all three platforms ship the same sing-box release.
     [string]$SingBoxVersion = "1.13.14",
-    # Optional override: pre-existing sing-box.exe to bundle instead of
-    # downloading upstream. Used for local testing of custom builds.
-    # Empty string means "auto-download upstream $SingBoxVersion".
+    # Optional override: pre-existing sing-box.exe to bundle.
+    # Empty string means "prefer publish\sing-box-lx.exe; fallback to upstream only
+    # for non-upload local builds".
     [string]$SingBoxPath = "",
     # Optional override: pre-built slipstream-client.exe (DNS-tunnel transport)
     # to bundle. Empty = probe tools\slipstream-cache\slipstream-client.exe, else
@@ -311,13 +313,32 @@ Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives
 # -SingBoxPath to bundle a custom build instead (e.g. the AmneziaWG/XHTTP
 # lx core from tools/build-singbox-lx.ps1 at publish/sing-box-lx.exe).
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
-if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
-    Copy-Item $SingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
+$effectiveSingBoxPath = $SingBoxPath
+if ($effectiveSingBoxPath -and -not (Test-Path $effectiveSingBoxPath)) {
+    throw "SingBoxPath not found: $effectiveSingBoxPath"
+}
+if (-not $effectiveSingBoxPath) {
+    $defaultLx = Join-Path $Root "publish\sing-box-lx.exe"
+    if (Test-Path $defaultLx) {
+        $effectiveSingBoxPath = $defaultLx
+        Write-Host "       Auto-selected sing-box-lx: $effectiveSingBoxPath" -ForegroundColor Gray
+    } elseif ($Upload) {
+        throw "Release upload requires sing-box-lx at publish\sing-box-lx.exe (or pass -SingBoxPath). Build it with tools\build-singbox-lx.ps1."
+    }
+}
+if ($effectiveSingBoxPath) {
+    if ($Upload) {
+        $versionText = & $effectiveSingBoxPath version 2>&1 | Out-String
+        if ($versionText -notmatch 'with_awg' -or $versionText -notmatch 'with_xhttp') {
+            throw "Release upload requires sing-box-lx with with_awg and with_xhttp tags. Version output:`n$versionText"
+        }
+    }
+    Copy-Item $effectiveSingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
     # v2.41.1: also grab a sibling libcronet.dll if the override points into an
     # extracted upstream archive — naive needs it next to sing-box.exe.
-    $ovCronet = Join-Path (Split-Path $SingBoxPath -Parent) "libcronet.dll"
+    $ovCronet = Join-Path (Split-Path $effectiveSingBoxPath -Parent) "libcronet.dll"
     if (Test-Path $ovCronet) { Copy-Item $ovCronet (Join-Path $DistDir "libcronet.dll") -Force }
-    Write-Host "       Copied from: $SingBoxPath (override)" -ForegroundColor Gray
+    Write-Host "       Copied from: $effectiveSingBoxPath (custom/lx)" -ForegroundColor Gray
 } else {
     # Auto-download upstream. Cache under tools\singbox-cache\ so repeat
     # builds reuse the download — version-pinned, so this cache never

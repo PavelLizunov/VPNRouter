@@ -809,22 +809,26 @@
                 IsVisible="{Binding !IsSimpleMode}"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceRaisedBrush}">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                <!-- Left: status dot + text; whole block is `min-width:0`
-                     (Grid * with TextTrimming) so long status lines ellide
-                     instead of pushing the Stop button off-screen. -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="7"
-                            VerticalAlignment="Center">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <!-- Left: Grid, not horizontal StackPanel, so StatusText gets a
+                     real width constraint and ellides before the button. -->
+                <Grid Grid.Column="0"
+                      ColumnDefinitions="Auto,*,Auto"
+                      ColumnSpacing="7"
+                      VerticalAlignment="Center"
+                      MinWidth="0">
                     <Ellipse Width="8" Height="8"
                              Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"
                              VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding StatusText}" FontSize="11"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding StatusText}" FontSize="11"
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
                     <!-- W1.3 "True split active" badge — visible only while the kernel split-tunnel
                          driver is ENGAGED (Windows exclude-mode). Tooltip carries the honest caveats. -->
-                    <Border IsVisible="{Binding IsTrueSplitActive}"
+                    <Border Grid.Column="2"
+                            IsVisible="{Binding IsTrueSplitActive}"
                             Background="{DynamicResource SuccessBgBrush}"
                             BorderBrush="{DynamicResource SuccessBorderBrush}"
                             BorderThickness="1" CornerRadius="{DynamicResource RadiusPill}"
@@ -833,7 +837,7 @@
                         <TextBlock Text="{Binding L_TrueSplitBadge}" FontSize="10" FontWeight="SemiBold"
                                    Foreground="{DynamicResource SuccessFgBrush}"/>
                     </Border>
-                </StackPanel>
+                </Grid>
 
                 <!-- Right: inline Start/Stop. Text toggles via ConnectButtonText
                      (Start / Stop / Starting / Stopping). Same command as the
