@@ -661,6 +661,22 @@ internal static class SplitTunnelPolicy
             && failureReason?.Contains("StartService err=183", StringComparison.OrdinalIgnoreCase) == true;
     }
 
+    public static bool IsForeignSplitDriverService(string? serviceName, string? pathName)
+    {
+        if (string.Equals(serviceName, SplitTunnelDriverProtocol.ServiceName, StringComparison.OrdinalIgnoreCase))
+            return false;
+        return NormalizeBinPath(pathName).EndsWith(@"\mullvad-split-tunnel.sys", StringComparison.Ordinal);
+    }
+
+    public static string FormatForeignSplitDriverOwner(string serviceName, string? displayName, string pathName)
+    {
+        string label = string.IsNullOrWhiteSpace(displayName) || string.Equals(displayName, serviceName, StringComparison.OrdinalIgnoreCase)
+            ? serviceName
+            : $"{displayName} ({serviceName})";
+        return "True Split cannot start because another split-tunnel kernel driver is already running: " +
+               $"{label} at {pathName}. Disable that VPN's split tunnel driver/service, reboot Windows, then retry True Split.";
+    }
+
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
     /// leading NT object-manager prefix (<c>\??\</c>), trims, lowercases (paths are
     /// case-insensitive on Windows). Empty/whitespace → empty string.</summary>

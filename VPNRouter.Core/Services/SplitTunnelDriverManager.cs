@@ -10,6 +10,9 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+#if PLATFORM_WINDOWS
+using System.Management;
+#endif
 using Microsoft.Win32.SafeHandles;
 using Serilog;
 
@@ -497,7 +500,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 && status.dwCurrentState == Native.SERVICE_STOPPED)
             {
                 var path = QueryServiceBinPath(svc) ?? "unknown";
-                LastFailureReason =
+                LastFailureReason = DescribeRunningForeignSplitDriverOwner() ??
                     $"True-split driver service '{Proto.ServiceName}' is stopped after StartService err=183 " +
                     $"(Win32ExitCode={status.dwWin32ExitCode}, Path={path}). Windows says the driver object already exists; " +
                     "close Mullvad/other VPN using mullvad-split-tunnel or reboot Windows, then retry True Split.";
@@ -527,6 +530,13 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (!SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(action, startErr, state))
             return false;
 
+        if (DescribeRunningForeignSplitDriverOwner() is { } foreignOwner)
+        {
+            LastFailureReason = foreignOwner;
+            _log.Warning("[SplitTunnel] Not repairing own stopped service: a foreign mullvad-split-tunnel driver is running");
+            return false;
+        }
+
         _log.Warning("[SplitTunnel] Repairing stopped stale own service after StartService err={Err}: delete + recreate", startErr);
         if (!Native.DeleteService(svc))
         {
@@ -545,13 +555,39 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
         if (SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(startErr, LastFailureReason))
         {
-            LastFailureReason =
+            LastFailureReason = DescribeRunningForeignSplitDriverOwner() ??
                 "True Split tried to repair the VPNRouter split driver service, but Windows still reports " +
                 "that the old driver object already exists (StartService err=183). Reboot Windows, then retry True Split.";
             _log.Warning("[SplitTunnel] Repair delete+recreate completed, but StartService still returned ERROR_ALREADY_EXISTS - reboot required");
         }
 
         return false;
+    }
+
+    private string? DescribeRunningForeignSplitDriverOwner()
+    {
+#if PLATFORM_WINDOWS
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Name, DisplayName, State, PathName FROM Win32_SystemDriver WHERE State = 'Running'");
+            foreach (ManagementObject driver in searcher.Get())
+            {
+                string name = Convert.ToString(driver["Name"]) ?? "";
+                string path = Convert.ToString(driver["PathName"]) ?? "";
+                if (!SplitTunnelPolicy.IsForeignSplitDriverService(name, path))
+                    continue;
+
+                string displayName = Convert.ToString(driver["DisplayName"]) ?? "";
+                return SplitTunnelPolicy.FormatForeignSplitDriverOwner(name, displayName, path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Debug(ex, "[SplitTunnel] Failed to inspect Win32_SystemDriver for foreign split driver owner");
+        }
+#endif
+        return null;
     }
 
     private static uint? QueryServiceState(IntPtr svc)

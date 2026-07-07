@@ -171,6 +171,31 @@ public class SplitTunnelManagerTests
         Assert.False(SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(5, "StartService err=183"));
     }
 
+    [Fact]
+    public void IsForeignSplitDriverService_DetectsAmneziaOwner()
+    {
+        Assert.True(SplitTunnelPolicy.IsForeignSplitDriverService(
+            "AmneziaVPNSplitTunnel",
+            @"\??\C:\Program Files\AmneziaVPN\mullvad-split-tunnel.sys"));
+
+        Assert.False(SplitTunnelPolicy.IsForeignSplitDriverService(
+            "mullvad-split-tunnel",
+            Ours));
+    }
+
+    [Fact]
+    public void FormatForeignSplitDriverOwner_NamesOwnerAndAction()
+    {
+        string text = SplitTunnelPolicy.FormatForeignSplitDriverOwner(
+            "AmneziaVPNSplitTunnel",
+            "Amnezia Split Tunnel Service",
+            @"\??\C:\Program Files\AmneziaVPN\mullvad-split-tunnel.sys");
+
+        Assert.Contains("Amnezia Split Tunnel Service (AmneziaVPNSplitTunnel)", text);
+        Assert.Contains("Disable", text);
+        Assert.Contains("reboot Windows", text);
+    }
+
     private static string NonexistentDir()
         => Path.Combine(Path.GetTempPath(), "vpnrouter-split-none-" + Guid.NewGuid().ToString("N"));
 }
