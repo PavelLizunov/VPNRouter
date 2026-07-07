@@ -756,6 +756,16 @@ public partial class MainWindowViewModel
             added = true;
         }
 
+        var exclude = _settings.App.RoutingAppsExclude ??= new List<string>();
+        if (!exclude.Any(a => a.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            exclude.Add(name);
+            bypassCustom.Apps
+                .FirstOrDefault(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase))
+                ?.RaiseIsCheckedChanged();
+            added = true;
+        }
+
         return added;
     }
 

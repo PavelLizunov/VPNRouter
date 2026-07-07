@@ -706,6 +706,12 @@ public static partial class Strings
     public static string MtuHint => Ru
         ? "Размер пакета TUN-интерфейса. По умолчанию 1420: лучше для Steam SDR и realtime-игр. 1400/1380 — запасные варианты для узких mobile/PPPoE/nested VPN путей. Значения ниже 1332 могут ломать Dota 2 / CS2 / TF2, выше 1420 — VPN/proxy пути из-за PMTU. Применяется при переподключении."
         : "TUN interface packet size. Default 1420: better for Steam SDR and realtime games. 1400/1380 are fallbacks for narrow mobile/PPPoE/nested VPN paths. Values below 1332 may break Dota 2 / CS2 / TF2; above 1420 may break VPN/proxy paths due to PMTU. Applied on reconnect.";
+    public static string MtuWarningLow => Ru
+        ? "MTU ниже 1332 может ломать Dota 2 / CS2 / TF2 / Steam SDR."
+        : "MTU below 1332 may break Dota 2 / CS2 / TF2 / Steam SDR.";
+    public static string MtuWarningHigh => Ru
+        ? "MTU выше 1420 может ломать VPN/proxy пути из-за PMTU. Попробуй 1400, затем 1380."
+        : "MTU above 1420 may break VPN/proxy paths due to PMTU. Try 1400, then 1380.";
     public static string ForceIpv4Label => Ru
         // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
         // a Russian sentence. Use natural RU "IPv6-утечек".

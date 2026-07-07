@@ -1901,19 +1901,26 @@
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"
-                  ToolTip.Tip="{Binding MtuHint}">
-              <TextBlock Grid.Column="0"
-                         Text="{Binding MtuLabel}"
+            <StackPanel Spacing="4" ToolTip.Tip="{Binding MtuHint}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding MtuLabel}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding TunMtu}"
+                         Width="90"
+                         VerticalAlignment="Center"
+                         HorizontalContentAlignment="Right"
+                         AutomationProperties.Name="{Binding MtuLabel}"/>
+              </Grid>
+              <TextBlock Text="{Binding TunMtuWarning}"
+                         IsVisible="{Binding TunMtuWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                         Foreground="{DynamicResource WarningFgBrush}"
+                         FontSize="11"
                          TextWrapping="Wrap"
-                         VerticalAlignment="Center"/>
-              <TextBox Grid.Column="1"
-                       Text="{Binding TunMtu}"
-                       Width="90"
-                       VerticalAlignment="Center"
-                       HorizontalContentAlignment="Right"
-                       AutomationProperties.Name="{Binding MtuLabel}"/>
-            </Grid>
+                         Margin="0,2,0,0"/>
+            </StackPanel>
           </Border>
         </StackPanel>
 

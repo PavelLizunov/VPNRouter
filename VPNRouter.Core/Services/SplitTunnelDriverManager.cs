@@ -306,6 +306,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         // must not stay engaged regardless of prior state. Full cleanup → fail-open to post-capture.
         if (addrs.inetV4 is null)
         {
+            LastFailureReason = "True-split could not find a physical internet adapter with an IPv4 gateway.";
             _log.Warning("[SplitTunnel] no internet NIC resolved — cannot bind excluded apps to a real address; fail-open to post-capture");
             BestEffortResetAndCloseLocked();
             return false;
@@ -395,8 +396,10 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         IntPtr scm = Native.OpenSCManager(null, null, Native.SC_MANAGER_ALL_ACCESS);
         if (scm == IntPtr.Zero)
         {
+            int err = Marshal.GetLastWin32Error();
+            LastFailureReason = $"True-split needs administrator access to Service Control Manager (OpenSCManager err={err}).";
             _log.Warning("[SplitTunnel] OpenSCManager failed (err={Err}) — need admin; post-capture stands",
-                Marshal.GetLastWin32Error());
+                err);
             return false;
         }
         try
@@ -409,6 +412,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                     return CreateAndStartServiceLocked(scm);
                 if (err == Native.ERROR_SERVICE_MARKED_FOR_DELETE)
                     LastFailureReason = "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split.";
+                else
+                    LastFailureReason = $"True-split driver service could not be opened (OpenService err={err}).";
                 _log.Warning("[SplitTunnel] OpenService failed (err={Err}) — post-capture stands", err);
                 return false;
             }
@@ -420,6 +425,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 switch (action)
                 {
                     case Proto.ServiceCollisionAction.BailForeign:
+                        LastFailureReason =
+                            $"True-split driver service '{Proto.ServiceName}' is owned by another install ({existing ?? "unknown path"}).";
                         _log.Warning("[SplitTunnel] '{Svc}' exists with a foreign binPath ({Path}) — not touching it " +
                             "(real Mullvad or unknown); post-capture stands", Proto.ServiceName, existing);
                         return false;
@@ -469,6 +476,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 _log.Warning("[SplitTunnel] CreateService failed (err={Err}) — post-capture stands", err);
                 if (err == Native.ERROR_SERVICE_MARKED_FOR_DELETE)
                     LastFailureReason = "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split.";
+                else
+                    LastFailureReason = $"True-split driver service could not be created (CreateService err={err}).";
                 return false;
             }
         }
@@ -549,6 +558,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         uint status = Native.FwpmEngineOpen0(null, Native.RPC_C_AUTHN_WINNT, IntPtr.Zero, IntPtr.Zero, out IntPtr engine);
         if (status != 0)
         {
+            LastFailureReason = $"Windows Filtering Platform is unavailable (FwpmEngineOpen0 status=0x{status:X8}).";
             _log.Warning("[SplitTunnel] FwpmEngineOpen0 failed (0x{S:X8}) — BFE stopped? post-capture stands", status);
             return false;
         }
@@ -572,6 +582,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             uint status = Native.FwpmSubLayerAdd0(engine, ref sub, IntPtr.Zero);
             if (status != 0 && status != Native.FWP_E_ALREADY_EXISTS)
             {
+                LastFailureReason = $"True-split WFP sublayer '{name}' could not be created (status=0x{status:X8}).";
                 _log.Warning("[SplitTunnel] FwpmSubLayerAdd0({Name}) failed (0x{S:X8})", name, status);
                 return false;
             }
@@ -628,7 +639,9 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         var evt = Native.CreateEventW(IntPtr.Zero, bManualReset: true, bInitialState: false, null);
         if (evt.IsInvalid)
         {
-            _log.Warning("[SplitTunnel] CreateEvent for control IOCTL failed (err={Err})", Marshal.GetLastWin32Error());
+            int err = Marshal.GetLastWin32Error();
+            LastFailureReason = $"True-split control event could not be created (CreateEvent err={err}).";
+            _log.Warning("[SplitTunnel] CreateEvent for control IOCTL failed (err={Err})", err);
             evt.Dispose();
             handle.Dispose();
             return false;

@@ -61,4 +61,41 @@ public class SteamLibraryScannerTests
             root.Delete(recursive: true);
         }
     }
+
+    [Fact]
+    public void FindGames_SkipsLockedManifestAndKeepsScanning()
+    {
+        var root = Directory.CreateTempSubdirectory("vpnrouter-steam-");
+        try
+        {
+            var steamApps = Path.Combine(root.FullName, "steamapps");
+            var gameDir = Path.Combine(steamApps, "common", "Good Game");
+            Directory.CreateDirectory(gameDir);
+
+            File.WriteAllText(
+                Path.Combine(steamApps, "appmanifest_123.acf"),
+                """
+                "AppState"
+                {
+                    "name" "Good Game"
+                    "installdir" "Good Game"
+                }
+                """);
+            File.WriteAllText(Path.Combine(gameDir, "GoodGame.exe"), "");
+
+            using var locked = new FileStream(
+                Path.Combine(steamApps, "appmanifest_999.acf"),
+                FileMode.Create,
+                FileAccess.ReadWrite,
+                FileShare.None);
+
+            var games = SteamLibraryScanner.FindGames(new[] { root.FullName });
+
+            Assert.Contains(games, g => g.ProcessName == "GoodGame.exe");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
 }

@@ -385,7 +385,7 @@ public class MainWindowViewModelAppsModeTests
     }
 
     [AvaloniaFact]
-    public void ImportedSteamCandidate_WhenSelected_WritesToExcludeOnly()
+    public void ImportedSteamCandidate_WritesToExcludeOnly()
     {
         var vm = MakeVm();
         var settings = GetSettings(vm);
@@ -404,10 +404,10 @@ public class MainWindowViewModelAppsModeTests
             .First(g => g.Name == "Custom Apps")
             .Apps
             .First(a => a.ProcessName == expected);
-        item.IsChecked = true;
 
         Assert.Contains(expected, settings.App.RoutingAppsExclude);
         Assert.DoesNotContain(expected, settings.App.RoutingAppsInclude);
+        Assert.True(item.IsChecked);
     }
 
     [AvaloniaFact]

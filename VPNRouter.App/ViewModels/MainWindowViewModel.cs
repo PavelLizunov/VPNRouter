@@ -100,7 +100,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     // W1.3: "True split active" badge — fed by VpnEngine.TrueSplitEngagedChanged (the kernel driver
     // engaged, so excluded apps are bound past the TUN). Bound to a small status-zone badge + tooltip.
-    [ObservableProperty] private bool _isTrueSplitActive;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
+    private bool _isTrueSplitActive;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
@@ -109,7 +112,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
     private bool _isTrueSplitProblem;
-    public bool IsTrueSplitStatusVisible => IsConnected && IsSplitTunnel && IsRoutingAppsModeExclude;
+    public bool IsTrueSplitStatusVisible =>
+        IsConnected && IsSplitTunnel && IsRoutingAppsModeExclude && (!IsTrueSplitActive || IsTrueSplitProblem);
     public bool IsTrueSplitRetryVisible => IsTrueSplitStatusVisible && IsTrueSplitProblem && _engine.IsRunning;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonText))]
@@ -1166,7 +1170,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // were the VM's own self-OnPropertyChanged announcements at lines
     // 806-807 (also removed).
     [ObservableProperty] private bool _strictMode = false;
-    [ObservableProperty] private int _tunMtu = TunSettings.DefaultMtu;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TunMtuWarning))]
+    private int _tunMtu = TunSettings.DefaultMtu;
+    public string TunMtuWarning => TunMtu < 1332
+        ? Strings.MtuWarningLow
+        : TunMtu > TunSettings.DefaultMtu
+            ? Strings.MtuWarningHigh
+            : string.Empty;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;

@@ -235,7 +235,7 @@ public class MainWindowViewModelCharacterizationTests
         // IsTrueSplitStatusVisible, IsTrueSplitRetryVisible, RestartTrueSplitCommand.
         // v2.46.0-r13 true-split diagnostics: failure reason reaches UI; service-owned
         // VPN connect adopts the Service instead of starting a parallel engine.
-        "fa3f46cdaeb1b5ad24c1b68480ac774995d06de284873da9308879678cea04c6";
+        "65594f04e72d25cbc3cfa4a98f0ad02ceb69f74eef0a5299d9b9a623472ac07e";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

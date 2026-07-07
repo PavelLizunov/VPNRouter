@@ -37,7 +37,7 @@ internal static partial class SteamLibraryScanner
             var steamApps = Path.Combine(library, "steamapps");
             if (!Directory.Exists(steamApps)) continue;
 
-            foreach (var manifest in Directory.EnumerateFiles(steamApps, "appmanifest_*.acf"))
+            foreach (var manifest in SafeEnumerateFiles(steamApps, "appmanifest_*.acf"))
             {
                 var (name, installDir) = ReadManifest(manifest);
                 if (string.IsNullOrWhiteSpace(installDir)) continue;
@@ -84,7 +84,7 @@ internal static partial class SteamLibraryScanner
             var vdf = Path.Combine(root, "steamapps", "libraryfolders.vdf");
             if (!File.Exists(vdf)) continue;
 
-            foreach (Match match in VdfPathRegex().Matches(File.ReadAllText(vdf)))
+            foreach (Match match in VdfPathRegex().Matches(ReadAllTextOrEmpty(vdf)))
             {
                 var path = UnescapeSteamPath(match.Groups[1].Value);
                 if (Directory.Exists(path) && seen.Add(path))
@@ -95,7 +95,8 @@ internal static partial class SteamLibraryScanner
 
     private static (string? Name, string? InstallDir) ReadManifest(string manifestPath)
     {
-        var text = File.ReadAllText(manifestPath);
+        var text = ReadAllTextOrEmpty(manifestPath);
+        if (text.Length == 0) return (null, null);
         return (
             ReadVdfValue(text, "name"),
             ReadVdfValue(text, "installdir"));
@@ -109,10 +110,10 @@ internal static partial class SteamLibraryScanner
 
     private static IEnumerable<string> EnumerateCandidateExecutables(string gameDir)
     {
-        var searchDirs = Directory.EnumerateDirectories(gameDir).Prepend(gameDir);
+        var searchDirs = SafeEnumerateDirectories(gameDir).Prepend(gameDir);
         foreach (var dir in searchDirs)
         {
-            foreach (var exe in Directory.EnumerateFiles(dir, "*.exe", SearchOption.TopDirectoryOnly))
+            foreach (var exe in SafeEnumerateFiles(dir, "*.exe"))
             {
                 if (!ShouldSkipExe(Path.GetFileNameWithoutExtension(exe)))
                     yield return exe;
@@ -122,6 +123,30 @@ internal static partial class SteamLibraryScanner
 
     private static bool ShouldSkipExe(string name)
         => SkipExePrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+    private static string ReadAllTextOrEmpty(string path)
+    {
+        try { return File.ReadAllText(path); }
+        catch (IOException) { return string.Empty; }
+        catch (UnauthorizedAccessException) { return string.Empty; }
+        catch (System.Security.SecurityException) { return string.Empty; }
+    }
+
+    private static IReadOnlyList<string> SafeEnumerateFiles(string dir, string pattern)
+    {
+        try { return Directory.EnumerateFiles(dir, pattern, SearchOption.TopDirectoryOnly).ToArray(); }
+        catch (IOException) { return Array.Empty<string>(); }
+        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+        catch (System.Security.SecurityException) { return Array.Empty<string>(); }
+    }
+
+    private static IReadOnlyList<string> SafeEnumerateDirectories(string dir)
+    {
+        try { return Directory.EnumerateDirectories(dir).ToArray(); }
+        catch (IOException) { return Array.Empty<string>(); }
+        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+        catch (System.Security.SecurityException) { return Array.Empty<string>(); }
+    }
 
     private static string UnescapeSteamPath(string path)
         => path.Replace(@"\\", @"\");
