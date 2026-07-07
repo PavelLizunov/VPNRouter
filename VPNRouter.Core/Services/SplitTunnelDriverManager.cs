@@ -540,7 +540,18 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
         Native.CloseServiceHandle(svc);
         svc = IntPtr.Zero;
-        return CreateAndStartServiceLocked(scm);
+        if (CreateAndStartServiceLocked(scm))
+            return true;
+
+        if (SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(startErr, LastFailureReason))
+        {
+            LastFailureReason =
+                "True Split tried to repair the VPNRouter split driver service, but Windows still reports " +
+                "that the old driver object already exists (StartService err=183). Reboot Windows, then retry True Split.";
+            _log.Warning("[SplitTunnel] Repair delete+recreate completed, but StartService still returned ERROR_ALREADY_EXISTS - reboot required");
+        }
+
+        return false;
     }
 
     private static uint? QueryServiceState(IntPtr svc)

@@ -160,6 +160,17 @@ public class SplitTunnelManagerTests
             P.ServiceCollisionAction.StartExisting, startError: 183, serviceState: 1));
     }
 
+    [Fact]
+    public void IsStaleDriverObjectAfterRepairFailure_OnlyErr183StartService()
+    {
+        Assert.True(SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(
+            183,
+            "True-split driver service 'mullvad-split-tunnel' is stopped after StartService err=183."));
+
+        Assert.False(SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(183, "CreateFile err=5"));
+        Assert.False(SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(5, "StartService err=183"));
+    }
+
     private static string NonexistentDir()
         => Path.Combine(Path.GetTempPath(), "vpnrouter-split-none-" + Guid.NewGuid().ToString("N"));
 }

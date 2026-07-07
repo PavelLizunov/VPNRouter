@@ -655,6 +655,12 @@ internal static class SplitTunnelPolicy
             && startError != ErrorServiceMarkedForDelete;
     }
 
+    public static bool IsStaleDriverObjectAfterRepairFailure(int startError, string? failureReason)
+    {
+        return startError == ErrorAlreadyExists
+            && failureReason?.Contains("StartService err=183", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
     /// leading NT object-manager prefix (<c>\??\</c>), trims, lowercases (paths are
     /// case-insensitive on Windows). Empty/whitespace → empty string.</summary>
