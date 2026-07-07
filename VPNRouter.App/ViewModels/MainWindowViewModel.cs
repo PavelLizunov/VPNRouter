@@ -3985,7 +3985,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (reason.Contains("err=5", StringComparison.OrdinalIgnoreCase)
             || reason.Contains("MULLVADSPLITTUNNEL", StringComparison.OrdinalIgnoreCase))
-            return Strings.TrueSplitDeviceBusy;
+            return string.IsNullOrWhiteSpace(reason) ? Strings.TrueSplitDeviceBusy : reason;
         if (!string.IsNullOrWhiteSpace(reason))
             return $"{Strings.TrueSplitFallback} {reason}";
         return Strings.TrueSplitFallback;

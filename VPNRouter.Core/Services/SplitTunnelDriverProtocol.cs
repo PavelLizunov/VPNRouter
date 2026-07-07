@@ -652,8 +652,7 @@ internal static class SplitTunnelPolicy
         return startError != 0
             && startError != ErrorAccessDenied
             && startError != ErrorServiceAlreadyRunning
-            && startError != ErrorServiceMarkedForDelete
-            && startError != ErrorAlreadyExists;
+            && startError != ErrorServiceMarkedForDelete;
     }
 
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a

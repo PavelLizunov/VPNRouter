@@ -493,6 +493,20 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (err == Native.ERROR_SERVICE_ALREADY_RUNNING) return true;
         if (err == Native.ERROR_ALREADY_EXISTS)
         {
+            if (Native.QueryServiceStatus(svc, out var status)
+                && status.dwCurrentState == Native.SERVICE_STOPPED)
+            {
+                var path = QueryServiceBinPath(svc) ?? "unknown";
+                LastFailureReason =
+                    $"True-split driver service '{Proto.ServiceName}' is stopped after StartService err=183 " +
+                    $"(Win32ExitCode={status.dwWin32ExitCode}, Path={path}). Windows says the driver object already exists; " +
+                    "close Mullvad/other VPN using mullvad-split-tunnel or reboot Windows, then retry True Split.";
+                _log.Warning(
+                    "[SplitTunnel] StartService returned ERROR_ALREADY_EXISTS but service is STOPPED " +
+                    "(Win32ExitCode={Exit}, Path={Path}) - stale/foreign driver object; trying safe repair if service is ours",
+                    status.dwWin32ExitCode, path);
+                return false;
+            }
             _log.Information("[SplitTunnel] StartService returned ERROR_ALREADY_EXISTS — continuing; device open will verify driver usability");
             return true;
         }

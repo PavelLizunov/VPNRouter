@@ -156,6 +156,8 @@ public class SplitTunnelManagerTests
             P.ServiceCollisionAction.StartExisting, startError: 5, serviceState: 1));
         Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
             P.ServiceCollisionAction.StartExisting, startError: 1072, serviceState: 1));
+        Assert.True(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
+            P.ServiceCollisionAction.StartExisting, startError: 183, serviceState: 1));
     }
 
     private static string NonexistentDir()
