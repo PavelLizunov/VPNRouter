@@ -684,7 +684,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             handle.Dispose();
             if (err == Native.ERROR_ACCESS_DENIED)
             {
-                LastFailureReason =
+                LastFailureReason = DescribeRunningForeignSplitDriverOwner() ??
                     "True-split driver device \\\\.\\MULLVADSPLITTUNNEL is busy (CreateFile err=5). " +
                     "Another VPNRouter Service/App or Mullvad process may hold it.";
                 _log.Warning("[SplitTunnel] CreateFile({Dev}) failed (err=5 access denied) — device held exclusively by another agent; post-capture stands", Proto.DevicePath);
