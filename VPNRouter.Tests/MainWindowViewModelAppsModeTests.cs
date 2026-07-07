@@ -71,6 +71,15 @@ public class MainWindowViewModelAppsModeTests
         await Dispatcher.UIThread.InvokeAsync(() => { });
     }
 
+    private static void InvokeMarkTrueSplitServiceManaged(MainWindowViewModel vm)
+    {
+        var method = typeof(MainWindowViewModel).GetMethod(
+            "MarkTrueSplitServiceManagedIfNeeded",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method!.Invoke(vm, null);
+    }
+
     [AvaloniaFact]
     public void IsAppCheckedInCurrentMode_ReadsFromRoutingAppsInclude_WhenIncludeMode()
     {
@@ -108,6 +117,22 @@ public class MainWindowViewModelAppsModeTests
         await InvokeTrueSplitStateAsync(vm, TrueSplitState.Active);
         Assert.True(vm.IsTrueSplitActive);
         Assert.False(vm.IsTrueSplitStatusVisible);
+    }
+
+    [AvaloniaFact]
+    public void TrueSplitServiceManaged_ShowsBannerWithoutRetry()
+    {
+        var vm = MakeVm();
+        vm.IsConnected = true;
+        vm.IsSplitTunnel = true;
+        vm.RoutingAppsMode = "exclude";
+
+        InvokeMarkTrueSplitServiceManaged(vm);
+
+        Assert.True(vm.IsTrueSplitStatusVisible);
+        Assert.True(vm.IsTrueSplitProblem);
+        Assert.False(vm.IsTrueSplitRetryVisible);
+        Assert.Contains("Windows", vm.TrueSplitStatusText);
     }
 
     [AvaloniaFact]

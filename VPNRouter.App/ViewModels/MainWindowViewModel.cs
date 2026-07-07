@@ -2932,6 +2932,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             StatusText = IsRussian
                 ? $"Подключено через службу [{mode}]"
                 : $"Connected via service [{mode}]";
+            MarkTrueSplitServiceManagedIfNeeded();
             StartSubRefreshTimer();
             _logger.Information("[VM] Detected VPN running via service (sing-box alive + TUN owned)");
         }
@@ -3980,6 +3981,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             IsTrueSplitProblem = state is TrueSplitState.DriverMissing or TrueSplitState.Fallback;
             _logger?.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
         });
+
+    private void MarkTrueSplitServiceManagedIfNeeded()
+    {
+        if (!IsSplitTunnel || !IsRoutingAppsModeExclude) return;
+        IsTrueSplitActive = false;
+        IsTrueSplitProblem = true;
+        TrueSplitStatusText = Strings.TrueSplitServiceManaged;
+    }
 
     private static string FormatTrueSplitFallback(string reason)
     {

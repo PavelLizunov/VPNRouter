@@ -120,6 +120,9 @@ public static class Strings
     public static string TrueSplitDeviceBusy => Ru
         ? "True Split не запустился: драйвер занят другим процессом или службой (err=5). Закройте Mullvad/VPNRouter Service или перезагрузите Windows."
         : "True Split did not start: the driver is held by another process or service (err=5). Close Mullvad/VPNRouter Service or reboot Windows.";
+    public static string TrueSplitServiceManaged => Ru
+        ? "VPN запущен службой Windows. True Split контролирует служба; чтобы перезапустить его вручную, остановите VPN и запустите его из приложения."
+        : "VPN is running in the Windows Service. True Split is controlled by the service; stop VPN and start it from the app to retry manually.";
     public static string TrueSplitNotApplicable => Ru
         ? "True Split доступен только для списка «Мимо VPN»."
         : "True Split applies only to the bypass list.";

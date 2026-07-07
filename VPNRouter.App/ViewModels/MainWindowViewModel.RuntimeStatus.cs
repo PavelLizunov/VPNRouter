@@ -236,6 +236,7 @@ public partial class MainWindowViewModel
             StatusText = IsRussian
                 ? $"Подключено через службу [{mode}]"
                 : $"Connected via service [{mode}]";
+            MarkTrueSplitServiceManagedIfNeeded();
             try { StartSubRefreshTimer(); } catch { }
         }
         else if (!vpnRunning && IsConnected)

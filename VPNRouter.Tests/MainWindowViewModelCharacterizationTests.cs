@@ -235,7 +235,10 @@ public class MainWindowViewModelCharacterizationTests
         // IsTrueSplitStatusVisible, IsTrueSplitRetryVisible, RestartTrueSplitCommand.
         // v2.46.0-r13 true-split diagnostics: failure reason reaches UI; service-owned
         // VPN connect adopts the Service instead of starting a parallel engine.
-        "65594f04e72d25cbc3cfa4a98f0ad02ceb69f74eef0a5299d9b9a623472ac07e";
+        // v2.46.0-r20 true-split UX: service-owned VPN now shows a clear
+        // "True Split is controlled by Windows Service" banner instead of
+        // leaving GUI retry/control ambiguous.
+        "10d322710620d0affc5a3e9bfc68a14c32da4534de7efc29f202c0d49a4dc45c";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
