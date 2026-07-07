@@ -4032,6 +4032,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task RestartTrueSplitAsync()
     {
         if (!IsConnected || !_engine.IsRunning) return;
+#if PLATFORM_WINDOWS
+        await Task.Run(() =>
+        {
+            try
+            {
+                if (!VPNRouter.App.Services.WindowsServiceHelper.IsRunning()) return;
+                var result = VPNRouter.App.Services.WindowsServiceHelper.Stop();
+                if (result.Success)
+                    _logger.Information("[VM] TrueSplit retry stopped VPNRouter Service before re-engage: {Message}", result.Message);
+                else
+                    _logger.Warning("[VM] TrueSplit retry could not stop VPNRouter Service: {Message}", result.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "[VM] TrueSplit retry service-stop probe failed");
+            }
+        });
+#endif
         SaveSettings();
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
         await Task.Run(() => _engine.RestartTrueSplitAsync(_settings, CancellationToken.None));

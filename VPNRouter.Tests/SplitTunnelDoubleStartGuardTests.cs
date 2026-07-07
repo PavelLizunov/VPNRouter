@@ -57,6 +57,28 @@ public sealed class SplitTunnelDoubleStartGuardTests
     }
 
     [Fact]
+    public void MainWindowViewModel_RestartTrueSplit_StopsVpnRouterServiceBeforeRetry()
+    {
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        if (src == null) return;
+
+        var start = src.IndexOf("private async Task RestartTrueSplitAsync()", System.StringComparison.Ordinal);
+        Assert.True(start >= 0, "RestartTrueSplitAsync method not found");
+
+        var end = src.IndexOf("private async Task ToggleConnectionAsync()", start, System.StringComparison.Ordinal);
+        Assert.True(end > start, "RestartTrueSplitAsync boundary not found");
+
+        var method = src.Substring(start, end - start);
+        var stopIdx = method.IndexOf("WindowsServiceHelper.Stop()", System.StringComparison.Ordinal);
+        var retryIdx = method.IndexOf("_engine.RestartTrueSplitAsync", System.StringComparison.Ordinal);
+
+        Assert.Contains("WindowsServiceHelper.IsRunning()", method);
+        Assert.True(stopIdx >= 0, "True Split retry must stop VPNRouter Service when it is running.");
+        Assert.True(retryIdx >= 0, "True Split retry must still re-engage the engine.");
+        Assert.True(stopIdx < retryIdx, "VPNRouter Service must be stopped before true-split re-engage.");
+    }
+
+    [Fact]
     public void MainWindowViewModel_Reconnect_UsesApplyBeforeStartFallback()
     {
         var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
