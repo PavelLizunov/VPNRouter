@@ -410,8 +410,7 @@ public class VpnEngine : IDisposable
     /// </summary>
     internal async Task TryEngageSplitDriverAsync(
         AppSettings settings,
-        CancellationToken ct,
-        bool allowForeignDriverTakeover = false)
+        CancellationToken ct)
     {
         if (_splitDriver is null)
         {
@@ -465,8 +464,7 @@ public class VpnEngine : IDisposable
         var req = new SplitTunnelEngageRequest(
             dosPaths,
             settings.Tun?.Ipv4Address,
-            TunnelIpv6: null,
-            AllowForeignDriverTakeover: allowForeignDriverTakeover);
+            TunnelIpv6: null);
         bool ok = await _splitDriver.EngageAsync(req, ct).ConfigureAwait(false);
         _logger?.Information("[VpnEngine] True-split driver engage={Ok} ({N} excluded path(s) resolved)", ok, dosPaths.Count);
         var failReason = _splitDriver.LastFailureReason;
@@ -476,7 +474,7 @@ public class VpnEngine : IDisposable
     }
 
     public Task RestartTrueSplitAsync(AppSettings settings, CancellationToken ct = default) =>
-        TryEngageSplitDriverAsync(settings, ct, allowForeignDriverTakeover: true);
+        TryEngageSplitDriverAsync(settings, ct);
 
     private void SetTrueSplitState(TrueSplitState state, string reason)
     {

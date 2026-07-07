@@ -652,13 +652,8 @@ internal static class SplitTunnelPolicy
         return startError != 0
             && startError != ErrorAccessDenied
             && startError != ErrorServiceAlreadyRunning
-            && startError != ErrorServiceMarkedForDelete;
-    }
-
-    public static bool IsStaleDriverObjectAfterRepairFailure(int startError, string? failureReason)
-    {
-        return startError == ErrorAlreadyExists
-            && failureReason?.Contains("StartService err=183", StringComparison.OrdinalIgnoreCase) == true;
+            && startError != ErrorServiceMarkedForDelete
+            && startError != ErrorAlreadyExists;
     }
 
     public static bool IsForeignSplitDriverService(string? serviceName, string? pathName)

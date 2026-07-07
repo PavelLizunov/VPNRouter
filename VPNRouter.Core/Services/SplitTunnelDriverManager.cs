@@ -81,8 +81,7 @@ public interface ISplitTunnelDriver : IDisposable
 public sealed record SplitTunnelEngageRequest(
     IReadOnlyList<string> ExcludedDosPaths,
     string? TunnelIpv4,
-    string? TunnelIpv6,
-    bool AllowForeignDriverTakeover = false);
+    string? TunnelIpv6);
 
 public enum TrueSplitState
 {
@@ -294,7 +293,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
 
         // #2/#3 — ensure the kernel service (create / adopt-moved / start), collision-guarded.
-        if (!EnsureServiceLocked(request.AllowForeignDriverTakeover)) return false;
+        if (!EnsureServiceLocked()) return false;
 
         // Micro-invariant: sublayers BEFORE any driver IOCTL, so the driver's filters never land
         // in a sublayer we later delete (#6, and avoids FWP_E_IN_USE junk on teardown).
@@ -395,7 +394,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     // ─── SCM: create / adopt / start (never stop) ───────────────────────────────
 
-    private bool EnsureServiceLocked(bool allowForeignDriverTakeover)
+    private bool EnsureServiceLocked()
     {
         IntPtr scm = Native.OpenSCManager(null, null, Native.SC_MANAGER_ALL_ACCESS);
         if (scm == IntPtr.Zero)
@@ -408,9 +407,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
         try
         {
-            if (allowForeignDriverTakeover && !TakeOverForeignSplitDriversLocked(scm))
-                return false;
-
             IntPtr svc = Native.OpenService(scm, Proto.ServiceName, Native.SERVICE_ALL_ACCESS);
             if (svc == IntPtr.Zero)
             {
@@ -557,93 +553,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (CreateAndStartServiceLocked(scm))
             return true;
 
-        if (SplitTunnelPolicy.IsStaleDriverObjectAfterRepairFailure(startErr, LastFailureReason))
-        {
-            LastFailureReason = DescribeRunningForeignSplitDriverOwner() ??
-                "True Split tried to repair the VPNRouter split driver service, but Windows still reports " +
-                "that the old driver object already exists (StartService err=183). Reboot Windows, then retry True Split.";
-            _log.Warning("[SplitTunnel] Repair delete+recreate completed, but StartService still returned ERROR_ALREADY_EXISTS - reboot required");
-        }
-
-        return false;
-    }
-
-    private bool TakeOverForeignSplitDriversLocked(IntPtr scm)
-    {
-        var foreignDrivers = FindRunningForeignSplitDrivers();
-        foreach (var foreign in foreignDrivers)
-        {
-            string label = FormatForeignSplitDriverLabel(foreign);
-            _log.Warning("[SplitTunnel] True Split retry taking over foreign split driver {Label} at {Path}",
-                label, foreign.PathName);
-
-            IntPtr svc = Native.OpenService(scm, foreign.ServiceName,
-                Native.SERVICE_STOP | Native.SERVICE_QUERY_STATUS | Native.SERVICE_CHANGE_CONFIG);
-            if (svc == IntPtr.Zero)
-            {
-                int err = Marshal.GetLastWin32Error();
-                LastFailureReason = $"True Split could not open foreign split driver service {label} (OpenService err={err}). " +
-                    "Close that VPN as administrator or reboot Windows, then retry True Split.";
-                _log.Warning("[SplitTunnel] OpenService({Svc}) for takeover failed (err={Err})", foreign.ServiceName, err);
-                return false;
-            }
-
-            try
-            {
-                if (!Native.ChangeServiceConfig(svc, Native.SERVICE_NO_CHANGE, Native.SERVICE_DEMAND_START,
-                        Native.SERVICE_NO_CHANGE, null, null, IntPtr.Zero, null, null, null, null))
-                    _log.Warning("[SplitTunnel] Could not set foreign split driver {Svc} to demand-start (err={Err}); trying stop anyway",
-                        foreign.ServiceName, Marshal.GetLastWin32Error());
-
-                if (!StopForeignSplitDriverLocked(svc, label))
-                    return false;
-            }
-            finally
-            {
-                Native.CloseServiceHandle(svc);
-            }
-        }
-
-        return true;
-    }
-
-    private bool StopForeignSplitDriverLocked(IntPtr svc, string label)
-    {
-        if (Native.QueryServiceStatus(svc, out var before) && before.dwCurrentState == Native.SERVICE_STOPPED)
-            return true;
-
-        if (!Native.ControlService(svc, Native.SERVICE_CONTROL_STOP, out _))
-        {
-            int err = Marshal.GetLastWin32Error();
-            if (err != Native.ERROR_SERVICE_NOT_ACTIVE)
-            {
-                LastFailureReason = $"True Split could not stop foreign split driver service {label} (ControlService STOP err={err}). " +
-                    "Close that VPN or reboot Windows, then retry True Split.";
-                _log.Warning("[SplitTunnel] ControlService(STOP) for foreign split driver {Label} failed (err={Err})", label, err);
-                return false;
-            }
-        }
-
-        for (int i = 0; i < 50; i++)
-        {
-            if (!Native.QueryServiceStatus(svc, out var status))
-            {
-                int err = Marshal.GetLastWin32Error();
-                LastFailureReason = $"True Split could not query foreign split driver service {label} after stop (QueryServiceStatus err={err}). " +
-                    "Reboot Windows, then retry True Split.";
-                _log.Warning("[SplitTunnel] QueryServiceStatus after takeover stop failed for {Label} (err={Err})", label, err);
-                return false;
-            }
-
-            if (status.dwCurrentState == Native.SERVICE_STOPPED)
-                return true;
-
-            Thread.Sleep(100);
-        }
-
-        LastFailureReason = $"True Split asked Windows to stop foreign split driver service {label}, but it did not stop within 5 seconds. " +
-            "Close that VPN or reboot Windows, then retry True Split.";
-        _log.Warning("[SplitTunnel] Foreign split driver {Label} did not stop within timeout", label);
         return false;
     }
 
@@ -680,12 +589,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 #endif
         return result;
     }
-
-    private static string FormatForeignSplitDriverLabel(ForeignSplitDriverService foreign)
-        => string.IsNullOrWhiteSpace(foreign.DisplayName)
-            || string.Equals(foreign.DisplayName, foreign.ServiceName, StringComparison.OrdinalIgnoreCase)
-            ? foreign.ServiceName
-            : $"{foreign.DisplayName} ({foreign.ServiceName})";
 
     private readonly record struct ForeignSplitDriverService(string ServiceName, string DisplayName, string PathName);
 

@@ -134,11 +134,10 @@ public sealed class VpnEngineSplitTunnelResolveTests
         // TUN v4 flowed into the request; v6 is intentionally null (TunSettings has no v6).
         Assert.Equal("172.19.0.2/30", driver.LastRequest.TunnelIpv4);
         Assert.Null(driver.LastRequest.TunnelIpv6);
-        Assert.False(driver.LastRequest.AllowForeignDriverTakeover);
     }
 
     [Fact]
-    public async Task RestartTrueSplit_AllowsForeignDriverTakeover()
+    public async Task RestartTrueSplit_ReengagesWithoutForeignDriverTakeover()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "TryEngageSplitDriverAsync's engage gate + ProcessImagePath resolvers are Windows-only.");
@@ -150,7 +149,7 @@ public sealed class VpnEngineSplitTunnelResolveTests
 
         Assert.Equal(1, driver.EngageCount);
         Assert.NotNull(driver.LastRequest);
-        Assert.True(driver.LastRequest!.AllowForeignDriverTakeover);
+        Assert.Single(driver.LastRequest!.ExcludedDosPaths);
     }
 
     [Fact]
