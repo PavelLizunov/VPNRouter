@@ -186,9 +186,6 @@ internal static class SplitTunnelDriverInterop
     public static extern bool QueryServiceStatus(IntPtr hService, out SERVICE_STATUS lpServiceStatus);
 
     [DllImport("advapi32.dll", SetLastError = true)]
-    public static extern bool DeleteService(IntPtr hService);
-
-    [DllImport("advapi32.dll", SetLastError = true)]
     public static extern bool CloseServiceHandle(IntPtr hSCObject);
 
     // ───────────────────────────────────────────────────────────────────────

@@ -203,6 +203,10 @@ public static class DiagnosticsExporter
         AppendCommand(sb, "sc query VPNRouter", "sc.exe", "query", "VPNRouter");
         AppendCommand(sb, "sc qc mullvad-split-tunnel", "sc.exe", "qc", "mullvad-split-tunnel");
         AppendCommand(sb, "sc query mullvad-split-tunnel", "sc.exe", "query", "mullvad-split-tunnel");
+        AppendCommand(sb, "sc qc AmneziaVPNSplitTunnel", "sc.exe", "qc", "AmneziaVPNSplitTunnel");
+        AppendCommand(sb, "sc query AmneziaVPNSplitTunnel", "sc.exe", "query", "AmneziaVPNSplitTunnel");
+        AppendCommand(sb, "sc qc AmneziaVPN-service", "sc.exe", "qc", "AmneziaVPN-service");
+        AppendCommand(sb, "sc query AmneziaVPN-service", "sc.exe", "query", "AmneziaVPN-service");
 
         AppendCommand(sb, "matching Win32_SystemDriver rows", "powershell.exe",
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
@@ -214,6 +218,12 @@ public static class DiagnosticsExporter
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
             "Get-Process *mullvad*,*vpnrouter*,sing-box -ErrorAction SilentlyContinue | " +
             "Select Id,ProcessName,Path | Format-Table -AutoSize | Out-String -Width 4096");
+
+        AppendCommand(sb, "recent System driver/service events", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "Get-WinEvent -FilterHashtable @{LogName='System'; StartTime=(Get-Date).AddHours(-12)} -ErrorAction SilentlyContinue | " +
+            "? { $_.ProviderName -match 'Service Control Manager|BugCheck|WER-SystemErrorReporting' -or $_.Message -match 'mullvad|Amnezia|split|BugCheck|bugcheck' } | " +
+            "Select -First 80 TimeCreated,Id,ProviderName,LevelDisplayName,Message | Format-List | Out-String -Width 4096");
 
         return sb.ToString();
 

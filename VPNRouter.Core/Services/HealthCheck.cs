@@ -300,7 +300,10 @@ public static class HealthCheck
                     $"{singboxCount} sing-box processes running (PIDs {singboxPids}) — multiple owners is unusual; one of them is likely orphaned"));
 
             if (OperatingSystem.IsWindows())
+            {
                 CheckWindowsServiceOwnership(results, singboxCount, appCount);
+                CheckTrueSplitReadiness(results);
+            }
         }
         catch (Exception ex)
         {
@@ -375,6 +378,79 @@ public static class HealthCheck
         {
             results.Add(new(Level.Warn, $"could not query Windows Service: {ex.Message}"));
         }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void CheckTrueSplitReadiness(List<Result> results)
+    {
+        try
+        {
+            var ownQuery = RunSc("query", "mullvad-split-tunnel");
+            var ownConfig = RunSc("qc", "mullvad-split-tunnel");
+            if (ownQuery.Exists)
+            {
+                var path = ExtractScValue(ownConfig.Output, "BINARY_PATH_NAME");
+                var action = SplitTunnelPolicy.ClassifyServiceBinPath(
+                    path,
+                    Path.Combine(AppContext.BaseDirectory, "driver", "mullvad-split-tunnel.sys"));
+                if (action == SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign)
+                    results.Add(new(Level.Warn,
+                        $"True Split service name is owned by another install: {path}. VPNRouter will not take it over."));
+                else if (ownQuery.Output.Contains("WIN32_EXIT_CODE", StringComparison.OrdinalIgnoreCase)
+                         && ownQuery.Output.Contains("183", StringComparison.Ordinal))
+                    results.Add(new(Level.Warn,
+                        "True Split driver service reports Win32ExitCode=183. Windows still has a driver object; close other VPNs and reboot before retrying True Split."));
+            }
+
+            var amneziaDriver = RunSc("query", "AmneziaVPNSplitTunnel");
+            if (amneziaDriver.Running)
+                results.Add(new(Level.Warn,
+                    "Amnezia split-tunnel kernel driver is RUNNING. True Split will not start until Amnezia split tunneling is disabled and Windows is rebooted."));
+            else if (amneziaDriver.Exists)
+                results.Add(new(Level.Ok,
+                    "Amnezia split-tunnel driver is installed but not running"));
+
+            var amneziaService = RunSc("query", "AmneziaVPN-service");
+            if (amneziaService.Running)
+                results.Add(new(Level.Warn,
+                    "AmneziaVPN-service is RUNNING. If it auto-starts its split driver, stop it in Amnezia before retrying True Split."));
+
+            results.Add(new(Level.Ok,
+                "True Split note: ICMP ping/MTU tests are unreliable while True Split is active; test MTU with True Split off or ordinary split."));
+        }
+        catch (Exception ex)
+        {
+            results.Add(new(Level.Warn, $"True Split readiness check failed: {ex.Message}"));
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static (bool Exists, bool Running, string Output) RunSc(string verb, string serviceName)
+    {
+        var psi = new ProcessStartInfo("sc.exe", $"{verb} {serviceName}")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        using var proc = Process.Start(psi);
+        if (proc == null) return (false, false, "");
+        var output = proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd();
+        proc.WaitForExit(3000);
+        return (proc.ExitCode == 0, output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase), output);
+    }
+
+    private static string ExtractScValue(string output, string key)
+    {
+        foreach (var line in output.Replace("\r\n", "\n").Split('\n'))
+        {
+            var idx = line.IndexOf(':');
+            if (idx < 0) continue;
+            if (line[..idx].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
+                return line[(idx + 1)..].Trim();
+        }
+        return string.Empty;
     }
 
     /// <summary>

@@ -79,6 +79,29 @@ public sealed class SplitTunnelDoubleStartGuardTests
     }
 
     [Fact]
+    public void SplitTunnelManager_RuntimePath_DoesNotDeleteKernelService()
+    {
+        var manager = LoadSource("VPNRouter.Core", "Services", "SplitTunnelDriverManager.cs");
+        var interop = LoadSource("VPNRouter.Core", "Services", "SplitTunnelDriverInterop.cs");
+        if (manager == null || interop == null) return;
+
+        Assert.DoesNotContain("DeleteService", manager);
+        Assert.DoesNotContain("ControlService", manager);
+        Assert.DoesNotContain("DeleteService", interop);
+        Assert.Contains("Foreign split-tunnel kernel driver is running before our start path", manager);
+    }
+
+    [Fact]
+    public void DiagnosticsExporter_CapturesAmneziaSplitDriverState()
+    {
+        var src = LoadSource("VPNRouter.Core", "Services", "Diagnostics", "DiagnosticsExporter.cs");
+        if (src == null) return;
+
+        Assert.Contains("AmneziaVPNSplitTunnel", src);
+        Assert.Contains("recent System driver/service events", src);
+    }
+
+    [Fact]
     public void MainWindowViewModel_Reconnect_UsesApplyBeforeStartFallback()
     {
         var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");

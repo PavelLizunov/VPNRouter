@@ -293,6 +293,13 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
 
         // #2/#3 — ensure the kernel service (create / adopt-moved / start), collision-guarded.
+        if (DescribeRunningForeignSplitDriverOwner() is { } foreignOwner)
+        {
+            LastFailureReason = foreignOwner;
+            _log.Warning("[SplitTunnel] Foreign split-tunnel kernel driver is running before our start path; not touching SCM");
+            return false;
+        }
+
         if (!EnsureServiceLocked()) return false;
 
         // Micro-invariant: sublayers BEFORE any driver IOCTL, so the driver's filters never land
@@ -446,7 +453,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                         break;
                 }
                 if (StartServiceLocked(svc, out int startErr)) return true;
-                return TryRepairOwnStoppedServiceLocked(scm, ref svc, action, startErr);
+                _log.Warning("[SplitTunnel] StartService failed (err={Err}); not deleting/recreating kernel service at runtime", startErr);
+                return false;
             }
             finally
             {
@@ -520,42 +528,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         return false;
     }
 
-    private bool TryRepairOwnStoppedServiceLocked(
-        IntPtr scm,
-        ref IntPtr svc,
-        Proto.ServiceCollisionAction action,
-        int startErr)
-    {
-        uint? state = QueryServiceState(svc);
-        if (!SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(action, startErr, state))
-            return false;
-
-        if (DescribeRunningForeignSplitDriverOwner() is { } foreignOwner)
-        {
-            LastFailureReason = foreignOwner;
-            _log.Warning("[SplitTunnel] Not repairing own stopped service: a foreign mullvad-split-tunnel driver is running");
-            return false;
-        }
-
-        _log.Warning("[SplitTunnel] Repairing stopped stale own service after StartService err={Err}: delete + recreate", startErr);
-        if (!Native.DeleteService(svc))
-        {
-            int err = Marshal.GetLastWin32Error();
-            LastFailureReason = err == Native.ERROR_SERVICE_MARKED_FOR_DELETE
-                ? "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split."
-                : $"True-split driver service repair failed (DeleteService err={err}).";
-            _log.Warning("[SplitTunnel] DeleteService repair failed (err={Err}) - post-capture stands", err);
-            return false;
-        }
-
-        Native.CloseServiceHandle(svc);
-        svc = IntPtr.Zero;
-        if (CreateAndStartServiceLocked(scm))
-            return true;
-
-        return false;
-    }
-
     private string? DescribeRunningForeignSplitDriverOwner()
     {
         foreach (var foreign in FindRunningForeignSplitDrivers())
@@ -591,13 +563,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     }
 
     private readonly record struct ForeignSplitDriverService(string ServiceName, string DisplayName, string PathName);
-
-    private static uint? QueryServiceState(IntPtr svc)
-    {
-        return Native.QueryServiceStatus(svc, out var status)
-            ? status.dwCurrentState
-            : null;
-    }
 
     private string? QueryServiceBinPath(IntPtr svc)
     {

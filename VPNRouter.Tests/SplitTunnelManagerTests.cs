@@ -143,24 +143,6 @@ public class SplitTunnelManagerTests
     }
 
     [Fact]
-    public void CanRepairOwnStoppedServiceStartFailure_OnlyStoppedOurs()
-    {
-        Assert.True(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
-            P.ServiceCollisionAction.StartExisting, startError: 1058, serviceState: 1));
-
-        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
-            P.ServiceCollisionAction.BailForeign, startError: 1058, serviceState: 1));
-        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
-            P.ServiceCollisionAction.StartExisting, startError: 1058, serviceState: 4));
-        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
-            P.ServiceCollisionAction.StartExisting, startError: 5, serviceState: 1));
-        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
-            P.ServiceCollisionAction.StartExisting, startError: 1072, serviceState: 1));
-        Assert.False(SplitTunnelPolicy.CanRepairOwnStoppedServiceStartFailure(
-            P.ServiceCollisionAction.StartExisting, startError: 183, serviceState: 1));
-    }
-
-    [Fact]
     public void IsForeignSplitDriverService_DetectsAmneziaOwner()
     {
         Assert.True(SplitTunnelPolicy.IsForeignSplitDriverService(
@@ -181,7 +163,8 @@ public class SplitTunnelManagerTests
             @"\??\C:\Program Files\AmneziaVPN\mullvad-split-tunnel.sys");
 
         Assert.Contains("Amnezia Split Tunnel Service (AmneziaVPNSplitTunnel)", text);
-        Assert.Contains("Disable", text);
+        Assert.Contains("will not stop this kernel driver automatically", text);
+        Assert.Contains("disable", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("reboot Windows", text);
     }
 

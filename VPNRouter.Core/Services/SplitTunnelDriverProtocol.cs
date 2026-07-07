@@ -550,12 +550,6 @@ internal readonly record struct NicSnapshot(
 /// </summary>
 internal static class SplitTunnelPolicy
 {
-    private const uint ServiceStopped = 1;
-    private const int ErrorAccessDenied = 5;
-    private const int ErrorServiceAlreadyRunning = 1056;
-    private const int ErrorServiceMarkedForDelete = 1072;
-    private const int ErrorAlreadyExists = 183;
-
     /// <summary>
     /// True only when the driver should engage: Windows, routing mode = split, apps-mode =
     /// exclude, at least one excluded app, and the <c>true_split_driver</c> setting is not "off".
@@ -642,20 +636,6 @@ internal static class SplitTunnelPolicy
         return SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign;
     }
 
-    public static bool CanRepairOwnStoppedServiceStartFailure(
-        SplitTunnelDriverProtocol.ServiceCollisionAction action,
-        int startError,
-        uint? serviceState)
-    {
-        if (action == SplitTunnelDriverProtocol.ServiceCollisionAction.BailForeign) return false;
-        if (serviceState != ServiceStopped) return false;
-        return startError != 0
-            && startError != ErrorAccessDenied
-            && startError != ErrorServiceAlreadyRunning
-            && startError != ErrorServiceMarkedForDelete
-            && startError != ErrorAlreadyExists;
-    }
-
     public static bool IsForeignSplitDriverService(string? serviceName, string? pathName)
     {
         if (string.Equals(serviceName, SplitTunnelDriverProtocol.ServiceName, StringComparison.OrdinalIgnoreCase))
@@ -669,7 +649,8 @@ internal static class SplitTunnelPolicy
             ? serviceName
             : $"{displayName} ({serviceName})";
         return "True Split cannot start because another split-tunnel kernel driver is already running: " +
-               $"{label} at {pathName}. Disable that VPN's split tunnel driver/service, reboot Windows, then retry True Split.";
+               $"{label} at {pathName}. VPNRouter will not stop this kernel driver automatically because doing so can crash Windows. " +
+               "Close that VPN, disable its split tunneling/service, reboot Windows, then retry True Split.";
     }
 
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
