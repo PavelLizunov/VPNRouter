@@ -806,8 +806,6 @@ internal static class Localization
     public static string SrvActiveBadge => global::VPNRouter.Core.Localization.Strings.SrvActiveBadge;
     public static string SrvSwitchedReconnect => global::VPNRouter.Core.Localization.Strings.SrvSwitchedReconnect;
     public static string SrvSelectedActive => global::VPNRouter.Core.Localization.Strings.SrvSelectedActive;
-    public static string MenuSectionFreeConfigs => global::VPNRouter.Core.Localization.Strings.MenuSectionFreeConfigs;
-    public static string MenuItemOpenFreeConfigs => global::VPNRouter.Core.Localization.Strings.MenuItemOpenFreeConfigs;
     public static string FcOverlayTitle => global::VPNRouter.Core.Localization.Strings.FcOverlayTitle;
     public static string FcSearchHint => global::VPNRouter.Core.Localization.Strings.FcSearchHint;
     public static string FcFindButton => global::VPNRouter.Core.Localization.Strings.FcFindButton;
@@ -896,8 +894,6 @@ internal static class Localization
     public static string SettingsDpiBypassOff => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassOff;
     public static string SettingsDpiBypassStandard => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassStandard;
     public static string SettingsDpiBypassAggressive => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassAggressive;
-    public static string MenuSectionProfiles => global::VPNRouter.Core.Localization.Strings.MenuSectionProfiles;
-    public static string MenuItemOpenProfiles => global::VPNRouter.Core.Localization.Strings.MenuItemOpenProfiles;
     public static string ProfilesOverlayTitle => global::VPNRouter.Core.Localization.Strings.ProfilesOverlayTitle;
     public static string ProfilesIntro => global::VPNRouter.Core.Localization.Strings.ProfilesIntro;
     public static string ProfilesNoneTitle => global::VPNRouter.Core.Localization.Strings.ProfilesNoneTitle;
@@ -919,9 +915,6 @@ internal static class Localization
     public static string TipMenuItemResetConfig => global::VPNRouter.Core.Localization.Strings.TipMenuItemResetConfig;
 
     // F-13 Android visual port: Tools / DPI Bypass overlays (2026-05-09).
-    public static string MenuSectionTools => global::VPNRouter.Core.Localization.Strings.MenuSectionTools;
-    public static string MenuItemOpenTools => global::VPNRouter.Core.Localization.Strings.MenuItemOpenTools;
-    public static string MenuItemOpenDpiBypass => global::VPNRouter.Core.Localization.Strings.MenuItemOpenDpiBypass;
     public static string ToolsOverlayTitle => global::VPNRouter.Core.Localization.Strings.ToolsOverlayTitle;
     public static string DpiBypassOverlayTitle => global::VPNRouter.Core.Localization.Strings.DpiBypassOverlayTitle;
     public static string ToolsTabZapret => global::VPNRouter.Core.Localization.Strings.ToolsTabZapret;

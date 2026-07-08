@@ -110,7 +110,7 @@ public partial class AndroidApp
     /// <see cref="AndroidStorage.GetCustomCategories"/>) and restores the
     /// last-active category id from
     /// <see cref="AndroidStorage.GetApplicationsActiveCategory"/>. Empty / no
-    /// active id keeps the right pane on the placeholder.</para>
+    /// active id falls back to the catch-all category.</para>
     /// </summary>
     private async void ReseedAppPickerTabState()
     {
@@ -178,7 +178,7 @@ public partial class AndroidApp
     /// <summary>Validate the persisted active-category id against the current
     /// built-in list + user-defined categories. Returns null if the id no
     /// longer maps (e.g. user removed a custom category between sessions),
-    /// so the placeholder shows on next open instead of orphan styling.</summary>
+    /// so catch-all opens instead of orphan styling.</summary>
     private string? ResolveActiveCategoryId(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
@@ -294,10 +294,7 @@ public partial class AndroidApp
         if (_appPickerList is null) return;
         var search = _appPickerSearch?.Text?.Trim() ?? string.Empty;
 
-        // Phase D — category scope is the first filter. No active category =
-        // empty pane (placeholder is shown by SetActiveAppCategory anyway,
-        // but ItemsSource still needs to be empty so the ListBox doesn't
-        // flash the previous category's rows).
+        // Category scope is the first filter.
         IEnumerable<AppListLoader.AppEntry> scoped = ScopeAppsToActiveCategory(_appPickerCache);
 
         var filtered = string.IsNullOrEmpty(search)
@@ -352,8 +349,7 @@ public partial class AndroidApp
     /// <summary>Filter the installed-app cache down to the apps that belong
     /// to the active category. Built-ins use a static hint package set; the
     /// catch-all + user-defined custom categories surface all installed
-    /// apps. Empty / unknown active id returns an empty sequence so the
-    /// right pane shows nothing while the placeholder is visible.</summary>
+    /// apps. Empty / unknown active id returns an empty sequence.</summary>
     private IEnumerable<AppListLoader.AppEntry> ScopeAppsToActiveCategory(IEnumerable<AppListLoader.AppEntry> source)
     {
         if (string.IsNullOrEmpty(_advAppsActiveCategoryId))
@@ -605,14 +601,6 @@ public partial class AndroidApp
         // category chip row → +New row → mode picker → mode hint →
         // count/system-toggle row → app list (fills) → sticky Save.
         //
-        // Reference points: Material Design app picker pattern
-        // (filter chips on top), desktop divergence intentional per user
-        // feedback ("Выбор приложений идентичный desktop неудобен на
-        // телефоне"). The fields _advAppsRightPanePlaceholder /
-        // _advAppsRightPaneScopeContainer stay declared because other
-        // call sites null-check them, but they no longer participate in
-        // the visual tree.
-
         // ── Category chip grid (categories) ──────────────────────────
         // Bug-AND-008 (2026-05-16) — replaced horizontal-scrollable strip
         // with a WrapPanel. The previous design (Horizontal StackPanel
@@ -628,16 +616,6 @@ public partial class AndroidApp
         // — at typical font sizes 10 built-in categories fit in 2 rows
         // on a 1080dp screen. Custom now leads the first row
         // (RebuildAppCategorySidebar ordering).
-        _advAppsCategoryListPanel = new StackPanel
-        {
-            // Keep the field type as StackPanel so the rest of the
-            // codebase (.Children.Clear, .Children.Add) keeps working
-            // without churn. We swap the panel into a WrapPanel host
-            // via a wrapper Panel that lets us re-layout to wrap-flow
-            // semantics without changing the field type.
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 6,
-        };
         var chipWrapHost = new WrapPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
@@ -646,15 +624,6 @@ public partial class AndroidApp
             // the next line as needed.
             Margin = new Thickness(8, 4, 8, 4),
         };
-        // Swap: WrapPanel hosts the rows directly. We replace the
-        // StackPanel role by pointing _advAppsCategoryListPanel at a
-        // panel that *is* the WrapPanel surface. Easiest pattern: keep
-        // the StackPanel field but reassign children every rebuild via
-        // a tiny adapter.
-        // Concretely: the WrapPanel holds chips directly; rebuild adds
-        // them straight to chipWrapHost. _advAppsCategoryListPanel is
-        // kept as an alias bound to chipWrapHost.Children via
-        // _advAppsCategoryWrapHost (private field set below).
         _advAppsCategoryWrapHost = chipWrapHost;
 
         // ── "+ New category" inline row (always visible, compact) ────
@@ -701,12 +670,6 @@ public partial class AndroidApp
             Child = scopeBody,
             IsVisible = true,
         };
-
-        // Field still declared but unused in mobile layout. Pre-fix the
-        // right pane could swap to a "← Select a category" placeholder;
-        // mobile design defaults the active category to CustomCatchAll
-        // (all apps), so the apps list is always populated.
-        _advAppsRightPanePlaceholder = null;
 
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(chipWrapHost, Dock.Top);
@@ -902,8 +865,7 @@ public partial class AndroidApp
         // scroll-strip StackPanel. Write chips into the WrapPanel so
         // they wrap to multiple rows instead of overflowing into a
         // horizontal ScrollViewer.
-        var host = (Avalonia.Controls.Panel?)_advAppsCategoryWrapHost
-                   ?? _advAppsCategoryListPanel;
+        var host = _advAppsCategoryWrapHost;
         if (host is null) return;
         host.Children.Clear();
         _advAppsCategoryRowMap.Clear();
@@ -1105,10 +1067,8 @@ public partial class AndroidApp
     /// <summary>Switch active category. Persists via
     /// <see cref="AndroidStorage.SetApplicationsActiveCategory"/> so the next
     /// open lands on the same category.
-    /// <para>Bug #2 (2026-05-11) — mobile redesign dropped the placeholder
-    /// surface (the pre-fix 2-pane layout swapped placeholder ↔ scope body
-    /// when id was empty). The scope body is now the only content surface,
-    /// always visible; chip strip drives the filter.</para></summary>
+    /// <para>The mobile layout has one content surface; the chip strip drives
+    /// the filter.</para></summary>
     private void SetActiveAppCategory(string? id)
     {
         // Bug-AND-019 — intercept the tap for pending-delete confirm.

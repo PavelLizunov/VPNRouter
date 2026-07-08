@@ -241,19 +241,6 @@ public partial class AndroidApp : Avalonia.Application
     // button to a field so language toggle refreshes its label
     // (RU "Расширенный ▸" / EN "Advanced ▸").
     private Avalonia.Controls.Button? _menuAdvancedToggleBtn;
-    // _menuRepoItem retained as field-level null-stub so existing
-    // ToggleLanguageAndRefresh / null-check sites don't need refactoring.
-    // Functionally retired — the About row above absorbs the repo-open click.
-    private Avalonia.Controls.Button? _menuRepoItem;
-    // AND-MIGRATE-OVERLAYS (2026-05-09): Free Configs / Tools / DPI bypass
-    // dropped from the kebab — they now live as Advanced-shell tabs
-    // (Public configs / DPI bypass / Telegram) reachable via the
-    // "Advanced settings ▸" CTA on the Simple page. Field stubs kept null
-    // so the language-refresh path's null-checks compile.
-    private Avalonia.Controls.Button? _menuFreeConfigsItem;
-    private Avalonia.Controls.Button? _menuToolsItem;
-    private Avalonia.Controls.Button? _menuDpiBypassItem;
-    private TextBlock? _menuSectionTools;
     // F-10 kebab parity (2026-05-09) — items added to Android Diagnostics
     // + Troubleshooting blocks so the kebab matches desktop sequence
     // 1:1. Pre-fix Check IP leak / Run Health Check / Restart in Safe
@@ -266,7 +253,6 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _menuSectionDiagnostics;
     private TextBlock? _menuSectionTroubleshooting;
     private TextBlock? _menuSectionAbout;
-    private TextBlock? _menuSectionFreeConfigs;
     // Tracks Reset confirm flow: first tap → confirm prompt, second tap → wipe.
     private bool _resetConfirmPending = false;
     // Banner that surfaces transient kebab-menu feedback (Update toast,
@@ -373,8 +359,6 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _profilesOverlayIntro;
     private Avalonia.Controls.Button? _profilesCloseBtn;
     private StackPanel? _profilesList;
-    private Avalonia.Controls.Button? _menuProfilesItem;
-    private TextBlock? _menuSectionProfiles;
 
     // AND-MIGRATE-OVERLAYS (2026-05-09): per-app filter picker is now the
     // Applications tab inside the Advanced shell. The "Choose apps…" button
@@ -418,22 +402,14 @@ public partial class AndroidApp : Avalonia.Application
     // Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — left category sidebar
     // + right per-category content pane. Mirrors desktop ApplicationsPage
     // (ColumnDefinitions="120,*"). Active category id persists via
-    // KeyApplicationsActiveCategory; null/empty = "Select a category"
-    // placeholder. Custom user categories live in
+    // KeyApplicationsActiveCategory; null/empty falls back to catch-all.
+    // Custom user categories live in
     // _advAppsCustomCategories (loaded from AndroidStorage on tab activation,
     // persisted via SetCustomCategories).
     private string? _advAppsActiveCategoryId;
-    private StackPanel? _advAppsCategoryListPanel;
-    // Bug-AND-008 (2026-05-16) — WrapPanel host that replaces the
-    // horizontal-scrolling category strip. All chips are simultaneously
-    // visible and tappable — no gesture conflict with a parent
-    // ScrollViewer. The legacy _advAppsCategoryListPanel field is kept
-    // declared so other call sites that null-check it still compile,
-    // but rebuild now writes children straight to this WrapPanel.
     private WrapPanel? _advAppsCategoryWrapHost;
     private TextBox? _advAppsNewCategoryInput;
     private Avalonia.Controls.Button? _advAppsAddCategoryBtn;
-    private TextBlock? _advAppsRightPanePlaceholder;
     private Border? _advAppsRightPaneScopeContainer;
     private List<VPNRouter.Core.Models.CustomCategory> _advAppsCustomCategories = new();
     private readonly Dictionary<string, Border> _advAppsCategoryRowMap = new(System.StringComparer.OrdinalIgnoreCase);
@@ -797,8 +773,7 @@ public partial class AndroidApp : Avalonia.Application
         // line 623-635 (Button Classes="menu-item" wrapping Grid */Auto). On
         // desktop the row opens AboutWindow; on Android there is no AboutWindow,
         // so the row's tap target opens the GitHub repo (the same destination
-        // the standalone "GitHub repository" row used to point at). _menuRepoItem
-        // is gone — its function folds into the new About row.
+        // the standalone "GitHub repository" row used to point at).
         _menuAboutLabel = new TextBlock
         {
             Text = Localization.SmpMenuAbout,
@@ -834,23 +809,11 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
         _menuVersionItem.Click += OnMenuRepoClicked;
-        // _menuRepoItem retired: combined into the About row above.
-        _menuRepoItem = null;
 
         var menuStack = new StackPanel
         {
             Spacing = 1,
         };
-
-        // v2.32.0 desktop parity (2026-05-10): Free Configs / Profiles /
-        // Tools / DPI bypass kebab entries removed — none of these exist
-        // in v2.32.0 desktop's kebab. They're reachable as Advanced shell
-        // tabs (Public configs / DPI bypass / Telegram). Stubs stay null
-        // so RefreshKebabLocalizedStrings's null-checks compile.
-        _menuFreeConfigsItem = null;
-        _menuProfilesItem = null;
-        _menuToolsItem     = null;
-        _menuDpiBypassItem = null;
 
         AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
                                       new Control[] { themeRow, langRow });
@@ -2272,7 +2235,7 @@ public partial class AndroidApp : Avalonia.Application
         // F-12 kebab visual parity (2026-05-09): About row's left text is
         // now a stand-alone TextBlock inside a Grid (not the Button.Content
         // string), so refresh that field directly. Version pill stays put —
-        // not localized. _menuRepoItem is a null stub (combined into About).
+        // not localized.
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
         // Bug-AND-009 follow-up (2026-05-16) — kebab "Advanced ▸"
         // toggle button. Sat as a local var pre-fix and missed
@@ -2294,17 +2257,6 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
-        // AND-MIGRATE-OVERLAYS (2026-05-09): Free Configs + Tools kebab
-        // sections retired; their items migrated to the Advanced shell.
-        // The null-check stubs below are kept for the old field references
-        // even though the items are intentionally null now.
-        if (_menuSectionFreeConfigs is not null) _menuSectionFreeConfigs.Text = Localization.MenuSectionFreeConfigs;
-        if (_menuFreeConfigsItem is not null) _menuFreeConfigsItem.Content = Localization.MenuItemOpenFreeConfigs;
-        if (_menuSectionProfiles is not null) _menuSectionProfiles.Text = Localization.MenuSectionProfiles;
-        if (_menuProfilesItem is not null) _menuProfilesItem.Content = Localization.MenuItemOpenProfiles;
-        if (_menuSectionTools is not null) _menuSectionTools.Text = Localization.MenuSectionTools;
-        if (_menuToolsItem is not null) _menuToolsItem.Content = Localization.MenuItemOpenTools;
-        if (_menuDpiBypassItem is not null) _menuDpiBypassItem.Content = Localization.MenuItemOpenDpiBypass;
         // Refresh Advanced-shell title + tab labels on language toggle.
         RefreshAdvancedShellStrings();
         // F-10 kebab parity (2026-05-09) — refresh new Diagnostics +

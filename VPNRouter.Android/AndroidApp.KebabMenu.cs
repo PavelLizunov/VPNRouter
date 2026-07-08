@@ -136,9 +136,6 @@ public partial class AndroidApp
         else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
         else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
         else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
-        else if (headerText == Localization.MenuSectionFreeConfigs) _menuSectionFreeConfigs = header;
-        else if (headerText == Localization.MenuSectionProfiles) _menuSectionProfiles = header;
-        else if (headerText == Localization.MenuSectionTools) _menuSectionTools = header;
 
         stack.Children.Add(header);
 
@@ -179,9 +176,6 @@ public partial class AndroidApp
         else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
         else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
         else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
-        else if (headerText == Localization.MenuSectionFreeConfigs) _menuSectionFreeConfigs = header;
-        else if (headerText == Localization.MenuSectionProfiles) _menuSectionProfiles = header;
-        else if (headerText == Localization.MenuSectionTools) _menuSectionTools = header;
 
         stack.Children.Add(header);
 
