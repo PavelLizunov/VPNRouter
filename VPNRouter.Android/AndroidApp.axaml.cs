@@ -199,7 +199,6 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _brandTitle;
     private TextBlock? _vpnChip;
     private TextBlock? _zapretChip;
-    private TextBlock? _tgChip;
     // v3.0 Phase 8.2 (2026-05-07) — Image is invariant under DynamicResource
     // because Bitmap source is bytes, not a brush. Theme switch must
     // re-call LoadMascot() to get the inverted Bgra8888 variant. Stored
@@ -615,8 +614,8 @@ public partial class AndroidApp : Avalonia.Application
         // ── Sub-header (mascot + brand + chips + kebab menu) ────────────
         // v3.0 Phase 4 (2026-05-04) — desktop parity. Pre-4 had a plain
         // "VPNRouter" title with a "RU" toggle pill at right. Desktop
-        // shows: mascot 🐧 + "Virtual Penguin Network" bold + three
-        // status chips (VPN / Zapret / TG) + ⋯ kebab menu. The kebab
+        // shows: mascot 🐧 + "Virtual Penguin Network" bold + two
+        // status chips (VPN / Zapret) + ⋯ kebab menu. The kebab
         // hosts language + theme toggles (was inline RU pill).
 
         // v3.0 Phase 5 — real PNG mascot with theme-aware RGB inversion.
@@ -669,18 +668,16 @@ public partial class AndroidApp : Avalonia.Application
         // v3.0 Phase 8.2 — chips ride DynamicResource via MakeChip's key
         // parameters so they auto-repaint on theme variant change.
         //
-        // 2026-05-15 (Bug-AND-002 brat live-test): hide Zapret + TG chips
+        // 2026-05-15 (Bug-AND-002 brat live-test): hide Zapret chip
         // entirely on Android. Pre-fix: chips were always rendered Off
         // because «those features aren't ported yet». User feedback:
         // «не нужно отображать zapret и tg прокси так как из нет, условно
         // ведь на мак мы их не отображет». Same rationale as Mac/Linux —
         // platform-not-applicable features should be hidden, not shown
-        // as perpetually-Off. The _zapretChip / _tgChip fields are kept
-        // (still touched by some legacy update paths) but excluded from
-        // the visual chip row.
+        // as perpetually-Off. The _zapretChip field is kept because update
+        // paths still mirror state into it, but it stays out of the visual row.
         _vpnChip = MakeChip("VPN", "SurfaceSunkenBrush", "TextMutedBrush");
         _zapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
-        _tgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
 
         var chipRow = new StackPanel
         {
@@ -1828,7 +1825,7 @@ public partial class AndroidApp : Avalonia.Application
 
     /// <summary>
     /// Phase 4 — pill-style status chip (rounded background + colored
-    /// label) for the sub-header VPN/Zapret/TG indicators. Mirrors
+    /// label) for the sub-header VPN/Zapret indicators. Mirrors
     /// desktop's chip pattern from MainWindow.axaml header.
     ///
     /// <para>v3.0 Phase 8.2 — takes brush KEYS (not brushes) so the

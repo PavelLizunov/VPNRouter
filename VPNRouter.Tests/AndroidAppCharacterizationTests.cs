@@ -113,7 +113,7 @@ public class AndroidAppCharacterizationTests
     // The 6 partial EXTRACTIONS this session (Profiles/CustomConfig/SettingsHandlers/
     // KebabMenu/PerAppFilter) were pure member MOVES — union unchanged, no re-pin.
     private const string PinnedHash =
-        "62d45c465c7c1032ad1e01eab4f7c5ea99c742e789846d5b2ad61d9852cc4ad5";
+        "dc1b1160ce1cf9761c74bae5cc7d879caca00cff0472610d7b9325b29618e4d0";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

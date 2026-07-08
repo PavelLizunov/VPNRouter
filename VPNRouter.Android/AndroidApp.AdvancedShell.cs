@@ -20,7 +20,7 @@ namespace VPNRouter.Android;
 /// <para>AND-ADV-CHROME (2026-05-10) rebuilt the shell chrome to mirror
 /// desktop v2.32.0 stable (commit <c>7d9707b</c>): the previous title bar
 /// "Advanced settings + ×" is replaced by a brand row (mascot + "Virtual
-/// Penguin Network" + VPN/Zapret/TG chips) with a "+ Simple" link button +
+/// Penguin Network" + VPN/Zapret chips) with a "+ Simple" link button +
 /// ⋮ kebab in the top-right; a persistent footer (status dot + status text
 /// on the left, accent Start VPN / Stop VPN button on the right) is always
 /// visible regardless of which tab is active. Tab labels were renamed to
@@ -76,7 +76,6 @@ public partial class AndroidApp
     // two surfaces. (MakeChip returns TextBlock — see SimplePage builder.)
     private TextBlock? _advVpnChip;
     private TextBlock? _advZapretChip;
-    private TextBlock? _advTgChip;
 
     // Persistent footer chrome (AND-ADV-CHROME 2026-05-10) — status dot +
     // text on the left, accent Start VPN button on the right. Mirrors
@@ -198,10 +197,10 @@ public partial class AndroidApp
 
     /// <summary>
     /// Build the Advanced shell's top header — mirrors desktop v2.32.0
-    /// SimplePage brand row (mascot + brand title + VPN/Zapret/TG chips)
+    /// SimplePage brand row (mascot + brand title + VPN/Zapret chips)
     /// plus a "+ Simple" toggle and ⋮ kebab in the top-right. The chips
     /// reuse the Simple-page chip fields (<c>_vpnChip</c>, <c>_zapretChip</c>,
-    /// <c>_tgChip</c>) — but those are already attached to the Simple page,
+    /// <c>_zapretChip</c>) — but those are already attached to the Simple page,
     /// so the Advanced header builds its own visual copies that aren't
     /// state-bound. The chip state on the Advanced header therefore
     /// reflects only the connection state at the time the overlay was
@@ -249,14 +248,13 @@ public partial class AndroidApp
         };
         _advBrandTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        // Visual copies of VPN/Zapret/TG chips. These are static copies —
+        // Visual copies of VPN/Zapret chips. These are static copies —
         // they show the connection state at the moment the overlay was
         // built. (Bug #3 fix 2026-05-11) chips are now state-bound — see
         // SetVpnChipState / SetZapretChipState which now mirror state onto
         // _advVpnChip / _advZapretChip alongside the Simple-page chips.
         _advVpnChip = MakeChip("VPN", "SurfaceSunkenBrush", "TextMutedBrush");
         _advZapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
-        _advTgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
         // Apply current state immediately so the chip looks right on
         // first overlay open instead of rendering Off until next change.
         // SetVpnChipState's force-rebind branch repaints both Simple and
@@ -266,9 +264,8 @@ public partial class AndroidApp
         // 2026-05-15 (Bug-AND-002 brat live-test, second code path):
         // Advanced shell has its own header chip row separate from
         // Simple-page chips. Same fix as in BuildSimpleMode header:
-        // hide Zapret + TG chips on Android (not applicable platform).
-        // _advZapretChip / _advTgChip kept allocated for legacy update
-        // paths that touch them, just excluded from the visual row.
+        // hide Zapret on Android (not applicable platform). Keep it allocated
+        // because SetZapretChipState mirrors state into this field.
         var vpnChip = _advVpnChip;
         var chipRow = new StackPanel
         {
