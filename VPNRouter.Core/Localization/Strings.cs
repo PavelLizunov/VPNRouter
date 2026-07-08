@@ -727,6 +727,9 @@ public static partial class Strings
     public static string MtuAutoTuneNoResult => Ru
         ? "Не нашёл рабочий DF payload. На этом пути ICMP PMTU может быть заблокирован."
         : "No working DF payload found. ICMP PMTU may be blocked on this path.";
+    public static string MtuAutoTuneTooLow(int mtu) => Ru
+        ? $"Нашёл только MTU {mtu}. Это ниже безопасного пола 1332 для Steam SDR, автоматически не сохраняю."
+        : $"Only MTU {mtu} worked. It is below the 1332 Steam SDR safety floor, so it was not saved automatically.";
     public static string ForceIpv4Label => Ru
         // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
         // a Russian sentence. Use natural RU "IPv6-утечек".

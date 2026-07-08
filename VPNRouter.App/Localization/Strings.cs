@@ -429,6 +429,7 @@ public static class Strings
     public static string MtuAutoTuneApplied(int mtu) => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneApplied(mtu);
     public static string MtuAutoTuneBlocked => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneBlocked;
     public static string MtuAutoTuneNoResult => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneNoResult;
+    public static string MtuAutoTuneTooLow(int mtu) => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneTooLow(mtu);
     public static string ForceIpv4Label => global::VPNRouter.Core.Localization.Strings.ForceIpv4Label;
     public static string FlushDnsLabel => global::VPNRouter.Core.Localization.Strings.FlushDnsLabel;
     // v2.31.6-r18: hint expanded — user feedback iter#7 audit asked

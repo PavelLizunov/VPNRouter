@@ -195,6 +195,12 @@ public partial class MainWindowViewModel
                 return;
             }
 
+            if (payload < 1332)
+            {
+                MtuAutoTuneStatus = Strings.MtuAutoTuneTooLow(payload);
+                return;
+            }
+
             TunMtu = Math.Clamp(payload, 576, TunSettings.DefaultMtu);
             SaveSettings();
             MtuAutoTuneStatus = Strings.MtuAutoTuneApplied(TunMtu);

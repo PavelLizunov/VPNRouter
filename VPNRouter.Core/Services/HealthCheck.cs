@@ -425,7 +425,7 @@ public static class HealthCheck
         if (!PingOk(null))
             return new(null, true);
 
-        foreach (var payload in new[] { 1420, 1400, 1380, 1360, 1350, 1320, 1310, 1300, 1280, 1260, 1240 })
+        foreach (var payload in new[] { 1420, 1400, 1380, 1360, 1350, 1340, 1332, 1320, 1310, 1300, 1280, 1260, 1240 })
         {
             if (PingOk(payload))
                 return new(payload, false);
