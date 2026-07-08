@@ -329,9 +329,6 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.CheckBox? _settingsBlockAds;
     private Avalonia.Controls.CheckBox? _settingsReceivePrereleases;
     private TextBlock? _settingsCurrentVersion;
-    private Avalonia.Controls.CheckBox? _settingsAutostartVpn;
-    private Avalonia.Controls.CheckBox? _settingsAutostartZapret;
-    private Avalonia.Controls.CheckBox? _settingsAutostartTgProxy;
     private Avalonia.Controls.Button? _menuSettingsItem;
     // v2.32.0 AND-NETRES — Reliability section controls. Always-on row
     // is text + button (no programmatic status read — the Android API

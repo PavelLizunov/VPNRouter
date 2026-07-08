@@ -128,8 +128,6 @@ internal static class Localization
     public static string ServiceComponentsHeader => global::VPNRouter.Core.Localization.Strings.ServiceComponentsHeader;
     public static string ServiceComponentsDisabledHint => global::VPNRouter.Core.Localization.Strings.ServiceComponentsDisabledHint;
     public static string AutostartUiSessionHeader => global::VPNRouter.Core.Localization.Strings.AutostartUiSessionHeader;
-    public static string AutostartBootSectionTitle => global::VPNRouter.Core.Localization.Strings.AutostartBootSectionTitle;
-    public static string AutostartBootSectionSub => global::VPNRouter.Core.Localization.Strings.AutostartBootSectionSub;
     public static string AutostartComponentsInfoHint => global::VPNRouter.Core.Localization.Strings.AutostartComponentsInfoHint;
     public static string AutostartStatusBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusBoot;
     public static string AutostartStatusLoginFallback => global::VPNRouter.Core.Localization.Strings.AutostartStatusLoginFallback;
@@ -264,9 +262,6 @@ internal static class Localization
     public static string SectionContent => global::VPNRouter.Core.Localization.Strings.SectionContent;
     public static string SectionUpdates => global::VPNRouter.Core.Localization.Strings.SectionUpdates;
     public static string AutostartSection => global::VPNRouter.Core.Localization.Strings.AutostartSection;
-    public static string AutostartVpn => global::VPNRouter.Core.Localization.Strings.AutostartVpn;
-    public static string AutostartZapret => global::VPNRouter.Core.Localization.Strings.AutostartZapret;
-    public static string AutostartTgProxy => global::VPNRouter.Core.Localization.Strings.AutostartTgProxy;
     public static string AutostartUi => global::VPNRouter.Core.Localization.Strings.AutostartUi;
     public static string TabFreeConfigs => global::VPNRouter.Core.Localization.Strings.TabFreeConfigs;
     public static string FcDashboardTotal => global::VPNRouter.Core.Localization.Strings.FcDashboardTotal;

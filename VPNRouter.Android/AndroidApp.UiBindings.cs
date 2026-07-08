@@ -841,24 +841,14 @@ public partial class AndroidApp
     }
 
     /// <summary>
-    /// Phase C (2026-05-10) — Autostart sub-section. Combines desktop's
-    /// Autostart (Service-install + boot toggles) and Reliability (Always-on
-    /// VPN + battery opt + auto-reconnect) sections per the parity plan's
-    /// platform-impossible item table — Always-on VPN IS Android's
-    /// replacement for Windows-Service-on-boot, so it naturally belongs
-    /// here. The 3 boot toggles (VPN/Zapret/TgProxy) keep persisting their
-    /// flags so a future BootCompletedReceiver can read them without a
-    /// migration, but they're permanently in the ⛔ tier on Android until
-    /// that receiver lands.
+    /// Android Autostart sub-section: Always-on VPN, battery optimisation,
+    /// auto-reconnect, and optional external broadcast control.
     /// </summary>
     private Control BuildSettingsAutostartSection()
     {
         var sectionTitle = MakeSectionTitle(Localization.SettingsSectionAutostart);
 
-        // Android-equivalence intro — explains that Always-on VPN is the
-        // way to get boot-time + network-change-time tunnel restoration
-        // without a Windows-style service. Sets expectations before the
-        // user sees the (non-firing) boot-toggle group below.
+        // Always-on VPN is Android's boot/network-change restoration path.
         var androidIntro = new TextBlock
         {
             Text = Localization.AdvSettingsAutostartAndroidIntro,
@@ -967,63 +957,6 @@ public partial class AndroidApp
         var externalControlCard = MakeCheckboxCard(_externalControlToggle,
             Localization.ExternalControlTitle,
             Localization.ExternalControlHint);
-
-        // ── Boot toggles (Windows-Service parity scaffolding) ──
-        // Pre-Phase-C these were the ENTIRE Autostart section. After Phase C
-        // they're a separate sub-block under the Always-on / battery /
-        // auto-reconnect rows because those are the controls that actually
-        // matter on Android. The boot flags keep persisting so a future
-        // BootCompletedReceiver port has its data ready.
-        var bootHeader = new TextBlock
-        {
-            Text = Localization.AutostartBootSectionTitle,
-            FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
-            Foreground = GetBrush("TextMutedBrush"),
-        };
-        var bootSub = new TextBlock
-        {
-            Text = Localization.AutostartBootSectionSub,
-            FontSize = 10,
-            Foreground = GetBrush("TextMutedBrush"),
-            Opacity = 0.85,
-            TextWrapping = TextWrapping.Wrap,
-        };
-
-        _settingsAutostartVpn = new Avalonia.Controls.CheckBox
-        {
-            IsChecked = AndroidStorage.GetAutostartVpn(),
-            MinHeight = 0,
-            Padding = new Thickness(4, 0),
-            Content = new TextBlock
-            {
-                Text = Localization.AutostartLabelVpn,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-            }
-        };
-        _settingsAutostartVpn.IsCheckedChanged += OnSettingsAutostartVpnChanged;
-        var vpnStack = MakeAutostartRow(_settingsAutostartVpn,
-            Localization.AutostartStatusNoBoot, "DangerFgBrush");
-
-        // Bug-AND-020 (2026-05-16, user-reported "в настройках автозапуска
-        // осталось про tgproxy и про zapret"): Zapret + TgProxy aren't
-        // ported to Android — surfacing their autostart toggles with a
-        // "not ported" warning was confusing UX. Removed entirely.
-        // The fields _settingsAutostartZapret / _settingsAutostartTgProxy
-        // stay declared so other call-sites that null-check them still
-        // compile, but they're never instantiated on Android now. Same
-        // pattern as Bug-AND-002/004 (Zapret + Tools chip hiding).
-        //
-        // Bug-AND-020 follow-up: the "At Windows startup (before sign-in)"
-        // section + "Start VPN on system boot" checkbox + ⛔ warning
-        // text are Windows-service-specific. On Android the right
-        // autostart path is Always-on VPN (already explained above in
-        // androidIntro + alwaysOnRow). Hide the whole boot section.
-        // _settingsAutostartVpn stays declared but isn't rendered;
-        // bootHeader / bootSub / vpnStack are unused locals now (kept
-        // to minimise diff churn — compiler dead-code-eliminates them).
-        _ = bootHeader; _ = bootSub; _ = vpnStack; // silence unused-warnings
 
         var stack = new StackPanel
         {

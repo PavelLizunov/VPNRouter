@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v3.0 Android port — Phase 0 scaffold AndroidManifest.
+  VPNRouter Android manifest.
 
-  Minimal: only declares permissions + VpnService registration.
-  - The Avalonia MainActivity is auto-registered from `[Activity]`
-    attribute on MainActivity.cs (don't list here).
-  - Icons / themes default to system until we add resources/ in
-    Phase 1.
+  MainActivity is auto-registered from `[Activity]`; Java services and
+  providers live here because they are not generated from C# attributes.
 
   Reference: plans/vpnrouter-android-research.md §"Required Android
   manifest bits".

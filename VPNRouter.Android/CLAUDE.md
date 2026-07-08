@@ -132,8 +132,8 @@ dotnet build VPNRouter.Android/VPNRouter.Android.csproj -c Release `
 
 Output: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.apk`.
 
-## Phase 0 historical scaffolding
+## Historical scaffolding
 
-See `VPNRouter.Android/README.md` for Phase 0 → Phase 1 setup notes
-(SDK install, libbox.aar build steps). That doc is outdated but kept
-for the lineage record.
+Old Phase 0 README / Kotlin service scaffolds were deleted after the Java
+service and APK build became the maintained path. Keep this file as the
+Android build/runtime source of truth.

@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- v3.0 Android port — Phase 0 scaffold.
-       Cannot build standalone yet (Android SDK not installed on this
-       host). Build when SDK is available:
+  <!-- Android port. Build when Android SDK is available:
            dotnet build VPNRouter.Android/VPNRouter.Android.csproj \
                   /p:AndroidSdkDirectory=<path>
        Or set $ANDROID_HOME / $ANDROID_SDK_ROOT env var.
@@ -220,7 +218,6 @@
          runtime dlopen probe (SlipstreamNative.isAvailable) so a build/ABI
          without the .so refuses the dns-tunnel scheme rather than crashing. -->
     <AndroidJavaSource Include="SlipstreamNative.java" />
-    <None Include="VpnRouterService.kt" />
   </ItemGroup>
 
   <!-- DNS-tunnel sidecar native lib, per ABI. Bundled in the APK (like libbox,

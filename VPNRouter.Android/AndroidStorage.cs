@@ -803,14 +803,12 @@ public static class AndroidStorage
 
     // ── v2.32.0 Settings parity (handbook §3.1, mirrors desktop NetworkPage) ──
     //
-    // Four sub-sections persisted as discrete SharedPreferences keys so the
-    // Android Settings overlay can read/write each control independently:
+    // Four sub-sections persisted as discrete SharedPreferences keys:
     //   • Routing: routing mode + Russian-traffic bypass
     //   • Leak protection: block_on_vpn_fail master + DNS strategy
     //   • Updates: channel selector (stable / experimental / placeholder)
-    //   • Autostart: 3 component flags (vpn / zapret / tgproxy) — currently
-    //     no-op on Android (no BOOT_COMPLETED receiver + no Service-mode),
-    //     but persisted so a future BootCompletedReceiver can act on them.
+    //   • Autostart: legacy backup/import flags only. Android runtime uses
+    //     Always-on VPN instead of app-owned boot receivers.
     //
     // Defaults match the desktop AppSettings.App defaults (RoutingMode="split",
     // BypassRussianTraffic=true, BlockOnVpnFail=false, ForceIpv4Only=true,

@@ -77,9 +77,6 @@ public partial class AndroidApp
             if (_settingsReceivePrereleases is not null)
                 _settingsReceivePrereleases.IsChecked = AndroidStorage.GetUpdateChannel() == "experimental";
             if (_settingsCurrentVersion is not null) _settingsCurrentVersion.Text = VPNRouter.Core.AppVersion.Version;
-            if (_settingsAutostartVpn is not null) _settingsAutostartVpn.IsChecked = AndroidStorage.GetAutostartVpn();
-            if (_settingsAutostartZapret is not null) _settingsAutostartZapret.IsChecked = AndroidStorage.GetAutostartZapret();
-            if (_settingsAutostartTgProxy is not null) _settingsAutostartTgProxy.IsChecked = AndroidStorage.GetAutostartTgProxy();
             if (_settingsDpiBypassMode is not null)
             {
                 _settingsDpiBypassMode.SelectedIndex = AndroidStorage.GetDpiBypassMode() switch
@@ -184,26 +181,6 @@ public partial class AndroidApp
         // sees the result inline; banner appears under the status card
         // (it's behind the overlay, but visible if user dismisses).
         _ = RunUpdateCheckAsync(manual: true);
-    }
-
-    private void OnSettingsAutostartVpnChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_settingsLoading || _settingsAutostartVpn is null) return;
-        AndroidStorage.SetAutostartVpn(_settingsAutostartVpn.IsChecked == true);
-        // Boot-time autostart flag — affects only the future BootCompletedReceiver
-        // path, not the currently-running tunnel. No dirty mark.
-    }
-
-    private void OnSettingsAutostartZapretChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_settingsLoading || _settingsAutostartZapret is null) return;
-        AndroidStorage.SetAutostartZapret(_settingsAutostartZapret.IsChecked == true);
-    }
-
-    private void OnSettingsAutostartTgProxyChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_settingsLoading || _settingsAutostartTgProxy is null) return;
-        AndroidStorage.SetAutostartTgProxy(_settingsAutostartTgProxy.IsChecked == true);
     }
 
     /// <summary>
