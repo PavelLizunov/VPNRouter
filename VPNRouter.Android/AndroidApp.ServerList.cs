@@ -51,9 +51,7 @@ public partial class AndroidApp
     private StackPanel? _srvListStack;
     private TextBlock? _srvEmptyHint;
     private TextBlock? _srvColServer;
-    private TextBlock? _srvColIp;
     private TextBlock? _srvColPing;
-    private TextBlock? _srvColPort;
 
     // ── AND-ADV-SERVERS-SUBSCRIBE (Phase B, 2026-05-10) ────────────────
     // Sub-tab segmented control (Servers / Custom Config JSON), the two
@@ -285,9 +283,7 @@ public partial class AndroidApp
 
         // ── Column header strip — mobile design 2026-05-11 collapsed the
         // desktop 4-col (Server / IP / Ping / Port) into 2 visible
-        // captions: Server + Ping. IP+Port now live in the row's
-        // meta-line. ColIp/ColPort fields stay null-but-instantiated to
-        // keep refresh and tooltip helpers null-safe.
+        // captions: Server + Ping. IP+Port now live in the row's meta-line.
         _srvColServer = new TextBlock
         {
             Text = Localization.ColServer,
@@ -306,8 +302,6 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
-        _srvColIp = new TextBlock { IsVisible = false };
-        _srvColPort = new TextBlock { IsVisible = false };
         var headerGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
@@ -1518,13 +1512,11 @@ public partial class AndroidApp
         }
         if (_srvEmptyHint is not null) _srvEmptyHint.Text = Localization.SrvEmptyHint;
         if (_srvColServer is not null) _srvColServer.Text = Localization.ColServer;
-        if (_srvColIp is not null) _srvColIp.Text = Localization.ColIp;
         if (_srvColPing is not null)
         {
             _srvColPing.Text = Localization.ColPing;
             ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
         }
-        if (_srvColPort is not null) _srvColPort.Text = Localization.ColPort;
 
         // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — sub-tab segments + footer
         // action row + Custom JSON sub-panel labels.
