@@ -191,6 +191,10 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         catch (Exception ex)   // fail-path #13 — no exception ever reaches the caller
         {
             _log.Warning(ex, "[SplitTunnel] Engage threw (non-fatal) — RESET + fall back to post-capture routing");
+            if (ex is Win32Exception win32
+                && SplitTunnelPolicy.FormatDriverStartFailure(unchecked((uint)win32.NativeErrorCode)) is { } reason)
+                LastFailureReason = reason;
+
             BestEffortResetAndCloseLocked();
             ok = false;
         }

@@ -550,6 +550,8 @@ internal readonly record struct NicSnapshot(
 /// </summary>
 internal static class SplitTunnelPolicy
 {
+    private const uint FwpAlreadyExists = 0x80320009;
+
     /// <summary>
     /// True only when the driver should engage: Windows, routing mode = split, apps-mode =
     /// exclude, at least one excluded app, and the <c>true_split_driver</c> setting is not "off".
@@ -652,6 +654,11 @@ internal static class SplitTunnelPolicy
                $"{label} at {pathName}. VPNRouter will not stop this kernel driver automatically because doing so can crash Windows. " +
                "Close that VPN, disable its split tunneling/service, reboot Windows, then retry True Split.";
     }
+
+    public static string? FormatDriverStartFailure(uint errorCode) =>
+        errorCode == FwpAlreadyExists
+            ? "True Split cannot start because Windows WFP/BFE already has a split-tunnel object from Amnezia/Mullvad/another VPN (0x80320009). Ordinary split is active. Disable that VPN's split tunneling, reboot Windows, then retry True Split."
+            : null;
 
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
     /// leading NT object-manager prefix (<c>\??\</c>), trims, lowercases (paths are

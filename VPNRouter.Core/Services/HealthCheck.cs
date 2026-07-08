@@ -416,7 +416,7 @@ public static class HealthCheck
                     "AmneziaVPN-service is RUNNING. If it auto-starts its split driver, stop it in Amnezia before retrying True Split."));
 
             results.Add(new(Level.Ok,
-                "True Split note: ICMP ping/MTU tests are unreliable while True Split is active; test MTU with True Split off or ordinary split."));
+                "True Split note: if ping says 'General failure', this is a local Windows WFP/driver block, not MTU. Test MTU only after plain ping works, with True Split off or ordinary split."));
         }
         catch (Exception ex)
         {

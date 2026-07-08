@@ -168,6 +168,18 @@ public class SplitTunnelManagerTests
         Assert.Contains("reboot Windows", text);
     }
 
+    [Fact]
+    public void FormatDriverStartFailure_WfpAlreadyExists_NamesConflictAndFallback()
+    {
+        string? text = SplitTunnelPolicy.FormatDriverStartFailure(0x80320009);
+
+        Assert.NotNull(text);
+        Assert.Contains("WFP/BFE", text);
+        Assert.Contains("0x80320009", text);
+        Assert.Contains("Ordinary split is active", text);
+        Assert.Contains("Amnezia/Mullvad", text);
+    }
+
     private static string NonexistentDir()
         => Path.Combine(Path.GetTempPath(), "vpnrouter-split-none-" + Guid.NewGuid().ToString("N"));
 }

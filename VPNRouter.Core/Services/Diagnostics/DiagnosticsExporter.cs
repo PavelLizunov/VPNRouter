@@ -193,6 +193,11 @@ public static class DiagnosticsExporter
         var sb = new StringBuilder();
         sb.AppendLine("Windows services and drivers");
         sb.AppendLine("============================");
+        sb.AppendLine("True Split notes:");
+        sb.AppendLine("- err=5 on \\\\.\\MULLVADSPLITTUNNEL means another agent holds the exclusive split-driver device.");
+        sb.AppendLine("- StartService err=183 means Windows still has an old split-driver object; reboot is usually required.");
+        sb.AppendLine("- WFP/BFE 0x80320009 means a duplicate split-tunnel object exists, commonly after Amnezia/Mullvad split-driver conflict.");
+        sb.AppendLine("- ping 'General failure' while True Split is active is a local WFP/driver block, not an MTU measurement.");
         if (!OperatingSystem.IsWindows())
         {
             sb.AppendLine("(not Windows)");

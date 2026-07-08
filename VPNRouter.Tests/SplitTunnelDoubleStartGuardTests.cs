@@ -99,6 +99,18 @@ public sealed class SplitTunnelDoubleStartGuardTests
 
         Assert.Contains("AmneziaVPNSplitTunnel", src);
         Assert.Contains("recent System driver/service events", src);
+        Assert.Contains("0x80320009", src);
+        Assert.Contains("General failure", src);
+    }
+
+    [Fact]
+    public void MainWindowViewModel_TrueSplitFallback_RecognizesWfpAlreadyExists()
+    {
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        if (src == null) return;
+
+        Assert.Contains("0x80320009", src);
+        Assert.Contains("FormatTrueSplitFallback", src);
     }
 
     [Fact]

@@ -108,7 +108,7 @@ public static class Strings
         : "Excluded apps bypass the VPN at the OS level and survive a sing-box restart.\n" +
           "Caveats: DNS via svchost may still tunnel; excluded apps' localhost-UDP (127.0.0.1) may " +
           "break; multicast receive and UWP/Store apps can't be excluded.";
-    public static string TrueSplitRetry => Ru ? "Запустить True Split" : "Start True Split";
+    public static string TrueSplitRetry => Ru ? "Проверить True Split" : "Retry True Split";
     public static string TrueSplitStarting => Ru ? "True Split запускается..." : "True Split is starting...";
     public static string TrueSplitActive => TrueSplitBadge;
     public static string TrueSplitMissing => Ru

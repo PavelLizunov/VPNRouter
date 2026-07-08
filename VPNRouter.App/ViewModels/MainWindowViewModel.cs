@@ -3993,7 +3993,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private static string FormatTrueSplitFallback(string reason)
     {
         if (reason.Contains("err=5", StringComparison.OrdinalIgnoreCase)
-            || reason.Contains("MULLVADSPLITTUNNEL", StringComparison.OrdinalIgnoreCase))
+            || reason.Contains("MULLVADSPLITTUNNEL", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("0x80320009", StringComparison.OrdinalIgnoreCase))
             return string.IsNullOrWhiteSpace(reason) ? Strings.TrueSplitDeviceBusy : reason;
         if (!string.IsNullOrWhiteSpace(reason))
             return $"{Strings.TrueSplitFallback} {reason}";
