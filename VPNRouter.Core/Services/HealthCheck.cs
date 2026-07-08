@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text;
@@ -403,6 +404,16 @@ public static class HealthCheck
             }
         }
 
+        if (CountDiscordDnsStalls(log) >= 2)
+        {
+            advice.Add(new(
+                HealthAdviceSeverity.Warning,
+                "Discord DNS/voice traffic is stalling through the VPN.",
+                "The sing-box log shows repeated Discord DNS timeouts or multi-second resolves while Discord is routed via the tunnel.",
+                "Switch server/transport, or move Discord to the direct/bypass app list if low voice latency matters more than hiding Discord from the ISP.",
+                HealthAdviceAction.BypassApp));
+        }
+
         if ((settings?.Tun?.Mtu ?? TunSettings.DefaultMtu) < 1332)
         {
             advice.Add(new(
@@ -556,6 +567,31 @@ public static class HealthCheck
             }
         }
         return count;
+    }
+
+    internal static int CountDiscordDnsStalls(string log)
+    {
+        var count = 0;
+        foreach (var line in log.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!line.Contains("dns:", StringComparison.OrdinalIgnoreCase) ||
+                !line.Contains("discord", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (line.Contains("context deadline exceeded", StringComparison.OrdinalIgnoreCase) ||
+                TryReadSingBoxDurationSeconds(line) >= 2)
+                count++;
+        }
+        return count;
+    }
+
+    private static double TryReadSingBoxDurationSeconds(string line)
+    {
+        var close = line.IndexOf("] dns:", StringComparison.OrdinalIgnoreCase);
+        if (close < 0) return 0;
+        var s = line.LastIndexOf(' ', close);
+        if (s < 0 || close - s < 3 || line[close - 1] != 's') return 0;
+        return double.TryParse(line.AsSpan(s + 1, close - s - 2), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ? seconds : 0;
     }
 
     [SupportedOSPlatform("windows")]

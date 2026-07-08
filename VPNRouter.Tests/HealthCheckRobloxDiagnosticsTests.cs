@@ -90,6 +90,19 @@ gamejoin.roblox.com resolved
     }
 
     [Fact]
+    public void BuildAdvice_DiscordDnsStalls_GivesBypassAction()
+    {
+        var advice = HealthCheck.BuildAdvice(new AppSettings(), "{}", """
++0300 2026-07-08 22:06:34 ERROR [1790913872 10.0s] dns: exchange failed for discord.com. IN A: context deadline exceeded
++0300 2026-07-08 22:07:36 INFO [3701978089 17.20s] dns: exchanged A discord.com. 204 IN A 162.159.137.232
+""");
+
+        var item = Assert.Single(advice, a => a.Action == HealthAdviceAction.BypassApp
+            && a.Problem.Contains("Discord", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("direct", item.ActionText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void BuildAdvice_InvalidCurrentJson_DoesNotThrow()
     {
         var advice = HealthCheck.BuildAdvice(new AppSettings(), "{", "gamejoin.roblox.com");

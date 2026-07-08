@@ -203,22 +203,20 @@ public class SplitTunnelDirectAppImpactTests
         Assert.Contains("local", lanRule.DomainSuffix!);                  // built-ins intact
     }
 
-    // ── Mechanism 2: the TUN captures ALL traffic (direct apps included) ─────
+    // ── Mechanism 2: the TUN captures non-local traffic (direct apps included) ─────
 
     [Fact]
-    public void SplitMode_Tun_AutoRouteCapturesEverything_NoRouteInclude()
+    public void SplitMode_Tun_AutoRouteExcludesLocalNetworks_NoRouteInclude()
     {
         var cfg = GenerateSplit();
 
         var tun = cfg.Inbounds.Single(i => i.Type == "tun");
 
-        // auto_route installs the default route → ALL traffic enters the TUN.
+        // auto_route installs the default route; local/private ranges are excluded
+        // before sing-box sees them.
         Assert.True(tun.AutoRoute);
 
-        // There is NO route-INCLUDE restriction in the model — only
-        // route_exclude_address (WG coexistence), which is null here. So nothing
-        // limits capture to "only routed apps"; direct apps traverse the TUN.
-        Assert.Null(tun.RouteExcludeAddress);
+        Assert.Equal(TunSettings.MandatoryLocalRouteExcludeAddress, tun.RouteExcludeAddress);
 
         // And they use the same TUN MTU as routed apps.
         Assert.Equal(TunSettings.DefaultMtu, tun.Mtu);

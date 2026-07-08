@@ -40,6 +40,26 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
 {
     private readonly string _tempDir;
 
+    private static string[] WithMandatory(params string[] first)
+    {
+        var r = new List<string>(first);
+        var seen = new HashSet<string>(first.Select(s => s.Trim()), StringComparer.OrdinalIgnoreCase);
+        foreach (var s in TunSettings.MandatoryLocalRouteExcludeAddress)
+        {
+            if (seen.Add(s))
+                r.Add(s);
+        }
+        return r.ToArray();
+    }
+
+    private static string[] WithMandatoryAndAuto(string auto, params string[] first)
+    {
+        var r = WithMandatory(first).ToList();
+        if (!r.Any(s => s.Trim().Equals(auto, StringComparison.OrdinalIgnoreCase)))
+            r.Add(auto);
+        return r.ToArray();
+    }
+
     public TunSettingsEffectiveExcludeTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(),
@@ -67,7 +87,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
 
         var eff = tun.GetEffectiveRouteExcludeAddress();
 
-        Assert.Equal(new[] { "192.168.50.0/24", "10.0.0.0/8" }, eff);
+        Assert.Equal(WithMandatory("192.168.50.0/24", "10.0.0.0/8"), eff);
     }
 
     [Fact]
@@ -83,7 +103,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
 
         var eff = tun.GetEffectiveRouteExcludeAddress();
 
-        Assert.Equal(new[] { "192.168.50.0/24", "10.9.1.0/24" }, eff);
+        Assert.Equal(WithMandatoryAndAuto("10.9.1.0/24", "192.168.50.0/24"), eff);
     }
 
     [Fact]
@@ -95,7 +115,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
             AutoDetectedExcludeAddress = new List<string> { "10.9.1.0/24" }
         };
 
-        Assert.Equal(new[] { "10.9.1.0/24" }, tun.GetEffectiveRouteExcludeAddress());
+        Assert.Equal(WithMandatoryAndAuto("10.9.1.0/24"), tun.GetEffectiveRouteExcludeAddress());
     }
 
     [Fact]
@@ -107,7 +127,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
             AutoDetectedExcludeAddress = new List<string>()
         };
 
-        Assert.Empty(tun.GetEffectiveRouteExcludeAddress());
+        Assert.Equal(TunSettings.MandatoryLocalRouteExcludeAddress, tun.GetEffectiveRouteExcludeAddress());
     }
 
     [Fact]
@@ -123,7 +143,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
 
         var eff = tun.GetEffectiveRouteExcludeAddress();
 
-        Assert.Single(eff);
+        Assert.Equal(WithMandatory("10.9.1.0/24"), eff);
         Assert.Equal("10.9.1.0/24", eff[0]);
     }
 
@@ -137,7 +157,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
             AutoDetectedExcludeAddress = new List<string> { "  10.9.1.0/24  " }
         };
 
-        Assert.Equal(new[] { "10.9.1.0/24" }, tun.GetEffectiveRouteExcludeAddress());
+        Assert.Equal(WithMandatory("10.9.1.0/24"), tun.GetEffectiveRouteExcludeAddress());
     }
 
     [Fact]
@@ -154,7 +174,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
 
         var eff = tun.GetEffectiveRouteExcludeAddress();
 
-        Assert.Single(eff);
+        Assert.Equal(WithMandatory("  10.0.0.0/8  "), eff);
         Assert.Equal("  10.0.0.0/8  ", eff[0]);
     }
 
@@ -167,7 +187,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
             AutoDetectedExcludeAddress = new List<string> { "  ", null! }
         };
 
-        Assert.Equal(new[] { "10.0.0.0/8" }, tun.GetEffectiveRouteExcludeAddress());
+        Assert.Equal(WithMandatory("10.0.0.0/8"), tun.GetEffectiveRouteExcludeAddress());
     }
 
     [Fact]
@@ -180,7 +200,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
             AutoDetectedExcludeAddress = new List<string> { "10.9.1.0/24" }
         };
 
-        Assert.Equal(new[] { "10.9.1.0/24" }, tun.GetEffectiveRouteExcludeAddress());
+        Assert.Equal(WithMandatoryAndAuto("10.9.1.0/24"), tun.GetEffectiveRouteExcludeAddress());
     }
 
     [Fact]
@@ -192,7 +212,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
             AutoDetectedExcludeAddress = null!
         };
 
-        Assert.Equal(new[] { "192.168.50.0/24" }, tun.GetEffectiveRouteExcludeAddress());
+        Assert.Equal(WithMandatory("192.168.50.0/24"), tun.GetEffectiveRouteExcludeAddress());
     }
 
     [Fact]
@@ -236,7 +256,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
 
         var eff = tun.GetEffectiveRouteExcludeAddress();
         Assert.DoesNotContain("10.9.1.0/24", eff);
-        Assert.Equal(new[] { "192.168.50.0/24" }, eff);
+        Assert.Equal(WithMandatory("192.168.50.0/24"), eff);
         // Persisted user list never affected by either connect.
         Assert.Equal(new[] { "192.168.50.0/24" }, tun.RouteExcludeAddress);
     }
@@ -299,7 +319,7 @@ public sealed class TunSettingsEffectiveExcludeTests : IDisposable
         // And the effective set on a fresh reload (before any detection) is the
         // user list only.
         Assert.Equal(
-            new[] { "192.168.50.0/24", "172.16.0.0/12" },
+            WithMandatory("192.168.50.0/24", "172.16.0.0/12"),
             reloaded.Tun.GetEffectiveRouteExcludeAddress());
     }
 }

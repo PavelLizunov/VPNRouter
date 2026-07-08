@@ -7,6 +7,15 @@ public class TunSettings
 {
     public const int DefaultMtu = 1420;
 
+    public static readonly string[] MandatoryLocalRouteExcludeAddress =
+    {
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "127.0.0.0/8"
+    };
+
     [YamlMember(Alias = "interface_name")]
     public string InterfaceName { get; set; } = "VPNRouter-TUN";
 
@@ -68,10 +77,11 @@ public class TunSettings
     /// <summary>
     /// The EFFECTIVE TUN route-exclude set used to build the sing-box config
     /// and the TUN-change fingerprint: the persisted user list
-    /// (<see cref="RouteExcludeAddress"/>) followed by the freshly
-    /// auto-detected WG/AWG subnets (<see cref="AutoDetectedExcludeAddress"/>),
-    /// de-duplicated case-insensitively. User entries are preserved verbatim
-    /// and win on collision; the persisted list itself is never mutated.
+    /// (<see cref="RouteExcludeAddress"/>), mandatory local networks, then the
+    /// freshly auto-detected WG/AWG subnets
+    /// (<see cref="AutoDetectedExcludeAddress"/>), de-duplicated
+    /// case-insensitively. User entries are preserved verbatim and win on
+    /// collision; the persisted list itself is never mutated.
     /// </summary>
     public List<string> GetEffectiveRouteExcludeAddress()
     {
@@ -87,6 +97,11 @@ public class TunSettings
                 if (string.IsNullOrWhiteSpace(s)) continue;
                 if (seen.Add(s.Trim())) result.Add(s);
             }
+        }
+
+        foreach (var s in MandatoryLocalRouteExcludeAddress)
+        {
+            if (seen.Add(s)) result.Add(s);
         }
 
         // Freshly auto-detected WG/AWG subnets, only those not already covered
