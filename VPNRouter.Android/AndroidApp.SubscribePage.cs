@@ -61,9 +61,7 @@ public partial class AndroidApp
     private StackPanel? _subsAggListStack;
     private TextBlock? _subsAggEmptyHint;
     private TextBlock? _subsAggColServer;
-    private TextBlock? _subsAggColIp;
     private TextBlock? _subsAggColPing;
-    private TextBlock? _subsAggColPort;
     private Avalonia.Controls.Button? _subsAggTestAllBtn;
     private Avalonia.Controls.Button? _subsAggDeepVerifyBtn;
     private TextBlock? _subsAggStatusText;
@@ -364,14 +362,6 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         ToolTip.SetTip(_subsAggColPing, Localization.ColPingTooltip);
-        // _subsAggColIp / _subsAggColPort still live on the class as fields
-        // for backwards compatibility; the dedicated columns were retired
-        // by the mobile redesign so we leave them null-but-instantiated
-        // (any incidental ToolTip / IsVisible reads stay safe). Mobile
-        // design grid matches the row layout: 14 (radio) · * (name+meta)
-        // · Auto (ping) · 24 (refresh).
-        _subsAggColIp = new TextBlock { IsVisible = false };
-        _subsAggColPort = new TextBlock { IsVisible = false };
         var headerGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
@@ -1385,13 +1375,11 @@ public partial class AndroidApp
         // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — aggregated server table
         // headers + middle action row + empty hint.
         if (_subsAggColServer is not null) _subsAggColServer.Text = Localization.ColServer;
-        if (_subsAggColIp is not null) _subsAggColIp.Text = Localization.ColIp;
         if (_subsAggColPing is not null)
         {
             _subsAggColPing.Text = Localization.ColPing;
             ToolTip.SetTip(_subsAggColPing, Localization.ColPingTooltip);
         }
-        if (_subsAggColPort is not null) _subsAggColPort.Text = Localization.ColPort;
         if (_subsAggEmptyHint is not null)
             _subsAggEmptyHint.Text = Localization.AdvSubscribeAggregatedEmpty;
         if (_subsAggTestAllBtn is not null && _subsAggTestAllCts is null)

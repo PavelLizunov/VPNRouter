@@ -96,11 +96,6 @@ public partial class AndroidApp
     /// FreeConfigsPage.axaml: sub-tab strip (Search | Saved) + scrollable
     /// bodies + bottom action bar. The shell provides the title bar /
     /// close button / outer chrome.
-    ///
-    /// <para>Renamed from <c>BuildFreeConfigsTabContent</c> to align with
-    /// the desktop "Public" tab label. The legacy name is kept as a thin
-    /// alias below so the AdvancedShell dispatch keeps working until
-    /// Phase A retires the wrapper alongside the chrome rebuild.</para>
     /// </summary>
     private Control BuildPublicTabContent()
     {
@@ -492,15 +487,6 @@ public partial class AndroidApp
             Child = dock,
         };
     }
-
-    /// <summary>
-    /// AND-ADV-TOOLS-PUBLIC (2026-05-10) — backwards-compat alias for the
-    /// AdvancedShell dispatch. Phase A's chrome rebuild will switch the
-    /// dispatch to call <see cref="BuildPublicTabContent"/> directly and
-    /// retire this wrapper. Until then, both names resolve to the same
-    /// widget tree.
-    /// </summary>
-    private Control BuildFreeConfigsTabContent() => BuildPublicTabContent();
 
     private Avalonia.Controls.Button MakeFcTabButton(string label, bool active)
     {
