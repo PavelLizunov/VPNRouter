@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
@@ -29,6 +30,7 @@ public static class HealthCheck
     public static List<Result> RunAll()
     {
         var results = new List<Result>();
+        AppSettings? parsedSettings = null;
 
         // ── Config ──
         var configPath = AppPaths.ConfigYamlPath;
@@ -38,6 +40,7 @@ public static class HealthCheck
             {
                 var yaml = File.ReadAllText(configPath);
                 var settings = SettingsLoader.Parse(yaml);
+                parsedSettings = settings;
                 results.Add(new(Level.Ok, $"config.yaml parses (schema v{settings.SchemaVersion})"));
 
                 if (settings.SchemaVersion < AppSettings.CurrentSchemaVersion)
@@ -158,6 +161,10 @@ public static class HealthCheck
         var receipt = UpdateChecker.CheckInstallReceipt(VPNRouter.Core.AppVersion.Version);
         if (!string.IsNullOrEmpty(receipt))
             results.Add(new(Level.Warn, receipt));
+
+        CheckRecentProxyTimeouts(results);
+        if (OperatingSystem.IsWindows() && parsedSettings != null)
+            CheckPathMtu(results, parsedSettings.Tun?.Mtu ?? TunSettings.DefaultMtu);
 
         // ── Linux: pkexec / polkit availability (v2.30 #3.3) ──
         // Some minimal distros (Alpine, headless servers) ship without
@@ -318,6 +325,167 @@ public static class HealthCheck
         }
 
         return results;
+    }
+
+    private static void CheckRecentProxyTimeouts(List<Result> results)
+    {
+        try
+        {
+            if (!File.Exists(AppPaths.CurrentConfigPath) || !File.Exists(AppPaths.SingBoxLogPath))
+                return;
+
+            var endpoints = ExtractProxyEndpointsFromCurrentJson(File.ReadAllText(AppPaths.CurrentConfigPath));
+            if (endpoints.Count == 0)
+                return;
+
+            var log = DiagnosticsExporter.TailLines(AppPaths.SingBoxLogPath, 2_000);
+            var timeoutCount = CountProxyDialTimeouts(log, endpoints);
+            if (timeoutCount >= 3)
+            {
+                var sample = string.Join(", ", endpoints.Take(3));
+                results.Add(new(Level.Warn,
+                    $"recent sing-box log has {timeoutCount} timeout(s) dialing VPN endpoint {sample}. Games such as Roblox can disconnect; switch server/transport before tuning app lists or MTU."));
+            }
+        }
+        catch (Exception ex)
+        {
+            results.Add(new(Level.Warn, $"proxy timeout log check failed: {ex.Message}"));
+        }
+    }
+
+    internal static HashSet<string> ExtractProxyEndpointsFromCurrentJson(string json)
+    {
+        var endpoints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("outbounds", out var outbounds) ||
+            outbounds.ValueKind != JsonValueKind.Array)
+            return endpoints;
+
+        foreach (var outbound in outbounds.EnumerateArray())
+        {
+            if (!outbound.TryGetProperty("server", out var serverEl) ||
+                serverEl.ValueKind != JsonValueKind.String)
+                continue;
+
+            var server = serverEl.GetString();
+            var port = ReadInt(outbound, "server_port") ?? ReadInt(outbound, "port");
+            if (!string.IsNullOrWhiteSpace(server) && port is > 0)
+                endpoints.Add($"{server}:{port}");
+        }
+        return endpoints;
+
+        static int? ReadInt(JsonElement obj, string name)
+        {
+            if (!obj.TryGetProperty(name, out var el)) return null;
+            return el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var n) ? n : null;
+        }
+    }
+
+    internal static int CountProxyDialTimeouts(string log, IReadOnlySet<string> endpoints)
+    {
+        var count = 0;
+        foreach (var line in log.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!line.Contains("i/o timeout", StringComparison.OrdinalIgnoreCase) ||
+                !line.Contains("dial tcp", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foreach (var endpoint in endpoints)
+            {
+                if (line.Contains(endpoint, StringComparison.OrdinalIgnoreCase))
+                {
+                    count++;
+                    break;
+                }
+            }
+        }
+        return count;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void CheckPathMtu(List<Result> results, int configuredMtu)
+    {
+        try
+        {
+            var probe = ProbePathMtuPayload();
+            var warning = BuildPathMtuWarning(configuredMtu, probe.BestPayload, probe.PlainPingBlocked);
+            if (warning != null)
+                results.Add(warning.Value);
+        }
+        catch (Exception ex)
+        {
+            results.Add(new(Level.Warn, $"MTU probe failed: {ex.Message}"));
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static (int? BestPayload, bool PlainPingBlocked) ProbePathMtuPayload()
+    {
+        if (!PingOk(null))
+            return (null, true);
+
+        foreach (var payload in new[] { 1420, 1400, 1380, 1360, 1350, 1320, 1310, 1300, 1280, 1260, 1240 })
+        {
+            if (PingOk(payload))
+                return (payload, false);
+        }
+        return (null, false);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static bool PingOk(int? payload)
+    {
+        using var proc = new Process();
+        proc.StartInfo.FileName = "ping.exe";
+        proc.StartInfo.UseShellExecute = false;
+        proc.StartInfo.CreateNoWindow = true;
+        proc.StartInfo.RedirectStandardOutput = true;
+        proc.StartInfo.RedirectStandardError = true;
+        proc.StartInfo.ArgumentList.Add("-n");
+        proc.StartInfo.ArgumentList.Add("1");
+        proc.StartInfo.ArgumentList.Add("-w");
+        proc.StartInfo.ArgumentList.Add("1000");
+        if (payload.HasValue)
+        {
+            proc.StartInfo.ArgumentList.Add("-f");
+            proc.StartInfo.ArgumentList.Add("-l");
+            proc.StartInfo.ArgumentList.Add(payload.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        proc.StartInfo.ArgumentList.Add("8.8.8.8");
+
+        if (!proc.Start()) return false;
+        var outputTask = proc.StandardOutput.ReadToEndAsync();
+        if (!proc.WaitForExit(2000))
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            return false;
+        }
+        var output = outputTask.GetAwaiter().GetResult();
+        return proc.ExitCode == 0 &&
+               output.Contains("TTL=", StringComparison.OrdinalIgnoreCase) &&
+               !output.Contains("fragmented", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static Result? BuildPathMtuWarning(int configuredMtu, int? bestPayload, bool plainPingBlocked)
+    {
+        if (plainPingBlocked)
+            return new(Level.Warn,
+                "plain ping to 8.8.8.8 fails. If this says 'General failure', fix True Split/WFP driver state before measuring MTU.");
+
+        if (bestPayload == null)
+            return new(Level.Warn,
+                "DF MTU probe got no successful payload; ICMP PMTU may be blocked on this path.");
+
+        var ipMtu = bestPayload.Value + 28;
+        if (configuredMtu > ipMtu)
+            return new(Level.Warn,
+                $"TUN MTU {configuredMtu} is above measured DF path MTU about {ipMtu} (largest ping payload {bestPayload}). For Roblox disconnects try TUN MTU {bestPayload}, then 1320.");
+
+        if (configuredMtu >= ipMtu - 8)
+            return new(Level.Warn,
+                $"TUN MTU {configuredMtu} is very close to measured DF path MTU about {ipMtu} (largest ping payload {bestPayload}). If Roblox disconnects, try {bestPayload}, then 1320.");
+
+        return null;
     }
 
     /// <summary>
