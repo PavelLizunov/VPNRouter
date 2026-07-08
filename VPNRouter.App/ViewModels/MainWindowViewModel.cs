@@ -1178,6 +1178,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         : TunMtu > TunSettings.DefaultMtu
             ? Strings.MtuWarningHigh
             : string.Empty;
+    [ObservableProperty] private bool _isMtuAutoTuneRunning;
+    [ObservableProperty] private string _mtuAutoTuneStatus = string.Empty;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;

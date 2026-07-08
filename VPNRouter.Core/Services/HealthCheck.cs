@@ -21,6 +21,7 @@ public static class HealthCheck
     public enum Level { Ok, Warn, Err }
 
     public readonly record struct Result(Level Severity, string Message);
+    public readonly record struct PathMtuProbeResult(int? BestPayload, bool PlainPingBlocked);
 
     /// <summary>
     /// Run all checks, return the ordered result list. No formatting,
@@ -419,17 +420,17 @@ public static class HealthCheck
     }
 
     [SupportedOSPlatform("windows")]
-    private static (int? BestPayload, bool PlainPingBlocked) ProbePathMtuPayload()
+    public static PathMtuProbeResult ProbePathMtuPayload()
     {
         if (!PingOk(null))
-            return (null, true);
+            return new(null, true);
 
         foreach (var payload in new[] { 1420, 1400, 1380, 1360, 1350, 1320, 1310, 1300, 1280, 1260, 1240 })
         {
             if (PingOk(payload))
-                return (payload, false);
+                return new(payload, false);
         }
-        return (null, false);
+        return new(null, false);
     }
 
     [SupportedOSPlatform("windows")]

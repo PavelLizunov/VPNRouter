@@ -238,7 +238,9 @@ public class MainWindowViewModelCharacterizationTests
         // v2.46.0-r20 true-split UX: service-owned VPN now shows a clear
         // "True Split is controlled by Windows Service" banner instead of
         // leaving GUI retry/control ambiguous.
-        "10d322710620d0affc5a3e9bfc68a14c32da4534de7efc29f202c0d49a4dc45c";
+        // v2.46.0-r31 MTU diagnostics: + AutoTuneMtuCommand +
+        // IsMtuAutoTuneRunning/MtuAutoTuneStatus/MtuAutoTuneButton.
+        "de5060a32ef32b940ebc476d7c574c3a52cb06b3d6604c75e7fb3a7f1f19f166";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

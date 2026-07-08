@@ -63,6 +63,7 @@ public partial class MainWindowViewModel
     public string StrictModeHint => Strings.StrictModeHint;
     public string MtuLabel => Strings.MtuLabel;
     public string MtuHint => Strings.MtuHint;
+    public string MtuAutoTuneButton => Strings.MtuAutoTuneButton;
     public string ForceIpv4Label => Strings.ForceIpv4Label;
     public string FlushDnsLabel => Strings.FlushDnsLabel;
     public string StrictDnsLabel => Strings.StrictDnsLabel;

@@ -712,6 +712,21 @@ public static partial class Strings
     public static string MtuWarningHigh => Ru
         ? "MTU выше 1420 может ломать VPN/proxy пути из-за PMTU. Попробуй 1400, затем 1380."
         : "MTU above 1420 may break VPN/proxy paths due to PMTU. Try 1400, then 1380.";
+    public static string MtuAutoTuneButton => Ru
+        ? "Подобрать MTU"
+        : "Auto-pick MTU";
+    public static string MtuAutoTuneRunning => Ru
+        ? "Проверяю путь до 8.8.8.8..."
+        : "Probing path to 8.8.8.8...";
+    public static string MtuAutoTuneApplied(int mtu) => Ru
+        ? $"MTU {mtu} сохранён. Переподключите VPN, чтобы применить."
+        : $"MTU {mtu} saved. Reconnect VPN to apply.";
+    public static string MtuAutoTuneBlocked => Ru
+        ? "Обычный ping не проходит. Сначала выключите True Split/почините WFP, потом меряйте MTU."
+        : "Plain ping fails. Turn off True Split/fix WFP first, then measure MTU.";
+    public static string MtuAutoTuneNoResult => Ru
+        ? "Не нашёл рабочий DF payload. На этом пути ICMP PMTU может быть заблокирован."
+        : "No working DF payload found. ICMP PMTU may be blocked on this path.";
     public static string ForceIpv4Label => Ru
         // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
         // a Russian sentence. Use natural RU "IPv6-утечек".

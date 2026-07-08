@@ -1914,9 +1914,20 @@
                          HorizontalContentAlignment="Right"
                          AutomationProperties.Name="{Binding MtuLabel}"/>
               </Grid>
+              <Button Content="{Binding MtuAutoTuneButton}"
+                      Command="{Binding AutoTuneMtuCommand}"
+                      IsEnabled="{Binding !IsMtuAutoTuneRunning}"
+                      Padding="10,5"
+                      HorizontalAlignment="Right"/>
               <TextBlock Text="{Binding TunMtuWarning}"
                          IsVisible="{Binding TunMtuWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                          Foreground="{DynamicResource WarningFgBrush}"
+                         FontSize="11"
+                         TextWrapping="Wrap"
+                         Margin="0,2,0,0"/>
+              <TextBlock Text="{Binding MtuAutoTuneStatus}"
+                         IsVisible="{Binding MtuAutoTuneStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                         Foreground="{DynamicResource TextMutedBrush}"
                          FontSize="11"
                          TextWrapping="Wrap"
                          Margin="0,2,0,0"/>

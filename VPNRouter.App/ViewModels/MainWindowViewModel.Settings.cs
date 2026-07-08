@@ -14,6 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
 using VPNRouter.Core.Services.Diagnostics;
 using VPNRouter.Core;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -165,6 +166,47 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             _logger?.Error(ex, "[ViewModel] Health check failed");
+        }
+    }
+
+    [RelayCommand]
+    private async Task AutoTuneMtu()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            MtuAutoTuneStatus = Strings.MtuAutoTuneNoResult;
+            return;
+        }
+
+        IsMtuAutoTuneRunning = true;
+        MtuAutoTuneStatus = Strings.MtuAutoTuneRunning;
+        try
+        {
+            var probe = await Task.Run(VPNRouter.Core.Services.HealthCheck.ProbePathMtuPayload);
+            if (probe.PlainPingBlocked)
+            {
+                MtuAutoTuneStatus = Strings.MtuAutoTuneBlocked;
+                return;
+            }
+
+            if (probe.BestPayload is not { } payload)
+            {
+                MtuAutoTuneStatus = Strings.MtuAutoTuneNoResult;
+                return;
+            }
+
+            TunMtu = Math.Clamp(payload, 576, TunSettings.DefaultMtu);
+            SaveSettings();
+            MtuAutoTuneStatus = Strings.MtuAutoTuneApplied(TunMtu);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warning(ex, "[ViewModel] MTU auto-tune failed");
+            MtuAutoTuneStatus = Strings.MtuAutoTuneNoResult;
+        }
+        finally
+        {
+            IsMtuAutoTuneRunning = false;
         }
     }
 
