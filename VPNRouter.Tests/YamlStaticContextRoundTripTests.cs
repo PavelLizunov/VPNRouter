@@ -120,6 +120,7 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal(AppSettings.CurrentSchemaVersion, roundTripped.SchemaVersion);
         Assert.Equal("info", roundTripped.App.LogLevel);
         Assert.Equal("split", roundTripped.App.RoutingMode);
+        Assert.Equal(ConnectionIntent.General, roundTripped.App.ConnectionIntent);
         Assert.Equal("include", roundTripped.App.RoutingAppsMode);
         Assert.Equal("system", roundTripped.App.Theme);   // Fix #7: default theme is now "system" (follow OS)
         Assert.Equal("advanced", roundTripped.App.UiMode);
@@ -130,6 +131,19 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal(30, roundTripped.Monitoring.HealthCheckInterval);
         Assert.Equal("PavelLizunov/VPNRouter", roundTripped.Update.GitHubRepo);
         Assert.True(roundTripped.Update.AutoCheck);
+    }
+
+    [Fact]
+    public void LegacyYaml_WithoutConnectionIntent_LoadsGeneralIntent()
+    {
+        var settings = SettingsLoader.Parse("""
+schema_version: 8
+app:
+  log_level: info
+  routing_mode: split
+""");
+
+        Assert.Equal(ConnectionIntent.General, settings.App.ConnectionIntent);
     }
 
     // ─────────────────────────────────────────────────────────────────────

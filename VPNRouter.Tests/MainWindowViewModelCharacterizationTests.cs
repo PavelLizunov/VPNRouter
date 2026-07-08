@@ -240,7 +240,7 @@ public class MainWindowViewModelCharacterizationTests
         // leaving GUI retry/control ambiguous.
         // v2.46.0-r31 MTU diagnostics: + AutoTuneMtuCommand +
         // IsMtuAutoTuneRunning/MtuAutoTuneStatus/MtuAutoTuneButton.
-        "de5060a32ef32b940ebc476d7c574c3a52cb06b3d6604c75e7fb3a7f1f19f166";
+        "72d4a5a49b8c0dac2a75febf8f6298b8fcb7cb5312fe90763c017d0ecca4b575";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

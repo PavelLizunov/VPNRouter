@@ -325,7 +325,162 @@ public static class HealthCheck
                 results.Add(new(Level.Warn, $"directory missing: {dir} (will be created on first launch)"));
         }
 
+        foreach (var advice in RunAdvice(parsedSettings))
+            results.Add(new(MapAdviceLevel(advice.Severity), FormatAdvice(advice)));
+
         return results;
+    }
+
+    public static List<HealthAdvice> RunAdvice(AppSettings? settings = null)
+    {
+        string? currentJson = null;
+        string? singBoxLog = null;
+
+        try
+        {
+            if (File.Exists(AppPaths.CurrentConfigPath))
+                currentJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+            if (File.Exists(AppPaths.SingBoxLogPath))
+                singBoxLog = DiagnosticsExporter.TailLines(AppPaths.SingBoxLogPath, 2_000);
+        }
+        catch
+        {
+            // Health advice is best-effort; the main health report keeps the
+            // file-read failure details in the regular checks.
+        }
+
+        return BuildAdvice(settings, currentJson, singBoxLog);
+    }
+
+    internal static List<HealthAdvice> BuildAdvice(
+        AppSettings? settings,
+        string? currentJson,
+        string? singBoxLog)
+    {
+        var advice = new List<HealthAdvice>();
+        var outbounds = ExtractOutboundTypes(currentJson ?? string.Empty);
+        var log = singBoxLog ?? string.Empty;
+
+        var hasRoblox = log.Contains("roblox", StringComparison.OrdinalIgnoreCase)
+            || log.Contains("128.116.", StringComparison.OrdinalIgnoreCase);
+        var proxyType = outbounds.TryGetValue("proxy", out var p) ? p : string.Empty;
+        var udpType = outbounds.TryGetValue("proxy-udp", out var u) ? u : string.Empty;
+
+        if (hasRoblox && string.Equals(proxyType, "vless", StringComparison.OrdinalIgnoreCase))
+        {
+            var action = string.IsNullOrWhiteSpace(udpType)
+                ? "Switch to AWG/HY2/TUIC, or route Roblox directly if privacy mode allows it."
+                : $"Try another UDP-native transport/server; Roblox UDP is currently using {udpType}.";
+            advice.Add(new(
+                HealthAdviceSeverity.Warning,
+                "Roblox traffic is on a VLESS/TCP profile.",
+                "Realtime games are sensitive to UDP relay loss and TCP head-of-line blocking.",
+                action,
+                HealthAdviceAction.ChangeTransport));
+        }
+
+        if (log.Contains("sing-box crashed", StringComparison.OrdinalIgnoreCase))
+        {
+            advice.Add(new(
+                HealthAdviceSeverity.Warning,
+                "sing-box crashed recently.",
+                "A crashing core can break long Roblox/game sessions even when DNS and HTTPS look fine.",
+                "Reconnect or switch server/transport before tuning MTU again.",
+                HealthAdviceAction.ChangeServer));
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentJson))
+        {
+            var endpoints = TryExtractProxyEndpointsFromCurrentJson(currentJson);
+            if (endpoints.Count > 0 && CountProxyDialTimeouts(log, endpoints) >= 3)
+            {
+                advice.Add(new(
+                    HealthAdviceSeverity.Warning,
+                    "The active VPN endpoint has repeated dial timeouts.",
+                    "Games and voice calls often disconnect when the selected endpoint stalls.",
+                    "Switch server or transport before editing app lists or MTU.",
+                    HealthAdviceAction.ChangeServer));
+            }
+        }
+
+        if ((settings?.Tun?.Mtu ?? TunSettings.DefaultMtu) < 1332)
+        {
+            advice.Add(new(
+                HealthAdviceSeverity.Warning,
+                "TUN MTU is below 1332.",
+                "This can help very narrow links, but may break Steam SDR-class games.",
+                "Try 1350 or switch transport/server instead of going lower by default.",
+                HealthAdviceAction.TuneMtu));
+        }
+
+        if (ConnectionIntent.Normalize(settings?.App?.ConnectionIntent) == ConnectionIntent.Privacy
+            && hasRoblox)
+        {
+            advice.Add(new(
+                HealthAdviceSeverity.Info,
+                "Privacy intent is active.",
+                "VPNRouter will not route Roblox directly by itself in this mode.",
+                "If Roblox must work over direct internet, switch intent or add an explicit app exclusion.",
+                HealthAdviceAction.BypassApp));
+        }
+
+        return advice;
+    }
+
+    private static Level MapAdviceLevel(HealthAdviceSeverity severity) => severity switch
+    {
+        HealthAdviceSeverity.Critical => Level.Err,
+        HealthAdviceSeverity.Warning => Level.Warn,
+        _ => Level.Ok
+    };
+
+    private static string FormatAdvice(HealthAdvice advice)
+        => $"Advice: {advice.Problem} {advice.Why} {advice.ActionText}";
+
+    internal static Dictionary<string, string> ExtractOutboundTypes(string json)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return result;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("outbounds", out var outbounds) ||
+                outbounds.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var outbound in outbounds.EnumerateArray())
+            {
+                if (!outbound.TryGetProperty("tag", out var tagEl) ||
+                    tagEl.ValueKind != JsonValueKind.String ||
+                    !outbound.TryGetProperty("type", out var typeEl) ||
+                    typeEl.ValueKind != JsonValueKind.String)
+                    continue;
+
+                var tag = tagEl.GetString();
+                var type = typeEl.GetString();
+                if (!string.IsNullOrWhiteSpace(tag) && !string.IsNullOrWhiteSpace(type))
+                    result[tag] = type;
+            }
+        }
+        catch (JsonException)
+        {
+            return result;
+        }
+
+        return result;
+    }
+
+    private static HashSet<string> TryExtractProxyEndpointsFromCurrentJson(string json)
+    {
+        try
+        {
+            return ExtractProxyEndpointsFromCurrentJson(json);
+        }
+        catch (JsonException)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     private static void CheckRecentProxyTimeouts(List<Result> results)

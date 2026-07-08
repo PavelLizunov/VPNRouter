@@ -1,3 +1,4 @@
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -54,5 +55,45 @@ public sealed class HealthCheckRobloxDiagnosticsTests
     public void BuildPathMtuWarning_ReturnsNullWhenConfiguredMtuHasRoom()
     {
         Assert.Null(HealthCheck.BuildPathMtuWarning(1320, bestPayload: 1350, plainPingBlocked: false));
+    }
+
+    [Fact]
+    public void BuildAdvice_RobloxOnVlessGivesTransportAction()
+    {
+        var advice = HealthCheck.BuildAdvice(new AppSettings(), """
+{
+  "outbounds": [
+    { "type": "vless", "tag": "proxy", "server": "104.194.156.93", "server_port": 443 },
+    { "type": "hysteria2", "tag": "proxy-udp", "server": "104.194.156.93", "server_port": 8444 }
+  ]
+}
+""", """
+open connection to 128.116.21.33:58581 using outbound/hysteria2[vless-udp-Germany HY2]
+gamejoin.roblox.com resolved
+""");
+
+        var item = Assert.Single(advice, a => a.Action == HealthAdviceAction.ChangeTransport);
+        Assert.Contains("Roblox", item.Problem);
+        Assert.Contains("UDP", item.ActionText);
+    }
+
+    [Fact]
+    public void BuildAdvice_PrivacyDoesNotAutoBypassRoblox()
+    {
+        var settings = new AppSettings();
+        settings.App.ConnectionIntent = ConnectionIntent.Privacy;
+
+        var advice = HealthCheck.BuildAdvice(settings, "{}", "gamejoin.roblox.com");
+
+        Assert.Contains(advice, a => a.Action == HealthAdviceAction.BypassApp
+            && a.ActionText.Contains("explicit", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void BuildAdvice_InvalidCurrentJson_DoesNotThrow()
+    {
+        var advice = HealthCheck.BuildAdvice(new AppSettings(), "{", "gamejoin.roblox.com");
+
+        Assert.NotNull(advice);
     }
 }

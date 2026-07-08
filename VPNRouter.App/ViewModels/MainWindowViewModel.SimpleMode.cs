@@ -516,8 +516,10 @@ public partial class MainWindowViewModel
                 {
                     var results = await new ServerHealthProbe(_logger)
                         .ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
-                    var chosen = ServerHealthProbe.PickForConnect(
-                        results, _settings.App.ActiveSubscriptionServer);
+                    var chosen = ConnectionIntentScorer.PickServer(
+                        results,
+                        _settings.App.ConnectionIntent,
+                        _settings.App.ActiveSubscriptionServer);
 
                     if (chosen == null)
                     {
@@ -533,6 +535,11 @@ public partial class MainWindowViewModel
                             "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
                         _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
                         SaveSettings();
+                    }
+
+                    if (ConnectionIntent.Normalize(_settings.App.ConnectionIntent) != ConnectionIntent.General)
+                    {
+                        StatusText = $"{ConnectionIntentStatusText} -> {chosen.Name}";
                     }
                 }
                 catch (Exception ex)

@@ -1084,6 +1084,29 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     partial void OnNewRuleValueChanged(string value) => ValidateNewRuleValue(value);
 
+    partial void OnConnectionIntentIndexChanged(int value)
+    {
+        if (_isLoadingUI) return;
+        _settings.App.ConnectionIntent = IntentFromIndex(value);
+        SaveSettings();
+    }
+
+    private static string IntentFromIndex(int value) => value switch
+    {
+        1 => VPNRouter.Core.Models.ConnectionIntent.Gaming,
+        2 => VPNRouter.Core.Models.ConnectionIntent.Privacy,
+        3 => VPNRouter.Core.Models.ConnectionIntent.Compatibility,
+        _ => VPNRouter.Core.Models.ConnectionIntent.General
+    };
+
+    private static int IntentToIndex(string? value) => VPNRouter.Core.Models.ConnectionIntent.Normalize(value) switch
+    {
+        VPNRouter.Core.Models.ConnectionIntent.Gaming => 1,
+        VPNRouter.Core.Models.ConnectionIntent.Privacy => 2,
+        VPNRouter.Core.Models.ConnectionIntent.Compatibility => 3,
+        _ => 0
+    };
+
     private void ValidateNewRuleValue(string val)
     {
         if (string.IsNullOrWhiteSpace(val))
@@ -1188,6 +1211,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // server via sing-box urltest. Persisted to Vless.AutoSelectBestServer; takes
     // effect on next connect/Apply (like BlockAds). Toggle on the Subscribe page.
     [ObservableProperty] private bool _autoSelectBestServer = false;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConnectionIntentStatusText))]
+    private int _connectionIntentIndex;
+    public IReadOnlyList<string> ConnectionIntentChoices => IsRussian
+        ? new[] { "Сайты и мессенджеры", "Игры и звонки", "Максимум приватности", "Максимальная совместимость" }
+        : new[] { "Sites and messaging", "Games and calls", "Maximum privacy", "Maximum compatibility" };
+    public string ConnectionIntentStatusText => ConnectionIntentIndex switch
+    {
+        1 => IsRussian ? "Авто: игры и звонки" : "Auto: games and calls",
+        2 => IsRussian ? "Авто: приватность" : "Auto: privacy",
+        3 => IsRussian ? "Авто: совместимость" : "Auto: compatibility",
+        _ => IsRussian ? "Авто: обычный режим" : "Auto: general"
+    };
     // Wave 39 (v2.35.0-r5): firewall-level DNS lockdown. When ON, the
     // FirewallManager adds outbound block rules for UDP/53, TCP/53, TCP/853
     // on all non-TUN interfaces while VPN is active. Protects against the
@@ -3063,6 +3099,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
         AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
+        ConnectionIntentIndex = IntentToIndex(_settings.App.ConnectionIntent);
         // Wave 39 — DNS leak lockdown (firewall block of UDP/53, TCP/53,
         // TCP/853 on non-TUN interfaces while VPN is active).
         IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
@@ -3795,6 +3832,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
         _settings.Vless.AutoSelectBestServer = AutoSelectBestServer;
+        _settings.App.ConnectionIntent = IntentFromIndex(ConnectionIntentIndex);
         // Wave 39 — DNS leak lockdown setting (default flipped per
         // SettingsMigrator: true for fresh installs, false for upgrades).
         _settings.App.DnsLeakLockdown = IsDnsLeakLockdownEnabled;

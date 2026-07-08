@@ -19,6 +19,13 @@ public class AppConfig
     public string RoutingMode { get; set; } = "split";
 
     /// <summary>
+    /// User intent for automatic server choice. Simple scoring only; never
+    /// enables direct bypass by itself.
+    /// </summary>
+    [YamlMember(Alias = "connection_intent")]
+    public string ConnectionIntent { get; set; } = VPNRouter.Core.Models.ConnectionIntent.General;
+
+    /// <summary>
     /// v2.32.x (AM-1, 2026-05-11): per-app routing mode within split tunnel.
     /// <list type="bullet">
     /// <item><c>"include"</c> (default, legacy behaviour) — selected apps
