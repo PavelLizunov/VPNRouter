@@ -733,7 +733,7 @@
         <Grid Grid.Row="3" RowDefinitions="Auto,*"
               IsVisible="{Binding !IsSimpleMode}">
             <!-- v2.25.0 — tabbar wrapped in a horizontal ScrollViewer.
-                 At 520 px window width the six tabs fit comfortably, but
+                 At 520 px window width the six tabs fit, but
                  longer localised labels (e.g. EN "Applications" vs RU
                  "Приложения" vs "Free Configs") have historically clipped
                  the rightmost "Free" on narrower viewports. Hidden
@@ -756,21 +756,21 @@
                          Padding="6,2">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="4"/>
+                            <StackPanel Orientation="Horizontal" Spacing="2"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
-                    <ListBoxItem Content="{Binding LblTabManual}"      Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabApps}"        Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabManual}"      Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabApps}"        Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
                     <!-- Tools tab: Zapret + Telegram proxy are Windows-only, but the
                          wgturn Emergency Channel works on Windows/macOS/Linux. Gate on
                          IsToolsAvailable (ANY sub-tool) so the tab — and the Emergency
                          Channel — shows on macOS/Linux too (2026-06-15 parity fix; was
                          IsZapretAvailable, which hid the whole tab off Windows). -->
-                    <ListBoxItem Content="{Binding LblTabTools}"       Padding="8,5" FontSize="12" FontWeight="SemiBold"
+                    <ListBoxItem Content="{Binding LblTabTools}"       Padding="5,5" FontSize="12" FontWeight="SemiBold"
                                  IsVisible="{Binding IsToolsAvailable}"/>
-                    <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
                 </ListBox>
             </ScrollViewer>
 

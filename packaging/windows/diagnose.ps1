@@ -201,8 +201,8 @@ Get-NetIPInterface -AddressFamily IPv4 -EA SilentlyContinue |
         if ($_.InterfaceAlias -match 'VPNRouter|sing-box|tun') { $tunMtu = $_.NlMtu }
     }
 if ($tunMtu) {
-    $okM = ($tunMtu -ge 1280 -and $tunMtu -le 1500)
-    Verdict 'tun mtu' $okM ("$tunMtu" + $(if ($tunMtu -gt 1500) { " - JUMBO; big packets fragment and can RST youtube (lower it / MSS-clamp)" } elseif ($tunMtu -lt 1280) { " - very low" } else { " - normal" }))
+    $okM = ($tunMtu -ge 1332 -and $tunMtu -le 1420)
+    Verdict 'tun mtu' $okM ("$tunMtu" + $(if ($tunMtu -gt 1420) { " - high; may break VPN/proxy paths (try 1420, then 1400/1380)" } elseif ($tunMtu -lt 1332) { " - low; may break Steam SDR games (Dota 2 / CS2 / TF2)" } else { " - normal" }))
 }
 
 # ---------- Layer 6.8: IPv6 ----------
@@ -241,8 +241,10 @@ if (-not $delay) {
     Line 'Server is unreachable through the tunnel -> the selected server is dead/slow. Switch servers and retest.'
 } elseif ($h2YoutubeFailed) {
     Line "Browser-grade HTTP/2 to YouTube FAILED here too -> this REPRODUCES the browser's ERR_CONNECTION_CLOSED (the basic HTTP/1.1 probe was too lenient)."
-    if ($tunMtu -and $tunMtu -gt 1500) {
-        Line "TUN MTU is $tunMtu (jumbo) -> most likely fragmentation. Lower the TUN MTU / add MSS-clamp."
+    if ($tunMtu -and $tunMtu -gt 1420) {
+        Line "TUN MTU is $tunMtu (>1420) -> most likely fragmentation/PMTU blackhole. Try 1420 first, then 1400/1380 on narrow paths."
+    } elseif ($tunMtu -and $tunMtu -lt 1332) {
+        Line "TUN MTU is $tunMtu (<1332) -> may break Steam SDR-class games. Keep it only if your path really needs a very low MTU."
     } elseif (-not $hasUdpProxy) {
         Line "Proxy is TCP-only ($($proxyTypes -join ',')) with QUIC blocked -> use a UDP server (Hysteria2/TUIC) so YouTube's QUIC works natively. If that also fails, it's MTU/HTTP-2 through the tunnel."
     } else {

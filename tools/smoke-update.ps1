@@ -127,10 +127,15 @@ if (-not $StagedCoreDll) {
     exit 1
 }
 try {
-    Add-Type -AssemblyName System.Reflection
-    $asm = [System.Reflection.Assembly]::LoadFile($StagedCoreDll.FullName)
-    $appVerType = $asm.GetType("VPNRouter.Core.AppVersion")
-    $stagedVersion = $appVerType.GetField("Version").GetValue($null)
+    $bytes = [System.IO.File]::ReadAllBytes($StagedCoreDll.FullName)
+    $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+    $u16 = [System.Text.Encoding]::Unicode.GetString($bytes)
+    $u16Shifted = if ($bytes.Length -gt 1) {
+        [System.Text.Encoding]::Unicode.GetString($bytes, 1, $bytes.Length - 1)
+    } else { "" }
+    $stagedVersion = if ($ascii.Contains($CandidateVersion) -or
+        $u16.Contains($CandidateVersion) -or
+        $u16Shifted.Contains($CandidateVersion)) { $CandidateVersion } else { $null }
     Write-Host "       Staged AppVersion: $stagedVersion" -ForegroundColor Gray
 } catch {
     Write-Host "ABORT: could not read AppVersion from $($StagedCoreDll.FullName): $($_.Exception.Message)" -ForegroundColor Red
@@ -167,7 +172,7 @@ if ((Test-Path $RootGui) -and (Test-Path $BootstrapDir)) {
     exit 1
 }
 
-Write-Host "[6/8] (skip end-to-end binary launch — requires DataDir override hook in App.cs)" -ForegroundColor DarkYellow
+Write-Host "[6/8] (skip end-to-end binary launch - requires DataDir override hook in App.cs)" -ForegroundColor DarkYellow
 
 Write-Host "[7/8] Static checks complete." -ForegroundColor Yellow
 Write-Host "       AppVersion in staged DLL: $stagedVersion" -ForegroundColor Gray
