@@ -235,6 +235,12 @@
                       <TextBlock Classes="srv-use-text" Text="{Binding ProtocolUseCase}"/>
                     </Border>
                   </Grid>
+                  <!-- R2 (urltest audit): honest phased health verdict — never claims
+                       "works" off ping/TCP alone; tooltip carries the RU-block /
+                       canary explanation + raw probe errors. -->
+                  <TextBlock Classes="srv-host" Text="{Binding HealthVerdictText}"
+                             IsVisible="{Binding HasHealthVerdict}"
+                             ToolTip.Tip="{Binding HealthTooltip}"/>
                 </StackPanel>
 
                 <!-- IP -->
@@ -242,12 +248,12 @@
                            Text="{Binding Server}"
                            TextTrimming="CharacterEllipsis"/>
 
-                <!-- Ping (coloured by status) -->
+                <!-- Ping (coloured by status; tooltip = full health verdict, R2) -->
                 <TextBlock Grid.Column="3" Classes="srv-cell"
                            Text="{Binding PingDisplay}"
                            Foreground="{Binding StatusDotBrush}"
                            HorizontalAlignment="Center"
-                           ToolTip.Tip="{Binding TestError}"/>
+                           ToolTip.Tip="{Binding HealthTooltip}"/>
 
                 <!-- Port -->
                 <TextBlock Grid.Column="4" Classes="srv-cell"

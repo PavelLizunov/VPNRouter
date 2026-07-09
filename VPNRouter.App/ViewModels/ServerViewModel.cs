@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.App.Localization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using CoreStrings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -171,6 +172,8 @@ public partial class ServerViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(ProtocolUseCase));
         OnPropertyChanged(nameof(ProtocolUseCaseTooltip));
+        OnPropertyChanged(nameof(HealthVerdictText));
+        OnPropertyChanged(nameof(HealthTooltip));
     }
 
     /// <summary>Apply a probe result to this VM (updates PingMs, Status, Error, clears IsTesting).</summary>
@@ -180,6 +183,58 @@ public partial class ServerViewModel : ViewModelBase
         TestStatus = result.Status;
         PingMs = result.LatencyMs;
         TestError = result.Error;
+        RecomputeHealthVerdict();
+    }
+
+    // ── Phased health verdict (urltest R2, audit batch-1 #3) ─────────────
+    // The audit's wording rule: never render "works" off ping/TCP alone. The
+    // quick-probe + deep-verify outcomes are folded through the pure
+    // mapper/classifier into ONE honest verdict line per row.
+
+    /// <summary>Merged health verdict from the quick probe + deep verify phases.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HealthVerdictText))]
+    [NotifyPropertyChangedFor(nameof(HealthTooltip))]
+    [NotifyPropertyChangedFor(nameof(HasHealthVerdict))]
+    private ServerHealthVerdict _healthVerdict = ServerHealthVerdict.Unknown;
+
+    /// <summary>Deep-verify contribution to the phases (kept so a later quick probe re-merges).</summary>
+    private ServerHealthPhases _deepPhases = new();
+
+    /// <summary>Hide the verdict line until at least one probe produced a signal.</summary>
+    public bool HasHealthVerdict => HealthVerdict != ServerHealthVerdict.Unknown;
+
+    /// <summary>Row verdict label (RU/EN), e.g. "TCP открыт, VPN-протокол не проверен".</summary>
+    public string HealthVerdictText => CoreStrings.HealthVerdictLabel(HealthVerdict);
+
+    /// <summary>
+    /// Rich tooltip: verdict + the audit's RU-block / canary explanation where the
+    /// verdict warrants it + the raw probe errors for diagnostics.
+    /// </summary>
+    public string HealthTooltip
+    {
+        get
+        {
+            var sb = new System.Text.StringBuilder(CoreStrings.HealthVerdictLabel(HealthVerdict));
+            if (HealthVerdict == ServerHealthVerdict.ProtocolHandshakeBlockedLikely)
+                sb.Append("\n\n").Append(CoreStrings.HealthRuBlockWarning);
+            else if (HealthVerdict == ServerHealthVerdict.OnlyControlWorks)
+                sb.Append("\n\n").Append(CoreStrings.HealthCanaryFailedWarning);
+            if (!string.IsNullOrEmpty(DeepError)) sb.Append('\n').Append(DeepError);
+            if (!string.IsNullOrEmpty(TestError)) sb.Append('\n').Append(TestError);
+            return sb.ToString();
+        }
+    }
+
+    private void RecomputeHealthVerdict()
+    {
+        var quick = ServerHealthPhaseMapper.FromQuickProbe(TestStatus);
+        HealthVerdict = ServerHealthClassifier
+            .Classify(ServerHealthPhaseMapper.Merge(quick, _deepPhases))
+            .Verdict;
+        // Verdict may be unchanged while the underlying error text moved — the
+        // tooltip must still refresh.
+        OnPropertyChanged(nameof(HealthTooltip));
     }
 
     // ── Deep verify state (v2.15.3) ──────────────────────────────────────
@@ -223,6 +278,7 @@ public partial class ServerViewModel : ViewModelBase
         {
             if (IsDeepTesting) return "⏳";
             if (IsDeepFailed) return "✗";
+            if (IsDeepInconclusive) return "!";   // local/unsupported — not a server verdict
             if (IsDeepVerified)
             {
                 if (BandwidthMbps > 0) return $"✓ {BandwidthMbps}M";
@@ -233,14 +289,25 @@ public partial class ServerViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// True when the last deep verify neither passed nor condemned the server —
+    /// a local/infra failure (our sing-box broke) or the verifier can't test this
+    /// protocol on this build. R2: these must NOT render as a server "✗".
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeepDisplay))]
+    private bool _isDeepInconclusive;
+
     /// <summary>Apply a deep-verify outcome.</summary>
     public void ApplyDeepResult(DeepVerifyResult result)
     {
         IsDeepTesting = false;
+        _deepPhases = ServerHealthPhaseMapper.FromDeepVerify(result);
         if (result.Ok)
         {
             IsDeepVerified = true;
             IsDeepFailed = false;
+            IsDeepInconclusive = false;
             HttpLatencyMs = result.HttpLatencyMs;
             BandwidthMbps = result.BandwidthMbps.HasValue ? (int)Math.Round(result.BandwidthMbps.Value) : 0;
             DeepError = null;
@@ -248,9 +315,15 @@ public partial class ServerViewModel : ViewModelBase
         else
         {
             IsDeepVerified = false;
-            IsDeepFailed = true;
+            // Single source of truth: only a mapper-confirmed server-meaningful
+            // failure (ProxiedHttpControl=Fail) condemns the server; local-infra
+            // and unsupported-by-verifier outcomes are inconclusive.
+            var condemning = _deepPhases.ProxiedHttpControl == PhaseOutcome.Fail;
+            IsDeepFailed = condemning;
+            IsDeepInconclusive = !condemning;
             DeepError = result.Error;
         }
+        RecomputeHealthVerdict();
     }
 
     public ServerViewModel()
