@@ -47,12 +47,39 @@ public static class ServerHealthPhaseMapper
     /// <summary>
     /// Map the deep-verify (spawn sing-box + proxied control HTTP) outcome to the
     /// proxy/HTTP phase. A local/infra failure is inconclusive, NOT a server verdict.
+    /// R1: reads the typed <see cref="DeepVerifyResult.FailurePhase"/> first; the
+    /// error-string heuristic remains only as the fallback for legacy
+    /// <see cref="DeepVerifyFailurePhase.None"/> results.
     /// </summary>
     public static ServerHealthPhases FromDeepVerify(DeepVerifyResult? r)
     {
         if (r is null) return new ServerHealthPhases();
         if (r.Ok) return new ServerHealthPhases(ProxiedHttpControl: PhaseOutcome.Pass);
 
+        switch (r.FailurePhase)
+        {
+            // Local/infra/guard failures — our sing-box never carried a request;
+            // says nothing about the server.
+            case DeepVerifyFailurePhase.Precondition:
+            case DeepVerifyFailurePhase.LocalSpawn:
+            case DeepVerifyFailurePhase.SocksBind:
+            case DeepVerifyFailurePhase.Cancelled:
+                return new ServerHealthPhases();
+
+            // Explicitly untestable on this build (AWG/xhttp without the lx core,
+            // naive without libcronet) — Skipped, so the classifier reads it as
+            // "protocol untested", never as a block.
+            case DeepVerifyFailurePhase.UnsupportedByVerifier:
+                return new ServerHealthPhases(ProxiedHttpControl: PhaseOutcome.Skipped);
+
+            // Server-meaningful: the tunnel came up locally but the control request
+            // through it failed (or the overall budget drained trying).
+            case DeepVerifyFailurePhase.ProxiedHttp:
+            case DeepVerifyFailurePhase.Timeout:
+                return new ServerHealthPhases(ProxiedHttpControl: PhaseOutcome.Fail);
+        }
+
+        // Legacy (FailurePhase == None): fall back to the string heuristic.
         var err = (r.Error ?? string.Empty).ToLowerInvariant();
         if (IsLocalInfraError(err))
             return new ServerHealthPhases();   // says nothing about the server

@@ -73,6 +73,58 @@ public class ServerHealthPhaseMapperTests
     public void FromDeepVerify_Null_IsAllUnknown()
         => Assert.Equal(PhaseOutcome.Unknown, ServerHealthPhaseMapper.FromDeepVerify(null).ProxiedHttpControl);
 
+    // ── R1: typed failure phases (string heuristic = legacy fallback only) ──
+
+    [Theory]
+    [InlineData(DeepVerifyFailurePhase.Precondition)]
+    [InlineData(DeepVerifyFailurePhase.LocalSpawn)]
+    [InlineData(DeepVerifyFailurePhase.SocksBind)]
+    [InlineData(DeepVerifyFailurePhase.Cancelled)]
+    public void FromDeepVerify_TypedLocalInfraPhase_IsInconclusive(DeepVerifyFailurePhase phase)
+        => Assert.Equal(PhaseOutcome.Unknown,
+            ServerHealthPhaseMapper.FromDeepVerify(
+                DeepVerifyResult.Failed("whatever", phase)).ProxiedHttpControl);
+
+    [Theory]
+    [InlineData(DeepVerifyFailurePhase.ProxiedHttp)]
+    [InlineData(DeepVerifyFailurePhase.Timeout)]
+    public void FromDeepVerify_TypedServerMeaningfulPhase_IsFail(DeepVerifyFailurePhase phase)
+        => Assert.Equal(PhaseOutcome.Fail,
+            ServerHealthPhaseMapper.FromDeepVerify(
+                DeepVerifyResult.Failed("whatever", phase)).ProxiedHttpControl);
+
+    [Fact]
+    public void FromDeepVerify_UnsupportedByVerifier_IsSkipped_NotFail()
+        => Assert.Equal(PhaseOutcome.Skipped,
+            ServerHealthPhaseMapper.FromDeepVerify(
+                DeepVerifyResult.Failed("deep verify: AmneziaWG needs the lx core (with_awg)",
+                    DeepVerifyFailurePhase.UnsupportedByVerifier)).ProxiedHttpControl);
+
+    [Fact]
+    public void FromDeepVerify_TypedPhase_BeatsContradictoryErrorString()
+    {
+        // The typed phase is authoritative: an error TEXT that looks server-meaningful
+        // ("http failed") must not override a typed local-infra phase.
+        var r = DeepVerifyResult.Failed("http failed", DeepVerifyFailurePhase.LocalSpawn);
+        Assert.Equal(PhaseOutcome.Unknown,
+            ServerHealthPhaseMapper.FromDeepVerify(r).ProxiedHttpControl);
+    }
+
+    [Fact]
+    public void TcpOk_UnsupportedByVerifier_ClassifiesAsUntested_NeverBlocked()
+    {
+        // E2E guardrail: an AWG/xhttp server on a core that can't verify it must read
+        // as "protocol untested" — never as ProtocolHandshakeBlockedLikely.
+        var phases = ServerHealthPhaseMapper.Merge(
+            ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok),
+            ServerHealthPhaseMapper.FromDeepVerify(
+                DeepVerifyResult.Failed("deep verify: xhttp needs the lx core (with_xhttp)",
+                    DeepVerifyFailurePhase.UnsupportedByVerifier)));
+        var verdict = ServerHealthClassifier.Classify(phases).Verdict;
+        Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, verdict);
+        Assert.NotEqual(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, verdict);
+    }
+
     // ── Merge ───────────────────────────────────────────────────────────────
 
     [Fact]

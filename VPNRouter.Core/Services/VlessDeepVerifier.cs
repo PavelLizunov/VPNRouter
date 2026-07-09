@@ -9,14 +9,46 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
+/// <summary>
+/// Typed failure phase of a deep verification pass (audit batch-1 R1). Replaces the
+/// error-string heuristics consumers used to parse: local/infra phases say NOTHING
+/// about the server; only <see cref="ProxiedHttp"/>/<see cref="Timeout"/> are
+/// server-meaningful. <see cref="None"/> = legacy/unset — consumers fall back to
+/// the <see cref="DeepVerifyResult.Error"/> string heuristic.
+/// </summary>
+public enum DeepVerifyFailurePhase
+{
+    /// <summary>Unset (legacy results / unexpected errors) — fall back to Error-string heuristics.</summary>
+    None = 0,
+    /// <summary>Refused before any probe (placeholder credentials) — not a server verdict.</summary>
+    Precondition,
+    /// <summary>sing-box binary missing or the spawn itself failed — local infra.</summary>
+    LocalSpawn,
+    /// <summary>sing-box started but the local SOCKS port never bound (config rejected / crash) — local infra.</summary>
+    SocksBind,
+    /// <summary>Tunnel came up locally but the control HTTP request through it failed — server-meaningful.</summary>
+    ProxiedHttp,
+    /// <summary>Overall verify budget exhausted — treated as a proxied-path failure.</summary>
+    Timeout,
+    /// <summary>Caller cancelled — inconclusive.</summary>
+    Cancelled,
+    /// <summary>This build/verifier cannot test the protocol (AWG or xhttp without the lx core,
+    /// naive without libcronet) — explicitly untestable, NEVER a server failure.</summary>
+    UnsupportedByVerifier,
+}
+
 /// <summary>Outcome of a deep verification pass through a spawned sing-box.</summary>
 public sealed record DeepVerifyResult(
     bool Ok,
     int HttpLatencyMs,
     double? BandwidthMbps,
-    string? Error)
+    string? Error,
+    DeepVerifyFailurePhase FailurePhase = DeepVerifyFailurePhase.None)
 {
     public static DeepVerifyResult Failed(string error) => new(false, 0, null, error);
+
+    public static DeepVerifyResult Failed(string error, DeepVerifyFailurePhase phase)
+        => new(false, 0, null, error, phase);
 }
 
 /// <summary>
@@ -93,7 +125,7 @@ public sealed class VlessDeepVerifier
         {
             _logger.Warning("[VlessDeepVerifier] sing-box not found at {Path}", _singBoxPath);
             foreach (var s in servers)
-                onOneDone(s, DeepVerifyResult.Failed("sing-box binary missing"));
+                onOneDone(s, DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn));
             return;
         }
 
@@ -111,11 +143,11 @@ public sealed class VlessDeepVerifier
             }
             catch (OperationCanceledException)
             {
-                onOneDone(entry, DeepVerifyResult.Failed("cancelled"));
+                onOneDone(entry, DeepVerifyResult.Failed("cancelled", DeepVerifyFailurePhase.Cancelled));
             }
             catch (Exception ex)
             {
-                onOneDone(entry, DeepVerifyResult.Failed(ex.GetType().Name));
+                onOneDone(entry, DeepVerifyResult.Failed(ex.GetType().Name));   // phase None — unexpected, fall back to heuristics
             }
             finally
             {
@@ -160,13 +192,35 @@ public sealed class VlessDeepVerifier
             _logger.Warning(
                 "[VlessDeepVerifier] {Name}: placeholder credential detected ({Field}) — refusing to probe",
                 label, placeholderField);
-            return DeepVerifyResult.Failed($"placeholder credential: {placeholderField}");
+            return DeepVerifyResult.Failed($"placeholder credential: {placeholderField}",
+                DeepVerifyFailurePhase.Precondition);
+        }
+
+        // R1 (audit batch-1, OPEN-DEFECTS AWG/XHTTP parity): pre-R1 an AWG entry fell
+        // into BuildVlessOutbound (garbage config → bind fail) and an xhttp entry was
+        // probed over plain TCP (transport silently dropped → false ProtocolBlocked).
+        // When the bundled core carries the tag we now verify them for real (endpoint /
+        // xhttp transport below); when it doesn't, return an explicit typed
+        // UnsupportedByVerifier — never condemn the server for our own gap.
+        var isAwg = protocol is "amneziawg" or "awg";
+        var isXhttp = "xhttp".Equals(entry.Transport?.Type, StringComparison.OrdinalIgnoreCase);
+        if (isAwg && !SingBoxFeatures.AwgAvailable)
+        {
+            _logger.Information("[VlessDeepVerifier] {Name}: AWG deep verify unsupported (core lacks with_awg)", label);
+            return DeepVerifyResult.Failed("deep verify: AmneziaWG needs the lx core (with_awg)",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+        }
+        if (isXhttp && !SingBoxFeatures.XhttpAvailable)
+        {
+            _logger.Information("[VlessDeepVerifier] {Name}: xhttp deep verify unsupported (core lacks with_xhttp)", label);
+            return DeepVerifyResult.Failed("deep verify: xhttp needs the lx core (with_xhttp)",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
         if (!IsAvailable)
         {
             _logger.Warning("[VlessDeepVerifier] {Name}: sing-box binary missing at {Path}", label, _singBoxPath);
-            return DeepVerifyResult.Failed("sing-box binary missing");
+            return DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn);
         }
 
         // r7 #5: naive needs libcronet next to sing-box (Windows/Linux only). The
@@ -179,7 +233,8 @@ public sealed class VlessDeepVerifier
             if (!ServerUriParser.NaiveRuntimeAvailable)
             {
                 _logger.Warning("[VlessDeepVerifier] {Name}: naive unsupported on this platform (needs libcronet)", label);
-                return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)");
+                return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
+                    DeepVerifyFailurePhase.UnsupportedByVerifier);
             }
             SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
         }
@@ -220,7 +275,7 @@ public sealed class VlessDeepVerifier
             catch (Exception ex)
             {
                 _logger.Warning(ex, "[VlessDeepVerifier] {Name}: sing-box spawn failed", label);
-                return DeepVerifyResult.Failed("sing-box spawn failed");
+                return DeepVerifyResult.Failed("sing-box spawn failed", DeepVerifyFailurePhase.LocalSpawn);
             }
 
             handle.ErrorLine += (_, line) =>
@@ -236,14 +291,14 @@ public sealed class VlessDeepVerifier
                 _logger.Warning("[VlessDeepVerifier] {Name}: SOCKS port {Port} never bound. stderr: {Stderr}", label, socksPort, snip);
                 return DeepVerifyResult.Failed(string.IsNullOrWhiteSpace(snip)
                     ? "sing-box didn't bind"
-                    : $"sing-box: {snip}");
+                    : $"sing-box: {snip}", DeepVerifyFailurePhase.SocksBind);
             }
 
             var (httpOk, httpLatencyMs, httpErr) = await ProbeViaSocksAsync(socksPort, overallCts.Token);
             if (!httpOk)
             {
                 _logger.Information("[VlessDeepVerifier] {Name}: HTTP probe FAILED — {Err}", label, httpErr);
-                return DeepVerifyResult.Failed(httpErr ?? "http failed");
+                return DeepVerifyResult.Failed(httpErr ?? "http failed", DeepVerifyFailurePhase.ProxiedHttp);
             }
 
             double? mbps = null;
@@ -258,15 +313,21 @@ public sealed class VlessDeepVerifier
                 label, httpLatencyMs, mbps?.ToString("F1") ?? "-");
             return new DeepVerifyResult(true, httpLatencyMs, mbps, null);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller cancellation, not the overall budget — inconclusive, not a verdict.
+            _logger.Information("[VlessDeepVerifier] {Name}: cancelled", label);
+            return DeepVerifyResult.Failed("cancelled", DeepVerifyFailurePhase.Cancelled);
+        }
         catch (OperationCanceledException)
         {
             _logger.Information("[VlessDeepVerifier] {Name}: TIMEOUT (overall {Sec}s)", label, OverallTimeout.TotalSeconds);
-            return DeepVerifyResult.Failed("timeout");
+            return DeepVerifyResult.Failed("timeout", DeepVerifyFailurePhase.Timeout);
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[VlessDeepVerifier] {Name}: unexpected error", label);
-            return DeepVerifyResult.Failed(ex.GetType().Name);
+            return DeepVerifyResult.Failed(ex.GetType().Name);   // phase None — fall back to heuristics
         }
         finally
         {
@@ -304,16 +365,32 @@ public sealed class VlessDeepVerifier
     internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int clashPort)
     {
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
-        var outbound = protocol switch
+
+        // R1 AWG parity: an AWG server is an ENDPOINT (top-level "endpoints", lx core),
+        // not an outbound — pre-R1 it fell into BuildVlessOutbound and produced a config
+        // sing-box rejects. Reuse the exact shipped builder (ConfigGenerator) so the
+        // deep-verify config matches what a real connect would run; route.final="proxy"
+        // resolves the endpoint tag the same way the live config's routes do.
+        JsonNode? awgEndpoint = null;
+        JsonObject? outbound = null;
+        if (protocol is "amneziawg" or "awg")
         {
-            "hysteria2"   => BuildHysteria2Outbound(s),
-            "hy2"         => BuildHysteria2Outbound(s),
-            "tuic"        => BuildTuicOutbound(s),
-            "shadowsocks" => BuildShadowsocksOutbound(s),
-            "ss"          => BuildShadowsocksOutbound(s),
-            "naive"       => BuildNaiveOutbound(s),   // r7 #5: was falling to vless → false-fail for valid naive
-            _             => BuildVlessOutbound(s),
-        };
+            awgEndpoint = System.Text.Json.JsonSerializer.SerializeToNode(
+                ConfigGenerator.BuildAmneziaWgEndpoint(s, "proxy"));
+        }
+        else
+        {
+            outbound = protocol switch
+            {
+                "hysteria2"   => BuildHysteria2Outbound(s),
+                "hy2"         => BuildHysteria2Outbound(s),
+                "tuic"        => BuildTuicOutbound(s),
+                "shadowsocks" => BuildShadowsocksOutbound(s),
+                "ss"          => BuildShadowsocksOutbound(s),
+                "naive"       => BuildNaiveOutbound(s),   // r7 #5: was falling to vless → false-fail for valid naive
+                _             => BuildVlessOutbound(s),
+            };
+        }
 
         // Phase 6 — Wave 31b: cast every JsonArray element to (JsonNode?)
         // so the desugared .Add calls pick JsonArray.Add(JsonNode?) instead
@@ -341,11 +418,16 @@ public sealed class VlessDeepVerifier
                     ["sniff"] = false,
                 },
             },
-            ["outbounds"] = new JsonArray
-            {
-                (JsonNode?)outbound,
-                (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
-            },
+            ["outbounds"] = outbound != null
+                ? new JsonArray
+                {
+                    (JsonNode?)outbound,
+                    (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
+                }
+                : new JsonArray
+                {
+                    (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
+                },
             ["route"] = new JsonObject
             {
                 ["final"] = "proxy",
@@ -364,6 +446,11 @@ public sealed class VlessDeepVerifier
                 },
             },
         };
+
+        // R1 AWG parity: the AWG proxy is a top-level endpoint (tag "proxy"), consumed
+        // by route.final exactly like the live config's routes consume it.
+        if (awgEndpoint != null)
+            root["endpoints"] = new JsonArray { awgEndpoint };
 
         // Pass null (uses JsonSerializerOptions.Default with reflection-based resolver).
         // Custom `new JsonSerializerOptions { WriteIndented = false }` lacks a TypeInfoResolver
@@ -577,6 +664,27 @@ public sealed class VlessDeepVerifier
                 ["type"] = "ws",
                 ["path"] = s.Transport?.Path ?? "/",
             };
+        }
+        else if (transportType == "xhttp")
+        {
+            // R1 xhttp parity — mirrors ConfigGenerator.BuildTransportConfig's xhttp
+            // branch (host is TOP-LEVEL, schema verified vs `sing-box-lx check`).
+            // Pre-R1 this fell through: the xhttp server got probed over plain TCP
+            // and false-failed. Callers gate on SingBoxFeatures.XhttpAvailable.
+            var t = new JsonObject
+            {
+                ["type"] = "xhttp",
+                ["mode"] = string.IsNullOrEmpty(s.Transport?.Mode) ? "auto" : s.Transport!.Mode,
+                ["path"] = string.IsNullOrEmpty(s.Transport?.Path) ? "/" : s.Transport!.Path,
+            };
+            if (!string.IsNullOrEmpty(s.Transport?.Host)) t["host"] = s.Transport!.Host;
+            if (!string.IsNullOrEmpty(s.Transport?.XPaddingBytes)) t["x_padding_bytes"] = s.Transport!.XPaddingBytes;
+            if (s.Transport?.NoGrpcHeader == true) t["no_grpc_header"] = true;
+            outbound["transport"] = t;
+
+            // XHTTP is incompatible with XTLS-Vision — drop a stray flow so the
+            // config stays valid (same rule as ConfigGenerator.BuildVlessOutbound).
+            outbound["flow"] = null;
         }
 
         return outbound;

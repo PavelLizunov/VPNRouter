@@ -7,16 +7,17 @@ review pass / a more-cautious model / live windows-brat verification. Fable keep
 the safe, additive, pure+tested work; each item here stays a written spec until someone
 signs off.
 
-## R1 — Add an explicit failure-phase enum to `DeepVerifyResult` (public surface change)
-- Why risky: `DeepVerifyResult` is consumed in ~15+ files across App / Android / CLI /
-  Tests; adding fields is a public-surface change and can churn the App
-  characterization hash. Also touches `FreeConfigDeepVerifier` (separate Android copy).
-- What: replace the free-text `Error` heuristic (currently bridged by a string-matching
-  mapper, see `ServerHealthPhaseMapper`) with an explicit
-  `enum DeepVerifyFailurePhase { None, LocalSpawn, SocksBind, ProxyHandshake, ProxiedHttp, Timeout }`
-  so the mapper reads a typed reason instead of parsing strings.
-- Gate before doing: run the App characterization test; update the pin if it moves;
-  update all call sites + the Android copy; keep `Ok`/`Failed(string)` back-compat.
+## R1 — Add an explicit failure-phase enum to `DeepVerifyResult` — **DONE 2026-07-09**
+- Landed on main (post-v2.46.0): `DeepVerifyFailurePhase { None, Precondition, LocalSpawn,
+  SocksBind, ProxiedHttp, Timeout, Cancelled, UnsupportedByVerifier }` as an optional
+  record field (default None — full back-compat); every `VlessDeepVerifier` failure site
+  typed; mapper reads the typed phase first, string heuristic only for legacy None.
+- The feared blast radius did not materialize: consumers were 3 product files (not ~15),
+  `FreeConfigDeepVerifier` has its own enum (untouched), characterization hash unmoved.
+- BONUS (same unit): AWG/XHTTP deep-verify PARITY — real verification when the core
+  carries with_awg/with_xhttp (AWG endpoint config via the shipped ConfigGenerator
+  builder; xhttp transport mirrored + Vision-flow drop), typed UnsupportedByVerifier
+  when it doesn't. Closed the OPEN-DEFECTS P2.
 
 ## R2 — Wire the classifier into the live probe pipeline + ServerViewModel + UI
 - Why risky: changes what the user sees for every server row; behaviour + UI copy;
