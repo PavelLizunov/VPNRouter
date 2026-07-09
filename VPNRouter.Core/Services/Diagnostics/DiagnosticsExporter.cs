@@ -101,6 +101,15 @@ public static class DiagnosticsExporter
             foreach (var log in appLogs)
                 AddLogTail(staging, log, Path.GetFileName(log), entries, warnings);
 
+            // update.log — the auto-update helper's per-run trace (wait-for-parent /
+            // stop-service / xcopy / relaunch, with timestamps + XCOPY_EXIT). The
+            // load-bearing reason: "VPNRouter disappears after a reboot" on the
+            // experimental channel is almost always the update APPLY window — the app
+            // stops during the xcopy and briefly vanishes from the tray, then
+            // relaunches as the new version. This log is the timeline that proves it
+            // (or shows a failed helper if it stayed gone). Absent from bundles before.
+            AddLogTail(staging, Path.Combine(AppPaths.LogsDir, "update.log"), "update.log", entries, warnings);
+
             // sing-box log tail (current + rotated .old), scrubbed. sing-box
             // rotates at 10 MB → singbox.old.log; include both so the bundle
             // spans more than the current session (v2.41.0).
