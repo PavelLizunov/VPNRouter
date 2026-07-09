@@ -30,10 +30,10 @@ stay in their existing services and later slices feed this core.
   *other* ASN has a `Healthy` server for the same client — the "grouped by subnet, not
   host-wide" heuristic.
 
-### Verdict rules (first match; TCP alive is the pivot)
+### Verdict rules (first match; TCP alive is the pivot for the BLOCK signal)
 
 1. `Dns==Fail` or `TcpConnect==Fail` → `HostUnreachable`.
-2. `TcpConnect==Pass` and `ProxiedHttpControl==Pass`:
+2. `ProxiedHttpControl==Pass` (regardless of the superficial phases — see amendment below):
    - `BlockedTargetCanary==Fail` → `OnlyControlWorks` (tunnel up, censorship-bypass unproven).
    - `UdpAppProfile==Fail` → `UdpOrAppProfileFailed`.
    - else → `Healthy`.
@@ -42,6 +42,21 @@ stay in their existing services and later slices feed this core.
    VPN protocol does not carry traffic — the RU-ASN/TSPU signal).
 4. `TcpConnect==Pass`, nothing deeper ran → `TcpOpenProtocolUntested` (NOT `Healthy`).
 5. else → `Unknown`.
+
+### Amendment 2026-07-09 (backlog unit 4)
+
+- Rule 2 no longer requires `TcpConnect==Pass`: a UDP-native transport (Hysteria2/TUIC —
+  quick TCP probe returns `SkippedNotApplicable`) has no TCP phase at all, and deep verify
+  is the meaningful answer for it. An end-to-end proxied-HTTP pass must not be vetoed by a
+  superficial phase that never ran / doesn't apply (the dual of "TCP alone is never
+  `Healthy`"). Rule 1 still fires first, so contradictory data (TCP `Fail` + HTTP `Pass`)
+  stays conservative (`HostUnreachable`).
+- `TcpConnect==Skipped/Unknown` + `ProxiedHttpControl==Fail` stays `Unknown` — without a
+  host-liveness pivot we cannot distinguish "server down" from "protocol blocked".
+- `CanaryPolicy.Evaluate`: mixed fresh results (some blocked targets pass, another fails)
+  now return `Pass` + `StaleOrAmbiguous=true` — partial is NOT a clean global OK (audit
+  canary regression 3). `CanaryPolicy.DirectProbesDefaultEnabled=false` pins the audit's
+  direct-probe safe default (regression 5).
 
 ## Why this shape
 

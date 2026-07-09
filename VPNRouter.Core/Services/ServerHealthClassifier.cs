@@ -106,21 +106,25 @@ public static class ServerHealthClassifier
         if (p.TcpConnect == PhaseOutcome.Fail)
             return new(ServerHealthVerdict.HostUnreachable, p, "TCP connect failed");
 
-        // 2/3/4 require TCP reachability as the pivot.
+        // 2. Proxied control HTTP works — the strongest end-to-end signal. It is NOT gated
+        //    on the TCP phase: a UDP-native transport (Hysteria2/TUIC — quick TCP probe is
+        //    SkippedNotApplicable) has no TCP phase at all, and deep verify is the meaningful
+        //    answer for it. A superficial phase that never ran/doesn't apply must not veto a
+        //    real end-to-end pass (the dual of "TCP alone never reads as Healthy").
+        if (p.ProxiedHttpControl == PhaseOutcome.Pass)
+        {
+            if (p.BlockedTargetCanary == PhaseOutcome.Fail)
+                return new(ServerHealthVerdict.OnlyControlWorks,
+                    p, "tunnel up but a blocked-target canary failed — censorship-bypass unproven");
+            if (p.UdpAppProfile == PhaseOutcome.Fail)
+                return new(ServerHealthVerdict.UdpOrAppProfileFailed,
+                    p, "proxied HTTP ok but the UDP/app-profile probe failed");
+            return new(ServerHealthVerdict.Healthy, p, "proxied control HTTP ok");
+        }
+
+        // 3/4 require TCP reachability as the pivot.
         if (p.TcpConnect == PhaseOutcome.Pass)
         {
-            // 2. Proxied control HTTP works — distinguish healthy vs partial.
-            if (p.ProxiedHttpControl == PhaseOutcome.Pass)
-            {
-                if (p.BlockedTargetCanary == PhaseOutcome.Fail)
-                    return new(ServerHealthVerdict.OnlyControlWorks,
-                        p, "tunnel up but a blocked-target canary failed — censorship-bypass unproven");
-                if (p.UdpAppProfile == PhaseOutcome.Fail)
-                    return new(ServerHealthVerdict.UdpOrAppProfileFailed,
-                        p, "proxied HTTP ok but the UDP/app-profile probe failed");
-                return new(ServerHealthVerdict.Healthy, p, "proxied control HTTP ok");
-            }
-
             // 3. Handshake / proxied-HTTP failure on a TCP-reachable host = protocol block likely.
             //    A handshake failure is a stronger signal than a mid-stream HTTP break, so a
             //    clean proxy handshake + failed HTTP is reported as a distinct softer verdict.

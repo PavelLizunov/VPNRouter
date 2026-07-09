@@ -51,6 +51,14 @@ public static class CanaryPolicy
     };
 
     /// <summary>
+    /// Audit safe default: DIRECT (non-VPN) probes to blocked targets can reveal user intent
+    /// to the ISP, so they are OFF unless the user explicitly opts in via an advanced action.
+    /// The future prober (deferred R4) must consult this; blocked-target canaries run
+    /// via-VPN only by default.
+    /// </summary>
+    public const bool DirectProbesDefaultEnabled = false;
+
+    /// <summary>
     /// Strip everything but scheme + host for logging, so a canary/probe never records a
     /// full path or query string. Control-canary paths (e.g. <c>/generate_204</c>) and any
     /// user-supplied fragments are dropped. Never throws on a malformed url — returns a
@@ -89,7 +97,10 @@ public static class CanaryPolicy
     /// phase, given whether the control canary passed:
     /// <list type="bullet">
     ///   <item>control did not pass → <see cref="PhaseOutcome.Unknown"/> (can't judge bypass without a working tunnel).</item>
-    ///   <item>any non-stale blocked target passed → <see cref="PhaseOutcome.Pass"/> (bypass proven).</item>
+    ///   <item>every non-stale blocked target passed → clean <see cref="PhaseOutcome.Pass"/> (bypass proven).</item>
+    ///   <item>some non-stale targets passed but another failed → <see cref="PhaseOutcome.Pass"/> +
+    ///     StaleOrAmbiguous (partial — e.g. YouTube ok but a less-popular target still fails; the
+    ///     audit's rule: partial is NOT a clean global OK).</item>
     ///   <item>at least one non-stale blocked target failed and none passed → <see cref="PhaseOutcome.Fail"/> (control-only).</item>
     ///   <item>only stale/ambiguous results → <see cref="PhaseOutcome.Unknown"/> + StaleOrAmbiguous.</item>
     /// </list>
@@ -109,7 +120,12 @@ public static class CanaryPolicy
                 list.Count > 0 ? "all blocked-target canaries are stale/ambiguous" : "no blocked-target canaries");
 
         if (fresh.Any(r => r.Passed))
-            return new(PhaseOutcome.Pass, false, "a blocked-target canary passed — bypass proven");
+        {
+            return fresh.Any(r => !r.Passed)
+                ? new(PhaseOutcome.Pass, true,
+                    "partial: a blocked-target canary passed but another fresh one failed — not a clean global OK")
+                : new(PhaseOutcome.Pass, false, "a blocked-target canary passed — bypass proven");
+        }
 
         return new(PhaseOutcome.Fail, false, "control ok but every fresh blocked-target canary failed");
     }
