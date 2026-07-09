@@ -13,6 +13,10 @@ public sealed class ServerHealthRecordDto
     public string Key { get; set; } = string.Empty;
     public ServerHealthVerdict Verdict { get; set; }
     public DateTimeOffset RecordedAt { get; set; }
+
+    /// <summary>R3: offline provider/subnet grouping key (<see cref="ProviderKey"/>),
+    /// null when unresolved. Additive — v1 files load with null.</summary>
+    public string? ProviderKey { get; set; }
 }
 
 /// <summary>Schema root for <c>cache/server_health.json</c>.</summary>
@@ -56,7 +60,8 @@ public static class ServerHealthStore
     /// is ignored — "no signal" must not overwrite a real one. Best-effort:
     /// any I/O failure is swallowed (verdicts also live in the UI session).
     /// </summary>
-    public static void Record(VlessServerEntry entry, ServerHealthVerdict verdict, DateTimeOffset? now = null)
+    public static void Record(VlessServerEntry entry, ServerHealthVerdict verdict,
+        DateTimeOffset? now = null, string? providerKey = null)
     {
         if (entry is null || verdict == ServerHealthVerdict.Unknown) return;
         lock (Gate)
@@ -64,11 +69,17 @@ public static class ServerHealthStore
             try
             {
                 var map = LoadLocked();
-                map[KeyFor(entry)] = new ServerHealthRecordDto
+                var key = KeyFor(entry);
+                // R3: a later Record without a resolved provider key must not wipe
+                // one an earlier (or background-resolved) Record established.
+                if (providerKey is null && map.TryGetValue(key, out var prior))
+                    providerKey = prior.ProviderKey;
+                map[key] = new ServerHealthRecordDto
                 {
-                    Key = KeyFor(entry),
+                    Key = key,
                     Verdict = verdict,
                     RecordedAt = now ?? DateTimeOffset.UtcNow,
+                    ProviderKey = providerKey,
                 };
                 SaveLocked(map);
             }

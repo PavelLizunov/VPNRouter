@@ -415,6 +415,9 @@ public partial class MainWindowViewModel
             setProgress(IsRussian
                 ? $"Готово. Verified: {verified} / {total}"
                 : $"Done. Verified: {verified} / {total}");
+            // R3: verdicts just changed en masse — recompute subnet-risk flags.
+            try { ServerViewModel.RefreshProviderRiskFlags(servers); }
+            catch (Exception ex) { _logger.Warning(ex, "[DeepVerifyAll] RefreshProviderRiskFlags failed"); }
         }
         catch (OperationCanceledException)
         {

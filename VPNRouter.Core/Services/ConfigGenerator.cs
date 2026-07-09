@@ -1215,10 +1215,39 @@ public static class ConfigGenerator
         //  - freshness TTL lives in ServerHealthStore (a stale verdict never excludes).
         if (settings.Vless.AutoSelectBestServer && servers.Count > 1)
         {
-            var kept = servers.Where(s =>
-                ServerHealthStore.GetFresh(s) != ServerHealthVerdict.ProtocolHandshakeBlockedLikely).ToList();
+            var records = servers
+                .Select(s => (Server: s, Rec: ServerHealthStore.GetFreshRecord(s)))
+                .ToList();
+
+            var kept = records
+                .Where(r => r.Rec?.Verdict != ServerHealthVerdict.ProtocolHandshakeBlockedLikely)
+                .Select(r => r.Server).ToList();
             if (kept.Count >= 1 && kept.Count < servers.Count)
                 servers = kept;
+
+            // R3: provider/subnet-level hygiene. Grouped analysis over the ORIGINAL
+            // pool's records (the blocked members carry the evidence): a key with
+            // >= ProviderHighRiskThreshold blocked-likely servers while ANOTHER key
+            // is Healthy marks the whole subnet HighRisk — its remaining (untested)
+            // members are dropped too, they share the blocked allocation. Same
+            // fail-open rail: never below one member.
+            var grouped = records
+                .Where(r => !string.IsNullOrEmpty(r.Rec?.ProviderKey))
+                .Select(r => (r.Rec!.ProviderKey!, r.Rec.Verdict));
+            var highRisk = ServerHealthClassifier.AnalyzeProviderRisk(grouped)
+                .Where(p => p.HighRisk)
+                .Select(p => p.Asn)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (highRisk.Count > 0)
+            {
+                var survivors = servers.Where(s =>
+                {
+                    var rec = records.FirstOrDefault(r => ReferenceEquals(r.Server, s)).Rec;
+                    return rec?.ProviderKey is null || !highRisk.Contains(rec.ProviderKey);
+                }).ToList();
+                if (survivors.Count >= 1 && survivors.Count < servers.Count)
+                    servers = survivors;
+            }
         }
 
         // v2.28.2 hard guard: if we got here with no servers, the resulting

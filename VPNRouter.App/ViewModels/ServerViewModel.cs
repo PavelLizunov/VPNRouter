@@ -220,6 +220,9 @@ public partial class ServerViewModel : ViewModelBase
                 sb.Append("\n\n").Append(CoreStrings.HealthRuBlockWarning);
             else if (HealthVerdict == ServerHealthVerdict.OnlyControlWorks)
                 sb.Append("\n\n").Append(CoreStrings.HealthCanaryFailedWarning);
+            // R3: subnet-level risk (set pool-wide by RefreshProviderRiskFlags).
+            if (IsProviderHighRisk)
+                sb.Append("\n\n").Append(CoreStrings.HealthProviderHighRisk);
             // R5: verdict age from the persisted store (survives restarts).
             var rec = _originalEntry != null ? ServerHealthStore.GetFreshRecord(_originalEntry) : null;
             if (rec != null)
@@ -238,12 +241,67 @@ public partial class ServerViewModel : ViewModelBase
             .Verdict;
         // R5: persist (best-effort) so the verdict survives a restart and can
         // inform the Auto/urltest pool (ConfigGenerator drops fresh blocked
-        // members). Unknown is ignored by the store.
+        // members). Unknown is ignored by the store. R3: attach the offline
+        // provider/subnet key — literal-IP fast path inline; a hostname resolves
+        // in the background and re-records (store preserves the key afterwards).
         if (_originalEntry != null)
-            ServerHealthStore.Record(_originalEntry, HealthVerdict);
+        {
+            var entry = _originalEntry;
+            var verdict = HealthVerdict;
+            var key = ProviderKey.ForIp(entry.Server);
+            ServerHealthStore.Record(entry, verdict, providerKey: key);
+            if (key is null && !string.IsNullOrWhiteSpace(entry.Server) && verdict != ServerHealthVerdict.Unknown)
+            {
+                _ = Task.Run(async () =>
+                {
+                    var resolved = await ProviderKey.ResolveAsync(entry.Server).ConfigureAwait(false);
+                    if (resolved != null)
+                        ServerHealthStore.Record(entry, verdict, providerKey: resolved);
+                });
+            }
+        }
         // Verdict may be unchanged while the underlying error text moved — the
         // tooltip must still refresh.
         OnPropertyChanged(nameof(HealthTooltip));
+    }
+
+    // ── R3: provider/subnet risk flag (pool-wide, set by RefreshProviderRiskFlags) ──
+
+    /// <summary>True when this row's provider/subnet key is flagged HighRisk.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HealthTooltip))]
+    private bool _isProviderHighRisk;
+
+    /// <summary>
+    /// Pool-wide grouped risk (mirrors <see cref="RefreshUdpSiblingFlags"/>): reads
+    /// each row's fresh store record, runs
+    /// <see cref="ServerHealthClassifier.AnalyzeProviderRisk"/> over (key, verdict)
+    /// pairs and flags rows whose subnet is HighRisk. Call after a collection
+    /// rebuild or a probe batch. Best-effort — store failures leave flags off.
+    /// </summary>
+    public static void RefreshProviderRiskFlags(System.Collections.Generic.IEnumerable<ServerViewModel> vms)
+    {
+        var list = new System.Collections.Generic.List<ServerViewModel>(vms);
+        var withRecs = new System.Collections.Generic.List<(ServerViewModel Vm, ServerHealthRecordDto? Rec)>(list.Count);
+        foreach (var vm in list)
+        {
+            ServerHealthRecordDto? rec = null;
+            try { if (vm._originalEntry != null) rec = ServerHealthStore.GetFreshRecord(vm._originalEntry); }
+            catch { /* best-effort */ }
+            withRecs.Add((vm, rec));
+        }
+
+        var grouped = new System.Collections.Generic.List<(string, ServerHealthVerdict)>();
+        foreach (var (_, rec) in withRecs)
+            if (!string.IsNullOrEmpty(rec?.ProviderKey))
+                grouped.Add((rec!.ProviderKey!, rec.Verdict));
+
+        var highRisk = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var risk in ServerHealthClassifier.AnalyzeProviderRisk(grouped))
+            if (risk.HighRisk) highRisk.Add(risk.Asn);
+
+        foreach (var (vm, rec) in withRecs)
+            vm.IsProviderHighRisk = rec?.ProviderKey != null && highRisk.Contains(rec.ProviderKey);
     }
 
     // ── Deep verify state (v2.15.3) ──────────────────────────────────────

@@ -93,6 +93,16 @@ public static partial class Strings
         ? "Часть заблокированных сервисов открывается через VPN, часть — нет. Обход подтверждён частично."
         : "Some blocked services open via the VPN, others do not. Bypass is only partially proven.";
 
+    /// <summary>
+    /// R3: tooltip line for a server whose provider/subnet grouping key was flagged
+    /// HighRisk (>=2 protocol-blocked on the subnet while another hosting works).
+    /// </summary>
+    public static string HealthProviderHighRisk => Ru
+        ? "Подсеть хостера под риском блокировки: несколько серверов этой подсети не проходят "
+          + "проверку VPN-протокола, при этом другой хостинг работает. Авто-выбор исключает её."
+        : "Hoster subnet at block risk: several servers on this subnet fail VPN-protocol "
+          + "verification while another hosting works. Auto-select excludes it.";
+
     /// <summary>R5: verdict age line for the health tooltip ("checked N min ago").</summary>
     public static string HealthCheckedAgo(TimeSpan age)
     {

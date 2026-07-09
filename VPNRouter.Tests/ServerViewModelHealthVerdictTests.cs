@@ -113,6 +113,46 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, vm.HealthVerdict);
     }
 
+    // ── R3: pool-wide subnet-risk flags ──────────────────────────────────────
+
+    [Fact]
+    public void RefreshProviderRiskFlags_FlagsHighRiskSubnetRows_NotOthers()
+    {
+        var prevDataDir = VPNRouter.Core.AppPaths.DataDir;
+        var temp = Path.Combine(Path.GetTempPath(), $"vpnrouter-prf-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(temp);
+        ServerHealthStore.ResetForTests();
+        try
+        {
+            VPNRouter.Core.Models.VlessServerEntry E(string n, string ip) =>
+                new() { Name = n, Server = ip, Port = 443, Protocol = "vless" };
+
+            var b1 = E("b1", "10.0.0.1"); var b2 = E("b2", "10.0.0.2");
+            var sib = E("sib", "10.0.0.3"); var ok = E("ok", "77.7.7.7");
+            ServerHealthStore.Record(b1, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+            ServerHealthStore.Record(b2, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+            ServerHealthStore.Record(sib, ServerHealthVerdict.TcpOpenProtocolUntested,       providerKey: "net:10.0.0.0/24");
+            ServerHealthStore.Record(ok,  ServerHealthVerdict.Healthy,                       providerKey: "net:77.7.7.0/24");
+
+            var vms = new[] { new ServerViewModel(b1), new ServerViewModel(b2),
+                              new ServerViewModel(sib), new ServerViewModel(ok) };
+            ServerViewModel.RefreshProviderRiskFlags(vms);
+
+            Assert.True(vms[0].IsProviderHighRisk);
+            Assert.True(vms[1].IsProviderHighRisk);
+            Assert.True(vms[2].IsProviderHighRisk);     // untested sibling shares the risk
+            Assert.False(vms[3].IsProviderHighRisk);
+            Assert.Contains(VPNRouter.Core.Localization.Strings.HealthProviderHighRisk,
+                vms[2].HealthTooltip);                   // tooltip explains it
+        }
+        finally
+        {
+            ServerHealthStore.ResetForTests();
+            VPNRouter.Core.AppPaths.OverrideDataDir(prevDataDir);
+            try { Directory.Delete(temp, recursive: true); } catch { }
+        }
+    }
+
     // ── R5: constructor hydration from the persisted store ──────────────────
 
     [Fact]

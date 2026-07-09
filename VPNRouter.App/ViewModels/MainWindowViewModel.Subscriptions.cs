@@ -58,6 +58,7 @@ public partial class MainWindowViewModel
                 SubscriptionServers.Add(new ServerViewModel(serverEntry));
         }
         ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
+        ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3: subnet-risk flags from the store
 
         // Restore selection if possible
         SelectedSubscriptionServer = SubscriptionServers
@@ -217,6 +218,7 @@ public partial class MainWindowViewModel
             foreach (var entry in entries)
                 SubscriptionServers.Add(new ServerViewModel(entry));
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
+            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3
 
             // Select first server as active
             SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();

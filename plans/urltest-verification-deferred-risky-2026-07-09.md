@@ -38,11 +38,25 @@ signs off.
   SelfRepair (web install.ps1) gutted app/ when interrupted. Deploy rule: always push
   a SHA-consistent App+Core+Service+CLI set. See OPEN-DEFECTS P2 (SelfRepair gutting).
 
-## R3 — ASN / provider metadata lookup (network I/O + privacy)
-- Why risky: outbound network calls; must never upload/log subscription URLs or secrets.
-- What: resolve server IP -> ASN/org/prefix (offline MaxMind-style DB preferred over a
-  live API), cache locally, feed `AnalyzeProviderRisk`. Redact via `DiagnosticsRedactor`.
-- Gate: confirm no secret leaves the machine; prefer a bundled/offline DB.
+## R3 — ASN / provider metadata — **DONE 2026-07-09 (offline PREFIX grouping, zero network)**
+- Implemented WITHOUT the risky parts: `AnalyzeProviderRisk` needs a GROUPING key, not a
+  registry ASN — `ProviderKey` groups by IP prefix (/24 v4 — hoster allocation
+  granularity, /48 v6), fully offline: no mmdb bundle/licensing, no reader dependency,
+  no API calls. NOTE: `FreeConfigGeoIp` turned out to be ip-api.com over plain HTTP
+  (the "MaxMind" note in Core CLAUDE.md is stale) — acceptable for PUBLIC free configs,
+  forbidden for private subscription IPs, which cemented the offline choice. The only
+  lookup is one OS-resolver DNS query for hostname entries (same lookup the probes
+  already make); literal IPs resolve inline with zero I/O.
+- Wired: `ServerHealthRecordDto.ProviderKey` (additive, keyless-overwrite preserves it);
+  ServerViewModel records the key (background DNS for hostnames); ConfigGenerator's
+  Auto-pool now ALSO drops untested siblings of a HighRisk subnet (>=2 blocked-likely +
+  another subnet Healthy — `AnalyzeProviderRisk`), same fail-open >=1 rail;
+  `RefreshProviderRiskFlags` (mirrors RefreshUdpSiblingFlags, 5 call sites + post-deep
+  batch) sets `IsProviderHighRisk` -> tooltip explains "Подсеть хостера под риском
+  блокировки... Авто-выбор исключает её". 13 new tests.
+- Future upgrade path (still deferred): real GeoLite2-ASN mmdb (needs MaxMind.Db reader
+  + a bundled/downloaded DB) would only replace the ProviderKey producer — every
+  consumer takes opaque string keys.
 
 ## R4 — Blocked-target canary probes (network + can reveal user intent to the ISP)
 - Why risky: direct probes to blocked targets can expose intent; must be via-VPN only by

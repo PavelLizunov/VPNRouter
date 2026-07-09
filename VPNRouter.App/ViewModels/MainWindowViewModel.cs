@@ -3181,6 +3181,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 activeServer = vm;
         }
         ServerViewModel.RefreshUdpSiblingFlags(Servers); // r8 #6: "naive + hy2" only on a real sibling
+        ServerViewModel.RefreshProviderRiskFlags(Servers); // R3: subnet-risk flags from the store
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
 
         // v2.32 (r10, F-C) — flag legacy vless.servers entries that aren't
@@ -3677,6 +3678,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // Add/Remove/row-delete/free-config-apply — not just load + sub rebuild.
             try { ServerViewModel.RefreshUdpSiblingFlags(Servers); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
+            try { ServerViewModel.RefreshProviderRiskFlags(Servers); } // R3
+            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshProviderRiskFlags on Servers change failed"); }
             try { MarkOrphanServers(); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
         };

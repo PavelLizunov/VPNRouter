@@ -171,6 +171,73 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
         Assert.Null(UrltestMembers(config));          // no auto group in manual mode
     }
 
+    // ── R3: provider/subnet-level drop ───────────────────────────────────────
+
+    [Fact]
+    public void HighRiskSubnet_DropsItsUntestedSiblingsToo()
+    {
+        // Two blocked on net:10.0.0.0/24 + one healthy elsewhere → the subnet is
+        // HighRisk (>=2 blocked + healthy alternative) → its UNTESTED sibling is
+        // dropped from the pool along with the blocked ones.
+        var blocked1  = Vless("blk-1",   "10.0.0.1");
+        var blocked2  = Vless("blk-2",   "10.0.0.2");
+        var untested  = Vless("sibling", "10.0.0.3");
+        var healthy   = Vless("good",    "77.7.7.7");
+        ServerHealthStore.Record(blocked1, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(blocked2, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(untested, ServerHealthVerdict.TcpOpenProtocolUntested,        providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(healthy,  ServerHealthVerdict.Healthy,                        providerKey: "net:77.7.7.0/24");
+
+        var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" },
+            Settings(autoSelect: true, blocked1, blocked2, untested, healthy));
+        var json = JsonSerializer.Serialize(config, VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig);
+
+        // Pool collapsed to the single healthy member → direct outbound, no group.
+        Assert.Null(UrltestMembers(config));
+        Assert.Contains("\"77.7.7.7\"", json);
+        Assert.DoesNotContain("\"10.0.0.3\"", json);   // the untested sibling went with its subnet
+    }
+
+    [Fact]
+    public void OneBlockedOnSubnet_DoesNotCondemnTheSubnet()
+    {
+        // Below the >=2 threshold the subnet is NOT HighRisk — only the blocked
+        // member itself is dropped (R5), its sibling stays in the group.
+        var blocked  = Vless("blk",     "10.0.0.1");
+        var sibling  = Vless("sibling", "10.0.0.3");
+        var healthy  = Vless("good",    "77.7.7.7");
+        ServerHealthStore.Record(blocked, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(sibling, ServerHealthVerdict.TcpOpenProtocolUntested,        providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(healthy, ServerHealthVerdict.Healthy,                        providerKey: "net:77.7.7.0/24");
+
+        var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" },
+            Settings(autoSelect: true, blocked, sibling, healthy));
+        var members = UrltestMembers(config);
+
+        Assert.NotNull(members);
+        Assert.Equal(2, members!.Count);
+        Assert.Contains(members, m => m.Contains("sibling"));
+    }
+
+    [Fact]
+    public void HighRiskSubnet_WithoutHealthyAlternative_IsNotFlagged()
+    {
+        // No healthy server elsewhere → could be a client-wide outage, not a
+        // subnet block — nothing extra is dropped beyond the R5 individual drop.
+        var blocked1 = Vless("blk-1",   "10.0.0.1");
+        var blocked2 = Vless("blk-2",   "10.0.0.2");
+        var sibling  = Vless("sibling", "10.0.0.3");
+        ServerHealthStore.Record(blocked1, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(blocked2, ServerHealthVerdict.ProtocolHandshakeBlockedLikely, providerKey: "net:10.0.0.0/24");
+        ServerHealthStore.Record(sibling,  ServerHealthVerdict.TcpOpenProtocolUntested,        providerKey: "net:10.0.0.0/24");
+
+        var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" },
+            Settings(autoSelect: true, blocked1, blocked2, sibling));
+        var json = JsonSerializer.Serialize(config, VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig);
+
+        Assert.Contains("\"10.0.0.3\"", json);   // the sibling survives
+    }
+
     // ── Audit regression #6: wording pins ────────────────────────────────────
 
     [Fact]

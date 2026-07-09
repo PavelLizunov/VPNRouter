@@ -103,4 +103,21 @@ public class ServerHealthStoreTests : IDisposable
         Assert.Null(ServerHealthStore.GetFresh(Entry(port: 8443)));
         Assert.Null(ServerHealthStore.GetFresh(Entry(protocol: "hysteria2")));
     }
+
+    // ── R3: provider key persistence ─────────────────────────────────────────
+
+    [Fact]
+    public void ProviderKey_RoundTrips_AndSurvivesKeylessOverwrite()
+    {
+        ServerHealthStore.Record(Entry(), ServerHealthVerdict.ProtocolHandshakeBlockedLikely,
+            providerKey: "net:1.2.3.0/24");
+        Assert.Equal("net:1.2.3.0/24", ServerHealthStore.GetFreshRecord(Entry())!.ProviderKey);
+
+        // A later verdict written WITHOUT a key (e.g. before the background DNS
+        // resolve lands) must not wipe the established grouping key.
+        ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);
+        var rec = ServerHealthStore.GetFreshRecord(Entry())!;
+        Assert.Equal(ServerHealthVerdict.Healthy, rec.Verdict);
+        Assert.Equal("net:1.2.3.0/24", rec.ProviderKey);
+    }
 }
