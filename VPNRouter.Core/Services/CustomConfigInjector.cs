@@ -68,6 +68,15 @@ public static class CustomConfigInjector
         var config = JsonNode.Parse(rawJson) as JsonObject
             ?? throw new JsonException("Custom sing-box config root is not an object");
 
+        // ── Fork-only feature gate (OPEN-DEFECTS P1, audit batch-1 #6) ────
+        // Runtime backstop for configs that reached Inject without Validate
+        // (old saved configs, direct file edits): AWG fields / xhttp on a
+        // non-lx core would FATAL sing-box at start — fail here with the
+        // actionable message instead.
+        var forkErrors = CheckForkFeatureSupport(config);
+        if (forkErrors.Count > 0)
+            throw new NotSupportedException(forkErrors[0]);
+
         // ── Phase 2c placeholder gate (v2.32.3-r1) ────────────────────────
         // Inspect the FIRST proxy-typed outbound (same heuristic
         // ConfigSanityCheck uses at runtime). The shared helper lives in
@@ -350,12 +359,23 @@ public static class CustomConfigInjector
             return (false, errors);
         }
 
+        // Fork-only feature gate (OPEN-DEFECTS P1, audit batch-1 #6): AWG
+        // obfuscation fields / xhttp transport FATAL a non-lx sing-box at start
+        // (strict JSON decode) — surface it here as an actionable error instead.
+        errors.AddRange(CheckForkFeatureSupport(config));
+
+        // A wireguard endpoint (official sing-box 1.11+ construct) is a valid
+        // proxy egress — an endpoints-based config has no proxy OUTBOUND.
+        var hasWireGuardEndpoint = config["endpoints"] is JsonArray eps
+            && eps.OfType<JsonObject>().Any(e => StjNodeHelpers.AsString(e["type"]) == "wireguard");
+
         // Must have outbounds
         var outbounds = config["outbounds"] as JsonArray;
         if (outbounds == null || outbounds.Count == 0)
         {
-            errors.Add("No 'outbounds' array in config");
-            return (false, errors);
+            if (!hasWireGuardEndpoint)
+                errors.Add("No 'outbounds' array in config");
+            return (errors.Count == 0, errors);
         }
 
         // Must have at least one proxy-like outbound (not just direct/block/dns)
@@ -364,12 +384,59 @@ public static class CustomConfigInjector
             var type = StjNodeHelpers.AsString(o?["type"]);
             return type != "direct" && type != "block" && type != "dns";
         });
-        if (!hasProxy)
+        if (!hasProxy && !hasWireGuardEndpoint)
             errors.Add("No proxy outbound found (all outbounds are direct/block/dns)");
 
         // Route section is optional — InjectRouteRules creates one if missing
 
         return (errors.Count == 0, errors);
+    }
+
+    // ── Fork-only feature gate ────────────────────────────────────────────
+    // The bundled sing-box-lx fork adds AmneziaWG obfuscation fields on the
+    // wireguard endpoint and the xhttp transport (with_awg / with_xhttp).
+    // Official sing-box and Android libbox strict-decode JSON, so either
+    // construct FATALs at start with an opaque error. The gate keys off the
+    // ACTUAL binary's tags (SingBoxFeatures), not the platform — same contract
+    // as the parser/config-gen gates this custom-config path used to bypass.
+
+    /// <summary>AWG-only fields on a wireguard endpoint (plain WG fields are official).</summary>
+    private static readonly string[] AwgOnlyEndpointFields =
+        { "jc", "jmin", "jmax", "s1", "s2", "s3", "s4",
+          "h1", "h2", "h3", "h4", "i1", "i2", "i3", "i4", "i5" };
+
+    /// <summary>Detects fork-only constructs in a parsed custom config.</summary>
+    internal static (bool NeedsAwg, bool NeedsXhttp) DetectForkOnlyFeatures(JsonObject config)
+    {
+        var needsAwg = false;
+        var needsXhttp = false;
+
+        if (config["endpoints"] is JsonArray endpoints)
+            foreach (var ep in endpoints.OfType<JsonObject>())
+                if (AwgOnlyEndpointFields.Any(ep.ContainsKey))
+                    needsAwg = true;
+
+        if (config["outbounds"] is JsonArray outbounds)
+            foreach (var ob in outbounds.OfType<JsonObject>())
+                if (StjNodeHelpers.AsString(ob["transport"]?["type"]) == "xhttp")
+                    needsXhttp = true;
+
+        return (needsAwg, needsXhttp);
+    }
+
+    /// <summary>One error per fork-only construct the active core can't run.</summary>
+    internal static List<string> CheckForkFeatureSupport(JsonObject config)
+    {
+        var errors = new List<string>();
+        var (needsAwg, needsXhttp) = DetectForkOnlyFeatures(config);
+        if (needsAwg && !SingBoxFeatures.AwgAvailable)
+            errors.Add("Config uses AmneziaWG obfuscation fields (jc/jmin/jmax/s1-s4/h1-h4) in 'endpoints', "
+                     + "but this sing-box build lacks with_awg — it would fail to start. "
+                     + "Use a VPNRouter build bundling the lx core, or remove the AWG fields.");
+        if (needsXhttp && !SingBoxFeatures.XhttpAvailable)
+            errors.Add("Config uses the 'xhttp' transport, but this sing-box build lacks with_xhttp — "
+                     + "it would fail to start. Use a VPNRouter build bundling the lx core, or switch the transport.");
+        return errors;
     }
 
     /// <summary>
