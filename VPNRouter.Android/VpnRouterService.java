@@ -1403,13 +1403,27 @@ public final class VpnRouterService extends VpnService {
             builder.setMetered(false);
         }
 
-        addPrefixesAsAddresses(builder, options.getInet4Address());
-        addPrefixesAsAddresses(builder, options.getInet6Address());
+        List<String> inet4Addrs = addPrefixesAsAddresses(builder, options.getInet4Address());
+        List<String> inet6Addrs = addPrefixesAsAddresses(builder, options.getInet6Address());
 
-        boolean any4 = addPrefixesAsRoutes(builder, options.getInet4RouteAddress());
+        List<String> inet4Routes = addPrefixesAsRoutes(builder, options.getInet4RouteAddress());
+        boolean any4 = !inet4Routes.isEmpty();
         if (!any4) builder.addRoute("0.0.0.0", 0);
-        boolean any6 = addPrefixesAsRoutes(builder, options.getInet6RouteAddress());
+        List<String> inet6Routes = addPrefixesAsRoutes(builder, options.getInet6RouteAddress());
+        boolean any6 = !inet6Routes.isEmpty();
         if (!any6) builder.addRoute("::", 0);
+
+        // P0.1 LAN-bypass observability (audit handoff Android P0.1 A1): prove
+        // whether route_exclude_address became narrowed Android route prefixes
+        // (split-route like 0.0.0.0/1, 128.0.0.0/1) or a full 0.0.0.0/0 fallback
+        // that would capture LAN. Route/no behaviour change — logging only.
+        Log.i(LOG_TAG, "openTun: mtu=" + options.getMTU());
+        Log.i(LOG_TAG, "openTun: inet4 addresses=" + joinPrefixes(inet4Addrs));
+        Log.i(LOG_TAG, "openTun: inet6 addresses=" + joinPrefixes(inet6Addrs));
+        Log.i(LOG_TAG, "openTun: inet4 routes=" + joinPrefixes(inet4Routes)
+                + (any4 ? "" : "; adding fallback 0.0.0.0/0"));
+        Log.i(LOG_TAG, "openTun: inet6 routes=" + joinPrefixes(inet6Routes)
+                + (any6 ? "" : "; adding fallback ::/0"));
 
         boolean dnsAdded = false;
         try {
@@ -1474,29 +1488,48 @@ public final class VpnRouterService extends VpnService {
         return pfd.getFd();
     }
 
-    private static void addPrefixesAsAddresses(Builder builder, RoutePrefixIterator iter) {
-        if (iter == null) return;
+    // P0.1 observability: return the prefixes we actually applied so openTun can
+    // log them WITHOUT consuming the libbox iterator twice (each getInet*Address /
+    // getInet*RouteAddress call is a single-pass RoutePrefixIterator).
+    private static List<String> addPrefixesAsAddresses(Builder builder, RoutePrefixIterator iter) {
+        List<String> applied = new ArrayList<>();
+        if (iter == null) return applied;
         while (iter.hasNext()) {
             RoutePrefix p = iter.next();
             if (p == null) continue;
             String addr = p.address();
-            if (addr != null && !addr.isEmpty()) builder.addAddress(addr, p.prefix());
+            if (addr != null && !addr.isEmpty()) {
+                builder.addAddress(addr, p.prefix());
+                applied.add(addr + "/" + p.prefix());
+            }
         }
+        return applied;
     }
 
-    private static boolean addPrefixesAsRoutes(Builder builder, RoutePrefixIterator iter) {
-        if (iter == null) return false;
-        boolean any = false;
+    private static List<String> addPrefixesAsRoutes(Builder builder, RoutePrefixIterator iter) {
+        List<String> applied = new ArrayList<>();
+        if (iter == null) return applied;
         while (iter.hasNext()) {
             RoutePrefix p = iter.next();
             if (p == null) continue;
             String addr = p.address();
             if (addr != null && !addr.isEmpty()) {
                 builder.addRoute(addr, p.prefix());
-                any = true;
+                applied.add(addr + "/" + p.prefix());
             }
         }
-        return any;
+        return applied;
+    }
+
+    /// <summary>Compact "a, b, c" join for logging (avoids String.join API-26 floor).</summary>
+    private static String joinPrefixes(List<String> items) {
+        if (items == null || items.isEmpty()) return "<empty>";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(items.get(i));
+        }
+        return sb.toString();
     }
 
     private static void addPackages(Builder builder, StringIterator iter, boolean allow) {
