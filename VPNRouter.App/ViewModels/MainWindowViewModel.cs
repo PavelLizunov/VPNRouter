@@ -4367,6 +4367,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     // If it returned cleanly, OnEngineStatus will eventually
                     // flip IsConnected when the engine emits a status event.
                     await startTask;
+                    // Audit batch-1 #2 residual: without this reset a clean
+                    // return with no follow-up status event left the UI stuck
+                    // on the "Connecting..." spinner forever. IsConnected
+                    // itself stays with OnEngineStatus (typed-Connected is the
+                    // only success signal); we only release the busy state.
+                    IsConnecting = false;
                     _logger.Warning("[VM] StartAsync returned without firing SingBoxStarted — leaving state to OnEngineStatus");
                 }
                 else if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
