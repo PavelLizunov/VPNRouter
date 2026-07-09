@@ -19,14 +19,24 @@ signs off.
   builder; xhttp transport mirrored + Vision-flow drop), typed UnsupportedByVerifier
   when it doesn't. Closed the OPEN-DEFECTS P2.
 
-## R2 — Wire the classifier into the live probe pipeline + ServerViewModel + UI
-- Why risky: changes what the user sees for every server row; behaviour + UI copy;
-  needs windows-brat MCP verification (never dev box).
-- What: after quick + deep probes run, feed outcomes through `ServerHealthPhaseMapper`
-  -> `ServerHealthClassifier` -> render the new verdict chips (`Host OK` /
-  `Protocol blocked` / `HTTP via VPN` / `ASN high-risk`) + RU copy; stop rendering a
-  bare "Сервер работает" when only ping/TCP passed.
-- Gate: live verify on windows-brat; visual-diff baseline refresh if pages change.
+## R2 — Wire the classifier into the live pipeline + UI — **DONE + LIVE-VERIFIED 2026-07-09**
+- Landed (commit 2d87d244): ServerViewModel folds quick+deep phases through
+  mapper->classifier into one verdict line on Servers/Subscribe rows + rich tooltip
+  (RU-block DPI/TSPU copy for ProtocolHandshakeBlockedLikely, canary copy for
+  OnlyControlWorks, raw errors preserved); deep '✗' now only for mapper-confirmed
+  server failures, local/unsupported render '!' (IsDeepInconclusive); deep phases
+  re-merge on later quick probes. 8 VM tests; snapshots+visual-diff green;
+  characterization unmoved.
+- LIVE GATE PASS on windows-brat (invisible WinRM+UIA harness, shots r2c-01..05):
+  after quick probe every reachable row read "ТСР открыт, VPN-протокол не проверен"
+  (never "works" from ping alone); after deep verify 21/21 the working VLESS/HY2 rows
+  flipped to "Работает через VPN", an inconclusive one honestly KEPT the untested
+  verdict, naive (probe not applicable) showed no false line.
+- Verdict-chips beyond the line (Host/Protocol/HTTP/ASN split) + ASN chip wait on R3.
+- INCIDENT captured during the gate (fixed): overlaying ONLY App+Core binaries on the
+  brat install tripped InstallHealthCheck (mixed VPNRouter.* SHAs) -> no app.bak ->
+  SelfRepair (web install.ps1) gutted app/ when interrupted. Deploy rule: always push
+  a SHA-consistent App+Core+Service+CLI set. See OPEN-DEFECTS P2 (SelfRepair gutting).
 
 ## R3 — ASN / provider metadata lookup (network I/O + privacy)
 - Why risky: outbound network calls; must never upload/log subscription URLs or secrets.
