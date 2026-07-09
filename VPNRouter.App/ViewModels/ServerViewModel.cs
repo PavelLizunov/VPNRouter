@@ -343,6 +343,16 @@ public partial class ServerViewModel : ViewModelBase
     public ServerViewModel(VlessServerEntry entry)
     {
         _originalEntry = entry;
+        // R5: hydrate the last persisted verdict (fresh-only) so the row shows an
+        // honest state right after app start — e.g. a blocked-likely server the
+        // Auto pool is excluding displays WHY instead of looking untested. A live
+        // probe this session recomputes and overwrites it.
+        try
+        {
+            var persisted = ServerHealthStore.GetFresh(entry);
+            if (persisted.HasValue) _healthVerdict = persisted.Value;
+        }
+        catch { /* best-effort — a broken cache must never break row construction */ }
         Name = entry.Name;
         Server = entry.Server;
         Port = entry.Port;

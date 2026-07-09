@@ -73,10 +73,12 @@ public partial class MainWindowViewModel
         ? "AdGuard DNS + adblock rule_set (~300K доменов)"
         : "AdGuard DNS + adblock rule_set (~300K domains)";
     // Backlog A (2026-06-20): opt-in urltest auto-select toggle (Subscribe page).
-    public string L_AutoSelectBest => IsRussian ? "Авто-выбор лучшего сервера" : "Auto-select best server";
-    public string L_AutoSelectBestTip => IsRussian
-        ? "Маршрутизировать через самый быстрый доступный сервер подписки (urltest). Применяется при следующем подключении."
-        : "Route through the fastest reachable subscription server (urltest). Applies on next connect.";
+    // urltest R5 (2026-07-09): forward to the shared Core strings so desktop and
+    // Android carry the SAME honest wording ("quick web test", not "best server") —
+    // the R5 brat live gate caught these stale duplicated literals.
+    public string L_AutoSelectBest => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServer;
+    public string L_AutoSelectBestTip => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServerTip
+        + (IsRussian ? " Применяется при следующем подключении." : " Applies on next connect.");
 
     // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";

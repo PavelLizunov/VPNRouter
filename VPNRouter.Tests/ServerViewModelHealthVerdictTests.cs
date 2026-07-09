@@ -113,6 +113,33 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, vm.HealthVerdict);
     }
 
+    // ── R5: constructor hydration from the persisted store ──────────────────
+
+    [Fact]
+    public void Ctor_HydratesFreshPersistedVerdict()
+    {
+        var prevDataDir = VPNRouter.Core.AppPaths.DataDir;
+        var temp = Path.Combine(Path.GetTempPath(), $"vpnrouter-hyd-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(temp);
+        ServerHealthStore.ResetForTests();
+        try
+        {
+            var entry = new VPNRouter.Core.Models.VlessServerEntry
+            { Name = "srv", Server = "10.9.9.9", Port = 443, Protocol = "vless" };
+            ServerHealthStore.Record(entry, ServerHealthVerdict.ProtocolHandshakeBlockedLikely);
+
+            var vm = new ServerViewModel(entry);
+            Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, vm.HealthVerdict);
+            Assert.True(vm.HasHealthVerdict);   // the row explains WHY Auto excludes it
+        }
+        finally
+        {
+            ServerHealthStore.ResetForTests();
+            VPNRouter.Core.AppPaths.OverrideDataDir(prevDataDir);
+            try { Directory.Delete(temp, recursive: true); } catch { }
+        }
+    }
+
     // ── A later quick probe re-merges with the stored deep phases ───────────
 
     [Fact]
