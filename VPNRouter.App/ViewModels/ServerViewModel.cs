@@ -220,6 +220,10 @@ public partial class ServerViewModel : ViewModelBase
                 sb.Append("\n\n").Append(CoreStrings.HealthRuBlockWarning);
             else if (HealthVerdict == ServerHealthVerdict.OnlyControlWorks)
                 sb.Append("\n\n").Append(CoreStrings.HealthCanaryFailedWarning);
+            // R5: verdict age from the persisted store (survives restarts).
+            var rec = _originalEntry != null ? ServerHealthStore.GetFreshRecord(_originalEntry) : null;
+            if (rec != null)
+                sb.Append('\n').Append(CoreStrings.HealthCheckedAgo(DateTimeOffset.UtcNow - rec.RecordedAt));
             if (!string.IsNullOrEmpty(DeepError)) sb.Append('\n').Append(DeepError);
             if (!string.IsNullOrEmpty(TestError)) sb.Append('\n').Append(TestError);
             return sb.ToString();
@@ -232,6 +236,11 @@ public partial class ServerViewModel : ViewModelBase
         HealthVerdict = ServerHealthClassifier
             .Classify(ServerHealthPhaseMapper.Merge(quick, _deepPhases))
             .Verdict;
+        // R5: persist (best-effort) so the verdict survives a restart and can
+        // inform the Auto/urltest pool (ConfigGenerator drops fresh blocked
+        // members). Unknown is ignored by the store.
+        if (_originalEntry != null)
+            ServerHealthStore.Record(_originalEntry, HealthVerdict);
         // Verdict may be unchanged while the underlying error text moved — the
         // tooltip must still refresh.
         OnPropertyChanged(nameof(HealthTooltip));

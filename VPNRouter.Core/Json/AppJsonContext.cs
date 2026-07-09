@@ -152,6 +152,7 @@ namespace VPNRouter.Core.Json;
 [JsonSerializable(typeof(Profile))]
 [JsonSerializable(typeof(ProfileCacheFile))]
 [JsonSerializable(typeof(ProfileCollection))]
+[JsonSerializable(typeof(Services.ServerHealthFileDto))]
 [JsonSerializable(typeof(SingBoxConfig))]
 [JsonSerializable(typeof(SubscriptionEntry))]
 [JsonSerializable(typeof(VlessServerEntry))]

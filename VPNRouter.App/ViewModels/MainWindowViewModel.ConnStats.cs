@@ -75,6 +75,7 @@ public partial class MainWindowViewModel
             _statsApi = null;
             _statsPrevAt = null;
             _autoSelectedServer = null;
+            _autoSelectPollTick = 0;   // R5: next session's first tick polls immediately
             ConnectionStatsText = string.Empty;
         }
     }
@@ -156,9 +157,19 @@ public partial class MainWindowViewModel
     /// highlight refresh on the UI thread if it changed. Best-effort: a null /
     /// failed query keeps the prior pick (status falls back to a generic label).
     /// </summary>
+    /// <summary>R5 / perf-hunt F3 follow-up: poll the group's "now" member only
+    /// every 3rd stats tick (~6s at the 2s poll) — the auto-pick doesn't move
+    /// faster than urltest's own 3m interval, so per-tick polling was waste.</summary>
+    private int _autoSelectPollTick;
+
     private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
     {
         if (!AutoSelectBestServer || !IsSubscribeMode)
+            return;
+
+        // Every 3rd tick only (the FIRST tick fires immediately so the label
+        // appears right after connect, not 6 s later).
+        if (Interlocked.Increment(ref _autoSelectPollTick) % 3 != 1)
             return;
 
         var nowTag = await api.GetGroupNowAsync("proxy").ConfigureAwait(false);

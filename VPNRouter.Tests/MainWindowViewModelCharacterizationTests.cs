@@ -240,7 +240,11 @@ public class MainWindowViewModelCharacterizationTests
         // leaving GUI retry/control ambiguous.
         // v2.46.0-r31 MTU diagnostics: + AutoTuneMtuCommand +
         // IsMtuAutoTuneRunning/MtuAutoTuneStatus/MtuAutoTuneButton.
-        "72d4a5a49b8c0dac2a75febf8f6298b8fcb7cb5312fe90763c017d0ecca4b575";
+        // urltest R5 (2026-07-09): + _autoSelectPollTick (ConnStats — GetGroupNow
+        // throttled to every 3rd tick; closes the perf-hunt F3 ledger P2).
+        // Cross-platform → Linux pin drifts in lock-step (soft-fail; capture
+        // from next ubuntu CI run).
+        "5406a615eefcbfad886d9839856fc49851c441cd8e3008366296d614551e006f";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

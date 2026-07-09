@@ -1203,6 +1203,24 @@ public static class ConfigGenerator
             servers = servers.Where(s =>
                 !"xhttp".Equals(s.Transport?.Type, StringComparison.OrdinalIgnoreCase)).ToList();
 
+        // urltest R5 (audit batch-1 #3): verdict-driven Auto-pool hygiene. When the
+        // user opted into AutoSelectBestServer, drop pool members whose PERSISTED
+        // health verdict is a FRESH ProtocolHandshakeBlockedLikely (TCP-reachable but
+        // the VPN protocol failed a real proxied probe — the RU DPI/TSPU signature).
+        // urltest's own generate_204 probe can't see that: a blocked member can keep
+        // winning on latency while carrying no traffic. Rules:
+        //  - ONLY in auto-select mode — a manually chosen server is never overridden;
+        //  - fail-open: never drop below one member (all-blocked => keep the full
+        //    pool and let urltest try — a wrong verdict must not brick connectivity);
+        //  - freshness TTL lives in ServerHealthStore (a stale verdict never excludes).
+        if (settings.Vless.AutoSelectBestServer && servers.Count > 1)
+        {
+            var kept = servers.Where(s =>
+                ServerHealthStore.GetFresh(s) != ServerHealthVerdict.ProtocolHandshakeBlockedLikely).ToList();
+            if (kept.Count >= 1 && kept.Count < servers.Count)
+                servers = kept;
+        }
+
         // v2.28.2 hard guard: if we got here with no servers, the resulting
         // sing-box JSON would have route rules referencing a "proxy" outbound
         // tag that we never emit (because AddOutboundGroup short-circuits on

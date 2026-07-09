@@ -50,12 +50,20 @@ signs off.
 - What: control canary + multi-canary matrix feeding the `BlockedTargetCanary` phase.
 - Gate: safe-default (via-VPN only) enforced + tested; live verify from an RU ISP.
 
-## R5 — Auto/urltest ranking + selection behaviour change
-- Why risky: changes which server the user actually connects through.
-- What: penalize `ProtocolHandshakeBlockedLikely` / `ProviderSubnetHighRisk`, prefer
-  ASN diversity; reword "Auto" as a quick web selector; expose selected member + last
-  test age.
-- Gate: live verify; tests for selected-member transitions (not just generated JSON).
+## R5 — Auto/urltest ranking + selection behaviour change — **DONE 2026-07-09**
+- Landed: new `ServerHealthStore` (cache/server_health.json, identity =
+  server:port:protocol so verdicts survive subscription refreshes, 12h freshness TTL,
+  atomic save, corrupt-file graceful) written best-effort by ServerViewModel on every
+  probe; `ConfigGenerator` drops Auto-pool members with a FRESH
+  ProtocolHandshakeBlockedLikely verdict — ONLY in AutoSelect mode (a manual choice is
+  never overridden), fail-open ≥1 member (all-blocked keeps the full pool), stale
+  verdicts never exclude. Wording: "Авто-выбор по быстрому веб-тесту" + tip states
+  generate_204 is a quick web test, not protocol verification, and blocked servers are
+  excluded (shared Core string — desktop + Android). Selected member was already shown
+  (v2.44.1-r6); added verdict AGE to the health tooltip; folded the perf-hunt F3 P2
+  (GetGroupNow every 3rd tick). 13 new tests incl. the audit's wording pin.
+- ASN diversity / ProviderSubnetHighRisk penalty intentionally NOT wired — needs R3
+  (ASN metadata) first; `ServerRankingScorer` is ready for it.
 
 ## R6 — Release (ship a -rN / cut stable)
 - Not autonomous. Stable cut needs an explicit user command; -rN only if asked.

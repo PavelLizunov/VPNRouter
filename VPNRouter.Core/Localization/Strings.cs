@@ -810,10 +810,19 @@ public static partial class Strings
     // A (2026-06-20) — opt-in urltest auto-select toggle (Android Subscribe tab,
     // parity with desktop SubscribePage). Desktop uses VM L_AutoSelectBest*; Android
     // reads these shared strings.
-    public static string AutoSelectBestServer => Ru ? "Авто-выбор лучшего сервера" : "Auto-select best server";
+    // urltest R5 (audit batch-1 #3): honest wording — Auto is a QUICK WEB TEST
+    // selector (one generate_204 probe), NOT full protocol verification. Never
+    // present it as having proven "the best server" works.
+    public static string AutoSelectBestServer => Ru
+        ? "Авто-выбор по быстрому веб-тесту"
+        : "Auto-select via quick web test";
     public static string AutoSelectBestServerTip => Ru
-        ? "Оборачивает серверы подписки одного протокола в urltest-группу — соединение идёт через самый быстрый доступный узел."
-        : "Wraps same-protocol subscription servers in a urltest group — traffic auto-routes through the fastest reachable node.";
+        ? "Оборачивает серверы подписки одного протокола в urltest-группу — соединение идёт через узел, "
+          + "быстрее всех отвечающий на веб-запрос (generate_204). Это быстрый веб-тест, а не полная проверка "
+          + "VPN-протокола. Серверы с недавно подтверждённой блокировкой протокола исключаются из группы."
+        : "Wraps same-protocol subscription servers in a urltest group — traffic rides the node that answers "
+          + "a web probe (generate_204) fastest. This is a quick web test, not full VPN-protocol verification. "
+          + "Servers with a recently confirmed protocol block are excluded from the group.";
     // B7 (2026-06-21) — Android foreground-service notification, passed to the Java
     // VpnRouterService via intent extras (English literals stay as the Java fallback).
     public static string NotifTunnelActive => Ru ? "Туннель активен" : "Tunnel active";

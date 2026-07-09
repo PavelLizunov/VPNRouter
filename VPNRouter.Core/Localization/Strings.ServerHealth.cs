@@ -92,4 +92,19 @@ public static partial class Strings
     public static string HealthCanaryPartialNote => Ru
         ? "Часть заблокированных сервисов открывается через VPN, часть — нет. Обход подтверждён частично."
         : "Some blocked services open via the VPN, others do not. Bypass is only partially proven.";
+
+    /// <summary>R5: verdict age line for the health tooltip ("checked N min ago").</summary>
+    public static string HealthCheckedAgo(TimeSpan age)
+    {
+        if (age < TimeSpan.Zero) age = TimeSpan.Zero;
+        if (age.TotalMinutes < 1)
+            return Ru ? "Проверено только что" : "Checked just now";
+        if (age.TotalHours < 1)
+        {
+            var m = (int)age.TotalMinutes;
+            return Ru ? $"Проверено {m} мин назад" : $"Checked {m} min ago";
+        }
+        var h = (int)age.TotalHours;
+        return Ru ? $"Проверено {h} ч назад" : $"Checked {h} h ago";
+    }
 }
