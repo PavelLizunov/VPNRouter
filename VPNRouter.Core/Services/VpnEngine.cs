@@ -578,6 +578,35 @@ public class VpnEngine : IDisposable
     /// </summary>
     public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default, bool forceRestart = false)
     {
+        // v2.46.1 (audit batch-1 #1): Apply joins the _lifecycleGate serialized set
+        // (StartAsync / Stop / failover restart). Without the gate, Apply could pass
+        // its IsRunning check and then race a Stop — hot-reloading a torn-down
+        // sing-box or re-engaging the true-split driver after the user disconnected.
+        // No caller runs under the gate (MVM via Task.Run, Service handler), so no
+        // re-entrancy; TryEngageSplitDriverAsync/StartupPipeline are gate-free.
+        await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await ApplyGatedAsync(settings, ct, forceRestart).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task<bool> ApplyGatedAsync(AppSettings settings, CancellationToken ct, bool forceRestart)
+    {
+        // Stop() cancels _sessionCts BEFORE taking the gate, so acquiring the gate
+        // after a Stop means the user no longer wants to be connected — bail instead
+        // of reviving state. The IsRunning check alone can't see a queued-behind-Stop
+        // Apply.
+        if (_sessionCts is null || _sessionCts.IsCancellationRequested)
+        {
+            _logger?.Warning("[VpnEngine] Apply skipped — no active session (stopped or never started)");
+            return false;
+        }
+
         if (_singBox == null || !_singBox.IsRunning())
         {
             _logger?.Warning("[VpnEngine] Apply called but sing-box not running");

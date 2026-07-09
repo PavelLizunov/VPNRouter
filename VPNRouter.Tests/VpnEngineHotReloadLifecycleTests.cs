@@ -474,6 +474,58 @@ public sealed class VpnEngineHotReloadLifecycleTests
         Assert.Equal(0, dnsHardening.RestoreCount);
     }
 
+    // ─── ApplyAsync lifecycle-gate pins (audit batch-1 #1, 2026-07-09) ───
+    // ApplyAsync now runs under _lifecycleGate with a session-token check:
+    // Stop() cancels _sessionCts before taking the gate, so an Apply that
+    // acquires the gate after a Stop must bail — never hot-reload a torn-down
+    // sing-box or re-engage the true-split driver after Disconnect.
+
+    [Fact]
+    public async Task Apply_AfterStop_ReturnsFalse_AndDoesNotRespawn()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart prerequisite is Windows-only.");
+
+        var (engine, dnsHardening, spawnedHandles, firewall, monitor, settings, cleanup) =
+            await StartHappyPathAsync();
+        using var _ = cleanup;
+
+        engine.Stop();
+        var handlesAfterStop = spawnedHandles.Count;
+
+        var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
+
+        Assert.False(ok);
+        // The load-bearing pin: Apply after disconnect must not respawn sing-box.
+        Assert.Equal(handlesAfterStop, spawnedHandles.Count);
+        Assert.False(engine.IsRunning);
+    }
+
+    [Fact]
+    public async Task Apply_ConcurrentWithStop_NeverResurrectsTunnel()
+    {
+        // Race invariant (either interleaving is legal, resurrection is not):
+        //  • Apply wins the gate → reload/restart completes → Stop tears down.
+        //  • Stop wins the gate → Apply sees the cancelled session → false.
+        // Pre-gate, Apply could pass IsRunning, lose the race to a full Stop,
+        // then restart sing-box AFTER teardown — a live tunnel post-Disconnect.
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart prerequisite is Windows-only.");
+
+        var (engine, dnsHardening, spawnedHandles, firewall, monitor, settings, cleanup) =
+            await StartHappyPathAsync();
+        using var _ = cleanup;
+
+        var applyTask = Task.Run(() => engine.ApplyAsync(settings, CancellationToken.None));
+        var stopTask = Task.Run(() => engine.Stop());
+        await stopTask;
+        await applyTask; // outcome depends on interleaving; the invariant doesn't:
+
+        Assert.False(engine.IsRunning);
+        Assert.True(spawnedHandles[^1].HasExited,
+            "no sing-box handle may remain alive after Stop has completed");
+    }
+
     [Fact]
     public async Task Apply_OnRunningEngine_PreservesFirewallAndMonitorReferences()
     {
