@@ -10,6 +10,8 @@
 #   ADB=/opt/homebrew/bin/adb bash tools/android-e2e-test.sh            # full auto suite
 #   MODE=baseline bash tools/android-e2e-test.sh                        # VPN-OFF reference run
 #   MODE=ui bash tools/android-e2e-test.sh                              # browser + speedtest (needs unlock)
+#   LAN_IP=192.168.31.1 EXPECT_LAN_IF=wlan0 bash tools/...              # + P0.1 LAN-bypass gate (T3.5/T3.6)
+#   TEST_DISCONNECT=1 bash tools/...                                    # + P0.2 disconnect-recovery gate (T12-T15; tears down tunnel LAST)
 #
 # Recommended flow: run MODE=baseline (VPN off) -> connect in-app (auto-select on)
 # -> run default (tunnel) -> compare egress IP / throughput / idle-CPU.
@@ -64,6 +66,29 @@ CODE="$(ash 'curl -s --max-time 15 -o /dev/null -w "%{http_code}" https://www.go
   && say "PASS T3  https://google.com -> HTTP $CODE (DNS + route OK)" \
   || say "FAIL T3  https://google.com -> HTTP ${CODE:-timeout}"
 
+# ── T3.5/T3.6 — LAN / local-network bypass (P0.1 invariant) ──
+# Local/private IPs must NEVER route via tun0, split OR full. Opt-in: set
+#   LAN_IP=<router/NAS ip>  [LAN_HTTP_URL=http://ip/]  [EXPECT_LAN_IF=wlan0]
+if [ -n "${LAN_IP:-}" ]; then
+  LANROUTE="$(ash "ip route get $LAN_IP 2>/dev/null")"
+  say "INFO T3.5  ip route get $LAN_IP -> ${LANROUTE:-<none>}"
+  if echo "$LANROUTE" | grep -q 'dev tun0'; then
+    say "FAIL T3.5  LAN $LAN_IP routes via tun0 — local-network invariant VIOLATED (LAN captured)"
+  else
+    say "PASS T3.5  LAN $LAN_IP bypasses tun0"
+    [ -n "${EXPECT_LAN_IF:-}" ] && ! echo "$LANROUTE" | grep -q "dev ${EXPECT_LAN_IF}" \
+      && say "WARN T3.5  route does not mention expected iface ${EXPECT_LAN_IF}"
+  fi
+  if [ -n "${LAN_HTTP_URL:-}" ]; then
+    LCODE="$(ash "curl -s --max-time 8 -o /dev/null -w '%{http_code}' '$LAN_HTTP_URL'")"
+    { [ "${LCODE:0:1}" = "2" ] || [ "${LCODE:0:1}" = "3" ]; } \
+      && say "PASS T3.6  LAN HTTP $LAN_HTTP_URL -> $LCODE (LAN reachable while connected)" \
+      || say "FAIL T3.6  LAN HTTP $LAN_HTTP_URL -> ${LCODE:-timeout}"
+  fi
+else
+  say "INFO T3.5  LAN checks skipped (set LAN_IP=<router/NAS ip> [LAN_HTTP_URL=] [EXPECT_LAN_IF=wlan0])"
+fi
+
 # ── T4 — real download throughput ──
 # Multi-stream: single-stream curl through a proxy badly under-reports (2.1 Mbps
 # single vs 84 Mbps fast.com on the same exit). N parallel streams track real speed.
@@ -108,5 +133,32 @@ say "INFO T8  battery over ${BAT_WIN}s: ${PWR:-<no per-uid mAh accrued — try l
 
 # ── T9 — stability: tun0 still up after the test window (NAT-idle 5-min drop) ──
 say "$([ "$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')" = up ] && echo 'PASS' || echo 'FAIL') T9  tun0 after window: $(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')"
+
+# ── T12-T15 — explicit-disconnect recovery (P0.2). OPT-IN: it tears down the
+#   tunnel, so it runs LAST and only when TEST_DISCONNECT=1. Uses the app's own
+#   STOP service action (not force-stop) so it exercises the real teardown path. ──
+if [ "${TEST_DISCONNECT:-0}" = "1" ]; then
+  say "---- T12-T15 explicit-disconnect recovery gate ----"
+  say "INFO T12  pre-disconnect tun0=$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')"
+  ash am startservice -n "$PKG/.VpnRouterService" -a "$PKG.STOP" >/dev/null 2>&1 \
+    || ash am start-service -n "$PKG/.VpnRouterService" -a "$PKG.STOP" >/dev/null 2>&1
+  sleep 6
+  TUN2="$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')"
+  [ "$TUN2" = down ] && say "PASS T12  tun0 removed after explicit disconnect" \
+                     || say "FAIL T12  tun0 still $TUN2 after explicit disconnect"
+  ACODE="$(ash 'curl -s --max-time 12 -o /dev/null -w "%{http_code}" https://www.google.com')"
+  { [ "${ACODE:0:1}" = "2" ] || [ "${ACODE:0:1}" = "3" ]; } \
+    && say "PASS T13  DNS/HTTPS works after disconnect (HTTP $ACODE, direct/ISP path)" \
+    || say "FAIL T13  DNS/HTTPS broken after disconnect (HTTP ${ACODE:-timeout})"
+  DIP="$(ash curl -s --max-time 12 "$IP_URL")"
+  say "INFO T14  post-disconnect egress IP=${DIP:-<none>} (should be home/ISP, not the T2 exit ${EXIT_IP:-?})"
+  if $ADB logcat -d 2>/dev/null | tail -400 | grep -qE 'ACTION_RESTART|system-initiated start|libbox service started'; then
+    say "WARN T15  a restart/re-start log appeared after explicit stop — verify it was NOT triggered here (Always-on?)"
+  else
+    say "PASS T15  no ACTION_RESTART / tunnel re-start after explicit stop"
+  fi
+else
+  say "INFO T12  disconnect-recovery gate skipped (set TEST_DISCONNECT=1 — it tears down the tunnel)"
+fi
 
 say "================ report: $OUT/report.txt ================"

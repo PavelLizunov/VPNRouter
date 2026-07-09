@@ -60,3 +60,23 @@ already fixed. Only genuinely usage-correlated growth = stale `_subsAggResults`/
 entries for removed servers (low severity, bounded-prune fix). Footprint is heavy (~500-680 MB)
 — the Avalonia+Mono+43 MB libgojni tax; a native Kotlin app is far lighter — but it's footprint,
 not a leak. Full audit + best-practices + peer comparison: see session report 2026-06-21.
+
+## P0.1 / P0.2 safety gates — ADDED 2026-07-09 (audit handoff Android P0.1/P0.2)
+
+Opt-in gates in `tools/android-e2e-test.sh` (skipped by default so the standard
+post-ship run is unchanged). Pair with the `openTun:` route-materialization logcat
+lines (`VpnRouterService.java`) which prove what libbox TunOptions became.
+
+- **T3.5 LAN route bypass** — `LAN_IP=<router/NAS>`: `ip route get $LAN_IP` must NOT
+  contain `dev tun0` (local-network invariant). `EXPECT_LAN_IF=wlan0` warns if the
+  route doesn't mention the expected iface.
+- **T3.6 LAN HTTP probe** — `LAN_HTTP_URL=http://<ip>/`: expect 2xx/3xx while connected.
+- **T12 explicit disconnect removes tun0** — `TEST_DISCONNECT=1`: STOP via the app's
+  own `.VpnRouterService` STOP action (not force-stop); `tun0` must go down.
+- **T13 DNS/HTTPS after disconnect** — public HTTPS must work post-disconnect (direct/ISP).
+- **T14 egress restored** — post-disconnect egress IP should be home/ISP, not the T2 exit.
+- **T15 no ACTION_RESTART after explicit stop** — logcat must show no tunnel re-start
+  (a restart is only acceptable under Always-on/system-requested behaviour).
+
+Ship gate: run with `LAN_IP` set (and `LAN_HTTP_URL` when a LAN target exists), then a
+separate `TEST_DISCONNECT=1` pass. Device-only — cannot run in GitHub CI (no phone).
