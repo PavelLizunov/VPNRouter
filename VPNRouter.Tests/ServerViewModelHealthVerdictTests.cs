@@ -113,6 +113,21 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, vm.HealthVerdict);
     }
 
+    // ── R4: canary conclusion flows into the row verdict ─────────────────────
+
+    [Fact]
+    public void DeepOk_ButCanaryFailed_IsOnlyControlWorks_WithCanaryCopy()
+    {
+        var vm = new ServerViewModel();
+        vm.ApplyProbeResult(Probe(ServerProbeStatus.Ok));
+        vm.ApplyDeepResult(new DeepVerifyResult(true, 120, null, null,
+            BlockedCanary: PhaseOutcome.Fail));
+
+        Assert.True(vm.IsDeepVerified);   // the tunnel itself did pass
+        Assert.Equal(ServerHealthVerdict.OnlyControlWorks, vm.HealthVerdict);
+        Assert.Contains(CoreStrings.HealthCanaryFailedWarning, vm.HealthTooltip);
+    }
+
     // ── R3: pool-wide subnet-risk flags ──────────────────────────────────────
 
     [Fact]

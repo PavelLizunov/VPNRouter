@@ -54,7 +54,12 @@ public static class ServerHealthPhaseMapper
     public static ServerHealthPhases FromDeepVerify(DeepVerifyResult? r)
     {
         if (r is null) return new ServerHealthPhases();
-        if (r.Ok) return new ServerHealthPhases(ProxiedHttpControl: PhaseOutcome.Pass);
+        if (r.Ok)
+            // R4: the canary conclusion (probed via the same tunnel) rides along —
+            // control Pass + canary Fail is exactly the OnlyControlWorks shape.
+            return new ServerHealthPhases(
+                ProxiedHttpControl: PhaseOutcome.Pass,
+                BlockedTargetCanary: r.BlockedCanary);
 
         switch (r.FailurePhase)
         {

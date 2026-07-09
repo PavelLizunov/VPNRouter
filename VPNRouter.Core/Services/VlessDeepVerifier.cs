@@ -43,7 +43,11 @@ public sealed record DeepVerifyResult(
     int HttpLatencyMs,
     double? BandwidthMbps,
     string? Error,
-    DeepVerifyFailurePhase FailurePhase = DeepVerifyFailurePhase.None)
+    DeepVerifyFailurePhase FailurePhase = DeepVerifyFailurePhase.None,
+    // R4: blocked-target canary conclusion, probed THROUGH the same spawned
+    // sing-box SOCKS (via-VPN by construction). Unknown when canaries didn't
+    // run (no budget / stale list / control failed) — additive, back-compat.
+    PhaseOutcome BlockedCanary = PhaseOutcome.Unknown)
 {
     public static DeepVerifyResult Failed(string error) => new(false, 0, null, error);
 
@@ -301,6 +305,12 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed(httpErr ?? "http failed", DeepVerifyFailurePhase.ProxiedHttp);
             }
 
+            // R4: blocked-target canaries through the SAME tunnel (via-VPN — the
+            // ISP only ever sees the tunnel). Control = the trace probe that just
+            // passed. Runs inside the remaining overall budget; skipped (Unknown)
+            // when there's no time left — never condemns on our own budget.
+            var canary = await ProbeCanariesViaSocksAsync(socksPort, label, overallCts.Token);
+
             double? mbps = null;
             if (measureBandwidth)
             {
@@ -309,9 +319,9 @@ public sealed class VlessDeepVerifier
             }
 
             _logger.Information(
-                "[VlessDeepVerifier] {Name}: PASS http={HttpMs}ms bw={BwMbps}",
-                label, httpLatencyMs, mbps?.ToString("F1") ?? "-");
-            return new DeepVerifyResult(true, httpLatencyMs, mbps, null);
+                "[VlessDeepVerifier] {Name}: PASS http={HttpMs}ms bw={BwMbps} canary={Canary}",
+                label, httpLatencyMs, mbps?.ToString("F1") ?? "-", canary);
+            return new DeepVerifyResult(true, httpLatencyMs, mbps, null, BlockedCanary: canary);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -527,6 +537,65 @@ public sealed class VlessDeepVerifier
         catch (Exception ex)
         {
             return (false, 0, ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// R4: probe the blocked-target canaries through the tunnel's SOCKS. A target
+    /// "passes" on ANY HTTP response (even 403/404 — bytes flowed through to the
+    /// blocked host, bypass proven); timeout/reset/connect failure = failed (the
+    /// RU block signature via a non-working transport). Per-target 4s cap, run in
+    /// parallel; skipped entirely (Unknown) when under ~5s of overall budget
+    /// remains. URLs are logged redacted (scheme+host).
+    /// </summary>
+    private async Task<PhaseOutcome> ProbeCanariesViaSocksAsync(int socksPort, string label, CancellationToken ct)
+    {
+        try
+        {
+            var targets = CanaryTargets.Load();
+            var now = DateTimeOffset.UtcNow;
+            var results = new List<(bool Passed, bool Stale)>();
+
+            var handler = new SocketsHttpHandler
+            {
+                Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
+                UseProxy = true,
+                ConnectTimeout = TimeSpan.FromSeconds(4),
+            };
+            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
+
+            var probes = targets.Select(async t =>
+            {
+                var stale = CanaryPolicy.IsStale(t, now, CanaryTargets.ReviewTtl);
+                bool passed;
+                try
+                {
+                    using var resp = await http.GetAsync(t.Url, HttpCompletionOption.ResponseHeadersRead, ct);
+                    passed = (int)resp.StatusCode < 500;   // any real answer = bytes flowed through
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch { passed = false; }
+                _logger.Debug("[VlessDeepVerifier] {Name}: canary {Url} passed={Passed} stale={Stale}",
+                    label, CanaryPolicy.RedactUrl(t.Url), passed, stale);
+                return (passed, stale);
+            }).ToList();
+
+            results.AddRange(await Task.WhenAll(probes));
+
+            var agg = CanaryPolicy.Evaluate(controlPassed: true, results);
+            if (agg.BlockedTargetCanary == PhaseOutcome.Fail)
+                _logger.Information("[VlessDeepVerifier] {Name}: canary FAIL — {Reason}", label, agg.Reason);
+            return agg.BlockedTargetCanary;
+        }
+        catch (OperationCanceledException)
+        {
+            // Overall budget drained mid-canary — inconclusive, never a verdict.
+            return PhaseOutcome.Unknown;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug("[VlessDeepVerifier] {Name}: canary stage error {Err} — inconclusive", label, ex.GetType().Name);
+            return PhaseOutcome.Unknown;
         }
     }
 

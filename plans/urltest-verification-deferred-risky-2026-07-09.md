@@ -58,11 +58,21 @@ signs off.
   + a bundled/downloaded DB) would only replace the ProviderKey producer — every
   consumer takes opaque string keys.
 
-## R4 — Blocked-target canary probes (network + can reveal user intent to the ISP)
-- Why risky: direct probes to blocked targets can expose intent; must be via-VPN only by
-  default, opt-in for direct, updateable/user-supplied list, URL-redacted logs.
-- What: control canary + multi-canary matrix feeding the `BlockedTargetCanary` phase.
-- Gate: safe-default (via-VPN only) enforced + tested; live verify from an RU ISP.
+## R4 — Blocked-target canary probes — **DONE 2026-07-09 (via-VPN only BY CONSTRUCTION)**
+- The safety model is structural, not a toggle: canaries are probed ONLY through the
+  spawned sing-box SOCKS of a deep verify — the ISP sees nothing but the tunnel; no
+  direct-from-client probing exists anywhere. `CanaryTargets`: lightweight built-ins
+  (YouTube generate_204, Discord gateway JSON) + user-override
+  `cache/canary_targets.json` (updateable without a release; corrupt file falls back);
+  45d review-TTL degrades stale targets to ambiguous via `CanaryPolicy.IsStale`.
+- `VlessDeepVerifier` runs the stage after the control probe passes (4s per-target cap,
+  parallel, skipped=Unknown when the 12s budget is drained — our own timeout never
+  condemns); pass = ANY http response (bytes flowed through the blocked host), fail =
+  timeout/reset. Redacted logs (scheme+host). Result rides `DeepVerifyResult.BlockedCanary`
+  (additive) -> mapper -> classifier: control Pass + canary Fail = OnlyControlWorks ->
+  the R2 verdict line + canary warning copy light up with ZERO new UI work.
+- 7 new tests (targets/override/corrupt, mapper OnlyControlWorks + back-compat, VM e2e).
+- Live RU-ISP verification rides the next -rN ship (brat sits behind a real RU ISP).
 
 ## R5 — Auto/urltest ranking + selection behaviour change — **DONE 2026-07-09**
 - Landed: new `ServerHealthStore` (cache/server_health.json, identity =

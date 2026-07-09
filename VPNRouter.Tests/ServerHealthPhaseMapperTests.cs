@@ -125,6 +125,30 @@ public class ServerHealthPhaseMapperTests
         Assert.NotEqual(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, verdict);
     }
 
+    // ── R4: blocked-target canary rides the deep-verify result ──────────────
+
+    [Fact]
+    public void FromDeepVerify_OkWithCanaryFail_YieldsOnlyControlWorks()
+    {
+        var phases = ServerHealthPhaseMapper.FromDeepVerify(
+            new DeepVerifyResult(true, 120, null, null, BlockedCanary: PhaseOutcome.Fail));
+        Assert.Equal(PhaseOutcome.Pass, phases.ProxiedHttpControl);
+        Assert.Equal(PhaseOutcome.Fail, phases.BlockedTargetCanary);
+
+        // The audit's key case end-to-end: tunnel up, blocked service still dark.
+        Assert.Equal(ServerHealthVerdict.OnlyControlWorks,
+            ServerHealthClassifier.Classify(phases).Verdict);
+    }
+
+    [Fact]
+    public void FromDeepVerify_OkWithoutCanary_StaysHealthy_BackCompat()
+    {
+        // Old results / skipped canaries (Unknown default) must not change the verdict.
+        var phases = ServerHealthPhaseMapper.FromDeepVerify(new DeepVerifyResult(true, 120, null, null));
+        Assert.Equal(PhaseOutcome.Unknown, phases.BlockedTargetCanary);
+        Assert.Equal(ServerHealthVerdict.Healthy, ServerHealthClassifier.Classify(phases).Verdict);
+    }
+
     // ── Merge ───────────────────────────────────────────────────────────────
 
     [Fact]
