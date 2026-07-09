@@ -89,5 +89,16 @@ signs off.
 - ASN diversity / ProviderSubnetHighRisk penalty intentionally NOT wired — needs R3
   (ASN metadata) first; `ServerRankingScorer` is ready for it.
 
-## R6 — Release (ship a -rN / cut stable)
-- Not autonomous. Stable cut needs an explicit user command; -rN only if asked.
+## R6 — Release — **SHIPPED 2026-07-09 (v2.46.1-r2 in-flight; stable cut = user command)**
+- v2.46.1-r1 (c53badbc) shipped on the user's "ship"; its post-ship live gate on
+  windows-brat (real release ZIP, real RU ISP) proved the chain end-to-end: Iceland AWG
+  deep-verified through the lx core (R1 parity), canary Pass/Fail differentiated live
+  (Germany AWG = a real OnlyControlWorks in the wild), SOCKS-bind failures honestly read
+  "untested". The same gate CAUGHT a real bug: the optional bandwidth probe draining the
+  12s budget discarded an already-passed HTTP+canary result (working-but-slow server
+  false-failed) -> fixed in r2 (f386958c): post-control-HTTP steps are best-effort
+  enrichment, their timeout never downgrades the pass.
+- v2.46.1-r2: 14 desktop assets, Mac/Linux CI green, commit CI 0 failures, r1 deleted
+  per rolling policy, Latest = v2.46.0. r2 live re-verify on brat = final gate.
+- Stable cut of v2.46.1 stays USER-GATED ("cut" / "ok" / "promote"), incl. the
+  mandatory live-update gate (cut-stable skill 6.5) before asking.
