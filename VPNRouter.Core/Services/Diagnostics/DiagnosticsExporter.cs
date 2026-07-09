@@ -70,6 +70,16 @@ public static class DiagnosticsExporter
             AddText(staging, "summary.txt", BuildSummary(timestamp, connected, warnings), entries);
             AddText(staging, "windows-services.txt", BuildWindowsServicesSnapshot(warnings), entries);
 
+            // Antivirus / install-integrity snapshot (Windows). The load-bearing
+            // reason: multiple users report "VPNRouter disappears after a reboot"
+            // and the app's own logs can never show its OWN external deletion. This
+            // captures the AV state that CAN — Defender status + Tamper Protection
+            // (which silently no-ops install.ps1's exclusion), the registered AV
+            // product (catches 3rd-party Kaspersky/etc), our exclusion presence,
+            // past threat detections, Defender quarantine/remove events filtered to
+            // our binaries, whether our EXEs still exist, and their (un)signed state.
+            AddText(staging, "antivirus-integrity.txt", BuildAntivirusSnapshot(warnings), entries);
+
             // config.yaml (redacted)
             AddRedactedFile(staging, AppPaths.ConfigYamlPath, "config.redacted.yaml",
                 DiagnosticsRedactor.RedactConfigYaml, entries, warnings);
@@ -240,6 +250,104 @@ public static class DiagnosticsExporter
             {
                 dest.AppendLine(RunCapture(fileName, args));
             }
+            catch (Exception ex)
+            {
+                warnings.Add($"{title} failed: {ex.GetType().Name}");
+                dest.AppendLine($"(failed: {ex.GetType().Name}: {ex.Message})");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Antivirus + install-integrity snapshot (Windows). Read-only — status queries,
+    /// event-log reads, file existence + Authenticode. No mutation of AV settings.
+    /// </summary>
+    private static string BuildAntivirusSnapshot(List<string> warnings)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Antivirus and install integrity");
+        sb.AppendLine("===============================");
+        sb.AppendLine("Why this file exists: several users report VPNRouter 'disappearing'");
+        sb.AppendLine("after a reboot. The binaries are UNSIGNED and do TUN + process-scan +");
+        sb.AppendLine("firewall work, so an antivirus can quarantine them on a boot scan. The");
+        sb.AppendLine("installer adds a Defender exclusion, but Tamper Protection silently");
+        sb.AppendLine("no-ops that. If our EXEs are missing below, or the AV event log shows a");
+        sb.AppendLine("quarantine of them, that is the deletion — add VPNRouter to your AV's");
+        sb.AppendLine("exclusions (and the install dir), or use a signed build once available.");
+
+        // Install integrity works cross-platform; the rest is Windows-only.
+        sb.AppendLine();
+        sb.AppendLine("---- install files present ----");
+        var appDir = AppContext.BaseDirectory;
+        foreach (var name in new[] { "VPNRouter.App.exe", "VPNRouter.CLI.exe",
+                     "VPNRouter.Service.exe", "sing-box.exe", "sing-box-lx.exe" })
+        {
+            var p = Path.Combine(appDir, name);
+            var exists = File.Exists(p);
+            sb.AppendLine($"{name,-26} {(exists ? "present" : "MISSING")}");
+            if (!exists && (name == "VPNRouter.App.exe" || name.StartsWith("sing-box")))
+                warnings.Add($"{name} MISSING from the install dir — likely AV-quarantined (see antivirus-integrity.txt)");
+        }
+        var installBin = AppPaths.SingBoxExePath;   // %ProgramData%\VPNRouter\bin\sing-box.exe
+        sb.AppendLine($"{"bin/sing-box.exe (ProgramData)",-26} {(File.Exists(installBin) ? "present" : "MISSING")}");
+        if (!File.Exists(installBin))
+            warnings.Add("bin/sing-box.exe MISSING from ProgramData — likely AV-quarantined");
+
+        if (!OperatingSystem.IsWindows())
+        {
+            sb.AppendLine();
+            sb.AppendLine("(not Windows — AV queries skipped)");
+            return sb.ToString();
+        }
+
+        AppendCommand(sb, "Defender status (RTP / Tamper Protection / mode / version)", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "try { Get-MpComputerStatus | Select AMRunningMode,RealTimeProtectionEnabled,IsTamperProtected," +
+            "AntivirusEnabled,AMProductVersion,AntivirusSignatureLastUpdated | Format-List | Out-String -Width 4096 } " +
+            "catch { 'Get-MpComputerStatus unavailable: ' + $_.Exception.Message }");
+
+        AppendCommand(sb, "registered antivirus products (catches 3rd-party)", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "try { Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction Stop | " +
+            "Select displayName,productState,pathToSignedProductExe | Format-List | Out-String -Width 4096 } " +
+            "catch { 'SecurityCenter2 query failed: ' + $_.Exception.Message }");
+
+        AppendCommand(sb, "our Defender exclusion present?", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "try { (Get-MpPreference).ExclusionPath | Out-String -Width 4096 } catch { 'n/a' }");
+
+        AppendCommand(sb, "past threat detections (Defender)", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "try { Get-MpThreatDetection -ErrorAction SilentlyContinue | " +
+            "Select InitialDetectionTime,@{n='Threat';e={$_.ThreatID}},@{n='Files';e={($_.Resources -join '; ')}} | " +
+            "Sort InitialDetectionTime -Descending | Select -First 30 | Format-List | Out-String -Width 4096 } " +
+            "catch { 'Get-MpThreatDetection unavailable' }");
+
+        // The definitive signal: Defender Operational quarantine/remove/block events
+        // (1116 detected, 1117 action taken, 1118/1119 remediation, 5001/5007) that
+        // NAME a VPNRouter/sing-box path, over the last 30 days.
+        AppendCommand(sb, "Defender quarantine/remove events naming our binaries (30d)", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "try { Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';" +
+            "StartTime=(Get-Date).AddDays(-30)} -ErrorAction SilentlyContinue | " +
+            "? { $_.Message -match 'VPNRouter|sing-box|singbox' } | " +
+            "Select -First 40 TimeCreated,Id,LevelDisplayName,Message | Format-List | Out-String -Width 4096 } " +
+            "catch { 'Defender event log unavailable' }");
+
+        AppendCommand(sb, "Authenticode status of our binaries (unsigned = AV-prone)", "powershell.exe",
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "@('VPNRouter.App.exe','sing-box.exe','VPNRouter.Service.exe') | % { " +
+            "$p = Join-Path '" + appDir.Replace("'", "''").TrimEnd('\\') + "' $_; " +
+            "if (Test-Path $p) { $s = Get-AuthenticodeSignature $p; \"$_ -> $($s.Status)\" } else { \"$_ -> MISSING\" } } | " +
+            "Out-String -Width 4096");
+
+        return sb.ToString();
+
+        void AppendCommand(StringBuilder dest, string title, string fileName, params string[] args)
+        {
+            dest.AppendLine();
+            dest.AppendLine("---- " + title + " ----");
+            try { dest.AppendLine(RunCapture(fileName, args)); }
             catch (Exception ex)
             {
                 warnings.Add($"{title} failed: {ex.GetType().Name}");

@@ -280,17 +280,45 @@ if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
 Ok "Installed $resolvedVersion to $InstallRoot"
 
 # == Windows Defender exclusions (interim, until code-signing — Task #132) =====
-# The DNS-tunnel sidecar (slipstream-client.exe) is unsigned and does DNS
-# tunnelling — a textbook exfiltration signature heuristic AV flags aggressively.
-# Exclude both the install dir and the runtime data dir so it isn't quarantined.
-# Tamper Protection on managed devices silently no-ops Add-MpPreference even when
-# elevated, so this is best-effort; the README documents manual exclusion too.
+# The binaries (VPNRouter.App.exe, sing-box.exe, the DNS-tunnel sidecar) are
+# UNSIGNED and do TUN + process-scan + firewall + DNS-tunnelling — textbook AV
+# heuristic targets. Without an exclusion a boot/scheduled scan can quarantine
+# them, and the user sees "VPNRouter disappeared after a reboot".
+#
+# CRITICAL: Tamper Protection (ON by default on Win10 1903+/Win11) silently
+# blocks Add-MpPreference even when elevated. The old code used
+# -ErrorAction SilentlyContinue and THEN unconditionally printed "added" — so it
+# lied when the exclusion never took. Now we VERIFY the exclusion stuck and, if
+# not, tell the user exactly what to do by hand.
+$exclOk = $false
 try {
     Add-MpPreference -ExclusionPath $InstallRoot -ErrorAction SilentlyContinue
     Add-MpPreference -ExclusionPath $DataRoot    -ErrorAction SilentlyContinue
-    Ok "Defender exclusions added ($InstallRoot, $DataRoot)"
-} catch {
-    Warn "Could not add Defender exclusions (Tamper Protection may block this) - see README if AV quarantines a file"
+    $paths = @()
+    try { $paths = (Get-MpPreference -ErrorAction SilentlyContinue).ExclusionPath } catch {}
+    $exclOk = ($paths -contains $InstallRoot) -and ($paths -contains $DataRoot)
+} catch {}
+
+if ($exclOk) {
+    Ok "Defender exclusions verified ($InstallRoot, $DataRoot)"
+} else {
+    # Figure out WHY, so the message is actionable.
+    $tp = $null
+    try { $tp = (Get-MpComputerStatus -ErrorAction SilentlyContinue).IsTamperProtected } catch {}
+    $thirdParty = @()
+    try {
+        $thirdParty = (Get-CimInstance -Namespace 'root/SecurityCenter2' -ClassName AntiVirusProduct -ErrorAction SilentlyContinue |
+            Where-Object { $_.displayName -and $_.displayName -notmatch 'Windows Defender' } | Select-Object -ExpandProperty displayName)
+    } catch {}
+
+    Warn "Could NOT confirm a Defender exclusion for VPNRouter."
+    if ($tp -eq $true) { Warn "  Reason: Windows Tamper Protection is ON — it blocks scripted exclusions." }
+    if ($thirdParty) { Warn "  Detected third-party antivirus: $($thirdParty -join ', ') (Defender exclusions do not apply to it)." }
+    Warn "  => VPNRouter is UNSIGNED; an antivirus may delete it on a reboot scan."
+    Warn "  => Add these two paths to your antivirus / Windows Security EXCLUSIONS manually:"
+    Warn "       $InstallRoot"
+    Warn "       $DataRoot"
+    Warn "     Windows Security > Virus & threat protection > Manage settings > Exclusions > Add > Folder."
 }
 
 # Clean up downloaded ZIP (cache in %TEMP% is fine to keep, but tidy)
