@@ -305,17 +305,31 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed(httpErr ?? "http failed", DeepVerifyFailurePhase.ProxiedHttp);
             }
 
-            // R4: blocked-target canaries through the SAME tunnel (via-VPN — the
-            // ISP only ever sees the tunnel). Control = the trace probe that just
-            // passed. Runs inside the remaining overall budget; skipped (Unknown)
-            // when there's no time left — never condemns on our own budget.
+            // Control HTTP passed → the server WORKS. Everything below (canary,
+            // bandwidth) is best-effort enrichment: a budget-timeout inside it must
+            // NEVER downgrade this success to a Timeout failure (that false-fails a
+            // working-but-slow server — live-caught on brat 2026-07-09, Germany AWG:
+            // canary ran, then bandwidth hit the 12s budget and discarded the pass).
+
+            // R4: blocked-target canaries through the SAME tunnel (via-VPN — the ISP
+            // only ever sees the tunnel). ProbeCanariesViaSocksAsync swallows a
+            // budget-timeout and returns Unknown, so it can't throw out of here.
             var canary = await ProbeCanariesViaSocksAsync(socksPort, label, overallCts.Token);
 
             double? mbps = null;
             if (measureBandwidth)
             {
-                var (bwOk, measuredMbps, _) = await MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
-                if (bwOk) mbps = measuredMbps;
+                try
+                {
+                    var (bwOk, measuredMbps, _) = await MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
+                    if (bwOk) mbps = measuredMbps;
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // Our overall budget drained during the OPTIONAL bandwidth probe.
+                    // Report bandwidth unmeasured; the HTTP+canary success stands.
+                    _logger.Debug("[VlessDeepVerifier] {Name}: bandwidth probe hit the overall budget — reporting unmeasured", label);
+                }
             }
 
             _logger.Information(
