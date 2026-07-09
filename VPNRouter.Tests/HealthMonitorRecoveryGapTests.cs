@@ -237,4 +237,27 @@ public class HealthMonitorRecoveryGapTests
         Assert.Equal(0, attempts);
         hm.Dispose();
     }
+
+    [Fact]
+    public void Source_AttemptRestart_DoesNotHotReloadOrphanSingBox()
+    {
+        var src = File.ReadAllText(FindRepoFile("VPNRouter.Core", "Services", "HealthMonitor.cs"));
+
+        Assert.Contains("var managedSingBoxRunning = _singBox.IsRunning();", src);
+        Assert.Contains("OrphanCleanup.KillOrphans(_logger, respectTunLock: false)", src);
+        Assert.Contains("var hotReloaded = managedSingBoxRunning && TryHotReloadViaApi(configJson);", src);
+    }
+
+    private static string FindRepoFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException(string.Join(Path.DirectorySeparatorChar, parts));
+    }
 }

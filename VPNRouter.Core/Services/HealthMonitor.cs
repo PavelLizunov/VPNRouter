@@ -889,7 +889,21 @@ public class HealthMonitor : IDisposable
                 // if it didn't take. Pre-2D-4 this was a single
                 // _singBox.ReloadConfigJson(configJson) call that
                 // bundled write+hot-reload+restart-fallback inline.
-                var hotReloaded = TryHotReloadViaApi(configJson);
+                var managedSingBoxRunning = _singBox.IsRunning();
+                if (!managedSingBoxRunning && OperatingSystem.IsWindows() && ProcessOwnership.AnySingBoxOwned())
+                {
+                    _logger.Warning(
+                        "[HealthMonitor] Managed sing-box handle is gone but a VPNRouter-owned sing-box is still running — killing orphan before full restart");
+                    try { OrphanCleanup.KillOrphans(_logger, respectTunLock: false); }
+                    catch (Exception cleanupEx) { _logger.Warning(cleanupEx, "[HealthMonitor] Orphan sing-box cleanup failed before full restart"); }
+                }
+
+                // A loopback Clash API can belong to an orphan process. If this
+                // manager does not own a live sing-box handle, a 204 hot-reload
+                // only updates that orphan and leaves HealthMonitor unhealthy.
+                var hotReloaded = managedSingBoxRunning && TryHotReloadViaApi(configJson);
+                if (!managedSingBoxRunning)
+                    _logger.Warning("[HealthMonitor] Hot-reload skipped on restart attempt — no managed sing-box process; performing full restart");
                 if (!hotReloaded)
                 {
                     _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
