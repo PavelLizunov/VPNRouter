@@ -25,6 +25,10 @@ logs/
 # tools/testvm-control.ps1 scoped Proxmox API token (DPAPI-encrypted, this-user)
 .pve-api-token.xml
 
+# Live-review screenshots pulled off the test VM — may contain the subscription
+# URL / other secrets on screen; never commit.
+rdp-shots/
+
 # OS
 Thumbs.db
 Desktop.ini

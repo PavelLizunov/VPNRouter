@@ -1,8 +1,24 @@
 ---
 name: post-ship-mcp-verify
-description: After every successful ship of a -rN candidate, run this skill to actually verify the new binary works on the user's machine. Downloads the freshly-shipped ZIP from GitHub Release, installs over the existing dev-VM install at `C:/Program Files/VPNRouter/app/`, launches it, walks through the changed pages via mcp__vpnrouter-test__* tools, screenshots each verification point, tails `vpnrouter*.log` for errors, and produces a PASS/FAIL report. Auto-triggered after `ship-rolling-candidate` completes. DO NOT skip even for "tiny" changes — past sessions shipped 12 candidates without local verification and the user caught it via screenshots. This skill makes "I forgot to test" impossible.
+description: After every successful ship of a -rN candidate, run this skill to actually verify the new binary works — on the windows-brat TEST VM (192.168.0.106) over WinRM, NEVER the local dev box (see the STOP banner in the body). Downloads the freshly-shipped ZIP, deploys it onto brat, launches + drives it there via UIA over WinRM, screenshots each verification point, tails `vpnrouter*.log` for errors, and produces a PASS/FAIL report. Auto-triggered after `ship-rolling-candidate` completes. DO NOT skip even for "tiny" changes — past sessions shipped 12 candidates without local verification and the user caught it via screenshots. This skill makes "I forgot to test" impossible.
 when: After `ship-rolling-candidate` finishes Step 8 (Mac+Linux CI green, 12-14 assets present), but BEFORE reporting completion to the user. Also run manually when user says "verify last ship" or "check if r19 actually works".
 ---
+
+> **STOP — TARGET MACHINE. Read before any install/launch/connect.**
+> The "dev-VM / user's machine" wording below is MISLEADING and caused an incident
+> (2026-07-06): an agent installed VPNRouter onto the operator's own dev box.
+> **NEVER install, launch, connect, overwrite, stop, or MCP-drive VPNRouter on the
+> machine you are running on (the dev box).** Do NOT touch `C:\Program Files\VPNRouter`
+> on this box. `mcp__vpnrouter-test__*` controls the DEV BOX (not a VM) — it is the
+> WRONG target; using it seizes the operator's real mouse/screen.
+> **ALL post-ship verification runs on the test VM `windows-brat` (192.168.0.106) over
+> WinRM, invisibly.** Recipe: `Copy-Item -ToSession` the ZIP to `C:\r4review\pkg` on
+> brat → launch via a scheduled task (Interactive principal, `RunLevel Highest` = no
+> UAC, `tester` is admin) → make the session render with `tscon 1 /dest:console` →
+> drive + screenshot via UIA + `CopyFromScreen` in that session → pull PNGs back over
+> WinRM. Cred: `.testpc-cred-192.168.0.106.xml`. See memories `no-devbox-input-hijack`
+> + `dev-box-not-a-test-target`. If brat/WinRM is unavailable, STOP and ask the user —
+> do NOT fall back to the local machine.
 
 # Post-Ship MCP Verification — actually launch + click + check
 

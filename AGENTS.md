@@ -123,8 +123,20 @@ Open Tasks / Last session log.
    "проверь сам". Если изменение Core-only без UI surface (parser,
    migration helper, etc.) — explicit "Core-only / not UI-testable"
    label в докладе. Иначе MCP-test обязателен.
-2. **Push в ОБА remote** после commit'а: `git push github HEAD:main && git push origin HEAD:main`.
-   Forgejo через VPN — может быть down, retry позже автоматически.
+
+   **КРИТИЧНО — цель = windows-brat, НЕ dev box (инцидент 2026-07-06).**
+   Install / launch / connect VPNRouter и любые `mcp__vpnrouter-test__*` идут
+   ТОЛЬКО на тест-VM **windows-brat (192.168.0.106) через WinRM, невидимо**.
+   НИКОГДА не ставить/запускать/останавливать VPNRouter на машине агента (dev box)
+   и не трогать `C:\Program Files\VPNRouter` — `mcp__vpnrouter-test__*` управляет
+   dev box'ом (WRONG target, хватает мышь/экран user'а). Рецепт brat: `Copy-Item
+   -ToSession` ZIP → scheduled task (Interactive principal, `RunLevel Highest`,
+   tester=admin → без UAC) → `tscon 1 /dest:console` для рендера → UIA +
+   `CopyFromScreen`, PNG назад по WinRM. Если brat/WinRM недоступен — STOP + спросить
+   user'а, НЕ откатываться на локальную машину. См. скилл post-ship-mcp-verify.
+2. **Push в ОБА remote** после commit'а: `git push origin HEAD:main && git push forgejo HEAD:main`.
+   Remotes: `origin`=GitHub (canonical), `forgejo`=Forgejo mirror (ssh, через VPN,
+   может быть down — retry позже). НЕТ remote с именем `github`.
 3. **Никогда `--no-verify` / `--no-gpg-sign`** без явного запроса. Если pre-commit
    hook упал — фиксить причину, не bypass. (Safety rail, не workflow confirm.)
 4. **Никогда `git push --force` на `main`** — destructive, можно потерять работу.
