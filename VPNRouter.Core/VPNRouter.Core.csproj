@@ -8,18 +8,18 @@
          The Android SDK (platforms;android-34, build-tools, platform-
          tools) must be installed and AndroidSdkDirectory set. v3.0
          Android port roadmap in plans/vpnrouter-android-research.md. -->
-    <TargetFrameworks Condition="'$(EnableAndroidTarget)' == 'true'">net8.0;net8.0-android</TargetFrameworks>
-    <TargetFrameworks Condition="'$(EnableAndroidTarget)' != 'true'">net8.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(EnableAndroidTarget)' == 'true'">net10.0;net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="'$(EnableAndroidTarget)' != 'true'">net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net8.0-android'">21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net10.0-android'">21.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <!-- Platform constants: defined per (target framework × build host OS). -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
     <DefineConstants>$(DefineConstants);PLATFORM_WINDOWS</DefineConstants>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
     <DefineConstants>$(DefineConstants);PLATFORM_ANDROID</DefineConstants>
   </PropertyGroup>
 
@@ -56,17 +56,21 @@
        v2.31.6-r10 (Phase D): added Microsoft.Win32.SystemEvents for the
        PowerEventListener that drives sleep/wake/lock/unlock recovery
        (brat user-reported recovery gap). -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.2" />
-    <PackageReference Include="System.Management" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="10.0.0" />
   </ItemGroup>
 
   <!-- v2.27.2: expose internals to the test project so unit tests can
        exercise helpers like VpnEngine.ComputeTunFingerprint without us
-       having to make them public. Standard .NET 8 friend-assembly
-       pattern — no runtime impact. Tests project is net8.0 only. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+       having to make them public. Standard friend-assembly pattern — no
+       runtime impact. Scoped to the desktop TFM (the Tests project targets
+       it); the android target never references Tests. net8.0 -> net10.0
+       migration 2026-07-10: this condition WAS the migration's CS0122
+       blocker — the net8.0-scoped item stopped emitting once Core moved to
+       net10.0. Keep this TFM in lockstep with VPNRouter.Tests.csproj. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <InternalsVisibleTo Include="VPNRouter.Tests" />
   </ItemGroup>
 

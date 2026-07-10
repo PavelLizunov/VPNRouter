@@ -2,11 +2,13 @@
 
   <PropertyGroup>
     <!--
-      Switched from net8.0-windows to net8.0 so tests can consume VPNRouter.App
-      (Avalonia net8.0). Windows-only production code in Core uses OperatingSystem
-      guards, and Avalonia.Headless handles the GUI bits on any host.
+      Non-windows TFM (net10.0, was net8.0) so tests can consume VPNRouter.App
+      (Avalonia). Windows-only production code in Core uses OperatingSystem
+      guards, and Avalonia.Headless handles the GUI bits on any host. Keep this
+      TFM in lockstep with VPNRouter.Core.csproj's InternalsVisibleTo condition
+      (net8.0 -> net10.0 migration 2026-07-10).
     -->
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 

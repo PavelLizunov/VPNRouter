@@ -244,7 +244,14 @@ public class MainWindowViewModelCharacterizationTests
         // throttled to every 3rd tick; closes the perf-hunt F3 ledger P2).
         // Cross-platform → Linux pin drifts in lock-step (soft-fail; capture
         // from next ubuntu CI run).
-        "5406a615eefcbfad886d9839856fc49851c441cd8e3008366296d614551e006f";
+        // net8.0 -> net10.0 migration (2026-07-10): the hash is REFLECTION-derived,
+        // so the .NET 10 runtime metadata + CommunityToolkit.Mvvm generator output
+        // shift the public-surface hash even though ZERO MVM source changed (only
+        // csproj TFMs). No member was added/removed/renamed — the full sln builds
+        // clean. Re-pinned to the net10 Windows actual. Prior net8 Windows hash:
+        // 5406a615…551e006f. Linux net10 hash self-captures via the soft-fail
+        // sentinel on the next ubuntu CI run.
+        "c77fff422464324f5dfe2e9b70b5222ac508693afe3f6313b5a4b169d9215e6b";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
