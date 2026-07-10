@@ -32,12 +32,26 @@ feature (v2.46.0) stable first, then do this as its own focused pass (each shrin
 > through phase-task-launcher + characterization)", NOT a mid-candidate-cycle sweep. Left OPEN
 > deliberately as a dedicated methodology-driven pass — not manufactured risk on v2.47.0.
 
-- [ ] **#1 localization re-export wrappers** — App/Android `Strings` mostly proxy
-  `Core.Localization.Strings` (907/1392 lines); alias to Core, keep only platform-bootstrap strings.
-  `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Android/Localization.cs` — **DEDICATED PASS**:
-  907-line surgical change to the UI-text layer bound EVERYWHERE (every XAML `{Binding L_X}` + code
-  `Strings.X`); one missed alias = wrong/blank UI text; characterization + visual-diff catch structure
-  but not per-string. Line-reduction only, no functional benefit → high blast radius on user-facing text.
+- [~] **#1 localization re-export wrappers — INVESTIGATED 2026-07-10 (Fable), premise partly REFUTED.**
+  Measured the actual structure rather than trusting the "907 proxy lines to alias" estimate:
+  - `VPNRouter.App/Localization/Strings.cs`: **756 members = 680 Core-proxies + 76 App-ONLY**
+    (`TrueSplitBadge`, `ProtocolUseDaily`, `ServersOrphanBadge`, `AutoSelectStatusLabel`,
+    `AutostartLoginAppDescription{Unix,Windows}`, the `Connected [{mode}]` builder — all confirmed
+    ABSENT from Core). It is NOT "mostly proxies to alias away"; it's a deliberate **unifying facade**
+    so call sites use one `Strings.X` surface without caring whether a string lives in Core or is
+    platform-specific. Deleting the 680 proxies would force every one of 18 code + 11 XAML consumers
+    to split each reference between two classes BY HAND (App-only stays, proxied moves to Core) — one
+    miss = wrong/blank UI text, for ZERO functional gain (proxies already compile to direct calls).
+    C# has no clean re-export for a static facade over another static class, so there is no low-risk
+    mechanism. **Do NOT gut the facade — the reduction fails ponytail rung 1 (does it need to exist?
+    No).**
+  - `VPNRouter.Android/Localization.cs`: **889/890 proxy** (near-pure) — the ONLY plausible target —
+    BUT it is the separate **.NET 10 Android toolchain** (can't build-verify in the Core/App build),
+    feeds the shared Avalonia UI, and the device is PIN-locked (no e2e). Blind-editing it ships an
+    unverifiable localization change → violates "don't ship what you can't verify". Gated on the
+    Android local-build toolchain + device access.
+  Net: the App half is refuted by its own structure; the Android half is real-but-unverifiable-by-me.
+  Left as documented, not executed. `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Android/Localization.cs`
 - [ ] **#4 duplicate deep-verify plumbing** — `VlessDeepVerifier` SELF-ADMITS it mirrors
   `FreeConfigDeepVerifier` BY DESIGN (its own class doc: "Duplicates ... by design — FreeConfigs has
   its own status enum and result mutation pattern that doesn't fit ServerViewModel"). Consolidating
