@@ -1145,15 +1145,19 @@ public final class VpnRouterService extends VpnService {
 
     private void pollStatsOnce() {
         Socket sock = null;
+        boolean protectedOk = false;
         try {
             sock = new Socket();
             // bypass our own tun — the whole point of P1. protect() can return
-            // false (transient binder / service not yet a VpnService owner); the
-            // unprotected connect to loopback then routes into our tun and fails
-            // (caught below). Log so a persistently-failing poller is diagnosable
-            // rather than silently never reporting stats.
-            if (!protect(sock))
-                Log.w(LOG_TAG, "pollStatsOnce: protect(socket) returned false — stats may not flow this tick");
+            // false (an unconnected new Socket() has no fd to protect yet on some
+            // devices — A101BM/Android 12 returns false EVERY tick). Device-verified
+            // 2026-07-10: the loopback connect to 127.0.0.1:9090 reaches the Clash
+            // API and stats flow ANYWAY (the kernel routes 127.0.0.0/8 via lo, not
+            // the tun), so a false protect() here is harmless. Only warn if a tick
+            // GENUINELY produces no stats (connect throws below) AND protect was
+            // false — that's the persistently-broken poller worth diagnosing, not
+            // the per-tick false alarm that used to spam a WARN every 2s.
+            protectedOk = protect(sock);
             sock.connect(new InetSocketAddress("127.0.0.1", 9090), 2000);
             sock.setSoTimeout(2000);
             java.io.OutputStream os = sock.getOutputStream();
@@ -1196,6 +1200,11 @@ public final class VpnRouterService extends VpnService {
             sendBroadcast(it);
         } catch (Exception e) {
             // best-effort — clash_api not up yet / transient; retry next tick.
+            // Only surface it when protect() ALSO failed: that combination is the
+            // genuinely-broken poller (unprotected socket that got captured by the
+            // tun), vs. the harmless clash-api-not-up-yet transient.
+            if (!protectedOk)
+                Log.w(LOG_TAG, "pollStatsOnce: stats tick failed after protect()=false — " + e);
         } finally {
             if (sock != null) { try { sock.close(); } catch (Exception ignore) { } }
         }
