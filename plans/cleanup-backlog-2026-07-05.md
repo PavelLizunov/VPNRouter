@@ -14,25 +14,36 @@ feature (v2.46.0) stable first, then do this as its own focused pass (each shrin
   EmergencyChannel engine is already unit-tested (`EmergencyChannel*Tests`), so the hidden CLI
   harness was a manual dev tool — removed the `AddCommand` registration + `EmergencyChannelTestCommand.cs`
   + the CLI CLAUDE.md line. CLI builds clean.
-- [ ] **#6 Android boot-autostart no-op scaffolding** — UI already hidden; checkbox/locals/storage
-  handlers left "for future BootCompletedReceiver". `VPNRouter.Android/AndroidApp.UiBindings.cs:971`
-  (touches the AndroidApp characterization hash → re-pin on removal)
+- [x] **#6 Android boot-autostart no-op scaffolding — STALE/already-done (verified 2026-07-10)**:
+  no boot-autostart checkbox/handler/storage remains (grep for boot-complete/autostart-boot/
+  KeyBootAutostart = empty) — swept by the Codex "Android dead-code purge" during the v2.46.0
+  cycle. No change needed.
 - [ ] **#8 `DeepVerifyConstants`** — NOT independently actionable: the 2 constants are SHARED by
   `VlessDeepVerifier` + `FreeConfigDeepVerifier` (that's why they were extracted); inlining would
   RE-duplicate them. Only makes sense folded into #4 (verifier consolidation). Leave until #4.
   `VPNRouter.Core/Services/DeepVerifyConstants.cs`
 
 ## Shrink-refactors (legit, but touch working code — each with tests + characterization)
+
+> Assessed 2026-07-10 (Fable): these three consolidate WORKING, mostly security-adjacent code
+> for LINE-REDUCTION only — no functional benefit — and each carries real regression risk on a
+> critical path (localization/UI text, deep-verify verdicts, firewall + true-split path
+> resolution). Per this file's own header they belong in "its own focused pass (each shrink
+> through phase-task-launcher + characterization)", NOT a mid-candidate-cycle sweep. Left OPEN
+> deliberately as a dedicated methodology-driven pass — not manufactured risk on v2.47.0.
+
 - [ ] **#1 localization re-export wrappers** — App/Android `Strings` mostly proxy
   `Core.Localization.Strings` (907/1392 lines); alias to Core, keep only platform-bootstrap strings.
-  `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Android/Localization.cs`
-- [ ] **#4 duplicate deep-verify plumbing** — `VlessDeepVerifier` self-admits it mirrors
-  `FreeConfigDeepVerifier`; outbound builders mirror `ConfigGenerator`. One probe runner + shared
-  outbound builder. `VPNRouter.Core/Services/VlessDeepVerifier.cs`
+  `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Android/Localization.cs` — dedicated pass (risk: UI text)
+- [ ] **#4 duplicate deep-verify plumbing** — `VlessDeepVerifier` SELF-ADMITS it mirrors
+  `FreeConfigDeepVerifier` BY DESIGN (different status enums + result-mutation patterns);
+  outbound builders mirror `ConfigGenerator`. One probe runner + shared outbound builder.
+  `VPNRouter.Core/Services/VlessDeepVerifier.cs` — dedicated pass (risk: verify verdicts) [#8 folds in here]
 - [ ] **#7 one profile-source builder** — `ProfileSourceFactory.Create`, `StartCommand.BuildDryRunSources`,
   and the Core path repeat one fallback order. `VPNRouter.CLI/Helpers/ProfileSourceFactory.cs`
-  (relatedly: `ProcessImagePath.ResolveNameToPath` where.exe now duplicates `FirewallManager`'s
-  where.exe-via-IProcessRunner — consolidate the two here.)
+  (relatedly: `ProcessImagePath.ResolveNameToPath` uses a STATIC raw `where.exe` Process while
+  `FirewallManager.ResolveProcessPath` uses instance `IProcessRunner` — genuinely different seams;
+  merging touches both the firewall + true-split path-resolution) — dedicated pass (risk: both critical)
 
 ## Push-back — do NOT bulk-delete
 - **#2 "phase/wave/version archaeology" (~4027 rg matches)** — most are **load-bearing "why"
