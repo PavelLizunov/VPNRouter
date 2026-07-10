@@ -77,7 +77,21 @@ public sealed class VlessDeepVerifier
     private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(8);
 
+    // P2 (2026-07-10): per-extra-concurrent-spawn slack added to the SOCKS-bind
+    // wait. N sing-box processes spawned at once contend for CPU, so on a slow
+    // VM (brat, live 2026-07-09) the SOCKS port doesn't bind inside the flat
+    // 1500ms warmup and the verify false-reports "port never bound" → "untested"
+    // for otherwise-fine servers. Scaling the wait by concurrency (the load
+    // signal we already have) fixes the under-report; still bounded by the 12s
+    // OverallTimeout, so a genuinely-dead spawn never hangs the pass.
+    private static readonly TimeSpan WarmupPerConcurrencySlack = TimeSpan.FromMilliseconds(300);
+
     public int MaxConcurrency { get; set; } = 5;
+
+    /// <summary>Effective SOCKS-bind wait: the flat warmup plus slack for each
+    /// EXTRA concurrent spawn (MaxConcurrency=1 → just the flat warmup).</summary>
+    internal TimeSpan EffectiveSocksBindWait =>
+        SingBoxWarmup + WarmupPerConcurrencySlack * Math.Max(0, MaxConcurrency - 1);
 
     // Phase 3+ (2026-05-21) IProcessRunner adoption — first long-lived spawn
     // target. The sing-box probe lifetime is ≤12s (OverallTimeout) and the
@@ -289,7 +303,7 @@ public sealed class VlessDeepVerifier
 
             _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, handle.Pid, socksPort);
 
-            if (!await WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
+            if (!await WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
             {
                 var snip = TrimSnippet(stderrBuffer.ToString(), 80);
                 _logger.Warning("[VlessDeepVerifier] {Name}: SOCKS port {Port} never bound. stderr: {Stderr}", label, socksPort, snip);

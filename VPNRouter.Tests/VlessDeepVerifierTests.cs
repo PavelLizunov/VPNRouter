@@ -49,6 +49,18 @@ public sealed class VlessDeepVerifierTests
         },
     };
 
+    // ─── P2 (2026-07-10): SOCKS-bind wait scales with concurrency ─────────
+
+    [Theory]
+    [InlineData(1, 1500)]   // no contention → flat warmup
+    [InlineData(5, 2700)]   // default: 1500 + 4*300
+    [InlineData(8, 3600)]   // heavier pool → more slack
+    public void EffectiveSocksBindWait_ScalesWithConcurrency(int concurrency, int expectedMs)
+    {
+        var v = new VlessDeepVerifier(Serilog.Log.Logger) { MaxConcurrency = concurrency };
+        Assert.Equal(expectedMs, (int)v.EffectiveSocksBindWait.TotalMilliseconds);
+    }
+
     // ─── Layer 1: sing-box config builder (BuildSingleOutboundConfig) ─────
 
     [Fact]
