@@ -148,6 +148,70 @@ remains USER-GATED** (rule #6) — awaiting "cut".
 enrollment (owner); SDR/AWG-server live (tester+server); wgturn (cross-repo); urltest
 D1/D2 + app-exclude (product); .NET 8→10 (autumn).
 
+## r9 re-verify on device (2026-07-10, after r8+r9 landed)
+
+Phase B built the APK from ~r7 code. Since then r8 (F1 deep-verify cancel, F2
+endpoints custom-config, F3 CI, F4 hygiene) + r9 (RuntimeStatusDetector probe-scope,
+ServerTesting AllowConcurrentExecutions) landed. Since VPNRouter.Android source-links
+Core, a rebuild was run from HEAD (c5c0f329) to prove the r8/r9 Core changes still
+compile for Android AND to re-run the device e2e on the actual r9 binary.
+
+- **Build (dev box, `~/.dotnet10` + VPNRouter.Android/global.json 10.0.301):** clean
+  **0 errors**, 209 warnings (all pre-existing cosmetic CS15xx XML-doc + CA1416/CA1422
+  platform-availability). **Build-risk for the cut APK = NO BLOCKER.** versionCode 2047000.
+- **Install:** `adb install -r` over the Phase-B 2.47.0 (same versionCode + same local
+  debug key) → `Success`, settings + VpnService consent preserved.
+- **Launch:** clean render (Simple mode), only expected `dns-tunnel Slipstream
+  unavailable` INFO (desktop-only native, correctly disabled on Android). No FATAL.
+- **Connect:** tun0 UP (172.19.0.1/30), libbox `outbound/vless[proxy]`, **egress
+  104.194.156.93 (Germany exit, not local)**. Live stats moving (↓29/↑30 B/s, 9 conn),
+  **health check ✓ ("Last check 24s ago")**, kill-switch nudge rendered.
+- **r8/r9 Android-reaching surfaces re-confirmed:** clash-secret bearer authenticates
+  (stats + /connections read, **0×401**), **protect() spam = 0** (was 139/min pre-fix),
+  0 genuine stats-tick failures.
+- **Disconnect:** tun0 torn down, **egress reverted to ISP 109.196.76.225**, no crash.
+
+**Verdict: r9 Android build is device-verified PASS.** The signed cut APK (Step 5.6,
+official keystore via sign-android.yml) is the only remaining Android step and it is
+part of the user-gated stable cut.
+
+### Android surface audit of v2.46.0..HEAD (workflow, adversarially verified)
+
+Ran a multi-agent reach/observability/build-risk/verify workflow over every code
+change in the range to confirm exactly what reaches the Android binary. Verdict:
+
+- **Build risk: NO BLOCKER** (matches the actual clean 0-error build). Only 1 `warn`
+  = `RuntimeStatusDetector.IsVpnRunning` gains a probe-in-flight second-signal gate,
+  but on Android `DeepVerifyProbe.AnyProbeInFlight` is always false + `IsOwnedByAnyone`
+  is fail-open try/catch → behavior unchanged, cannot throw.
+- **Device-observable on Android (3, all verified):** (1) clash-secret bearer plumbing —
+  **device-confirmed PASS** (stats flow, 0×401, health ✓); (2) F2 `FindProxyOutboundTag`
+  endpoint-tag fix — reaches Android via `AndroidConfigBuilder.BuildConfigJsonFromCustom`,
+  unit-pinned + reach-confirmed (custom-config paste on a Release build isn't adb-drivable,
+  so not device-clicked; SFA-libbox HAS `with_wireguard` so a plain-WG endpoint config
+  now starts instead of the pre-fix `unknown outbound` FATAL); (3) fork-feature gate —
+  see below.
+- **Fork-gate (r8 F2) correctness on Android — RESOLVED, not a regression.** The audit
+  flagged a risk: the gate keys off `SingBoxFeatures.Probe()` which always returns
+  (false,false) on Android (no sing-box binary) → it rejects ALL AWG/xhttp custom
+  configs. **Verified the bundled `libbox.so` build tags**: `with_wireguard, with_quic,
+  with_utls, with_clash_api, with_v2ray_api` — **NO `with_awg`, NO `with_xhttp`** (0
+  amnezia symbols; the 3 "xhttp" hits are coincidental substrings of http2/https/mux
+  URLs; `unknown transport type:` reject path present). So SFA-libbox genuinely can't
+  run AWG/xhttp → the gate correctly rejects what would otherwise FATAL. Pre-r8 = opaque
+  `unknown transport` FATAL; post-r8 = actionable up-front error → strict IMPROVEMENT.
+  Only the message copy ("use lx core build") is desktop-worded → ledgered P3 (not
+  cut-blocking).
+- **Inert on Android (compiled-not-invoked):** `AndroidSingBoxRuntime.IsRunningAsync`
+  bearer (type never instantiated), `ConfigGenerator` urltest R5/R3 pool hygiene
+  (`ServerHealthStore` never written on Android), `LeakProtection.ValidateProxyEndpoint`
+  (unreachable + warn-only).
+- **Desktop-only, NO device test (confirmed):** deep-verify refactor #4 (`VlessDeepVerifier`,
+  `DeepVerifyProbe`, desktop `RuntimeStatusDetector`/`SingBoxFeatures.Prewarm`, F1 cancel
+  phase), r9 `ServerTesting` AllowConcurrentExecutions + all `VPNRouter.App` changes,
+  `ClashSingBoxApi`/`ClashLogStream`/`SingBoxManager.HotReload`. (Android has NO
+  ProjectReference to VPNRouter.App.)
+
 ## Cross-refs
 
 memory: `android-local-build-toolchain`, `mac-android-host`,
