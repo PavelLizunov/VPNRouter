@@ -61,10 +61,12 @@ public sealed record DeepVerifyResult(
 /// inbound, then performs HTTP GET through it (optionally followed by a
 /// 5 MB bandwidth probe). Returns structured <see cref="DeepVerifyResult"/>.
 ///
-/// Duplicates the sing-box spawn logic of <c>FreeConfigDeepVerifier</c> by
-/// design — FreeConfigs has its own status enum and result mutation pattern
-/// that doesn't fit ServerViewModel. Consolidation possible in a future
-/// refactor (v2.16+).
+/// The sing-box spawn/probe plumbing (port-bind wait, SOCKS HTTP probe,
+/// bandwidth, IP classification) lives in the shared <see cref="DeepVerifyProbe"/>
+/// (#4 cleanup 2026-07-10 — the "consolidation possible in a future refactor"
+/// this doc used to promise). What stays here is this verifier's OWN result
+/// shape — <see cref="DeepVerifyResult"/> for ServerViewModel — which is the
+/// part FreeConfigs deliberately mutates differently (its own status enum).
 /// </summary>
 public sealed class VlessDeepVerifier
 {
@@ -72,7 +74,6 @@ public sealed class VlessDeepVerifier
     private readonly string _singBoxPath;
     private readonly IProcessRunner _runner;
 
-    private const string ProbeUrl = DeepVerifyConstants.ProbeUrl;
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(8);
@@ -303,16 +304,16 @@ public sealed class VlessDeepVerifier
 
             _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, handle.Pid, socksPort);
 
-            if (!await WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
+            if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
             {
-                var snip = TrimSnippet(stderrBuffer.ToString(), 80);
+                var snip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 80);
                 _logger.Warning("[VlessDeepVerifier] {Name}: SOCKS port {Port} never bound. stderr: {Stderr}", label, socksPort, snip);
                 return DeepVerifyResult.Failed(string.IsNullOrWhiteSpace(snip)
                     ? "sing-box didn't bind"
                     : $"sing-box: {snip}", DeepVerifyFailurePhase.SocksBind);
             }
 
-            var (httpOk, httpLatencyMs, httpErr) = await ProbeViaSocksAsync(socksPort, overallCts.Token);
+            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaSocksAsync(socksPort, HttpTimeout, overallCts.Token);
             if (!httpOk)
             {
                 _logger.Information("[VlessDeepVerifier] {Name}: HTTP probe FAILED — {Err}", label, httpErr);
@@ -335,7 +336,7 @@ public sealed class VlessDeepVerifier
             {
                 try
                 {
-                    var (bwOk, measuredMbps, _) = await MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
+                    var (bwOk, measuredMbps, _) = await DeepVerifyProbe.MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
                     if (bwOk) mbps = measuredMbps;
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -499,75 +500,6 @@ public sealed class VlessDeepVerifier
         return root.ToJsonString();
     }
 
-    private static async Task<bool> WaitForPortBoundAsync(int port, TimeSpan maxWait, CancellationToken ct)
-    {
-        var deadline = DateTime.UtcNow + maxWait;
-        while (DateTime.UtcNow < deadline)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var c = new TcpClient();
-                var connectTask = c.ConnectAsync(IPAddress.Loopback, port);
-                var completed = await Task.WhenAny(connectTask, Task.Delay(200, ct));
-                if (completed == connectTask && c.Connected) return true;
-            }
-            catch { /* keep polling */ }
-            await Task.Delay(100, ct);
-        }
-        return false;
-    }
-
-    private static async Task<(bool ok, int latencyMs, string? err)> ProbeViaSocksAsync(int socksPort, CancellationToken ct)
-    {
-        var handler = new SocketsHttpHandler
-        {
-            Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5),
-        };
-        using var http = new HttpClient(handler) { Timeout = HttpTimeout };
-
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            using var resp = await http.GetAsync(ProbeUrl, ct);
-            if (!resp.IsSuccessStatusCode)
-                return (false, 0, $"http {(int)resp.StatusCode}");
-
-            var body = await resp.Content.ReadAsStringAsync(ct);
-
-            if (!body.Contains("ip=", StringComparison.Ordinal))
-                return (false, 0, "bad response");
-
-            var ipLine = body.Split('\n').FirstOrDefault(l => l.StartsWith("ip=", StringComparison.Ordinal));
-            if (ipLine != null)
-            {
-                var ipStr = ipLine[3..].Trim();
-                if (IPAddress.TryParse(ipStr, out var ip))
-                {
-                    if (IsPrivateOrLoopback(ip))
-                        return (false, 0, "local ip in response");
-                }
-            }
-
-            sw.Stop();
-            return (true, (int)sw.ElapsedMilliseconds, null);
-        }
-        catch (TaskCanceledException)
-        {
-            return (false, 0, "http timeout");
-        }
-        catch (HttpRequestException hx)
-        {
-            return (false, 0, $"http: {Short(hx.Message)}");
-        }
-        catch (Exception ex)
-        {
-            return (false, 0, ex.GetType().Name);
-        }
-    }
-
     /// <summary>
     /// R4: probe the blocked-target canaries through the tunnel's SOCKS. A target
     /// "passes" on ANY HTTP response (even 403/404 — bytes flowed through to the
@@ -626,76 +558,6 @@ public sealed class VlessDeepVerifier
             return PhaseOutcome.Unknown;
         }
     }
-
-    private static async Task<(bool ok, double mbps, string? err)> MeasureBandwidthViaSocksAsync(
-        int socksPort, CancellationToken ct)
-    {
-        var handler = new SocketsHttpHandler
-        {
-            Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5),
-        };
-        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
-
-        var urls = new[]
-        {
-            "https://speed.cloudflare.com/__down?bytes=5242880",
-            "https://proof.ovh.net/files/10Mb.dat",
-            "https://ash-speed.hetzner.com/100MB.bin",
-        };
-
-        foreach (var url in urls)
-        {
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-                if (!resp.IsSuccessStatusCode) continue;
-
-                using var stream = await resp.Content.ReadAsStreamAsync(ct);
-                var buffer = new byte[8192];
-                long total = 0;
-                const long target = 5_242_880L;
-                while (total < target)
-                {
-                    var n = await stream.ReadAsync(buffer, ct);
-                    if (n == 0) break;
-                    total += n;
-                }
-                sw.Stop();
-
-                if (total < 1_000_000) continue;
-                if (sw.ElapsedMilliseconds < 100) continue;
-
-                var mbps = (total * 8.0 / 1_000_000.0) / (sw.ElapsedMilliseconds / 1000.0);
-                return (true, mbps, null);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch { /* try next URL */ }
-        }
-        return (false, 0, "all bandwidth URLs failed");
-    }
-
-    internal static bool IsPrivateOrLoopback(IPAddress ip)
-    {
-        if (IPAddress.IsLoopback(ip)) return true;
-        var bytes = ip.GetAddressBytes();
-        if (bytes.Length != 4) return false;
-        if (bytes[0] == 10) return true;
-        if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
-        if (bytes[0] == 192 && bytes[1] == 168) return true;
-        if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
-        return false;
-    }
-
-    internal static string TrimSnippet(string s, int max)
-    {
-        s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return s.Length > max ? s[..max] + "…" : s;
-    }
-
-    private static string Short(string s) => s.Length > 60 ? s[..60] : s;
 
     // ─── Protocol-specific outbound builders (v2.31.6-r16, Phase 2) ──────────
     // Mirror ConfigGenerator.BuildVlessOutbound dispatcher (ConfigGenerator.cs

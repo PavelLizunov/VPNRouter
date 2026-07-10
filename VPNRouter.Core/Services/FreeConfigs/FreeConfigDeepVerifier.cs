@@ -23,9 +23,6 @@ public sealed class FreeConfigDeepVerifier
     private readonly ILogger _logger;
     private readonly string _singBoxPath;
 
-    /// <summary>URL probed for verification. Cloudflare's trace endpoint — small, fast, globally distributed.</summary>
-    private const string ProbeUrl = DeepVerifyConstants.ProbeUrl;
-
     /// <summary>Time to wait for sing-box to bind SOCKS before we attempt HTTP.</summary>
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
 
@@ -144,17 +141,17 @@ public sealed class FreeConfigDeepVerifier
             process.BeginErrorReadLine();
 
             // 3. Wait for sing-box to bind. Poll the SOCKS port.
-            if (!await WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
+            if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
             {
-                var stderrSnip = TrimSnippet(stderrBuffer.ToString(), 300);
-                cfg.LastError = $"sing-box didn't bind: {TrimSnippet(stderrSnip, 80)}";
+                var stderrSnip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 300);
+                cfg.LastError = $"sing-box didn't bind: {DeepVerifyProbe.TrimSnippet(stderrSnip, 80)}";
                 _logger.Warning("[DV] {host}:{port} [{cc}] → didn't bind. stderr: {err}",
                     cfg.Host, cfg.Port, cc, stderrSnip);
                 return;
             }
 
             // 4. HTTP GET through SOCKS proxy.
-            var (httpOk, httpLatencyMs, httpErr) = await ProbeViaSocksAsync(socksPort, overallCts.Token);
+            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaSocksAsync(socksPort, HttpTimeout, overallCts.Token);
 
             if (httpOk)
             {
@@ -192,7 +189,7 @@ public sealed class FreeConfigDeepVerifier
                 // v2.14.3: optional bandwidth measurement via 5 MB download through same SOCKS proxy.
                 if (MeasureBandwidth)
                 {
-                    var (bwOk, mbps, bwErr) = await MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
+                    var (bwOk, mbps, bwErr) = await DeepVerifyProbe.MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
                     if (bwOk)
                     {
                         cfg.MeasuredBandwidthMbps = (int)Math.Round(mbps);
@@ -225,7 +222,7 @@ public sealed class FreeConfigDeepVerifier
                     cfg.Status = FreeConfigStatus.TlsFailed;
                 cfg.LastError = httpErr ?? "http failed";
 
-                var stderrSnip = TrimSnippet(stderrBuffer.ToString(), 200);
+                var stderrSnip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 200);
                 _logger.Information("[DV] {host}:{port} [{cc}] ✗ {err} (total {total}ms){sbErr}",
                     cfg.Host, cfg.Port, cc, httpErr, sw.ElapsedMilliseconds,
                     string.IsNullOrWhiteSpace(stderrSnip) ? "" : $" | sb-err: {stderrSnip}");
@@ -262,68 +259,6 @@ public sealed class FreeConfigDeepVerifier
                 try { File.Delete(tmpConfigPath); } catch { }
             }
         }
-    }
-
-    private static string TrimSnippet(string s, int max)
-    {
-        s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return s.Length > max ? s[..max] + "…" : s;
-    }
-
-    /// <summary>
-    /// v2.14.3: Measure download throughput via 5 MB file over SOCKS proxy.
-    /// Tries Cloudflare → Hetzner → OVH in sequence. Returns (ok, mbps, err).
-    /// Adds ~3-8s per config depending on pipe bandwidth.
-    /// </summary>
-    private static async Task<(bool ok, double mbps, string? err)> MeasureBandwidthViaSocksAsync(
-        int socksPort, CancellationToken ct)
-    {
-        var handler = new System.Net.Http.SocketsHttpHandler
-        {
-            Proxy = new System.Net.WebProxy($"socks5://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5),
-        };
-        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
-
-        // Test URLs in priority order. Each returns ≥5 MB (we read exactly 5 MB and close).
-        var urls = new[]
-        {
-            "https://speed.cloudflare.com/__down?bytes=5242880",  // Cloudflare, global
-            "https://proof.ovh.net/files/10Mb.dat",               // OVH, EU
-            "https://ash-speed.hetzner.com/100MB.bin",            // Hetzner, EU (reads only 5 MB)
-        };
-
-        foreach (var url in urls)
-        {
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
-                if (!resp.IsSuccessStatusCode) continue;
-
-                using var stream = await resp.Content.ReadAsStreamAsync(ct);
-                var buffer = new byte[8192];
-                long total = 0;
-                const long target = 5_242_880L; // 5 MB
-                while (total < target)
-                {
-                    var n = await stream.ReadAsync(buffer, ct);
-                    if (n == 0) break;
-                    total += n;
-                }
-                sw.Stop();
-
-                if (total < 1_000_000) continue; // too little data, probably cached/error
-                if (sw.ElapsedMilliseconds < 100) continue; // too fast, likely local cache hit
-
-                var mbps = (total * 8.0 / 1_000_000.0) / (sw.ElapsedMilliseconds / 1000.0);
-                return (true, mbps, null);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch { /* try next URL */ }
-        }
-        return (false, 0, "all bandwidth URLs failed");
     }
 
     /// <summary>
@@ -468,93 +403,4 @@ public sealed class FreeConfigDeepVerifier
     }
 
     /// <summary>Poll the loopback port until something accepts a connection, or timeout.</summary>
-    private static async Task<bool> WaitForPortBoundAsync(int port, TimeSpan maxWait, CancellationToken ct)
-    {
-        var deadline = DateTime.UtcNow + maxWait;
-        while (DateTime.UtcNow < deadline)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var c = new TcpClient();
-                var connectTask = c.ConnectAsync(IPAddress.Loopback, port);
-                var completed = await Task.WhenAny(connectTask, Task.Delay(200, ct));
-                if (completed == connectTask && c.Connected) return true;
-            }
-            catch { /* keep polling */ }
-            await Task.Delay(100, ct);
-        }
-        return false;
-    }
-
-    /// <summary>Make an HTTP GET through a local SOCKS5 proxy. Returns (ok, latency_ms, err).</summary>
-    private static async Task<(bool ok, int latencyMs, string? err)> ProbeViaSocksAsync(int socksPort, CancellationToken ct)
-    {
-        var handler = new SocketsHttpHandler
-        {
-            Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5),
-        };
-        using var http = new HttpClient(handler) { Timeout = HttpTimeout };
-
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            using var resp = await http.GetAsync(ProbeUrl, ct);
-            if (!resp.IsSuccessStatusCode)
-                return (false, 0, $"http {(int)resp.StatusCode}");
-
-            var body = await resp.Content.ReadAsStringAsync(ct);
-
-            // Trace endpoint format: multiline "key=value". Look for "ip=" line with a non-local IP.
-            if (!body.Contains("ip=", StringComparison.Ordinal))
-                return (false, 0, "bad response");
-
-            // Extract ip= line and verify it's a valid public-looking IP (not localhost / private).
-            var ipLine = body.Split('\n').FirstOrDefault(l => l.StartsWith("ip=", StringComparison.Ordinal));
-            if (ipLine != null)
-            {
-                var ipStr = ipLine[3..].Trim();
-                if (IPAddress.TryParse(ipStr, out var ip))
-                {
-                    if (IsPrivateOrLoopback(ip))
-                        return (false, 0, "local ip in response");
-                }
-            }
-
-            sw.Stop();
-            return (true, (int)sw.ElapsedMilliseconds, null);
-        }
-        catch (TaskCanceledException)
-        {
-            return (false, 0, "http timeout");
-        }
-        catch (HttpRequestException hx)
-        {
-            return (false, 0, $"http: {Short(hx.Message)}");
-        }
-        catch (Exception ex)
-        {
-            return (false, 0, ex.GetType().Name);
-        }
-    }
-
-    private static bool IsPrivateOrLoopback(IPAddress ip)
-    {
-        if (IPAddress.IsLoopback(ip)) return true;
-        var bytes = ip.GetAddressBytes();
-        if (bytes.Length != 4) return false;
-        // 10.0.0.0/8
-        if (bytes[0] == 10) return true;
-        // 172.16.0.0/12
-        if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
-        // 192.168.0.0/16
-        if (bytes[0] == 192 && bytes[1] == 168) return true;
-        // 100.64.0.0/10 — CGNAT
-        if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
-        return false;
-    }
-
-    private static string Short(string s) => s.Length > 60 ? s[..60] : s;
 }

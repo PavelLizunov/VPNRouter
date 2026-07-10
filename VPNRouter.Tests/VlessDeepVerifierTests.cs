@@ -270,7 +270,7 @@ public sealed class VlessDeepVerifierTests
         // ITS OWN egress instead of the proxy's. A bug in this classifier
         // → wrong-IP verdicts slip through.
         var ip = IPAddress.Parse(ipString);
-        Assert.Equal(expected, VlessDeepVerifier.IsPrivateOrLoopback(ip));
+        Assert.Equal(expected, DeepVerifyProbe.IsPrivateOrLoopback(ip));
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public sealed class VlessDeepVerifierTests
         // verbose to surface inline. Long input → truncated + ellipsis;
         // newlines → collapsed to spaces (so log line stays single-line).
         var verbose = string.Join('\n', new[] { "line one of stderr", "line two with more", "line three more text" });
-        var snip = VlessDeepVerifier.TrimSnippet(verbose, 20);
+        var snip = DeepVerifyProbe.TrimSnippet(verbose, 20);
 
         Assert.True(snip.Length <= 21); // 20 + ellipsis (1-char "…")
         Assert.DoesNotContain('\n', snip);
@@ -293,7 +293,7 @@ public sealed class VlessDeepVerifierTests
     {
         // Input shorter than the budget passes through clean (after
         // newline collapsing).
-        var snip = VlessDeepVerifier.TrimSnippet("short", 80);
+        var snip = DeepVerifyProbe.TrimSnippet("short", 80);
         Assert.Equal("short", snip);
         Assert.DoesNotContain("…", snip);
     }
