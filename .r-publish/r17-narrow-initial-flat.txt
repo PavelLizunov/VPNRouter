@@ -1,0 +1,38 @@
+﻿ControlType.TitleBar	VPNRouter
+ControlType.MenuBar	System Menu Bar
+ControlType.MenuItem	System
+ControlType.Button	Minimize
+ControlType.Button	Maximize
+ControlType.Button	Close
+ControlType.Group	WindowChrome
+ControlType.Text	Virtual Penguin Network
+ControlType.Button	Avalonia.Controls.StackPanel
+ControlType.Text	VPN
+ControlType.Button	Zapret
+ControlType.Text	Zapret
+ControlType.Button	TG
+ControlType.Text	TG
+ControlType.Button	⋯
+ControlType.Text	Не подключено
+ControlType.Text	Трафик идёт напрямую — выбери конфиг и запусти туннель.
+ControlType.Button	Конфиг · Режим
+ControlType.Text	⚑
+ControlType.Text	Конфиг · Режим
+ControlType.Text	подписка · сплит
+ControlType.Text	▽
+ControlType.Text	Конфиг VPN
+ControlType.Text	Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive) или URL подписки (http/https).
+ControlType.Text	Что идёт через VPN
+ControlType.RadioButton	Выбранные приложения
+ControlType.Text	По списку выбранных приложений
+ControlType.RadioButton	Весь трафик
+ControlType.Text	Включая игры и банки
+ControlType.Button	Avalonia.Controls.Grid
+ControlType.Text	Автозапуск
+ControlType.Text	Настроить автозапуск VPN при старте Windows
+ControlType.Text	›
+ControlType.Button	Подключить
+ControlType.Button	Расширенные настройки
+ControlType.Text	Расширенные настройки
+ControlType.Text	Серверы · Подписки · Zapret · Telegram-прокси · Публичные
+ControlType.Text	›

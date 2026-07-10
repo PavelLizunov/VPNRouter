@@ -1,0 +1,127 @@
+{
+  "_comment": "v3.0 Android profile catalog. Same 9 categories as default.json (Win), default-macos.json, default-linux.json — but uses android_packages (reverse-DNS package IDs) instead of process_name. Android VpnService.Builder.addAllowedApplication takes package names; sing-box process_name rules don't apply at the OS sandbox layer. Mapping table sourced from Google Play / F-Droid metadata as of 2026-04. Verify per-app: `pm list packages | grep -i <vendor>` on a device with the app installed.",
+  "profiles": [
+    {
+      "name": "Discord_Privacy",
+      "description": "Discord voice & chat",
+      "processes": [],
+      "android_packages": [
+        "com.discord"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": true
+    },
+    {
+      "name": "Messengers",
+      "description": "Telegram, Signal, WhatsApp",
+      "processes": [],
+      "android_packages": [
+        "org.telegram.messenger",
+        "org.telegram.messenger.web",
+        "org.telegram.plus",
+        "org.thoughtcrime.securesms",
+        "com.whatsapp",
+        "com.whatsapp.w4b"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "AI_Tools",
+      "description": "ChatGPT, Claude, Gemini, Cursor mobile",
+      "processes": [],
+      "android_packages": [
+        "com.openai.chatgpt",
+        "com.anthropic.claude",
+        "com.google.android.apps.bard",
+        "com.perplexity.app.android"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Browsers",
+      "description": "Chrome, Firefox, Brave, Edge, Opera, Tor",
+      "processes": [],
+      "android_packages": [
+        "com.android.chrome",
+        "com.chrome.beta",
+        "com.chrome.dev",
+        "com.chrome.canary",
+        "org.mozilla.firefox",
+        "org.mozilla.firefox_beta",
+        "org.mozilla.fenix",
+        "com.brave.browser",
+        "com.brave.browser_beta",
+        "com.microsoft.emmx",
+        "com.opera.browser",
+        "com.opera.mini.native",
+        "org.torproject.torbrowser",
+        "com.duckduckgo.mobile.android",
+        "com.vivaldi.browser",
+        "com.yandex.browser"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Work_Suite",
+      "description": "Slack, Zoom, Teams, Notion, Obsidian",
+      "processes": [],
+      "android_packages": [
+        "com.Slack",
+        "us.zoom.videomeetings",
+        "com.microsoft.teams",
+        "com.microsoft.office.outlook",
+        "notion.id",
+        "md.obsidian",
+        "com.figma.mirror"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Streaming",
+      "description": "YouTube, Spotify, Twitch, Netflix",
+      "processes": [],
+      "android_packages": [
+        "com.google.android.youtube",
+        "com.google.android.apps.youtube.music",
+        "com.spotify.music",
+        "tv.twitch.android.app",
+        "com.netflix.mediaclient",
+        "com.amazon.avod.thirdpartyclient"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Gaming",
+      "description": "Steam Link, Battle.net, Epic Games — companion apps; on-device games are usually NOT routed through VPN",
+      "processes": [],
+      "android_packages": [
+        "com.valvesoftware.android.steam.community",
+        "com.valvesoftware.steamlink",
+        "com.blizzard.messenger",
+        "com.epicgames.portal"
+      ],
+      "dns_mode": "smart",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Privacy_Shell",
+      "description": "Privacy-first apps that should always go through VPN — password managers, secure notes, mental health, banking",
+      "processes": [],
+      "android_packages": [
+        "com.bitwarden.x8",
+        "im.molly.app",
+        "com.protonvpn.android",
+        "ch.protonmail.android",
+        "ch.protonpass.android",
+        "ch.protondrive.android"
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": true
+    }
+  ]
+}

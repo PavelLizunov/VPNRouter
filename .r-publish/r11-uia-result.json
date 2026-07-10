@@ -1,0 +1,11 @@
+﻿{
+    "WindowFound":  true,
+    "ClickedApps":  false,
+    "ClickedConnect":  true,
+    "Shots":  [
+                  "C:\\r4review\\shots\\r11-main.png",
+                  "C:\\r4review\\shots\\r11-apps.png",
+                  "C:\\r4review\\shots\\r11-after-connect-click.png",
+                  "C:\\r4review\\shots\\r11-apps-after-connect.png"
+              ]
+}

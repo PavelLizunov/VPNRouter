@@ -1,0 +1,147 @@
+﻿=== Logs full recent ===
+--- C:\ProgramData\VPNRouter\logs\vpnrouter20260707_006.log 2026-07-07T13:34:11.1858352+03:00 len=110 ---
+2026-07-07 13:34:11.167 +03:00 [INF] [SingleInstance] another instance detected â€” signalling it to surface
+--- C:\ProgramData\VPNRouter\logs\vpnrouter20260707_005.log 2026-07-07T13:33:37.1936015+03:00 len=277 ---
+2026-07-07 13:33:36.209 +03:00 [INF] [VM] Sub-tab init: ServerModeIndex=0 (manual=3, custom=0, configMode=subscribe)
+2026-07-07 13:33:37.207 +03:00 [INF] [App-Autostart] TgProxy: not installed, skipping autostart (user must run the Telegram tab once to download tg-ws-proxy)
+--- C:\ProgramData\VPNRouter\logs\vpnrouter20260707_004.log 2026-07-07T13:33:36.1154547+03:00 len=742 ---
+2026-07-07 13:30:43.742 +03:00 [INF] [VM] Sub-tab init: ServerModeIndex=0 (manual=3, custom=0, configMode=subscribe)
+2026-07-07 13:30:44.911 +03:00 [INF] [App-Autostart] TgProxy: not installed, skipping autostart (user must run the Telegram tab once to download tg-ws-proxy)
+2026-07-07 13:33:36.006 +03:00 [WRN] [Startup] Previous run (PID 5068, started 2026-07-07T10:30:43.5608980Z) did not shut down cleanly. Check logs for details; consider running with --safe if the app keeps crashing.
+2026-07-07 13:33:36.124 +03:00 [INF] [SettingsLoader] Loaded C:\ProgramData\VPNRouter\config.yaml: schema=8, config_mode=subscribe, subs=1[+11], vless.servers=3, vless.server=set, active_sub='Germany VLESS ~main-brat', active_vless='Manual VLESS'
+2026-07-07 13:33:36.894 +03:00 [INF] [ShellMenu] registered verbs (route=flat + unroute) on exefile + lnkfile
+--- C:\ProgramData\VPNRouter\logs\vpnrouter20260707_003.log 2026-07-07T13:30:44.4279597+03:00 len=67463 ---
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 09:20:37.409 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 09:20:37.410 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 09:20:37.410 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 09:20:37.410 +03:00 [INF] [Subscription] Fetched 11 servers from https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 09:20:37.415 +03:00 [INF] [SubRefresh] No UUID changes, skipping rebuild and reconnect
+2026-07-07 10:20:36.324 +03:00 [INF] [SubRefresh] Checking 1 subscription(s)...
+2026-07-07 10:20:36.330 +03:00 [INF] [Subscription] Fetching https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 10:20:37.583 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 10:20:37.586 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 10:20:37.586 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 10:20:37.587 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 10:20:37.587 +03:00 [INF] [Subscription] Fetched 11 servers from https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 10:20:37.600 +03:00 [INF] [SubRefresh] No UUID changes, skipping rebuild and reconnect
+2026-07-07 11:20:36.322 +03:00 [INF] [SubRefresh] Checking 1 subscription(s)...
+2026-07-07 11:20:36.323 +03:00 [INF] [Subscription] Fetching https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 11:20:37.005 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 11:20:37.005 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 11:20:37.005 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 11:20:37.006 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 11:20:37.006 +03:00 [INF] [Subscription] Fetched 11 servers from https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 11:20:37.013 +03:00 [INF] [SubRefresh] No UUID changes, skipping rebuild and reconnect
+2026-07-07 12:20:36.322 +03:00 [INF] [SubRefresh] Checking 1 subscription(s)...
+2026-07-07 12:20:36.323 +03:00 [INF] [Subscription] Fetching https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 12:20:37.719 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 12:20:37.719 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 12:20:37.719 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 12:20:37.719 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 12:20:37.719 +03:00 [INF] [Subscription] Fetched 11 servers from https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 12:20:37.725 +03:00 [INF] [SubRefresh] No UUID changes, skipping rebuild and reconnect
+2026-07-07 13:20:36.322 +03:00 [INF] [SubRefresh] Checking 1 subscription(s)...
+2026-07-07 13:20:36.323 +03:00 [INF] [Subscription] Fetching https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 13:20:36.887 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 13:20:36.888 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 13:20:36.888 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 13:20:36.888 +03:00 [WRN] [Subscription] Failed to parse line: vless://[redacted]
+System.FormatException: XHTTP transport requires a sing-box-lx (with_xhttp) build. This build bundles upstream sing-box â€” use a tcp / ws / grpc VLESS server instead.
+   at VPNRouter.Core.Services.VlessUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.ServerUriParser.Parse(String uri)
+   at VPNRouter.Core.Services.SubscriptionFetcher.ParseBody(String responseBody, Int32& droppedPlaceholders, ILogger logger)
+2026-07-07 13:20:36.888 +03:00 [INF] [Subscription] Fetched 11 servers from https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-07-07 13:20:36.893 +03:00 [INF] [SubRefresh] No UUID changes, skipping rebuild and reconnect
+2026-07-07 13:30:43.239 +03:00 [INF] [Firewall] Cleaned up 8 orphaned rules
+2026-07-07 13:30:43.560 +03:00 [WRN] [Startup] Previous run (PID 2956, started 2026-07-06T23:18:57.3156448Z) did not shut down cleanly. Check logs for details; consider running with --safe if the app keeps crashing.
+2026-07-07 13:30:43.654 +03:00 [INF] [SettingsLoader] Loaded C:\ProgramData\VPNRouter\config.yaml: schema=8, config_mode=subscribe, subs=1[+11], vless.servers=3, vless.server=set, active_sub='Germany VLESS ~main-brat', active_vless='Manual VLESS'
+2026-07-07 13:30:44.436 +03:00 [INF] [ShellMenu] registered verbs (route=flat + unroute) on exefile + lnkfile
+=== Launch/counter/crash files ===
+2026-07-07T13:34:11.1858352+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707_006.log len=110
+2026-07-07T13:34:11.1233328+03:00 C:\ProgramData\VPNRouter\launch-counter.json len=253
+2026-07-07T13:33:37.1936015+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707_005.log len=277
+2026-07-07T13:33:36.8810906+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707_004.log len=853
+2026-07-07T13:30:44.4279597+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707_003.log len=67463
+2026-07-07T13:29:34.8772604+03:00 C:\ProgramData\VPNRouter\logs\singbox.log len=398943
+2026-07-07T02:19:53.7920599+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707_002.log len=14451
+2026-07-07T00:57:55.5916887+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707_001.log len=14171
+2026-07-07T00:54:39.9075347+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter20260707.log len=901
+2026-06-23T22:51:22.3885599+03:00 C:\ProgramData\VPNRouter\logs\vpnrouter-launch-error.log len=360
+2026-06-22T23:31:42.4943022+03:00 C:\ProgramData\VPNRouter\logs\helper-stderr.log len=33
+2026-06-22T23:31:42.4943022+03:00 C:\ProgramData\VPNRouter\logs\update.log len=383
+=== App event log recent ===

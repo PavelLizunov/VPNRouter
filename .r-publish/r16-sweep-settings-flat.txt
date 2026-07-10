@@ -1,0 +1,59 @@
+﻿ControlType.TitleBar	VPNRouter
+ControlType.MenuBar	System Menu Bar
+ControlType.MenuItem	System
+ControlType.Button	Minimize
+ControlType.Button	Maximize
+ControlType.Button	Close
+ControlType.Group	WindowChrome
+ControlType.Text	Virtual Penguin Network
+ControlType.Button	Avalonia.Controls.StackPanel
+ControlType.Text	VPN
+ControlType.Button	Zapret
+ControlType.Text	Zapret
+ControlType.Button	TG
+ControlType.Text	TG
+ControlType.Button	◂ Простой
+ControlType.Button	⋯
+ControlType.ListItem	Серверы
+ControlType.Text	Серверы
+ControlType.ListItem	Подписка
+ControlType.Text	Подписка
+ControlType.ListItem	Настройки
+ControlType.Text	Настройки
+ControlType.ListItem	Приложения
+ControlType.Text	Приложения
+ControlType.ListItem	Инструменты
+ControlType.Text	Инструменты
+ControlType.ListItem	Публичные
+ControlType.Text	Публичные
+ControlType.ListItem	Маршрутизация
+ControlType.Text	Маршрутизация
+ControlType.ListItem	Правила
+ControlType.Text	Правила
+ControlType.ListItem	Защита от утечек
+ControlType.Text	Защита от утечек
+ControlType.ListItem	Контент
+ControlType.Text	Контент
+ControlType.ListItem	Обновления
+ControlType.Text	Обновления
+ControlType.ListItem	Автозапуск
+ControlType.Text	Автозапуск
+ControlType.Text	Защита от утечек
+ControlType.CheckBox	Строгий режим (быстрая реакция на сбои)
+ControlType.Text	Строгий режим (быстрая реакция на сбои)
+ControlType.CheckBox	Только IPv4 (защита от IPv6-утечек)
+ControlType.Text	Только IPv4 (защита от IPv6-утечек)
+ControlType.CheckBox	Очищать DNS кэш при подключении
+ControlType.Text	Очищать DNS кэш при подключении
+ControlType.CheckBox	Строгий DNS (весь DNS через VPN — рекомендуется при leak-тестах)
+ControlType.Text	Строгий DNS (весь DNS через VPN — рекомендуется при leak-тестах)
+ControlType.CheckBox	Блокировать DNS вне VPN (защита от утечек)
+ControlType.Text	Блокировать DNS вне VPN (защита от утечек)
+ControlType.Text	MTU TUN-интерфейса
+ControlType.Edit	MTU TUN-интерфейса
+ControlType.Text	✓
+ControlType.Text	Авто-сохранение
+ControlType.Button	↻ Применить
+ControlType.Text	Подключено [split] → Germany VLESS ~main-brat (104.194.156.93)
+ControlType.Text	True split: активен
+ControlType.Button	⬛  Остановить VPN

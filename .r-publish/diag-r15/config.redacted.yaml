@@ -1,0 +1,854 @@
+schema_version: 8
+app:
+  log_level: info
+  log_file: '***'
+  routing_mode: split
+  routing_apps_mode: exclude
+  routing_apps_include:
+  - Discord.exe
+  - Telegram.exe
+  - Signal.exe
+  - WhatsApp.exe
+  - claude.exe
+  - ChatGPT.exe
+  - Cursor.exe
+  - chrome.exe
+  - msedge.exe
+  - firefox.exe
+  - brave.exe
+  - opera.exe
+  - vivaldi.exe
+  - yandex.exe
+  - tor.exe
+  - waterfox.exe
+  - librewolf.exe
+  - floorp.exe
+  - ungoogled-chromium.exe
+  - arc.exe
+  - maxthon.exe
+  - seamonkey.exe
+  - palemoon.exe
+  - basilisk.exe
+  - iridium.exe
+  - iron.exe
+  - cent_browser.exe
+  - thorium.exe
+  - whale.exe
+  - zen.exe
+  - slack.exe
+  - Zoom.exe
+  - Teams.exe
+  - Code.exe
+  - Notion.exe
+  - Obsidian.exe
+  - Spotify.exe
+  - vlc.exe
+  - steam.exe
+  - EpicGamesLauncher.exe
+  - Battle.net.exe
+  - VirtualBox.exe
+  - VirtualBoxVM.exe
+  - VBoxHeadless.exe
+  - VBoxManage.exe
+  - VBoxSVC.exe
+  - VBoxNetDHCP.exe
+  - VBoxNetNAT.exe
+  - VBoxTray.exe
+  - VBoxClient.exe
+  - WindowsTerminal.exe
+  - pwsh.exe
+  - git.exe
+  - node.exe
+  - python.exe
+  - overlay-host.exe
+  - VPNRouter.App.exe
+  - Codex.exe
+  routing_apps_exclude:
+  - Discord.exe
+  - cmd.exe
+  theme: system
+  language: ru
+  ui_mode: advanced
+  config_mode: subscribe
+  custom_config: ''
+  custom_configs: []
+  active_custom_config: ''
+  subscription_url: ''
+  subscription_servers: []
+  active_subscription_server: Germany VLESS ~main-brat
+  subscriptions:
+  - id: '***'
+    name: simple
+    url: https://ninitux.com/***
+    enabled: true
+    last_refreshed_at: '***'
+    last_server_count: 11
+    servers:
+    - name: Germany VLESS ~main-brat
+      protocol: vless
+      server: 104.194.156.93
+      port: 443
+      uuid: '***'
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: randomized
+        public_key: gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A
+        short_id: '***'
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Iceland VLESS ~main-brat
+      protocol: vless
+      server: 93.95.226.167
+      port: 443
+      uuid: '***'
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: randomized
+        public_key: 4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw
+        short_id: '***'
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Netherlands VLESS ~main-brat
+      protocol: vless
+      server: 194.87.222.111
+      port: 8443
+      uuid: '***'
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: randomized
+        public_key: XLE_ppZAtCXfAqOb8Jifq8AV3J6xvp4IYRdlK2YRXko
+        short_id: '***'
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Latvia NAIVE ~main-brat
+      protocol: naive
+      server: cdn.ninitux.top
+      port: 443
+      uuid: ''
+      flow: ''
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: cdn.ninitux.top
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: '***'
+      password: '***'
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: '***'
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Latvia HY2 ~main-brat
+      protocol: hysteria2
+      server: 213.155.15.93
+      port: 8444
+      uuid: ''
+      flow: ''
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: 213.155.15.93
+        insecure: true
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: '***'
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: '***'
+      obfs_password: '***'
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: '***'
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Germany HY2 ~main-brat
+      protocol: hysteria2
+      server: 104.194.156.93
+      port: 8444
+      uuid: ''
+      flow: ''
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: 104.194.156.93
+        insecure: true
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: '***'
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: '***'
+      obfs_password: '***'
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Iceland HY2 ~main-brat
+      protocol: hysteria2
+      server: 93.95.226.167
+      port: 8444
+      uuid: ''
+      flow: ''
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: 93.95.226.167
+        insecure: true
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: '***'
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: '***'
+      obfs_password: '***'
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Netherlands HY2 ~main-brat
+      protocol: hysteria2
+      server: 194.87.222.111
+      port: 8444
+      uuid: ''
+      flow: ''
+      security: reality
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: 194.87.222.111
+        insecure: true
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: '***'
+        headers: {}
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: '***'
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: '***'
+      obfs_password: '***'
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Germany WS ~main-brat
+      protocol: vless
+      server: de.ninitux.top
+      port: 8443
+      uuid: '***'
+      flow: ''
+      security: tls
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: de.ninitux.top
+        insecure: false
+        fingerprint: chrome
+        alpn: ''
+      transport:
+        type: ws
+        path: '***'
+        headers:
+          Host: '***'
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Iceland WS ~main-brat
+      protocol: vless
+      server: is.ninitux.top
+      port: 8443
+      uuid: '***'
+      flow: ''
+      security: tls
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: is.ninitux.top
+        insecure: false
+        fingerprint: chrome
+        alpn: ''
+      transport:
+        type: ws
+        path: '***'
+        headers:
+          Host: '***'
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    - name: Netherlands WS ~main-brat
+      protocol: vless
+      server: nl.ninitux.top
+      port: 2087
+      uuid: '***'
+      flow: ''
+      security: tls
+      reality:
+        enabled: true
+        server_name: yahoo.com
+        fingerprint: firefox
+        public_key: ''
+        short_id: ''
+      tls:
+        enabled: true
+        server_name: nl.ninitux.top
+        insecure: false
+        fingerprint: chrome
+        alpn: ''
+      transport:
+        type: ws
+        path: '***'
+        headers:
+          Host: '***'
+        mode: ''
+        host: ''
+        x_padding_bytes: ''
+        no_grpc_header: false
+      username: ''
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: '***'
+      obfs_type: ''
+      obfs_password: ''
+      hysteria_up_mbps: 0
+      hysteria_down_mbps: 0
+      awg: ''
+      plugin: ''
+      plugin_opts: ''
+      pair: ''
+      naive_quic: false
+      dns_domain: ''
+      dns_resolvers: []
+      dns_use_system_resolver: false
+      dns_authoritative: []
+      dns_leaf_cert: ''
+      dns_leaf_fingerprint: ''
+    user_info: ''
+  bypass_russian_traffic: false
+  custom_direct_rules: []
+  custom_rules:
+  - action: direct
+    type: domain
+    value: '***'
+    comment: ''
+    enabled: true
+  custom_rules_priority: toggles_first
+  force_ipv4_only: true
+  block_quic_on_tcp_proxy: true
+  strict_mode: false
+  free_config_security_warning_acked: false
+  user_free_sources: []
+  strict_dns: true
+  resolve_lan_via_system_dns: true
+  lan_dns_suffixes: []
+  block_ads: true
+  zapret_enabled: false
+  zapret_strategy: '***'
+  zapret_custom_args: ''
+  tg_proxy_enabled: false
+  tg_proxy_port: 1443
+  tg_proxy_secret: '***'
+  autostart_vpn: true
+  autostart_zapret: false
+  autostart_tgproxy: true
+  autostart_ui: false
+  flush_dns_on_start: true
+  dns_leak_lockdown: true
+  placeholder_prune_count: 0
+  placeholder_prune_at_utc: ''
+profile_sources:
+- type: local
+  url: ''
+  path: '***'
+  update_interval: 3600
+active_profile: '***'
+vless:
+  server: 1.2.3.4
+  port: 443
+  uuid: '***'
+  flow: xtls-rprx-vision
+  security: reality
+  reality:
+    enabled: true
+    server_name: example.com
+    fingerprint: chrome
+    public_key: SGVsbG9Xb3JsZA
+    short_id: ''
+  tls:
+    enabled: false
+    server_name: ''
+    insecure: false
+    fingerprint: ''
+    alpn: ''
+  transport:
+    type: tcp
+    path: '***'
+    headers: {}
+    mode: ''
+    host: ''
+    x_padding_bytes: ''
+    no_grpc_header: false
+  servers:
+  - name: Manual VLESS
+    protocol: vless
+    server: 1.2.3.4
+    port: 443
+    uuid: '***'
+    flow: xtls-rprx-vision
+    security: reality
+    reality:
+      enabled: true
+      server_name: example.com
+      fingerprint: chrome
+      public_key: SGVsbG9Xb3JsZA
+      short_id: ''
+    tls:
+      enabled: false
+      server_name: ''
+      insecure: false
+      fingerprint: ''
+      alpn: ''
+    transport:
+      type: tcp
+      path: '***'
+      headers: {}
+      mode: ''
+      host: ''
+      x_padding_bytes: ''
+      no_grpc_header: false
+    username: ''
+    password: ''
+    method: ''
+    congestion_control: bbr
+    udp_relay_mode: '***'
+    obfs_type: ''
+    obfs_password: ''
+    hysteria_up_mbps: 0
+    hysteria_down_mbps: 0
+    awg: ''
+    plugin: ''
+    plugin_opts: ''
+    pair: ''
+    naive_quic: false
+    dns_domain: ''
+    dns_resolvers: []
+    dns_use_system_resolver: false
+    dns_authoritative: []
+    dns_leaf_cert: ''
+    dns_leaf_fingerprint: ''
+  - name: Manual HY2
+    protocol: hysteria2
+    server: 5.6.7.8
+    port: 8443
+    uuid: ''
+    flow: ''
+    security: reality
+    reality:
+      enabled: true
+      server_name: yahoo.com
+      fingerprint: firefox
+      public_key: ''
+      short_id: ''
+    tls:
+      enabled: true
+      server_name: example.com
+      insecure: true
+      fingerprint: ''
+      alpn: ''
+    transport:
+      type: tcp
+      path: '***'
+      headers: {}
+      mode: ''
+      host: ''
+      x_padding_bytes: ''
+      no_grpc_header: false
+    username: ''
+    password: '***'
+    method: ''
+    congestion_control: bbr
+    udp_relay_mode: '***'
+    obfs_type: ''
+    obfs_password: ''
+    hysteria_up_mbps: 0
+    hysteria_down_mbps: 0
+    awg: ''
+    plugin: ''
+    plugin_opts: ''
+    pair: ''
+    naive_quic: false
+    dns_domain: ''
+    dns_resolvers: []
+    dns_use_system_resolver: false
+    dns_authoritative: []
+    dns_leaf_cert: ''
+    dns_leaf_fingerprint: ''
+  - name: Manual WS
+    protocol: vless
+    server: 9.9.9.9
+    port: 8443
+    uuid: '***'
+    flow: ''
+    security: tls
+    reality:
+      enabled: true
+      server_name: yahoo.com
+      fingerprint: firefox
+      public_key: ''
+      short_id: ''
+    tls:
+      enabled: true
+      server_name: example.com
+      insecure: false
+      fingerprint: ''
+      alpn: ''
+    transport:
+      type: ws
+      path: '***'
+      headers:
+        Host: '***'
+      mode: ''
+      host: ''
+      x_padding_bytes: ''
+      no_grpc_header: false
+    username: ''
+    password: ''
+    method: ''
+    congestion_control: bbr
+    udp_relay_mode: '***'
+    obfs_type: ''
+    obfs_password: ''
+    hysteria_up_mbps: 0
+    hysteria_down_mbps: 0
+    awg: ''
+    plugin: ''
+    plugin_opts: ''
+    pair: ''
+    naive_quic: false
+    dns_domain: ''
+    dns_resolvers: []
+    dns_use_system_resolver: false
+    dns_authoritative: []
+    dns_leaf_cert: ''
+    dns_leaf_fingerprint: ''
+  active_server: Manual VLESS
+  auto_select_best_server: true
+tun:
+  interface_name: VPNRouter-TUN
+  ipv4_address: '***'
+  ipv6_enabled: false
+  mtu: 1337
+  auto_route: true
+  strict_route: false
+  route_exclude_address:
+  - '***'
+dns:
+  strategy: ipv4_only
+  vpn_dns: '***'
+  local_dns: '***'
+singbox:
+  executable_path: '***'
+  auto_download: true
+  download_url: '***'
+  clash_api: '***'
+monitoring:
+  health_check_interval: 30
+  restart_on_failure: true
+  max_restart_attempts: 5
+  process_scan_interval: 60
+custom_apps: []
+custom_group_apps: {}
+custom_categories: []
+excluded_apps: []
+update:
+  github_repo: '***'
+  auto_check: true
+  channel: experimental
+emergency_channel:
+  enabled: false
+  wgturn_url: ''
+  vk_link: ''
+  configs: []
+  active_config: ''
+  last_vk_link: ''

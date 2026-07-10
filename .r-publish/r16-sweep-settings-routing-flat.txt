@@ -1,0 +1,55 @@
+﻿ControlType.TitleBar	VPNRouter
+ControlType.MenuBar	System Menu Bar
+ControlType.MenuItem	System
+ControlType.Button	Minimize
+ControlType.Button	Maximize
+ControlType.Button	Close
+ControlType.Group	WindowChrome
+ControlType.Text	Virtual Penguin Network
+ControlType.Button	Avalonia.Controls.StackPanel
+ControlType.Text	VPN
+ControlType.Button	Zapret
+ControlType.Text	Zapret
+ControlType.Button	TG
+ControlType.Text	TG
+ControlType.Button	◂ Простой
+ControlType.Button	⋯
+ControlType.ListItem	Серверы
+ControlType.Text	Серверы
+ControlType.ListItem	Подписка
+ControlType.Text	Подписка
+ControlType.ListItem	Настройки
+ControlType.Text	Настройки
+ControlType.ListItem	Приложения
+ControlType.Text	Приложения
+ControlType.ListItem	Инструменты
+ControlType.Text	Инструменты
+ControlType.ListItem	Публичные
+ControlType.Text	Публичные
+ControlType.ListItem	Маршрутизация
+ControlType.Text	Маршрутизация
+ControlType.ListItem	Правила
+ControlType.Text	Правила
+ControlType.ListItem	Защита от утечек
+ControlType.Text	Защита от утечек
+ControlType.ListItem	Контент
+ControlType.Text	Контент
+ControlType.ListItem	Обновления
+ControlType.Text	Обновления
+ControlType.ListItem	Автозапуск
+ControlType.Text	Автозапуск
+ControlType.Text	Маршрутизация
+ControlType.Text	Определяет, какой трафик пойдёт через VPN.
+ControlType.Text	Раздельный туннель
+ControlType.Text	Только выбранные приложения. Остальное идёт напрямую.
+ControlType.Text	Полный туннель
+ControlType.Text	Весь трафик ОС через VPN, включая игры и банки.
+ControlType.CheckBox	Российский трафик через реальный IP
+ControlType.Text	Российский трафик через реальный IP
+ControlType.Text	Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами.
+ControlType.Text	✓
+ControlType.Text	Авто-сохранение
+ControlType.Button	↻ Применить
+ControlType.Text	Подключено [split] → Germany VLESS ~main-brat (104.194.156.93)
+ControlType.Text	True split: активен
+ControlType.Button	⬛  Остановить VPN

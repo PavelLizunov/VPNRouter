@@ -1,0 +1,5 @@
+﻿Started=2026-07-08T20:41:58.8546691+03:00
+Bounds=1024x768
+Screenshot=C:\r4review\shots\r33-screen.png
+UIAError=Cannot overwrite variable PID because it is read-only or constant.
+Finished=2026-07-08T20:41:59.0421673+03:00

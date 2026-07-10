@@ -1,0 +1,20 @@
+﻿DeployStart=2026-07-08T02:57:24.9753402+03:00
+Target=C:\Program Files\VPNRouter\app
+Zip=C:\r4review\pkg\r27\VPNRouter-v2.46.0-r27-win.zip
+OK C:\Program Files\VPNRouter\app\VPNRouter.App.exe length=224768 mtime=2026-07-08T02:48:14.0000000+03:00
+OK C:\Program Files\VPNRouter\app\VPNRouter.Core.dll length=1776128 mtime=2026-07-08T02:48:10.0000000+03:00
+OK C:\Program Files\VPNRouter\app\VPNRouter.CLI.exe length=151552 mtime=2026-07-08T02:48:16.0000000+03:00
+OK C:\Program Files\VPNRouter\app\sing-box.exe length=40447488 mtime=2026-07-02T18:59:08.0000000+03:00
+OK C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys length=98400 mtime=2026-07-05T12:02:08.0000000+03:00
+sing-box version:
+sing-box version 1.13.13-lx-awg
+
+Environment: go1.26.1 windows/amd64
+Tags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg
+Revision: c7a2592e750406ade9ebaae1d0fdb7482fc0773e
+CGO: disabled
+driver dir:
+  checksums.sha256 276
+  mullvad-split-tunnel.cat 12350
+  mullvad-split-tunnel.inf 1796
+  mullvad-split-tunnel.sys 98400

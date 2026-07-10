@@ -1,0 +1,128 @@
+﻿Started=2026-07-08T21:08:55.0698256+03:00
+Invoked=Расширенные настройки
+Focused=Подписка
+  ControlType.Group id=AvaloniaWindowChrome name=WindowChrome
+  ControlType.Text id= name=Virtual Penguin Network
+  ControlType.Button id= name=Avalonia.Controls.StackPanel
+  ControlType.Text id= name=VPN
+  ControlType.Button id= name=Zapret
+  ControlType.Text id= name=Zapret
+  ControlType.Button id= name=TG
+  ControlType.Text id= name=TG
+  ControlType.Button id= name=◂ Простой
+  ControlType.Button id= name=⋯
+  ControlType.ListItem id= name=Серверы
+  ControlType.Text id= name=Серверы
+  ControlType.ListItem id= name=Подписка
+  ControlType.Text id= name=Подписка
+  ControlType.ListItem id= name=Настройки
+  ControlType.Text id= name=Настройки
+  ControlType.ListItem id= name=Приложения
+  ControlType.Text id= name=Приложения
+  ControlType.ListItem id= name=Инструменты
+  ControlType.Text id= name=Инструменты
+  ControlType.ListItem id= name=Публичные
+  ControlType.Text id= name=Публичные
+  ControlType.Text id= name=Сервер
+  ControlType.Text id= name=IP
+  ControlType.Text id= name=Ping
+  ControlType.Text id= name=Порт
+  ControlType.List id=SubList name=
+  ControlType.ListItem id= name=Germany VLESS ~main-brat (104.194.156.93:443)
+  ControlType.Text id= name=Germany VLESS ~main-brat
+  ControlType.Text id= name=tcp + reality
+  ControlType.Text id= name=Повседневно
+  ControlType.Text id= name=104.194.156.93
+  ControlType.Text id= name=—
+  ControlType.Text id= name=443
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Iceland VLESS ~main-brat (93.95.226.167:443)
+  ControlType.Text id= name=Iceland VLESS ~main-brat
+  ControlType.Text id= name=tcp + reality
+  ControlType.Text id= name=Повседневно
+  ControlType.Text id= name=93.95.226.167
+  ControlType.Text id= name=—
+  ControlType.Text id= name=443
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Netherlands VLESS ~main-brat (194.87.222.111:8443)
+  ControlType.Text id= name=Netherlands VLESS ~main-brat
+  ControlType.Text id= name=tcp + reality
+  ControlType.Text id= name=Повседневно
+  ControlType.Text id= name=194.87.222.111
+  ControlType.Text id= name=—
+  ControlType.Text id= name=8443
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Latvia NAIVE ~main-brat (cdn.ninitux.top:443)
+  ControlType.Text id= name=Latvia NAIVE ~main-brat
+  ControlType.Text id= name=naive + hy2
+  ControlType.Text id= name=Веб + UDP
+  ControlType.Text id= name=cdn.ninitux.top
+  ControlType.Text id= name=—
+  ControlType.Text id= name=443
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Latvia HY2 ~main-brat (213.155.15.93:8444)
+  ControlType.Text id= name=Latvia HY2 ~main-brat
+  ControlType.Text id= name=hysteria2 + salamander
+  ControlType.Text id= name=Игры/звонки
+  ControlType.Text id= name=213.155.15.93
+  ControlType.Text id= name=—
+  ControlType.Text id= name=8444
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Germany HY2 ~main-brat (104.194.156.93:8444)
+  ControlType.Text id= name=Germany HY2 ~main-brat
+  ControlType.Text id= name=hysteria2 + salamander
+  ControlType.Text id= name=Игры/звонки
+  ControlType.Text id= name=104.194.156.93
+  ControlType.Text id= name=—
+  ControlType.Text id= name=8444
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Iceland HY2 ~main-brat (93.95.226.167:8444)
+  ControlType.Text id= name=Iceland HY2 ~main-brat
+  ControlType.Text id= name=hysteria2 + salamander
+  ControlType.Text id= name=Игры/звонки
+  ControlType.Text id= name=93.95.226.167
+  ControlType.Text id= name=—
+  ControlType.Text id= name=8444
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Netherlands HY2 ~main-brat (194.87.222.111:8444)
+  ControlType.Text id= name=Netherlands HY2 ~main-brat
+  ControlType.Text id= name=hysteria2 + salamander
+  ControlType.Text id= name=Игры/звонки
+  ControlType.Text id= name=194.87.222.111
+  ControlType.Text id= name=—
+  ControlType.Text id= name=8444
+  ControlType.Button id= name=⟳
+  ControlType.ListItem id= name=Germany WS ~main-brat (de.ninitux.top:8443)
+  ControlType.Text id= name=Germany WS ~main-brat
+  ControlType.Text id= name=ws + tls
+  ControlType.Text id= name=Веб-резерв
+  ControlType.Text id= name=de.ninitux.top
+  ControlType.Text id= name=—
+  ControlType.Text id= name=8443
+  ControlType.Button id= name=⟳
+  ControlType.ScrollBar id=PART_VerticalScrollBar name=
+  ControlType.Button id=PART_LineUpButton name=Line up
+  ControlType.Button id=PART_PageUpButton name=Page up
+  ControlType.Button id=PART_PageDownButton name=Page down
+  ControlType.Thumb id= name=Position
+  ControlType.Button id=PART_LineDownButton name=Line down
+  ControlType.Button id= name=TCP + TLS проверка всех серверов
+  ControlType.Button id= name=Spawn sing-box + HTTP trace + 5MB download
+  ControlType.CheckBox id= name=Авто-выбор лучшего сервера
+  ControlType.Text id= name=Авто-выбор лучшего сервера
+  ControlType.Text id= name=Авто: обычный режим
+  ControlType.Text id= name=Сайты и мессенджеры
+  ControlType.Text id= name=Подписки
+  ControlType.Button id= name=Обновить все
+  ControlType.CheckBox id= name=simple
+  ControlType.Text id= name=simple
+  ControlType.Text id= name=https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee · 19s · 2026-07-08 01:51
+  ControlType.Button id= name=↻
+  ControlType.Button id= name=✕
+  ControlType.Edit id= name=Имя
+  ControlType.Edit id= name=URL подписки
+  ControlType.Button id= name=+ Добавить
+  ControlType.Text id= name=Не подключено
+  ControlType.Button id= name=▶  Запустить VPN
+Screenshot=C:\r4review\shots\r33-subscribe.png
+Finished=2026-07-08T21:08:59.4479514+03:00

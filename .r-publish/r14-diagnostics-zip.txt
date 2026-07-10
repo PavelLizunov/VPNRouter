@@ -1,0 +1,18 @@
+﻿Zip=C:\Users\tester\Desktop\VPNRouter-diagnostics-20260707-022508.zip
+LastWrite=2026-07-07T02:25:10.4552040+03:00 Size=43083
+HasWindowsServices=True
+Entries:
+config.redacted.yaml
+current.redacted.json
+geo-manifest.txt
+README.txt
+singbox-tail.log
+summary.txt
+vpnrouter20260706_008.log
+vpnrouter20260706_009.log
+vpnrouter20260706_010.log
+vpnrouter20260707.log
+vpnrouter20260707_001.log
+vpnrouter20260707_002.log
+vpnrouter20260707_003.log
+windows-services.txt

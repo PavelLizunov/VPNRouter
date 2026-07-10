@@ -1,0 +1,95 @@
+﻿Start
+Type here to search
+Task View
+Running applications
+Running applications
+User Promoted Notification Area
+System Clock, 1:10 AM, ‎7/‎7/‎2026
+Action Center
+VPNRouter
+Вид
+Системная
+Светлая
+Тёмная
+RU
+EN
+Диагностика
+Открыть логи
+Собрать диагностику
+Проверить утечку IP
+Проверить обновления
+Устранение неполадок
+Проверить состояние
+Перезапустить в безопасном режиме
+Сбросить настройки
+Avalonia.Controls.Grid
+О приложении
+v2.46.0-r14
+◂ Простой
+WindowChrome
+Virtual Penguin Network
+Avalonia.Controls.StackPanel
+VPN
+Zapret
+Zapret
+TG
+TG
+◂ Простой
+⋯
+Серверы
+Серверы
+Подписка
+Подписка
+Настройки
+Настройки
+Приложения
+Приложения
+Инструменты
+Инструменты
+Публичные
+Публичные
+Zapret
+Zapret
+Telegram-прокси
+Telegram-прокси
+Экстренный канал (wgturn)
+Экстренный канал (wgturn)
+Обход блокировок
+Откроем заблокированные сайты — Discord, YouTube и другие. Один клик — всё настроим автоматически.
+Включить обход блокировок
+Включить обход блокировок
+◌
+multisplit
+Avalonia.Controls.StackPanel
+▶
+Запустить
+✓
+работает
+⚠
+частично
+✗
+не работает
+◌
+не проверена
+⏱
+устарело
+Стратегия
+Hosts
+Фильтры
+Дополнительно
+Технология обхода DPI. Если одна не работает — попробуйте другую.
+◌
+multisplit
+Не установлен
+Скачать
+Обновить IPSet список
+Авто-проверка обновлений Zapret
+Авто-проверка обновлений Zapret
+Остановлен
+Подключено [subscribe/split] → Germany VLESS ~main-brat (104.194.156.93)
+True split: активен
+⬛  Остановить VPN
+Administrator: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Text Area
+Program Manager
+FolderView

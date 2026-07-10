@@ -1,0 +1,7 @@
+﻿Found=⋯ type=ControlType.Button
+Invoked=⋯
+Found=Собрать диагностику type=ControlType.Button
+Invoked=Собрать диагностику
+LatestZip=C:\Users\tester\Desktop\VPNRouter-diagnostics-20260707-134454.zip
+LatestZipTime=2026-07-07T13:44:56.1337132+03:00
+LatestZipLength=50278

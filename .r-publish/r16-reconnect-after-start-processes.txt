@@ -1,0 +1,8 @@
+﻿
+  Id ProcessName   Path                                            
+  -- -----------   ----                                            
+3732 sing-box      C:\ProgramData\VPNRouter\bin\sing-box.exe       
+6160 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+
+
+

@@ -1,0 +1,38 @@
+﻿Started=2026-07-08T20:44:32.0536147+03:00
+WINDOW procId=216 class=MainWindow name=VPNRouter
+  ControlType.Group id=AvaloniaWindowChrome name=WindowChrome
+  ControlType.Text id= name=Virtual Penguin Network
+  ControlType.Button id= name=Avalonia.Controls.StackPanel
+  ControlType.Text id= name=VPN
+  ControlType.Button id= name=Zapret
+  ControlType.Text id= name=Zapret
+  ControlType.Button id= name=TG
+  ControlType.Text id= name=TG
+  ControlType.Button id= name=⋯
+  ControlType.Text id= name=Не подключено
+  ControlType.Text id= name=Трафик идёт напрямую — выбери конфиг и запусти туннель.
+  ControlType.Button id= name=Конфиг · Режим
+  ControlType.Text id= name=⚑
+  ControlType.Text id= name=Конфиг · Режим
+  ControlType.Text id= name=подписка · сплит
+  ControlType.Text id= name=▽
+  ControlType.Text id= name=Конфиг VPN
+  ControlType.Text id= name=Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive) или URL подписки (http/https).
+  ControlType.Text id= name=Что идёт через VPN
+  ControlType.RadioButton id= name=Выбранные приложения
+  ControlType.Text id= name=По списку выбранных приложений
+  ControlType.RadioButton id= name=Весь трафик
+  ControlType.Text id= name=Включая игры и банки
+  ControlType.Button id= name=Avalonia.Controls.Grid
+  ControlType.Text id= name=Автозапуск
+  ControlType.Text id= name=Настроить автозапуск VPN при старте Windows
+  ControlType.Text id= name=›
+  ControlType.Button id= name=Подключить
+  ControlType.Button id= name=Расширенные настройки
+  ControlType.Text id= name=Расширенные настройки
+  ControlType.Text id= name=Серверы · Подписки · Zapret · Telegram-прокси · Публичные
+  ControlType.Text id= name=›
+Bounds=1024x768
+Screenshot=C:\r4review\shots\r33-screen2.png
+PROC 216 VPNRouter.App window=983118 title=VPNRouter
+Finished=2026-07-08T20:44:38.7097282+03:00

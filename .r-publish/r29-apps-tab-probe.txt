@@ -1,0 +1,97 @@
+﻿Text|Virtual Penguin Network|78,59,318,15
+Text|VPN|90,77,19,11
+Text|Zapret|123,77,29,11
+Text|TG|166,77,13,11
+Text|Серверы|42,105,55,15
+Text|Подписка|117,105,60,15
+Text|Настройки|197,105,66,15
+Text|Приложения|283,105,77,15
+Text|Инструменты|380,105,83,15
+Text|Публичные|483,105,69,15
+Text|Сервер|68,133,208,11
+Text|IP|284,133,100,11
+Text|Ping|403,133,20,11
+Text|Порт|450,133,23,11
+Text|Germany VLESS ~main-brat|69,154,206,13
+Text|tcp + reality|69,168,132,11
+Text|Повседневно|210,168,61,11
+Text|104.194.156.93|283,161,100,11
+Text|—|409,161,5,11
+Text|443|453,161,15,11
+Text|Iceland VLESS ~main-brat|69,189,206,13
+Text|tcp + reality|69,203,132,11
+Text|Повседневно|210,203,61,11
+Text|93.95.226.167|283,196,100,11
+Text|—|409,196,5,11
+Text|443|453,196,15,11
+Text|Netherlands VLESS ~main-brat|69,224,206,13
+Text|tcp + reality|69,238,132,11
+Text|Повседневно|210,238,61,11
+Text|194.87.222.111|283,231,100,11
+Text|—|409,231,5,11
+Text|8443|451,231,20,11
+Text|Latvia NAIVE ~main-brat|69,259,206,13
+Text|naive + hy2|69,273,146,11
+Text|Веб + UDP|224,273,47,11
+Text|cdn.ninitux.top|283,266,100,11
+Text|—|409,266,5,11
+Text|443|453,266,15,11
+Text|Latvia HY2 ~main-brat|69,294,206,13
+Text|hysteria2 + salamander|69,308,134,11
+Text|Игры/звонки|212,308,59,11
+Text|213.155.15.93|283,301,100,11
+Text|—|409,301,5,11
+Text|8444|451,301,20,11
+Text|Germany HY2 ~main-brat|69,329,206,13
+Text|hysteria2 + salamander|69,343,134,11
+Text|Игры/звонки|212,343,59,11
+Text|104.194.156.93|283,336,100,11
+Text|—|409,336,5,11
+Text|8444|451,336,20,11
+Text|Iceland HY2 ~main-brat|69,364,206,13
+Text|hysteria2 + salamander|69,378,134,11
+Text|Игры/звонки|212,378,59,11
+Text|93.95.226.167|283,371,100,11
+Text|—|409,371,5,11
+Text|8444|451,371,20,11
+Text|Netherlands HY2 ~main-brat|69,399,206,13
+Text|hysteria2 + salamander|69,413,134,11
+Text|Игры/звонки|212,413,59,11
+Text|194.87.222.111|283,406,100,11
+Text|—|409,406,5,11
+Text|8444|451,406,20,11
+Text|Germany WS ~main-brat|69,434,206,13
+Text|ws + tls|69,448,140,11
+Text|Веб-резерв|218,448,53,11
+Text|de.ninitux.top|283,441,100,11
+Text|—|409,441,5,11
+Text|8443|451,441,20,11
+Text|Авто-выбор лучшего сервера|62,504,162,14
+Text|Подписки|38,534,398,15
+Text|simple|78,567,401,13
+Text|https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee · 19s · 2026-07-08 01:51|78,581,401,11
+Text|Не подключено|55,656,322,14
+Button|Avalonia.Controls.StackPanel|78,76,36,13
+Button|Zapret|118,76,39,13
+Button|TG|161,76,23,13
+Button|◂ Простой|406,63,76,23
+Button|⋯|492,60,28,28
+Button|⟳|489,157,14,19
+Button|⟳|489,192,14,19
+Button|⟳|489,227,14,19
+Button|⟳|489,262,14,19
+Button|⟳|489,297,14,19
+Button|⟳|489,332,14,19
+Button|⟳|489,367,14,19
+Button|⟳|489,402,14,19
+Button|⟳|489,437,14,19
+Button|Line up|505,149,16,16
+Button|Page down|505,295,16,149
+Button|Line down|505,444,16,16
+Button|TCP + TLS проверка всех серверов|38,468,96,23
+Button|Spawn sing-box + HTTP trace + 5MB download|140,468,117,23
+Button|Обновить все|436,531,86,21
+Button|↻|495,570,15,18
+Button|✕|518,569,13,19
+Button|+ Добавить|432,608,90,26
+Button|▶  Запустить VPN|392,651,128,24

@@ -1,0 +1,346 @@
+{
+  "profiles": [
+    {
+      "name": "Discord_Privacy",
+      "description": "Discord voice & chat",
+      "processes": [
+        {
+          "name": "Discord",
+          "include_children": true,
+          "scan_patterns": ["Discord*", "discord*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Messengers",
+      "description": "Telegram, Signal, WhatsApp",
+      "processes": [
+        {
+          "name": "telegram-desktop",
+          "include_children": true,
+          "scan_patterns": ["telegram-desktop", "Telegram*"]
+        },
+        {
+          "name": "signal-desktop",
+          "include_children": true,
+          "scan_patterns": ["signal-desktop", "Signal*"]
+        },
+        {
+          "name": "whatsapp-for-linux",
+          "include_children": true,
+          "scan_patterns": ["whatsapp*", "WhatsApp*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "AI_Tools",
+      "description": "Claude, ChatGPT, Cursor",
+      "processes": [
+        {
+          "name": "claude",
+          "include_children": true,
+          "scan_patterns": ["claude*", "Claude*"]
+        },
+        {
+          "name": "chatgpt",
+          "include_children": true,
+          "scan_patterns": ["chatgpt*", "ChatGPT*"]
+        },
+        {
+          "name": "cursor",
+          "include_children": true,
+          "scan_patterns": ["cursor*", "Cursor*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Browsers",
+      "description": "All browsers",
+      "processes": [
+        {
+          "name": "firefox",
+          "include_children": true,
+          "scan_patterns": ["firefox", "firefox-bin", "firefox-esr", "firefox-*"]
+        },
+        {
+          "name": "chromium",
+          "include_children": true,
+          "scan_patterns": ["chromium", "chromium-*", "chromium-browser"]
+        },
+        {
+          "name": "chrome",
+          "include_children": true,
+          "scan_patterns": ["chrome", "google-chrome*"]
+        },
+        {
+          "name": "brave",
+          "include_children": true,
+          "scan_patterns": ["brave", "brave-*"]
+        },
+        {
+          "name": "microsoft-edge",
+          "include_children": true,
+          "scan_patterns": ["microsoft-edge*", "msedge*"]
+        },
+        {
+          "name": "opera",
+          "include_children": true,
+          "scan_patterns": ["opera", "opera-*"]
+        },
+        {
+          "name": "vivaldi",
+          "include_children": true,
+          "scan_patterns": ["vivaldi", "vivaldi-*"]
+        },
+        {
+          "name": "librewolf",
+          "include_children": true,
+          "scan_patterns": ["librewolf*"]
+        },
+        {
+          "name": "zen",
+          "include_children": true,
+          "scan_patterns": ["zen", "zen-*", "Zen*"]
+        },
+        {
+          "name": "yandex-browser",
+          "include_children": true,
+          "scan_patterns": ["yandex-browser*", "yandex_browser*"]
+        },
+        {
+          "name": "tor",
+          "include_children": true,
+          "scan_patterns": ["tor", "tor-browser*", "start-tor-browser"]
+        },
+        {
+          "name": "epiphany",
+          "include_children": true,
+          "scan_patterns": ["epiphany", "epiphany-*", "gnome-web*"]
+        },
+        {
+          "name": "falkon",
+          "include_children": true,
+          "scan_patterns": ["falkon"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Work_Suite",
+      "description": "Slack, Zoom, VS Code, Obsidian, productivity",
+      "processes": [
+        {
+          "name": "slack",
+          "include_children": true,
+          "scan_patterns": ["slack", "Slack"]
+        },
+        {
+          "name": "zoom",
+          "include_children": true,
+          "scan_patterns": ["zoom", "Zoom*"]
+        },
+        {
+          "name": "code",
+          "include_children": true,
+          "scan_patterns": ["code", "code-*", "code-insiders"]
+        },
+        {
+          "name": "codium",
+          "include_children": true,
+          "scan_patterns": ["codium", "vscodium*"]
+        },
+        {
+          "name": "obsidian",
+          "include_children": true,
+          "scan_patterns": ["obsidian", "Obsidian*"]
+        },
+        {
+          "name": "teams",
+          "include_children": true,
+          "scan_patterns": ["teams*", "Teams*"]
+        },
+        {
+          "name": "notion-app",
+          "include_children": true,
+          "scan_patterns": ["notion*", "Notion*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Streaming",
+      "description": "Spotify, media players",
+      "processes": [
+        {
+          "name": "spotify",
+          "include_children": true,
+          "scan_patterns": ["spotify", "Spotify*"]
+        },
+        {
+          "name": "vlc",
+          "include_children": true,
+          "scan_patterns": ["vlc"]
+        },
+        {
+          "name": "mpv",
+          "include_children": false,
+          "scan_patterns": ["mpv"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Gaming",
+      "description": "Steam, game launchers",
+      "processes": [
+        {
+          "name": "steam",
+          "include_children": true,
+          "scan_patterns": ["steam", "steam.sh", "steamwebhelper", "steamerrorreporter"]
+        },
+        {
+          "name": "lutris",
+          "include_children": true,
+          "scan_patterns": ["lutris", "lutris-*"]
+        },
+        {
+          "name": "heroic",
+          "include_children": true,
+          "scan_patterns": ["heroic", "heroic-games-launcher"]
+        },
+        {
+          "name": "bottles",
+          "include_children": true,
+          "scan_patterns": ["bottles", "bottles-*"]
+        },
+        {
+          "name": "minecraft-launcher",
+          "include_children": true,
+          "scan_patterns": ["minecraft-launcher", "Minecraft*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Virtualization",
+      "description": "VirtualBox VMs & host network helpers",
+      "processes": [
+        {
+          "name": "VirtualBox",
+          "include_children": true,
+          "scan_patterns": ["VirtualBox", "virtualbox"]
+        },
+        {
+          "name": "VirtualBoxVM",
+          "include_children": true,
+          "scan_patterns": ["VirtualBoxVM"]
+        },
+        {
+          "name": "VBoxHeadless",
+          "include_children": true,
+          "scan_patterns": ["VBoxHeadless"]
+        },
+        {
+          "name": "VBoxManage",
+          "include_children": true,
+          "scan_patterns": ["VBoxManage"]
+        },
+        {
+          "name": "VBoxSVC",
+          "include_children": true,
+          "scan_patterns": ["VBoxSVC"]
+        },
+        {
+          "name": "VBoxXPCOMIPCD",
+          "include_children": false,
+          "scan_patterns": ["VBoxXPCOMIPCD"]
+        },
+        {
+          "name": "VBoxNetDHCP",
+          "include_children": true,
+          "scan_patterns": ["VBoxNetDHCP"]
+        },
+        {
+          "name": "VBoxNetNAT",
+          "include_children": true,
+          "scan_patterns": ["VBoxNetNAT"]
+        },
+        {
+          "name": "VBoxClient",
+          "include_children": true,
+          "scan_patterns": ["VBoxClient*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Privacy_Shell",
+      "description": "Terminal + dev tools — split carefully",
+      "processes": [
+        {
+          "name": "bash",
+          "include_children": true,
+          "scan_patterns": ["bash", "-bash"]
+        },
+        {
+          "name": "zsh",
+          "include_children": true,
+          "scan_patterns": ["zsh", "-zsh"]
+        },
+        {
+          "name": "fish",
+          "include_children": true,
+          "scan_patterns": ["fish"]
+        },
+        {
+          "name": "ssh",
+          "include_children": true,
+          "scan_patterns": ["ssh", "ssh-*"]
+        },
+        {
+          "name": "git",
+          "include_children": true,
+          "scan_patterns": ["git", "git-*"]
+        },
+        {
+          "name": "curl",
+          "include_children": false,
+          "scan_patterns": ["curl"]
+        },
+        {
+          "name": "wget",
+          "include_children": false,
+          "scan_patterns": ["wget"]
+        },
+        {
+          "name": "node",
+          "include_children": true,
+          "scan_patterns": ["node"]
+        },
+        {
+          "name": "python",
+          "include_children": true,
+          "scan_patterns": ["python", "python3", "python3.*"]
+        },
+        {
+          "name": "ruby",
+          "include_children": true,
+          "scan_patterns": ["ruby"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    }
+  ]
+}

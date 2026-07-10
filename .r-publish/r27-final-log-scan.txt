@@ -1,0 +1,225 @@
+﻿Post-ship log scan r27
+Time=2026-07-08T03:03:12.1540875+03:00
+Processes:
+  1840 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+Installed files:
+  OK C:\Program Files\VPNRouter\app\VPNRouter.App.exe length=224768 mtime=2026-07-08T02:48:14.0000000+03:00
+  OK C:\Program Files\VPNRouter\app\VPNRouter.Core.dll length=1776128 mtime=2026-07-08T02:48:10.0000000+03:00
+  OK C:\Program Files\VPNRouter\app\sing-box.exe length=40447488 mtime=2026-07-02T18:59:08.0000000+03:00
+  OK C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys length=98400 mtime=2026-07-05T12:02:08.0000000+03:00
+sing-box version:
+  sing-box version 1.13.13-lx-awg
+  
+  Environment: go1.26.1 windows/amd64
+  Tags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg
+  Revision: c7a2592e750406ade9ebaae1d0fdb7482fc0773e
+  CGO: disabled
+driver service query:
+  
+  SERVICE_NAME: mullvad-split-tunnel 
+          TYPE               : 1  KERNEL_DRIVER  
+          STATE              : 4  RUNNING 
+                                  (STOPPABLE, NOT_PAUSABLE, IGNORES_SHUTDOWN)
+          WIN32_EXIT_CODE    : 0  (0x0)
+          SERVICE_EXIT_CODE  : 0  (0x0)
+          CHECKPOINT         : 0x0
+          WAIT_HINT          : 0x0
+doctor:
+  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ VPNRouter Doctor ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  Version: 2.46.0-r27
+  Data dir: C:\ProgramData\VPNRouter
+  
+  ? OK    config.yaml parses (schema v8)
+  ? OK    subscription has 19 cached server(s)
+  ? OK    user catalogue has 9 profiles
+  ? OK    sing-box at C:\ProgramData\VPNRouter\bin\sing-box.exe (38 MB)
+  ? OK    no running-state file (app is stopped)
+  ? OK    no sing-box process running
+  ? OK    Windows Service not installed (running in user mode)
+  ? OK    True Split note: ICMP ping/MTU tests are unreliable while True Split is 
+  active; test MTU with True Split off or ordinary split.
+  
+  ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+  All checks passed.
+  doctor_exit=0
+LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260708_002.log
+LastWriteTime=2026-07-08T02:58:49.0257084+03:00
+MATCHES:
+111: 2026-07-08 03:00:46.618 +03:00 [INF] [SingBoxManager] Expected exit during intentional stop (exit code: -1) â€” suppressing Crashed event, late OS callback after SuppressExitedEvent
+TAIL:
+2026-07-08 02:58:49.034 +03:00 [INF] [VM] Sub-tab init: ServerModeIndex=0 (manual=3, custom=0, configMode=subscribe)
+2026-07-08 02:58:50.209 +03:00 [INF] [App-Autostart] TgProxy: not installed, skipping autostart (user must run the Telegram tab once to download tg-ws-proxy)
+2026-07-08 02:58:51.679 +03:00 [INF] [VM] OnSelectedTabIndexChanged tab=3 (was IsVlessMode=false, IsSubscribeMode=true, ServerModeIndex=0)
+2026-07-08 03:00:33.732 +03:00 [INF] [VM] ToggleConnectionAsync.Connect.Subscription: aggregated 19 servers, ActiveServer=Germany VLESS ~main-brat, ConfigMode preserved=subscribe
+2026-07-08 03:00:33.736 +03:00 [WRN] [SplitTunnel] CreateFile(\\.\MULLVADSPLITTUNNEL) failed (err=2) â€” driver not loaded? post-capture stands
+2026-07-08 03:00:33.770 +03:00 [INF] [DnsFlusher] Windows DNS cache flushed
+2026-07-08 03:00:33.775 +03:00 [INF] [VlessServersResolver] Aggregated 19 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-08 03:00:33.776 +03:00 [INF] [VpnEngine] Loading profiles...
+2026-07-08 03:00:33.781 +03:00 [INF] [ProfileManager] Loaded 9 profiles from Local(C:\ProgramData\VPNRouter\profiles\default.json)
+2026-07-08 03:00:33.782 +03:00 [INF] [StartupPipeline] Loaded profile catalogue (9): Discord_Privacy, Messengers, AI_Tools, Browsers, Work_Suite, Streaming, Gaming, Virtualization, Privacy_Shell
+2026-07-08 03:00:33.783 +03:00 [INF] [ProfileManager] Merged 8 profiles (tolerant) â†’ 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell' with 46 process rules
+2026-07-08 03:00:33.784 +03:00 [INF] [VpnEngine] Profile: Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell (46 rules)
+2026-07-08 03:00:33.785 +03:00 [INF] [VpnEngine] Scanning processes...
+2026-07-08 03:00:33.837 +03:00 [INF] [ProcessScanner] Resolved 80 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell'
+2026-07-08 03:00:33.838 +03:00 [INF] [StartupPipeline] Resolved 80 process names
+2026-07-08 03:00:33.849 +03:00 [INF] [VlessServersResolver] Aggregated 19 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-08 03:00:34.843 +03:00 [WRN] [Firewall] Skipping rule for Discord.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:34.932 +03:00 [WRN] [Firewall] Skipping rule for DiscordUpdate.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.014 +03:00 [WRN] [Firewall] Skipping rule for DiscordPTB.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.109 +03:00 [WRN] [Firewall] Skipping rule for DiscordCanary.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.188 +03:00 [WRN] [Firewall] Skipping rule for Telegram.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.351 +03:00 [WRN] [Firewall] Skipping rule for Signal.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.436 +03:00 [WRN] [Firewall] Skipping rule for WhatsApp.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.532 +03:00 [WRN] [Firewall] Skipping rule for claude.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.694 +03:00 [WRN] [Firewall] Skipping rule for ChatGPT.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.782 +03:00 [WRN] [Firewall] Skipping rule for Cursor.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.870 +03:00 [WRN] [Firewall] Skipping rule for chrome.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:35.986 +03:00 [WRN] [Firewall] Skipping rule for msedge.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.067 +03:00 [WRN] [Firewall] Skipping rule for firefox.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.213 +03:00 [WRN] [Firewall] Skipping rule for brave.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.296 +03:00 [WRN] [Firewall] Skipping rule for opera.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.390 +03:00 [WRN] [Firewall] Skipping rule for opera_autoupdate.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.472 +03:00 [WRN] [Firewall] Skipping rule for vivaldi.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.561 +03:00 [WRN] [Firewall] Skipping rule for yandex.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.679 +03:00 [WRN] [Firewall] Skipping rule for browser.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.771 +03:00 [WRN] [Firewall] Skipping rule for tor.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.851 +03:00 [WRN] [Firewall] Skipping rule for waterfox.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:36.937 +03:00 [WRN] [Firewall] Skipping rule for librewolf.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.108 +03:00 [WRN] [Firewall] Skipping rule for floorp.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.199 +03:00 [WRN] [Firewall] Skipping rule for ungoogled-chromium.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.283 +03:00 [WRN] [Firewall] Skipping rule for chromium.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.361 +03:00 [WRN] [Firewall] Skipping rule for arc.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.454 +03:00 [WRN] [Firewall] Skipping rule for maxthon.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.536 +03:00 [WRN] [Firewall] Skipping rule for seamonkey.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.623 +03:00 [WRN] [Firewall] Skipping rule for palemoon.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.702 +03:00 [WRN] [Firewall] Skipping rule for basilisk.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.791 +03:00 [WRN] [Firewall] Skipping rule for iridium.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:37.969 +03:00 [WRN] [Firewall] Skipping rule for iron.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.061 +03:00 [WRN] [Firewall] Skipping rule for cent_browser.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.152 +03:00 [WRN] [Firewall] Skipping rule for thorium.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.236 +03:00 [WRN] [Firewall] Skipping rule for whale.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.314 +03:00 [WRN] [Firewall] Skipping rule for zen.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.402 +03:00 [WRN] [Firewall] Skipping rule for slack.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.699 +03:00 [WRN] [Firewall] Skipping rule for Zoom.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.895 +03:00 [WRN] [Firewall] Skipping rule for Teams.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:38.976 +03:00 [WRN] [Firewall] Skipping rule for Code.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.066 +03:00 [WRN] [Firewall] Skipping rule for Notion.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.151 +03:00 [WRN] [Firewall] Skipping rule for Obsidian.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.235 +03:00 [WRN] [Firewall] Skipping rule for Spotify.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.311 +03:00 [WRN] [Firewall] Skipping rule for vlc.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.462 +03:00 [WRN] [Firewall] Skipping rule for steam.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.552 +03:00 [WRN] [Firewall] Skipping rule for EpicGamesLauncher.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.631 +03:00 [WRN] [Firewall] Skipping rule for Battle.net.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.719 +03:00 [WRN] [Firewall] Skipping rule for Agent.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.808 +03:00 [WRN] [Firewall] Skipping rule for WindowsTerminal.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:39.909 +03:00 [WRN] [Firewall] Skipping rule for wt.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:40.120 +03:00 [WRN] [Firewall] Skipping rule for pwsh.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:40.390 +03:00 [WRN] [Firewall] Skipping rule for git.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:40.473 +03:00 [WRN] [Firewall] Skipping rule for node.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:40.560 +03:00 [WRN] [Firewall] Skipping rule for python.exe â€” exe path not found (process not running?)
+2026-07-08 03:00:40.560 +03:00 [INF] [Firewall] Created 1 block rules (disabled â€” will enable on VPN crash)
+2026-07-08 03:00:40.560 +03:00 [INF] [VpnEngine] Firewall block rules created (disabled)
+2026-07-08 03:00:40.756 +03:00 [INF] [TunDiag] StartupPipeline: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-08 03:00:42.616 +03:00 [INF] [TunDiag] StartupPipeline: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-08 03:00:43.123 +03:00 [INF] [VpnEngine] Starting sing-box...
+2026-07-08 03:00:43.123 +03:00 [INF] [TunLock] Acquired (process owns sing-box)
+2026-07-08 03:00:43.124 +03:00 [INF] [SingBoxManager] Starting sing-box with config: C:\ProgramData\VPNRouter\config\current.json
+2026-07-08 03:00:43.302 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-08 03:00:44.136 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-08 03:00:44.140 +03:00 [INF] [SingBoxManager] sing-box started (PID 4940)
+2026-07-08 03:00:44.649 +03:00 [INF] [StartupPipeline] sing-box started (PID 4940)
+2026-07-08 03:00:44.649 +03:00 [INF] [VpnEngine] sing-box started (PID 4940)
+2026-07-08 03:00:44.650 +03:00 [INF] [VpnEngine] Warming up network...
+2026-07-08 03:00:44.655 +03:00 [INF] [ETW] Starting process monitor session
+2026-07-08 03:00:44.659 +03:00 [WRN] [ETW] Found orphaned session 'VPNRouterETW', disposing
+2026-07-08 03:00:44.660 +03:00 [INF] [PowerEventListener] Listening for SessionSwitch + PowerModeChanged
+2026-07-08 03:00:44.661 +03:00 [INF] [HealthMonitor] Started â€” check every 30s, max 5 restarts (strict mode: false)
+2026-07-08 03:00:44.661 +03:00 [INF] [VpnEngine] Firewall leak protection ready (armed for VPN failure)
+2026-07-08 03:00:44.661 +03:00 [INF] [DnsHardening] Found stale state file â€” restoring before re-apply
+2026-07-08 03:00:44.665 +03:00 [INF] [DnsHardening] Restored to original values
+2026-07-08 03:00:44.814 +03:00 [INF] [DnsHardening] Applied â€” SMHNR=was unset, ParallelAAAA=was unset, TUN metric set=false
+2026-07-08 03:00:44.815 +03:00 [INF] [VpnEngine] VPN Router is running
+2026-07-08 03:00:44.819 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-08 03:00:44.826 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-08 03:00:44.852 +03:00 [INF] [ETW] Session active, listening for process events
+2026-07-08 03:00:44.912 +03:00 [INF] [VpnEngine] Split-tunnel: 'Discord.exe' not running/unresolved â€” post-capture rule covers it
+2026-07-08 03:00:45.116 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-08 03:00:45.135 +03:00 [INF] [SplitTunnel] ENGAGED â€” 1 excluded path(s) bind to internet NIC 192.168.0.106
+2026-07-08 03:00:45.135 +03:00 [INF] [VpnEngine] True-split driver engage=true (1 excluded path(s) resolved)
+2026-07-08 03:00:45.137 +03:00 [INF] [VM] TrueSplit state="Active": True split active.
+2026-07-08 03:00:45.138 +03:00 [WRN] [VM] StartAsync returned without firing SingBoxStarted â€” leaving state to OnEngineStatus
+2026-07-08 03:00:46.101 +03:00 [INF] [FirewallManager] DNS leak lockdown disabled â€” IPv4 + IPv6 firewall rules deleted (BR-9 r17 + r10 #6)
+2026-07-08 03:00:46.189 +03:00 [INF] [StartupPipeline] TUN ready after 1537ms (attempt 1)
+2026-07-08 03:00:46.189 +03:00 [INF] [VpnEngine] Connected (PID 4940)
+2026-07-08 03:00:46.189 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-08 03:00:46.190 +03:00 [INF] [DnsHardening] DnsLeakLockdown armed â€” TUN confirmed serving (UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)
+2026-07-08 03:00:46.610 +03:00 [INF] [HealthMonitor] Stopped
+2026-07-08 03:00:46.610 +03:00 [INF] [VpnEngine] Stopping...
+2026-07-08 03:00:46.610 +03:00 [INF] [HealthMonitor] Stopped
+2026-07-08 03:00:46.612 +03:00 [INF] [SingBoxManager] Stopping sing-box (PID 4940)
+2026-07-08 03:00:46.618 +03:00 [INF] [SingBoxManager] Expected exit during intentional stop (exit code: -1) â€” suppressing Crashed event, late OS callback after SuppressExitedEvent
+2026-07-08 03:00:46.619 +03:00 [WRN] [SingBoxManager] === sing-box crash tail (last 50 of 5720 lines) ===
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:52:15 INFO router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:52:15 INFO [1509336914 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50253
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:52:15 INFO [1509336914 0ms] inbound/tun[tun-in]: inbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:52:15 INFO [1509336914 0ms] router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:52:15 INFO [1509336914 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:52:16 INFO [1509336914 340ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:53:28 INFO router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:53:28 INFO [3248525060 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50255
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:53:28 INFO [3248525060 0ms] inbound/tun[tun-in]: inbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:53:28 INFO [3248525060 0ms] router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:53:28 INFO [3248525060 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:53:28 INFO [3248525060 346ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:54:14 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:54:14 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:54:14 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:54:14 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:54:14 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:54:14 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:58:29 INFO router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:58:29 INFO [3002485576 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50260
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:58:29 INFO [3002485576 0ms] inbound/tun[tun-in]: inbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:58:29 INFO [3002485576 0ms] router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:58:29 INFO [3002485576 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 01:58:29 INFO [3002485576 312ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:00:14 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:00:14 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:00:14 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:00:14 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:00:14 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:00:14 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:03:29 INFO router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:03:29 INFO [3716871764 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50265
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:03:29 INFO [3716871764 0ms] inbound/tun[tun-in]: inbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:03:29 INFO [3716871764 0ms] router: found process path: C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.26050.15-0\MpDefenderCoreService.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:03:29 INFO [3716871764 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:03:29 INFO [3716871764 341ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 52.123.240.4:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:00 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:00 INFO [517275012 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:63615
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:00 INFO [517275012 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:00 INFO [517275012 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [517275012 555ms] dns: exchanged CNAME v10.events.data.microsoft.com. 36 IN CNAME win-global-asimov-leafs-events-data.trafficmanager.net.
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [517275012 555ms] dns: exchanged CNAME win-global-asimov-leafs-events-data.trafficmanager.net. 36 IN CNAME onedscolprdaue52.australiaeast.cloudapp.azure.com.
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [517275012 555ms] dns: exchanged A onedscolprdaue52.australiaeast.cloudapp.azure.com. 36 IN A 40.79.163.154
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [1726879067 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50269
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [1726879067 0ms] inbound/tun[tun-in]: inbound connection to 40.79.163.154:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [1726879067 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [1726879067 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 40.79.163.154:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 02:04:01 INFO [1726879067 341ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 40.79.163.154:443
+2026-07-08 03:00:46.619 +03:00 [WRN] [singbox] +0300 2026-07-08 03:00:44 INFO network: updated default interface Ethernet, index 7
+2026-07-08 03:00:46.620 +03:00 [WRN] [SingBoxManager] === end sing-box crash tail ===
+2026-07-08 03:00:46.620 +03:00 [INF] [TunLock] Released
+2026-07-08 03:00:46.620 +03:00 [INF] [SingBoxManager] sing-box stopped
+2026-07-08 03:00:46.792 +03:00 [INF] [SplitTunnel] Disengaged (driver inert, kernel service left running)
+2026-07-08 03:00:46.794 +03:00 [INF] [DnsHardening] Restored to original values
+2026-07-08 03:00:46.795 +03:00 [INF] [ETW] Stopping process monitor
+2026-07-08 03:00:47.045 +03:00 [INF] [Firewall] Disabled 1 block rules (VPN up â€” TUN handles routing)
+2026-07-08 03:00:47.133 +03:00 [INF] [Firewall] All VPNRouter firewall rules deleted
+2026-07-08 03:00:47.133 +03:00 [INF] [Firewall] All VPNRouter firewall rules deleted
+2026-07-08 03:00:47.168 +03:00 [INF] [FirewallManager] DNS leak lockdown enabled â€” UDP/53, TCP/53, TCP/853 blocked on non-loopback IPv4 interfaces (TUN block-exclusion=172.19.0.0/30, BR-9) + public-IPv6 (2000::/3) DNS blocked (r10 #6)
+2026-07-08 03:00:47.211 +03:00 [INF] [TunDiag] VpnEngine.after-stop: no VPNRouter-TUN or sing-box-tun adapters found
+2026-07-08 03:00:47.211 +03:00 [INF] [VpnEngine] Stopped
+2026-07-08 03:00:47.211 +03:00 [INF] [VpnEngine] Stopped
+2026-07-08 03:00:48.194 +03:00 [INF] [FirewallManager] DNS leak lockdown disabled â€” IPv4 + IPv6 firewall rules deleted (BR-9 r17 + r10 #6)

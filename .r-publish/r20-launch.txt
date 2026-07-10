@@ -1,0 +1,7 @@
+﻿LaunchStart=2026-07-07T20:07:08.3480103+03:00
+QUSER:  USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME
+QUSER:  tester                console             1  Active      none   7/7/2026 7:18 PM
+schtasks-delete: ERROR: The system cannot find the file specified.
+schtasks-delete: System.Management.Automation.RemoteException
+schtasks-create: SUCCESS: The scheduled task "VPNRouter-r20-verify" has successfully been created.
+schtasks-run: SUCCESS: Attempted to run the scheduled task "VPNRouter-r20-verify".

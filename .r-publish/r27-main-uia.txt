@@ -1,0 +1,46 @@
+﻿NAME|ControlType.Pane|Start|0,728,48,40
+NAME|ControlType.Pane|Type here to search|48,728,48,40
+NAME|ControlType.Pane|Task View|96,728,48,40
+NAME|ControlType.Pane|Running applications|144,728,667,40
+NAME|ControlType.Pane|Running applications|144,728,667,40
+NAME|ControlType.Pane|System Promoted Notification Area|835,728,24,40
+NAME|ControlType.Pane|User Promoted Notification Area|859,728,48,40
+NAME|ControlType.Pane|System Clock, 2:18 AM, ‎7/‎8/‎2026|907,728,64,40
+NAME|ControlType.Pane|Action Center|971,728,48,40
+NAME|ControlType.Window|VPNRouter|252,55,520,640
+NAME|ControlType.Group|WindowChrome|252,55,520,640
+NAME|ControlType.Text|Virtual Penguin Network|302,63,410,15
+NAME|ControlType.Button|Avalonia.Controls.StackPanel|302,80,36,13
+NAME|ControlType.Text|VPN|314,81,19,11
+NAME|ControlType.Button|Zapret|342,80,39,13
+NAME|ControlType.Text|Zapret|347,81,29,11
+NAME|ControlType.Button|TG|385,80,23,13
+NAME|ControlType.Text|TG|390,81,13,11
+NAME|ControlType.Button|⋯|732,64,28,28
+NAME|ControlType.Text|Не подключено|337,129,119,19
+NAME|ControlType.Text|Трафик идёт напрямую — выбери конфиг и запусти туннель.|337,156,370,15
+NAME|ControlType.Button|Конфиг · Режим|302,200,420,43
+NAME|ControlType.Text|⚑|323,213,9,16
+NAME|ControlType.Text|Конфиг · Режим|349,209,336,11
+NAME|ControlType.Text|подписка · сплит|349,221,336,13
+NAME|ControlType.Text|▽|695,213,14,16
+NAME|ControlType.Text|Конфиг VPN|315,270,394,14
+NAME|ControlType.Text|Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive) или URL подписки (http/https).|315,324,394,11
+NAME|ControlType.Text|Что идёт через VPN|315,349,394,14
+NAME|ControlType.RadioButton|Выбранные приложения|315,367,164,32
+NAME|ControlType.Text|По списку выбранных приложений|339,400,370,11
+NAME|ControlType.RadioButton|Весь трафик|315,419,98,32
+NAME|ControlType.Text|Включая игры и банки|339,452,370,11
+NAME|ControlType.Button|Avalonia.Controls.Grid|315,477,394,45
+NAME|ControlType.Text|Автозапуск|326,486,356,14
+NAME|ControlType.Text|Настроить автозапуск VPN при старте Windows|326,502,356,11
+NAME|ControlType.Text|›|692,491,6,17
+NAME|ControlType.Button|Подключить|302,549,420,41
+NAME|ControlType.Button|Расширенные настройки|302,604,420,55
+NAME|ControlType.Text|Расширенные настройки|317,617,352,15
+NAME|ControlType.Text|Серверы · Подписки · Zapret · Telegram-прокси · Публичные|317,635,352,11
+NAME|ControlType.Text|›|690,621,6,19
+NAME|ControlType.Window|Administrator: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe|0,0,1024,728
+NAME|ControlType.Document|Text Area|0,0,1024,728
+NAME|ControlType.Pane|Program Manager|0,0,1024,768
+NAME|ControlType.Pane|FolderView|0,0,1024,768

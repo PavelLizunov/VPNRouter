@@ -1,0 +1,33 @@
+﻿Version=2.46.0-r16
+Zip=C:\r4review\pkg\VPNRouter-v2.46.0-r16-win.zip
+App=C:\Program Files\VPNRouter\app
+VPNRouterServiceBefore=
+[SC] EnumQueryServicesStatus:OpenService FAILED 1060:
+
+The specified service does not exist as an installed service.
+DriverSrcHash=10CF25BBCFE51FD663A1FEC88A98E9B858F3A579589BB2EC496B66E4FDD1B201
+DriverDstHashBefore=10CF25BBCFE51FD663A1FEC88A98E9B858F3A579589BB2EC496B66E4FDD1B201
+DriverCopy=skipped-same-hash
+Process=6160 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+ServiceState:
+SERVICE_NAME: mullvad-split-tunnel 
+        TYPE               : 1  KERNEL_DRIVER  
+        STATE              : 4  RUNNING 
+                                (STOPPABLE, NOT_PAUSABLE, IGNORES_SHUTDOWN)
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+ServiceConfig:
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: mullvad-split-tunnel
+        TYPE               : 1  KERNEL_DRIVER 
+        START_TYPE         : 3   DEMAND_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : \??\C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : Mullvad Split Tunnel (VPNRouter)
+        DEPENDENCIES       : 
+        SERVICE_START_NAME :

@@ -1,0 +1,75 @@
+﻿ControlType.TitleBar	VPNRouter
+ControlType.MenuBar	System Menu Bar
+ControlType.MenuItem	System
+ControlType.Button	Minimize
+ControlType.Button	Maximize
+ControlType.Button	Close
+ControlType.Group	WindowChrome
+ControlType.Text	Virtual Penguin Network
+ControlType.Button	Avalonia.Controls.StackPanel
+ControlType.Text	VPN
+ControlType.Button	Zapret
+ControlType.Text	Zapret
+ControlType.Button	TG
+ControlType.Text	TG
+ControlType.Button	◂ Простой
+ControlType.Button	⋯
+ControlType.ListItem	Серверы
+ControlType.Text	Серверы
+ControlType.ListItem	Подписка
+ControlType.Text	Подписка
+ControlType.ListItem	Настройки
+ControlType.Text	Настройки
+ControlType.ListItem	Приложения
+ControlType.Text	Приложения
+ControlType.ListItem	Инструменты
+ControlType.Text	Инструменты
+ControlType.ListItem	Публичные
+ControlType.Text	Публичные
+ControlType.ListItem	Серверы
+ControlType.Text	Серверы
+ControlType.ListItem	Свой конфиг (JSON)
+ControlType.Text	Свой конфиг (JSON)
+ControlType.Text	Сервер
+ControlType.Text	IP
+ControlType.Text	Ping
+ControlType.Text	Порт
+ControlType.ListItem	Manual VLESS (1.2.3.4:443)
+ControlType.Text	Manual VLESS
+ControlType.Text	Не из подписки
+ControlType.Text	tcp + reality
+ControlType.Text	Повседневно
+ControlType.Text	1.2.3.4
+ControlType.Text	—
+ControlType.Text	443
+ControlType.Button	⟳
+ControlType.Button	✕
+ControlType.ListItem	Manual HY2 (5.6.7.8:8443)
+ControlType.Text	Manual HY2
+ControlType.Text	Не из подписки
+ControlType.Text	hysteria2
+ControlType.Text	Игры/звонки
+ControlType.Text	5.6.7.8
+ControlType.Text	—
+ControlType.Text	8443
+ControlType.Button	⟳
+ControlType.Button	✕
+ControlType.ListItem	Manual WS (9.9.9.9:8443)
+ControlType.Text	Manual WS
+ControlType.Text	Не из подписки
+ControlType.Text	ws + tls
+ControlType.Text	Веб-резерв
+ControlType.Text	9.9.9.9
+ControlType.Text	—
+ControlType.Text	8443
+ControlType.Button	⟳
+ControlType.Button	✕
+ControlType.Text	VLESS+Reality маршрутизирует TCP. Для UDP (игры, QUIC) используйте свой конфиг с TUIC- или Hysteria2-исходящим.
+ControlType.Button	TCP + TLS проверка всех серверов
+ControlType.Button	Spawn sing-box + HTTP trace + 5MB download
+ControlType.Button	Добавить сервер(ы)
+ControlType.Button	Удалить сервер
+ControlType.Edit	vless:// / hy2:// / tuic:// / ss://...#name
+ControlType.Text	Подключено [split] → Germany VLESS ~main-brat (104.194.156.93)
+ControlType.Text	True split: активен
+ControlType.Button	⬛  Остановить VPN

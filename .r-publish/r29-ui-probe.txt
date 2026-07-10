@@ -1,0 +1,12 @@
+﻿WindowName=VPNRouter
+ClassName=MainWindow
+Rect=252,55,520,640
+RectAfter=28,51,504,631
+Button|Avalonia.Controls.StackPanel|78,76,36,13
+Button|Zapret|118,76,39,13
+Button|TG|161,76,23,13
+Button|⋯|492,60,28,28
+Button|Конфиг · Режим|70,196,420,43
+Button|Avalonia.Controls.Grid|83,473,394,45
+Button|Подключить|70,545,420,41
+Button|Расширенные настройки|70,600,420,55

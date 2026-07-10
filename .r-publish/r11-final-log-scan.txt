@@ -1,0 +1,25 @@
+﻿LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260706_010.log
+LastWriteTime=2026-07-06T21:50:37.0895277+03:00
+RECENT_CLEAN: no [ERR]/Exception/FATAL/crashed/Failed to since retry window
+RECENT_SPLIT_LINES:
+2026-07-06 21:50:36.945 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-06 21:50:37.091 +03:00 [WRN] [SplitTunnel] 'mullvad-split-tunnel' exists with a foreign binPath (\??\C:\r4review\pkg\app\driver\mullvad-split-tunnel.sys) â€” not touching it (real Mullvad or unknown); post-capture stands
+2026-07-06 21:50:37.091 +03:00 [INF] [VpnEngine] True-split driver engage=false (1 excluded path(s) resolved)
+2026-07-06 21:50:37.091 +03:00 [INF] [VM] TrueSplit state="Fallback": True split did not start; ordinary split is active.
+2026-07-06 21:52:31.379 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-06 21:52:31.565 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-06 21:52:31.581 +03:00 [INF] [SplitTunnel] ENGAGED â€” 1 excluded path(s) bind to internet NIC 192.168.0.106
+2026-07-06 21:52:31.582 +03:00 [INF] [VpnEngine] True-split driver engage=true (1 excluded path(s) resolved)
+2026-07-06 21:52:31.583 +03:00 [INF] [VM] TrueSplit state="Active": True split active.
+RECENT_TAIL:
+2026-07-06 21:50:36.945 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-06 21:50:37.021 +03:00 [INF] [VpnEngine] Split-tunnel: 'Discord.exe' not running/unresolved â€” post-capture rule covers it
+2026-07-06 21:50:37.091 +03:00 [WRN] [SplitTunnel] 'mullvad-split-tunnel' exists with a foreign binPath (\??\C:\r4review\pkg\app\driver\mullvad-split-tunnel.sys) â€” not touching it (real Mullvad or unknown); post-capture stands
+2026-07-06 21:50:37.091 +03:00 [INF] [VpnEngine] True-split driver engage=false (1 excluded path(s) resolved)
+2026-07-06 21:50:37.091 +03:00 [INF] [VM] TrueSplit state="Fallback": True split did not start; ordinary split is active.
+2026-07-06 21:52:31.379 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-06 21:52:31.461 +03:00 [INF] [VpnEngine] Split-tunnel: 'Discord.exe' not running/unresolved â€” post-capture rule covers it
+2026-07-06 21:52:31.565 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-06 21:52:31.581 +03:00 [INF] [SplitTunnel] ENGAGED â€” 1 excluded path(s) bind to internet NIC 192.168.0.106
+2026-07-06 21:52:31.582 +03:00 [INF] [VpnEngine] True-split driver engage=true (1 excluded path(s) resolved)
+2026-07-06 21:52:31.583 +03:00 [INF] [VM] TrueSplit state="Active": True split active.

@@ -1,0 +1,226 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true,
+    "output": "C:\\ProgramData\\VPNRouter\\logs\\singbox.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "vpn-dns",
+        "type": "https",
+        "server": "dns.adguard-dns.com",
+        "server_port": 443,
+        "path": "***",
+        "detour": "proxy",
+        "domain_resolver": "local-dns"
+      },
+      {
+        "tag": "local-dns",
+        "type": "https",
+        "server": "1.1.1.1",
+        "path": "***",
+        "detour": "dns-direct"
+      }
+    ],
+    "rules": [
+      {
+        "action": "reject",
+        "rule_set": [
+          "vpnrouter-adblock"
+        ]
+      },
+      {
+        "process_name": [
+          "Discord.exe",
+          "cmd.exe"
+        ],
+        "action": "route",
+        "server": "local-dns"
+      }
+    ],
+    "final": "vpn-dns",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "VPNRouter-TUN",
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "mtu": 1337,
+      "auto_route": true,
+      "strict_route": false,
+      "route_exclude_address": [
+        "***"
+      ],
+      "endpoint_independent_nat": true,
+      "stack": "system"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-Germany VLESS ~main-brat",
+      "server": "104.194.156.93",
+      "server_port": 443,
+      "uuid": "***",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "yahoo.com",
+        "insecure": false,
+        "reality": {
+          "enabled": true,
+          "public_key": "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
+          "short_id": "***"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        },
+        "record_fragment": true,
+        "fragment_fallback_delay": "***"
+      },
+      "domain_resolver": "local-dns",
+      "tcp_keep_alive": "***",
+      "tcp_keep_alive_interval": "***"
+    },
+    {
+      "type": "vless",
+      "tag": "vless-Iceland VLESS ~main-brat",
+      "server": "93.95.226.167",
+      "server_port": 443,
+      "uuid": "***",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "yahoo.com",
+        "insecure": false,
+        "reality": {
+          "enabled": true,
+          "public_key": "4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw",
+          "short_id": "***"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        },
+        "record_fragment": true,
+        "fragment_fallback_delay": "***"
+      },
+      "domain_resolver": "local-dns",
+      "tcp_keep_alive": "***",
+      "tcp_keep_alive_interval": "***"
+    },
+    {
+      "type": "vless",
+      "tag": "vless-Netherlands VLESS ~main-brat",
+      "server": "194.87.222.111",
+      "server_port": 8443,
+      "uuid": "***",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "yahoo.com",
+        "insecure": false,
+        "reality": {
+          "enabled": true,
+          "public_key": "XLE_ppZAtCXfAqOb8Jifq8AV3J6xvp4IYRdlK2YRXko",
+          "short_id": "***"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        },
+        "record_fragment": true,
+        "fragment_fallback_delay": "***"
+      },
+      "domain_resolver": "local-dns",
+      "tcp_keep_alive": "***",
+      "tcp_keep_alive_interval": "***"
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy",
+      "outbounds": [
+        "***",
+        "***",
+        "***"
+      ],
+      "url": "http://www.gstatic.com/***",
+      "interval": "***",
+      "tolerance": 150,
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "direct",
+      "tag": "dns-direct",
+      "udp_fragment": true
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff",
+        "timeout": "***"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "action": "route",
+        "outbound": "direct"
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "vpnrouter-adblock"
+        ]
+      },
+      {
+        "action": "route",
+        "outbound": "direct",
+        "domain": [
+          "boosty.to"
+        ]
+      },
+      {
+        "protocol": "quic",
+        "action": "reject"
+      },
+      {
+        "process_name": [
+          "Discord.exe",
+          "cmd.exe"
+        ],
+        "action": "route",
+        "outbound": "direct"
+      }
+    ],
+    "final": "proxy",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "***",
+    "rule_set": [
+      {
+        "type": "local",
+        "tag": "vpnrouter-adblock",
+        "format": "binary",
+        "path": "***"
+      }
+    ]
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090"
+    }
+  }
+}

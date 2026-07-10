@@ -1,0 +1,3 @@
+﻿InspectStart=2026-07-07T20:12:03.3192787+03:00
+ScreenshotError=Exception calling "CopyFromScreen" with "3" argument(s): "The handle is invalid"
+NO VPNRouter window found

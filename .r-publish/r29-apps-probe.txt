@@ -1,0 +1,26 @@
+﻿InvokeAdvanced=True
+Button|Avalonia.Controls.StackPanel|78,76,36,13
+Button|Zapret|118,76,39,13
+Button|TG|161,76,23,13
+Button|◂ Простой|406,63,76,23
+Button|⋯|492,60,28,28
+Button|⟳|489,157,14,19
+Button|⟳|489,192,14,19
+Button|⟳|489,227,14,19
+Button|⟳|489,262,14,19
+Button|⟳|489,297,14,19
+Button|⟳|489,332,14,19
+Button|⟳|489,367,14,19
+Button|⟳|489,402,14,19
+Button|⟳|489,437,14,19
+Button|Line up|505,149,16,16
+Button|Page up|Infinity,Infinity,-Infinity,-Infinity
+Button|Page down|505,295,16,149
+Button|Line down|505,444,16,16
+Button|TCP + TLS проверка всех серверов|38,468,96,23
+Button|Spawn sing-box + HTTP trace + 5MB download|140,468,117,23
+Button|Обновить все|436,531,86,21
+Button|↻|495,570,15,18
+Button|✕|518,569,13,19
+Button|+ Добавить|432,608,90,26
+Button|▶  Запустить VPN|392,651,128,24

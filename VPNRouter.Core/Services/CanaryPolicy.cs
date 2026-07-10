@@ -70,14 +70,8 @@ public static class CanaryPolicy
         if (Uri.TryCreate(url, UriKind.Absolute, out var u))
             return $"{u.Scheme}://{u.Host}";
         // Malformed: keep only up to the first '/', '?' or '#'.
-        var cut = url.AsSpan();
-        int end = cut.Length;
-        foreach (var sep in new[] { '/', '?', '#' })
-        {
-            var i = url.IndexOf(sep);
-            if (i >= 0 && i < end) end = i;
-        }
-        return url[..end];
+        var end = url.IndexOfAny(new[] { '/', '?', '#' });
+        return end >= 0 ? url[..end] : url;
     }
 
     /// <summary>

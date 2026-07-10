@@ -1,0 +1,19 @@
+﻿CleanupStart=2026-07-07T20:46:41.2811040+03:00
+StopProcess=4308 sing-box C:\ProgramData\VPNRouter\bin\sing-box.exe
+StopProcess=3532 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+sc-stop: 
+sc-stop: SERVICE_NAME: mullvad-split-tunnel 
+sc-stop:         TYPE               : 1  KERNEL_DRIVER  
+sc-stop:         STATE              : 1  STOPPED 
+sc-stop:         WIN32_EXIT_CODE    : 0  (0x0)
+sc-stop:         SERVICE_EXIT_CODE  : 0  (0x0)
+sc-stop:         CHECKPOINT         : 0x0
+sc-stop:         WAIT_HINT          : 0x0
+sc-query: 
+sc-query: SERVICE_NAME: mullvad-split-tunnel 
+sc-query:         TYPE               : 1  KERNEL_DRIVER  
+sc-query:         STATE              : 1  STOPPED 
+sc-query:         WIN32_EXIT_CODE    : 0  (0x0)
+sc-query:         SERVICE_EXIT_CODE  : 0  (0x0)
+sc-query:         CHECKPOINT         : 0x0
+sc-query:         WAIT_HINT          : 0x0

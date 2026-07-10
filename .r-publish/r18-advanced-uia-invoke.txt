@@ -1,0 +1,9 @@
+﻿2026-07-07T16:16:46.3248232+03:00 invoke start
+2026-07-07T16:16:46.4966952+03:00 before.hasApps=False
+2026-07-07T16:16:46.5279525+03:00 adv.enabled=True focusable=True rect=60,623,420,55
+2026-07-07T16:16:46.5435680+03:00 adv.patterns=InvokePatternIdentifiers.Pattern,ScrollItemPatternIdentifiers.Pattern
+2026-07-07T16:16:46.5435680+03:00 SetFocus=ok
+2026-07-07T16:16:46.9185687+03:00 SendEnter=ok
+2026-07-07T16:16:49.0307101+03:00 afterEnter.hasApps=True
+2026-07-07T16:16:49.1244558+03:00 afterSpace.hasApps=True
+2026-07-07T16:16:49.1244558+03:00 DONE

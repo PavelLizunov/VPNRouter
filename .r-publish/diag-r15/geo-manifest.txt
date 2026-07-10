@@ -1,0 +1,3 @@
+Geo rule files (sizes + dates only — files themselves not included)
+===================================================================
+(no .srs files present)

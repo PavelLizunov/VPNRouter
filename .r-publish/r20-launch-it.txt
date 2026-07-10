@@ -1,0 +1,5 @@
+﻿ScheduledTasksLaunchStart=2026-07-07T20:11:01.6761318+03:00
+QUSER:  USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME
+QUSER:  tester                console             1  Active      none   7/7/2026 7:18 PM
+TaskLastRun=2026-07-07T20:11:11.0000000+03:00 LastResult=0
+Process=5904 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe

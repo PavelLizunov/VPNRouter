@@ -1,0 +1,5 @@
+﻿LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260706_008.log
+LastWriteTime=2026-07-06T21:00:58.2082284+03:00
+CLEAN: no [ERR]/Exception/FATAL/crashed/Failed to in last 200 lines
+TAIL:
+2026-07-06 21:00:58.186 +03:00 [INF] [SingleInstance] another instance detected â€” signalling it to surface

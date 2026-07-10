@@ -1,0 +1,114 @@
+﻿LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260708_006.log
+LastWriteTime=2026-07-08T18:26:40.9502636+03:00
+CLEAN: no [ERR]/Exception/FATAL/crashed/Failed to in last 200 lines
+TAIL:
+2026-07-08 18:26:39.646 +03:00 [INF] [VM] Sub-tab init: ServerModeIndex=0 (manual=3, custom=0, configMode=subscribe)
+2026-07-08 18:26:40.958 +03:00 [INF] [App-Autostart] TgProxy: not installed, skipping autostart (user must run the Telegram tab once to download tg-ws-proxy)
+2026-07-08 18:27:30.740 +03:00 [INF] [VM] OnSelectedTabIndexChanged tab=3 (was IsVlessMode=false, IsSubscribeMode=true, ServerModeIndex=0)
+2026-07-08 18:28:52.334 +03:00 [INF] [VM] ToggleConnectionAsync.Connect.Subscription: aggregated 19 servers, ActiveServer=Germany VLESS ~main-brat, ConfigMode preserved=subscribe
+2026-07-08 18:28:52.340 +03:00 [WRN] [SplitTunnel] CreateFile(\\.\MULLVADSPLITTUNNEL) failed (err=2) â€” driver not loaded? post-capture stands
+2026-07-08 18:28:52.373 +03:00 [INF] [DnsFlusher] Windows DNS cache flushed
+2026-07-08 18:28:52.378 +03:00 [INF] [VlessServersResolver] Aggregated 19 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-08 18:28:52.379 +03:00 [INF] [VpnEngine] Loading profiles...
+2026-07-08 18:28:52.384 +03:00 [INF] [ProfileManager] Loaded 9 profiles from Local(C:\ProgramData\VPNRouter\profiles\default.json)
+2026-07-08 18:28:52.385 +03:00 [INF] [StartupPipeline] Loaded profile catalogue (9): Discord_Privacy, Messengers, AI_Tools, Browsers, Work_Suite, Streaming, Gaming, Virtualization, Privacy_Shell
+2026-07-08 18:28:52.386 +03:00 [INF] [ProfileManager] Merged 8 profiles (tolerant) â†’ 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell' with 46 process rules
+2026-07-08 18:28:52.386 +03:00 [INF] [VpnEngine] Profile: Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell (46 rules)
+2026-07-08 18:28:52.388 +03:00 [INF] [VpnEngine] Scanning processes...
+2026-07-08 18:28:52.439 +03:00 [INF] [ProcessScanner] Resolved 80 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell'
+2026-07-08 18:28:52.439 +03:00 [INF] [StartupPipeline] Resolved 80 process names
+2026-07-08 18:28:52.457 +03:00 [INF] [StartupPipeline] Auto-excluded WG/AWG subnets (runtime-only, not persisted): 100.64.0.0/10
+2026-07-08 18:28:52.459 +03:00 [INF] [VlessServersResolver] Aggregated 19 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-08 18:28:53.385 +03:00 [WRN] [Firewall] Skipping rule for Discord.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:53.468 +03:00 [WRN] [Firewall] Skipping rule for DiscordUpdate.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:53.549 +03:00 [WRN] [Firewall] Skipping rule for DiscordPTB.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:53.637 +03:00 [WRN] [Firewall] Skipping rule for DiscordCanary.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:53.728 +03:00 [WRN] [Firewall] Skipping rule for Telegram.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:53.839 +03:00 [WRN] [Firewall] Skipping rule for Signal.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:53.918 +03:00 [WRN] [Firewall] Skipping rule for WhatsApp.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.133 +03:00 [WRN] [Firewall] Skipping rule for claude.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.249 +03:00 [WRN] [Firewall] Skipping rule for ChatGPT.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.331 +03:00 [WRN] [Firewall] Skipping rule for Cursor.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.416 +03:00 [WRN] [Firewall] Skipping rule for chrome.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.500 +03:00 [WRN] [Firewall] Skipping rule for msedge.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.590 +03:00 [WRN] [Firewall] Skipping rule for firefox.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.810 +03:00 [WRN] [Firewall] Skipping rule for brave.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.900 +03:00 [WRN] [Firewall] Skipping rule for opera.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:54.986 +03:00 [WRN] [Firewall] Skipping rule for opera_autoupdate.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.063 +03:00 [WRN] [Firewall] Skipping rule for vivaldi.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.148 +03:00 [WRN] [Firewall] Skipping rule for yandex.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.227 +03:00 [WRN] [Firewall] Skipping rule for browser.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.315 +03:00 [WRN] [Firewall] Skipping rule for tor.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.394 +03:00 [WRN] [Firewall] Skipping rule for waterfox.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.474 +03:00 [WRN] [Firewall] Skipping rule for librewolf.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.556 +03:00 [WRN] [Firewall] Skipping rule for floorp.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.646 +03:00 [WRN] [Firewall] Skipping rule for ungoogled-chromium.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.720 +03:00 [WRN] [Firewall] Skipping rule for chromium.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.800 +03:00 [WRN] [Firewall] Skipping rule for arc.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.888 +03:00 [WRN] [Firewall] Skipping rule for maxthon.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:55.965 +03:00 [WRN] [Firewall] Skipping rule for seamonkey.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.050 +03:00 [WRN] [Firewall] Skipping rule for palemoon.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.129 +03:00 [WRN] [Firewall] Skipping rule for basilisk.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.213 +03:00 [WRN] [Firewall] Skipping rule for iridium.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.304 +03:00 [WRN] [Firewall] Skipping rule for iron.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.386 +03:00 [WRN] [Firewall] Skipping rule for cent_browser.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.465 +03:00 [WRN] [Firewall] Skipping rule for thorium.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.729 +03:00 [WRN] [Firewall] Skipping rule for whale.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.814 +03:00 [WRN] [Firewall] Skipping rule for zen.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.891 +03:00 [WRN] [Firewall] Skipping rule for slack.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:56.972 +03:00 [WRN] [Firewall] Skipping rule for Zoom.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.115 +03:00 [WRN] [Firewall] Skipping rule for Teams.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.239 +03:00 [WRN] [Firewall] Skipping rule for Code.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.323 +03:00 [WRN] [Firewall] Skipping rule for Notion.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.403 +03:00 [WRN] [Firewall] Skipping rule for Obsidian.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.485 +03:00 [WRN] [Firewall] Skipping rule for Spotify.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.569 +03:00 [WRN] [Firewall] Skipping rule for vlc.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.651 +03:00 [WRN] [Firewall] Skipping rule for steam.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.739 +03:00 [WRN] [Firewall] Skipping rule for EpicGamesLauncher.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.822 +03:00 [WRN] [Firewall] Skipping rule for Battle.net.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:57.967 +03:00 [WRN] [Firewall] Skipping rule for Agent.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.057 +03:00 [WRN] [Firewall] Skipping rule for WindowsTerminal.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.131 +03:00 [WRN] [Firewall] Skipping rule for wt.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.222 +03:00 [WRN] [Firewall] Skipping rule for pwsh.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.407 +03:00 [WRN] [Firewall] Skipping rule for git.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.494 +03:00 [WRN] [Firewall] Skipping rule for node.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.569 +03:00 [WRN] [Firewall] Skipping rule for python.exe â€” exe path not found (process not running?)
+2026-07-08 18:28:58.569 +03:00 [INF] [Firewall] Created 1 block rules (disabled â€” will enable on VPN crash)
+2026-07-08 18:28:58.569 +03:00 [INF] [VpnEngine] Firewall block rules created (disabled)
+2026-07-08 18:28:58.692 +03:00 [INF] [TunDiag] StartupPipeline: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-08 18:29:00.156 +03:00 [INF] [TunDiag] StartupPipeline: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-08 18:29:00.648 +03:00 [INF] [VpnEngine] Starting sing-box...
+2026-07-08 18:29:00.649 +03:00 [INF] [TunLock] Acquired (process owns sing-box)
+2026-07-08 18:29:00.650 +03:00 [INF] [SingBoxManager] Starting sing-box with config: C:\ProgramData\VPNRouter\config\current.json
+2026-07-08 18:29:00.715 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-08 18:29:01.450 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-08 18:29:01.454 +03:00 [INF] [SingBoxManager] sing-box started (PID 2120)
+2026-07-08 18:29:01.966 +03:00 [INF] [StartupPipeline] sing-box started (PID 2120)
+2026-07-08 18:29:01.966 +03:00 [INF] [VpnEngine] sing-box started (PID 2120)
+2026-07-08 18:29:01.967 +03:00 [INF] [VpnEngine] Warming up network...
+2026-07-08 18:29:02.029 +03:00 [INF] [ETW] Starting process monitor session
+2026-07-08 18:29:02.049 +03:00 [INF] [PowerEventListener] Listening for SessionSwitch + PowerModeChanged
+2026-07-08 18:29:02.049 +03:00 [INF] [HealthMonitor] Started â€” check every 30s, max 5 restarts (strict mode: false)
+2026-07-08 18:29:02.050 +03:00 [INF] [VpnEngine] Firewall leak protection ready (armed for VPN failure)
+2026-07-08 18:29:02.058 +03:00 [INF] [DnsHardening] Found stale state file â€” restoring before re-apply
+2026-07-08 18:29:02.071 +03:00 [WRN] [ETW] Found orphaned session 'VPNRouterETW', disposing
+2026-07-08 18:29:02.210 +03:00 [INF] [DnsHardening] Restored to original values
+2026-07-08 18:29:02.288 +03:00 [INF] [DnsHardening] Applied â€” SMHNR=was unset, ParallelAAAA=was unset, TUN metric set=true
+2026-07-08 18:29:02.288 +03:00 [INF] [VpnEngine] VPN Router is running
+2026-07-08 18:29:02.294 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-08 18:29:02.317 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-08 18:29:02.421 +03:00 [INF] [ETW] Session active, listening for process events
+2026-07-08 18:29:02.431 +03:00 [INF] [VpnEngine] Split-tunnel: 'Discord.exe' not running/unresolved â€” post-capture rule covers it
+2026-07-08 18:29:02.647 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-08 18:29:02.668 +03:00 [INF] [SplitTunnel] ENGAGED â€” 1 excluded path(s) bind to internet NIC 192.168.0.106
+2026-07-08 18:29:02.668 +03:00 [INF] [VpnEngine] True-split driver engage=true (1 excluded path(s) resolved)
+2026-07-08 18:29:02.671 +03:00 [INF] [VM] TrueSplit state="Active": True split active.
+2026-07-08 18:29:02.672 +03:00 [WRN] [VM] StartAsync returned without firing SingBoxStarted â€” leaving state to OnEngineStatus
+2026-07-08 18:29:02.902 +03:00 [INF] [FirewallManager] DNS leak lockdown disabled â€” IPv4 + IPv6 firewall rules deleted (BR-9 r17 + r10 #6)
+2026-07-08 18:29:03.673 +03:00 [INF] [StartupPipeline] TUN ready after 1658ms (attempt 1)
+2026-07-08 18:29:03.673 +03:00 [INF] [VpnEngine] Connected (PID 2120)
+2026-07-08 18:29:03.673 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-08 18:29:03.674 +03:00 [INF] [DnsHardening] DnsLeakLockdown armed â€” TUN confirmed serving (UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)
+2026-07-08 18:29:04.114 +03:00 [INF] [FirewallManager] DNS leak lockdown enabled â€” UDP/53, TCP/53, TCP/853 blocked on non-loopback IPv4 interfaces (TUN block-exclusion=172.19.0.0/30, BR-9) + public-IPv6 (2000::/3) DNS blocked (r10 #6)
+2026-07-08 18:29:05.269 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-08 18:29:32.054 +03:00 [INF] [HealthMonitor] VPN is up

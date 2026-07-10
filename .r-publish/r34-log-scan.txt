@@ -1,0 +1,6 @@
+﻿LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260709_001.log
+LastWriteTime=2026-07-09T01:17:18.3769328+03:00
+CLEAN: no [ERR]/Exception/FATAL/crashed/Failed to in last 240 lines
+TAIL:
+2026-07-09 01:17:18.387 +03:00 [INF] [VM] Sub-tab init: ServerModeIndex=0 (manual=3, custom=0, configMode=subscribe)
+2026-07-09 01:17:19.687 +03:00 [INF] [App-Autostart] TgProxy: not installed, skipping autostart (user must run the Telegram tab once to download tg-ws-proxy)

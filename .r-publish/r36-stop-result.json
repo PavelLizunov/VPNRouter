@@ -1,0 +1,14 @@
+﻿{
+    "clickedStop":  true,
+    "error":  null,
+    "buttons":  [
+                    "Avalonia.Controls.StackPanel",
+                    "Zapret",
+                    "TG",
+                    "⋯",
+                    "Конфиг · Режим",
+                    "Avalonia.Controls.Grid",
+                    "Отключить",
+                    "Расширенные настройки"
+                ]
+}

@@ -1,0 +1,568 @@
+Windows services and drivers
+============================
+True Split notes:
+- err=5 on \\.\MULLVADSPLITTUNNEL means another agent holds the exclusive split-driver device.
+- StartService err=183 means Windows still has an old split-driver object; reboot is usually required.
+- WFP/BFE 0x80320009 means a duplicate split-tunnel object exists, commonly after Amnezia/Mullvad split-driver conflict.
+- ping 'General failure' while True Split is active is a local WFP/driver block, not an MTU measurement.
+
+---- sc qc VPNRouter ----
+exit=0
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: VPNRouter
+        TYPE               : 10  WIN32_OWN_PROCESS 
+        START_TYPE         : 2   AUTO_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : C:\Program Files\VPNRouter\app\VPNRouter.Service.exe --service
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : VPN Process Router
+        DEPENDENCIES       : Tcpip
+                           : Dnscache
+                           : Dhcp
+        SERVICE_START_NAME : LocalSystem
+
+---- sc query VPNRouter ----
+exit=0
+
+SERVICE_NAME: VPNRouter 
+        TYPE               : 10  WIN32_OWN_PROCESS  
+        STATE              : 1  STOPPED 
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+
+---- sc qc mullvad-split-tunnel ----
+exit=0
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: mullvad-split-tunnel
+        TYPE               : 1  KERNEL_DRIVER 
+        START_TYPE         : 3   DEMAND_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : \??\C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : Mullvad Split Tunnel (VPNRouter)
+        DEPENDENCIES       : 
+        SERVICE_START_NAME :
+
+---- sc query mullvad-split-tunnel ----
+exit=0
+
+SERVICE_NAME: mullvad-split-tunnel 
+        TYPE               : 1  KERNEL_DRIVER  
+        STATE              : 1  STOPPED 
+        WIN32_EXIT_CODE    : 183  (0xb7)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+
+---- sc qc AmneziaVPNSplitTunnel ----
+exit=0
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: AmneziaVPNSplitTunnel
+        TYPE               : 1  KERNEL_DRIVER 
+        START_TYPE         : 3   DEMAND_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : \??\C:\Program Files\AmneziaVPN\mullvad-split-tunnel.sys
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : Amnezia Split Tunnel Service
+        DEPENDENCIES       : 
+        SERVICE_START_NAME :
+
+---- sc query AmneziaVPNSplitTunnel ----
+exit=0
+
+SERVICE_NAME: AmneziaVPNSplitTunnel 
+        TYPE               : 1  KERNEL_DRIVER  
+        STATE              : 4  RUNNING 
+                                (STOPPABLE, NOT_PAUSABLE, IGNORES_SHUTDOWN)
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+
+---- sc qc AmneziaVPN-service ----
+exit=0
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: AmneziaVPN-service
+        TYPE               : 10  WIN32_OWN_PROCESS 
+        START_TYPE         : 2   AUTO_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : C:\\Program Files\AmneziaVPN\AmneziaVPN-service.exe
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : AmneziaVPN-service
+        DEPENDENCIES       : BFE
+                           : nsi
+        SERVICE_START_NAME : LocalSystem
+
+---- sc query AmneziaVPN-service ----
+exit=0
+
+SERVICE_NAME: AmneziaVPN-service 
+        TYPE               : 10  WIN32_OWN_PROCESS  
+        STATE              : 4  RUNNING 
+                                (STOPPABLE, NOT_PAUSABLE, IGNORES_SHUTDOWN)
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+
+---- matching Win32_SystemDriver rows ----
+exit=0
+
+Name                  State   Started StartMode PathName                                                          
+----                  -----   ------- --------- --------                                                          
+AmneziaVPNSplitTunnel Running    True Manual    \??\C:\Program Files\AmneziaVPN\mullvad-split-tunnel.sys          
+mullvad-split-tunnel  Stopped   False Manual    \??\C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys
+
+---- matching processes ----
+exit=0
+
+   Id ProcessName   Path                                            
+   -- -----------   ----                                            
+28764 sing-box      C:\ProgramData\VPNRouter\bin\sing-box.exe       
+43624 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+
+---- recent System driver/service events ----
+exit=0
+
+
+TimeCreated      : 7/8/2026 7:25:48 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 7:21:43 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 7:09:43 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 7:05:38 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 6:53:38 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 6:49:34 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 6:37:33 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 6:33:29 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 6:21:28 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 6:17:23 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 6:12:09 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 6:01:09 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 5:49:09 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 5:45:04 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 5:33:01 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 5:28:57 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 4:01:06 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 3:57:02 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 3:37:36 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 3:33:31 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 3:11:39 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 3:07:34 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 2:55:34 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 2:51:29 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 2:39:23 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 2:35:19 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 2:22:34 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 2:18:30 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 1:59:18 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 1:55:14 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 1:43:03 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 1:38:58 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 1:26:57 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 1:22:53 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 1:10:04 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 1:05:59 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 12:31:08 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 12:27:04 PM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 11:56:37 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 11:52:33 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 11:43:42 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 11:41:34 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 11:40:07 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 11:36:03 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 11:23:37 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 11:19:33 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 11:07:07 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 11:03:02 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 10:50:37 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 10:46:32 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 10:34:06 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 10:30:02 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 10:17:36 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 10:13:32 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 10:01:06 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 9:57:01 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 9:44:36 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 9:40:31 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 9:28:05 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 9:24:01 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 9:11:35 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 9:07:31 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 8:55:05 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 8:51:00 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 8:38:34 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 8:34:30 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 8:22:04 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 8:18:00 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 8:05:34 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 8:01:30 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.
+
+TimeCreated      : 7/8/2026 7:49:04 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from auto start to demand start.
+
+TimeCreated      : 7/8/2026 7:44:59 AM
+Id               : 7040
+ProviderName     : Service Control Manager
+LevelDisplayName : Information
+Message          : The start type of the Background Intelligent Transfer Service service was changed from demand start to auto start.

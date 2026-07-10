@@ -1,0 +1,7 @@
+﻿LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260708_001.log
+LastWriteTime=2026-07-08T02:04:36.6517265+03:00
+CLEAN: no bad patterns in last 240 lines
+TAIL:
+2026-07-08 02:04:35.514 +03:00 [INF] [VM] Sub-tab init: ServerModeIndex=0 (manual=3, custom=0, configMode=subscribe)
+2026-07-08 02:04:36.660 +03:00 [INF] [App-Autostart] TgProxy: not installed, skipping autostart (user must run the Telegram tab once to download tg-ws-proxy)
+2026-07-08 02:07:40.138 +03:00 [INF] [VM] OnSelectedTabIndexChanged tab=3 (was IsVlessMode=false, IsSubscribeMode=true, ServerModeIndex=0)

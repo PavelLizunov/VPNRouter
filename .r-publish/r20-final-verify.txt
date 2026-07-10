@@ -1,0 +1,79 @@
+﻿VerifyStart=2026-07-07T20:17:50.8561825+03:00
+=== process/runtime ===
+5236 sing-box C:\ProgramData\VPNRouter\bin\sing-box.exe
+5904 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+=== app sing-box version ===
+sing-box version 1.13.13-lx-awg
+
+Environment: go1.26.1 windows/amd64
+Tags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg
+Revision: c7a2592e750406ade9ebaae1d0fdb7482fc0773e
+CGO: disabled
+=== runtime sing-box version ===
+sing-box version 1.13.13-lx-awg
+
+Environment: go1.26.1 windows/amd64
+Tags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg
+Revision: c7a2592e750406ade9ebaae1d0fdb7482fc0773e
+CGO: disabled
+=== split service ===
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: mullvad-split-tunnel
+        TYPE               : 1  KERNEL_DRIVER 
+        START_TYPE         : 3   DEMAND_START
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : \??\C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : Mullvad Split Tunnel (VPNRouter)
+        DEPENDENCIES       : 
+        SERVICE_START_NAME : 
+
+SERVICE_NAME: mullvad-split-tunnel 
+        TYPE               : 1  KERNEL_DRIVER  
+        STATE              : 4  RUNNING 
+                                (STOPPABLE, NOT_PAUSABLE, IGNORES_SHUTDOWN)
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+=== tun interface ===
+InterfaceIndex                  : 4
+InterfaceAlias                  : VPNRouter-TUN
+CompartmentId                   : 1
+AddressFamily                   : IPv4
+Forwarding                      : Enabled
+ClampMss                        : Disabled
+Advertising                     : Disabled
+NlMtu(Bytes)                    : 1420
+AutomaticMetric                 : Disabled
+InterfaceMetric                 : 
+NeighborDiscoverySupported      : Yes
+NeighborUnreachabilityDetection : Enabled
+BaseReachableTime(ms)           : 30000
+ReachableTime(ms)               : 25500
+RetransmitTime(ms)              : 1000
+DadTransmits                    : 0
+DadRetransmitTime(ms)           : 1000
+RouterDiscovery                 : Disabled
+ManagedAddressConfiguration     : Disabled
+OtherStatefulConfiguration      : Disabled
+WeakHostSend                    : Disabled
+WeakHostReceive                 : Disabled
+IgnoreDefaultRoutes             : Disabled
+AdvertisedRouterLifetime        : 00:30:00
+AdvertiseDefaultRoute           : Disabled
+CurrentHopLimit                 : 0
+ForceArpNdWolPattern            : Disabled
+DirectedMacWolPattern           : Disabled
+EcnMarking                      : AppDecide
+Dhcp                            : Disabled
+ConnectionState                 : Connected
+PolicyStore                     : ActiveStore
+=== latest log scan ===
+LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260707_018.log
+LastWriteTime=2026-07-07T20:16:03.1865004+03:00
+CLEAN: no [ERR]/Exception/FATAL/crashed/Failed to/AccessDenied/err=5 in last 220 lines
+TAIL:
+2026-07-07 20:16:03.163 +03:00 [INF] [SingleInstance] another instance detected â€” signalling it to surface

@@ -1,0 +1,274 @@
+﻿Computer=WINBRAT
+PROCESSES:
+  2512 sing-box C:\ProgramData\VPNRouter\bin\sing-box.exe
+  3264 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
+TUN:
+  ifIndex=3 alias=VPNRouter-TUN mtu=1420 state=Connected metric=
+LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260709_005.log
+LastWriteTime=2026-07-09T13:08:43.6600158+03:00
+MATCHES:
+122: 2026-07-09 13:09:41.121 +03:00 [WRN] [sing-box] [31mFATAL[0m[0015] start service: start inbound/tun[tun-in]: configure tun interface: (create adapter: Cannot create a file when that file already exists. | open existing adapter: Element not found.)
+123: 2026-07-09 13:09:41.126 +03:00 [ERR] [SingBoxManager] sing-box crashed (exit code: 1)
+238: 2026-07-09 13:09:51.373 +03:00 [INF] [HealthMonitor] Previous crash was TUN orphan ('Cannot create a file when that file already exists'). Force-disabling VPNRouter-TUN via netsh before retry.
+239: 2026-07-09 13:09:51.929 +03:00 [WRN] [HealthMonitor] Hot-reload skipped on restart attempt â€” no managed sing-box process; performing full restart
+TAIL:
+2026-07-09 13:09:13.452 +03:00 [INF] [TcpTlsProbe] Germany XHTTP ~main-brat 104.194.156.93:9443 protocol=vless status="Ok" latency=50ms err=-
+2026-07-09 13:09:13.453 +03:00 [INF] [TcpTlsProbe] Germany VLESS ~main-brat 104.194.156.93:443 protocol=vless status="Ok" latency=56ms err=-
+2026-07-09 13:09:13.464 +03:00 [INF] [TcpTlsProbe] Germany WS ~main-brat de.ninitux.top:8443 protocol=vless status="Ok" latency=51ms err=-
+2026-07-09 13:09:13.514 +03:00 [INF] [TcpTlsProbe] Iceland VLESS ~main-brat 93.95.226.167:443 protocol=vless status="Ok" latency=83ms err=-
+2026-07-09 13:09:13.515 +03:00 [INF] [TcpTlsProbe] Iceland XHTTP ~main-brat 93.95.226.167:9443 protocol=vless status="Ok" latency=82ms err=-
+2026-07-09 13:09:13.525 +03:00 [INF] [TcpTlsProbe] Iceland WS ~main-brat is.ninitux.top:8443 protocol=vless status="Ok" latency=85ms err=-
+2026-07-09 13:09:13.588 +03:00 [INF] [TcpTlsProbe] Netherlands VLESS ~main-brat 194.87.222.111:8443 protocol=vless status="Ok" latency=120ms err=-
+2026-07-09 13:09:13.599 +03:00 [INF] [TcpTlsProbe] United States VLESS ~main-brat 130.94.19.7:443 protocol=vless status="Ok" latency=124ms err=-
+2026-07-09 13:09:13.603 +03:00 [INF] [TcpTlsProbe] Netherlands WS ~main-brat nl.ninitux.top:2087 protocol=vless status="Ok" latency=121ms err=-
+2026-07-09 13:09:13.609 +03:00 [INF] [TcpTlsProbe] Netherlands XHTTP ~main-brat 194.87.222.111:9443 protocol=vless status="Ok" latency=125ms err=-
+2026-07-09 13:09:15.350 +03:00 [INF] [TcpTlsProbe] United States HY2 ~main-brat 130.94.19.7:8444 protocol=hysteria2 status="Ok" latency=2000ms err=udp open (no reply)
+2026-07-09 13:09:15.351 +03:00 [INF] [TcpTlsProbe] Iceland HY2 ~main-brat 93.95.226.167:8444 protocol=hysteria2 status="Ok" latency=2000ms err=udp open (no reply)
+2026-07-09 13:09:15.351 +03:00 [INF] [TcpTlsProbe] Netherlands HY2 ~main-brat 194.87.222.111:8444 protocol=hysteria2 status="Ok" latency=2000ms err=udp open (no reply)
+2026-07-09 13:09:15.351 +03:00 [INF] [TcpTlsProbe] Germany HY2 ~main-brat 104.194.156.93:8444 protocol=hysteria2 status="Ok" latency=2000ms err=udp open (no reply)
+2026-07-09 13:09:15.351 +03:00 [INF] [TcpTlsProbe] Latvia HY2 ~main-brat 213.155.15.93:8444 protocol=hysteria2 status="Ok" latency=2000ms err=udp open (no reply)
+2026-07-09 13:09:15.352 +03:00 [INF] [ServerHealthProbe] 16/21 servers alive
+2026-07-09 13:09:15.653 +03:00 [INF] [VM] ToggleConnectionAsync.Connect.Subscription: aggregated 21 servers, ActiveServer=Germany VLESS ~main-brat, ConfigMode preserved=subscribe
+2026-07-09 13:09:15.656 +03:00 [WRN] [SplitTunnel] CreateFile(\\.\MULLVADSPLITTUNNEL) failed (err=2) â€” driver not loaded? post-capture stands
+2026-07-09 13:09:15.691 +03:00 [INF] [DnsFlusher] Windows DNS cache flushed
+2026-07-09 13:09:15.696 +03:00 [INF] [VlessServersResolver] Aggregated 21 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-09 13:09:15.697 +03:00 [INF] [VpnEngine] Loading profiles...
+2026-07-09 13:09:15.702 +03:00 [INF] [ProfileManager] Loaded 9 profiles from Local(C:\ProgramData\VPNRouter\profiles\default.json)
+2026-07-09 13:09:15.702 +03:00 [INF] [StartupPipeline] Loaded profile catalogue (9): Discord_Privacy, Messengers, AI_Tools, Browsers, Work_Suite, Streaming, Gaming, Virtualization, Privacy_Shell
+2026-07-09 13:09:15.704 +03:00 [INF] [ProfileManager] Merged 8 profiles (tolerant) â†’ 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell' with 46 process rules
+2026-07-09 13:09:15.704 +03:00 [INF] [VpnEngine] Profile: Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell (46 rules)
+2026-07-09 13:09:15.705 +03:00 [INF] [VpnEngine] Scanning processes...
+2026-07-09 13:09:15.755 +03:00 [INF] [ProcessScanner] Resolved 80 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell'
+2026-07-09 13:09:15.755 +03:00 [INF] [StartupPipeline] Resolved 80 process names
+2026-07-09 13:09:15.774 +03:00 [INF] [StartupPipeline] Auto-excluded WG/AWG subnets (runtime-only, not persisted): 100.64.0.0/10
+2026-07-09 13:09:15.776 +03:00 [INF] [VlessServersResolver] Aggregated 21 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-09 13:09:17.064 +03:00 [WRN] [Firewall] Skipping rule for Discord.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.152 +03:00 [WRN] [Firewall] Skipping rule for DiscordUpdate.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.236 +03:00 [WRN] [Firewall] Skipping rule for DiscordPTB.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.327 +03:00 [WRN] [Firewall] Skipping rule for DiscordCanary.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.412 +03:00 [WRN] [Firewall] Skipping rule for Telegram.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.569 +03:00 [WRN] [Firewall] Skipping rule for Signal.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.653 +03:00 [WRN] [Firewall] Skipping rule for WhatsApp.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.739 +03:00 [WRN] [Firewall] Skipping rule for claude.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.826 +03:00 [WRN] [Firewall] Skipping rule for ChatGPT.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:17.919 +03:00 [WRN] [Firewall] Skipping rule for Cursor.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.001 +03:00 [WRN] [Firewall] Skipping rule for chrome.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.087 +03:00 [WRN] [Firewall] Skipping rule for msedge.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.174 +03:00 [WRN] [Firewall] Skipping rule for firefox.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.265 +03:00 [WRN] [Firewall] Skipping rule for brave.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.466 +03:00 [WRN] [Firewall] Skipping rule for opera.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.557 +03:00 [WRN] [Firewall] Skipping rule for opera_autoupdate.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.636 +03:00 [WRN] [Firewall] Skipping rule for vivaldi.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.715 +03:00 [WRN] [Firewall] Skipping rule for yandex.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.799 +03:00 [WRN] [Firewall] Skipping rule for browser.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.901 +03:00 [WRN] [Firewall] Skipping rule for tor.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:18.988 +03:00 [WRN] [Firewall] Skipping rule for waterfox.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.073 +03:00 [WRN] [Firewall] Skipping rule for librewolf.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.163 +03:00 [WRN] [Firewall] Skipping rule for floorp.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.257 +03:00 [WRN] [Firewall] Skipping rule for ungoogled-chromium.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.338 +03:00 [WRN] [Firewall] Skipping rule for chromium.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.424 +03:00 [WRN] [Firewall] Skipping rule for arc.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.514 +03:00 [WRN] [Firewall] Skipping rule for maxthon.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.597 +03:00 [WRN] [Firewall] Skipping rule for seamonkey.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.788 +03:00 [WRN] [Firewall] Skipping rule for palemoon.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.867 +03:00 [WRN] [Firewall] Skipping rule for basilisk.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:19.948 +03:00 [WRN] [Firewall] Skipping rule for iridium.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.063 +03:00 [WRN] [Firewall] Skipping rule for iron.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.157 +03:00 [WRN] [Firewall] Skipping rule for cent_browser.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.250 +03:00 [WRN] [Firewall] Skipping rule for thorium.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.332 +03:00 [WRN] [Firewall] Skipping rule for whale.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.459 +03:00 [WRN] [Firewall] Skipping rule for zen.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.544 +03:00 [WRN] [Firewall] Skipping rule for slack.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.640 +03:00 [WRN] [Firewall] Skipping rule for Zoom.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.722 +03:00 [WRN] [Firewall] Skipping rule for Teams.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.805 +03:00 [WRN] [Firewall] Skipping rule for Code.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.890 +03:00 [WRN] [Firewall] Skipping rule for Notion.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:20.974 +03:00 [WRN] [Firewall] Skipping rule for Obsidian.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.122 +03:00 [WRN] [Firewall] Skipping rule for Spotify.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.277 +03:00 [WRN] [Firewall] Skipping rule for vlc.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.357 +03:00 [WRN] [Firewall] Skipping rule for steam.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.442 +03:00 [WRN] [Firewall] Skipping rule for EpicGamesLauncher.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.526 +03:00 [WRN] [Firewall] Skipping rule for Battle.net.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.614 +03:00 [WRN] [Firewall] Skipping rule for Agent.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.706 +03:00 [WRN] [Firewall] Skipping rule for WindowsTerminal.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:21.845 +03:00 [WRN] [Firewall] Skipping rule for wt.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:22.030 +03:00 [WRN] [Firewall] Skipping rule for pwsh.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:22.172 +03:00 [WRN] [Firewall] Skipping rule for git.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:22.253 +03:00 [WRN] [Firewall] Skipping rule for node.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:22.342 +03:00 [WRN] [Firewall] Skipping rule for python.exe â€” exe path not found (process not running?)
+2026-07-09 13:09:22.342 +03:00 [INF] [Firewall] Created 1 block rules (disabled â€” will enable on VPN crash)
+2026-07-09 13:09:22.342 +03:00 [INF] [VpnEngine] Firewall block rules created (disabled)
+2026-07-09 13:09:22.481 +03:00 [INF] [TunDiag] StartupPipeline: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-09 13:09:24.375 +03:00 [INF] [TunDiag] StartupPipeline: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-09 13:09:24.883 +03:00 [INF] [VpnEngine] Starting sing-box...
+2026-07-09 13:09:24.884 +03:00 [INF] [TunLock] Acquired (process owns sing-box)
+2026-07-09 13:09:24.884 +03:00 [INF] [SingBoxManager] Starting sing-box with config: C:\ProgramData\VPNRouter\config\current.json
+2026-07-09 13:09:24.951 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-09 13:09:25.705 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-09 13:09:25.710 +03:00 [INF] [SingBoxManager] sing-box started (PID 2760)
+2026-07-09 13:09:26.211 +03:00 [INF] [StartupPipeline] sing-box started (PID 2760)
+2026-07-09 13:09:26.211 +03:00 [INF] [VpnEngine] sing-box started (PID 2760)
+2026-07-09 13:09:26.211 +03:00 [INF] [VpnEngine] Warming up network...
+2026-07-09 13:09:26.216 +03:00 [INF] [ETW] Starting process monitor session
+2026-07-09 13:09:26.220 +03:00 [WRN] [ETW] Found orphaned session 'VPNRouterETW', disposing
+2026-07-09 13:09:26.222 +03:00 [INF] [PowerEventListener] Listening for SessionSwitch + PowerModeChanged
+2026-07-09 13:09:26.222 +03:00 [INF] [HealthMonitor] Started â€” check every 30s, max 5 restarts (strict mode: false)
+2026-07-09 13:09:26.222 +03:00 [INF] [VpnEngine] Firewall leak protection ready (armed for VPN failure)
+2026-07-09 13:09:26.222 +03:00 [INF] [DnsHardening] Found stale state file â€” restoring before re-apply
+2026-07-09 13:09:26.296 +03:00 [INF] [DnsHardening] Restored to original values
+2026-07-09 13:09:26.380 +03:00 [INF] [DnsHardening] Applied â€” SMHNR=was unset, ParallelAAAA=was unset, TUN metric set=false
+2026-07-09 13:09:26.380 +03:00 [INF] [VpnEngine] VPN Router is running
+2026-07-09 13:09:26.386 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-09 13:09:26.401 +03:00 [INF] [VM] TrueSplit state="Starting": Starting true split...
+2026-07-09 13:09:26.489 +03:00 [INF] [VpnEngine] Split-tunnel: 'Discord.exe' not running/unresolved â€” post-capture rule covers it
+2026-07-09 13:09:26.537 +03:00 [INF] [ETW] Session active, listening for process events
+2026-07-09 13:09:26.921 +03:00 [INF] [FirewallManager] DNS leak lockdown disabled â€” IPv4 + IPv6 firewall rules deleted (BR-9 r17 + r10 #6)
+2026-07-09 13:09:27.354 +03:00 [INF] [StartupPipeline] TUN ready after 1141ms (attempt 1)
+2026-07-09 13:09:27.354 +03:00 [INF] [VpnEngine] Connected (PID 2760)
+2026-07-09 13:09:27.355 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-09 13:09:27.355 +03:00 [INF] [DnsHardening] DnsLeakLockdown armed â€” TUN confirmed serving (UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)
+2026-07-09 13:09:27.527 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-09 13:09:27.549 +03:00 [INF] [SplitTunnel] ENGAGED â€” 1 excluded path(s) bind to internet NIC 192.168.0.106
+2026-07-09 13:09:27.550 +03:00 [INF] [VpnEngine] True-split driver engage=true (1 excluded path(s) resolved)
+2026-07-09 13:09:27.550 +03:00 [INF] [VM] TrueSplit state="Active": True split active.
+2026-07-09 13:09:27.550 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-09 13:09:27.796 +03:00 [INF] [FirewallManager] DNS leak lockdown enabled â€” UDP/53, TCP/53, TCP/853 blocked on non-loopback IPv4 interfaces (TUN block-exclusion=172.19.0.0/30, BR-9) + public-IPv6 (2000::/3) DNS blocked (r10 #6)
+2026-07-09 13:09:41.121 +03:00 [WRN] [sing-box] [31mFATAL[0m[0015] start service: start inbound/tun[tun-in]: configure tun interface: (create adapter: Cannot create a file when that file already exists. | open existing adapter: Element not found.)
+2026-07-09 13:09:41.126 +03:00 [ERR] [SingBoxManager] sing-box crashed (exit code: 1)
+2026-07-09 13:09:41.153 +03:00 [WRN] [SingBoxManager] === sing-box crash tail (last 50 of 6012 lines) ===
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:00 INFO [106091793 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [106091793 66ms] dns: exchanged CNAME x1.c.lencr.org. 9 IN CNAME crl.root-x1.letsencrypt.org.edgekey.net.
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [106091793 66ms] dns: exchanged CNAME crl.root-x1.letsencrypt.org.edgekey.net. 9 IN CNAME e8652.dscx.akamaiedge.net.
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [106091793 66ms] dns: exchanged A e8652.dscx.akamaiedge.net. 9 IN A 2.19.101.20
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [1437997093 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50690
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [1437997093 0ms] inbound/tun[tun-in]: inbound connection to 2.19.101.20:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [1437997093 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [1437997093 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 2.19.101.20:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [1437997093 356ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 2.19.101.20:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [651417626 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:55991
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [651417626 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [651417626 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [651417626 65ms] dns: exchanged CNAME c.pki.goog. 132 IN CNAME pki-goog.l.google.com.
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [651417626 65ms] dns: exchanged A pki-goog.l.google.com. 132 IN A 142.251.13.94
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2826346015 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50692
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2826346015 0ms] inbound/tun[tun-in]: inbound connection to 142.251.13.94:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2826346015 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2826346015 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 142.251.13.94:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2826346015 357ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 142.251.13.94:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:62695
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 66ms] dns: exchanged CNAME yr.c.lencr.org. 60 IN CNAME e5.i.lencr.org.edgekey.net.
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 66ms] dns: exchanged CNAME e5.i.lencr.org.edgekey.net. 60 IN CNAME e192961.dscx.akamaiedge.net.
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 66ms] dns: exchanged A e192961.dscx.akamaiedge.net. 60 IN A 2.19.122.16
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [2045339982 66ms] dns: exchanged A e192961.dscx.akamaiedge.net. 60 IN A 2.19.122.30
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [3488085372 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50694
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [3488085372 0ms] inbound/tun[tun-in]: inbound connection to 2.19.122.16:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [3488085372 0ms] router: found process path: C:\Windows\System32\svchost.exe
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:01 INFO [3488085372 0ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 2.19.122.16:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO [3488085372 351ms] outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to 2.19.122.16:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:05:02 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:11:02 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:11:02 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:11:02 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:11:02 INFO outbound/vless[vless-Netherlands VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:11:02 INFO outbound/vless[vless-Iceland VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-08 19:11:02 INFO outbound/vless[vless-Germany VLESS ~main-brat]: outbound connection to www.gstatic.com:80
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-09 13:09:25 INFO network: updated default interface Ethernet, index 7
+2026-07-09 13:09:41.153 +03:00 [WRN] [singbox] +0300 2026-07-09 13:09:35 WARN inbound/tun[tun-in]: open interface take too much time to finish!
+2026-07-09 13:09:41.153 +03:00 [WRN] [SingBoxManager] === end sing-box crash tail ===
+2026-07-09 13:09:41.154 +03:00 [WRN] [SingBoxManager] Detected TUN-orphan crash signature in stderr â€” HealthMonitor will fire netsh disable on VPNRouter-TUN before restart.
+2026-07-09 13:09:41.235 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Discord.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.313 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve DiscordUpdate.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.397 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve DiscordPTB.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.480 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve DiscordCanary.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.557 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Telegram.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.638 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Signal.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.715 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve WhatsApp.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.789 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve claude.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.879 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve ChatGPT.exe â€” cannot block its direct egress
+2026-07-09 13:09:41.960 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Cursor.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.134 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve chrome.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.206 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve msedge.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.294 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve firefox.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.366 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve brave.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.443 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve opera.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.525 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve opera_autoupdate.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.604 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve vivaldi.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.690 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve yandex.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.767 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve browser.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.843 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve tor.exe â€” cannot block its direct egress
+2026-07-09 13:09:42.917 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve waterfox.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.002 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve librewolf.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.079 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve floorp.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.164 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve ungoogled-chromium.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.239 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve chromium.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.365 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve arc.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.451 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve maxthon.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.527 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve seamonkey.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.606 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve palemoon.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.685 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve basilisk.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.767 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve iridium.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.840 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve iron.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.916 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve cent_browser.exe â€” cannot block its direct egress
+2026-07-09 13:09:43.991 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve thorium.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.062 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve whale.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.133 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve zen.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.206 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve slack.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.287 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Zoom.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.363 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Teams.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.444 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Code.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.530 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Notion.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.607 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Obsidian.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.682 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Spotify.exe â€” cannot block its direct egress
+2026-07-09 13:09:44.769 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve vlc.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.131 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve steam.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.223 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve EpicGamesLauncher.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.307 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Battle.net.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.375 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve Agent.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.458 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve WindowsTerminal.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.618 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve wt.exe â€” cannot block its direct egress
+2026-07-09 13:09:45.979 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve pwsh.exe â€” cannot block its direct egress
+2026-07-09 13:09:46.067 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve git.exe â€” cannot block its direct egress
+2026-07-09 13:09:46.155 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve node.exe â€” cannot block its direct egress
+2026-07-09 13:09:46.239 +03:00 [WRN] [Firewall] kill-switch: still cannot resolve python.exe â€” cannot block its direct egress
+2026-07-09 13:09:46.261 +03:00 [WRN] [VpnEngine] F-E post-start probe reported dead (Clash API call failed (attempt 2): No connection could be made because the target machine actively refused it. (127.0.0.1:9090)) but TUN warmup already confirmed connectivity â€” treating as false positive, NOT failing over.
+2026-07-09 13:09:46.378 +03:00 [INF] [Firewall] ENABLED 1 block rules (VPN down â€” leak protection active)
+2026-07-09 13:09:46.378 +03:00 [INF] [DnsHardening] DnsLeakLockdown lifted (fail-open) â€” tunnel not serving; DNS restored so the user keeps internet while the VPN is down / reconnecting
+2026-07-09 13:09:46.379 +03:00 [WRN] [HealthMonitor] Restarting sing-box (attempt 1/5) in 5000ms
+2026-07-09 13:09:46.999 +03:00 [INF] [FirewallManager] DNS leak lockdown disabled â€” IPv4 + IPv6 firewall rules deleted (BR-9 r17 + r10 #6)
+2026-07-09 13:09:51.372 +03:00 [INF] [ProcessScanner] Resolved 79 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell'
+2026-07-09 13:09:51.372 +03:00 [INF] [VlessServersResolver] Aggregated 21 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-09 13:09:51.373 +03:00 [INF] [HealthMonitor] Previous crash was TUN orphan ('Cannot create a file when that file already exists'). Force-disabling VPNRouter-TUN via netsh before retry.
+2026-07-09 13:09:51.929 +03:00 [WRN] [HealthMonitor] Hot-reload skipped on restart attempt â€” no managed sing-box process; performing full restart
+2026-07-09 13:09:51.929 +03:00 [WRN] [HealthMonitor] Hot-reload unavailable on restart attempt â€” performing full restart
+2026-07-09 13:09:51.929 +03:00 [INF] [ProcessScanner] Resolved 79 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell'
+2026-07-09 13:09:51.929 +03:00 [INF] [VlessServersResolver] Aggregated 21 server(s) from 1 active subscription(s) (mode: subscribe, active: Germany VLESS ~main-brat)
+2026-07-09 13:09:51.930 +03:00 [INF] [SingBoxManager] Reloading config (force restart, no hot-reload attempt)
+2026-07-09 13:09:51.932 +03:00 [INF] [SingBoxManager] Restarting sing-box
+2026-07-09 13:09:51.933 +03:00 [INF] [SingBoxManager] Stopping sing-box (PID null)
+2026-07-09 13:09:51.933 +03:00 [INF] [SingBoxManager] Stop called but sing-box already exited (process=HasExited) â€” running cleanup-only path
+2026-07-09 13:09:52.827 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: no stale TUN adapters found via netsh enumeration
+2026-07-09 13:09:53.495 +03:00 [INF] [TunDiag] SingBoxManager.LaunchProcess: pre-start cleanup: removed 1 TUN adapter(s) total (enumeration + direct fallback)
+2026-07-09 13:09:53.497 +03:00 [INF] [SingBoxManager] sing-box started (PID 2512)
+2026-07-09 13:09:53.497 +03:00 [INF] [HealthMonitor] Full restart done â€” deferring kill-switch lift until health confirmed
+2026-07-09 13:09:53.497 +03:00 [INF] [HealthMonitor] sing-box restarted successfully
+2026-07-09 13:09:54.272 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-07-09 13:09:56.349 +03:00 [INF] [Firewall] Disabled 1 block rules (VPN up â€” TUN handles routing)
+2026-07-09 13:09:56.349 +03:00 [INF] [HealthMonitor] Kill-switch block rules lifted after restart â€” TUN serving confirmed (clashApi=true, fallback=false, +3s)
+2026-07-09 13:09:56.350 +03:00 [INF] [DnsHardening] DnsLeakLockdown armed â€” TUN confirmed serving (UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)
+2026-07-09 13:09:56.781 +03:00 [INF] [FirewallManager] DNS leak lockdown enabled â€” UDP/53, TCP/53, TCP/853 blocked on non-loopback IPv4 interfaces (TUN block-exclusion=172.19.0.0/30, BR-9) + public-IPv6 (2000::/3) DNS blocked (r10 #6)
+2026-07-09 13:09:57.249 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null
+2026-07-09 13:10:16.583 +03:00 [INF] [HealthMonitor] Debounce elapsed â€” rescanning processes
+2026-07-09 13:10:16.584 +03:00 [INF] [ProcessScanner] Resolved 79 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Privacy_Shell'
+2026-07-09 13:10:29.297 +03:00 [INF] [SplitTunnel] Internet NIC for split-bind: Ethernet (Intel(R) PRO/1000 MT Network Connection) v4=192.168.0.106 v6=null

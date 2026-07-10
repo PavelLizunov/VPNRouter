@@ -1,0 +1,9 @@
+﻿{
+    "Pass":  true,
+    "includeBefore":  "On",
+    "excludeBefore":  "Off",
+    "excludeAfter":  "On",
+    "includeAfterExclude":  "On",
+    "includeAfterPolicy":  "On",
+    "excludeAfterPolicy":  "On"
+}

@@ -1,0 +1,19 @@
+﻿DeployStart=2026-07-07T20:44:15.5040570+03:00
+SplitServiceBefore:
+
+SERVICE_NAME: mullvad-split-tunnel 
+        TYPE               : 1  KERNEL_DRIVER  
+        STATE              : 1  STOPPED 
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+[SC] DeleteService SUCCESS
+CopiedAppDll=2026-07-07T20:37:16.0000000+03:00
+SingBoxVersion:
+sing-box version 1.13.13-lx-awg
+
+Environment: go1.26.1 windows/amd64
+Tags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg
+Revision: c7a2592e750406ade9ebaae1d0fdb7482fc0773e
+CGO: disabled

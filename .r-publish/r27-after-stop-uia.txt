@@ -1,0 +1,74 @@
+﻿NAME|ControlType.TitleBar|VPNRouter|252,32,520,23
+NAME|ControlType.MenuBar|System Menu Bar|252,32,22,22
+NAME|ControlType.MenuItem|System|252,32,22,22
+NAME|ControlType.Button|Minimize|633,25,47,30
+NAME|ControlType.Button|Maximize|680,25,46,30
+NAME|ControlType.Button|Close|726,25,47,30
+NAME|ControlType.Group|WindowChrome|252,55,520,640
+NAME|ControlType.Text|Virtual Penguin Network|302,63,334,15
+NAME|ControlType.Button|Avalonia.Controls.StackPanel|302,80,36,13
+NAME|ControlType.Text|VPN|314,81,19,11
+NAME|ControlType.Button|Zapret|342,80,39,13
+NAME|ControlType.Text|Zapret|347,81,29,11
+NAME|ControlType.Button|TG|385,80,23,13
+NAME|ControlType.Text|TG|390,81,13,11
+NAME|ControlType.Button|◂ Простой|646,67,76,23
+NAME|ControlType.Button|⋯|732,64,28,28
+NAME|ControlType.ListItem|Серверы|258,104,71,25
+NAME|ControlType.Text|Серверы|266,109,55,15
+NAME|ControlType.ListItem|Подписка|333,104,76,25
+NAME|ControlType.Text|Подписка|341,109,60,15
+NAME|ControlType.ListItem|Настройки|413,104,82,25
+NAME|ControlType.Text|Настройки|421,109,66,15
+NAME|ControlType.ListItem|Приложения|499,104,93,25
+NAME|ControlType.Text|Приложения|507,109,77,15
+NAME|ControlType.ListItem|Инструменты|596,104,99,25
+NAME|ControlType.Text|Инструменты|604,109,83,15
+NAME|ControlType.ListItem|Публичные|699,104,85,25
+NAME|ControlType.Text|Публичные|707,109,69,15
+NAME|ControlType.Text|Как применять списки|266,139,492,14
+NAME|ControlType.Button|Активен список «Через VPN»|266,159,243,26
+NAME|ControlType.Button|Активен список «Мимо VPN»|515,159,243,26
+NAME|ControlType.Text|Отмеченные приложения идут напрямую (мимо VPN), остальной трафик идёт через VPN.|266,191,492,13
+NAME|ControlType.Text|Что редактировать|266,215,492,14
+NAME|ControlType.Button|Через VPN|266,235,243,26
+NAME|ControlType.Button|Мимо VPN|515,235,243,26
+NAME|ControlType.ListItem|Discord (1)|252,266,119,22
+NAME|ControlType.Text|Discord|256,270,98,14
+NAME|ControlType.Text|1|358,272,5,11
+NAME|ControlType.ListItem|Мессенджеры (3)|252,288,119,22
+NAME|ControlType.Text|Мессенджеры|256,292,98,14
+NAME|ControlType.Text|3|358,294,5,11
+NAME|ControlType.ListItem|AI-инструменты (4)|252,310,119,22
+NAME|ControlType.Text|AI-инструменты|256,314,98,14
+NAME|ControlType.Text|4|358,316,5,11
+NAME|ControlType.ListItem|Браузеры (23)|252,332,119,22
+NAME|ControlType.Text|Браузеры|256,336,93,14
+NAME|ControlType.Text|23|353,338,10,11
+NAME|ControlType.ListItem|Работа (6)|252,354,119,22
+NAME|ControlType.Text|Работа|256,358,98,14
+NAME|ControlType.Text|6|358,360,5,11
+NAME|ControlType.ListItem|Стриминг (2)|252,376,119,22
+NAME|ControlType.Text|Стриминг|256,380,98,14
+NAME|ControlType.Text|2|358,382,5,11
+NAME|ControlType.ListItem|Игры (3)|252,398,119,22
+NAME|ControlType.Text|Игры|256,402,98,14
+NAME|ControlType.Text|3|358,404,5,11
+NAME|ControlType.ListItem|Виртуализация (9)|252,420,119,22
+NAME|ControlType.Text|Виртуализация|256,424,98,14
+NAME|ControlType.Text|9|358,426,5,11
+NAME|ControlType.ListItem|Приватность (5)|252,442,119,22
+NAME|ControlType.Text|Приватность|256,446,98,14
+NAME|ControlType.Text|5|358,448,5,11
+NAME|ControlType.ListItem|Свои|252,464,119,22
+NAME|ControlType.Text|Свои|256,468,111,14
+NAME|ControlType.Button|+ Новая категория|256,629,111,23
+NAME|ControlType.Text|Discord|386,276,372,16
+NAME|ControlType.CheckBox|Включить всю группу|386,302,158,32
+NAME|ControlType.Text|Включить всю группу|410,310,130,15
+NAME|ControlType.ListItem|VPNRouter.App.ViewModels.AppItemViewModel|382,342,380,46
+NAME|ControlType.CheckBox|Discord.exe|392,349,20,32
+NAME|ControlType.Text|Discord.exe|420,358,316,14
+NAME|ControlType.Button|+ Добавить|664,619,94,26
+NAME|ControlType.Text|Не подключено|279,669,338,14
+NAME|ControlType.Button|▶  Запустить VPN|632,664,128,24

@@ -1,0 +1,33 @@
+﻿WindowChrome
+Virtual Penguin Network
+Avalonia.Controls.StackPanel
+VPN
+Zapret
+Zapret
+TG
+TG
+⋯
+Подключено
+через авто-выбор
+Конфиг · Режим
+⚑
+Конфиг · Режим
+подписка · сплит
+через Germany VLESS ~main-brat@104.194.156.93
+▽
+Конфиг VPN
+Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive) или URL подписки (http/https).
+Что идёт через VPN
+Выбранные приложения
+По списку выбранных приложений
+Весь трафик
+Включая игры и банки
+Avalonia.Controls.Grid
+Автозапуск
+Настроить автозапуск VPN при старте Windows
+›
+Отключить
+Расширенные настройки
+Расширенные настройки
+Серверы · Подписки · Zapret · Telegram-прокси · Публичные
+›

@@ -1,0 +1,9 @@
+﻿2026-07-07T15:10:32.1272238+03:00 r17 UI verify start
+2026-07-07T15:10:33.2678493+03:00 connect.click=True name=Подключить
+2026-07-07T15:10:51.0777937+03:00 assert.connected=True
+2026-07-07T15:10:51.0777937+03:00 assert.trueSplitCount=1
+2026-07-07T15:10:51.0777937+03:00 assert.retryVisible=False
+2026-07-07T15:10:51.0777937+03:00 assert.stopVisible=True
+2026-07-07T15:10:51.0777937+03:00 assert.yellowActiveBannerHidden=True
+2026-07-07T15:10:51.1360657+03:00 assert.appCoreLx=True
+2026-07-07T15:10:51.1360657+03:00 assert.runtimeCoreLx=True

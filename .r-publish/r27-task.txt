@@ -1,0 +1,1 @@
+﻿TaskLastRun=2026-07-08T02:58:58.0000000+03:00 LastResult=0

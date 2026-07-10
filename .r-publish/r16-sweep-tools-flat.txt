@@ -1,0 +1,69 @@
+﻿ControlType.TitleBar	VPNRouter
+ControlType.MenuBar	System Menu Bar
+ControlType.MenuItem	System
+ControlType.Button	Minimize
+ControlType.Button	Maximize
+ControlType.Button	Close
+ControlType.Group	WindowChrome
+ControlType.Text	Virtual Penguin Network
+ControlType.Button	Avalonia.Controls.StackPanel
+ControlType.Text	VPN
+ControlType.Button	Zapret
+ControlType.Text	Zapret
+ControlType.Button	TG
+ControlType.Text	TG
+ControlType.Button	◂ Простой
+ControlType.Button	⋯
+ControlType.ListItem	Серверы
+ControlType.Text	Серверы
+ControlType.ListItem	Подписка
+ControlType.Text	Подписка
+ControlType.ListItem	Настройки
+ControlType.Text	Настройки
+ControlType.ListItem	Приложения
+ControlType.Text	Приложения
+ControlType.ListItem	Инструменты
+ControlType.Text	Инструменты
+ControlType.ListItem	Публичные
+ControlType.Text	Публичные
+ControlType.ListItem	Zapret
+ControlType.Text	Zapret
+ControlType.ListItem	Telegram-прокси
+ControlType.Text	Telegram-прокси
+ControlType.ListItem	Экстренный канал (wgturn)
+ControlType.Text	Экстренный канал (wgturn)
+ControlType.Text	Обход блокировок
+ControlType.Text	Откроем заблокированные сайты — Discord, YouTube и другие. Один клик — всё настроим автоматически.
+ControlType.Button	Включить обход блокировок
+ControlType.Text	Включить обход блокировок
+ControlType.Text	◌
+ControlType.Text	multisplit
+ControlType.Button	Avalonia.Controls.StackPanel
+ControlType.Text	▶
+ControlType.Text	Запустить
+ControlType.Text	✓
+ControlType.Text	работает
+ControlType.Text	⚠
+ControlType.Text	частично
+ControlType.Text	✗
+ControlType.Text	не работает
+ControlType.Text	◌
+ControlType.Text	не проверена
+ControlType.Text	⏱
+ControlType.Text	устарело
+ControlType.Button	Стратегия
+ControlType.Button	Hosts
+ControlType.Button	Фильтры
+ControlType.Button	Дополнительно
+ControlType.Text	Технология обхода DPI. Если одна не работает — попробуйте другую.
+ControlType.Text	◌
+ControlType.Text	multisplit
+ControlType.Text	Не установлен
+ControlType.Button	Скачать
+ControlType.Button	Обновить IPSet список
+ControlType.CheckBox	Авто-проверка обновлений Zapret
+ControlType.Text	Авто-проверка обновлений Zapret
+ControlType.Text	Остановлен
+ControlType.Text	Подключено [split] → Germany VLESS ~main-brat (104.194.156.93)
+ControlType.Text	True split: активен
+ControlType.Button	⬛  Остановить VPN

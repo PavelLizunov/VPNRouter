@@ -1,0 +1,20 @@
+VPNRouter bundles the Mullvad "win-split-tunnel" kernel driver
+(mullvad-split-tunnel.sys / .cat / .inf) to provide OS-level per-app split
+tunneling on Windows (exclude mode). The driver is used only when the user
+enables exclude-mode routing; its absence disables the feature (VPNRouter
+falls back to sing-box process_name routing).
+
+Source (driver):  https://github.com/mullvad/win-split-tunnel
+Signed binaries:  https://github.com/mullvad/mullvadvpn-app-binaries
+                  @ cc0affb2f06e870fb594e2dd6d61049611991586
+                  x86_64-pc-windows-msvc/split-tunnel/
+
+The driver is distributed by Mullvad VPN AB under a dual
+GPL-3.0-or-later / MPL-2.0 license. The .sys is Authenticode-signed by
+"CN=Mullvad VPN AB" and carries a Microsoft Windows Hardware Compatibility
+Publisher attestation countersignature (so it loads on production Win10/11
+x64 without test-signing).
+
+VPNRouter neither modifies nor relinks the driver: it is bundled verbatim
+(sha256-pinned) and driven over its public IOCTL interface. See the upstream
+repositories above for the full license texts and source code.

@@ -1,0 +1,4 @@
+﻿2026-07-07T14:31:18.3743270+03:00 category.select=True name=Game_Launchers (12)
+2026-07-07T14:31:20.0492750+03:00 assert.importSteam=True
+2026-07-07T14:31:20.0492750+03:00 assert.trueSplitActive=True
+2026-07-07T14:31:20.0492750+03:00 assert.retryVisible=False

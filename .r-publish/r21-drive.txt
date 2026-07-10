@@ -1,0 +1,22 @@
+﻿DriveStart=2026-07-07T20:45:34.0476940+03:00
+SHOT:C:\r4review\shots\r21-before-connect.png
+INVOKE:Подключить
+ConnectedAfter=11s
+SHOT:C:\r4review\shots\r21-after-connect.png
+Connected=True
+INVOKE:Расширенные настройки
+SELECT:Приложения
+SHOT:C:\r4review\shots\r21-apps.png
+NAME:Приложения
+NAME:Приложения
+NAME:Активен список «Через VPN»
+NAME:Активен список «Мимо VPN»
+NAME:Отмеченные приложения идут напрямую (мимо VPN), остальной трафик идёт через VPN.
+NAME:Через VPN
+NAME:Мимо VPN
+NAME:Подключено [split] → авто-выбор
+NAME:True split: активен
+NAME:⬛  Остановить VPN
+MATCH|ControlType.Text|Подключено [split] → авто-выбор|279,669,222,14
+MATCH|ControlType.Text|True split: активен|516,669,92,13
+MATCH|ControlType.Button|⬛  Остановить VPN|624,663,136,25

@@ -1,0 +1,29 @@
+VPNRouter diagnostics summary
+=============================
+Version:    2.46.0-r15
+Channel:    experimental (prerelease)
+OS:         Microsoft Windows NT 10.0.17763.0
+Platform:   Windows
+64-bit:     True
+CLR:        8.0.24
+Connected:  True
+Generated:  2026-07-07T13:44:54.3724011+03:00 (local) / 2026-07-07T10:44:54.3724011Z (UTC)
+
+──── Health check ────
+VPNRouter Health Check
+Version:   2.46.0-r15
+Time:      2026-07-07 13:44:54
+Data dir:  C:\ProgramData\VPNRouter
+OS:        Microsoft Windows NT 10.0.17763.0
+
+[OK]   config.yaml parses (schema v8)
+[OK]   subscription has 11 cached server(s)
+[OK]   user catalogue has 9 profiles
+[OK]   sing-box at C:\ProgramData\VPNRouter\bin\sing-box.exe (43 MB)
+[OK]   no running-state file (app is stopped)
+[OK]   1 sing-box process running (PID 2312)
+[OK]   Windows Service not installed (running in user mode)
+
+──────────────────────────────────────────────────────
+All checks passed.
+

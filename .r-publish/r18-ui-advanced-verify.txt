@@ -1,0 +1,14 @@
+﻿2026-07-07T16:06:43.9138545+03:00 r18 advanced UI verify start
+2026-07-07T16:06:43.9294772+03:00 config.ui_mode=advanced
+2026-07-07T16:06:56.2923050+03:00 connect.click=True name=Подключить
+2026-07-07T16:07:09.8913537+03:00 apps.click=False name=
+2026-07-07T16:07:12.1806804+03:00 assert.connected=True
+2026-07-07T16:07:12.1806804+03:00 assert.appsPage=False
+2026-07-07T16:07:12.1962882+03:00 assert.trueSplitActive=False
+2026-07-07T16:07:12.1962882+03:00 assert.retryVisible=False
+2026-07-07T16:07:12.2119264+03:00 assert.stopVisible=True
+2026-07-07T16:07:12.2279280+03:00 assert.appCoreLx=True
+2026-07-07T16:07:12.2279280+03:00 assert.runtimeCoreLx=True
+2026-07-07T16:07:12.2431789+03:00 VPNRouterServiceState=[SC] EnumQueryServicesStatus:OpenService FAILED 1060: |  | The specified service does not exist as an installed service. |  | 
+2026-07-07T16:07:12.2587981+03:00 SplitDriverState= | SERVICE_NAME: mullvad-split-tunnel  |         TYPE               : 1  KERNEL_DRIVER   |         STATE              : 4  RUNNING  |                                 (STOPPABLE, NOT_PAUSABLE, IGNORES_SHUTDOWN) |         WIN32_EXIT_CODE    : 0  (0x0) |         SERVICE_EXIT_CODE  : 0  (0x0) |         CHECKPOINT         : 0x0 |         WAIT_HINT          : 0x0 | 
+2026-07-07T16:07:12.2587981+03:00 FAIL: Apps page not visible
