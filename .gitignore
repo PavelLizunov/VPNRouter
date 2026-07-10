@@ -139,3 +139,6 @@ test-screenshots/
 *.jks
 vpnrouter-keystore-credentials.txt
 .vpnr-ks.*
+
+# build/diag/release-extract artifacts (never track - 2.2GB incident 2026-07-10)
+.r-publish/
