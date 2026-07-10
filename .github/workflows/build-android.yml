@@ -158,22 +158,22 @@ jobs:
           echo "Building version: $VERSION"
 
       # audit batch-8 (2026-07-10): AppVersion.cs MUST match the release version
-      # (rule #5 — the embedded version, incl. -rN, tracks the tag). Compare the
-      # CORE (major.minor.patch, suffix stripped) so a candidate tag v2.47.0-r7
-      # validates against AppVersion "2.47.0-r7". A mismatch means someone tagged
-      # without bumping AppVersion.cs → the APK versionName/versionCode would be
-      # wrong; hard-fail before we build+sign a mislabelled installer.
+      # (rule #5 — the embedded version, incl. -rN, tracks the tag). F3 (r8): the
+      # comparison is the FULL string, suffix included — a core-only compare let a
+      # stale -rN suffix through (AppVersion 2.47.0-r6 under tag v2.47.0-r7),
+      # which is exactly the v2.25.0-r1->r2 in-app update-loop class: the APK's
+      # versionName is forced from the tag, but the EMBEDDED AppVersion drives the
+      # in-app update check. Hard-fail before we build+sign a mislabelled installer.
       - name: Validate AppVersion.cs matches release version
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
           APPVER=$(grep -oE 'readonly string Version = "[^"]+"' VPNRouter.Core/AppVersion.cs | grep -oE '"[^"]+"' | tr -d '"')
-          core() { echo "${1%%-*}"; }
-          if [ "$(core "$APPVER")" != "$(core "$VERSION")" ]; then
-            echo "::error::AppVersion.cs ('$APPVER') core != release version ('$VERSION'). Bump AppVersion.cs to match the tag (rule #5)."
+          if [ "$APPVER" != "$VERSION" ]; then
+            echo "::error::AppVersion.cs ('$APPVER') != release version ('$VERSION') — full match incl. -rN required. Bump AppVersion.cs to match the tag (rule #5)."
             exit 1
           fi
-          echo "AppVersion.cs '$APPVER' matches release core '$(core "$VERSION")'."
+          echo "AppVersion.cs '$APPVER' matches release version exactly."
 
       # ── Decode signing keystore from secret ────────────────────────────
       # The keystore was generated locally one-time (see roadmap Phase A
