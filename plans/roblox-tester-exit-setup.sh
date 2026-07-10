@@ -10,6 +10,11 @@
 # Output: prints the client subscription URIs (HY2 + TUIC) and the AmneziaWG client config to
 #         paste into the AmneziaVPN app / your subscription server.
 set -euo pipefail
+# Harden (2026-07-10): this script MINTS secrets (WG keys, HY2/TUIC passwords).
+# umask 077 so every file it writes — configs AND the secrets dump — is owner-only
+# from creation, closing the world-readable-key window (default umask 022 left
+# /etc/hysteria/config.yaml et al. group/world-readable).
+umask 077
 
 HOST="${1:?usage: sudo bash roblox-tester-exit-setup.sh <public-ip-or-hostname>}"
 WAN_IF="$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'dev \K\S+' || echo eth0)"
@@ -19,9 +24,22 @@ rand() { head -c "${1:-16}" /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c
 echo "== base: forwarding + NAT + firewall (WAN=$WAN_IF) =="
 apt-get update -y
 apt-get install -y curl wget jq iproute2 iptables nftables ufw openssl
+
+# SSH-lockout guard: `ufw enable` defaults to DENY inbound, so a bare
+# `ufw allow 22/tcp` would cut the operator off the moment ufw comes up if sshd is
+# NOT on 22 (a common hardening). Detect the REAL sshd port(s) + the port THIS
+# session arrived on (SSH_CONNECTION) and allow them BEFORE enabling.
+SSH_PORTS="$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | sort -u)"
+[ -z "$SSH_PORTS" ] && SSH_PORTS="$(awk '/^[Pp]ort /{print $2}' /etc/ssh/sshd_config 2>/dev/null | sort -u)"
+[ -z "$SSH_PORTS" ] && SSH_PORTS=22
+CUR_SSH_PORT="$(awk '{print $4}' <<<"${SSH_CONNECTION:-}")"
+[ -n "$CUR_SSH_PORT" ] && SSH_PORTS="$SSH_PORTS $CUR_SSH_PORT"
+for p in $(printf '%s\n' $SSH_PORTS | sort -u); do
+  echo "  allowing SSH port $p/tcp (lockout guard)"; ufw allow "${p}/tcp" || true
+done
+
 sysctl -w net.ipv4.ip_forward=1
 grep -q '^net.ipv4.ip_forward=1' /etc/sysctl.conf || echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-ufw allow 22/tcp || true
 ufw allow ${AWG_PORT}/udp || true
 ufw allow ${HY2_PORT}/udp || true
 ufw allow ${TUIC_PORT}/udp || true
@@ -65,8 +83,21 @@ EOF
 
 # ── Hysteria2 (calibrated-ready) + Salamander obfs. Client declares up/down ~75% of measured. ──
 echo "== Hysteria2 =="
-bash <(curl -fsSL https://get.hy2.sh/) 2>/dev/null || echo "  install hysteria2 manually (app.hysteria.network)"
+# SUPPLY-CHAIN: `bash <(curl … | bash)` runs whatever the URL serves, unauthenticated
+# and unpinned. Download to a file first so the operator can inspect it (and pin its
+# sha256 here once a known-good release is chosen) instead of piping a live remote
+# script straight into a root shell.
+HY2_INSTALLER="$(mktemp /tmp/hy2-install.XXXXXX.sh)"
+if curl -fsSL https://get.hy2.sh/ -o "$HY2_INSTALLER"; then
+  echo "  hysteria2 installer sha256: $(sha256sum "$HY2_INSTALLER" | awk '{print $1}')"
+  echo "  (REVIEW $HY2_INSTALLER — pin this hash once you trust a release — then:)"
+  bash "$HY2_INSTALLER" 2>/dev/null || echo "  installer failed — install hysteria2 manually (app.hysteria.network)"
+else
+  echo "  could not fetch hysteria2 installer — install manually (app.hysteria.network)"
+fi
+rm -f "$HY2_INSTALLER"
 HY2_PW=$(rand 24); HY2_OBFS=$(rand 24)
+mkdir -p /etc/hysteria
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -keyout /etc/hysteria/key.pem \
   -out /etc/hysteria/cert.pem -days 3650 -nodes -subj "/CN=${HOST}" 2>/dev/null || true
 cat >/etc/hysteria/config.yaml <<EOF
@@ -75,6 +106,9 @@ tls: { cert: /etc/hysteria/cert.pem, key: /etc/hysteria/key.pem }
 obfs: { type: salamander, salamander: { password: ${HY2_OBFS} } }
 auth: { type: password, password: ${HY2_PW} }
 EOF
+# Belt-and-suspenders over umask 077: openssl/systemd may relax perms on their own
+# files, so pin the private key + secret-bearing config to owner-only.
+chmod 600 /etc/hysteria/key.pem /etc/hysteria/config.yaml 2>/dev/null || true
 systemctl enable --now hysteria-server 2>/dev/null || echo "  start hysteria-server manually"
 
 # ── TUIC (gentler QUIC fallback) ──
@@ -87,10 +121,17 @@ cat >/etc/tuic-config.json <<EOF
   "certificate": "/etc/hysteria/cert.pem", "private_key": "/etc/hysteria/key.pem",
   "congestion_control": "bbr", "alpn": ["h3"] }
 EOF
+chmod 600 /etc/tuic-config.json 2>/dev/null || true
 echo "  (install tuic-server binary + a systemd unit pointing at /etc/tuic-config.json)"
 
 # ── Output: client subscription entries ──
-cat <<OUT
+# The URIs below embed live secrets. Terminal stdout is frequently logged
+# (tmux/script/CI capture), so ALSO write them to a root-only file the operator
+# can retrieve deliberately, and warn that stdout is not a safe place for keys.
+SECRETS_OUT="/root/roblox-tester-secrets.txt"
+: >"$SECRETS_OUT"; chmod 600 "$SECRETS_OUT" 2>/dev/null || true
+echo "  secrets also written to ${SECRETS_OUT} (chmod 600) — prefer that over scrollback"
+{ cat <<OUT
 
 ================  PASTE THESE INTO YOUR SUBSCRIPTION / AmneziaVPN  ================
 Hysteria2 (set up/down to ~75% of the tester's MEASURED speed to this box):
@@ -122,3 +163,4 @@ AmneziaWG (import into the AmneziaVPN app on the tester's PC — Jc..H4 MUST mat
 NOTE: self-signed TLS -> the HY2/TUIC URIs carry insecure=1. Use a real (ACME) cert if you
 prefer strict TLS. Verify each service is listening:  ss -ulnp | grep -E '${AWG_PORT}|${HY2_PORT}|${TUIC_PORT}'
 OUT
+} | tee "$SECRETS_OUT"
