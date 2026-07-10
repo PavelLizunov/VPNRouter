@@ -43,16 +43,29 @@ fi
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 mkdir -p "$(dirname "$OUT")"
 
+# P2 supply-chain (2026-07-10): fail CLOSED if a pinned checkout drifts from the
+# expected commit (a moved tag/branch would otherwise bundle an unpinned tree).
+assert_git_head() {  # <repo-dir> <expected-sha> <label>
+  head="$(git -C "$1" rev-parse HEAD)"
+  if [ "$head" != "$2" ]; then
+    echo "ERROR: $3 HEAD drift: expected $2, got $head — refusing to build an unpinned core." >&2
+    exit 1
+  fi
+  echo "       $3 HEAD pinned OK ($head)"
+}
+
 SRC="$WORK/sing-box-lx"
 echo "[1/4] Clone sing-box-lx @ $LX_COMMIT"
 git clone --quiet "$LX_REPO" "$SRC"
 git -C "$SRC" checkout --quiet "$LX_COMMIT"
+assert_git_head "$SRC" "$LX_COMMIT" "sing-box-lx"
 
 WG="$SRC/submodules/wireguard-go"
 echo "[2/4] Clone wireguard-go-awg2-lx @ $WG_COMMIT -> submodules/wireguard-go"
 rm -rf "$WG"
 git clone --quiet -b "$WG_BRANCH" "$WG_REPO" "$WG"
 git -C "$WG" checkout --quiet "$WG_COMMIT"
+assert_git_head "$WG" "$WG_COMMIT" "wireguard-go-awg2-lx"
 
 echo "[2.5/4] Patch conn/bind_std.go (H4 gate + OOB nil-guard + ENOBUFS retry)"
 python3 - "$WG/conn/bind_std.go" <<'PYEOF'

@@ -45,12 +45,27 @@ function Invoke-Git { param([string[]]$GitArgs)
     if ($LASTEXITCODE -ne 0) { throw "git $($GitArgs -join ' ') failed ($LASTEXITCODE)" }
 }
 
+# P2 supply-chain (2026-07-10): assert a checked-out repo's HEAD == the pinned
+# commit. `git checkout <sha>` normally lands exactly there, but if a pin were
+# ever a branch/tag name (or a rev that later moved) the build would silently
+# produce a binary from an unpinned tree. Fail CLOSED so a drifted checkout can
+# never be bundled + signed.
+function Assert-GitHead { param([string]$RepoDir, [string]$Expected, [string]$Label)
+    $head = (& git -C $RepoDir rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "git -C $RepoDir rev-parse HEAD failed ($LASTEXITCODE)" }
+    if ($head -ne $Expected) {
+        throw "$Label HEAD drift: expected $Expected, got $head. The pinned commit did not check out cleanly (moved tag/branch?) — refusing to build an unpinned core."
+    }
+    Write-Host "       $Label HEAD pinned OK ($head)" -ForegroundColor DarkGray
+}
+
 $src = Join-Path $WorkDir 'sing-box-lx'
 Write-Host "[1/4] Clone sing-box-lx @ $LX_COMMIT" -ForegroundColor Yellow
 if (Test-Path $src) { Remove-Item -Recurse -Force $src }
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 Invoke-Git @('clone', '--quiet', $LX_REPO, $src)
 Invoke-Git @('-C', $src, 'checkout', '--quiet', $LX_COMMIT)
+Assert-GitHead -RepoDir $src -Expected $LX_COMMIT -Label 'sing-box-lx'
 
 Write-Host "[2/4] Clone wireguard-go-awg2-lx @ $WG_COMMIT (submodule path)" -ForegroundColor Yellow
 # The fork's `git submodule update` trips over its apple/android client submodules, so
@@ -59,6 +74,7 @@ $wg = Join-Path $src 'submodules\wireguard-go'
 if (Test-Path $wg) { Remove-Item -Recurse -Force $wg }
 Invoke-Git @('clone', '--quiet', '-b', $WG_BRANCH, $WG_REPO, $wg)
 Invoke-Git @('-C', $wg, 'checkout', '--quiet', $WG_COMMIT)
+Assert-GitHead -RepoDir $wg -Expected $WG_COMMIT -Label 'wireguard-go-awg2-lx'
 
 # ── Patch: Go 1.26 Windows WSASendMsg regression (golang/go#77875) ──
 # On Windows the wireguard-go StdNetBind send loop calls net.UDPConn.WriteMsgUDP
