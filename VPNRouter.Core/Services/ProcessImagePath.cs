@@ -178,15 +178,37 @@ internal static class ProcessImagePath
     /// won't resolve pre-launch — that residual (ETW-driven late re-engage) is a documented follow-up
     /// (arch plan §5.4). The post-capture <c>process_name → direct</c> rule covers them meanwhile.</para>
     /// </summary>
-    public static string? ResolveNameToPath(string? processName)
+    public static string? ResolveNameToPath(string? processName, IProcessRunner? runner = null)
     {
         if (string.IsNullOrWhiteSpace(processName)) return null;
         if (!OperatingSystem.IsWindows()) return null;
+        var name = processName.Trim();
+
+        // #7 (cleanup 2026-07-10): one where.exe→first-existing-path resolver shared
+        // by BOTH callers. FirewallManager passes its injected IProcessRunner (so its
+        // rule-creation tests can mock where.exe output); the true-split path passes
+        // null and uses a raw Process (no runner in that static context). Same parse
+        // (first non-empty line that exists on disk) either way — the duplicated
+        // block that used to live in FirewallManager.ResolveProcessPath is gone.
+        if (runner != null)
+        {
+            try
+            {
+                var r = runner.RunAsync(new ProcessRequest(
+                    ExecutablePath: "where.exe",
+                    Arguments: new[] { name },
+                    Timeout: TimeSpan.FromMilliseconds(WhereExeTimeoutMs)))
+                    .GetAwaiter().GetResult();
+                if (r.TimedOut || r.ExitCode != 0) return null;
+                return FirstExistingPath(r.Stdout);
+            }
+            catch { return null; }
+        }
 
         Process? proc = null;
         try
         {
-            var psi = new ProcessStartInfo("where.exe", processName.Trim())
+            var psi = new ProcessStartInfo("where.exe", name)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -196,15 +218,11 @@ internal static class ProcessImagePath
             proc = Process.Start(psi);
             if (proc is null) return null;
 
-            // where.exe emits one path per line; take the first (mirrors FirewallManager.ResolveProcessPath).
-            string? firstLine = proc.StandardOutput.ReadLine();
-            if (!proc.WaitForExit(3000)) { try { proc.Kill(true); } catch { } return null; }
+            var stdout = proc.StandardOutput.ReadToEnd();
+            if (!proc.WaitForExit(WhereExeTimeoutMs)) { try { proc.Kill(true); } catch { } return null; }
             proc.StandardError.ReadToEnd();   // drain so a wedged child can't block on a full stderr pipe
 
-            firstLine = firstLine?.Trim();
-            if (proc.ExitCode == 0 && !string.IsNullOrEmpty(firstLine) && File.Exists(firstLine))
-                return firstLine;
-            return null;
+            return proc.ExitCode == 0 ? FirstExistingPath(stdout) : null;
         }
         catch
         {
@@ -216,5 +234,20 @@ internal static class ProcessImagePath
             try { proc?.Dispose(); }
             catch { /* defensive */ }
         }
+    }
+
+    private const int WhereExeTimeoutMs = 3000;
+
+    /// <summary>where.exe emits one path per line — return the first non-empty line
+    /// that exists on disk, or null.</summary>
+    private static string? FirstExistingPath(string? whereStdout)
+    {
+        if (string.IsNullOrEmpty(whereStdout)) return null;
+        foreach (var line in whereStdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var p = line.Trim();
+            if (!string.IsNullOrEmpty(p) && File.Exists(p)) return p;
+        }
+        return null;
     }
 }

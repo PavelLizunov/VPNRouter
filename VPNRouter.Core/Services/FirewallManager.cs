@@ -27,20 +27,14 @@ public class FirewallManager : IFirewallManager
 {
     private const string RulePrefix = "VPNRouter_Block_";
 
-    // v2.37.0-r7 — extracted timeout magic numbers per Phase 1 quality pass.
-    // Pre-r7 these were inline `TimeSpan.FromMilliseconds(3000)` / `(5000)`
-    // calls in WhereProcess / RunNetsh paths. Named constants make the
-    // policy intent (how long do we wait before assuming hung) reviewable
-    // and tweakable in one place.
+    // v2.37.0-r7 — extracted timeout magic number per Phase 1 quality pass.
+    // Named constant makes the policy intent (how long before assuming hung)
+    // reviewable in one place. (#7 cleanup 2026-07-10: the where.exe timeout
+    // moved to ProcessImagePath alongside the shared resolver.)
     //
-    // Rationale:
-    //   - `where.exe` resolves PATH lookups locally; 3 s is generous for
-    //     even cold-cache PATH traversal on disk-loaded systems.
-    //   - `netsh.exe` interacts with the Windows Filtering Platform and
-    //     can take longer on first invocation after boot; 5 s covers the
-    //     advfirewall service cold-start without making rule edits feel
-    //     unresponsive.
-    private const int WhereExeTimeoutMs = 3000;
+    // Rationale: `netsh.exe` interacts with the Windows Filtering Platform and
+    // can take longer on first invocation after boot; 5 s covers the
+    // advfirewall service cold-start without making rule edits feel unresponsive.
     private const int NetshTimeoutMs = 5000;
 
     // ─── Wave 39 (2026-05-19): DNS leak lockdown rule names ──────────────────
@@ -403,28 +397,15 @@ public class FirewallManager : IFirewallManager
                 return running;
         }
 
-        // 2. Try where.exe — finds executables on PATH
-        try
+        // 2. Try where.exe — finds executables on PATH. #7 (cleanup 2026-07-10):
+        // shared with the true-split path resolver via ProcessImagePath, passing
+        // OUR injected runner so the rule-creation tests keep mocking where.exe.
+        if (OperatingSystem.IsWindows())
         {
-            // Phase 3+ (2026-05-21): routed through IProcessRunner. Where.exe
-            // emits one path per line; legacy code read only the first line
-            // (.ReadLine()) — replicate via Split + First on the captured
-            // stdout to keep the wire-equivalent behaviour.
-            var result = _runner.RunAsync(new ProcessRequest(
-                ExecutablePath: "where.exe",
-                Arguments: new[] { processName },
-                Timeout: TimeSpan.FromMilliseconds(WhereExeTimeoutMs))).GetAwaiter().GetResult();
-
-            if (!result.TimedOut && result.ExitCode == 0 && !string.IsNullOrEmpty(result.Stdout))
-            {
-                var firstLine = result.Stdout
-                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                    .FirstOrDefault();
-                if (!string.IsNullOrEmpty(firstLine) && File.Exists(firstLine))
-                    return firstLine;
-            }
+            var onPath = ProcessImagePath.ResolveNameToPath(processName, _runner);
+            if (!string.IsNullOrEmpty(onPath))
+                return onPath;
         }
-        catch { /* where.exe not available or failed */ }
 
         _logger.Debug("[Firewall] Could not resolve path for {Process}", processName);
         return null;
