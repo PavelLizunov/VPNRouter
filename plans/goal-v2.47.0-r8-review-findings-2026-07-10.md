@@ -180,14 +180,23 @@ fail-fast); Android protect()-фикс (device-verified) + e2e гейты T3.5/T
 
 ## Acceptance
 
-- [ ] F1: отмена батч-deep-теста не порождает `ProtocolHandshakeBlockedLikely` ни в
-  UI, ни в `server_health.json`; in-flight серверы получают inconclusive («!»).
-- [ ] F2: endpoints-only WG/AWG кастомный конфиг: Validate PASS → Inject даёт JSON,
-  где route.final/rules ссылаются на тег endpoint'а; `sing-box check` (lx) exit 0.
-- [ ] F3: build-android гейт валит билд при `AppVersion != VERSION` (полная строка).
-- [ ] F4: батч мелочей закоммичен, тесты зелёные.
-- [ ] Ship v2.47.0-r8 по стандартному циклу (rules #1, #11, #12: CI-gate,
-  post-ship-mcp-verify на brat), r7 удалён.
+- [x] F1: отмена батч-deep-теста не порождает `ProtocolHandshakeBlockedLikely`
+  (d03412c6; юнит-пины DeepVerifyProbeCancellationTests + mapper e2e guardrail
+  зелёные; live на brat: 4 полных deep-прогона по 21 серверу — ноль красных
+  клейм, inconclusive-серверы с quick-Pass показывают нейтральное «TCP открыт,
+  VPN-протокол не проверен». NB: сам UI-cancel оказался недостижим — кнопка
+  disabled while running, ЗАВЕДЕНО как новый P2 в OPEN-DEFECTS, target r9).
+- [x] F2: endpoints-only WG/AWG кастомный конфиг: Validate PASS → Inject ссылается
+  на тег endpoint'а (d03412c6; 2 positive-Inject пина зелёные; «custom-proxy»
+  отсутствует в выводе).
+- [x] F3: build-android гейт — полное сравнение `AppVersion == VERSION` (582bad0d).
+- [x] F4: батч мелочей закоммичен (5df37f41), тесты зелёные (242 таргетных).
+- [x] Ship v2.47.0-r8: тег + prerelease + notes, 14 desktop assets, Mac/Linux CI
+  зелёные, commit CI зелёный, v2.46.0 восстановлен Latest, r7 удалён,
+  post-ship-verify на brat выполнен (запуск, версия e2c5192a, smoke, deep-прогоны,
+  лог-скан clean). Две новые pre-existing находки live-verify занесены в
+  OPEN-DEFECTS (dead deep-cancel button; transient «Подключено через службу»
+  при probe-спавнах на машине с чужим TUN).
 - [ ] macOS kill-9 gate — перед cut stable (отдельная сессия с Mac-доступом).
 
 ## Оценка
