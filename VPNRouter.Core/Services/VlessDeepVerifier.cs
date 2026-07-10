@@ -258,6 +258,10 @@ public sealed class VlessDeepVerifier
             SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
         }
 
+        // r9 P2: flag the probe window so RuntimeStatusDetector doesn't read our
+        // own spawned sing-box as a live tunnel (false "Connected via service").
+        using var probeScope = DeepVerifyProbe.BeginProbeScope();
+
         var socksPort = NetPortUtil.FindFreePort();
         var clashPort = NetPortUtil.FindFreePort();
         string? tmpConfigPath = null;

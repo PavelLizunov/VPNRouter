@@ -28,6 +28,39 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 internal static class DeepVerifyProbe
 {
+    // ── r9 P2: probe-in-flight signal for RuntimeStatusDetector ─────────────
+    // Deep verify spawns REAL sing-box processes from our own bin dir, so the
+    // ownership-filtered process detector counts them as "VPN running" and the
+    // 2s status poll flipped the UI to a false "Connected via service" for the
+    // duration of a batch (live-caught on brat 2026-07-10). While any probe is
+    // in flight, the detector demands the second signal (the TUN ownership
+    // semaphore a REAL tunnel holds) before reporting running.
+
+    private static int _probesInFlight;
+
+    /// <summary>True while any deep-verify sing-box probe spawn is alive in THIS process.</summary>
+    public static bool AnyProbeInFlight => Volatile.Read(ref _probesInFlight) > 0;
+
+    /// <summary>Raw counter for tests (delta-based assertions stay parallel-safe).</summary>
+    internal static int ProbesInFlightForTests => Volatile.Read(ref _probesInFlight);
+
+    /// <summary>Marks a probe as in flight until disposed. Dispose is idempotent.</summary>
+    public static IDisposable BeginProbeScope()
+    {
+        Interlocked.Increment(ref _probesInFlight);
+        return new ProbeScope();
+    }
+
+    private sealed class ProbeScope : IDisposable
+    {
+        private int _done;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) == 0)
+                Interlocked.Decrement(ref _probesInFlight);
+        }
+    }
+
     /// <summary>Poll a loopback TCP port until it accepts a connection or the wait elapses.</summary>
     public static async Task<bool> WaitForPortBoundAsync(int port, TimeSpan maxWait, CancellationToken ct)
     {

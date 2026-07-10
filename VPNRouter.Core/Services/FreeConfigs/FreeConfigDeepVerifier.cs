@@ -97,6 +97,10 @@ public sealed class FreeConfigDeepVerifier
     {
         cfg.LastTestedAt = DateTime.UtcNow;
 
+        // r9 P2: flag the probe window so RuntimeStatusDetector doesn't read our
+        // own spawned sing-box as a live tunnel (false "Connected via service").
+        using var probeScope = DeepVerifyProbe.BeginProbeScope();
+
         var socksPort = NetPortUtil.FindFreePort();
         var clashPort = NetPortUtil.FindFreePort();
         string? tmpConfigPath = null;

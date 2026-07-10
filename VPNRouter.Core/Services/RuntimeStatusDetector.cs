@@ -30,9 +30,18 @@ public static class RuntimeStatusDetector
 {
     /// <summary>True if a VPNRouter-managed sing-box is running. S1 (v2.45.0):
     /// gated on ownership (image path under the VPNRouter bin dir) so a
-    /// third-party / dev sing-box no longer shows the UI as "connected".</summary>
+    /// third-party / dev sing-box no longer shows the UI as "connected".
+    /// r9 P2 (brat 2026-07-10): deep-verify probes spawn sing-box from that SAME
+    /// bin dir, so while a probe is in flight in THIS process the ownership
+    /// signal is ambiguous — require the second signal (the TUN ownership
+    /// semaphore a real tunnel holds) before reporting running. Outside a probe
+    /// window the single ownership signal keeps its existing semantics.</summary>
     public static bool IsVpnRunning()
-        => ProcessOwnership.AnySingBoxOwned();
+    {
+        if (!ProcessOwnership.AnySingBoxOwned()) return false;
+        if (DeepVerifyProbe.AnyProbeInFlight) return TunOwnershipLock.IsOwnedByAnyone();
+        return true;
+    }
 
     /// <summary>True if any winws.exe process is running (Zapret DPI bypass).</summary>
     public static bool IsZapretRunning()

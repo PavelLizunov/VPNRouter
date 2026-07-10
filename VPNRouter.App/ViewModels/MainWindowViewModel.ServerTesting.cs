@@ -122,7 +122,15 @@ public partial class MainWindowViewModel
 
     // ── Batch test: all manual VLESS servers ─────────────────────────────
 
-    [RelayCommand]
+    // r9 P2 (brat 2026-07-10): AllowConcurrentExecutions on all four batch-test
+    // commands. A bare [RelayCommand] on an async method generates an
+    // AsyncRelayCommand that DISABLES the bound button while the command runs —
+    // so the "press again to cancel" re-entry branch below was UNREACHABLE from
+    // the UI (live-proven: four cancel attempts, the 21-server batch completed
+    // every time). Re-entry is safe: everything up to the IsTesting*/IsDeep*
+    // flag assignment is synchronous on the dispatcher, so a second click can
+    // only ever take the cancel branch.
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task TestAllServersAsync()
     {
         if (IsTestingServers)
@@ -141,7 +149,7 @@ public partial class MainWindowViewModel
 
     // ── Batch test: all aggregated subscription servers ──────────────────
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]   // r9 P2: keep the cancel re-entry reachable
     private async Task TestAllSubscriptionServersAsync()
     {
         if (IsTestingServers)
@@ -315,7 +323,7 @@ public partial class MainWindowViewModel
 
     // ── Deep verify (sing-box spawn + HTTP probe + bandwidth) ─────────────
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]   // r9 P2: keep the cancel re-entry reachable
     private async Task DeepVerifyAllServersAsync()
     {
         if (IsDeepTestingServers)
@@ -331,7 +339,7 @@ public partial class MainWindowViewModel
             setProgress: text => ServerDeepProgressText = text);
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]   // r9 P2: keep the cancel re-entry reachable
     private async Task DeepVerifyAllSubscriptionServersAsync()
     {
         if (IsDeepTestingServers)
