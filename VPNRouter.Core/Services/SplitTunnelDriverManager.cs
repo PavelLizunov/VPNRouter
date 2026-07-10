@@ -526,9 +526,19 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return true;
         }
         _log.Warning("[SplitTunnel] StartService failed (err={Err}) — post-capture stands", err);
-        LastFailureReason = err == Native.ERROR_SERVICE_MARKED_FOR_DELETE
-            ? "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split."
-            : $"True-split driver service could not start (StartService err={err}).";
+        // P2 (2026-07-10): name the two SCM errors that otherwise read as a bare
+        // "StartService err=N" — the project has a history of a silent-generic
+        // failure hiding an actionable cause (v2.31.7). 1058/1072 each have a
+        // concrete user remedy.
+        LastFailureReason = err switch
+        {
+            Native.ERROR_SERVICE_MARKED_FOR_DELETE =>
+                "True-split driver service is being deleted by Windows; reboot Windows, then retry True Split.",
+            Native.ERROR_SERVICE_DISABLED =>
+                "True-split driver service is disabled; re-run the VPNRouter installer, or in an admin console " +
+                "`sc config mullvad-split-tunnel start= demand`, then retry True Split.",
+            _ => $"True-split driver service could not start (StartService err={err}).",
+        };
         return false;
     }
 
