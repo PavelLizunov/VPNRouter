@@ -34,16 +34,24 @@ feature (v2.46.0) stable first, then do this as its own focused pass (each shrin
 
 - [ ] **#1 localization re-export wrappers** — App/Android `Strings` mostly proxy
   `Core.Localization.Strings` (907/1392 lines); alias to Core, keep only platform-bootstrap strings.
-  `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Android/Localization.cs` — dedicated pass (risk: UI text)
+  `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Android/Localization.cs` — **DEDICATED PASS**:
+  907-line surgical change to the UI-text layer bound EVERYWHERE (every XAML `{Binding L_X}` + code
+  `Strings.X`); one missed alias = wrong/blank UI text; characterization + visual-diff catch structure
+  but not per-string. Line-reduction only, no functional benefit → high blast radius on user-facing text.
 - [ ] **#4 duplicate deep-verify plumbing** — `VlessDeepVerifier` SELF-ADMITS it mirrors
-  `FreeConfigDeepVerifier` BY DESIGN (different status enums + result-mutation patterns);
-  outbound builders mirror `ConfigGenerator`. One probe runner + shared outbound builder.
-  `VPNRouter.Core/Services/VlessDeepVerifier.cs` — dedicated pass (risk: verify verdicts) [#8 folds in here]
-- [ ] **#7 one profile-source builder** — `ProfileSourceFactory.Create`, `StartCommand.BuildDryRunSources`,
-  and the Core path repeat one fallback order. `VPNRouter.CLI/Helpers/ProfileSourceFactory.cs`
-  (relatedly: `ProcessImagePath.ResolveNameToPath` uses a STATIC raw `where.exe` Process while
-  `FirewallManager.ResolveProcessPath` uses instance `IProcessRunner` — genuinely different seams;
-  merging touches both the firewall + true-split path-resolution) — dedicated pass (risk: both critical)
+  `FreeConfigDeepVerifier` BY DESIGN (its own class doc: "Duplicates ... by design — FreeConfigs has
+  its own status enum and result mutation pattern that doesn't fit ServerViewModel"). Consolidating
+  fights a DELIBERATE, author-documented design choice, on the security-verdict path, for line-reduction.
+  `VPNRouter.Core/Services/VlessDeepVerifier.cs` — **DEDICATED PASS** (respect the documented choice
+  absent a bug) [#8 folds in here]
+- [x] **#7 profile-source builder — PARTIALLY DONE v2.47.0-r6 (2026-07-10)**: the profile-source half
+  IS done — `StartCommand.BuildDryRunSources` (a near-dup that silently dropped the %ProgramData%
+  source) deleted; dry-run now calls `ProfileSourceFactory.Create(settings)`, so a dry-run previews
+  the SAME source set a real start uses (behaviour fix + ~26 LOC gone, 0 tests pinned it, ProfileManager
+  tests green). The where.exe half LEFT OPEN: `ProcessImagePath.ResolveNameToPath` (STATIC raw Process,
+  used by true-split) vs `FirewallManager.ResolveProcessPath` (instance `IProcessRunner`, injectable for
+  tests) — merging touches the LIVE-PROVEN session-0 kill-switch fail-OPEN fix + true-split path
+  resolution (both security-critical, different testability) for ~10 LOC. Not worth the regression risk.
 
 ## Push-back — do NOT bulk-delete
 - **#2 "phase/wave/version archaeology" (~4027 rg matches)** — most are **load-bearing "why"

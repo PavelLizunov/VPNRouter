@@ -217,8 +217,12 @@ public class StartCommand : AsyncCommand<StartSettings>
     {
         try
         {
-            // Load profiles & resolve
-            var sources = BuildDryRunSources(settings);
+            // Load profiles & resolve. #7 (cleanup 2026-07-10): dry-run uses the
+            // SAME source list as a real start (ProfileSourceFactory.Create) — the
+            // old private BuildDryRunSources was a near-duplicate that silently
+            // dropped the %ProgramData%\VPNRouter\profiles source, so a dry-run
+            // could preview a different profile set than the actual start used.
+            var sources = ProfileSourceFactory.Create(settings);
             var manager = new ProfileManager(sources, Serilog.Log.Logger);
             var collection = await manager.LoadAsync();
 
@@ -314,31 +318,4 @@ public class StartCommand : AsyncCommand<StartSettings>
         }
     }
 
-    private static List<Core.Interfaces.IProfileSource> BuildDryRunSources(AppSettings settings)
-    {
-        var sources = new List<Core.Interfaces.IProfileSource>();
-        int priority = 10;
-
-        foreach (var src in settings.ProfileSources)
-        {
-            switch (src.Type?.ToLowerInvariant())
-            {
-                case "github" when !string.IsNullOrEmpty(src.Url):
-                    sources.Add(new GitHubProfileSource(src.Url, priority));
-                    break;
-                case "local" when !string.IsNullOrEmpty(src.Path):
-                    sources.Add(new LocalProfileSource(src.Path, priority + 10));
-                    break;
-            }
-            priority += 10;
-        }
-
-        var appDir = AppContext.BaseDirectory;
-        var defaultJson = Path.Combine(appDir, "profiles", "default.json");
-        if (File.Exists(defaultJson))
-            sources.Add(new LocalProfileSource(defaultJson, 80));
-
-        sources.Add(new BuiltInProfileSource());
-        return sources;
-    }
 }
