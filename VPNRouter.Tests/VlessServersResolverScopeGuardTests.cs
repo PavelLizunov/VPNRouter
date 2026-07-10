@@ -441,4 +441,55 @@ public class VlessServersResolverScopeGuardTests
         Assert.DoesNotContain(resolved, s => s.Server == StasPlaceholderServer);
         Assert.NotEqual("khunrath_ln", settings.Vless.ActiveServer);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // P1.8 — subscribe-mode active-selector drift (audit handoff)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static AppSettings SubscribeWith(string activeSubName, params (string Name, string Ip)[] servers)
+        => new()
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                ActiveSubscriptionServer = activeSubName,
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new()
+                    {
+                        Name = "sub",
+                        Url = "https://example.com/sub",
+                        Enabled = true,
+                        Servers = servers.Select(s => MakeServer(s.Name, s.Ip, 443)).ToList(),
+                    },
+                },
+            },
+            Vless = new VlessConfig { ActiveServer = activeSubName, Servers = new List<VlessServerEntry>() },
+        };
+
+    [Fact]
+    public void SubscribeMode_StaleActiveSubscriptionServer_CorrectedInBothSelectors()
+    {
+        // ActiveSubscriptionServer points at a server the refresh dropped; the resolver
+        // falls Vless.ActiveServer back to the first scoped server — and P1.8 must move
+        // App.ActiveSubscriptionServer (the Subscribe-UI authoritative name) WITH it.
+        var settings = SubscribeWith("old-server", ("new-server", "1.2.3.4"));
+
+        VlessServersResolver.Resolve(settings);
+
+        Assert.Equal("new-server", settings.Vless.ActiveServer);
+        Assert.Equal("new-server", settings.App.ActiveSubscriptionServer);   // no drift
+    }
+
+    [Fact]
+    public void SubscribeMode_InScopeActiveSubscriptionServer_Unchanged()
+    {
+        // Already-valid selector must not be rewritten to scoped[0].
+        var settings = SubscribeWith("new-server", ("new-server", "1.2.3.4"), ("other", "5.6.7.8"));
+
+        VlessServersResolver.Resolve(settings);
+
+        Assert.Equal("new-server", settings.Vless.ActiveServer);
+        Assert.Equal("new-server", settings.App.ActiveSubscriptionServer);
+    }
 }

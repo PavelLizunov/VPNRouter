@@ -178,6 +178,7 @@ public sealed class AutoFailoverEngine
         // to it within this session. We add the OLD one, not the NEW —
         // because the NEW one is what we're about to test.
         var oldActive = _settings.Vless.ActiveServer ?? "";
+        var oldActiveSub = _settings.App.ActiveSubscriptionServer;
         if (!string.IsNullOrWhiteSpace(oldActive))
             _tried.Add(oldActive);
 
@@ -189,19 +190,48 @@ public sealed class AutoFailoverEngine
             // so ActiveServer matching still works downstream.
             newName = $"{candidate.Server}:{candidate.Port}";
         }
+        // 5. Mutate ONLY in memory. The restart delegate consumes the mutated
+        // _settings to bring the replacement up, so the swap must be visible to it —
+        // but disk persistence is delayed to step 7 (see P1.5 below).
         _settings.Vless.ActiveServer = newName;
         _settings.App.ActiveSubscriptionServer = newName;
 
-        // 6. Persist the active-server selection. v2.44.3 (P1 subscription-leak):
-        // persist via a RELOAD-FRESH of the on-disk settings + only the two
-        // selector fields — NOT _store.Save(_settings). In subscribe mode the
-        // resolver populated the in-memory _settings.Vless.Servers with a transient
-        // aggregate; saving _settings directly serializes that aggregate into
+        // 6. Bring the replacement up BEFORE persisting (P1.5 user-intent guard,
+        // audit handoff). A user Disconnect during the failover window cancels
+        // _sessionCts, so ExecuteProbeFailoverRestartAsync returns false — we must
+        // NOT persist (or announce) a swap the user never saw. A missing delegate
+        // (tests / pre-start placeholder recovery) is treated as committed so the
+        // caller-driven restart path keeps its existing behaviour.
+        bool committed = true;
+        if (_restart != null)
+        {
+            try { committed = await _restart(ct); }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { _logger?.Warning(ex, "[AutoFailover] Restart delegate threw"); committed = false; }
+            _logger?.Information("[AutoFailover] Restart delegate returned {Ok}", committed);
+        }
+
+        if (!committed)
+        {
+            // Replacement never came up (user Disconnect cancelled the session, or the
+            // restart failed). Roll the in-memory swap back to what the user last chose,
+            // persist NOTHING, and stay quiet — no failover message after a Disconnect.
+            _settings.Vless.ActiveServer = oldActive;
+            _settings.App.ActiveSubscriptionServer = oldActiveSub;
+            _logger?.Information(
+                "[AutoFailover] Replacement start not confirmed (cancelled/failed) — reverted ActiveServer to '{Old}', selection NOT persisted",
+                oldActive);
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
+        }
+
+        // 7. Committed — NOW persist the active-server selection. v2.44.3 (P1
+        // subscription-leak): persist via a RELOAD-FRESH of the on-disk settings +
+        // only the two selector fields — NOT _store.Save(_settings). In subscribe
+        // mode the resolver populated in-memory _settings.Vless.Servers with a
+        // transient aggregate; saving _settings directly serializes it into
         // vless.servers YAML (the v2.28.2 / v2.30.0-r8 silent-leak class). Reloading
-        // fresh keeps the on-disk vless.servers as the user set it (empty in
-        // subscribe mode) while the in-memory _settings keeps the aggregate for
-        // THIS session's restart. Best-effort: on throw we still proceed with the
-        // in-memory swap so the user gets the failover for this session.
+        // fresh keeps on-disk vless.servers as the user set it while the in-memory
+        // _settings keeps the aggregate for THIS session. Best-effort on throw.
         try
         {
             var onDisk = _store.Load();
@@ -216,24 +246,6 @@ public sealed class AutoFailoverEngine
         {
             _logger?.Warning(ex,
                 "[AutoFailover] Failed to persist ActiveServer migration — proceeding in-memory only");
-        }
-
-        // 7. Optional restart via the caller-supplied delegate. If no
-        // delegate is wired (e.g. tests), we just return Switched=true and
-        // let the caller drive the restart.
-        if (_restart != null)
-        {
-            try
-            {
-                var ok = await _restart(ct);
-                _logger?.Information(
-                    "[AutoFailover] Restart delegate returned {Ok}", ok);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                _logger?.Warning(ex, "[AutoFailover] Restart delegate threw");
-            }
         }
 
         return new FailoverOutcome(

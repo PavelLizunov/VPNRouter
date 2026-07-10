@@ -145,6 +145,13 @@ public static class VlessServersResolver
                         oldActive,
                         newActive);
                     settings.Vless.ActiveServer = newActive;
+                    // P1.8 selector-drift fix: this fallback is subscription-scoped (we're
+                    // inside the hasActiveSubscriptionServers branch), so App.ActiveSubscription-
+                    // Server — the authoritative name the Subscribe UI's active-row logic reads —
+                    // must move WITH Vless.ActiveServer. Leaving it stale meant the active dot
+                    // didn't light the fallback row and a later Save/reconnect carried the dead
+                    // selector. Manual generated-mode selections never reach here.
+                    settings.App.ActiveSubscriptionServer = newActive;
                 }
             }
 

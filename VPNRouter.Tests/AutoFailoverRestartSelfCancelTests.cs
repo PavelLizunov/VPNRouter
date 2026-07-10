@@ -141,7 +141,13 @@ public sealed class AutoFailoverRestartSelfCancelTests
         var outcome = await engine.HandleDeadConfigAsync("delay-test dead", probeCts.Token);
 
         Assert.False(replacementStarted, "must NOT resurrect after user disconnect");
-        // The swap itself still happens in-memory (Switched=true); the bring-up is what's gated.
-        Assert.True(outcome.Switched);
+        // P1.5 user-intent guard (2026-07-09): a restart that returns false because the
+        // session was cancelled is NOT a committed swap. Pre-P1.5 this returned
+        // Switched=true with the swap persisted (ambiguous state the audit flagged);
+        // now the engine reverts the in-memory selection, persists nothing, and stays
+        // quiet, so the next Connect uses the server the user last chose.
+        Assert.False(outcome.Switched);
+        Assert.Null(outcome.UserFacingMessage);
+        Assert.Equal("srv-1", settings.Vless.ActiveServer);
     }
 }
