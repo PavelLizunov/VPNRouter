@@ -136,12 +136,15 @@ say "$([ "$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo
 
 # ── T12-T15 — explicit-disconnect recovery (P0.2). OPT-IN: it tears down the
 #   tunnel, so it runs LAST and only when TEST_DISCONNECT=1. Uses the app's own
-#   STOP service action (not force-stop) so it exercises the real teardown path. ──
+#   exported EXT_STOP broadcast (VpnControlReceiver) — the P4 control surface —
+#   so it exercises the real teardown path. NOTE (device-proven 2026-07-10):
+#   `am startservice -n .../.VpnRouterService -a $PKG.STOP` is REJECTED on-device
+#   ("Requires permission not exported"), the service is not shell-startable;
+#   the broadcast receiver is the supported external entry point. ──
 if [ "${TEST_DISCONNECT:-0}" = "1" ]; then
   say "---- T12-T15 explicit-disconnect recovery gate ----"
   say "INFO T12  pre-disconnect tun0=$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')"
-  ash am startservice -n "$PKG/.VpnRouterService" -a "$PKG.STOP" >/dev/null 2>&1 \
-    || ash am start-service -n "$PKG/.VpnRouterService" -a "$PKG.STOP" >/dev/null 2>&1
+  ash am broadcast -a "$PKG.EXT_STOP" -n "$PKG/.VpnControlReceiver" >/dev/null 2>&1
   sleep 6
   TUN2="$(ash 'ip addr show tun0 2>/dev/null | grep -q inet && echo up || echo down')"
   [ "$TUN2" = down ] && say "PASS T12  tun0 removed after explicit disconnect" \
