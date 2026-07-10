@@ -109,6 +109,45 @@ LAN-захват. Теперь можно снять доказательств�
 - Battery optimizer может убить сервис — на AC 100% риск минимален.
 - НИКАКИХ установок VPNRouter на dev box (rule 1a); телефон — только через Mac.
 
+## Outcome (2026-07-10)
+
+**Status: PASS.** Phone unblocked → all three phases run live on BALMUDA A101BM.
+
+- **Phase A (v2.46.0 device e2e) — PASS.** Signed APK digest-verified (`92a3b691…625a`),
+  `install -r` over 2.44.1 = real update path (same release key, no
+  INSTALL_FAILED_UPDATE_INCOMPATIBLE). Launch/render clean, connect (consent already
+  granted), **50 MB @ 770 KB/s through the tunnel** with correct live stats, health-check
+  ✓, kill-switch nudge rendered, clean disconnect (tun0 torn down). **Closes "Android APK
+  not device-tested".** Found a real (cosmetic) device-only bug → fixed (below).
+- **Phase B (2.47.0 build + surfaces) — PASS.** Built the APK locally
+  (`~/.dotnet10` + temp SDK-10 global.json override for the net10 subtree +
+  `-p:` to dodge Git-Bash `/p:` mangling; **closes the CI-NU1102 local-build gap**),
+  versionCode 2047000. Fresh install → subscription refresh fetched+parsed 6 servers →
+  select Germany VLESS → Start VPN. Verified: **tun0 + clash-api@9090**, real traffic
+  (`inbound/tun → outbound/vless[proxy]`, curl **4.2 MB/s**), **clash-secret bearer works
+  — no 401** (r3 feature live on Android), **A1 openTun route logging** present, **my
+  protect() fix: 0 log-spam** (was 139/min on 2.46.0), **live stats display 5.8 MB/s
+  correct**, battery-opt exemption prompt (AND-NODOZE) fired, Advanced UI all 5 tabs render,
+  auto-select toggle present, P4 EXT_STOP broadcast correctly IGNORED (secure-default,
+  external-control off). VpnService consent handled per plan.
+- **Phase C (P0.2 LAN-capture diagnostic) — evidence: NO CAPTURE.** Phone 192.168.31.137;
+  Mac 192.168.0.246 pings **0.857 ms** with VPN all-traffic UP (sub-ms = local, not the
+  Germany exit), **0 `192.168.x` captured in tun**. Local/LAN traffic bypasses the tunnel
+  → the excludeRoute concern does NOT reproduce here → stays deferred, now with evidence.
+
+**Fix landed (89c271d8, CI green, both remotes):** `fix(android)` — stats poller
+`protect()` false-alarm spam. Only warns now when a tick genuinely produces no stats.
+AndroidApp*.cs untouched → characterization hash unaffected. Rides into the stable APK
+(Step 5.6), no new desktop -rN needed.
+
+**Cut-readiness:** v2.47.0 verification gate now covers Android too (build+install+connect+
+traffic+all surfaces on real hardware). Desktop r7 = 14 assets, CI green. **Stable cut
+remains USER-GATED** (rule #6) — awaiting "cut".
+
+**Deferred (unchanged, gated):** B4 AOT (post-cut, now device-profilable); SignPath
+enrollment (owner); SDR/AWG-server live (tester+server); wgturn (cross-repo); urltest
+D1/D2 + app-exclude (product); .NET 8→10 (autumn).
+
 ## Cross-refs
 
 memory: `android-local-build-toolchain`, `mac-android-host`,
