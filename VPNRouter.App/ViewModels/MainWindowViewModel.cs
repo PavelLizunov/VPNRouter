@@ -2936,20 +2936,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             // v2.26.1 — two-signal detection:
-            //   1. sing-box process visible (old single check)
+            //   1. VPNRouter-OWNED sing-box process alive + TUN owned
             //   2. TUN ownership semaphore held by SOMEONE
             // Both must be true. Signal #1 alone had a false-positive
             // window on startup: a sing-box that just exited but whose
             // process record Windows hadn't reaped yet would still show
-            // up in GetProcessesByName and we'd flip IsConnected=true
-            // only to demote it on the next poll. TUN-lock check gates
-            // that: once the owner releases (on Stop or death), the
-            // kernel releases the semaphore atomically so there's no
-            // stale window.
-            // v2.40.0-r3 (audit P0 handle-leak sweep): ProcessQuery disposes the
-            // Process[] (a bare GetProcessesByName(...).Length leaked a handle per
-            // poll on this status path).
-            var singboxRunning = VPNRouter.Core.Services.ProcessQuery.AnyAlive("sing-box");
+            // up and we'd flip IsConnected=true only to demote it on the
+            // next poll. TUN-lock check gates that: once the owner releases
+            // (on Stop or death), the kernel releases the semaphore
+            // atomically so there's no stale window.
+            // P1.4 (audit 2026-07-09): signal #1 is the OWNERSHIP-FILTERED
+            // detector, not a bare process-name probe. RuntimeStatusDetector
+            // .IsVpnRunning delegates to ProcessOwnership.AnySingBoxOwned
+            // (image path under our bin dir or the registered custom exe;
+            // unverifiable path => not-owned, fail-closed), so a third-party/dev
+            // sing-box can never let the UI claim "Connected via service".
+            // Supersedes the v2.40.0-r3 bare ProcessQuery.AnyAlive("sing-box")
+            // probe; the detector is likewise handle-safe (disposes its Process[]).
+            var singboxRunning = VPNRouter.Core.Services.RuntimeStatusDetector.IsVpnRunning();
             if (!singboxRunning) return;
 
             var tunOwned = TunOwnershipLock.IsOwnedByAnyone();
