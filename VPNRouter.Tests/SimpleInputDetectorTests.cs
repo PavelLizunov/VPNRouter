@@ -15,6 +15,11 @@ public class SimpleInputDetectorTests
     [InlineData("hysteria2://pw@h:8444#n")]
     [InlineData("tuic://uuid:pw@h:443#n")]
     [InlineData("ss://x@h:443#n")]
+    [InlineData("dns-tunnel://x@h:443#n")]
+    // P2 (2026-07-10): AmneziaWG share-links recognised at intake (apply-time
+    // gate refuses them on a non-lx core, like naive/dns-tunnel).
+    [InlineData("awg://PEER@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32")]
+    [InlineData("amneziawg://PEER@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32")]
     public void Classify_ServerUriSchemes(string uri)
         => Assert.Equal(SmpInputKind.ServerUri, SimpleInputDetector.Classify(uri));
 

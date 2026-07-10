@@ -46,7 +46,13 @@ public static class SimpleInputDetector
             trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase) ||
             // dns-tunnel (slipstream) last-resort transport (Win/Linux runtime;
             // platform-gated at apply time, like naive).
-            trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase))
+            trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase) ||
+            // P2 (2026-07-10): AmneziaWG share-links. Recognised at intake so the
+            // user gets real parsing/feedback instead of "invalid link"; the
+            // SingBoxFeatures with_awg gate refuses them at APPLY time on a
+            // non-lx core (same core-gated pattern as naive/dns-tunnel).
+            trimmed.StartsWith("awg://",         StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("amneziawg://",   StringComparison.OrdinalIgnoreCase))
             return SmpInputKind.ServerUri;
 
         if (trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase) ||

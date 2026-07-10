@@ -94,6 +94,18 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     }
 
     [Fact]
+    public void Prewarm_WithOverridesSet_NoOps_AndDoesNotThrow()
+    {
+        // P2 (2026-07-10): the ctor set both overrides, so Prewarm must NOT spawn
+        // `sing-box version` (it would race the override + waste a process); it
+        // just returns. The reads still honour the overrides afterwards.
+        var ex = Record.Exception(() => SingBoxFeatures.Prewarm());
+        Assert.Null(ex);
+        Assert.False(SingBoxFeatures.AwgAvailable);   // override wins, no probe
+        Assert.False(SingBoxFeatures.XhttpAvailable);
+    }
+
+    [Fact]
     public void ScrubSecrets_CollapsesAwgUri_HidingPrivateKey()
     {
         // bug-hunt P2: the proxy-URI scrubber was missing amneziawg|awg, so an

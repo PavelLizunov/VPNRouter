@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace VPNRouter.Core.Services;
 
@@ -42,6 +43,21 @@ public static class SingBoxFeatures
 
     /// <summary>True when the bundled sing-box was built <c>with_xhttp</c> (the lx fork).</summary>
     public static bool XhttpAvailable => OverrideXhttp ?? Probe().xhttp;
+
+    /// <summary>
+    /// P2 (2026-07-10): fire the one-time capability probe on a BACKGROUND thread
+    /// so the first <see cref="AwgAvailable"/> / <see cref="XhttpAvailable"/> read
+    /// doesn't pay the ≤5s <c>sing-box version</c> spawn on the UI thread — that
+    /// path is hit synchronously on an <c>awg://</c> manual paste
+    /// (<c>SmpToggleConnectAsync</c> → <c>TryApplyVless</c> → parser gate). Idempotent
+    /// (the probe caches), best-effort (a spawn failure leaves the safe default),
+    /// no-op when an override is set (tests). Call once at app startup.
+    /// </summary>
+    public static void Prewarm()
+    {
+        if (OverrideAwg.HasValue && OverrideXhttp.HasValue) return;
+        _ = Task.Run(() => { try { _ = Probe(); } catch { /* best-effort warm */ } });
+    }
 
     /// <summary>Drop the cached probe + any overrides (tests only).</summary>
     internal static void ResetForTests()

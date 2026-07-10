@@ -393,6 +393,11 @@ sealed class Program
         if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))
             return;
 
+        // P2 (2026-07-10): warm the sing-box capability probe off the UI thread
+        // now, so the first awg:// paste doesn't pay the ≤5s `sing-box version`
+        // spawn synchronously on the dispatcher. Best-effort + idempotent.
+        try { SingBoxFeatures.Prewarm(); } catch { }
+
         // Defensive cleanup: kill orphan sing-box left behind by failed
         // updates or hard crashes. After r2 the Mutex prevents twin
         // VPNRouter.App instances, but a stale sing-box (started by a
