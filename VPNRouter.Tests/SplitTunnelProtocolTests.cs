@@ -747,4 +747,48 @@ public class SplitTunnelProtocolTests
         Assert.False(SplitTunnelPolicy.ShouldReRegister(
             Addr(null, null), Addr(null, null)));
     }
+
+    // ── P2 (2026-07-10): checksums.sha256 sidecar parse (driver integrity diagnostic) ──
+
+    private const string Sidecar =
+        "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201  mullvad-split-tunnel.sys\n" +
+        "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d  mullvad-split-tunnel.cat\n" +
+        "3dd5905e5fb98d61a942a33e8c9a5ba07c3a2de1e4f319e1fec3e54df6591608  mullvad-split-tunnel.inf\n";
+
+    [Fact]
+    public void ParseSidecarHashFor_ReturnsHashForListedFile()
+        => Assert.Equal(
+            "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201",
+            SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, "mullvad-split-tunnel.sys"));
+
+    [Fact]
+    public void ParseSidecarHashFor_MatchesRegardlessOfFilenameCase()
+        => Assert.Equal(
+            "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d",
+            SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, "MULLVAD-SPLIT-TUNNEL.CAT"));
+
+    [Fact]
+    public void ParseSidecarHashFor_HandlesBinaryStarMarkerAndPathPrefix()
+        => Assert.Equal(
+            "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+            SplitTunnelPolicy.ParseSidecarHashFor(
+                "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee *./driver/mullvad-split-tunnel.sys",
+                "mullvad-split-tunnel.sys"));
+
+    [Theory]
+    [InlineData("not-listed.sys")]
+    [InlineData("")]
+    public void ParseSidecarHashFor_ReturnsNullForMissingOrEmpty(string fileName)
+        => Assert.Null(SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, fileName));
+
+    [Fact]
+    public void ParseSidecarHashFor_NullSidecar_ReturnsNull()
+        => Assert.Null(SplitTunnelPolicy.ParseSidecarHashFor(null, "mullvad-split-tunnel.sys"));
+
+    [Fact]
+    public void ParseSidecarHashFor_RejectsNon64HexOrJunkLines()
+        => Assert.Null(SplitTunnelPolicy.ParseSidecarHashFor(
+            "deadbeef  mullvad-split-tunnel.sys\n# a comment\ngarbage line no hash\n",
+            "mullvad-split-tunnel.sys")); // "deadbeef" is 8 hex, not 64 -> rejected
 }
+

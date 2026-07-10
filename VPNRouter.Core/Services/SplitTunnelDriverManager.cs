@@ -296,6 +296,14 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return false;
         }
 
+        // #1b — P2 (2026-07-10): diagnostic integrity check against the shipped
+        // driver/checksums.sha256 sidecar. Windows kernel-driver signature
+        // enforcement already rejects a TAMPERED .sys, so this doesn't gate the
+        // load (fail-OPEN) — its value is catching a STALE-but-still-signed .sys
+        // (a partial/manual file swap → ABI mismatch with this manager) with a
+        // named log line instead of an opaque later IOCTL failure.
+        VerifySysIntegrityLocked();
+
         // #2/#3 — ensure the kernel service (create / adopt-moved / start), collision-guarded.
         if (DescribeRunningForeignSplitDriverOwner() is { } foreignOwner)
         {
@@ -404,6 +412,46 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     }
 
     // ─── SCM: create / adopt / start (never stop) ───────────────────────────────
+
+    /// <summary>
+    /// Fail-OPEN driver-integrity diagnostic: compare the shipped .sys against the
+    /// hash pinned in the sibling <c>checksums.sha256</c>. Mismatch → a named
+    /// warning (stale/mismatched driver, ABI issues possible), NOT a block —
+    /// Windows signature enforcement is the real tamper gate; this only turns a
+    /// silent ABI mismatch into a diagnosable log line. Absent/unreadable sidecar
+    /// → debug + proceed. Never throws.
+    /// </summary>
+    private void VerifySysIntegrityLocked()
+    {
+        try
+        {
+            var sidecarPath = Path.Combine(Path.GetDirectoryName(_sysPath) ?? string.Empty, "checksums.sha256");
+            if (!File.Exists(sidecarPath))
+            {
+                _log.Debug("[SplitTunnel] No driver checksums.sha256 sidecar — skipping integrity diagnostic");
+                return;
+            }
+            var expected = SplitTunnelPolicy.ParseSidecarHashFor(File.ReadAllText(sidecarPath), DriverFileName);
+            if (expected == null)
+            {
+                _log.Debug("[SplitTunnel] {File} not listed in checksums.sha256 — skipping integrity diagnostic", DriverFileName);
+                return;
+            }
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var fs = File.OpenRead(_sysPath);
+            var actual = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+            if (actual == expected)
+                _log.Debug("[SplitTunnel] Driver integrity OK (sha256 matches sidecar)");
+            else
+                _log.Warning("[SplitTunnel] Driver sha256 MISMATCH vs checksums.sha256 (expected {Exp}, got {Act}) — " +
+                    "stale/partial .sys? ABI mismatch possible; engaging anyway (Windows signature check is the tamper gate)",
+                    expected, actual);
+        }
+        catch (Exception ex)
+        {
+            _log.Debug(ex, "[SplitTunnel] Driver integrity diagnostic failed (ignored)");
+        }
+    }
 
     private bool EnsureServiceLocked()
     {

@@ -660,6 +660,35 @@ internal static class SplitTunnelPolicy
             ? "True Split cannot start because Windows WFP/BFE already has a split-tunnel object from Amnezia/Mullvad/another VPN (0x80320009). Ordinary split is active. Disable that VPN's split tunneling, reboot Windows, then retry True Split."
             : null;
 
+    /// <summary>
+    /// P2 (2026-07-10): parse the expected sha256 for <paramref name="fileName"/> out of a
+    /// <c>checksums.sha256</c> sidecar (standard <c>&lt;hex&gt;␠␠&lt;name&gt;</c> lines, as
+    /// emitted by <c>sha256sum</c>). Returns the lowercase 64-hex digest, or null when the
+    /// file isn't listed / the line is malformed. Pure so the manager's runtime integrity
+    /// check (fail-open) is unit-tested off-Windows.
+    /// </summary>
+    public static string? ParseSidecarHashFor(string? sidecarContent, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(sidecarContent) || string.IsNullOrWhiteSpace(fileName))
+            return null;
+        foreach (var raw in sidecarContent.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0) continue;
+            // "<hash><ws><name>" — name may carry a leading '*' (binary-mode marker) or a path.
+            var sp = line.IndexOfAny(new[] { ' ', '\t' });
+            if (sp <= 0) continue;
+            var hash = line.Substring(0, sp).Trim().ToLowerInvariant();
+            if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) continue;
+            var name = line.Substring(sp).Trim().TrimStart('*');
+            name = name.Replace('\\', '/');
+            var baseName = name.Contains('/') ? name.Substring(name.LastIndexOf('/') + 1) : name;
+            if (string.Equals(baseName, fileName, StringComparison.OrdinalIgnoreCase))
+                return hash;
+        }
+        return null;
+    }
+
     /// <summary>Normalises an SCM binPath for comparison: strips surrounding quotes and a
     /// leading NT object-manager prefix (<c>\??\</c>), trims, lowercases (paths are
     /// case-insensitive on Windows). Empty/whitespace → empty string.</summary>
