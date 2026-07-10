@@ -78,6 +78,7 @@ public partial class SingBoxManager
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var response = _http.SendAsync(new HttpRequest(
                 HttpMethod.Put, new Uri(url),
+                Headers: ClashAuthHeaders(),
                 Body: bodyBytes,
                 BodyContentType: "application/json",
                 Timeout: TimeSpan.FromSeconds(3)), cts.Token).GetAwaiter().GetResult();
@@ -107,7 +108,11 @@ public partial class SingBoxManager
 
     /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs as root child of sudo).
     /// 3G-2 (v3.0 refactor): routed through the shared <see cref="IHttpClient"/>
-    /// seam with an explicit 3 s deadline mirroring the legacy <c>HttpClient.Timeout</c>.</summary>
+    /// seam with an explicit 3 s deadline mirroring the legacy <c>HttpClient.Timeout</c>.
+    /// P1 clash_api secret (2026-07-10): this is THE liveness authority behind
+    /// <c>IsRunning</c> — an unauthenticated GET against a secret-carrying
+    /// sing-box 401s and would read a healthy tunnel as dead (false demotes,
+    /// failed health checks), so the bearer header here is load-bearing.</summary>
     private bool IsClashApiAlive()
     {
         try
@@ -115,10 +120,19 @@ public partial class SingBoxManager
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var response = _http.SendAsync(new HttpRequest(
                 HttpMethod.Get, new Uri($"http://{_settings.ClashApi}/configs"),
+                Headers: ClashAuthHeaders(),
                 Timeout: TimeSpan.FromSeconds(3)), cts.Token).GetAwaiter().GetResult();
             return response.IsSuccess();
         }
         catch { return false; }
     }
+
+    /// <summary>Authorization header for the Clash API, or null when the
+    /// settings carry no secret (legacy open API — header omitted keeps the
+    /// wire shape byte-identical to pre-P1).</summary>
+    private Dictionary<string, string>? ClashAuthHeaders()
+        => string.IsNullOrEmpty(_settings.ClashApiSecret)
+            ? null
+            : new Dictionary<string, string> { ["Authorization"] = $"Bearer {_settings.ClashApiSecret}" };
 
 }

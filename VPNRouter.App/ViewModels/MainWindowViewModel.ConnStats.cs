@@ -60,7 +60,8 @@ public partial class MainWindowViewModel
                 var hostPort = string.IsNullOrWhiteSpace(_settings?.SingBox?.ClashApi)
                     ? "127.0.0.1:9090" : _settings!.SingBox.ClashApi;
                 _statsApi?.Dispose();
-                _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger);
+                _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger,
+                    secret: _settings?.SingBox?.ClashApiSecret);
                 _statsPrevAt = null; _statsPrevDown = 0; _statsPrevUp = 0;
             }
             catch (Exception ex)

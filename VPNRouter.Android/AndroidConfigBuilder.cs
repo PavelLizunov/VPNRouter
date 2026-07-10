@@ -61,6 +61,31 @@ public static class AndroidConfigBuilder
     /// error message. Routing log.output to a file we can <c>adb shell cat</c>
     /// finally surfaces those errors.</para>
     /// </summary>
+    /// <summary>
+    /// P1 clash_api secret (2026-07-10): thread the app-private persisted
+    /// bearer token into the AppSettings both build paths hand to Core, so
+    /// the emitted <c>experimental.clash_api.secret</c> locks libbox's API
+    /// (any installed app could otherwise read live connection metadata /
+    /// issue control calls on 127.0.0.1:9090). Also primes
+    /// <see cref="VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ClashApiSecret"/>
+    /// so IsRunningAsync authenticates — set here (the single choke point
+    /// every tunnel start flows through) rather than at app init.
+    /// </summary>
+    private static void ApplyClashApiSecret(AppSettings settings)
+    {
+        try
+        {
+            var secret = AndroidStorage.GetClashApiSecret();
+            settings.SingBox.ClashApiSecret = secret;
+            VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ClashApiSecret = secret;
+        }
+        catch
+        {
+            // SharedPreferences failure — config ships without a secret
+            // (legacy open API); never block a connect on this.
+        }
+    }
+
     public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null)
     {
         var settings = new AppSettings();
@@ -86,6 +111,7 @@ public static class AndroidConfigBuilder
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "generated";
+        ApplyClashApiSecret(settings);
         // v2.32.0 — surface persisted settings into the generated config
         // so the Android Settings overlay actually affects the sing-box
         // pipeline (handbook §1.5 — "settings must do something").
@@ -241,6 +267,7 @@ public static class AndroidConfigBuilder
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "custom";
+        ApplyClashApiSecret(settings);
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
         // Bug-AND-012 (2026-05-16) — same BlockAds wiring as the
         // generated path. CustomConfigInjector respects BlockAds via

@@ -663,6 +663,13 @@ public final class VpnRouterService extends VpnService {
         // libbox.start time (~1-2 s on this hardware).
         acquireConnectWakeLock();
 
+        // P1 clash_api secret (2026-07-10): the config we are about to launch
+        // carries experimental.clash_api.secret — libbox then 401s every
+        // unauthenticated API call, so the stats poller must present the same
+        // bearer token. Extracted here (single choke point: UI start, restore
+        // and Always-on all funnel through startTunnel with pendingConfigJson).
+        clashApiSecret = extractClashApiSecret(pendingConfigJson);
+
         try {
             ensureLibboxSetup();
             startSlipstreamIfNeeded();
@@ -1091,6 +1098,28 @@ public final class VpnRouterService extends VpnService {
     // connection count, broadcast to the C# UI. Every 2s while live; fully best-effort.
     private java.util.concurrent.ScheduledExecutorService statsPoller;
 
+    // P1 clash_api secret (2026-07-10): bearer token the generated config locks
+    // the Clash API with. Set by startTunnel from the launching config; the raw
+    // HTTP GET below must carry it or libbox answers 401 and stats go dark.
+    private volatile String clashApiSecret;
+
+    /** Best-effort read of experimental.clash_api.secret from a sing-box config
+     *  JSON. Null when absent/unparseable (legacy open API — no header sent). */
+    private static String extractClashApiSecret(String configJson) {
+        if (configJson == null) return null;
+        try {
+            org.json.JSONObject root = new org.json.JSONObject(configJson);
+            org.json.JSONObject exp = root.optJSONObject("experimental");
+            if (exp == null) return null;
+            org.json.JSONObject ca = exp.optJSONObject("clash_api");
+            if (ca == null) return null;
+            String s = ca.optString("secret", "");
+            return s.isEmpty() ? null : s;
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
     private synchronized void startStatsPoller() {
         stopStatsPoller();
         java.util.concurrent.ScheduledExecutorService ex =
@@ -1129,7 +1158,11 @@ public final class VpnRouterService extends VpnService {
             sock.setSoTimeout(2000);
             java.io.OutputStream os = sock.getOutputStream();
             // HTTP/1.0 + close-delimited body so we never have to de-chunk.
-            os.write("GET /connections HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n".getBytes("UTF-8"));
+            // P1 (2026-07-10): bearer header — the config now locks the API.
+            String secret = clashApiSecret;
+            String auth = (secret == null || secret.isEmpty())
+                ? "" : ("Authorization: Bearer " + secret + "\r\n");
+            os.write(("GET /connections HTTP/1.0\r\nHost: 127.0.0.1\r\n" + auth + "\r\n").getBytes("UTF-8"));
             os.flush();
             java.io.InputStream is = sock.getInputStream();
             java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();

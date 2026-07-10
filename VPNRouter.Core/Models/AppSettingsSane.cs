@@ -18,6 +18,11 @@ public static class AppSettingsSane
 {
     /// <summary>Walk the AppSettings tree and replace every null
     /// sub-object / collection with a fresh empty default.</summary>
+    /// <summary>32-hex-char cryptographically random Clash-API bearer secret.</summary>
+    internal static string GenerateClashApiSecret()
+        => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
+            .ToLowerInvariant();
+
     public static AppSettings EnsureSane(this AppSettings? settings)
     {
         // Tolerate null receiver — caller may pass us the result of a
@@ -31,6 +36,13 @@ public static class AppSettingsSane
         settings.Tun              ??= new TunSettings();
         settings.Dns              ??= new DnsSettings();
         settings.SingBox          ??= new SingBoxSettings();
+        // P1 clash_api secret (2026-07-10): every loaded settings object MUST
+        // carry a non-empty secret so the generated config and this process's
+        // Clash-API consumers always agree. SettingsLoader persists it on the
+        // happy path; a read-only config dir just means a per-process secret
+        // (degrades to stats-only mismatch across App/Service, never a leak).
+        if (string.IsNullOrEmpty(settings.SingBox.ClashApiSecret))
+            settings.SingBox.ClashApiSecret = GenerateClashApiSecret();
         settings.Monitoring       ??= new MonitoringSettings();
         settings.CustomApps       ??= new List<string>();
         settings.CustomGroupApps  ??= new Dictionary<string, List<string>>();

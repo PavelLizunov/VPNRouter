@@ -272,7 +272,7 @@ public static class CustomConfigInjector
         }
 
         EnsureDefaultDomainResolver(config);
-        EnsureClashApi(config, settings.SingBox.ClashApi);
+        EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
 
         return config.ToJsonString(InjectorOutputOptions);
@@ -1321,7 +1321,7 @@ public static class CustomConfigInjector
 
     // ─── Private: Ensure Clash API ───────────────────────────────────────────
 
-    private static void EnsureClashApi(JsonObject config, string clashApiAddr)
+    private static void EnsureClashApi(JsonObject config, string clashApiAddr, string? clashApiSecret)
     {
         var experimental = config["experimental"] as JsonObject;
         if (experimental == null)
@@ -1339,7 +1339,17 @@ public static class CustomConfigInjector
 
         // Don't override if user already set it
         if (clashApi["external_controller"] == null)
+        {
             clashApi["external_controller"] = clashApiAddr;
+            // P1 clash_api secret (2026-07-10): WE created/own this block, so
+            // lock it exactly like generated configs — our consumers (stats,
+            // hot-reload, probes) all send the settings-backed bearer token.
+            // A USER-authored clash_api block is left untouched (their
+            // controller = their auth policy; overriding a secret they didn't
+            // set would silently break their external dashboards).
+            if (!string.IsNullOrEmpty(clashApiSecret) && clashApi["secret"] == null)
+                clashApi["secret"] = clashApiSecret;
+        }
     }
 
     // ─── Private: Migrate legacy config to 1.13+ ──────────────────────────

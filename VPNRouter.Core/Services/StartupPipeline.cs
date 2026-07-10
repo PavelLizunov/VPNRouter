@@ -1380,7 +1380,9 @@ internal sealed class StartupPipeline
 
         var healthMonitor = new HealthMonitor(
             singBox, _host.Scanner, firewall,
-            settings.Monitoring, _host.Logger);
+            settings.Monitoring, _host.Logger,
+            clashApiBase: settings.SingBox?.ClashApi,
+            clashApiSecret: settings.SingBox?.ClashApiSecret);
 
         etw.ProcessStarted += (_, e) =>
         {

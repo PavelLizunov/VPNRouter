@@ -821,4 +821,14 @@ public class ClashApi
 {
     [JsonPropertyName("external_controller")]
     public string ExternalController { get; set; } = "127.0.0.1:9090";
+
+    /// <summary>
+    /// P1 (2026-07-10): bearer secret sing-box requires on every Clash API
+    /// call (HTTP <c>Authorization: Bearer</c> / WS <c>?token=</c>) when set.
+    /// Omitted (null) = legacy open API — kept only so a hand-rolled config
+    /// without a secret still round-trips byte-identical.
+    /// </summary>
+    [JsonPropertyName("secret")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Secret { get; set; }
 }

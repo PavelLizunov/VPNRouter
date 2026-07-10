@@ -72,7 +72,8 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     public ClashSingBoxApi(
         HttpClient? httpClient = null,
         string baseUrl = "http://127.0.0.1:9090",
-        ILogger? logger = null)
+        ILogger? logger = null,
+        string? secret = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("Clash API base URL cannot be empty.", nameof(baseUrl));
@@ -116,6 +117,15 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             _http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             _ownsHttpClient = true;
         }
+
+        // P1 clash_api secret (2026-07-10): sing-box 401s EVERY endpoint when
+        // the config carries experimental.clash_api.secret. One default header
+        // covers all call sites (every method routes through _http + _baseUrl).
+        // A sing-box WITHOUT a secret ignores the header, so this is safe to
+        // set unconditionally against mixed-version installs.
+        if (!string.IsNullOrEmpty(secret))
+            _http.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", secret);
     }
 
     /// <inheritdoc/>

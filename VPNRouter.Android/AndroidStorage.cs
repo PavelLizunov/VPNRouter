@@ -827,6 +827,7 @@ public static class AndroidStorage
     private const string KeyPostNotifPrompt = "post_notif_prompt_shown"; // bool (B1: POST_NOTIFICATIONS asked once)
     private const string KeyAlwaysOnPrompt = "alwayson_lockdown_prompt_shown"; // bool (B3: kill-switch nudge shown once)
     private const string KeyExternalControl = "external_control_enabled"; // bool (P4: allow broadcast START/STOP/TOGGLE; default OFF)
+    private const string KeyClashApiSecret = "clash_api_secret";       // string (P1 2026-07-10: bearer token locking libbox's Clash API; lazily generated)
     private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
     private const string KeyAutostartVpn = "autostart_vpn";            // bool
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
@@ -927,6 +928,22 @@ public static class AndroidStorage
     // (secure-by-default); the VpnControlReceiver no-ops unless the user opts in here.
     public static bool GetExternalControlEnabled() => GetBool(KeyExternalControl, defaultValue: false);
     public static bool SetExternalControlEnabled(bool value) => SetBool(KeyExternalControl, value);
+
+    /// <summary>
+    /// P1 clash_api secret (2026-07-10): get-or-create the bearer token that
+    /// locks libbox's Clash API (127.0.0.1:9090). Without it ANY installed app
+    /// can read live connection metadata / issue control calls — SharedPreferences
+    /// is app-private, so persisting here is exactly the isolation we want.
+    /// Desktop's equivalent lives in AppSettingsSane.EnsureSane + config.yaml.
+    /// </summary>
+    public static string GetClashApiSecret()
+    {
+        var existing = GetString(KeyClashApiSecret);
+        if (!string.IsNullOrEmpty(existing)) return existing;
+        var fresh = VPNRouter.Core.Models.AppSettingsSane.GenerateClashApiSecret();
+        SetString(KeyClashApiSecret, fresh);
+        return fresh;
+    }
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");

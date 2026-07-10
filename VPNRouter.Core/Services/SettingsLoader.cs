@@ -237,6 +237,22 @@ public static class SettingsLoader
             return defaults;
         }
 
+        // P1 clash_api secret (2026-07-10): EnsureSane (inside Parse) filled a
+        // fresh random secret when the YAML had none — persist it so the App
+        // and the Windows Service (separate processes, same YAML) present the
+        // SAME bearer token to sing-box. Detect "was missing" by re-reading
+        // the raw YAML: cheaper than threading a flag through Parse, and a
+        // false-negative here only delays persistence to the next SaveSettings.
+        try
+        {
+            if (!string.IsNullOrEmpty(parsed.SingBox?.ClashApiSecret) &&
+                !yaml.Contains("clash_api_secret:", StringComparison.Ordinal))
+            {
+                Save(parsed, configPath);
+            }
+        }
+        catch { /* read-only config dir — per-process secret still works */ }
+
         // BR-3 (brat 2026-05-19) — single-line diagnostic snapshot of the
         // post-parse, post-migration, post-validation state. Helps future
         // user-report investigations see the exact AppSettings shape r6

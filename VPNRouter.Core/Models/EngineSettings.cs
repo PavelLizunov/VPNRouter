@@ -32,6 +32,19 @@ public class SingBoxSettings
     /// </summary>
     [YamlMember(Alias = "clash_api")]
     public string ClashApi { get; set; } = "127.0.0.1:9090";
+
+    /// <summary>
+    /// P1 (OPEN-DEFECTS, 2026-07-10): bearer secret for the Clash API. Without
+    /// it ANY local process (or a hostile web page XHR-ing 127.0.0.1:9090 —
+    /// and on Android any installed app) can read live connection metadata and
+    /// issue control calls (proxy switch, config reload). Auto-generated on
+    /// first load (<c>AppSettingsSane.EnsureSane</c>), persisted so the App and
+    /// the Windows Service — separate processes sharing this YAML — agree.
+    /// Rides the generated config as <c>experimental.clash_api.secret</c>;
+    /// every in-app consumer sends <c>Authorization: Bearer</c> / WS <c>?token=</c>.
+    /// </summary>
+    [YamlMember(Alias = "clash_api_secret")]
+    public string ClashApiSecret { get; set; } = "";
 }
 
 public class MonitoringSettings

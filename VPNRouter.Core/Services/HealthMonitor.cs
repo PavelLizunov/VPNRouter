@@ -214,7 +214,9 @@ public class HealthMonitor : IDisposable
         MonitoringSettings settings,
         ILogger? logger = null,
         ISingBoxApi? api = null,
-        IWindowsDnsHardening? dnsHardening = null)
+        IWindowsDnsHardening? dnsHardening = null,
+        string? clashApiBase = null,
+        string? clashApiSecret = null)
     {
         _singBox = singBox;
         _scanner = scanner;
@@ -228,6 +230,10 @@ public class HealthMonitor : IDisposable
         // wired against the same target SingBoxManager.TryHotReload used
         // pre-2D-4 (the Clash API listens on localhost:9090 by
         // convention; the YAML default matches).
+        // P1 clash_api secret (2026-07-10): production (StartupPipeline)
+        // passes the settings-backed host:port + bearer secret — the old
+        // bare default would 401 against a secret-carrying sing-box and
+        // read every health tick as dead.
         if (api is not null)
         {
             _api = api;
@@ -235,7 +241,10 @@ public class HealthMonitor : IDisposable
         }
         else
         {
-            var concrete = new ClashSingBoxApi(logger: _logger);
+            var baseUrl = string.IsNullOrWhiteSpace(clashApiBase)
+                ? "http://127.0.0.1:9090"
+                : $"http://{clashApiBase}";
+            var concrete = new ClashSingBoxApi(baseUrl: baseUrl, logger: _logger, secret: clashApiSecret);
             _api = concrete;
             _ownedApi = concrete;
         }

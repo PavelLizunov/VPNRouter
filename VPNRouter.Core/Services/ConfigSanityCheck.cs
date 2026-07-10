@@ -269,6 +269,13 @@ public sealed class ConfigSanityCheck
     /// a row strongly suggests the outbound is unreachable.
     /// </summary>
     public async Task<ProbeResult> ProbeAsync(int clashApiPort, CancellationToken ct = default)
+        => await ProbeAsync(clashApiPort, clashApiSecret: null, ct).ConfigureAwait(false);
+
+    /// <param name="clashApiSecret">P1 clash_api secret (2026-07-10): bearer
+    /// token for the running sing-box. Without it a secret-carrying config
+    /// 401s the delay probe and the post-start sanity check would condemn a
+    /// HEALTHY tunnel (auto-failover storm). Null/empty = legacy open API.</param>
+    public async Task<ProbeResult> ProbeAsync(int clashApiPort, string? clashApiSecret, CancellationToken ct = default)
     {
         if (clashApiPort <= 0 || clashApiPort > 65535)
             return new ProbeResult(true, $"invalid Clash API port {clashApiPort}", 0);
@@ -286,7 +293,11 @@ public sealed class ConfigSanityCheck
 
             try
             {
-                using var resp = await _http.GetAsync(url, ct);
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                if (!string.IsNullOrEmpty(clashApiSecret))
+                    req.Headers.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", clashApiSecret);
+                using var resp = await _http.SendAsync(req, ct);
                 var body = await resp.Content.ReadAsStringAsync(ct);
 
                 if (resp.IsSuccessStatusCode)

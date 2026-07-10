@@ -56,17 +56,21 @@ public sealed class ClashLogStream : IDisposable
         string clashBaseUrl,
         ConnectionHealthState state,
         Func<IReadOnlySet<string>?>? proxyEndpoints = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        string? secret = null)
     {
-        _logsUri = BuildLogsUri(clashBaseUrl);
+        _logsUri = BuildLogsUri(clashBaseUrl, secret);
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _proxyEndpoints = proxyEndpoints ?? (() => null);
         _logger = logger ?? Log.Logger;
     }
 
     /// <summary>Convert the Clash HTTP base URL into the ws(s) <c>/logs</c> endpoint,
-    /// enforcing the same loopback-only guard as <see cref="ClashSingBoxApi"/>.</summary>
-    internal static Uri BuildLogsUri(string clashBaseUrl)
+    /// enforcing the same loopback-only guard as <see cref="ClashSingBoxApi"/>.
+    /// P1 clash_api secret (2026-07-10): WebSocket clients can't send an
+    /// Authorization header through ClientWebSocket portably — the Clash API's
+    /// documented WS auth is the <c>?token=</c> query parameter.</summary>
+    internal static Uri BuildLogsUri(string clashBaseUrl, string? secret = null)
     {
         if (string.IsNullOrWhiteSpace(clashBaseUrl))
             throw new ArgumentException("Clash API base URL cannot be empty.", nameof(clashBaseUrl));
@@ -83,7 +87,10 @@ public sealed class ClashLogStream : IDisposable
                 "Remote Clash control is a security risk.", nameof(clashBaseUrl));
 
         var scheme = uri.Scheme == Uri.UriSchemeHttps ? "wss" : "ws";
-        return new Uri($"{scheme}://{uri.Authority}/logs?level=info");
+        var token = string.IsNullOrEmpty(secret)
+            ? string.Empty
+            : $"&token={Uri.EscapeDataString(secret)}";
+        return new Uri($"{scheme}://{uri.Authority}/logs?level=info{token}");
     }
 
     /// <summary>Start the background subscribe/reconnect loop. A second call while

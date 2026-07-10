@@ -58,6 +58,15 @@ public sealed class AndroidSingBoxRuntime
     /// </summary>
     private const string ClashApiUrl = "http://127.0.0.1:9090/configs";
 
+    /// <summary>
+    /// P1 clash_api secret (2026-07-10): bearer token matching the generated
+    /// config's <c>experimental.clash_api.secret</c>. AndroidApp sets this
+    /// right after settings load (same pattern as <see cref="RegisterServiceType"/>);
+    /// without it <see cref="IsRunningAsync"/> 401s against the secret-locked
+    /// libbox API and Android would read a healthy tunnel as down.
+    /// </summary>
+    public static string? ClashApiSecret { get; set; }
+
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
 
     /// <summary>
@@ -167,7 +176,11 @@ public sealed class AndroidSingBoxRuntime
     {
         try
         {
-            using var resp = await _http.GetAsync(ClashApiUrl, ct).ConfigureAwait(false);
+            using var req = new HttpRequestMessage(HttpMethod.Get, ClashApiUrl);
+            if (!string.IsNullOrEmpty(ClashApiSecret))
+                req.Headers.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ClashApiSecret);
+            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
             return resp.IsSuccessStatusCode;
         }
         catch

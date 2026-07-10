@@ -151,7 +151,22 @@ public static class ConfigGenerator
             Outbounds = outbounds,
             Endpoints = endpoints, // AmneziaWG "proxy" endpoint (sing-box-lx); null otherwise
             Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyCarriesUdpNatively),
-            Experimental = new SingBoxExperimental()
+            // P1 clash_api secret (2026-07-10): the controller address comes
+            // from settings (pre-P1 the model default silently ignored a
+            // user-changed clash_api port) and the bearer secret locks the
+            // API to our own consumers — without it any local process / web
+            // page (and on Android any installed app) could read live
+            // connection metadata or issue control calls on 127.0.0.1:9090.
+            Experimental = new SingBoxExperimental
+            {
+                ClashApi = new ClashApi
+                {
+                    ExternalController = string.IsNullOrWhiteSpace(settings.SingBox?.ClashApi)
+                        ? "127.0.0.1:9090" : settings.SingBox.ClashApi,
+                    Secret = string.IsNullOrEmpty(settings.SingBox?.ClashApiSecret)
+                        ? null : settings.SingBox.ClashApiSecret,
+                }
+            }
         };
 
         // v2.30.0 — full custom rules engine (direct/proxy/block). Inserted
