@@ -125,6 +125,23 @@ public class ServerHealthPhaseMapperTests
         Assert.NotEqual(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, verdict);
     }
 
+    [Fact]
+    public void TcpOk_UserCancelledDeepVerify_ClassifiesAsUntested_NeverBlocked()
+    {
+        // F1 (r8) e2e guardrail: a user Cancel mid-deep-verify surfaces as the typed
+        // Cancelled phase (DeepVerifyProbe rethrows external cancellation instead of
+        // swallowing it as "http timeout"). Merged with a passing quick probe it must
+        // read "protocol untested" — never ProtocolHandshakeBlockedLikely, which
+        // would persist to the store and exclude the server from the Auto pool.
+        var phases = ServerHealthPhaseMapper.Merge(
+            ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok),
+            ServerHealthPhaseMapper.FromDeepVerify(
+                DeepVerifyResult.Failed("cancelled", DeepVerifyFailurePhase.Cancelled)));
+        var verdict = ServerHealthClassifier.Classify(phases).Verdict;
+        Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, verdict);
+        Assert.NotEqual(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, verdict);
+    }
+
     // ── R4: blocked-target canary rides the deep-verify result ──────────────
 
     [Fact]

@@ -522,30 +522,45 @@ public static class CustomConfigInjector
     /// </summary>
     private static string FindProxyOutboundTag(JsonObject config)
     {
-        var outbounds = config["outbounds"] as JsonArray;
-        if (outbounds == null) return "custom-proxy";
-
-        // 1. Selector (user-switchable)
-        foreach (var ob in outbounds)
+        if (config["outbounds"] is JsonArray outbounds)
         {
-            if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "selector")
-                return ResolveOrAssignProxyTag(obObj);
+            // 1. Selector (user-switchable)
+            foreach (var ob in outbounds)
+            {
+                if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "selector")
+                    return ResolveOrAssignProxyTag(obObj);
+            }
+
+            // 2. URLTest (auto-failover)
+            foreach (var ob in outbounds)
+            {
+                if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "urltest")
+                    return ResolveOrAssignProxyTag(obObj);
+            }
+
+            // 3. First proxy-like outbound
+            foreach (var ob in outbounds)
+            {
+                if (ob is not JsonObject obObj) continue;
+                var type = StjNodeHelpers.AsString(obObj["type"]);
+                if (type != "direct" && type != "block" && type != "dns")
+                    return ResolveOrAssignProxyTag(obObj);
+            }
         }
 
-        // 2. URLTest (auto-failover)
-        foreach (var ob in outbounds)
+        // 4. F2 (r8): endpoints-based config — a wireguard/AWG ENDPOINT is the proxy
+        // egress (official sing-box 1.11+ construct; Validate accepts it since
+        // v2.47.0-r1). It has no proxy OUTBOUND at all, so the loops above find
+        // nothing; route rules must reference the ENDPOINT's tag — the fabricated
+        // "custom-proxy" fallback produced a tag no outbound/endpoint carries and
+        // sing-box FATALed at start.
+        if (config["endpoints"] is JsonArray endpoints)
         {
-            if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "urltest")
-                return ResolveOrAssignProxyTag(obObj);
-        }
-
-        // 3. First proxy-like outbound
-        foreach (var ob in outbounds)
-        {
-            if (ob is not JsonObject obObj) continue;
-            var type = StjNodeHelpers.AsString(obObj["type"]);
-            if (type != "direct" && type != "block" && type != "dns")
-                return ResolveOrAssignProxyTag(obObj);
+            foreach (var ep in endpoints)
+            {
+                if (ep is JsonObject epObj && StjNodeHelpers.AsString(epObj["type"]) == "wireguard")
+                    return ResolveOrAssignProxyTag(epObj);
+            }
         }
 
         return "custom-proxy";

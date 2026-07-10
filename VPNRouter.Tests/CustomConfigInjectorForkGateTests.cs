@@ -143,4 +143,42 @@ public class CustomConfigInjectorForkGateTests
             var json = CustomConfigInjector.Inject(XhttpOutboundConfig, new[] { "Discord.exe" }, new AppSettings());
             Assert.Contains("xhttp", json);
         });
+
+    // ── Inject: endpoints-only configs must route to the ENDPOINT's tag (F2, r8) ──
+    // Validate accepts a wireguard-endpoint egress since v2.47.0-r1, but the
+    // injector's proxy-tag resolver only scanned outbounds — an endpoints-only
+    // config got route.final / rules pointing at a fabricated "custom-proxy" tag
+    // nothing carries, and sing-box FATALed at start ("valid" -> opaque crash).
+
+    [Fact]
+    public void Inject_PlainWireGuardEndpoint_FullTunnel_RoutesFinalToEndpointTag()
+        => WithOverrides(awg: false, xhttp: false, () =>
+        {
+            var settings = new AppSettings();
+            settings.App.RoutingMode = "full";
+            var json = CustomConfigInjector.Inject(
+                PlainWireGuardEndpointConfig, new[] { "Discord.exe" }, settings);
+
+            Assert.DoesNotContain("custom-proxy", json);
+            var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            Assert.Equal("proxy", (string?)root["route"]?["final"]);
+        });
+
+    [Fact]
+    public void Inject_AwgEndpoint_CoreWithAwg_SplitRules_ReferenceEndpointTag()
+        => WithOverrides(awg: true, xhttp: false, () =>
+        {
+            var json = CustomConfigInjector.Inject(
+                AwgEndpointConfig, new[] { "Discord.exe" }, new AppSettings()); // default split
+
+            Assert.DoesNotContain("custom-proxy", json);
+            var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            var rules = root["route"]?["rules"]?.AsArray();
+            Assert.NotNull(rules);
+            // The injected process rule must egress via the endpoint's tag.
+            Assert.Contains(rules!, r =>
+                r is System.Text.Json.Nodes.JsonObject o
+                && (string?)o["outbound"] == "proxy"
+                && o["process_name"] != null);
+        });
 }

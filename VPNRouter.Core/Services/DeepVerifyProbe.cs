@@ -88,6 +88,16 @@ internal static class DeepVerifyProbe
             sw.Stop();
             return (true, (int)sw.ElapsedMilliseconds, null);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // F1 (r8): EXTERNAL cancellation (user Cancel / caller budget) must
+            // surface as cancellation, NOT be swallowed as "http timeout" — the
+            // callers map "http timeout" to a server-meaningful ProxiedHttp FAIL,
+            // which false-branded in-flight servers ProtocolHandshakeBlockedLikely
+            // (and excluded them from the Auto pool for 12h) on every user Cancel.
+            // Mirrors MeasureBandwidthViaSocksAsync's existing rethrow.
+            throw;
+        }
         catch (TaskCanceledException)
         {
             return (false, 0, "http timeout");
