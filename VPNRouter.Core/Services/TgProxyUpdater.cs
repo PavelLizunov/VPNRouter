@@ -23,6 +23,13 @@ public class TgProxyUpdater
     private const string GitHubApiBase = "https://api.github.com/repos";
     private const string PythonVersion = "3.12.7";
     private const string PythonZipUrl = $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";
+    // P1-2 (dep-review 2026-07-09): pinned sha256 of python-3.12.7-embed-amd64.zip,
+    // captured from python.org canonical (11062583 bytes). python.org has no
+    // authoritative sha256 API (MD5 + GPG only), so this locks the embeddable to
+    // the exact known-good file: a later MITM / poisoned mirror on a user's box
+    // fails CLOSED instead of unpacking + running a swapped Python interpreter.
+    // MUST be recomputed when PythonVersion is bumped.
+    private const string PythonZipSha256 = "0d57bb6cb078b74d23dbfe91f77d6780d45bed328911609f1f7ee2ba1606bf44";
 
     private static readonly string _dataDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -182,6 +189,11 @@ public class TgProxyUpdater
                 await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
             }
 
+            // P1-2: fail-closed sha256 pin of the Python embeddable BEFORE
+            // extract — this is a whole interpreter we're about to run under the
+            // user's account.
+            VerifyPinnedSha256(tempZip, PythonZipSha256, $"Python {PythonVersion} embeddable");
+
             StatusChanged?.Invoke("Step 1/3: Extracting Python...");
             if (Directory.Exists(PythonDir))
                 Directory.Delete(PythonDir, recursive: true);
@@ -258,14 +270,19 @@ public class TgProxyUpdater
                     $"HTTP {pypiResp.StatusCode} fetching PyPI metadata for {pkgName}");
             using var doc = JsonDocument.Parse(pypiResp.AsString());
 
-            // Find matching wheel
-            string? wheelUrl = null;
+            // Find matching wheel. P1-2 (dep-review 2026-07-09): capture the
+            // PyPI-published sha256 (urls[].digests.sha256) ALONGSIDE the URL so
+            // the download can be verified — this installs executable code
+            // (cffi/cryptography C/Rust extensions) under the user's account, and
+            // pre-fix the wheel was taken on trust with zero integrity check.
+            string? wheelUrl = null, wheelSha256 = null;
             foreach (var urlEntry in doc.RootElement.GetProperty("urls").EnumerateArray())
             {
                 var filename = urlEntry.GetProperty("filename").GetString() ?? "";
                 if (filename.Contains(wheelPattern) && filename.EndsWith(".whl"))
                 {
                     wheelUrl = urlEntry.GetProperty("url").GetString();
+                    wheelSha256 = ReadPypiSha256(urlEntry);
                     break;
                 }
             }
@@ -276,15 +293,11 @@ public class TgProxyUpdater
                 foreach (var urlEntry in doc.RootElement.GetProperty("urls").EnumerateArray())
                 {
                     var filename = urlEntry.GetProperty("filename").GetString() ?? "";
-                    if (filename.Contains("win_amd64") && filename.EndsWith(".whl"))
+                    if ((filename.Contains("win_amd64") || filename.Contains("py3-none-any"))
+                        && filename.EndsWith(".whl"))
                     {
                         wheelUrl = urlEntry.GetProperty("url").GetString();
-                        break;
-                    }
-                    // Pure Python wheel
-                    if (filename.Contains("py3-none-any") && filename.EndsWith(".whl"))
-                    {
-                        wheelUrl = urlEntry.GetProperty("url").GetString();
+                        wheelSha256 = ReadPypiSha256(urlEntry);
                         break;
                     }
                 }
@@ -314,6 +327,14 @@ public class TgProxyUpdater
                     await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
                 }
 
+                // P1-2: verify the wheel against PyPI's published sha256 BEFORE
+                // extracting/importing it. Fail-CLOSED — a mismatch (MITM, a
+                // compromised mirror, a truncated download) aborts the install
+                // rather than unpacking untrusted code. If PyPI didn't publish a
+                // digest (shouldn't happen — every file carries one), log and
+                // proceed so a metadata quirk doesn't brick TgProxy setup.
+                VerifyWheelDigest(tempWhl, wheelSha256, pkgName);
+
                 ZipFile.ExtractToDirectory(tempWhl, libDir, overwriteFiles: true);
                 _logger.Information("[TgProxy] {Package} installed", pkgName);
             }
@@ -323,6 +344,49 @@ public class TgProxyUpdater
             }
         }
     }
+
+    /// <summary>Read <c>digests.sha256</c> from a PyPI <c>urls[]</c> entry; null if absent.</summary>
+    private static string? ReadPypiSha256(JsonElement urlEntry)
+        => urlEntry.TryGetProperty("digests", out var digests)
+           && digests.TryGetProperty("sha256", out var sha)
+           && sha.ValueKind == JsonValueKind.String
+            ? sha.GetString()
+            : null;
+
+    /// <summary>
+    /// P1-2: fail-closed sha256 check of a downloaded wheel against PyPI's
+    /// published digest. A null/empty expected digest is logged + skipped
+    /// (metadata quirk, not a downgrade — PyPI always publishes one).
+    /// </summary>
+    private void VerifyWheelDigest(string wheelPath, string? expectedSha256, string pkgName)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256))
+        {
+            _logger.Warning("[TgProxy] PyPI published no sha256 for {Package} wheel — installing unverified", pkgName);
+            return;
+        }
+        VerifyPinnedSha256(wheelPath, expectedSha256, $"{pkgName} wheel");
+    }
+
+    /// <summary>Compute the file's sha256 and throw <see cref="InvalidOperationException"/>
+    /// unless it equals <paramref name="expectedSha256"/> (hex, case-insensitive).
+    /// The single fail-closed integrity primitive for every executable TgProxy
+    /// pulls down (Python interpreter + wheels).</summary>
+    internal static void VerifyPinnedSha256Static(string filePath, string expectedSha256, string label, ILogger? logger = null)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        using var fs = File.OpenRead(filePath);
+        var actual = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+        var expected = (expectedSha256 ?? string.Empty).Trim().ToLowerInvariant();
+        if (actual != expected)
+            throw new InvalidOperationException(
+                $"{label} sha256 mismatch — expected {expected}, got {actual}. " +
+                "Refusing to install a file that doesn't match the trusted digest.");
+        logger?.Information("[TgProxy] {Label} sha256 verified", label);
+    }
+
+    private void VerifyPinnedSha256(string filePath, string expectedSha256, string label)
+        => VerifyPinnedSha256Static(filePath, expectedSha256, label, _logger);
 
     /// <summary>Download proxy source from GitHub (latest release tag).</summary>
     private async Task DownloadProxySourceAsync(CancellationToken ct)
