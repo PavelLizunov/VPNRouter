@@ -1,5 +1,0 @@
-﻿User=WINBRAT\tester
-Session=1
-Process 5652 VPNRouter.App Session=1 Hwnd=5570618 Title=[VPNRouter] Path=C:\Program Files\VPNRouter\app\VPNRouter.App.exe
-UIAError=Cannot overwrite variable PID because it is read-only or constant.
-Screen=1024x768 at 0,0

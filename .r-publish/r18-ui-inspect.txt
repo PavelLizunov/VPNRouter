@@ -1,5 +1,0 @@
-﻿2026-07-07T16:01:10.0452051+03:00 r18 UI inspect start
-2026-07-07T16:01:11.3889585+03:00 connect.click=False name=
-2026-07-07T16:02:25.6776860+03:00 advanced.click=True name=Расширенные настройки
-2026-07-07T16:02:26.7114781+03:00 apps.click=False
-2026-07-07T16:02:28.7926051+03:00 FAIL: The specified wildcard character pattern is not valid: *Подключено [*

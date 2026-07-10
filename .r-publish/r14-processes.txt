@@ -1,7 +1,0 @@
-﻿
-  Id ProcessName   Path                                            
-  -- -----------   ----                                            
-2956 VPNRouter.App C:\Program Files\VPNRouter\app\VPNRouter.App.exe
-
-
-

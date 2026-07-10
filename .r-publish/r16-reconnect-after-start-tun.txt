@@ -1,7 +1,0 @@
-﻿
-InterfaceAlias NlMtu ConnectionState InterfaceMetric
--------------- ----- --------------- ---------------
-VPNRouter-TUN   1420       Connected               1
-
-
-

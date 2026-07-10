@@ -1,3 +1,0 @@
-﻿NO vpnrouter*.log found
-Roots=
-C:\Users\tester\AppData\Roaming\VPNRouter C:\Users\tester\AppData\Local\VPNRouter C:\ProgramData\VPNRouter C:\r4review exists=False

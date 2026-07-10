@@ -1,2 +1,0 @@
-﻿LatestLog=C:\ProgramData\VPNRouter\logs\vpnrouter20260707_007.log
-CLEAN: no [ERR]/FATAL/crashed/Unhandled/AccessDenied/device-held/CreateFile/StartService failures in last 220 lines

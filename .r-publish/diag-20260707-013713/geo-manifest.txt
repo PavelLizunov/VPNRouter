@@ -1,4 +1,0 @@
-Geo rule files (sizes + dates only — files themselves not included)
-===================================================================
-geoip-ru.srs                  49972 bytes   2026-04-07T06:36:00.5740542Z
-geosite-ru.srs                  155 bytes   2026-04-07T06:37:20.4271543Z

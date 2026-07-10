@@ -1,5 +1,0 @@
-﻿Log=C:\ProgramData\VPNRouter\logs\vpnrouter20260706_003.log
-LastWrite=2026-07-06T15:29:50.3280119+03:00
-TailLines=3
-Matches=0
-Clean: no [ERR]/Exception/FATAL/crashed/Failed to in last 200 lines.

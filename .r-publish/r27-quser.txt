@@ -1,2 +1,0 @@
-﻿ USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME
- tester                console             1  Active      none   7/7/2026 7:18 PM

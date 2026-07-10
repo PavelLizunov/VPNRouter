@@ -1,3 +1,0 @@
-[mcp_servers.vpnrouter-test]
-command = "dotnet"
-args = ["./tools/VpnRouterTestMcp/bin/Release/net8.0-windows/VpnRouterTestMcp.dll"]

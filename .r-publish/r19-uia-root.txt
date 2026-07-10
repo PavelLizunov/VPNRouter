@@ -1,4 +1,0 @@
-﻿4712||Shell_TrayWnd|ControlType.Pane|0,728,1024,40
-5420|Administrator: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe|ConsoleWindowClass|ControlType.Window|0,0,1024,728
-3164|VPNRouter|MainWindow|ControlType.Window|252,55,520,640
-4712|Program Manager|Progman|ControlType.Pane|0,0,1024,768
