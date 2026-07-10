@@ -62,16 +62,6 @@ app.Configure(config =>
         .WithDescription("CI-only: trigger the auto-update flow programmatically (gated by VPNROUTER_CI=1)")
         .IsHidden();
 
-    // vpnrouter emergency-test — r9 Phase 2 local verification harness
-    // for the wgturn-core integration. Spawns wgturn-cli.exe via the
-    // EmergencyChannelEngine and prints state transitions. Hidden — not
-    // for end users; Phase 3 will drive the engine from the desktop UI.
-    config.AddCommand<EmergencyChannelTestCommand>("emergency-test")
-        .WithDescription("r9 Phase 2 dev harness: spawn wgturn-cli.exe via EmergencyChannelEngine")
-        .WithExample("emergency-test", "--dummy")
-        .WithExample("emergency-test", "--wgturn-url", "wgturn://...", "--vk-link", "https://vk.com/call/join/abc")
-        .IsHidden();
-
     // vpnrouter service [install|uninstall|start|stop|status]
     config.AddBranch("service", svc =>
     {

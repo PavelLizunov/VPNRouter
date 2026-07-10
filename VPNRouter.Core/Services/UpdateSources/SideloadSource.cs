@@ -51,8 +51,6 @@ namespace VPNRouter.Core.Services.UpdateSources;
 /// <list type="bullet">
 ///   <item><see cref="SideloadSource"/> — this class. Default for
 ///   non-Play-Store distribution.</item>
-///   <item><see cref="PlayStoreSource"/> — stub. Returns null from
-///   CheckAsync (the Play Store handles updates).</item>
 /// </list>
 /// Build-time flavour selection lands in Phase 4 via an MSBuild
 /// constant; today's APK ships with the sideload variant.</para>

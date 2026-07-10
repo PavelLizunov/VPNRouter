@@ -15,9 +15,6 @@
 //   • SideloadSource — current Android distribution: same GitHub
 //     Releases API but picks the .apk asset and hands install off to
 //     android.app.PackageInstaller via Intent.ActionView.
-//   • PlayStoreSource — placeholder (NotSupportedException). Returns
-//     null from CheckAsync because the Play Store handles its own
-//     updates; Download/Apply throw NotSupportedException until the
 //     Play Console publishing flow lands in Phase 4.
 //
 // UpdateChecker now becomes a thin wrapper that delegates to the
@@ -46,7 +43,6 @@ namespace VPNRouter.Core.Services.UpdateSources;
 /// <list type="bullet">
 ///   <item><see cref="GitHubReleaseSource"/> — desktop (Win/Mac/Linux).</item>
 ///   <item><see cref="SideloadSource"/> — Android sideload via GitHub Releases.</item>
-///   <item><see cref="PlayStoreSource"/> — Android Play Store (stub; Phase 4 wiring).</item>
 /// </list>
 ///
 /// <para>

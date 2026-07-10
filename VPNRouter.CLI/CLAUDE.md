@@ -28,7 +28,6 @@ Commands/
   ProfilesCommand.cs        ← ProfilesList/Show/Update commands
   ServiceCommand.cs         ← Service{Install,Uninstall,Start,Stop,Status}, обёртка над ServiceInstaller (sc.exe)
   TestUpdateCommand.cs      ← hidden, CI-only auto-update driver (VPNROUTER_CI=1)
-  EmergencyChannelTestCommand.cs ← hidden dev harness (wgturn-cli via EmergencyChannelEngine)
 Helpers/
   AdminHelper.cs            ← IsAdmin() check
   ProfileSourceFactory.cs

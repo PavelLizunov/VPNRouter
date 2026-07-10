@@ -6,14 +6,20 @@ feature (v2.46.0) stable first, then do this as its own focused pass (each shrin
 `phase-task-launcher` + characterization). Triaged below.
 
 ## Safe deadwood (low risk — clean delete, one pass)
-- [ ] **#3 `PlayStoreSource` stub** — `return null` / `NotSupportedException` + tests on the stub;
-  no real Play build variant. Delete until a Play variant exists.
-  `VPNRouter.Core/Services/UpdateSources/PlayStoreSource.cs`
-- [ ] **#5 `vpnrouter emergency-test` hidden CLI** — dev harness in the production CLI → move to a
-  local script / test fixture. `VPNRouter.CLI/Commands/EmergencyChannelTestCommand.cs`
+- [x] **#3 `PlayStoreSource` stub — DONE v2.47.0-r6 (2026-07-10)**: no caller passed
+  `preferPlayStore:true` (dead branch); deleted the stub + the `preferPlayStore` param/branch in
+  `PlatformServices.CreateUpdateSource` + the 2 contract tests + all doc crefs. Build clean, 8
+  update-source tests green.
+- [x] **#5 `vpnrouter emergency-test` hidden CLI — DONE v2.47.0-r6 (2026-07-10)**: the
+  EmergencyChannel engine is already unit-tested (`EmergencyChannel*Tests`), so the hidden CLI
+  harness was a manual dev tool — removed the `AddCommand` registration + `EmergencyChannelTestCommand.cs`
+  + the CLI CLAUDE.md line. CLI builds clean.
 - [ ] **#6 Android boot-autostart no-op scaffolding** — UI already hidden; checkbox/locals/storage
   handlers left "for future BootCompletedReceiver". `VPNRouter.Android/AndroidApp.UiBindings.cs:971`
-- [ ] **#8 `DeepVerifyConstants`** — 2 constants for 2 call-sites; folds into #4.
+  (touches the AndroidApp characterization hash → re-pin on removal)
+- [ ] **#8 `DeepVerifyConstants`** — NOT independently actionable: the 2 constants are SHARED by
+  `VlessDeepVerifier` + `FreeConfigDeepVerifier` (that's why they were extracted); inlining would
+  RE-duplicate them. Only makes sense folded into #4 (verifier consolidation). Leave until #4.
   `VPNRouter.Core/Services/DeepVerifyConstants.cs`
 
 ## Shrink-refactors (legit, but touch working code — each with tests + characterization)

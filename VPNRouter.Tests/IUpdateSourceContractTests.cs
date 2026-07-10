@@ -3,7 +3,6 @@
 // Pins the expected behaviour of all three concrete implementations:
 //   • GitHubReleaseSource (desktop)
 //   • SideloadSource (Android sideload)
-//   • PlayStoreSource (Android Play Store stub)
 //
 // Tests run on any OS — they use FakeHttpClient + in-process fake
 // installers. The Android-specific Intent.ActionView dispatch is covered
@@ -40,8 +39,7 @@ namespace VPNRouter.Tests;
 /// <summary>
 /// Contract tests for <see cref="IUpdateSource"/>. Covers all three
 /// concrete impls: <see cref="GitHubReleaseSource"/> (desktop),
-/// <see cref="SideloadSource"/> (Android sideload),
-/// <see cref="PlayStoreSource"/> (Android Play Store stub).
+/// <see cref="SideloadSource"/> (Android sideload).
 ///
 /// <para>
 /// SECURITY CONTRACT (pinned by
@@ -361,36 +359,6 @@ public sealed class IUpdateSourceContractTests
         Assert.True(result);
         Assert.Equal(1, fakeInstaller.BeginInstallCallCount);
         Assert.Equal(@"/data/data/com.app/cache/update.apk", fakeInstaller.LastApkPath);
-    }
-
-    // ─── PlayStoreSource ────────────────────────────────────────────────
-
-    [Fact]
-    public async Task PlayStoreSource_CheckAsync_ReturnsNull()
-    {
-        // Phase 3F stub — Play Store handles its own updates, so our
-        // in-app check returns null (no banner). Phase 4 will replace
-        // with Play In-App Update API.
-        var source = new PlayStoreSource();
-        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
-        Assert.Null(info);
-        Assert.Equal("play-store", source.SourceId);
-    }
-
-    [Fact]
-    public async Task PlayStoreSource_DownloadAndApply_Throw()
-    {
-        // Stub raises NotSupportedException loudly so a caller bug
-        // (forgetting the SourceId == "play-store" branch) shows up in
-        // QA rather than as a silent no-op.
-        var source = new PlayStoreSource();
-        var info = SampleSourceInfo(sha: null);
-        var ct = TestContext.Current.CancellationToken;
-
-        await Assert.ThrowsAsync<NotSupportedException>(
-            () => source.DownloadAsync(info, ct: ct));
-        await Assert.ThrowsAsync<NotSupportedException>(
-            () => source.ApplyAsync(info, "/data/data/x/files/x.apk", ct));
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────

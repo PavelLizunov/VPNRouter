@@ -104,8 +104,7 @@ public static class PlatformServices
     /// Phase 3 — 3F (v3.0 refactor): build a platform-appropriate
     /// <see cref="IUpdateSource"/>. Branches:
     /// <list type="bullet">
-    ///   <item>Android (sideload variant, today's default) → <see cref="SideloadSource"/>.</item>
-    ///   <item>Android (Play Store variant, Phase 4) → <see cref="PlayStoreSource"/>.</item>
+    ///   <item>Android → <see cref="SideloadSource"/>.</item>
     ///   <item>Win/Mac/Linux → <see cref="GitHubReleaseSource"/>.</item>
     /// </list>
     ///
@@ -126,16 +125,12 @@ public static class PlatformServices
     /// Required when not on Android.</param>
     /// <param name="androidInstaller">Android-side installer adapter.
     /// Required when on Android sideload.</param>
-    /// <param name="preferPlayStore">Force the Play Store stub even on
-    /// Android (Phase 4 build variant). Default <c>false</c> selects
-    /// sideload.</param>
     public static IUpdateSource CreateUpdateSource(
         UpdateSettings settings,
         string currentVersion,
         IHttpClient http,
         IDesktopInstaller? desktopInstaller = null,
-        IAndroidInstaller? androidInstaller = null,
-        bool preferPlayStore = false)
+        IAndroidInstaller? androidInstaller = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(currentVersion);
@@ -143,8 +138,6 @@ public static class PlatformServices
 
         if (OperatingSystem.IsAndroid())
         {
-            if (preferPlayStore)
-                return new PlayStoreSource();
             if (androidInstaller is null)
                 throw new InvalidOperationException(
                     "androidInstaller is required for Android sideload — " +
