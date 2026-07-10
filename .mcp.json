@@ -1,10 +1,8 @@
 {
   "mcpServers": {
     "vpnrouter-test": {
-      "command": "dotnet",
-      "args": [
-        "./tools/VpnRouterTestMcp/bin/Release/net8.0-windows/VpnRouterTestMcp.dll"
-      ],
+      "command": "./tools/VpnRouterTestMcp/bin/Release/net10.0-windows/VpnRouterTestMcp.exe",
+      "args": [],
       "env": {}
     }
   }
