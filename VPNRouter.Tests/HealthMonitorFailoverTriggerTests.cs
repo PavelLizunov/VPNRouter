@@ -25,7 +25,7 @@ public class HealthMonitorFailoverTriggerTests
 
     private sealed class StubFirewall : IFirewallManager
     {
-        public void CreateBlockRules(IEnumerable<string> processNames) { }
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
         public void EnableBlockRules() { }
         public void DisableBlockRules() { }
         public void DeleteAllRules() { }

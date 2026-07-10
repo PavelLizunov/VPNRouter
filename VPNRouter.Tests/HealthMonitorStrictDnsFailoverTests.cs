@@ -33,7 +33,7 @@ public class HealthMonitorStrictDnsFailoverTests
 
     private sealed class StubFirewall : VPNRouter.Core.Interfaces.IFirewallManager
     {
-        public void CreateBlockRules(IEnumerable<string> processNames) { }
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
         public void EnableBlockRules() { }
         public void DisableBlockRules() { }
         public void DeleteAllRules() { }

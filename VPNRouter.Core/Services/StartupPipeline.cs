@@ -1083,7 +1083,13 @@ internal sealed class StartupPipeline
         _host.SetFirewallManager(firewall);
         if (profile.BlockOnVpnFail)
         {
-            firewall.CreateBlockRules(scanResult.ProcessNames);
+            // P1 (2026-07-10): pass the EXPLICIT routing intent so the Linux/macOS
+            // global kill-switch arms ONLY in full-tunnel. Pre-fix an empty
+            // ProcessNames (split-tunnel scan that timed out or matched nothing)
+            // was misread as full-tunnel and dropped the whole host's egress.
+            var isFullTunnel = (settings.App.RoutingMode ?? "split")
+                .Equals("full", StringComparison.OrdinalIgnoreCase);
+            firewall.CreateBlockRules(scanResult.ProcessNames, isFullTunnel);
             _host.OnStatus("Firewall block rules created (disabled)");
         }
 

@@ -54,7 +54,7 @@ public sealed class VpnEngineOrchestratorTests
 
     private sealed class StubFirewallManager : IFirewallManager
     {
-        public void CreateBlockRules(IEnumerable<string> processNames) { }
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
         public void EnableBlockRules() { }
         public void DisableBlockRules() { }
         public void DeleteAllRules() { }

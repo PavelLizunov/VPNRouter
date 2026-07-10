@@ -51,16 +51,33 @@ public class LinuxFirewallManagerTests : IDisposable
         f.RunCalls.First(c => c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("-f")).Arguments.Last();
 
     [Fact]
-    public void SplitTunnel_nonEmpty_list_disarms_and_Enable_is_noop()
+    public void SplitTunnel_disarms_and_Enable_is_noop()
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
         var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
 
-        sut.CreateBlockRules(new[] { "Discord", "chrome" });
+        sut.CreateBlockRules(new[] { "Discord", "chrome" }, isFullTunnel: false);
         sut.EnableBlockRules();
 
         Assert.Empty(fake.RunCalls); // never armed → no nft at all (full-tunnel-only)
+    }
+
+    // P1 regression (2026-07-10): a SPLIT-tunnel process scan that TIMED OUT
+    // returns an empty list. Pre-fix an empty list meant "full tunnel" → the
+    // whole host's egress was dropped on a crash. Arming is now by the explicit
+    // routing intent, so split-with-empty-list must STILL disarm.
+    [Fact]
+    public void SplitTunnel_emptyList_scanTimeout_still_disarms()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = OkRunner();
+        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: false); // split scan returned nothing
+        sut.EnableBlockRules();
+
+        Assert.Empty(fake.RunCalls); // must NOT global-block a split-tunnel user
     }
 
     [Fact]
@@ -70,7 +87,7 @@ public class LinuxFirewallManagerTests : IDisposable
         var fake = OkRunner();
         var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
 
-        sut.CreateBlockRules(Array.Empty<string>());
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
         sut.EnableBlockRules();
 
         var load = fake.RunCalls.FirstOrDefault(c =>

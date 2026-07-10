@@ -33,7 +33,7 @@ public sealed class HealthMonitorStartIdempotencyTests
 
     private sealed class StubFirewallManager : VPNRouter.Core.Interfaces.IFirewallManager
     {
-        public void CreateBlockRules(IEnumerable<string> processNames) { }
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
         public void EnableBlockRules() { }
         public void DisableBlockRules() { }
         public void DeleteAllRules() { }

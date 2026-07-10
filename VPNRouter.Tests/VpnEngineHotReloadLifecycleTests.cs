@@ -107,7 +107,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         public int DeleteAllRulesCount;
         public int DisposeCount;
 
-        public void CreateBlockRules(IEnumerable<string> processNames) => CreateBlockRulesCount++;
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) => CreateBlockRulesCount++;
         public void EnableBlockRules() => EnableBlockRulesCount++;
         public void DisableBlockRules() => DisableBlockRulesCount++;
         public void DeleteAllRules() => DeleteAllRulesCount++;

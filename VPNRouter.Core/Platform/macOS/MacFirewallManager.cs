@@ -95,19 +95,21 @@ public sealed class MacFirewallManager : IFirewallManager
     }
 
     /// <inheritdoc />
-    public void CreateBlockRules(IEnumerable<string> processNames)
+    public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
     {
         var names = (processNames ?? Enumerable.Empty<string>())
             .Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
 
-        if (names.Count > 0)
+        // P1 (2026-07-10): arm on the EXPLICIT routing intent, NEVER on list
+        // emptiness. Pre-fix `names.Count == 0` meant "full tunnel" — so a
+        // SPLIT-tunnel user whose process scan timed out (an empty list) had the
+        // WHOLE host's egress dropped on a crash. pf can't block per-process, so
+        // split stays a labelled no-op no matter what the scan returned.
+        if (!isFullTunnel)
         {
-            // Split tunnel: pf can't block per-process, so we don't engage —
-            // blocking everything would also kill the never-tunnelled direct
-            // apps. Honest no-op (the leak-toggle UI already labels this).
             _armed = false;
             _logger.Information(
-                "[MacFirewall] {N} routed app(s) → split tunnel; pf kill-switch is full-tunnel-only " +
+                "[MacFirewall] split tunnel ({N} routed app(s)) → pf kill-switch is full-tunnel-only " +
                 "on macOS (per-process blocking impossible with pf) — staying disarmed", names.Count);
             return;
         }

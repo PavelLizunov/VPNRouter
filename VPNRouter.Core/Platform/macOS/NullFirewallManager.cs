@@ -26,9 +26,9 @@ public class NullFirewallManager : IFirewallManager
         _logger = logger ?? Log.Logger;
     }
 
-    public void CreateBlockRules(IEnumerable<string> processNames)
+    public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
     {
-        _logger.Debug("[NullFirewall] CreateBlockRules called — block_on_vpn_fail not supported on macOS");
+        _logger.Debug("[NullFirewall] CreateBlockRules called — block_on_vpn_fail not supported on this platform");
     }
 
     public void EnableBlockRules()

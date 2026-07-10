@@ -48,7 +48,7 @@ public sealed class HealthMonitorTunOrphanRestartTests
 
     private sealed class StubFirewallManager : VPNRouter.Core.Interfaces.IFirewallManager
     {
-        public void CreateBlockRules(System.Collections.Generic.IEnumerable<string> processNames) { }
+        public void CreateBlockRules(System.Collections.Generic.IEnumerable<string> processNames, bool isFullTunnel = true) { }
         public void EnableBlockRules() { }
         public void DisableBlockRules() { }
         public void DeleteAllRules() { }

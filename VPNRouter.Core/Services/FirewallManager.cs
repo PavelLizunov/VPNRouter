@@ -214,8 +214,14 @@ public class FirewallManager : IFirewallManager
     /// Create DISABLED block rules for all processes with block_on_vpn_fail=true.
     /// Rules stay disabled while VPN is running normally.
     /// </summary>
-    public void CreateBlockRules(IEnumerable<string> processNames)
+    public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
     {
+        // isFullTunnel is a Linux/macOS-only signal (their kill-switch is a global
+        // egress block that must arm on routing INTENT, not list emptiness).
+        // Windows blocks per-process image via netsh, so it is (correctly)
+        // ignored here — full-tunnel on Windows still routes everything through
+        // the TUN and per-app rules are moot, but we never GLOBAL-block.
+        _ = isFullTunnel;
         // v2.31.6-r20: CleanupOrphanedRules deletes ALL prefix-matching
         // rules in Windows Firewall (including ones we previously added to
         // _managedRules). The pre-r20 code never reset _managedRules, so on
