@@ -60,10 +60,14 @@ public sealed class AndroidSingBoxRuntime
 
     /// <summary>
     /// P1 clash_api secret (2026-07-10): bearer token matching the generated
-    /// config's <c>experimental.clash_api.secret</c>. AndroidApp sets this
-    /// right after settings load (same pattern as <see cref="RegisterServiceType"/>);
-    /// without it <see cref="IsRunningAsync"/> 401s against the secret-locked
-    /// libbox API and Android would read a healthy tunnel as down.
+    /// config's <c>experimental.clash_api.secret</c>. Set by
+    /// <c>AndroidConfigBuilder.ApplyClashApiSecret</c> on every config build
+    /// (the single choke point every tunnel start flows through); without it
+    /// <see cref="IsRunningAsync"/> 401s against the secret-locked libbox API
+    /// and Android would read a healthy tunnel as down. r8 note: nothing
+    /// currently instantiates this runtime — if a consumer appears that polls
+    /// BEFORE the first config build (e.g. UI-process restart over a live
+    /// tunnel), it must prime this from the app-private stored secret first.
     /// </summary>
     public static string? ClashApiSecret { get; set; }
 

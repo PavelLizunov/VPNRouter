@@ -505,8 +505,9 @@ public sealed class VlessDeepVerifier
     /// "passes" on ANY HTTP response (even 403/404 — bytes flowed through to the
     /// blocked host, bypass proven); timeout/reset/connect failure = failed (the
     /// RU block signature via a non-working transport). Per-target 4s cap, run in
-    /// parallel; skipped entirely (Unknown) when under ~5s of overall budget
-    /// remains. URLs are logged redacted (scheme+host).
+    /// parallel; an overall-budget cancellation mid-canary is swallowed and
+    /// reported Unknown (inconclusive), never a verdict. URLs are logged
+    /// redacted (scheme+host).
     /// </summary>
     private async Task<PhaseOutcome> ProbeCanariesViaSocksAsync(int socksPort, string label, CancellationToken ct)
     {

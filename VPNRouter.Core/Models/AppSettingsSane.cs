@@ -16,13 +16,13 @@ namespace VPNRouter.Core.Models;
 /// </summary>
 public static class AppSettingsSane
 {
-    /// <summary>Walk the AppSettings tree and replace every null
-    /// sub-object / collection with a fresh empty default.</summary>
     /// <summary>32-hex-char cryptographically random Clash-API bearer secret.</summary>
     internal static string GenerateClashApiSecret()
         => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
             .ToLowerInvariant();
 
+    /// <summary>Walk the AppSettings tree and replace every null
+    /// sub-object / collection with a fresh empty default.</summary>
     public static AppSettings EnsureSane(this AppSettings? settings)
     {
         // Tolerate null receiver — caller may pass us the result of a

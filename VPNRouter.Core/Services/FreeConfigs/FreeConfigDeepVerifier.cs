@@ -26,6 +26,12 @@ public sealed class FreeConfigDeepVerifier
     /// <summary>Time to wait for sing-box to bind SOCKS before we attempt HTTP.</summary>
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
 
+    /// <summary>r8: per-extra-concurrent-spawn slack added to the SOCKS-bind wait —
+    /// same slow-hardware fix VlessDeepVerifier got in v2.47.0-r4 (N concurrent
+    /// sing-box spawns contend for CPU and the flat 1500ms falsely reports
+    /// "didn't bind" on a slow VM). Still bounded by the per-config OverallTimeout.</summary>
+    private static readonly TimeSpan WarmupPerConcurrencySlack = TimeSpan.FromMilliseconds(300);
+
     /// <summary>Overall per-config timeout.</summary>
     private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
 
@@ -34,6 +40,10 @@ public sealed class FreeConfigDeepVerifier
 
     /// <summary>How many configs to verify in parallel.</summary>
     public int MaxConcurrency { get; set; } = 5;
+
+    /// <summary>Effective SOCKS-bind wait: flat warmup plus slack per EXTRA concurrent spawn.</summary>
+    internal TimeSpan EffectiveSocksBindWait =>
+        SingBoxWarmup + WarmupPerConcurrencySlack * Math.Max(0, MaxConcurrency - 1);
 
     /// <summary>v2.14.3: if true, after HTTP trace also measure download throughput
     /// via a 5 MB file from cloudflare/hetzner/ovh. Adds 3-8s per config.</summary>
@@ -141,7 +151,7 @@ public sealed class FreeConfigDeepVerifier
             process.BeginErrorReadLine();
 
             // 3. Wait for sing-box to bind. Poll the SOCKS port.
-            if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
+            if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
             {
                 var stderrSnip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 300);
                 cfg.LastError = $"sing-box didn't bind: {DeepVerifyProbe.TrimSnippet(stderrSnip, 80)}";

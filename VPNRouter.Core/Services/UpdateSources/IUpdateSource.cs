@@ -8,14 +8,13 @@
 // blocked future Play Store distribution because every change to that
 // channel required forking the desktop updater.
 //
-// Solution: thin IUpdateSource interface + 3 concrete impls (1 stub).
+// Solution: thin IUpdateSource interface + 2 concrete impls.
 //   • GitHubReleaseSource — desktop default (win/mac/linux), wraps the
 //     existing UpdateChecker.CheckForUpdateAsync flow against the
 //     GitHub Releases JSON API.
 //   • SideloadSource — current Android distribution: same GitHub
 //     Releases API but picks the .apk asset and hands install off to
 //     android.app.PackageInstaller via Intent.ActionView.
-//     Play Console publishing flow lands in Phase 4.
 //
 // UpdateChecker now becomes a thin wrapper that delegates to the
 // platform-appropriate IUpdateSource via PlatformServices.

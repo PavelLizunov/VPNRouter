@@ -147,7 +147,8 @@ public static class ServerHealthStore
         var dto = new ServerHealthFileDto { Records = new List<ServerHealthRecordDto>(map.Values) };
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(dto, Json.AppJsonContext.Default.ServerHealthFileDto));
-        if (File.Exists(path)) File.Delete(path);
-        File.Move(tmp, path);
+        // r8: single atomic replace — the old Delete-then-Move left a crash window
+        // with NO store file between the two calls.
+        File.Move(tmp, path, overwrite: true);
     }
 }

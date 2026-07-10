@@ -1563,7 +1563,7 @@ public final class VpnRouterService extends VpnService {
         return applied;
     }
 
-    /// <summary>Compact "a, b, c" join for logging (avoids String.join API-26 floor).</summary>
+    // Compact "a, b, c" join for logging (avoids the String.join API-26 floor).
     private static String joinPrefixes(List<String> items) {
         if (items == null || items.isEmpty()) return "<empty>";
         StringBuilder sb = new StringBuilder();

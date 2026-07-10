@@ -255,7 +255,16 @@ public partial class ServerViewModel : ViewModelBase
                 _ = Task.Run(async () =>
                 {
                     var resolved = await ProviderKey.ResolveAsync(entry.Server).ConfigureAwait(false);
-                    if (resolved != null)
+                    if (resolved == null) return;
+                    // r8: a newer probe may have recorded a fresher verdict while DNS
+                    // resolved (up to 3s) — attach the key to the CURRENT record
+                    // (preserving its verdict + timestamp) instead of resurrecting the
+                    // captured one; the captured verdict is only the fallback for a
+                    // record the synchronous Record above failed to persist.
+                    var cur = ServerHealthStore.GetFreshRecord(entry);
+                    if (cur != null)
+                        ServerHealthStore.Record(entry, cur.Verdict, cur.RecordedAt, resolved);
+                    else
                         ServerHealthStore.Record(entry, verdict, providerKey: resolved);
                 });
             }
