@@ -91,6 +91,30 @@ jobs:
             "$RUNNER_TEMP/aligned.apk"
           echo "=== apksigner verify ==="
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/$SIGNED"
+          # audit batch-8 (2026-07-10): verify the signed APK actually carries the
+          # version this release claims. Catches a stale / mislabelled UNSIGNED
+          # upload — the filename says v${VERSION} but a wrong AppVersion.cs at
+          # build time would embed a different versionName/versionCode, and Android
+          # gates updates on versionCode, so a non-monotonic or wrong code silently
+          # breaks in-place updates. versionCode = Major*1000000+Minor*1000+Patch
+          # (suffix stripped), mirroring VPNRouter.Android.csproj.
+          echo "=== version verification ==="
+          AAPT="$BUILD_TOOLS/aapt2"; [ -x "$AAPT" ] || AAPT="$BUILD_TOOLS/aapt"
+          BADGING=$("$AAPT" dump badging "$RUNNER_TEMP/$SIGNED")
+          GOT_NAME=$(printf '%s\n' "$BADGING" | grep -oE "versionName='[^']*'" | head -1 | sed "s/versionName='//;s/'//")
+          GOT_CODE=$(printf '%s\n' "$BADGING" | grep -oE "versionCode='[^']*'" | head -1 | sed "s/versionCode='//;s/'//")
+          CORE="${VERSION%%-*}"
+          IFS=. read -r MA MI PA <<< "$CORE"
+          WANT_CODE=$(( MA*1000000 + MI*1000 + PA ))
+          echo "versionName: got='$GOT_NAME' want='$VERSION'"
+          echo "versionCode: got='$GOT_CODE' want='$WANT_CODE'"
+          if [ "$GOT_NAME" != "$VERSION" ]; then
+            echo "::error::signed APK versionName '$GOT_NAME' != release version '$VERSION'"; exit 1
+          fi
+          if [ "$GOT_CODE" != "$WANT_CODE" ]; then
+            echo "::error::signed APK versionCode '$GOT_CODE' != expected monotonic '$WANT_CODE'"; exit 1
+          fi
+          echo "version verification OK."
           ( cd "$RUNNER_TEMP" && sha256sum "$SIGNED" > "$SIGNED.sha256" )
           echo "=== signed artifacts ==="
           ls -la "$RUNNER_TEMP/$SIGNED" "$RUNNER_TEMP/$SIGNED.sha256"
