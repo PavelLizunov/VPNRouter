@@ -337,7 +337,42 @@ public static class LeakProtection
             ValidateProxyOutbound(proxyOutbound, config, errors, proxyTag);
         }
 
+        // 7b. AWG (sing-box-lx) emits "proxy" as a wireguard ENDPOINT, never an
+        // outbound, so the loop above never sees it. An endpoint with an empty
+        // private_key / no peers / a peer missing its public_key or endpoint
+        // address FATALs sing-box at startup — the leak gate runs in both
+        // StartAsync + Apply, so catching it here gives an actionable error
+        // instead of a bare "sing-box exited". Defense-in-depth: the awg://
+        // parser already required these fields, but a custom config or a future
+        // codegen path could emit a malformed endpoint. (P2, 2026-07-10.)
+        var proxyEndpoint = config.Endpoints?.FirstOrDefault(e => e.Tag == "proxy");
+        if (proxyEndpoint != null)
+            ValidateProxyEndpoint(proxyEndpoint, errors);
+
         return new ValidationResult { Errors = errors, Warnings = warnings };
+    }
+
+    private static void ValidateProxyEndpoint(SingBoxEndpoint ep, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(ep.PrivateKey))
+            errors.Add("AWG 'proxy' endpoint: private_key is empty");
+        if (ep.Address == null || ep.Address.Count == 0 || ep.Address.All(string.IsNullOrWhiteSpace))
+            errors.Add("AWG 'proxy' endpoint: no local tunnel address");
+        if (ep.Peers == null || ep.Peers.Count == 0)
+        {
+            errors.Add("AWG 'proxy' endpoint: no peers (nothing to route through)");
+            return;
+        }
+        for (var i = 0; i < ep.Peers.Count; i++)
+        {
+            var p = ep.Peers[i];
+            if (string.IsNullOrWhiteSpace(p.PublicKey))
+                errors.Add($"AWG 'proxy' endpoint peer[{i}]: public_key is empty");
+            if (string.IsNullOrWhiteSpace(p.Address))
+                errors.Add($"AWG 'proxy' endpoint peer[{i}]: endpoint address is empty (can't dial the server)");
+            if (p.Port <= 0 || p.Port > 65535)
+                errors.Add($"AWG 'proxy' endpoint peer[{i}]: invalid port {p.Port}");
+        }
     }
 
     private static void ValidateProxyOutbound(
