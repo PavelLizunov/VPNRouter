@@ -1,9 +1,53 @@
 # macOS P0.3 PF anchor kill-switch — corrected design + live-verify plan
 
-**Status**: deferred from v2.47.0-r1 to -r2. Reason: the Drive handoff
-(`1y7mtDgi...`) under-specifies the anchor wiring and, as written, ships a dead
-kill-switch. This doc records the correction so the -r2 Mac session implements
-it right and live-proves it.
+**Status**: IMPLEMENTED + LIVE-PROVEN 2026-07-10 (ships in v2.47.0-r2). The Drive
+handoff (`1y7mtDgi...`) under-specifies the anchor wiring and, as written, ships
+a dead kill-switch — both halves now proven empirically on the Mac host
+(slovn@192.168.0.246, macOS 26.5.2, NOPASSWD `/sbin/pfctl *` grant active):
+
+## Live proof transcript (2026-07-10, dead-man guarded, SSH survived throughout)
+
+1. **Baseline**: `curl -4 http://1.1.1.1` → 301 (egress up). Live main ruleset =
+   stock com.apple + `anchor "amn/*"` (AmneziaWG runtime carrier — NOT in
+   /etc/pf.conf; also nat-anchor/rdr-anchor "amn/*" in the nat rules).
+2. **INERT proof (handoff shape)**: `pfctl -a com.vpnrouter/killswitch -f <rules>`
+   loaded — anchor body verifiably contained `block drop out all` — yet
+   `curl http://1.1.1.1` → **301, egress alive**. Anchor rules without a main-
+   ruleset carrier are dead. The handoff's D2/D3 command-shape tests would have
+   been green on a kill-switch that does not block.
+3. **CARRIER proof (corrected shape)**: loaded main = /etc/pf.conf content +
+   `anchor "amn/*"` + `anchor "com.vpnrouter/killswitch"` → `curl http://1.1.1.1`
+   → **000 / timeout 28 = BLOCKED**; SSH (LAN 192.168/16 + 10/8 passes) stayed
+   alive.
+4. **FLUSH proof (disable shape)**: `pfctl -a com.vpnrouter/killswitch -F rules`
+   → curl → 301 again. Carrier with an empty anchor is inert → normal disable
+   never needs to touch the main ruleset.
+5. **Restore**: exact pre-test state re-loaded. GOTCHA FOUND: other tools'
+   runtime carriers exist in the NAT table too (`nat-anchor "amn/*"`,
+   `rdr-anchor "amn/*"` — invisible in `-sr`, only in `-sn`); the first restore
+   missed them and a follow-up load with the full section-ordered set
+   (scrub → nat → rdr → dummynet → filter, com.apple interleaved with amn)
+   repaired it. Amnezia anchor BODIES survive main reloads — only carrier lines
+   need re-adding.
+6. `pfctl` prints "Use of -f option, could result in flushing..." + "ALTQ
+   related functions disabled" to stderr with exit 0 — RunSudo's exit-code
+   check is unaffected.
+
+**Implementation** (MacFirewallManager.cs): anchor `com.vpnrouter/killswitch`;
+Enable = `-E` token → EnsureCarrier (`-sr` contains-check; if absent load
+/etc/pf.conf + carrier) → `-a … -f` body; Disable/DeleteAllRules/Dispose =
+`-a … -F rules` + `-X` (main untouched); marker content `anchor-v1` (legacy
+`engaged` → old broad restore path, incl. upgraded-mid-engage installs);
+legacy broad-load fallback when pf.conf is unreadable; `set block-policy`
+dropped from BuildRules (`set` is main-only — would fail the anchor load; drop
+is pf's default policy). 21 unit pins in MacFirewallManagerTests.
+
+**Known ceiling (ponytail, documented in code)**: the FIRST engage reloads
+pf.conf+carrier, which drops OTHER tools' runtime carrier lines (amn class) —
+same event the pre-P0.3 code caused on *every* enable/disable/shutdown, now
+once per boot at most, and disable no longer touches main at all. Upgrade path
+if a real coexistence report needs it: faithful live reconstruction from
+`-sr` + `-sn` (+ dummynet), section-ordered as in step 5 above.
 
 ## The gap in the handoff
 
