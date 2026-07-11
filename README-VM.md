@@ -79,7 +79,7 @@ The script:
 - bootstraps [Chocolatey](https://chocolatey.org/) if it's not already
   installed (works on all Windows editions, including Enterprise LTSC,
   where Microsoft Store / `winget` are absent)
-- installs `.NET 8 SDK`, `Go`, `Git`, `GitHub CLI`, `7-Zip` via `choco`
+- installs `.NET 10 SDK`, `Go`, `Git`, `GitHub CLI`, `7-Zip` via `choco`
 - adds Windows Defender exclusions for `C:\Project\VPNRouter\` and
   `C:\ProgramData\VPNRouter\`
 - clones the repo to `C:\Project\VPNRouter`
@@ -116,7 +116,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
     'https://community.chocolatey.org/install.ps1'))
 
-choco install -y dotnet-8.0-sdk golang git gh 7zip
+choco install -y dotnet-10.0-sdk golang git gh 7zip
 
 Add-MpPreference -ExclusionPath "C:\Project\VPNRouter"
 Add-MpPreference -ExclusionPath "C:\ProgramData\VPNRouter"

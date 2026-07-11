@@ -10,7 +10,7 @@ agree your contributions are licensed under the same terms.
 
 ## Building
 
-Requires the .NET 8 SDK (desktop). Android additionally needs the .NET Android
+Requires the .NET SDK pinned by global.json (10.0.301). Android additionally needs the .NET Android
 workload.
 
     dotnet build VPNRouter.sln -c Release

@@ -1,7 +1,7 @@
 # VPNRouter.App
 
 Avalonia **12.0.3** GUI (не 11). Кросс-платформа (Windows / macOS / Linux),
-`net8.0` (App.csproj без `-windows` суффикса — иначе не собирается на других
+`net10.0` (App.csproj без `-windows` суффикса — иначе не собирается на других
 платформах). Платформ-специфичные ветки через `#if PLATFORM_WINDOWS`.
 
 ## Layout
