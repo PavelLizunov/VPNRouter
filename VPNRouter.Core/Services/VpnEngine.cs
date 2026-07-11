@@ -1581,7 +1581,8 @@ public class VpnEngine : IDisposable
                 {
                     await Task.Delay(TimeSpan.FromSeconds(15), probeCt);
                     var clashPort = ParseClashApiPort(settings.SingBox.ClashApi);
-                    var probe = await sanityCheck.ProbeAsync(clashPort, probeCt);
+                    var probe = await sanityCheck.ProbeAsync(
+                        clashPort, settings.SingBox.ClashApiSecret, probeCt);
                     if (ShouldAutoFailoverAfterProbe(
                             probe.IsDead, probeCt.IsCancellationRequested, _engine._warmupConfirmed))
                     {
