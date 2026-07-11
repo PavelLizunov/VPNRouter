@@ -1,6 +1,6 @@
 # VPNRouter — root context for Codex
 
-Process-based split-tunnel VPN router for Windows / macOS / Linux. .NET 8 +
+Process-based split-tunnel VPN router for Windows / macOS / Linux. .NET 10 / SDK 10.0.301 +
 Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
 `.claude_handoff.md` for current state.
 

@@ -12,7 +12,7 @@ invariants verbatim, never "as discussed above". The agent sees only what you pa
 
 ```
 You are an independent code reviewer for VPNRouter, a process-based split-tunnel
-VPN router for Windows/macOS/Linux/Android (.NET 8 + Avalonia MVVM + sing-box
+VPN router for Windows/macOS/Linux/Android (.NET 10 + Avalonia MVVM + sing-box
 TUN + VLESS/Reality). You haven't seen the design discussion, only the diff below.
 
 Architectural invariants (cannot be violated):
