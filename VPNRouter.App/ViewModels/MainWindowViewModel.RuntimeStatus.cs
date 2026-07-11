@@ -230,8 +230,10 @@ public partial class MainWindowViewModel
         {
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
-            var configLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
-            var tunnelLabel = IsSplitTunnel ? "split" : "full";
+            var configLabel = IsSubscribeMode
+                ? (IsRussian ? "подписка" : "subscribe")
+                : IsVlessMode ? (IsRussian ? "ручной" : "manual") : (IsRussian ? "свой" : "custom");
+            var tunnelLabel = IsSplitTunnel ? (IsRussian ? "сплит" : "split") : (IsRussian ? "полный" : "full");
             var mode = $"{configLabel}/{tunnelLabel}";
             StatusText = IsRussian
                 ? $"Подключено через службу [{mode}]"

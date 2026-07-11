@@ -262,6 +262,7 @@ public partial class MainWindowViewModel
     public string L_TgProxySecret => Strings.TgProxySecret;
     public string L_TgProxySetupOnce => Strings.TgProxySetupOnce;
     public string L_TipCloseServerDetail => Strings.TipCloseServerDetail;
+    public string L_TipDismiss => Strings.TipDismiss;
     public string L_TipDeleteServer => Strings.TipDeleteServer;
     public string L_TipDeepVerifyServers => Strings.TipDeepVerifyServers;
     public string L_TipFcSkipRu => Strings.TipFcSkipRu;

@@ -251,7 +251,7 @@ public class MainWindowViewModelCharacterizationTests
         // clean. Re-pinned to the net10 Windows actual. Prior net8 Windows hash:
         // 5406a615…551e006f. Linux net10 hash self-captures via the soft-fail
         // sentinel on the next ubuntu CI run.
-        "c77fff422464324f5dfe2e9b70b5222ac508693afe3f6313b5a4b169d9215e6b";
+        "ee6ac11f2d53b94b5762afc93be94abd8d2b46c641099e8582686bdc70f14322";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

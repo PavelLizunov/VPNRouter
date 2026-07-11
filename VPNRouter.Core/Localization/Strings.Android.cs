@@ -9,7 +9,7 @@ public static partial class Strings
     // section sits between Autostart and Updates so the kebab menu user
     // who's looking for "stay connected at all times" plumbing finds it
     // before they hit the Updates / Diagnostics tail.
-    public static string SettingsSectionReliability => Ru ? "Резервирование" : "Reliability";
+    public static string SettingsSectionReliability => Ru ? "Надёжность" : "Reliability";
 
     public static string SettingsReliabilityIntro => Ru
         ? "Чтобы VPN держался даже при перезагрузке телефона, в режиме энергосбережения и при смене Wi-Fi на мобильную сеть."
@@ -38,8 +38,8 @@ public static partial class Strings
         : "✓ VPNRouter is excluded from battery optimization";
 
     public static string ReliabilityBatteryOptStatusOptimized => Ru
-        ? "⚠ VPNRouter в обычном энергосбережении — Android может прибить туннель в Doze"
-        : "⚠ VPNRouter is under standard battery optimization — Android may kill the tunnel in Doze";
+        ? "VPNRouter в обычном энергосбережении — Android может прибить туннель в Doze"
+        : "VPNRouter is under standard battery optimization — Android may kill the tunnel in Doze";
 
     public static string ReliabilityBatteryOptHint => Ru
         ? "Android в Doze (экран выключен 30+ минут) урезает CPU фоновым процессам. Если VPNRouter не исключён, sing-box может застрять между ретрансляциями и потерять трафик."
@@ -69,7 +69,7 @@ public static partial class Strings
         : "Auto-reconnect on network change";
 
     public static string ReliabilityAutoReconnectHint => Ru
-        ? "При переключении Wi-Fi ↔ мобильная sing-box сам пересвяжет upstream-сокеты с новым интерфейсом. Отключи только если подозреваешь конфликт с внутренним монитором интерфейсов libbox."
+        ? "При переключении Wi-Fi ↔ мобильная sing-box сам пересвяжет upstream-сокеты с новым интерфейсом. Отключите только если подозреваете конфликт с внутренним монитором интерфейсов libbox."
         : "On Wi-Fi ↔ cellular handoff, sing-box re-binds upstream sockets to the new interface. Disable only if you suspect a conflict with libbox's own interface monitor.";
 
     // P4 (2026-06-21) — external broadcast control toggle (Tasker / widgets / adb)
@@ -143,7 +143,7 @@ public static partial class Strings
 
     public static string CcModeManual => Ru ? "Сервер" : "Server";
 
-    public static string CcModeCustom => Ru ? "Свой JSON" : "Custom JSON";
+    public static string CcModeCustom => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
 
     public static string CcCustomLabel => Ru
         ? "Свой sing-box JSON"
@@ -170,7 +170,7 @@ public static partial class Strings
         : "✓ JSON is valid. Protocols: {0}. Server: {1}.";
 
     public static string CcValidationFailed => Ru
-        ? "✗ Не валидно: {0}"
+        ? "✗ Некорректно: {0}"
         : "✗ Invalid: {0}";
 
     public static string CcValidationParseError => Ru
@@ -186,16 +186,16 @@ public static partial class Strings
         : "Saved. Tap Connect.";
 
     public static string CcSaveStatusInvalid => Ru
-        ? "JSON не валиден — сохраняю как есть, но sing-box может его отвергнуть."
+        ? "JSON некорректен — сохраняю как есть, но sing-box может его отвергнуть."
         : "JSON is invalid — saving as-is, but sing-box may reject it.";
 
     public static string AutostartZapretNotPorted => Ru
-        ? "⛔ Zapret пока не портирован на Android"
-        : "⛔ Zapret is not ported to Android yet";
+        ? "Zapret пока не портирован на Android"
+        : "Zapret is not ported to Android yet";
 
     public static string AutostartTgProxyNotPorted => Ru
-        ? "⛔ TgProxy пока не портирован на Android"
-        : "⛔ TgProxy is not ported to Android yet";
+        ? "TgProxy пока не портирован на Android"
+        : "TgProxy is not ported to Android yet";
 
     // ── v2.32.0 (AND-ZAPRET, 2026-05-07) — DPI bypass picker (handbook §7 Phase 8.4) ──
     //
@@ -207,7 +207,7 @@ public static partial class Strings
     // because we don't have hosts-file installers / external binary
     // updaters to manage).
     public static string SettingsDpiBypassLabel => Ru
-        ? "DPI bypass (Zapret)"
+        ? "Обход блокировок (Zapret)"
         : "DPI bypass (Zapret)";
 
     public static string SettingsDpiBypassHint => Ru
@@ -215,8 +215,8 @@ public static partial class Strings
         : "Splits TLS handshake inside the tunnel to bypass Russian ISP DPI. Uses sing-box's native tls_fragment — no separate service, unlike the Windows Zapret port.";
 
     public static string SettingsDpiBypassWarning => Ru
-        ? "⚠ Включай только если без него сайты не открываются. Может слегка увеличить задержку соединения."
-        : "⚠ Turn on only if sites don't open without it. May add a small connection-setup delay.";
+        ? "Включай только если без него сайты не открываются. Может слегка увеличить задержку соединения."
+        : "Turn on only if sites don't open without it. May add a small connection-setup delay.";
 
     public static string SettingsDpiBypassOff => Ru ? "Выключен" : "Off";
 
@@ -301,15 +301,15 @@ public static partial class Strings
         : "DPI bypass + Telegram proxy";
 
     public static string MenuItemOpenDpiBypass => Ru
-        ? "DPI bypass (Zapret)"
+        ? "Обход блокировок (Zapret)"
         : "DPI bypass (Zapret)";
 
     public static string ToolsOverlayTitle => Ru ? "Инструменты" : "Tools";
 
-    public static string DpiBypassOverlayTitle => Ru ? "DPI bypass" : "DPI bypass";
+    public static string DpiBypassOverlayTitle => Ru ? "Обход DPI" : "DPI bypass";
 
     /// <summary>Sub-tab strip on Android Tools overlay — left segment.</summary>
-    public static string ToolsTabZapret => Ru ? "DPI bypass" : "DPI bypass";
+    public static string ToolsTabZapret => Ru ? "Обход DPI" : "DPI bypass";
 
     /// <summary>Sub-tab strip on Android Tools overlay — right segment.</summary>
     public static string ToolsTabTgProxy => Ru ? "Telegram-прокси" : "Telegram proxy";
@@ -463,7 +463,7 @@ public static partial class Strings
 
     // ── Public tab (Phase E P1-P4) ──────────────────────────────────────
     public static string AdvPublicSubTabSearch => Ru ? "▶ Поиск" : "▶ Search";
-    public static string AdvPublicSubTabSaved  => Ru ? "★ Сохранённые" : "★ Saved";
+    public static string AdvPublicSubTabSaved  => Ru ? "Сохранённые" : "Saved";
 
     /// <summary>Big green CTA on Public > Search. Mirrors desktop's
     /// "✓✓ Найти рабочие конфиги" / "✓✓ Find working configs".</summary>

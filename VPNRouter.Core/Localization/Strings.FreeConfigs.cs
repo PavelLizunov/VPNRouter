@@ -11,7 +11,7 @@ public static partial class Strings
     public static string TabFreeConfigs => Ru ? "Публичные" : "Public";
     public static string FcDashboardTotal     => Ru ? "Всего"         : "Total";
     public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
-    public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";
+    public static string FcDashboardTimeout   => Ru ? "Таймаут"       : "Timeout";
     public static string FcDashboardUnreach   => Ru ? "Недоступны"    : "Unreachable";
     public static string FcDashboardTlsFail   => Ru ? "TLS провал"    : "TLS failed";
     public static string FcDashboardVerified  => Ru ? "Проверено"     : "Verified";
@@ -41,13 +41,13 @@ public static partial class Strings
         ? $"Поиск {target} рабочих конфигов из пула {poolSize}..."
         : $"Searching {target} working configs from pool of {poolSize}...";
     public static string FcStatusBatchedTcpTls(int found, int target, int batchNum, int totalBatches) => Ru
-        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} (TCP+TLS)..."
+        ? $"Найдено {found}/{target} · группа {batchNum}/{totalBatches} (TCP+TLS)..."
         : $"Found {found}/{target} · batch {batchNum}/{totalBatches} (TCP+TLS)...";
     public static string FcStatusBatchedTcpTlsProgress(int found, int target, int batchNum, int totalBatches, int done, int total) => Ru
-        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} · проверено {done}/{total}"
+        ? $"Найдено {found}/{target} · группа {batchNum}/{totalBatches} · проверено {done}/{total}"
         : $"Found {found}/{target} · batch {batchNum}/{totalBatches} · tested {done}/{total}";
     public static string FcStatusBatchedDeepVerify(int found, int target, int batchNum, int totalBatches, int candidates) => Ru
-        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} · глубокая проверка {candidates} кандидатов..."
+        ? $"Найдено {found}/{target} · группа {batchNum}/{totalBatches} · глубокая проверка {candidates} кандидатов..."
         : $"Found {found}/{target} · batch {batchNum}/{totalBatches} · deep-verifying {candidates} candidates...";
     public static string FcStatusBatchedFound(int found, int target) => Ru
         ? $"Найдено {found}/{target} рабочих конфигов..."
@@ -68,13 +68,13 @@ public static partial class Strings
         ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Остановится когда наберётся достаточно рабочих с пингом ниже порога."
         : "Downloads public VLESS configs and tries each one with a real connection. Stops once enough working ones meet your ping threshold.";
     public static string FcStatusMainVpnActive => Ru
-        ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед глубокой проверкой."
-        : "⚠ Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
-    public static string FcOpenLogs         => Ru ? "📁 Логи"                : "📁 Logs";
-    public static string FcClearFailed      => Ru ? "🧹 Убрать мусор"        : "🧹 Clear dead";
-    public static string FcKeepVerified     => Ru ? "⭐ Только ✓✓"           : "⭐ Keep ✓✓ only";
+        ? "Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед глубокой проверкой."
+        : "Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
+    public static string FcOpenLogs         => Ru ? "Логи"                : "Logs";
+    public static string FcClearFailed      => Ru ? "Убрать мусор"        : "Clear dead";
+    public static string FcKeepVerified     => Ru ? "Только ✓✓"           : "Keep ✓✓ only";
     public static string FcKeepVerifiedOnly => FcKeepVerified;
-    public static string FcClearAll         => Ru ? "💥 Очистить всё"        : "💥 Clear all";
+    public static string FcClearAll         => Ru ? "Очистить всё"        : "Clear all";
     public static string FcCleanupHint      => Ru
         ? "Очистка: убери мусорные записи, чтобы поиск работал быстрее. При следующем обновлении всё перезагрузится из источников."
         : "Cleanup: remove dead entries to speed up Refresh. Next Refresh re-fetches from sources.";
@@ -87,8 +87,8 @@ public static partial class Strings
     public static string FcConnectHint        => Ru ? "Выберите строку ↑ и нажмите «Подключить» (или двойной клик)"
                                                     : "Select a row ↑ and click Connect (or double-click)";
     public static string FcTipVpnActive       => Ru
-        ? "⚠ VPN активен — результаты пинга проходят через туннель и могут быть недостоверны. Для точного теста отключите VPN."
-        : "⚠ VPN is active — ping results go through the tunnel and may be inaccurate. Disconnect VPN for accurate tests.";
+        ? "VPN активен — результаты пинга проходят через туннель и могут быть недостоверны. Для точного теста отключите VPN."
+        : "VPN is active — ping results go through the tunnel and may be inaccurate. Disconnect VPN for accurate tests.";
     public static string FcCancel             => Ru ? "Отмена"        : "Cancel";
     public static string FcApplySelected      => Ru ? "Подключить"    : "Connect";
     public static string FcCountryAll         => Ru ? "Все страны"    : "All countries";
@@ -116,8 +116,8 @@ public static partial class Strings
         ? "Скачайте публичные VLESS-конфиги и узнайте какие из них работают прямо сейчас."
         : "Download public VLESS configs and see which ones are working right now.";
     public static string FcEmptyCtaButton     => Ru
-        ? "⚡ Загрузить список конфигов"
-        : "⚡ Load configs list";
+        ? "Загрузить список конфигов"
+        : "Load configs list";
     public static string FcFilteredEmpty      => Ru
         ? "Ничего не найдено по фильтру. Снимите «Только рабочие», увеличьте порог пинга или выберите «Все страны»."
         : "No results for current filter. Uncheck 'Only working', raise the ping threshold, or choose 'All countries'.";
@@ -126,7 +126,7 @@ public static partial class Strings
         : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
 
     // v2.13.17 — Smart Refresh (latency goal)
-    public static string FcSmartRefreshLabel => Ru ? "🎯 Smart Refresh (стоп при достижении цели)" : "🎯 Smart Refresh (stop when goal reached)";
+    public static string FcSmartRefreshLabel => Ru ? "Smart Refresh (стоп при достижении цели)" : "Smart Refresh (stop when goal reached)";
     public static string FcTargetNLabel      => Ru ? "Найти:" : "Find:";
     public static string FcConfigsWord       => Ru ? "конфигов" : "configs";
     public static string FcWithPingUnder     => Ru ? "с пингом <" : "with ping <";
@@ -138,10 +138,10 @@ public static partial class Strings
     // v2.28.4-r2: Quickstart banner removed (single-button flow makes the 3-step lecture obsolete).
 
     // v2.14.7 — collapsible More Options
-    public static string FcMoreOptions => Ru ? "⚙ Больше опций (фильтры, очистка, свои источники)" : "⚙ More options (filters, cleanup, user sources)";
+    public static string FcMoreOptions => Ru ? "Больше опций (фильтры, очистка, свои источники)" : "More options (filters, cleanup, user sources)";
 
     // v2.28.4-r1: 6-section nav removed (FreeConfigs is now single Simple page).
-    public static string FcListHeader    => Ru ? "📋 Конфиги"       : "📋 Configs";
+    public static string FcListHeader    => Ru ? "Конфиги"       : "Configs";
     public static string FcListShown     => Ru ? "показано"         : "shown";
 
     // Stop button in the Free Configs search card
@@ -155,8 +155,8 @@ public static partial class Strings
 
     // ── v2.28.6 — Free Configs tab strip (Search / Saved) + Saved-tab UI ──
     public static string FcTabSearch                 => Ru ? "▶ Поиск"     : "▶ Search";
-    public static string FcTabSaved                  => Ru ? "★ Сохранённые" : "★ Saved";
-    public static string FcTabSavedWithCount(int n)  => Ru ? $"★ Сохранённые ({n})" : $"★ Saved ({n})";
+    public static string FcTabSaved                  => Ru ? "Сохранённые" : "Saved";
+    public static string FcTabSavedWithCount(int n)  => Ru ? $"Сохранённые ({n})" : $"Saved ({n})";
     public static string FcSavedTabHint              => Ru
         ? "Конфиги, найденные в прошлых поисках. Они могут перестать работать со временем — нажмите ↻ чтобы перепроверить."
         : "Configs you've found in past searches. They may stop working over time — click ↻ to recheck.";
@@ -202,18 +202,18 @@ public static partial class Strings
         : "Click the button above to find configs.";
 
     // v2.13.18 — Fast scan toggle
-    public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
+    public static string FcFastScanLabel => Ru ? "Fast scan (только TCP, без TLS)" : "Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
         ? "В 3 раза быстрее, но помечает как 'рабочие' даже honeypot-ы (открытый порт ≠ VLESS). Используйте только если Deep Verify отфильтрует дальше."
-        : "3× faster but marks as 'working' even honeypots (open port ≠ VLESS). Use only if Deep Verify filters further.";
+        : "3× faster but marks even honeypots as 'working' (open port ≠ VLESS). Deep Verify filters them out afterwards.";
 
     // v2.14.3 — Deep Verify presets
     public static string FcPresetLabel    => Ru ? "Пресет:" : "Preset:";
-    public static string FcPresetGaming   => Ru ? "⚡ Gaming (пинг<60ms, bw>2 Mbps)" : "⚡ Gaming (ping<60ms, bw>2 Mbps)";
-    public static string FcPresetStream   => Ru ? "📺 Streaming (пинг<250ms, bw>10 Mbps)" : "📺 Streaming (ping<250ms, bw>10 Mbps)";
-    public static string FcPresetChat     => Ru ? "💬 Chat/web (пинг<300ms, bw>1 Mbps)" : "💬 Chat/web (ping<300ms, bw>1 Mbps)";
-    public static string FcPresetBest     => Ru ? "🚀 Best effort (любой рабочий)" : "🚀 Best effort (any verified)";
-    public static string FcPresetCustom   => Ru ? "⚙ Custom" : "⚙ Custom";
+    public static string FcPresetGaming   => Ru ? "Gaming (пинг<60ms, bw>2 Mbps)" : "Gaming (ping<60ms, bw>2 Mbps)";
+    public static string FcPresetStream   => Ru ? "Streaming (пинг<250ms, bw>10 Mbps)" : "Streaming (ping<250ms, bw>10 Mbps)";
+    public static string FcPresetChat     => Ru ? "Chat/web (пинг<300ms, bw>1 Mbps)" : "Chat/web (ping<300ms, bw>1 Mbps)";
+    public static string FcPresetBest     => Ru ? "Best effort (любой рабочий)" : "Best effort (any verified)";
+    public static string FcPresetCustom   => Ru ? "Custom" : "Custom";
     public static string FcCustomPing     => Ru ? "Макс пинг:" : "Max ping:";
     public static string FcCustomBw       => Ru ? "Мин bw:" : "Min bw:";
     public static string FcMbpsUnit       => "Mbps";
@@ -222,7 +222,7 @@ public static partial class Strings
         : "Bandwidth test downloads ~5 MB per config via proxy (~150 MB for 30 candidates). OK on wifi, mind mobile data.";
 
     // v2.14.4 — User sources
-    public static string FcUserSrcSection      => Ru ? "👤 Мои источники" : "👤 My sources";
+    public static string FcUserSrcSection      => Ru ? "Мои источники" : "My sources";
     public static string FcUserSrcNamePlaceholder => Ru ? "Имя (опционально)" : "Name (optional)";
     public static string FcUserSrcUrlPlaceholder  => Ru ? "URL подписки (https://...)" : "Subscription URL (https://...)";
     public static string FcUserSrcAdd          => Ru ? "+ Добавить" : "+ Add";
@@ -253,16 +253,16 @@ public static partial class Strings
         : "Public proxy — privacy warning";
     public static string FcSecWarnHeader => Ru
         ? "Вы подключаетесь к публичному прокси-серверу"
-        : "You're connecting to a public proxy operator";
+        : "You're connecting to a public proxy server";
     public static string FcSecWarnBody => Ru
         ? "Оператор этого конфига может видеть метаданные вашего трафика — к каким сайтам вы обращаетесь, когда, как часто. Содержимое HTTPS-сайтов (логины, пароли, сообщения) защищено TLS и недоступно оператору."
         : "The operator of this config can see your traffic metadata — which sites you visit, when, how often. HTTPS content (logins, passwords, messages) is protected by TLS and invisible to the operator.";
     public static string FcSecWarnDontUseList => Ru
-        ? "🚫 НЕ используйте для:\n  • банковских приложений / онлайн-банков\n  • входа в почту (Gmail, Яндекс.Почта, Mail.ru)\n  • Госуслуги, налоговая, банки\n  • 2FA / SMS-коды / криптокошельки\n  • любых паролей, которые вы цените"
-        : "🚫 DO NOT use for:\n  • banking apps / online banking\n  • email logins (Gmail, Outlook, etc.)\n  • government services, tax sites\n  • 2FA / SMS codes / crypto wallets\n  • any passwords you care about";
+        ? "✗ НЕ используйте для:\n  • банковских приложений / онлайн-банков\n  • входа в почту (Gmail, Яндекс.Почта, Mail.ru)\n  • Госуслуги, налоговая, банки\n  • 2FA / SMS-коды / криптокошельки\n  • любых паролей, которые вы цените"
+        : "✗ DO NOT use for:\n  • banking apps / online banking\n  • email logins (Gmail, Outlook, etc.)\n  • government services, tax sites\n  • 2FA / SMS codes / crypto wallets\n  • any passwords you care about";
     public static string FcSecWarnGoodFor => Ru
-        ? "✅ Подходит для: YouTube, новостей, Wikipedia, Discord, Telegram, публичного веба"
-        : "✅ Good for: YouTube, news, Wikipedia, Discord, Telegram, public web browsing";
+        ? "✓ Подходит для: YouTube, новостей, Wikipedia, Discord, Telegram, публичного веба"
+        : "✓ Good for: YouTube, news, Wikipedia, Discord, Telegram, public web browsing";
     public static string FcSecWarnProceed => Ru ? "Понял, подключить" : "Understood, connect";
     public static string FcSecWarnCancel  => Ru ? "Отмена" : "Cancel";
     public static string FcPageDescription    => Ru
