@@ -33,6 +33,12 @@ public static class ConfigGenerator
     internal static int NormalizeTunMtu(int mtu)
         => (mtu <= 0 || mtu > MaxSafeTunMtu) ? SafeTunMtuFallback : mtu;
 
+    // macOS 26.5 + sing-box-lx: the system stack installs utun99 routes but
+    // never receives TCP from the host (live repro 2026-07-11: 0 TCP inbounds,
+    // gVisor with the identical config returned gstatic 204 in 0.6s).
+    internal static string SelectTunStack(bool isMacOS)
+        => isMacOS ? "gvisor" : "system";
+
     // v2.45.0-r11 (2026-07-02): AmneziaWG/WireGuard endpoint MTU = 1420 (the
     // wireguard-go DefaultMTU for a ~1500 underlay; AWG transport overhead == WG,
     // the obfuscation junk is handshake-only). A UDP WireGuard endpoint has NO
@@ -1155,7 +1161,7 @@ public static class ConfigGenerator
                 // plans/sdr-research-realtime-games-nat-2026-07-02.md. Value kept true:
                 // harmless, and would apply if we ever switch to the gVisor stack.
                 EndpointIndependentNat  = true,
-                Stack                   = "system"
+                Stack                   = SelectTunStack(OperatingSystem.IsMacOS())
                 // sniff + sniff_override_destination removed — deprecated since 1.11
                 // Sniffing now handled by route rule: action="sniff"
             }
