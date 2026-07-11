@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -144,6 +145,19 @@ public sealed class ClashApiSecretTests
         _ = await api.GetVersionAsync();
 
         Assert.Null(handler.Last!.Headers.Authorization); // legacy wire shape preserved
+    }
+
+    [Fact]
+    public void Post_start_probe_passes_settings_secret()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "VPNRouter.Core")))
+            dir = dir.Parent;
+
+        var source = File.ReadAllText(Path.Combine(
+            dir!.FullName, "VPNRouter.Core", "Services", "VpnEngine.cs"));
+        Assert.Contains(
+            "clashPort, settings.SingBox.ClashApiSecret, probeCt", source);
     }
 
     // ── custom-config injection ─────────────────────────────────────────────
