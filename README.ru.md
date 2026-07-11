@@ -178,12 +178,12 @@ Release-сборка + упаковка:
 
 ```powershell
 # Windows (PowerShell) — производит full + update ZIP'ы + их .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.47.0-r12"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.47.0-r13"
 ```
 
 ```bash
 # macOS DMG — запускается на любом Mac с .NET 8 SDK
-./build-mac.sh 2.47.0-r12
+./build-mac.sh 2.47.0-r13
 ```
 
 ```bash
