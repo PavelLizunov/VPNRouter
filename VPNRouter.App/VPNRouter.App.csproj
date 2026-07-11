@@ -48,7 +48,7 @@
          12.0.3 pins SkiaSharp >= 3.119.4-preview.1.1 specifically; a lower
          stable version trips NU1605 downgrade-detected). API surface used
          (SKGraphics statics) is unchanged across the 2 -> 3 jump. -->
-    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp" Version="4.150.0" />
     <!-- Avalonia 12 renamed the diagnostics package to
          AvaloniaUI.DiagnosticsSupport (separate side-cart on its own version
          track — 2.x). The attach helper changed from AttachDevTools to
