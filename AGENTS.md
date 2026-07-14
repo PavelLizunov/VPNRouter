@@ -1,6 +1,6 @@
 # VPNRouter — root context for Codex
 
-Process-based split-tunnel VPN router for Windows / macOS / Linux. .NET 8 +
+Process-based split-tunnel VPN router for Windows / macOS / Linux. .NET 10 / SDK 10.0.301 +
 Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
 `.claude_handoff.md` for current state.
 
@@ -11,20 +11,20 @@ Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
 - Не моя зона (внешние upstream): `tools/zapret/`, `tools/singbox-cache/` —
   скачанные binary-артефакты, не комитим в репо.
 
-## Sub-AGENTS.md map
+## Zone CLAUDE.md map
 
-Подробности по конкретной зоне — в её sub-AGENTS.md. Этот файл тонкий.
+Подробности по конкретной зоне — в её zone CLAUDE.md. Этот файл тонкий и только ссылается на существующие zone-файлы, не дублируя их содержимое.
 
-| Зона | Sub-AGENTS.md |
+| Зона | Zone CLAUDE.md |
 |---|---|
-| Бизнес-логика, sing-box, subscriptions, free configs | `VPNRouter.Core/AGENTS.md` |
-| Avalonia GUI, ViewModels, design tokens | `VPNRouter.App/AGENTS.md` |
-| CLI (Spectre.Console) | `VPNRouter.CLI/AGENTS.md` |
-| Windows Service wrapper | `VPNRouter.Service/AGENTS.md` |
-| xUnit tests | `VPNRouter.Tests/AGENTS.md` |
-| CI workflows + secrets | `.github/workflows/AGENTS.md` |
-| Per-platform install scripts + APT/winget | `packaging/AGENTS.md` |
-| Roadmap / handoff plans convention | `plans/AGENTS.md` |
+| Бизнес-логика, sing-box, subscriptions, free configs | `VPNRouter.Core/CLAUDE.md` |
+| Avalonia GUI, ViewModels, design tokens | `VPNRouter.App/CLAUDE.md` |
+| CLI (Spectre.Console) | `VPNRouter.CLI/CLAUDE.md` |
+| Windows Service wrapper | `VPNRouter.Service/CLAUDE.md` |
+| xUnit tests | `VPNRouter.Tests/CLAUDE.md` |
+| CI workflows + secrets | `.github/workflows/CLAUDE.md` |
+| Per-platform install scripts + APT/winget | `packaging/CLAUDE.md` |
+| Roadmap / handoff plans convention | `plans/CLAUDE.md` |
 
 ## Quick reference commands
 
