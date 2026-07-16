@@ -174,6 +174,41 @@ public sealed class RuntimeStatusAdoptionTests
     }
 
     [Fact]
+    public void Reconnect_RefreshedV2Record_SelectsSecondChild_NotStaleFirstChild()
+    {
+        var path = @"D:\runtime\custom-sing-box.exe";
+        var owner = new OwnedProcessIdentity(6200, 7000, @"D:\runtime\VPNRouter.App.exe");
+        var firstChild = new OwnedProcessIdentity(6201, 7001, path);
+        var secondChild = new OwnedProcessIdentity(6202, 7002, path);
+        var firstFound = ProcessOwnership.FindOwnedSingBox(
+            CurrentOwner(firstChild, owner),
+            new[] { firstChild },
+            _ => throw new InvalidOperationException("v2 must not inspect command lines"),
+            @"C:\ProgramData\VPNRouter\bin",
+            @"C:\ProgramData\VPNRouter\config\current.json",
+            _ => owner);
+        var staleFound = ProcessOwnership.FindOwnedSingBox(
+            CurrentOwner(firstChild, owner),
+            new[] { secondChild },
+            _ => throw new InvalidOperationException("v2 must not inspect command lines"),
+            @"C:\ProgramData\VPNRouter\bin",
+            @"C:\ProgramData\VPNRouter\config\current.json",
+            _ => owner);
+        var refreshedFound = ProcessOwnership.FindOwnedSingBox(
+            CurrentOwner(secondChild, owner),
+            new[] { firstChild, secondChild },
+            _ => throw new InvalidOperationException("v2 must not inspect command lines"),
+            @"C:\ProgramData\VPNRouter\bin",
+            @"C:\ProgramData\VPNRouter\config\current.json",
+            _ => owner);
+
+        Assert.Equal(firstChild, firstFound);
+        Assert.Null(staleFound);
+        Assert.Equal(secondChild, refreshedFound);
+        Assert.NotEqual(firstChild, refreshedFound);
+    }
+
+    [Fact]
     public void DeadRecordedChild_RetainedLockAndAnotherVerifier_DoesNotReportTunnel()
     {
         var tunnel = new OwnedProcessIdentity(7101, 8001, @"C:\vpnrouter\bin\sing-box-lx.exe");
