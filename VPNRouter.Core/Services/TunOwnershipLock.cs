@@ -48,11 +48,16 @@ public sealed class TunOwnershipLock : IDisposable
 
     // Singleton: one lock per process. Prevents orphaned locks when
     // VpnEngine creates a new SingBoxManager for each connection.
+    private static readonly object InstanceGate = new();
     private static TunOwnershipLock? _instance;
     public static TunOwnershipLock Instance(ILogger? logger = null)
     {
-        _instance ??= new TunOwnershipLock(logger);
-        return _instance;
+        lock (InstanceGate)
+        {
+            if (_instance is null || _instance._disposed)
+                _instance = new TunOwnershipLock(logger);
+            return _instance;
+        }
     }
 
     public TunOwnershipLock(ILogger? logger = null)
@@ -126,11 +131,16 @@ public sealed class TunOwnershipLock : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        Release();
-        _semaphore?.Dispose();
-        _semaphore = null;
+        lock (InstanceGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Release();
+            _semaphore?.Dispose();
+            _semaphore = null;
+            if (ReferenceEquals(_instance, this))
+                _instance = null;
+        }
     }
 
     /// <summary>
@@ -142,9 +152,12 @@ public sealed class TunOwnershipLock : IDisposable
     /// </summary>
     internal static void RegisterExecutablePath(string executablePath)
     {
-        var instance = _instance;
-        if (instance is null || !instance._owned || instance._disposed) return;
-        instance.StartOwnerRecordMonitor(executablePath);
+        lock (InstanceGate)
+        {
+            var instance = _instance;
+            if (instance is null || !instance._owned || instance._disposed) return;
+            instance.StartOwnerRecordMonitor(executablePath);
+        }
     }
 
     private void StartOwnerRecordMonitor(string executablePath)
