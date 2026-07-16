@@ -9,45 +9,79 @@ public class StatusCommand : Command
 {
     public override int Execute(CommandContext context)
     {
+        // Always perform the side-effect-free runtime probe. It reads
+        // config.yaml directly on every invocation, even when CLI state is
+        // absent, so GUI/Service ownership is observable without allowing the
+        // configured path to mutate the durable runtime-owner record.
+        var runtime = RuntimeStatusDetector.GetVpnRuntime();
         var state = StateFile.Read();
 
         var rule = new Rule("[cyan]VPN Router Status[/]");
         AnsiConsole.Write(rule);
 
-        if (state == null)
+        var stateWrittenAtUtc = GetStateWrittenAtUtc();
+        var stateIsExact = state is not null
+                           && RuntimeStatusDetector.PersistedCliStateMatches(
+                               state.SingBoxPid,
+                               stateWrittenAtUtc);
+        var detailedRunning = stateIsExact
+                              && runtime is not null
+                              && state!.SingBoxPid == runtime.Pid;
+        var detailedCrashed = stateIsExact
+                              && runtime is null
+                              && state is not null
+                              && !RuntimeStatusDetector.IsPersistedChildAlive(state.SingBoxPid);
+
+        if (!detailedRunning && !detailedCrashed)
         {
-            AnsiConsole.MarkupLine("[bold red]Status:[/]          Stopped");
+            if (runtime is not null)
+            {
+                var ownerTable = new Table().NoBorder().HideHeaders();
+                ownerTable.AddColumn("");
+                ownerTable.AddColumn("");
+                ownerTable.AddRow("[grey]Status:[/]", "[bold green]Running[/]");
+                ownerTable.AddRow("[grey]Owner:[/]", "[cyan]VPNRouter GUI or Service[/]");
+                AnsiConsole.Write(ownerTable);
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[bold red]Status:[/]          Stopped");
+            }
+
             AnsiConsole.Write(new Rule());
             return 0;
         }
 
-        // Check if sing-box is actually running
-        bool isRunning = false;
+        var exactState = state!;
+        var isRunning = detailedRunning;
         ProcessMetrics? metrics = null;
 
-        if (state.SingBoxPid > 0)
+        if (isRunning && runtime is not null)
         {
             try
             {
-                var proc = Process.GetProcessById(state.SingBoxPid);
-                isRunning = !proc.HasExited;
-
-                if (isRunning)
+                using var process = Process.GetProcessById(runtime.Pid);
+                if (!process.HasExited
+                    && process.StartTime.ToUniversalTime().Ticks
+                       == runtime.StartedAt.ToUniversalTime().Ticks)
                 {
-                    proc.Refresh();
+                    process.Refresh();
                     metrics = new ProcessMetrics
                     {
-                        MemoryMb = proc.WorkingSet64 / 1024 / 1024,
-                        CpuTime = proc.TotalProcessorTime,
-                        StartTime = proc.StartTime
+                        MemoryMb = process.WorkingSet64 / 1024 / 1024,
+                        CpuTime = process.TotalProcessorTime,
+                        StartTime = process.StartTime
                     };
                 }
             }
-            catch (ArgumentException) { /* process not found */ }
+            catch
+            {
+                // Process exited between the exact identity probe and metrics.
+            }
         }
 
         var uptime = isRunning
-            ? FormatUptime(DateTime.Now - state.StartedAt)
+            ? FormatUptime(DateTime.Now - exactState.StartedAt)
             : "—";
 
         var statusText = isRunning
@@ -61,23 +95,23 @@ public class StatusCommand : Command
 
         table.AddRow("[grey]Status:[/]",          statusText);
         table.AddRow("[grey]Uptime:[/]",           uptime);
-        table.AddRow("[grey]Active Profile:[/]",   $"[cyan]{state.ActiveProfile}[/]");
-        table.AddRow("[grey]sing-box PID:[/]",     isRunning ? state.SingBoxPid.ToString() : "[red]dead[/]");
-        table.AddRow("[grey]Started at:[/]",       state.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"));
+        table.AddRow("[grey]Active Profile:[/]",   $"[cyan]{Markup.Escape(exactState.ActiveProfile)}[/]");
+        table.AddRow("[grey]sing-box PID:[/]",     isRunning ? exactState.SingBoxPid.ToString() : "[red]dead[/]");
+        table.AddRow("[grey]Started at:[/]",       exactState.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"));
 
         AnsiConsole.Write(table);
         AnsiConsole.WriteLine();
 
         // Monitored processes
-        if (state.ProcessNames.Count > 0)
+        if (exactState.ProcessNames.Count > 0)
         {
-            AnsiConsole.MarkupLine($"[bold]Monitored Processes[/] ({state.ProcessNames.Count}):");
-            foreach (var name in state.ProcessNames.Take(20))
+            AnsiConsole.MarkupLine($"[bold]Monitored Processes[/] ({exactState.ProcessNames.Count}):");
+            foreach (var name in exactState.ProcessNames.Take(20))
             {
-                AnsiConsole.MarkupLine($"  [green]✓[/] [grey]{name}[/]");
+                AnsiConsole.MarkupLine($"  [green]✓[/] [grey]{Markup.Escape(name)}[/]");
             }
-            if (state.ProcessNames.Count > 20)
-                AnsiConsole.MarkupLine($"  [grey]... and {state.ProcessNames.Count - 20} more[/]");
+            if (exactState.ProcessNames.Count > 20)
+                AnsiConsole.MarkupLine($"  [grey]... and {exactState.ProcessNames.Count - 20} more[/]");
             AnsiConsole.WriteLine();
         }
 
@@ -97,6 +131,18 @@ public class StatusCommand : Command
 
         AnsiConsole.Write(new Rule());
         return 0;
+    }
+
+    private static DateTime GetStateWrittenAtUtc()
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(VPNRouter.Core.AppPaths.StatePath);
+        }
+        catch
+        {
+            return default;
+        }
     }
 
     private static string FormatUptime(TimeSpan ts)
