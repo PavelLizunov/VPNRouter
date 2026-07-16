@@ -28,20 +28,50 @@ public enum ComponentRuntimeStatus
 /// </summary>
 public static class RuntimeStatusDetector
 {
-    /// <summary>True if a VPNRouter-managed sing-box is running. S1 (v2.45.0):
-    /// gated on ownership (image path under the VPNRouter bin dir) so a
-    /// third-party / dev sing-box no longer shows the UI as "connected".
-    /// r9 P2 (brat 2026-07-10): deep-verify probes spawn sing-box from that SAME
-    /// bin dir, so while a probe is in flight in THIS process the ownership
-    /// signal is ambiguous — require the second signal (the TUN ownership
-    /// semaphore a real tunnel holds) before reporting running. Outside a probe
-    /// window the single ownership signal keeps its existing semantics.</summary>
-    public static bool IsVpnRunning()
+    /// <summary>A live, ownership-filtered tunnel child.</summary>
+    public sealed record VpnRuntimeProcess(
+        int Pid,
+        DateTime StartedAt,
+        string ExecutablePath);
+
+    /// <summary>
+    /// Read config.yaml afresh and detect the real tunnel child. The YAML path
+    /// is a discovery candidate only; ProcessOwnership independently decides
+    /// whether the image is trusted. A positively free semaphore rejects even a
+    /// trusted-bin process (deep verifiers do not own TUN), while an unavailable
+    /// semaphore preserves the historical process-only fail-open behaviour.
+    /// </summary>
+    public static VpnRuntimeProcess? GetVpnRuntime()
     {
-        if (!ProcessOwnership.AnySingBoxOwned()) return false;
-        if (DeepVerifyProbe.AnyProbeInFlight) return TunOwnershipLock.IsOwnedByAnyone();
-        return true;
+        var configuredCandidate = ProcessOwnership.ReadConfiguredExecutablePath(
+            AppPaths.ConfigYamlPath);
+        var child = ProcessOwnership.FindOwnedSingBox(configuredCandidate);
+        var ownership = TunOwnershipLock.ProbeOwnership();
+        if (!IsTunnelPresent(child is not null, ownership) || child is not { } live)
+            return null;
+
+        return new VpnRuntimeProcess(
+            live.Pid,
+            new DateTime(live.StartedAtUtcTicks, DateTimeKind.Utc),
+            live.ExecutablePath);
     }
+
+    public static bool IsVpnRunning() => GetVpnRuntime() is not null;
+
+    internal static bool IsTunnelPresent(bool liveTunnelChild, TunOwnershipStatus ownership)
+        => liveTunnelChild && ownership != TunOwnershipStatus.Free;
+
+    /// <summary>
+    /// Validate CLI state.json against the durable child identity. The state
+    /// file write may be arbitrarily delayed; it only has to be at or after the
+    /// recorded child start. This accepts a precisely recorded crashed child,
+    /// but rejects a live process that merely reused its PID.
+    /// </summary>
+    public static bool PersistedCliStateMatches(int singBoxPid, DateTime stateWrittenAtUtc)
+        => ProcessOwnership.PersistedCliStateMatches(singBoxPid, stateWrittenAtUtc);
+
+    public static bool IsPersistedChildAlive(int singBoxPid)
+        => ProcessOwnership.PersistedChildIsAlive(singBoxPid);
 
     /// <summary>True if any winws.exe process is running (Zapret DPI bypass).</summary>
     public static bool IsZapretRunning()

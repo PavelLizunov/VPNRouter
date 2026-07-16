@@ -4,6 +4,16 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
+/// <summary>Tri-state semaphore observation. Unavailable is distinct from Free
+/// so status detection can preserve its process-only fail-open behaviour when
+/// the platform cannot inspect the named semaphore.</summary>
+public enum TunOwnershipStatus
+{
+    Free,
+    Owned,
+    Unavailable
+}
+
 /// <summary>
 /// System-wide named mutex that guarantees only ONE process owns the
 /// VPNRouter-TUN adapter at a time.
@@ -33,6 +43,8 @@ public sealed class TunOwnershipLock : IDisposable
     private Semaphore? _semaphore;
     private bool _owned;
     private bool _disposed;
+    private CancellationTokenSource? _ownerRecordMonitorCts;
+    private readonly object _ownerRecordMonitorGate = new();
 
     // Singleton: one lock per process. Prevents orphaned locks when
     // VpnEngine creates a new SingBoxManager for each connection.
@@ -80,7 +92,9 @@ public sealed class TunOwnershipLock : IDisposable
         }
 
         if (_owned)
+        {
             _logger.Information("[TunLock] Acquired (process owns sing-box)");
+        }
         else
             _logger.Information("[TunLock] Held by another VPNRouter instance");
 
@@ -90,6 +104,7 @@ public sealed class TunOwnershipLock : IDisposable
     public void Release()
     {
         if (!_owned || _semaphore == null) return;
+        StopOwnerRecordMonitor();
         try
         {
             _semaphore.Release();
@@ -119,6 +134,103 @@ public sealed class TunOwnershipLock : IDisposable
     }
 
     /// <summary>
+    /// Called only by <see cref="ProcessOwnership.ConfiguredExePath"/>, which
+    /// SingBoxManager sets for the executable it is about to launch. The process
+    /// that actually owns the TUN semaphore watches for that exact image and
+    /// publishes PID + start identity. Merely reading or rewriting config.yaml
+    /// never reaches this path and therefore cannot overwrite durable owner A.
+    /// </summary>
+    internal static void RegisterExecutablePath(string executablePath)
+    {
+        var instance = _instance;
+        if (instance is null || !instance._owned || instance._disposed) return;
+        instance.StartOwnerRecordMonitor(executablePath);
+    }
+
+    private void StartOwnerRecordMonitor(string executablePath)
+    {
+        CancellationTokenSource cts;
+        lock (_ownerRecordMonitorGate)
+        {
+            StopOwnerRecordMonitorUnderLock();
+            cts = new CancellationTokenSource();
+            _ownerRecordMonitorCts = cts;
+        }
+
+        var notBeforeUtcTicks = DateTime.UtcNow.Ticks;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!cts.IsCancellationRequested && _owned)
+                {
+                    try
+                    {
+                        // A verifier in this owner process uses the same image path.
+                        // Do not publish while its explicit scope is active. Cross-
+                        // process verifiers are rejected later by the exact v2 child
+                        // identity rather than by a process-local flag.
+                        if (!DeepVerifyProbe.AnyProbeInFlight)
+                        {
+                            var child = ProcessOwnership.FindProcessAtPath(
+                                executablePath,
+                                notBeforeUtcTicks,
+                                Environment.ProcessId);
+                            if (child is { } identity)
+                            {
+                                var existing = ProcessOwnership.ReadRuntimeOwnerRecord(
+                                    Path.Combine(AppPaths.DataDir, "runtime-owner.json"));
+                                var alreadyPublished = existing.Kind == RuntimeOwnerRecordKind.CurrentV2
+                                                       && existing.Record is { } record
+                                                       && record.OwnerPid == Environment.ProcessId
+                                                       && record.ChildPid == identity.Pid
+                                                       && record.ChildStartedAtUtcTicks == identity.StartedAtUtcTicks
+                                                       && ProcessOwnership.IsSamePath(
+                                                           record.ExecutablePath,
+                                                           identity.ExecutablePath);
+                                if (!alreadyPublished)
+                                    ProcessOwnership.WriteRuntimeOwnerRecord(identity);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug(ex, "[TunLock] Runtime owner record monitor iteration failed");
+                    }
+
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(200), cts.Token)
+                            .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                cts.Dispose();
+            }
+        });
+    }
+
+    private void StopOwnerRecordMonitor()
+    {
+        lock (_ownerRecordMonitorGate)
+            StopOwnerRecordMonitorUnderLock();
+    }
+
+    private void StopOwnerRecordMonitorUnderLock()
+    {
+        var cts = _ownerRecordMonitorCts;
+        _ownerRecordMonitorCts = null;
+        if (cts is null) return;
+        try { cts.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>
     /// v2.26.1 — peek whether ANY process currently owns the TUN semaphore
     /// without disrupting them. Used by the Service's startup flow to
     /// decide "should I try to start sing-box right now?" and by the App
@@ -138,6 +250,15 @@ public sealed class TunOwnershipLock : IDisposable
     /// the fail-open posture of <see cref="TryAcquire"/>.
     /// </summary>
     public static bool IsOwnedByAnyone()
+        => ProbeOwnership() == TunOwnershipStatus.Owned;
+
+    /// <summary>
+    /// Observe the global semaphore without taking ownership. Unlike the legacy
+    /// bool API, failures are returned as <see cref="TunOwnershipStatus.Unavailable"/>
+    /// so runtime status can fail open only when observation is genuinely
+    /// unavailable, not when the semaphore is positively free.
+    /// </summary>
+    public static TunOwnershipStatus ProbeOwnership()
     {
         try
         {
@@ -147,13 +268,13 @@ public sealed class TunOwnershipLock : IDisposable
             {
                 // Release immediately — we were just peeking, not acquiring.
                 try { probe.Release(); } catch { /* already released, fine */ }
-                return false;
+                return TunOwnershipStatus.Free;
             }
-            return true;
+            return TunOwnershipStatus.Owned;
         }
         catch
         {
-            return false;
+            return TunOwnershipStatus.Unavailable;
         }
     }
 }
