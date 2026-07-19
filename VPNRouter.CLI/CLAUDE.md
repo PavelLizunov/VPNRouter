@@ -14,6 +14,7 @@ VPNRouter.CLI profiles list
 VPNRouter.CLI profiles show <name>
 VPNRouter.CLI profiles update
 VPNRouter.CLI service install / uninstall / start / stop / status
+VPNRouter.CLI --version                              ← версия из VPNRouter.Core.AppVersion.Version
 ```
 
 ## Layout
