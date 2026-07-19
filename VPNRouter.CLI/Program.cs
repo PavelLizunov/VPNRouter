@@ -33,7 +33,7 @@ var app = new CommandApp(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("vpnrouter");
-    config.SetApplicationVersion("1.0.0");
+    config.SetApplicationVersion(VPNRouter.Core.AppVersion.Version);
     config.ValidateExamples();
 
     // vpnrouter start
