@@ -17,6 +17,9 @@ concrete failure mode.
 No product code, VPN process, service, installer, firewall, or ProgramData
 state was changed during the audit.
 
+Follow-up execution plan:
+`plans/qwen-audit-remediation-prompt-pool-2026-07-28.md`.
+
 ## P0 — release blocker
 
 | ID | Evidence | Verified failure | Minimum root fix |
