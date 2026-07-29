@@ -309,23 +309,50 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.Null(host.SetFirewall);
     }
 
-    // Phase 6 wiring coverage: split routing must pass isFullTunnel=false to
-    // CreateBlockRules. Production is already correct; this guards a future
-    // inversion that would arm the global Linux/macOS kill-switch for a split
-    // user. The capturing firewall aborts at phase 6, so sing-box never starts.
+    // Phase 6 wiring: split routing must pass isFullTunnel=false to CreateBlockRules.
     [Fact]
     public async Task SetupFirewall_BlockOnFail_SplitRouting_PassesIsFullTunnelFalse()
     {
+        var (thrown, host) = await RunFirewallWalkAsync("split", "Discord_Privacy");
+
+        Assert.IsType<FirewallCapturedSentinelException>(thrown);
+        Assert.Equal(1, host.CapturedFirewall.CreateBlockRulesCount);
+        Assert.False(host.CapturedFirewall.LastIsFullTunnel);
+    }
+
+    // Full-tunnel + selected profile with BlockOnVpnFail=true must arm the kill-switch.
+    [Fact]
+    public async Task SetupFirewall_FullTunnel_SelectedProfileBlockOnFail_ArmsKillSwitch()
+    {
+        var (thrown, host) = await RunFirewallWalkAsync("full", "Discord_Privacy");
+
+        Assert.IsType<FirewallCapturedSentinelException>(thrown);
+        Assert.Equal(1, host.CapturedFirewall.CreateBlockRulesCount);
+        Assert.True(host.CapturedFirewall.LastIsFullTunnel);
+    }
+
+    // Full-tunnel + BlockOnVpnFail=false intent must NOT arm.
+    [Fact]
+    public async Task SetupFirewall_FullTunnel_NoBlockIntent_DoesNotArm()
+    {
+        var (thrown, host) = await RunFirewallWalkAsync("full", "Browsers");
+
+        Assert.IsNotType<FirewallCapturedSentinelException>(thrown);
+        Assert.Equal(0, host.CapturedFirewall.CreateBlockRulesCount);
+    }
+
+    // ColdStart walk with capturing firewall armed to abort at phase 6.
+    private async Task<(Exception? Thrown, TestStartupHost Host)> RunFirewallWalkAsync(
+        string routingMode, string? activeProfile)
+    {
         var settings = BuildBaseSettings();
-        settings.App.RoutingMode = "split";
-        settings.App.FlushDnsOnStart = false;       // avoid the DNS-flush side effect
-        settings.App.BypassRussianTraffic = false;  // avoid the geo-data download
-        settings.ActiveProfile = "Discord_Privacy"; // bundled profile, BlockOnVpnFail=true
+        settings.App.RoutingMode = routingMode;
+        settings.App.FlushDnsOnStart = false;
+        settings.App.BypassRussianTraffic = false;
+        settings.ActiveProfile = activeProfile;
         settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("main", "104.194.156.93", 443) };
         settings.Vless.ActiveServer = "main";
 
-        // Throwaway binary so DeploySingBoxBinary finds an installed exe. Windows
-        // resolves it from settings; other OSes use the fixed AppPaths.SingBoxExePath.
         var fakeBin = OperatingSystem.IsWindows()
             ? Path.Combine(Path.GetTempPath(), $"vpnrouter-fake-singbox-{Guid.NewGuid():N}.exe")
             : AppPaths.SingBoxExePath;
@@ -338,20 +365,18 @@ public sealed class StartupPipelineTests : IDisposable
         settings.SingBox.ExecutablePath = fakeBin;
 
         var host = new TestStartupHost();
-        host.CapturedFirewall.AbortAfterCapture = true; // stop deterministically at phase 6
+        host.CapturedFirewall.AbortAfterCapture = true;
         var pipeline = new StartupPipeline(host, _store);
 
-        // SafeMode forces the FullTunnel substitute (BlockOnVpnFail=false), which
-        // would skip phase 6; turn it off so the real bundled profile resolves.
         var prevSafeMode = SafeMode.Enabled;
         SafeMode.Enabled = false;
-        Exception? thrown;
         try
         {
-            thrown = await Record.ExceptionAsync(async () =>
+            var thrown = await Record.ExceptionAsync(async () =>
                 await pipeline.ExecuteAsync(
                     new StartupContext(settings, StartupMode.ColdStart, SkipVpnConflictCheck: true),
                     TestContext.Current.CancellationToken));
+            return (thrown, host);
         }
         finally
         {
@@ -361,12 +386,6 @@ public sealed class StartupPipelineTests : IDisposable
                 try { File.Delete(fakeBin); } catch { }
             }
         }
-
-        // The sentinel proves phase 6 ran CreateBlockRules and aborted before
-        // sing-box start; split routing must derive isFullTunnel=false.
-        Assert.IsType<FirewallCapturedSentinelException>(thrown);
-        Assert.Equal(1, host.CapturedFirewall.CreateBlockRulesCount);
-        Assert.False(host.CapturedFirewall.LastIsFullTunnel);
     }
 
     // Phase 5: PreStartChecks skipped on HotReload (per pipeline contract).
