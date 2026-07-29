@@ -439,6 +439,9 @@ app:
         Assert.Single(roundTripped.EmergencyChannel.Configs);
         Assert.Equal("Operator-A", roundTripped.EmergencyChannel.Configs[0].Name);
         Assert.Equal("wgturn://op-a", roundTripped.EmergencyChannel.Configs[0].Url);
+        // Non-nullable DateTimeOffset branch (AddedAt); nullable covered by LastRefreshedAt above.
+        Assert.Equal(original.EmergencyChannel.Configs[0].AddedAt.UtcDateTime,
+                     roundTripped.EmergencyChannel.Configs[0].AddedAt.UtcDateTime);
 
         // ── UserFreeSources + DateTime ──
         Assert.Single(roundTripped.App.UserFreeSources);
