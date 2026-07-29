@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -141,5 +142,77 @@ public sealed class CrashReporterScrubberTests
             try { if (System.IO.Directory.Exists(tmp)) System.IO.Directory.Delete(tmp, recursive: true); }
             catch { }
         }
+    }
+
+    // ── OBS-2 (audit R06): bounded crash-tail regression tests ─────────────
+
+    /// <summary>
+    /// Sets up a temp DataDir with a logs/ subdirectory containing a single
+    /// vpnrouter-test.log file, calls WriteReport, and returns the report text.
+    /// Restores AppPaths.DataDir in all cases.
+    /// </summary>
+    private static string WriteReportWithLog(string logContent)
+    {
+        var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            $"vpnrouter-crashreporter-obs2-{Guid.NewGuid():N}");
+        var previous = VPNRouter.Core.AppPaths.DataDir;
+        try
+        {
+            VPNRouter.Core.AppPaths.OverrideDataDir(tmp);
+            var logsDir = System.IO.Path.Combine(tmp, "logs");
+            System.IO.Directory.CreateDirectory(logsDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(logsDir, "vpnrouter-test.log"), logContent);
+
+            var reportPath = CrashReporter.WriteReport(new InvalidOperationException("test crash"));
+            Assert.NotNull(reportPath);
+            return System.IO.File.ReadAllText(reportPath!);
+        }
+        finally
+        {
+            VPNRouter.Core.AppPaths.OverrideDataDir(previous);
+            try { if (System.IO.Directory.Exists(tmp)) System.IO.Directory.Delete(tmp, recursive: true); }
+            catch { }
+        }
+    }
+
+    [Fact]
+    public void WriteReport_LargeLog_OnlyLast200Lines()
+    {
+        // 300 numbered lines; the report must contain lines 101-300 and NOT lines 1-100.
+        var lines = Enumerable.Range(1, 300).Select(i => $"log-line-{i:D4}");
+        var report = WriteReportWithLog(string.Join(Environment.NewLine, lines));
+
+        Assert.Contains("log-line-0101", report);
+        Assert.Contains("log-line-0300", report);
+        Assert.DoesNotContain("log-line-0001", report);
+        Assert.DoesNotContain("log-line-0100", report);
+    }
+
+    [Fact]
+    public void WriteReport_SmallLog_AllLinesIncluded()
+    {
+        var report = WriteReportWithLog("alpha\nbeta\ngamma");
+
+        Assert.Contains("alpha", report);
+        Assert.Contains("beta", report);
+        Assert.Contains("gamma", report);
+    }
+
+    [Fact]
+    public void WriteReport_TailStillScrubbed()
+    {
+        // A vless:// URI in the last log line must be redacted in the report
+        // (preserves P09 scrubber behavior after the OBS-2 tail change).
+        const string secret = "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443";
+        var logContent = string.Join(Environment.NewLine,
+            Enumerable.Range(1, 5).Select(i => $"benign line {i}")
+                .Append($"dial error: {secret}"));
+
+        var report = WriteReportWithLog(logContent);
+
+        Assert.DoesNotContain("2d54442d-158f-49e2-b225-67ba1a5b77f4", report);
+        Assert.DoesNotContain("194.87.222.111", report);
+        Assert.Contains("vless://[redacted]", report);
+        Assert.Contains("benign line 5", report);
     }
 }

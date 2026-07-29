@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
@@ -128,10 +129,10 @@ public static class CrashReporter
                     if (!string.IsNullOrEmpty(logs) && File.Exists(logs))
                     {
                         sb.AppendLine($"──── Tail of {Path.GetFileName(logs)} (last 200 lines) ────");
-                        var lines = File.ReadAllLines(logs);
-                        var startIndex = Math.Max(0, lines.Length - 200);
-                        for (int i = startIndex; i < lines.Length; i++)
-                            sb.AppendLine(ScrubSecrets(lines[i]));
+                        // OBS-2 (audit R06): bounded tail (12 MB cap) — File.ReadAllLines
+                        // would OOM on a runaway multi-GB log.
+                        foreach (var line in DiagnosticsExporter.TailLines(logs, 200).Split(Environment.NewLine))
+                            sb.AppendLine(ScrubSecrets(line));
                     }
                 }
             }
