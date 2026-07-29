@@ -215,22 +215,23 @@ Must stay green: existing `ZapretUpdater` tests (if any), `ZapretProbeCacheTests
 - [ ] **Gate 5 — UI/live**: DEFERRED by explicit owner constraint (no local launch/MCP/VM). Do NOT fake PASS.
 - [ ] **Gate 6 — Characterization**: N/A (no god-file split; no MVM surface change).
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN
+**Commits**: `b6aa4cca` (fix(core): gate zapret version on complete copy)
+**Pushed**: draft PR #58, branch `codex/qwen-audit-p10-zapret-atomicity-2026-07-29`
+**Test deltas**: +106 / -0 (1 new test file: `ZapretUpdaterAtomicityTests.cs` +106)
+**Files changed**: 2 · +135 / -8
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI): <output>
-- [ ] Gate 2 tests (remote CI): <output>
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review: <output>
-- [-] Gate 5 UI/live: deferred (owner constraint) — not live-verified
+- [x] Gate 1 build (remote CI): PASS — dotnet test run 30446264235 SUCCESS
+- [x] Gate 2 tests (remote CI): PASS — run 30446264235 SUCCESS; new `ZapretUpdaterAtomicityTests` green; full existing suite stayed green
+- [x] Gate 3 docs: PASS — Outcome filled; no README change needed
+- [x] Gate 4 self-review: PASS — static self-review performed during implementation; gate condition and retry path reviewed
+- [-] Gate 5 UI/live: deferred (owner constraint) — ProgramData/process live validation deferred
 - [-] Gate 6 characterization: N/A
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: none
+**Follow-ups spawned**: none
+**Rollback**: `git revert b6aa4cca` / branch delete

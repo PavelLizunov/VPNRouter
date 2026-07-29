@@ -116,7 +116,10 @@ public class UpdateChecker : IDesktopInstaller
             HtmlUrl = info.ReleaseUrl,
             IsNewer = true,
             HasLiteUpdate = false,
-            FullChecksumUrl = null, // SHA already inlined via info.AssetSha256; legacy path fetches by URL — Phase 4 unifies.
+            FullChecksumUrl = null,
+            // Thread the release's inline SHA256 so the download gate hash-verifies
+            // the asset (IUpdateSource.DownloadAsync MUST-validate contract).
+            FullChecksumSha256 = info.AssetSha256,
         };
 
         // Bridge the byte-level progress record onto the legacy
@@ -247,25 +250,32 @@ public class UpdateChecker : IDesktopInstaller
             throw new InvalidOperationException(
                 $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
 
-        // ── Verify SHA256 against .sha256 asset on the release (v2.15.8) ──
-        if (!string.IsNullOrEmpty(checksumUrl))
+        // ── Verify SHA256 before extraction (fail-closed on mismatch) ──
+        // Prefer the inline digest threaded from IUpdateSource; fall back to the
+        // legacy .sha256 URL fetch; when both are absent degrade to size-only.
+        string? expectedSha = useLite ? null : info.FullChecksumSha256;
+        if (string.IsNullOrEmpty(expectedSha) && !string.IsNullOrEmpty(checksumUrl))
         {
-            StatusChanged?.Invoke("Verifying checksum...");
             var shaResponse = await _http.SendAsync(
                 new HttpRequest(HttpMethod.Get, new Uri(checksumUrl)),
                 ct);
             if (!shaResponse.IsSuccess())
                 throw new InvalidOperationException(
                     $"Checksum download failed: HTTP {shaResponse.StatusCode} from {checksumUrl}");
-            var expectedSha = shaResponse.AsString().Trim().ToLowerInvariant();
+            expectedSha = shaResponse.AsString().Trim().ToLowerInvariant();
 
             // Strip any trailing filename portion if the .sha256 file used "HASH  filename" format
             if (expectedSha.Contains(' '))
                 expectedSha = expectedSha.Split(' ', 2)[0].Trim();
+        }
+
+        if (!string.IsNullOrEmpty(expectedSha))
+        {
+            StatusChanged?.Invoke("Verifying checksum...");
 
             if (expectedSha.Length != 64)
                 throw new InvalidOperationException(
-                    $"Checksum file content is not a valid SHA256 (got {expectedSha.Length} hex chars, expected 64).");
+                    $"Checksum is not a valid SHA256 (got {expectedSha.Length} hex chars, expected 64).");
 
             string actualSha;
             using (var sha = System.Security.Cryptography.SHA256.Create())

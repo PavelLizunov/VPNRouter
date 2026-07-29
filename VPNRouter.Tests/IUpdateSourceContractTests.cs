@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -218,6 +219,36 @@ public sealed class IUpdateSourceContractTests
         Assert.Equal(100, captured[^1].Percent);
     }
 
+    [Fact]
+    public async Task GitHubReleaseSource_DownloadAsync_ShaMismatch_ThrowsBeforeApply()
+    {
+        // End-to-end UPD-1 thread pin: AssetSha256 MUST flow through the real
+        // UpdateChecker adapter into the SHA gate, so a wrong digest throws
+        // before DownloadAsync returns a staged path (ApplyAsync unreachable).
+        var zip = MinimalUpdateZip();
+        const string assetUrl = "https://example.com/VPNRouter-v2.32.1-win.zip";
+        var http = new FakeHttpClient().SetupStream(assetUrl, zip);
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo },
+            CurrentVersion,
+            http,
+            new UpdateChecker(new UpdateSettings(), CurrentVersion, http));
+
+        var info = new UpdateSourceInfo(
+            Version: "2.32.1",
+            ReleaseUrl: "https://github.com/foo/bar/releases/tag/v2.32.1",
+            AssetName: "VPNRouter-v2.32.1-win.zip",
+            DownloadUrl: assetUrl,
+            AssetSize: zip.LongLength,
+            AssetSha256: new string('b', 64), // well-formed but wrong
+            IsPrerelease: false,
+            ReleaseNotes: string.Empty);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => source.DownloadAsync(info, ct: TestContext.Current.CancellationToken));
+        Assert.Contains("checksum mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ─── SideloadSource ─────────────────────────────────────────────────
 
     [Fact]
@@ -362,6 +393,20 @@ public sealed class IUpdateSourceContractTests
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────
+
+    /// <summary>Minimal ZIP whose marker entries satisfy
+    /// <c>UpdateChecker.ValidateExtractedContent</c> on any platform.</summary>
+    private static byte[] MinimalUpdateZip()
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            zip.CreateEntry("app/VPNRouter.GUI.dll");
+            zip.CreateEntry("VPNRouter.App.dll");
+            zip.CreateEntry("VPNRouter.Mac.dll");
+        }
+        return ms.ToArray();
+    }
 
     /// <summary>Resolve the asset name for the OS the test is running
     /// on, matching <see cref="GitHubReleaseSource"/>'s PlatformSuffix
