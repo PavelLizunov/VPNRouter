@@ -113,22 +113,23 @@ public class EmergencyChannelEngine : IDisposable
 
         try
         {
-            _manager = _managerFactory();
-            _manager.Started += OnManagerStarted;
-            _manager.Crashed += OnManagerCrashed;
-            _manager.Start(config);
+            var manager = _managerFactory();
+            Interlocked.Exchange(ref _manager, manager);
+            manager.Started += OnManagerStarted;
+            manager.Crashed += OnManagerCrashed;
+            manager.Start(config);
             _activeConfig = config;
             State = EmergencyChannelState.Connected;
             _logger?.Information(
                 "[EmergencyChannelEngine] Connected (PID {Pid}, label {Label})",
-                _manager.Pid, config.Label ?? "(none)");
+                manager.Pid, config.Label ?? "(none)");
             return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             _logger?.Error(ex, "[EmergencyChannelEngine] StartAsync failed");
-            try { _manager?.Dispose(); } catch { }
-            _manager = null;
+            var failed = Interlocked.Exchange(ref _manager, null);
+            try { failed?.Dispose(); } catch { }
             _activeConfig = null;
             State = EmergencyChannelState.Failed;
             ErrorOccurred?.Invoke(ex.Message);
@@ -139,7 +140,9 @@ public class EmergencyChannelEngine : IDisposable
     /// <summary>Tear down the emergency channel. Idempotent.</summary>
     public void Stop()
     {
-        if (_manager == null)
+        // Atomic claim — exactly one of Stop/OnManagerCrashed disposes.
+        var manager = Interlocked.Exchange(ref _manager, null);
+        if (manager == null)
         {
             State = EmergencyChannelState.Disconnected;
             return;
@@ -147,9 +150,9 @@ public class EmergencyChannelEngine : IDisposable
 
         try
         {
-            _manager.Started -= OnManagerStarted;
-            _manager.Crashed -= OnManagerCrashed;
-            _manager.Stop();
+            manager.Started -= OnManagerStarted;
+            manager.Crashed -= OnManagerCrashed;
+            manager.Stop();
         }
         catch (Exception ex)
         {
@@ -157,8 +160,7 @@ public class EmergencyChannelEngine : IDisposable
         }
         finally
         {
-            try { _manager.Dispose(); } catch { }
-            _manager = null;
+            try { manager.Dispose(); } catch { }
             _activeConfig = null;
             State = EmergencyChannelState.Disconnected;
             _logger?.Information("[EmergencyChannelEngine] Disconnected");
@@ -187,6 +189,18 @@ public class EmergencyChannelEngine : IDisposable
 
     private void OnManagerCrashed(object? sender, int? exitCode)
     {
+        // Exact-owner claim is decisive — mirrors Manager.OnProcessExited.
+        // A stale callback from a manager that Stop()/reconnect already
+        // claimed or replaced loses the CompareExchange and must not log,
+        // flip state, raise ErrorOccurred, or dispose.
+        if (sender is not EmergencyChannelManager crashed ||
+            !ReferenceEquals(Interlocked.CompareExchange(ref _manager, null, crashed), crashed))
+            return;
+
+        crashed.Started -= OnManagerStarted;
+        crashed.Crashed -= OnManagerCrashed;
+        try { crashed.Dispose(); } catch { }
+
         _logger?.Warning("[EmergencyChannelEngine] wgturn-cli crashed (exit {Code})",
             exitCode?.ToString() ?? "?");
         State = EmergencyChannelState.Failed;

@@ -93,6 +93,10 @@ public sealed class ClashLogStream : IDisposable
         return new Uri($"{scheme}://{uri.Authority}/logs?level=info{token}");
     }
 
+    /// <summary>URI without query string so a <c>?token=</c> secret never reaches the log.</summary>
+    internal static string RedactLogsUri(Uri uri) =>
+        $"{uri.Scheme}://{uri.Host}:{uri.Port}{uri.AbsolutePath}";
+
     /// <summary>Start the background subscribe/reconnect loop. A second call while
     /// already running is ignored.</summary>
     public void Start()
@@ -130,7 +134,7 @@ public sealed class ClashLogStream : IDisposable
             {
                 using var ws = new ClientWebSocket();
                 await ws.ConnectAsync(_logsUri, ct).ConfigureAwait(false);
-                _logger.Information("[ConnHealth] Clash /logs stream connected ({Uri})", _logsUri);
+                _logger.Information("[ConnHealth] Clash /logs stream connected ({Uri})", RedactLogsUri(_logsUri));
                 backoff = MinBackoff; // reset after a successful connect
                 await ReceiveLoopAsync(ws, ct).ConfigureAwait(false);
             }
