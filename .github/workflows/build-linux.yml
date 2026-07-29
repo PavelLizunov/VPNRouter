@@ -165,8 +165,22 @@ jobs:
       - name: Build AppImage
         run: |
           set -euo pipefail
-          # appimagetool is a single-file ELF; grab latest release asset.
-          wget -q -O appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          # appimagetool is a single-file ELF. Pin the IMMUTABLE release asset
+          # (repo AppImage/appimagetool, tag 1.9.1, asset appimagetool-x86_64.AppImage).
+          # The old retired AppImageKit rolling ref changed on every upstream CI
+          # build — a supply-chain RCE vector; never reintroduce a rolling ref.
+          # To update: bump the tag in APPIMAGETOOL_URL to the next immutable
+          # release, re-read the asset size via
+          # `gh api repos/AppImage/appimagetool/releases/tags/<tag>` into
+          # APPIMAGETOOL_SIZE, and re-capture the SHA256 from the official release
+          # asset (one-time CI/owner download over github TLS) into APPIMAGETOOL_SHA256.
+          # Fail-closed: any size/digest mismatch aborts the build before chmod/exec.
+          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+          APPIMAGETOOL_SIZE=15092216
+          wget -q -O appimagetool "$APPIMAGETOOL_URL"
+          [ "$(stat -c %s appimagetool)" = "$APPIMAGETOOL_SIZE" ]
+          echo "${APPIMAGETOOL_SHA256}  appimagetool" | sha256sum -c -
           chmod +x appimagetool
           # --appimage-extract-and-run avoids needing FUSE on the runner.
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run \
