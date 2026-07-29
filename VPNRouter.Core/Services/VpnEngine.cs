@@ -76,6 +76,10 @@ public class VpnEngine : IDisposable
     // the warmup task, read on the probe task.
     private volatile bool _warmupConfirmed;
 
+    // P02 FAIL-1: false during pre-start (gate already held); set true by
+    // OnSingBoxStarted. Volatile: written on pipeline thread, read on probe thread.
+    private volatile bool _postStartPhase;
+
     // DNS-tunnel (slipstream) transport sidecar. Created lazily by the startup
     // host ONLY when the active server is dns-tunnel; null for every other
     // server type. Stopped in Stop() after sing-box. See
@@ -130,6 +134,11 @@ public class VpnEngine : IDisposable
     /// user's "Ignore VPN conflict" instead of re-throwing ConflictingVpnException.
     /// </summary>
     internal bool SkipVpnConflictCheckSnapshot => _skipVpnConflictCheck;
+
+    /// <summary>
+    /// P02 FAIL-1: transition to post-start phase (called by OnSingBoxStarted).
+    /// </summary>
+    internal void EnterPostStartPhase() => _postStartPhase = true;
 
     // ─── Events for UI ───────────────────────────────────────────────────────
 
@@ -339,6 +348,7 @@ public class VpnEngine : IDisposable
         // connectivity. Cleared here so a prior session's warmup-confirm can't
         // suppress this attempt's post-start failover safety net.
         _warmupConfirmed = false;
+        _postStartPhase = false; // P02 FAIL-1: fresh attempt starts pre-start
         // Phase 3C (2026-05-18): the 750-LOC inline sequence that used to
         // live here moved into StartupPipeline. The pipeline walks the 8
         // canonical phases (Resolve -> Scan -> Generate -> PreStartChecks
@@ -480,6 +490,29 @@ public class VpnEngine : IDisposable
     {
         CurrentTrueSplitState = state;
         TrueSplitStateChanged?.Invoke(state, reason);
+    }
+
+    /// <summary>
+    /// P02 FAIL-1: phase-aware failover dispatch. Post-start routes through
+    /// the safe gated path; pre-start (gate already held) re-enters
+    /// StartAsyncInternal directly — re-taking the non-reentrant gate deadlocks.
+    /// </summary>
+    internal async Task<bool> ExecuteFailoverRestartAsync(AppSettings captured, CancellationToken ct)
+    {
+        if (_postStartPhase)
+            return await ExecuteProbeFailoverRestartAsync(captured, ct).ConfigureAwait(false);
+
+        try
+        {
+            await StartAsyncInternal(captured, ct, _skipVpnConflictCheck).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warning(ex,
+                "[VpnEngine] Pre-start failover restart threw inside StartAsyncInternal");
+            return false;
+        }
     }
 
     /// <summary>
@@ -1359,7 +1392,11 @@ public class VpnEngine : IDisposable
 
         public void OnWarning(string message) => _engine.Warning?.Invoke(message);
 
-        public void OnSingBoxStarted(int pid) => _engine.SingBoxStarted?.Invoke(pid);
+        public void OnSingBoxStarted(int pid)
+        {
+            _engine.EnterPostStartPhase(); // P02 FAIL-1
+            _engine.SingBoxStarted?.Invoke(pid);
+        }
 
         // Task #41 Stage 1 (2026-05-21) — fire the typed Connected event on
         // the engine ONLY when the pipeline's warmup probe success branch
@@ -1484,58 +1521,23 @@ public class VpnEngine : IDisposable
             sanityCheck = _engine._sanityCheck;
         }
 
-        /// <summary>
-        /// Wire AutoFailoverEngine with a restart delegate that calls back
-        /// into StartAsync. Used by the pre-start F-E check (phase 5).
-        /// </summary>
+        /// <summary>Pre-start F-E check (phase 5).</summary>
         public AutoFailoverEngine WireFailover(ConfigSanityCheck sanityCheck)
-        {
-            // The pre-start check hasn't started sing-box yet, so the restart
-            // delegate just re-enters StartAsync without a Stop call.
-            _engine._failover ??= new AutoFailoverEngine(
-                CapturedSettings(),
-                sanityCheck,
-                restart: async (innerCt) =>
-                {
-                    try
-                    {
-                        // v2.44.3: pre-start F-E re-entry runs INSIDE an already-gated
-                        // public StartAsync frame — call StartAsyncInternal so it does
-                        // NOT re-take the non-reentrant lifecycle gate (deadlock).
-                        await _engine.StartAsyncInternal(CapturedSettings(), innerCt, _engine._skipVpnConflictCheck);
-                        return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        _engine._logger?.Warning(ex,
-                            "[VpnEngine] F-E restart delegate threw inside StartAsyncInternal");
-                        return false;
-                    }
-                },
-                logger: _engine._logger);
-            return _engine._failover;
-        }
+            => WireFailoverCore(sanityCheck);
 
-        /// <summary>
-        /// Wire AutoFailoverEngine for the post-start probe path -- restart
-        /// delegate tears down the live sing-box BEFORE re-entering StartAsync
-        /// so we don't leave an orphan adapter while the new instance comes
-        /// up. Pre-3C this was inlined inside the post-start probe lambda.
-        /// </summary>
+        /// <summary>Post-start probe path.</summary>
         public AutoFailoverEngine WireFailoverWithStop(ConfigSanityCheck sanityCheck)
+            => WireFailoverCore(sanityCheck);
+
+        // P02 FAIL-1: both wire methods install the same phase-aware delegate;
+        // the ??= slot collision is harmless because dispatch reads the live flag.
+        private AutoFailoverEngine WireFailoverCore(ConfigSanityCheck sanityCheck)
         {
             _engine._failover ??= new AutoFailoverEngine(
                 CapturedSettings(),
                 sanityCheck,
-                // v2.44.3 (P0): the self-cancel + resurrection rework. The restart
-                // runs through ExecuteProbeFailoverRestartAsync, which holds the
-                // lifecycle gate, tears the dead link down, and brings the replacement
-                // up under the SESSION token (not innerCt/_probeCts, which teardown
-                // cancels — that was the self-cancel, diag 20260624-235243). A user
-                // Disconnect cancels the session and the restart aborts instead of
-                // resurrecting the tunnel.
                 restart: (innerCt) =>
-                    _engine.ExecuteProbeFailoverRestartAsync(CapturedSettings(), innerCt),
+                    _engine.ExecuteFailoverRestartAsync(CapturedSettings(), innerCt),
                 logger: _engine._logger);
             return _engine._failover;
         }
