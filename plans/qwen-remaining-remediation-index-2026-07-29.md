@@ -8,16 +8,24 @@ Adjudication source of truth:
 Prompt pool: `C:\Project\VPNRouter-qwen-audit-2026-07-28\plans\qwen-audit-remediation-prompt-pool-2026-07-28.md`
 Adjudicated commit: `b39a28c32fae26838e615b5080d183dc33ee551b` (== this worktree HEAD, == `origin/main`)
 
-This index covers ONLY the 22 survivors that remain after the P1 wave. The P1
-wave (13 IDs: UPD-1, UPD-2, FAIL-1, DATA-1, FLOW-1, CLI-1, CLI-2, AND-1, SUP-1,
-SEC-1, SEC-2, OBS-1, ZAP-1) is already implemented in draft PRs #53, #55-#61 on
-the `codex/qwen-audit-p0X-*-2026-07-29` branches and is NOT re-covered here.
-The 5 refuted IDs (AND-2, DATA-2, DATA-5, PERF-2, and the refuted P1 form of
-LIFE-1) are NOT covered here.
+This index covers the 22 survivors that remain after the P1 wave, PLUS one
+newly-discovered defect (FW-3 → R12) found DURING Qwen R01 implementation review
+(see row 23). The P1 wave (13 IDs: UPD-1, UPD-2, FAIL-1, DATA-1, FLOW-1, CLI-1,
+CLI-2, AND-1, SUP-1, SEC-1, SEC-2, OBS-1, ZAP-1) is already implemented in draft
+PRs #53, #55-#61 on the `codex/qwen-audit-p0X-*-2026-07-29` branches and is NOT
+re-covered here. The 5 refuted IDs (AND-2, DATA-2, DATA-5, PERF-2, and the
+refuted P1 form of LIFE-1) are NOT covered here.
+
+**R12 provenance**: FW-3 was NOT part of the original P00 audit survivor set. It
+was discovered on 2026-07-29 while tracing the firewall wiring for R01
+(FW-1/FW-2/TEST-1): the full-tunnel branch of `StartupPipeline` replaces the
+selected profile with a synthetic `FullTunnel` profile whose `BlockOnVpnFail`
+defaults false, dropping the user's per-profile kill-switch intent. It is tracked
+here for completeness and sequenced right after R01 (it reuses R01's test seam).
 
 ---
 
-## 1. Scope invariant (22 = 18 P2 + 4 P3)
+## 1. Scope invariant (23 = 19 P2 + 4 P3)
 
 | # | ID | Final severity | Verdict | R-package | Brief |
 |---:|---|---|---|---|---|
@@ -43,13 +51,16 @@ LIFE-1) are NOT covered here.
 | 20 | UI-1 | P3 | CONFIRMED | R09 | phase3-audit-r09-localization |
 | 21 | SUP-3 | P3 | CONFIRMED | R10 | phase3-audit-r10-signing-action-pins |
 | 22 | PERF-1 | P3 | PARTIALLY_CONFIRMED | R11 | phase3-audit-r11-etw-disposal |
+| 23 | FW-3 | P2 | CONFIRMED | R12 | phase2-audit-r12-full-tunnel-killswitch |
 
 Coverage invariant:
 
 ```text
-Expected survivors:            22
-P2 survivors:                  18  (rows 1-18)
-P3 survivors:                   4  (rows 19-22)
+Expected survivors:            22  (original P00 survivor set)
+Newly-discovered (R01 review):  1  (FW-3 -> R12, row 23; NOT a P00 survivor)
+Total tracked here:            23
+P2 tracked:                    19  (rows 1-18 + row 23)
+P3 tracked:                     4  (rows 19-22)
 IDs with no R-package:          0
 IDs with multiple R-packages:   0
 P1-wave IDs included here:      0  (UPD-1/2, FAIL-1, DATA-1, FLOW-1, CLI-1/2, AND-1, SUP-1, SEC-1/2, OBS-1, ZAP-1)
@@ -75,14 +86,17 @@ Refuted IDs given a fix brief:  0  (AND-2, DATA-2, DATA-5, PERF-2 fully refuted;
 | R09 | `origin/main` | `MainWindow.axaml` update button is not touched by any P1 branch. |
 | R10 | `origin/main` | `.github/workflows/sign-windows.yml` is not touched by any P1 branch. |
 | R11 | `codex/qwen-audit-p02-failover-wiring-2026-07-29` | MANDATED: PERF-1 disposes the ETW monitor at `VpnEngine.cs:832` (`_etw?.Stop()`) / `:845` (`_etw = null`). P02 rewrote that exact teardown region of `VpnEngine.cs` (+92/-45). R11 must build on P02 to avoid a conflicting edit and to test against the post-FAIL-1 teardown. |
+| R12 | `codex/qwen-audit-r01-firewall-wiring-2026-07-29` (R01 branch) | RECOMMENDED: R12's regression test reuses the capturing `FirewallFactory` fake that R01 adds to `StartupPipelineTests.cs` (R01 flips it from throwing to capturing). R01 does NOT edit `StartupPipeline.cs` production code, so the only shared file is `StartupPipelineTests.cs`; basing on R01 avoids a textual conflict and supplies the fake. Fallback `origin/main` ONLY if R01 has already merged (the fake is then in main). |
 
 ### 2.2 Execution order
 
-P2 packages first (R01-R07), then P3 packages (R08-R11). Within P2 the order
-follows the prompt pool §22 recommended PR order, adapted to survivors:
+P2 packages first (R01-R07 + R12), then P3 packages (R08-R11). Within P2 the
+order follows the prompt pool §22 recommended PR order, adapted to survivors:
 
 1. **R03** (DATA-3/4/6, NET-1) — data-safety, no dependency.
 2. **R01** (FW-1/FW-2, TEST-1) — kill-switch correctness + its missing test.
+   2a. **R12** (FW-3) — full-tunnel kill-switch intent; immediately after R01
+   (reuses R01's capturing `FirewallFactory` fake; same test file).
 3. **R02** (CFG-1/CFG-2/PROTO-1) — config/protocol parity.
 4. **R06** (SEC-3/OBS-2) — security/diagnostics (after P09 merges).
 5. **R05** (PKG-1/SUP-2/SUP-4) — supply-chain pins (after P08-v2 merges).
@@ -114,6 +128,11 @@ P3:
 - **R05 / SUP-2 vs P08-v2 (SUP-1):** both edit `build-linux.yml`. R05 is based
   on P08-v2; add the sing-box/libcronet digest step near, but not on top of,
   the appimagetool pin block.
+- **R12 / FW-3 vs R01 (TEST-1):** both add tests to `StartupPipelineTests.cs`.
+  R12 is based on the R01 branch so it inherits R01's capturing `FirewallFactory`
+  fake; do not re-base R12 onto `origin/main` while R01 is unmerged (the fake
+  would be absent and R12's tests would hit the throwing factory). R12's only
+  production edit is `StartupPipeline.cs:705`, which R01 does not touch.
 
 ### 2.4 Shared-root-cause reuse (fix once)
 
@@ -158,6 +177,33 @@ installer, не применяй nftables/PF нигде, не скачивай b
 VM/WinRM/ADB/MCP/live мутаций. Только чтение/поиск/редактирование кода и запись
 тестов. Commit/push/CI делает orchestrator. Без release/merge/tag/deploy. Без
 emoji. Подготовь diff и заполни секцию Outcome шаблоном PENDING.
+```
+
+### R12 — full-tunnel kill-switch intent (FW-3, found during R01 review)
+
+```text
+Выполни brief plans/phase2-audit-r12-full-tunnel-killswitch-2026-07-29.md через
+Qwen Code. ID: FW-3 (P2, CONFIRMED; найден при Qwen R01 implementation review).
+Base branch: codex/qwen-audit-r01-firewall-wiring-2026-07-29 (R12 переиспользует
+capturing FirewallFactory fake из R01; если R01 уже merged — base origin/main).
+Сначала прочитай brief целиком, AGENTS.md, plans/CLAUDE.md,
+VPNRouter.Core/CLAUDE.md и VPNRouter.Tests/CLAUDE.md. Root-cause fix только в
+full-tunnel ветке profile-resolution (StartupPipeline.cs:705): скопируй
+BlockOnVpnFail из effective selected profile (settings.ActiveProfile через
+существующий ProfileManager.MergeProfilesTolerant, true-wins) в синтетический
+FullTunnel profile, чтобы kill-switch gate (StartupPipeline.cs:1084) мог сработать
+в full-tunnel. Пустой/неразрешимый ActiveProfile -> false (без over-arming,
+поведение не меняется). НЕ добавляй глобальный AppConfig toggle / UI editor; НЕ
+трогай gate :1084, isFullTunnel derivation, platform CreateBlockRules impl
+(IPv6 — это R01), CustomConfig synthetic (:734) и Android. Переиспользуй
+существующие helpers; без speculative abstractions. Напиши 2 теста на capturing
+fake: full-tunnel + profile BlockOnVpnFail=true -> CreateBlockRules вызван с
+isFullTunnel=true (падает на старом коде); full-tunnel + нет block intent ->
+НЕ вызван (guard от over-arming). НЕ запускай локальные build/test/app/binary/
+service/installer, не применяй nftables/PF/netsh нигде, не скачивай binary, не
+делай VM/WinRM/ADB/MCP/live мутаций. Только чтение/поиск/редактирование кода и
+запись тестов. Commit/push/CI делает orchestrator. Без release/merge/tag/deploy.
+Без emoji. Подготовь diff и заполни секцию Outcome шаблоном PENDING.
 ```
 
 ### R02 — config / protocol parity
