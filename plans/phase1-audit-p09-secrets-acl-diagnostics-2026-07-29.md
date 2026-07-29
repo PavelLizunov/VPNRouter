@@ -340,22 +340,23 @@ Must stay green: `SubscriptionFetcherParserTests.cs` (all), existing
 - [ ] **Gate 5 — UI/live**: DEFERRED by explicit owner constraint (no local launch/MCP/VM). Do NOT fake PASS. Note "deferred — ACL change not live-verified on multi-user box" in Outcome.
 - [ ] **Gate 6 — Characterization**: N/A (no god-file split; no MVM surface change).
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN
+**Commits**: `d857fa6e` (fix(security): redact secrets and restrict data ACL)
+**Pushed**: draft PR #60, branch `codex/qwen-audit-p09-secrets-acl-diagnostics-2026-07-29`
+**Test deltas**: +175 / -0 (1 new test file: `SubscriptionUrlRedactionTests.cs` +115; extended existing `CrashReporterScrubberTests.cs` +32, `ClashLogStreamTests.cs` +28)
+**Files changed**: 8 · +323 / -9
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI): <output>
-- [ ] Gate 2 tests (remote CI): <output>
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review / security-review: <output>
-- [-] Gate 5 UI/live: deferred (owner constraint) — not live-verified
+- [x] Gate 1 build (remote CI): PASS — dotnet test run 30446800880 SUCCESS
+- [x] Gate 2 tests (remote CI): PASS — run 30446800880 SUCCESS; new `SubscriptionUrlRedactionTests`, extended `CrashReporterScrubberTests` and `ClashLogStreamTests` green; full existing suite stayed green
+- [x] Gate 3 docs: PASS — Outcome filled; no README change needed
+- [x] Gate 4 self-review / security-review: PASS — static self-review performed during implementation; URL redaction (SEC-1), token scrubbing (OBS-1), and ACL change (SEC-2) reviewed
+- [-] Gate 5 UI/live: deferred (owner constraint) — ACL change not live-verified on multi-user box; multi-user ACL live validation deferred
 - [-] Gate 6 characterization: N/A
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: none
+**Follow-ups spawned**: raw subscription URL exception logs in App ViewModels remain outside this package (SEC-1 covers `SubscriptionFetcher.cs` Core sites only).
+**Rollback**: `git revert d857fa6e` / branch delete
