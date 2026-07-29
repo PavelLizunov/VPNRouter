@@ -72,6 +72,9 @@ echo "    sing-box-lx bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev
 # Source resolution: $WGTURN_CORE_DIR > tools/wgturn-cli-cache/wgturn-core/
 # > gh repo clone PavelLizunov/wgturn-core (requires gh auth). If neither
 # works, the step is skipped with a warning and the .app still works.
+# Pin: wgturn-core main HEAD 416991d (committer 2026-06-18T11:44:23Z) from
+# GET repos/PavelLizunov/wgturn-core/commits/main — bump by updating this SHA.
+WGTURN_CORE_REF="416991d2633b497fd37169782f2ef2eab003fa6b"
 WGTURN_CORE="${WGTURN_CORE_DIR:-}"
 if [ -z "$WGTURN_CORE" ] || [ ! -d "$WGTURN_CORE/cmd/wgturn-cli" ]; then
     if [ -d "$REPO_DIR/tools/wgturn-cli-cache/wgturn-core/cmd/wgturn-cli" ]; then
@@ -85,6 +88,17 @@ if [ -z "$WGTURN_CORE" ] || [ ! -d "$WGTURN_CORE/cmd/wgturn-cli" ]; then
     fi
 fi
 if [ -n "$WGTURN_CORE" ] && [ -d "$WGTURN_CORE/cmd/wgturn-cli" ] && command -v go >/dev/null 2>&1; then
+    case "${ARCH:-${WGTURN_GOARCH:-$(uname -m)}}" in
+        x86_64|amd64)  ARCH=amd64 ;;
+        arm64|aarch64) ARCH=arm64 ;;
+        *) echo "ERROR: unsupported wgturn GOARCH: ${ARCH:-${WGTURN_GOARCH:-$(uname -m)}}" >&2; exit 1 ;;
+    esac
+    git -C "$WGTURN_CORE" checkout --quiet "$WGTURN_CORE_REF"
+    WGTURN_HEAD="$(git -C "$WGTURN_CORE" rev-parse HEAD)"
+    if [ "$WGTURN_HEAD" != "$WGTURN_CORE_REF" ]; then
+        echo "ERROR: wgturn-core HEAD $WGTURN_HEAD != pinned $WGTURN_CORE_REF" >&2
+        exit 1
+    fi
     WGTURN_SHA=$(cd "$WGTURN_CORE" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
     mkdir -p "$APP/Contents/MacOS/bin"
     echo "    wgturn-cli: building darwin-${ARCH} (sha $WGTURN_SHA)..."

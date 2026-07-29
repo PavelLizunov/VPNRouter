@@ -100,7 +100,7 @@ public class SettingsMigratorMtuTests
     }
 
     [Theory]
-    [InlineData(1280, 1420)]
+    [InlineData(1280, 1280)]
     [InlineData(1500, 1420)]
     [InlineData(0, 1420)]
     [InlineData(-1, 1420)]

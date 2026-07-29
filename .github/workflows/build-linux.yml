@@ -104,8 +104,10 @@ jobs:
           # dlopen's it at runtime). The deb/AppImage/tar.gz all `cp -R publish/linux-x64/.`,
           # so it rides into every Linux artifact automatically.
           SINGBOX_VER="1.13.14"
+          SINGBOX_SHA256="f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697"
           curl -sSL -o /tmp/singbox.tar.gz \
             "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
+          echo "${SINGBOX_SHA256}  /tmp/singbox.tar.gz" | sha256sum -c -
           tar -xzf /tmp/singbox.tar.gz -C /tmp
           cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/libcronet.so" publish/linux-x64/libcronet.so
           ls -lh publish/linux-x64/sing-box publish/linux-x64/libcronet.so
@@ -165,8 +167,22 @@ jobs:
       - name: Build AppImage
         run: |
           set -euo pipefail
-          # appimagetool is a single-file ELF; grab latest release asset.
-          wget -q -O appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          # appimagetool is a single-file ELF. Pin the IMMUTABLE release asset
+          # (repo AppImage/appimagetool, tag 1.9.1, asset appimagetool-x86_64.AppImage).
+          # The old retired AppImageKit rolling ref changed on every upstream CI
+          # build — a supply-chain RCE vector; never reintroduce a rolling ref.
+          # To update: bump the tag in APPIMAGETOOL_URL to the next immutable
+          # release, re-read the asset size via
+          # `gh api repos/AppImage/appimagetool/releases/tags/<tag>` into
+          # APPIMAGETOOL_SIZE, and re-capture the SHA256 from the official release
+          # asset (one-time CI/owner download over github TLS) into APPIMAGETOOL_SHA256.
+          # Fail-closed: any size/digest mismatch aborts the build before chmod/exec.
+          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+          APPIMAGETOOL_SIZE=15092216
+          wget -q -O appimagetool "$APPIMAGETOOL_URL"
+          [ "$(stat -c %s appimagetool)" = "$APPIMAGETOOL_SIZE" ]
+          echo "${APPIMAGETOOL_SHA256}  appimagetool" | sha256sum -c -
           chmod +x appimagetool
           # --appimage-extract-and-run avoids needing FUSE on the runner.
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run \

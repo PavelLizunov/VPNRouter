@@ -193,7 +193,7 @@ public static class CustomConfigInjector
         // exclude list (persisted user list + runtime auto-detected WG/AWG
         // subnets) so custom configs coexist with a host WG tunnel the same way
         // generated configs do — without persisting the auto subnets.
-        StripUnsupportedFeatures(config, settings.Tun.GetEffectiveRouteExcludeAddress(), settings.App.ForceIpv4Only, settings.App.StrictDns);
+        StripUnsupportedFeatures(config, settings.Tun.GetEffectiveRouteExcludeAddress(), settings.App.ForceIpv4Only, settings.App.StrictDns, settings.Tun.Ipv6Enabled);
 
         // Align route.final with the routing policy — mirrors
         // ConfigGenerator.BuildRoute's finalOutbound: full tunnel OR exclude
@@ -310,6 +310,21 @@ public static class CustomConfigInjector
                 return; // already has urltest, don't add another
         }
 
+        // sing-box FATALs on duplicate outbound tags; probe auto / auto-2 / ... (Ordinal — tags are case-sensitive Go strings).
+        var existingTags = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var ob in outbounds)
+        {
+            if (ob is JsonObject obObj)
+            {
+                var tag = StjNodeHelpers.AsString(obObj["tag"]);
+                if (!string.IsNullOrEmpty(tag))
+                    existingTags.Add(tag);
+            }
+        }
+        var urltestTag = "auto";
+        for (var n = 2; existingTags.Contains(urltestTag); n++)
+            urltestTag = $"auto-{n}";
+
         // Create urltest from selector's children.
         // Phase 6 — Wave 31b: cast to (JsonNode?) so the compiler picks
         // JsonArray.Add(JsonNode?) instead of Add<T>(T) (IL3050).
@@ -321,7 +336,7 @@ public static class CustomConfigInjector
         var urltest = new JsonObject
         {
             ["type"] = "urltest",
-            ["tag"] = "auto",
+            ["tag"] = urltestTag,
             ["outbounds"] = childTagsArray,
             ["url"] = "https://www.gstatic.com/generate_204",
             ["interval"] = "5m"
@@ -331,8 +346,8 @@ public static class CustomConfigInjector
         var selectorIdx = outbounds.IndexOf(selector);
         outbounds.Insert(selectorIdx, urltest);
 
-        // Add "auto" to selector's children (first = default)
-        children.Insert(0, "auto");
+        // Add the injected urltest to selector's children (first = default)
+        children.Insert(0, urltestTag);
     }
 
     /// <summary>
@@ -386,6 +401,20 @@ public static class CustomConfigInjector
         });
         if (!hasProxy && !hasWireGuardEndpoint)
             errors.Add("No proxy outbound found (all outbounds are direct/block/dns)");
+
+        // sing-box FATALs on duplicate outbound tags; reject here with an actionable message (Ordinal — tags are case-sensitive).
+        var tagCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var o in outbounds)
+        {
+            var tag = StjNodeHelpers.AsString(o?["tag"]);
+            if (string.IsNullOrEmpty(tag)) continue;
+            tagCounts[tag] = tagCounts.TryGetValue(tag, out var count) ? count + 1 : 1;
+        }
+        foreach (var (tag, count) in tagCounts)
+        {
+            if (count > 1)
+                errors.Add($"Duplicate outbound tag '{tag}' ({count} outbounds) — sing-box rejects duplicate outbound tags");
+        }
 
         // Route section is optional — InjectRouteRules creates one if missing
 
@@ -1377,7 +1406,7 @@ public static class CustomConfigInjector
     /// 4. "block"/"dns" outbound types → removed + route rules converted to actions
     /// 5. Legacy inbound sniff fields → removed (moved to route actions)
     /// </summary>
-    private static void StripUnsupportedFeatures(JsonObject config, List<string>? excludeAddresses = null, bool forceIpv4Only = true, bool strictDns = false)
+    private static void StripUnsupportedFeatures(JsonObject config, List<string>? excludeAddresses, bool forceIpv4Only, bool strictDns, bool ipv6Enabled)
     {
         // 1. Convert legacy DNS server format to type-based
         var dnsServers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
@@ -1533,6 +1562,12 @@ public static class CustomConfigInjector
             {
                 var strategy = StjNodeHelpers.AsString(dns["strategy"]);
                 if (strategy != "ipv4_only")
+                    dns["strategy"] = "ipv4_only";
+            }
+            else if (!ipv6Enabled)
+            {
+                // G5 parity: fill ipv4_only only when absent — an authored strategy is the user's explicit contract.
+                if (StjNodeHelpers.AsString(dns["strategy"]) is null)
                     dns["strategy"] = "ipv4_only";
             }
 
