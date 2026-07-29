@@ -49,6 +49,10 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
     private static readonly TimeSpan DefaultRetryBaseDelay = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan PoolDnsRefresh = TimeSpan.FromMinutes(5);
 
+    /// <summary>NET-1: hard cap on buffered response body (32 MB).</summary>
+    /// <remarks>Buffered metadata/text only; binary downloads use SendStreamingAsync.</remarks>
+    internal const long MaxResponseBytes = 32L * 1024 * 1024;
+
     private static readonly Lazy<PolicyHttpClient> _shared = new(() => new PolicyHttpClient());
 
     /// <summary>Process-wide default instance (lazy singleton).</summary>
@@ -111,11 +115,11 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
             {
                 httpResponse = await _client.SendAsync(
                     httpRequest,
-                    HttpCompletionOption.ResponseContentRead,
+                    HttpCompletionOption.ResponseHeadersRead,
                     perRequestCts.Token).ConfigureAwait(false);
 
-                var body = await httpResponse.Content
-                    .ReadAsByteArrayAsync(perRequestCts.Token)
+                var body = await ReadBoundedAsync(
+                    httpResponse.Content, MaxResponseBytes, perRequestCts.Token)
                     .ConfigureAwait(false);
 
                 var duration = TimeSpan.FromMilliseconds(Environment.TickCount64 - startedAt);
@@ -351,6 +355,31 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
     {
         foreach (var (name, values) in source)
             sink[name] = string.Join(", ", values);
+    }
+
+    /// <summary>NET-1: bounded streaming read — counts decompressed bytes
+    /// and aborts past <paramref name="maxBytes"/>.</summary>
+    private static async Task<byte[]> ReadBoundedAsync(
+        HttpContent content, long maxBytes, CancellationToken ct)
+    {
+        if (content.Headers.ContentLength is { } declared && declared > maxBytes)
+            throw new InvalidDataException(
+                $"HTTP response body declared as {declared} bytes, exceeding the {maxBytes}-byte limit.");
+
+        await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        long total = 0;
+        int n;
+        while ((n = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), ct).ConfigureAwait(false)) > 0)
+        {
+            total += n;
+            if (total > maxBytes)
+                throw new InvalidDataException(
+                    $"HTTP response body exceeded {maxBytes} bytes (possible decompression bomb or oversized response).");
+            buffer.Write(chunk, 0, n);
+        }
+        return buffer.ToArray();
     }
 
     /// <summary>
