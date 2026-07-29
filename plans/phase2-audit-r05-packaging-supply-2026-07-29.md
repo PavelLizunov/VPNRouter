@@ -198,23 +198,25 @@ SUP-4) after the orchestrator pushes. No local `wget`/`curl`/`go build`/actionli
 - [ ] Gate 5 — MCP verify: N/A (build infra only).
 - [ ] Gate 6 — Characterization diff: N/A.
 
-## 12. Outcome (PARTIAL — pre-final-commit state)
+## 12. Outcome
 
-**Status**: PARTIAL — final fail-closed code is uncommitted (PENDING final
-commit); final remote Linux + macOS verification after that commit still PENDING.
+**Status**: PASS (implementable / remote-only scope) — with wgturn
+runtime-branch caveat (see below).
 
 **Branch base**: `63a4856b` (P08-v2 / PR #61).
+**PR**: #75 (draft, intentionally stacked on P08-v2 PR #61 / base branch
+`codex/qwen-audit-p08-appimagetool-pin-v2-2026-07-29`).
 
 **Commits on branch**:
 - `d767586d` — docs: add R05 brief.
 - `0d5ee149` — provisional implementation + remote-only digest capture.
-- Final fail-closed code: PENDING final commit (not yet committed).
+- `c0febe02` — final fail-closed code (ci: verify sing-box archive input).
 
-**Pushed**: `d767586d` and `0d5ee149` pushed to `origin` branch.
+**Pushed**: `d767586d`, `0d5ee149`, and `c0febe02` pushed to `origin` branch.
 
-**Files changed** (cumulative diff vs base `63a4856b`): 3 files, +290/-0;
+**Files changed** (cumulative diff vs base `63a4856b`): 3 files, +314/-0;
 0 new test files.
-- brief (`plans/phase2-audit-r05-packaging-supply-2026-07-29.md`) +274
+- brief (`plans/phase2-audit-r05-packaging-supply-2026-07-29.md`) +298
 - `build-mac.sh` +14
 - `.github/workflows/build-linux.yml` +2
 
@@ -224,13 +226,30 @@ commit); final remote Linux + macOS verification after that commit still PENDING
   `upload_to_release=false`, release upload skipped; captured sing-box SHA256
   `f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697`.
 - `30457608906` for `0d5ee149`: success (test + characterization-windows).
+- `30458580034` for `c0febe02`: success (test + characterization-windows).
+- `30458582745` for `c0febe02` (build-linux): success; digest gate logged
+  `/tmp/singbox.tar.gz: OK`; AppImage/deb/tar built; Upload to GitHub Release
+  skipped (`upload_to_release=false`).
+- `30458585894` for `c0febe02` (build-mac): success; package build + smoke
+  success; Upload to GitHub Release and Homebrew trigger skipped
+  (`upload_to_release=false` / non-stable).
+
+**wgturn runtime-branch caveat**: the macOS log shows the cross-repo wgturn
+clone was inaccessible and the existing gated branch printed
+`wgturn-cli: SKIPPED`. PKG-1 (ARCH derivation) and SUP-4 (wgturn-core
+pin/assert) were therefore statically reviewed by Qwen but NOT dynamically
+exercised on a runner. This is a verification limitation of the
+private/inaccessible wgturn branch, not a code defect.
 
 **Self-review**: Qwen final static Ponytail review PASS — no unnecessary lines,
-no shell bug. No local build/test/script/binary/app/network/download was run.
+no shell bug. No local build/test/script/binary/app/installer/VM/MCP/
+network/download was run.
 
 **Gate results:**
-- [ ] Gate 1: PENDING — final remote Linux + macOS CI after final commit
-- [ ] Gate 2: PENDING — final remote runs after final commit
+- [x] Gate 1: PASS — remote Linux CI (`30458582745`) and Mac CI
+  (`30458585894`) success after final commit `c0febe02`
+- [x] Gate 2: PASS — remote test + characterization-windows (`30458580034`)
+  success; existing build paths without wgturn unchanged
 - [x] Gate 3: PASS — brief Outcome filled; pins' capture source + update
   procedure documented in commit message
 - [x] Gate 4: PASS — static shell/YAML review; no mutable `continuous`
@@ -245,11 +264,16 @@ no shell bug. No local build/test/script/binary/app/network/download was run.
 - Local repo had no wgturn pin, so the GitHub metadata main HEAD
   `416991d2633b497fd37169782f2ef2eab003fa6b` was pinned.
 
-**Follow-ups spawned**: none within R05.
+**Follow-ups spawned**: none within R05. The private/inaccessible wgturn branch
+is a verification limitation (PKG-1/SUP-4 not dynamically exercised), not a new
+code task.
+
+**No merge/tag/release/deploy performed.**
 
 ## 13. Rollback
 
-`git revert <commit>` on the R05 branch, or delete
+`git revert c0febe02 0d5ee149` on the R05 branch (revert the two code commits;
+`d767586d` is docs-only), or delete
 `codex/qwen-audit-r05-packaging-supply-2026-07-29`. Because R05 is based on
 P08-v2, reverting R05 leaves the P08-v2 appimagetool pin intact. Build scripts
 revert to the prior (unpinned/unverified) behavior; no release state is touched.
