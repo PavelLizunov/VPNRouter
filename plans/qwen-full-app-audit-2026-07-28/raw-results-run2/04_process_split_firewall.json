@@ -1,0 +1,1 @@
+The audit is complete. The final output was the JSON array above with two findings — both in the kill-switch server-IP allow-list path where `ReadServerIps` accepts IPv6 literals but the ruleset builders mishandle them (Mac: pf syntax error → silent leak; Linux: silent drop → host brick).

@@ -1,0 +1,3 @@
+The background exploration confirmed both findings. The HealthMonitor holds a direct constructor-injected reference to the SingBoxManager (HealthMonitor.cs:252 `_singBox.Crashed += OnSingBoxCrashed`), and its AttemptRestart continuation calls `_singBox.Restart()` at lines 951 and 1189 — both operating on the stale reference when `SetSingBoxManager` (VpnEngine.cs:1437) overwrites the engine field without disposing the previous instance.
+
+The final audit output was already emitted above as the required JSON array.

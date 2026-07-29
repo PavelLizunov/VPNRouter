@@ -679,9 +679,12 @@ public final class VpnRouterService extends VpnService {
             setTunnelLive(true);
             startStatsPoller();   // P1: begin polling clash_api for live up/down + conn count
         } catch (Exception e) {
-            Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + e.getMessage(), e);
+            // AND-1: scrub before log + broadcast. Do NOT pass the raw
+            // Throwable to Log.e — its toString() embeds the unsanitized message.
+            String safeMsg = scrubSecrets(e.getMessage());
+            Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + safeMsg);
             Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
-            err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + e.getMessage());
+            err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + safeMsg);
             sendBroadcast(err);
             setTunnelLive(false);
             stopSelf();
