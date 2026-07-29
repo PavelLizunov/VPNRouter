@@ -34,13 +34,17 @@
 
 ## Executive table (ровно 8 строк)
 
+> **Update 2026-07-29:** статусы #29/#31/#32/#33 актуализированы после авторизованных
+> follow-up действий (подробности — в «Follow-up actions — 2026-07-29» в конце файла).
+> Строки #22/#42/#46 без изменений (KEEP, owner-gated).
+
 | # | Объект | Состояние | Required `test` | Вердикт | Код-работа? |
 |---|---|---|---|---|---|
 | **#22** | coverlet.collector 6.0.4 → 10.0.1 | OPEN, MERGEABLE/BEHIND | green | **KEEP** | нет |
-| **#29** | actions-all group, 9 updates | OPEN, MERGEABLE/BLOCKED | **red (flaky)** | **KEEP** (merge-blocked флейком, не контентом) | нет |
-| **#31** | SkiaSharp 3.119.4 → 4.150.0 | OPEN, MERGEABLE/BEHIND | **cancelled** (нет green) | **BLOCKED_PENDING_EVIDENCE** (склоняется к CLOSE_AS_STALE) | нет (пока нет evidence) |
-| **#32** | Vecc.YamlDotNet.Analyzers.StaticGenerator 15.1.2 → 18.1.0 | OPEN, MERGEABLE/BEHIND | **red (CS0535)** | **REPLACE** | **да** (в составе combined PR) |
-| **#33** | YamlDotNet 15.3.0 → 18.1.0 | OPEN, MERGEABLE/BEHIND | **red (CS0535)** | **REPLACE** | **да** (combined PR + фикс конвертера) |
+| **#29** | actions-all group, 9 updates | OPEN, MERGEABLE/BLOCKED | **green** (re-run 2026-07-29) | **KEEP** (ready; owner merge decision) | нет |
+| **#31** | SkiaSharp 3.119.4 → 4.150.0 | **CLOSED** (2026-07-29) | **cancelled** (нет green) | **CLOSED_AS_STALE** (нет green evidence) | нет |
+| **#32** | Vecc.YamlDotNet.Analyzers.StaticGenerator 15.1.2 → 18.1.0 | **CLOSED** (superseded by #71) | **red (CS0535)** | **REPLACED** → combined PR #71 (CI SUCCESS) | **да** (PR #71 green) |
+| **#33** | YamlDotNet 15.3.0 → 18.1.0 | **CLOSED** (superseded by #71) | **red (CS0535)** | **REPLACED** → combined PR #71 (CI SUCCESS) | **да** (PR #71 green) |
 | **#42** | docs(readme): build examples → 2.47.0 | OPEN, MERGEABLE/BEHIND | green | **KEEP** | нет |
 | **#46** | Avalonia + 12 others (minor/patch group) | OPEN, MERGEABLE/**CLEAN** | **green** | **KEEP** | нет |
 | **43649922** | merge PR #45, упавший `test` | merged (ancestor main) | red на предке, green на HEAD | **HISTORICAL_SUPERSEDED** | нет (опц. harden flaky test) |
@@ -390,16 +394,24 @@
    `DeepVerifyProbeCancellationTests`). Контент корректен (9/9 live, base==main).
    Действие: re-run упавшего `test` (мутация, вне read-only); после green — merge.
    Если флейк устойчив — чинить тест отдельно на main (см. шаг 7), не блокая #29 надолго.
+   **Update 2026-07-29:** re-run выполнен удалённо (run `30138066328`, attempt 2 = SUCCESS) →
+   `test` green, флейк подтверждён. PR ready; merge по решению владельца. Код-работа не нужна.
 5. **#32 + #33 — НЕ merge'ить по отдельности** (оба красные, CS0535). **REPLACE:** открыть
    один combined lockstep PR (`YamlDotNet 15.3.0 → 18.1.0` + analyzer `15.1.2 → 18.1.0`)
    **с правкой `DateTimeOffsetYamlConverter.cs`** под интерфейс 16.0.0+
    (`ReadYaml(IParser, Type, ObjectDeserializer)` / `WriteYaml(IEmitter, object?, Type, ObjectSerializer)`).
    Верификация: build clean + `YamlStaticContextRoundTripTests` + v2.28.x regression + max-depth-130.
    После green — закрыть #32 и #33 как superseded. **Код-работа нужна.**
+   **Update 2026-07-29:** combined replacement **PR #71** создан (commit `54c069ce`; парный бамп
+   YamlDotNet + Vecc generator 18.1.0 + адаптация сигнатур конвертера). Remote CI **SUCCESS**
+   (run `30456780192`: restore + build + full test). #32 и #33 **закрыты** как superseded by #71.
 6. **#31 — НЕ merge'ить** (BLOCKED_PENDING_EVIDENCE; test-job cancelled, ABI-риск 3→4).
    После шага 1 (#46): прогнать restore+build+`dotnet test` против SkiaSharp 4.150.0;
    если 4.x несовместима с Avalonia.Skia (ожидается) — закрыть #31 как stale /
    `@dependabot ignore this major version`, pin SkiaSharp под транзитивный пин Avalonia 12.1.0.
+   **Update 2026-07-29:** re-run (run `29134583027`, attempt 2) — restore+build success, но
+   `test` снова ушёл в 15-минутный cancellation; green evidence нет. PR #31 **закрыт** как
+   stale/unsafe (comment `5118508265`). Дальнейших действий не требуется.
 7. **43649922 — действий не требуется** (HISTORICAL_SUPERSEDED; main green). Опц. harden
    `DeepVerifyProbeCancellationTests.ClientTimeout_WithoutExternalCancel_ReportsHttpTimeout`
    против тайминговой гонки — это же снимает флейк-блокер с #29 (шаг 4).
@@ -417,3 +429,39 @@
   assertion `DeepVerifyProbeCancellationTests.cs:55`; README `2.47.0-r13`).
 - **Read-only соблюдён:** создан/изменён только этот файл
   (`plans/qwen-open-pr-triage-2026-07-29.md`); никаких мутаций PR/CI/кода не выполнялось.
+
+---
+
+## Follow-up actions — 2026-07-29 (post-snapshot addendum)
+
+> Датированное дополнение к read-only snapshot'у выше. Исходные FACT-секции
+> («Детально по каждому PR») не переписаны — этот раздел фиксирует авторизованные
+> follow-up действия, выполненные после snapshot'а, и актуализирует статусы, которые
+> иначе вводили бы в заблуждение. Merge/release здесь НЕ утверждаются — только
+> состояние PR/CI. Маркировка `[FACT]`/`[INFER]` сохранена.
+
+- **PR #29 — green, ready (owner-gated) [FACT].** Упавший `test` пере-запущен удалённо:
+  workflow run `30138066328`, **attempt 2 = SUCCESS**. Предыдущий фейл подтверждён как
+  флейк `DeepVerifyProbeCancellationTests` (тот же класс, что на commit 43649922). PR теперь
+  green и готов к merge по решению владельца. Код-изменений нет.
+- **PR #31 — CLOSED, нет green evidence [FACT].** Workflow run `29134583027` пере-запущен
+  удалённо: attempt 2 успешно сделал restore+build, но `test` снова шёл до 15-минутного
+  cancellation. Green test-evidence так и не получено → PR закрыт как stale/unsafe.
+  Комментарий закрытия: https://github.com/PavelLizunov/VPNRouter/pull/31#issuecomment-5118508265
+  `[INFER]` Закрытие согласуется с прежним BLOCKED_PENDING_EVIDENCE → CLOSE_AS_STALE
+  (ABI-риск SkiaSharp 3→4 из детальной секции подтвердить зелёным прогоном не удалось).
+- **PR #32 / #33 — CLOSED, superseded by green PR #71 [FACT].** Вместо двух красных PR открыт
+  один combined replacement: **PR #71** (https://github.com/PavelLizunov/VPNRouter/pull/71),
+  commit `54c069ce` — парный бамп `YamlDotNet 15.3.0 → 18.1.0` +
+  `Vecc.YamlDotNet.Analyzers.StaticGenerator 15.1.2 → 18.1.0` плюс адаптация сигнатур
+  `DateTimeOffsetYamlConverter` под интерфейс 16.0.0+. Remote CI **SUCCESS** (run `30456780192`:
+  restore + build + full test). #32 и #33 **закрыты** как superseded by #71 с комментариями:
+  #32 https://github.com/PavelLizunov/VPNRouter/pull/32#issuecomment-5118547247,
+  #33 https://github.com/PavelLizunov/VPNRouter/pull/33#issuecomment-5118551489.
+  `[INFER]` Merge #71 остаётся owner-gated.
+- **PR #66 — CLOSED, superseded by green #67 [FACT].** Закрыт как заменённый зелёным replacement
+  **PR #67** (https://github.com/PavelLizunov/VPNRouter/pull/67, run `30454340845`). #66/#67 не
+  входили в исходный snapshot из 8 строк; зафиксировано здесь как связанное follow-up действие,
+  в executive table не добавляется.
+- **Без изменений [FACT]:** #22, #42, #46 остаются **KEEP** и owner-gated (зелёные; merge
+  по решению владельца). Никаких merge/release в этом разделе не утверждается.
