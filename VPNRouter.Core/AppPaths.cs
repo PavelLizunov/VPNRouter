@@ -1,3 +1,7 @@
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
+
 namespace VPNRouter.Core;
 
 /// <summary>
@@ -104,6 +108,85 @@ public static class AppPaths
         Directory.CreateDirectory(SlipstreamBinDir);
         Directory.CreateDirectory(ProfilesDir);
         Directory.CreateDirectory(GeoDir);
+
+        // SEC-2: tighten %ProgramData% ACL on first run without installer.
+        if (OperatingSystem.IsWindows())
+            TryRestrictWindowsDataDirAcl(DataDir);
+    }
+
+    /// <summary>
+    /// Windows-only, best-effort: replace the inherited BUILTIN\Users read with
+    /// explicit SYSTEM + Administrators (FullControl) and current-user (Modify).
+    /// Uses well-known SIDs so the logic is locale-independent. Idempotent:
+    /// re-runs are no-ops once the Users ACE is gone.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void TryRestrictWindowsDataDirAcl(string dir)
+    {
+        try
+        {
+            var dirInfo = new DirectoryInfo(dir);
+            if (!dirInfo.Exists) return;
+
+            var security = dirInfo.GetAccessControl();
+            if (!HasBuiltinUsersReadAccess(security))
+                return;
+
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: true);
+
+            const InheritanceFlags inherit =
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+
+            // Well-known SIDs are locale-independent (unlike NTAccount names).
+            var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+            var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            var usersSid  = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+
+            // Re-assert allowed identities BEFORE removing Users.
+            security.SetAccessRule(new FileSystemAccessRule(
+                systemSid, FileSystemRights.FullControl,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.SetAccessRule(new FileSystemAccessRule(
+                adminsSid, FileSystemRights.FullControl,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.SetAccessRule(new FileSystemAccessRule(
+                WindowsIdentity.GetCurrent().User!, FileSystemRights.Modify,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+
+            // RemoveAccessRuleAll drops EVERY Allow ACE for BUILTIN\Users
+            // regardless of rights/inheritance/propagation flags.
+            security.RemoveAccessRuleAll(new FileSystemAccessRule(
+                usersSid, FileSystemRights.ReadAndExecute,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+
+            dirInfo.SetAccessControl(security);
+        }
+        catch
+        {
+            // Best-effort: never throw from the startup path.
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static bool HasBuiltinUsersReadAccess(DirectorySecurity security)
+    {
+        try
+        {
+            var usersSid = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+            foreach (FileSystemAccessRule rule in
+                security.GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier)))
+            {
+                if (rule.AccessControlType != AccessControlType.Allow) continue;
+                if (!usersSid.Equals(rule.IdentityReference)) continue;
+                if ((rule.FileSystemRights & FileSystemRights.ReadAndExecute) == FileSystemRights.ReadAndExecute)
+                    return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        return false;
     }
 
     private static string ResolveDataDir()

@@ -182,6 +182,12 @@ public static class CrashReporter
         @"\b[A-Za-z0-9+/_\-]{40,}={0,2}\b",
         RegexOptions.Compiled);
 
+    // clash_api secret (32 hex) is too short for _longBase64Pattern (>=40)
+    // and ws/wss is not in _proxyUriPattern; match the token param directly.
+    private static readonly Regex _tokenParamPattern = new(
+        @"([?&])token=[^&\s]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
     /// Best-effort secret scrubbing on a single line of text. Public so
     /// callers serialising their own context (e.g. an Android Java
@@ -197,6 +203,7 @@ public static class CrashReporter
             m.Groups[2].Success ? $"{m.Groups[1].Value}/[redacted]" : m.Groups[1].Value);
         s = _uuidPattern.Replace(s, "<uuid>");
         s = _longBase64Pattern.Replace(s, "<key>");
+        s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}token=[REDACTED]");
         return s;
     }
 }

@@ -533,7 +533,28 @@ public static class SettingsLoader
             .WithTypeConverter(new DateTimeOffsetYamlConverter())
             .Build();
 
-        File.WriteAllText(configPath, serializer.Serialize(settings));
+        var yaml = serializer.Serialize(settings);
+
+        // DATA-1 (P05): write-to-temp + fsync + atomic rename. File.WriteAllText
+        // truncates on open — a crash mid-write zeros a populated config.
+        // Same-directory temp guarantees same-volume rename (atomic on NTFS/POSIX).
+        var tmp = configPath + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+            {
+                writer.Write(yaml);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tmp, configPath, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort */ }
+        }
     }
 
     // ── v2.26.0 — live reload on config.yaml change ──────────────────────
