@@ -8,16 +8,24 @@ Adjudication source of truth:
 Prompt pool: `C:\Project\VPNRouter-qwen-audit-2026-07-28\plans\qwen-audit-remediation-prompt-pool-2026-07-28.md`
 Adjudicated commit: `b39a28c32fae26838e615b5080d183dc33ee551b` (== this worktree HEAD, == `origin/main`)
 
-This index covers ONLY the 22 survivors that remain after the P1 wave. The P1
-wave (13 IDs: UPD-1, UPD-2, FAIL-1, DATA-1, FLOW-1, CLI-1, CLI-2, AND-1, SUP-1,
-SEC-1, SEC-2, OBS-1, ZAP-1) is already implemented in draft PRs #53, #55-#61 on
-the `codex/qwen-audit-p0X-*-2026-07-29` branches and is NOT re-covered here.
-The 5 refuted IDs (AND-2, DATA-2, DATA-5, PERF-2, and the refuted P1 form of
-LIFE-1) are NOT covered here.
+This index covers the 22 survivors that remain after the P1 wave, PLUS one
+newly-discovered defect (FW-3 → R12) found DURING Qwen R01 implementation review
+(see row 23). The P1 wave (13 IDs: UPD-1, UPD-2, FAIL-1, DATA-1, FLOW-1, CLI-1,
+CLI-2, AND-1, SUP-1, SEC-1, SEC-2, OBS-1, ZAP-1) is already implemented in draft
+PRs #53, #55-#61 on the `codex/qwen-audit-p0X-*-2026-07-29` branches and is NOT
+re-covered here. The 5 refuted IDs (AND-2, DATA-2, DATA-5, PERF-2, and the
+refuted P1 form of LIFE-1) are NOT covered here.
+
+**R12 provenance**: FW-3 was NOT part of the original P00 audit survivor set. It
+was discovered on 2026-07-29 while tracing the firewall wiring for R01
+(FW-1/FW-2/TEST-1): the full-tunnel branch of `StartupPipeline` replaces the
+selected profile with a synthetic `FullTunnel` profile whose `BlockOnVpnFail`
+defaults false, dropping the user's per-profile kill-switch intent. It is tracked
+here for completeness and sequenced right after R01 (it reuses R01's test seam).
 
 ---
 
-## 1. Scope invariant (22 = 18 P2 + 4 P3)
+## 1. Scope invariant (23 = 19 P2 + 4 P3)
 
 | # | ID | Final severity | Verdict | R-package | Brief |
 |---:|---|---|---|---|---|
@@ -43,13 +51,16 @@ LIFE-1) are NOT covered here.
 | 20 | UI-1 | P3 | CONFIRMED | R09 | phase3-audit-r09-localization |
 | 21 | SUP-3 | P3 | CONFIRMED | R10 | phase3-audit-r10-signing-action-pins |
 | 22 | PERF-1 | P3 | PARTIALLY_CONFIRMED | R11 | phase3-audit-r11-etw-disposal |
+| 23 | FW-3 | P2 | CONFIRMED | R12 | phase2-audit-r12-full-tunnel-killswitch |
 
 Coverage invariant:
 
 ```text
-Expected survivors:            22
-P2 survivors:                  18  (rows 1-18)
-P3 survivors:                   4  (rows 19-22)
+Expected survivors:            22  (original P00 survivor set)
+Newly-discovered (R01 review):  1  (FW-3 -> R12, row 23; NOT a P00 survivor)
+Total tracked here:            23
+P2 tracked:                    19  (rows 1-18 + row 23)
+P3 tracked:                     4  (rows 19-22)
 IDs with no R-package:          0
 IDs with multiple R-packages:   0
 P1-wave IDs included here:      0  (UPD-1/2, FAIL-1, DATA-1, FLOW-1, CLI-1/2, AND-1, SUP-1, SEC-1/2, OBS-1, ZAP-1)
@@ -75,14 +86,17 @@ Refuted IDs given a fix brief:  0  (AND-2, DATA-2, DATA-5, PERF-2 fully refuted;
 | R09 | `origin/main` | `MainWindow.axaml` update button is not touched by any P1 branch. |
 | R10 | `origin/main` | `.github/workflows/sign-windows.yml` is not touched by any P1 branch. |
 | R11 | `codex/qwen-audit-p02-failover-wiring-2026-07-29` | MANDATED: PERF-1 disposes the ETW monitor at `VpnEngine.cs:832` (`_etw?.Stop()`) / `:845` (`_etw = null`). P02 rewrote that exact teardown region of `VpnEngine.cs` (+92/-45). R11 must build on P02 to avoid a conflicting edit and to test against the post-FAIL-1 teardown. |
+| R12 | `codex/qwen-audit-r01-firewall-wiring-2026-07-29` (R01 branch) | RECOMMENDED: R12's regression test reuses the capturing `FirewallFactory` fake that R01 adds to `StartupPipelineTests.cs` (R01 flips it from throwing to capturing). R01 does NOT edit `StartupPipeline.cs` production code, so the only shared file is `StartupPipelineTests.cs`; basing on R01 avoids a textual conflict and supplies the fake. Fallback `origin/main` ONLY if R01 has already merged (the fake is then in main). |
 
 ### 2.2 Execution order
 
-P2 packages first (R01-R07), then P3 packages (R08-R11). Within P2 the order
-follows the prompt pool §22 recommended PR order, adapted to survivors:
+P2 packages first (R01-R07 + R12), then P3 packages (R08-R11). Within P2 the
+order follows the prompt pool §22 recommended PR order, adapted to survivors:
 
 1. **R03** (DATA-3/4/6, NET-1) — data-safety, no dependency.
 2. **R01** (FW-1/FW-2, TEST-1) — kill-switch correctness + its missing test.
+   2a. **R12** (FW-3) — full-tunnel kill-switch intent; immediately after R01
+   (reuses R01's capturing `FirewallFactory` fake; same test file).
 3. **R02** (CFG-1/CFG-2/PROTO-1) — config/protocol parity.
 4. **R06** (SEC-3/OBS-2) — security/diagnostics (after P09 merges).
 5. **R05** (PKG-1/SUP-2/SUP-4) — supply-chain pins (after P08-v2 merges).
@@ -114,6 +128,11 @@ P3:
 - **R05 / SUP-2 vs P08-v2 (SUP-1):** both edit `build-linux.yml`. R05 is based
   on P08-v2; add the sing-box/libcronet digest step near, but not on top of,
   the appimagetool pin block.
+- **R12 / FW-3 vs R01 (TEST-1):** both add tests to `StartupPipelineTests.cs`.
+  R12 is based on the R01 branch so it inherits R01's capturing `FirewallFactory`
+  fake; do not re-base R12 onto `origin/main` while R01 is unmerged (the fake
+  would be absent and R12's tests would hit the throwing factory). R12's only
+  production edit is `StartupPipeline.cs:705`, which R01 does not touch.
 
 ### 2.4 Shared-root-cause reuse (fix once)
 
@@ -158,6 +177,38 @@ installer, не применяй nftables/PF нигде, не скачивай b
 VM/WinRM/ADB/MCP/live мутаций. Только чтение/поиск/редактирование кода и запись
 тестов. Commit/push/CI делает orchestrator. Без release/merge/tag/deploy. Без
 emoji. Подготовь diff и заполни секцию Outcome шаблоном PENDING.
+```
+
+### R12 — full-tunnel kill-switch intent (FW-3, found during R01 review)
+
+```text
+Выполни brief plans/phase2-audit-r12-full-tunnel-killswitch-2026-07-29.md через
+Qwen Code. ID: FW-3 (P2, CONFIRMED; найден при Qwen R01 implementation review).
+Base branch: codex/qwen-audit-r01-firewall-wiring-2026-07-29 (R12 переиспользует
+capturing FirewallFactory fake из R01; если R01 уже merged — base origin/main).
+Сначала прочитай brief целиком, AGENTS.md, plans/CLAUDE.md,
+VPNRouter.Core/CLAUDE.md и VPNRouter.Tests/CLAUDE.md. Root-cause fix только в
+full-tunnel ветке profile-resolution (StartupPipeline.cs:705): скопируй
+BlockOnVpnFail из effective selected profile (settings.ActiveProfile через
+существующий ProfileManager.MergeProfilesTolerant, true-wins) в синтетический
+FullTunnel profile, чтобы kill-switch gate (StartupPipeline.cs:1084) мог сработать
+в full-tunnel. Пустой/неразрешимый ActiveProfile -> false (без over-arming,
+поведение не меняется). НЕ добавляй глобальный AppConfig toggle / UI editor; НЕ
+трогай gate :1084, isFullTunnel derivation, platform CreateBlockRules impl
+(IPv6 — это R01), CustomConfig synthetic (:734) и Android. Переиспользуй
+существующие helpers; без speculative abstractions. Напиши 2 теста на capturing
+fake: full-tunnel + profile BlockOnVpnFail=true -> CreateBlockRules вызван с
+isFullTunnel=true (падает на старом коде); full-tunnel + нет block intent ->
+НЕ вызван (guard от over-arming). Проверь, что baseline
+VpnEngineHotReloadLifecycleTests.cs:550-552 (ActiveProfile="") остаётся зелёным.
+Flag в PR description: §4 Simple-mode decision gate (Simple full-tunnel теперь
+армит kill-switch на Linux/macOS, потому что ActiveProfile держит SimpleSplitProfile
+с BlockOnVpnFail=true профилями — нужно явное owner sign-off; альтернатива WONTFIX).
+НЕ запускай локальные build/test/app/binary/
+service/installer, не применяй nftables/PF/netsh нигде, не скачивай binary, не
+делай VM/WinRM/ADB/MCP/live мутаций. Только чтение/поиск/редактирование кода и
+запись тестов. Commit/push/CI делает orchestrator. Без release/merge/tag/deploy.
+Без emoji. Подготовь diff и заполни секцию Outcome шаблоном PENDING.
 ```
 
 ### R02 — config / protocol parity
@@ -373,3 +424,91 @@ the audit-specific sections required by the orchestrator:
 10. Remote-only verification gates + PENDING Outcome template.
 11. Rollback.
 12. Self-contained copyable Qwen prompt.
+
+---
+
+## 6. Final outcomes and merge DAG (updated 2026-07-29)
+
+### 6.1 R01-R14 outcome summary
+
+| R-pkg | IDs | PR | State | Base | Key green run | Notes |
+|---|---|---|---|---|---|---|
+| R01 | FW-1, FW-2, TEST-1 | [#65](https://github.com/PavelLizunov/VPNRouter/pull/65) | OPEN | #63 branch | not independently confirmed | IPv6 firewall + pipeline test |
+| R02 | CFG-1, CFG-2, PROTO-1 | [#64](https://github.com/PavelLizunov/VPNRouter/pull/64) | OPEN | #63 branch | not independently confirmed | Config/protocol parity |
+| R03 | DATA-3, DATA-4, DATA-6, NET-1 | [#67](https://github.com/PavelLizunov/VPNRouter/pull/67) | OPEN | #63 branch | not independently confirmed | v2; #66 (v1) CLOSED superseded |
+| R04 | UI-2 | [#69](https://github.com/PavelLizunov/VPNRouter/pull/69) | OPEN | #63 branch | not independently confirmed | Narrow layout |
+| R05 | PKG-1, SUP-2, SUP-4 | [#75](https://github.com/PavelLizunov/VPNRouter/pull/75) | OPEN | #61 branch (P08-v2) | [30458580034](https://github.com/PavelLizunov/VPNRouter/actions/runs/30458580034) | Latest red 30459209007 = known DeepVerify flake; fixed via #51 merge order |
+| R06 | SEC-3, OBS-2 | [#68](https://github.com/PavelLizunov/VPNRouter/pull/68) | OPEN | #60 branch (P09) | not independently confirmed | Security/diagnostics |
+| R07 | ZAP-2, ZAP-3 | [#80](https://github.com/PavelLizunov/VPNRouter/pull/80) | OPEN | #68 branch (R06) | [30462778670](https://github.com/PavelLizunov/VPNRouter/actions/runs/30462778670) | v2; #79 (v1) CLOSED superseded |
+| R08 | LIFE-1 | -- | REFUTED | -- | -- | P1 claim refuted; P3 residual handle-churn not worth code change; no PR |
+| R09 | UI-1 | [#77](https://github.com/PavelLizunov/VPNRouter/pull/77) | OPEN | main | [30459825529](https://github.com/PavelLizunov/VPNRouter/actions/runs/30459825529) | v2; #73 (v1) CLOSED superseded |
+| R10 | SUP-3 | [#76](https://github.com/PavelLizunov/VPNRouter/pull/76) | OPEN | main | not independently confirmed | Signing action SHA-pins |
+| R11 | PERF-1 | [#74](https://github.com/PavelLizunov/VPNRouter/pull/74) | OPEN | #57 branch (P02) | not independently confirmed | ETW monitor dispose |
+| R12 | FW-3 | [#70](https://github.com/PavelLizunov/VPNRouter/pull/70) | OPEN | #65 branch (R01) | not independently confirmed | Full-tunnel kill-switch intent |
+| R13 | (security) | [#72](https://github.com/PavelLizunov/VPNRouter/pull/72) | OPEN | #68 branch (R06) | not independently confirmed | App URL + wgturn diagnostics redaction |
+| R14 | (security) | [#78](https://github.com/PavelLizunov/VPNRouter/pull/78) | OPEN | #72 branch (R13) | [30461673710](https://github.com/PavelLizunov/VPNRouter/actions/runs/30461673710) | UI error text scrub |
+
+### 6.2 Superseded / closed PRs (do NOT enter merge queue)
+
+| PR | Title | Reason |
+|---|---|---|
+| [#54](https://github.com/PavelLizunov/VPNRouter/pull/54) | fix(core): save settings atomically | Superseded by #55 (v2) |
+| [#59](https://github.com/PavelLizunov/VPNRouter/pull/59) | fix(cli): request graceful stop | Superseded by #62 (v2) |
+| [#66](https://github.com/PavelLizunov/VPNRouter/pull/66) | fix(core): preserve data (R03 v1) | Superseded by #67 (v2) |
+| [#73](https://github.com/PavelLizunov/VPNRouter/pull/73) | fix(app): localize update banner (R09 v1) | Superseded by #77 (v2) |
+| [#79](https://github.com/PavelLizunov/VPNRouter/pull/79) | fix(core): wgturn atomic (R07 v1) | Superseded by #80 (v2) |
+
+### 6.3 Verified merge DAG and order
+
+```text
+#51 (main)  DeepVerify stabilization — FIRST
+ │          Fixes the known timeout-assertion flake that causes red CI
+ │          on stacked branches. Do NOT copy this fix into child branches;
+ │          they inherit it when #51 merges to main and they rebase.
+ │
+ ├─ #52 (main)  P1 docs/base
+ │   ├─ #53  P01 update integrity
+ │   ├─ #55  P05 atomic settings v2
+ │   ├─ #56  P06 smart-connect persistence
+ │   ├─ #57  P02 failover wiring
+ │   │   └─ #74  R11 ETW disposal
+ │   ├─ #58  P10 zapret atomicity
+ │   ├─ #60  P09 secrets/ACL
+ │   │   └─ #68  R06 security/diagnostics
+ │   │       ├─ #72  R13 App URL redaction
+ │   │       │   └─ #78  R14 UI error scrub
+ │   │       └─ #80  R07 wgturn atomic v2
+ │   ├─ #61  P08 appimagetool pin v2
+ │   │   └─ #75  R05 packaging supply
+ │   └─ #62  P07 CLI/Android security v2
+ │
+ ├─ #63 (main)  P2/P3 docs/base (THIS PR)
+ │   ├─ #64  R02 config/protocol
+ │   ├─ #65  R01 firewall wiring
+ │   │   └─ #70  R12 full-tunnel kill-switch
+ │   ├─ #67  R03 data/network v2
+ │   └─ #69  R04 UI layout
+ │
+ ├─ #76 (main)  R10 signing action pins
+ ├─ #77 (main)  R09 localization v2
+ │
+ └─ Dependabot #46 (main) — LAST, rebase + CI after product stacks
+```
+
+Merge order rules:
+
+1. **#51 first.** Its DeepVerify stabilization resolves the flaky timeout
+   assertion. Stacked branches that show a red `dotnet test` run with ONLY
+   the DeepVerify failure are NOT product regressions — they go green via
+   rebase after #51 merges. Do NOT cherry-pick the fix into children.
+2. **#52 (P1 docs/base) merges to main**, then P1 implementation stacks
+   merge in their base-branch order (innermost first).
+3. **#61 -> #75** is gated on #51 only because the latest red run on #75
+   is the DeepVerify flake; profile-specific runs (Build Linux, Build macOS,
+   earlier dotnet test) are green.
+4. **#63 (this PR) merges to main** after P1 stacks land, then its children
+   (#64, #65, #67, #69) merge; #70 follows #65.
+5. **#76, #77** are independent main-based PRs; merge after #51.
+6. **Dependabot #46 last** — rebase onto final main and re-run CI after all
+   product stacks have merged.
+7. **Superseded/closed PRs** (section 6.2) are NOT in the merge queue.

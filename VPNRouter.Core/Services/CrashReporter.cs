@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
@@ -128,10 +129,10 @@ public static class CrashReporter
                     if (!string.IsNullOrEmpty(logs) && File.Exists(logs))
                     {
                         sb.AppendLine($"──── Tail of {Path.GetFileName(logs)} (last 200 lines) ────");
-                        var lines = File.ReadAllLines(logs);
-                        var startIndex = Math.Max(0, lines.Length - 200);
-                        for (int i = startIndex; i < lines.Length; i++)
-                            sb.AppendLine(ScrubSecrets(lines[i]));
+                        // OBS-2 (audit R06): bounded tail (12 MB cap) — File.ReadAllLines
+                        // would OOM on a runaway multi-GB log.
+                        foreach (var line in DiagnosticsExporter.TailLines(logs, 200).Split(Environment.NewLine))
+                            sb.AppendLine(ScrubSecrets(line));
                     }
                 }
             }
@@ -167,7 +168,7 @@ public static class CrashReporter
     //     with "<key>" — covers Reality pbk, sid, and similar.
 
     private static readonly Regex _proxyUriPattern = new(
-        @"\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive|amneziawg|awg)://\S+",
+        @"\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive|amneziawg|awg|wgturn)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _httpUrlPattern = new(
@@ -181,6 +182,12 @@ public static class CrashReporter
     private static readonly Regex _longBase64Pattern = new(
         @"\b[A-Za-z0-9+/_\-]{40,}={0,2}\b",
         RegexOptions.Compiled);
+
+    // clash_api secret (32 hex) is too short for _longBase64Pattern (>=40)
+    // and ws/wss is not in _proxyUriPattern; match the token param directly.
+    private static readonly Regex _tokenParamPattern = new(
+        @"([?&])token=[^&\s]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Best-effort secret scrubbing on a single line of text. Public so
@@ -197,6 +204,7 @@ public static class CrashReporter
             m.Groups[2].Success ? $"{m.Groups[1].Value}/[redacted]" : m.Groups[1].Value);
         s = _uuidPattern.Replace(s, "<uuid>");
         s = _longBase64Pattern.Replace(s, "<key>");
+        s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}token=[REDACTED]");
         return s;
     }
 }
