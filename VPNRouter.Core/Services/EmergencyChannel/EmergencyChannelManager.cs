@@ -41,7 +41,17 @@ public class EmergencyChannelManager : IDisposable
     public EmergencyChannelState State { get; private set; } = EmergencyChannelState.Disconnected;
 
     /// <summary>PID of the running wgturn-cli, or null when not running.</summary>
-    public int? Pid => _process?.HasExited == false ? _process.Id : null;
+    public int? Pid
+    {
+        get
+        {
+            // Single Volatile snapshot: a concurrent Stop/DisposeProcess
+            // Exchange must not null the field between the HasExited and Id
+            // reads, and we must never observe a successor process.
+            var p = Volatile.Read(ref _process);
+            return p is { HasExited: false } ? p.Id : null;
+        }
+    }
 
     /// <summary>Fires after a successful spawn. Carries the PID so the
     /// engine can persist it for status display / debugging.</summary>
@@ -128,19 +138,22 @@ public class EmergencyChannelManager : IDisposable
     {
         _logger.Information("[EmergencyChannelManager] Stopping wgturn-cli (PID {Pid})", Pid);
 
-        if (_process == null || _process.HasExited)
+        // Atomic claim — exactly one of Stop/OnProcessExited/Dispose disposes.
+        var p = Interlocked.Exchange(ref _process, null);
+        if (p == null || p.HasExited)
         {
+            try { p?.Dispose(); } catch { }
             State = EmergencyChannelState.Disconnected;
             CloseLogWriter();
             return;
         }
 
-        _process.EnableRaisingEvents = false;
+        p.EnableRaisingEvents = false;
 
         try
         {
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(5000);
+            p.Kill(entireProcessTree: true);
+            p.WaitForExit(5000);
         }
         catch (Exception ex)
         {
@@ -148,8 +161,7 @@ public class EmergencyChannelManager : IDisposable
         }
         finally
         {
-            _process.Dispose();
-            _process = null;
+            try { p.Dispose(); } catch { }
             State = EmergencyChannelState.Disconnected;
             CloseLogWriter();
             _logger.Information("[EmergencyChannelManager] wgturn-cli stopped");
@@ -160,18 +172,29 @@ public class EmergencyChannelManager : IDisposable
     {
         var psi = BuildProcessStartInfo(config);
 
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _process.OutputDataReceived += OnStdLine;
-        _process.ErrorDataReceived += OnStdLine;
-        _process.Exited += (_, _) => OnProcessExited();
+        DisposeProcess();
 
-        _process.Start();
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
+        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        process.OutputDataReceived += OnStdLine;
+        process.ErrorDataReceived += OnStdLine;
+        // Bind to the exact instance so a stale callback can't touch a successor.
+        process.Exited += (_, _) => OnProcessExited(process);
+        _process = process;
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
         State = EmergencyChannelState.Connected;
-        _logger.Information("[EmergencyChannelManager] wgturn-cli started (PID {Pid})", _process.Id);
-        Started?.Invoke(_process.Id);
+        _logger.Information("[EmergencyChannelManager] wgturn-cli started (PID {Pid})", process.Id);
+        Started?.Invoke(process.Id);
+    }
+
+    /// <summary>Atomically claim and dispose <see cref="_process"/> (exactly-once).</summary>
+    private void DisposeProcess()
+    {
+        var p = Interlocked.Exchange(ref _process, null);
+        try { p?.Dispose(); } catch { }
     }
 
     // wgturn-cli arg shape (cmd/wgturn-cli/connect_url.go):
@@ -225,15 +248,25 @@ public class EmergencyChannelManager : IDisposable
         WriteLogLine(e.Data);
     }
 
-    private void OnProcessExited()
+    private void OnProcessExited(Process process)
     {
+        // Exact-process claim is decisive. If a concurrent Stop() or a
+        // successor LaunchProcess already claimed _process, this callback
+        // lost the race — return without logging, state change, or event,
+        // so a stopped manager can never flip back to Failed on a stale
+        // exit. Only the winning callback captures/disposes/reports.
+        if (!ReferenceEquals(Interlocked.CompareExchange(ref _process, null, process), process))
+            return;
+
         int? exitCode = null;
         try
         {
-            if (_process is { HasExited: true } p)
-                exitCode = p.ExitCode;
+            if (process.HasExited)
+                exitCode = process.ExitCode;
         }
-        catch { /* race with Dispose / handle teardown — tolerate */ }
+        catch { /* race with handle teardown — tolerate */ }
+
+        try { process.Dispose(); } catch { }
 
         _logger.Warning(
             "[EmergencyChannelManager] wgturn-cli exited unexpectedly (exit code: {Code})",
@@ -305,7 +338,7 @@ public class EmergencyChannelManager : IDisposable
         _disposed = true;
 
         try { Stop(); } catch { }
-        try { _process?.Dispose(); } catch { }
+        DisposeProcess();
         CloseLogWriter();
         GC.SuppressFinalize(this);
     }
