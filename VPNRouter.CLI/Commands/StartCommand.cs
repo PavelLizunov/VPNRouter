@@ -185,6 +185,7 @@ public class StartCommand : AsyncCommand<StartSettings>
         {
             ActiveProfile = engine.ActiveProfileName,
             SingBoxPid = engine.SingBoxPid ?? 0,
+            OwnerPid = Environment.ProcessId,
             StartedAt = DateTime.Now,
             ProcessNames = engine.MonitoredProcesses
         });
@@ -193,7 +194,7 @@ public class StartCommand : AsyncCommand<StartSettings>
         AnsiConsole.MarkupLine($"[grey]Profile:[/] [cyan]{engine.ActiveProfileName}[/]  [grey]|[/]  [grey]Processes:[/] [cyan]{engine.MonitoredProcesses.Count}[/]  [grey]|[/]  [grey]ETW:[/] [cyan]active[/]");
         AnsiConsole.MarkupLine($"[grey]Press Ctrl+C to stop.[/]\n");
 
-        // 6. Block and handle Ctrl+C
+        // 6. Block and handle Ctrl+C / external stop signal
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
@@ -201,10 +202,31 @@ public class StartCommand : AsyncCommand<StartSettings>
             cts.Cancel();
         };
 
+        // CLI-1: named event lets `vpnrouter stop` request a graceful
+        // shutdown (same CTS as Ctrl+C). Windows-only; Linux/macOS use
+        // the Avalonia app, not CLI start.
+        EventWaitHandle? stopEvent = null;
+        RegisteredWaitHandle? stopWait = null;
+        if (OperatingSystem.IsWindows())
+        {
+            stopEvent = new EventWaitHandle(
+                false,
+                EventResetMode.AutoReset,
+                StopCommand.StopEventPrefix + Environment.ProcessId);
+            stopWait = ThreadPool.RegisterWaitForSingleObject(
+                stopEvent,
+                (_, _) => cts.Cancel(),
+                state: null,
+                timeout: Timeout.Infinite,
+                executeOnlyOnce: true);
+        }
+
         try { await Task.Delay(Timeout.Infinite, cts.Token); }
         catch (OperationCanceledException) { }
 
         // 7. Graceful shutdown
+        stopWait?.Unregister(null);
+        stopEvent?.Dispose();
         AnsiConsole.MarkupLine("\n[yellow]Stopping...[/]");
         engine.Stop();
         StateFile.Clear();
