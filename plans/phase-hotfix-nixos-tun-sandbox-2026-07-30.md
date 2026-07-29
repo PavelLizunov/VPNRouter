@@ -62,18 +62,17 @@ local privilege failure.
 
 ### Tests written
 
-- `LinuxRuntimeEnvironmentTests`:
+- `LinuxTunSandboxTests`:
   - parses `NoNewPrivs` enabled, disabled and malformed status;
   - distinguishes the initial uid map from remapped, multi-range and malformed
     maps;
-  - resolves the standard pkexec path first, then the NixOS wrapper, then none.
-- `SingBoxManagerLinuxTunPermissionTests`:
+  - resolves the standard pkexec path first, then the NixOS wrapper, then none;
   - matches the exact Linux EPERM signature case-insensitively;
   - rejects incomplete and unrelated TUN messages;
   - preserves Windows orphan classification behavior.
-- `HealthMonitorLinuxTunPermissionTests`:
+- `VpnEngineLifecycleTests.LinuxTunPermissionCrash_DisarmsAutomaticRestart`:
   - permanent TUN permission failure is non-retryable;
-  - normal crashes still follow `RestartOnFailure`.
+  - existing lifecycle tests keep normal `RestartOnFailure` behavior pinned.
 
 ### Verification approach
 
@@ -101,4 +100,56 @@ calls. Codex validates every Qwen claim against the repository before editing.
 
 ## Outcome
 
-Pending implementation and remote CI.
+## Outcome (filled 2026-07-30)
+
+**Status**: PARTIAL - implementation and Windows smoke pass; GitHub Linux CI pending.
+**Commits**: implementation commit pending.
+**Test deltas**: +13 focused regression cases.
+**Files changed**: 18 files, +266 / -33 before this Outcome update.
+
+**Verification gate results**:
+
+- [x] Changed-project build: `VPNRouter.Tests.csproj` built Core, App and
+  Tests with 0 warnings and 0 errors.
+- [ ] Full solution build: blocked by two pre-existing errors in unchanged
+  `VPNRouter.CLI` (`ProcessOwnership` accessibility and the .NET 10
+  `RegisterWaitForSingleObject` timeout overload). `git diff origin/main --
+  VPNRouter.CLI` is empty.
+- [x] Focused tests: 13/13 green
+  (`LinuxTunSandboxTests` plus
+  `LinuxTunPermissionCrash_DisarmsAutomaticRestart`).
+- [ ] Full local suite: 2675 passed, 2 skipped, 25 failed. Twenty-three
+  failures require administrator access to `C:\ProgramData\VPNRouter`; two
+  existing TUN-lock tests also fail. The GitHub runner remains the release
+  gate.
+- [x] Docs: README EN/RU, Linux packaging notes, test inventory and this
+  brief updated.
+- [x] Self-review: Qwen 3.8 completed the independent design review before
+  implementation. Final adversarial diff runs were attempted in read-only
+  zero-tool mode but timed out without findings; Codex static diff review and
+  focused executable tests passed.
+- [x] Windows test VM: self-contained `win-x64` App launched on
+  `windows-brat` (192.168.0.106), PID 924 in console session 1. UI Automation
+  found one enabled responsive `MainWindow`; screenshot captured; recent log
+  scan found no error patterns. The process was stopped and all temporary
+  scheduled tasks were removed.
+- [ ] GitHub Linux build/tests: pending implementation push.
+- [ ] Native NixOS AppImage/bubblewrap execution: no NixOS test host is
+  connected. This remains a post-CI verification gap; the code does not claim
+  that an unprivileged wrapper can create the host TUN.
+
+**Surprises encountered**:
+
+- The dev box initially had only .NET SDK 8.0.418. SDK 10.0.301 was installed
+  into an isolated non-admin build directory using Microsoft's official
+  `dotnet-install.ps1`.
+- The repository's full Windows test suite assumes writable ProgramData and
+  cannot run cleanly under the non-admin dev session.
+
+**Follow-ups spawned**:
+
+- Fix the two baseline `VPNRouter.CLI` .NET 10 compilation errors separately.
+- Build an official native Nix derivation/flake with a verified privileged
+  sing-box deployment outside bubblewrap.
+
+**Rollback**: revert the implementation commit or close PR #81.

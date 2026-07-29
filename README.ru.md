@@ -155,7 +155,7 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 |---|---|
 | [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Агрегированные ~25 000 публичных VLESS-конфигов + GeoIP-метаданные. Потребляется вкладкой Free Configs. |
 
-Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); read-only `AppImage` нельзя `setcap`'нуть, поэтому он откатывается на `pkexec` с запросом пароля при первом подключении.
+Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); AppImage без песочницы использует системный `pkexec` с запросом пароля. AppImage, обёрнутый в bubblewrap или user namespace (включая NixOS `appimageTools.wrapType2`), не может получить право создать системный TUN-интерфейс, даже если `getcap` показывает capability файла. Используйте нативный пакет дистрибутива вне этой песочницы.
 
 ## Требования
 

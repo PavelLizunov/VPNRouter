@@ -487,14 +487,16 @@ public class HealthMonitor : IDisposable
             // could fire a false AttemptRestart against a half-rebuilt sing-box;
             // checking _isStopping closes it instead of relying solely on the BR-6a
             // monitor-before-sing-box dispose ordering.
-            if (!isHealthy && _vpnWasRunning && !_isStopping)
+            if (!isHealthy && _vpnWasRunning && !_isStopping &&
+                !_singBox.LastCrashWasLinuxTunPermissionFailure)
             {
                 _logger.Warning("[HealthMonitor] Health check failed — sing-box is not healthy");
                 if (!ShouldRestartAfterHealthProbeFailure())
                     return;
                 AttemptRestart();
             }
-            else if (!isHealthy && _shouldBeRunning && !_isStopping)
+            else if (!isHealthy && _shouldBeRunning && !_isStopping &&
+                     !_singBox.LastCrashWasLinuxTunPermissionFailure)
             {
                 // v2.31.5-r2 (user-reported VPN-loss bug): defensive recovery.
                 // sing-box is dead AND user wants VPN up AND we're not in
@@ -750,6 +752,14 @@ public class HealthMonitor : IDisposable
         // flag, so this is a no-op when the feature is off.
         try { _dnsHardening.ReconcileLockdownForHealth(false, _appSettings, _logger); }
         catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to lift DNS lockdown on crash"); }
+
+        if (_singBox.LastCrashWasLinuxTunPermissionFailure)
+        {
+            _shouldBeRunning = false;
+            _logger.Error(
+                "[HealthMonitor] Automatic restart disabled: Linux denied TUNSETIFF. Reconnect after launching outside the restricting sandbox or granting host TUN privileges.");
+            return;
+        }
 
         if (_settings.RestartOnFailure)
             AttemptRestart();

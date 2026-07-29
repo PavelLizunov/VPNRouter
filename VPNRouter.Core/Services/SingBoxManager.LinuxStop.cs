@@ -60,7 +60,9 @@ public partial class SingBoxManager
             _logger.Information("[SingBoxManager] Linux stop: user pkill didn't kill sing-box, escalating to pkexec");
 
             // Step 2: pkexec with SIGKILL. GUI prompt — user might dismiss.
-            if (TrySpawnAndWait("/usr/bin/pkexec", "pkill -KILL -f sing-box", 30000, "pkexec pkill -KILL"))
+            var pkexec = LinuxRuntimeEnvironment.ResolvePkexec();
+            if (pkexec != null &&
+                TrySpawnAndWait(pkexec, "pkill -KILL -f sing-box", 30000, "pkexec pkill -KILL"))
             {
                 System.Threading.Thread.Sleep(500);
                 if (!IsSingBoxAlive())
@@ -68,6 +70,10 @@ public partial class SingBoxManager
                     _logger.Information("[SingBoxManager] Linux stop: pkexec pkill -KILL succeeded");
                     return;
                 }
+            }
+            else if (pkexec == null)
+            {
+                _logger.Warning("[SingBoxManager] Linux stop: trusted pkexec not found");
             }
 
             _logger.Warning("[SingBoxManager] Linux stop: pkexec didn't kill sing-box, trying sudo");

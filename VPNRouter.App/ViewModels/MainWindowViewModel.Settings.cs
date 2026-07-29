@@ -147,7 +147,7 @@ public partial class MainWindowViewModel
                 // xdg-open on Linux, /usr/bin/open on macOS.
                 var opener = OperatingSystem.IsMacOS()
                     ? "/usr/bin/open"
-                    : "/usr/bin/xdg-open";
+                    : "xdg-open";
                 psi = new ProcessStartInfo
                 {
                     FileName = opener,
@@ -466,7 +466,7 @@ public partial class MainWindowViewModel
                 if (!string.IsNullOrEmpty(dir))
                     System.Diagnostics.Process.Start(new ProcessStartInfo
                     {
-                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "/usr/bin/xdg-open",
+                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
                         Arguments = $"\"{dir}\"",
                         UseShellExecute = false,
                     });

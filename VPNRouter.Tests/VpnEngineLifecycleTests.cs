@@ -505,7 +505,7 @@ public sealed class VpnEngineLifecycleTests
         // sing-box.exe + NullWindowsDnsHardening injection — these in
         // combination keep the pipeline hermetic on Windows. Linux CI
         // skips because SingBoxManager's Linux path uses pkexec/sudo
-        // argv + a direct Process.Start("/usr/sbin/getcap") probe that
+        // argv + a direct Process.Start("getcap") probe that
         // isn't routed through IProcessRunner; the test would shell out
         // to real getcap.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
@@ -720,6 +720,47 @@ public sealed class VpnEngineLifecycleTests
             Assert.Equal(2, attempts.Count);
             Assert.Equal(1, attempts[0]);
             Assert.Equal(2, attempts[1]);
+        }
+        finally
+        {
+            hm.Stop();
+        }
+    }
+
+    [Fact]
+    public void LinuxTunPermissionCrash_DisarmsAutomaticRestart()
+    {
+        var sbSettings = new SingBoxSettings { ClashApi = "127.0.0.1:65535" };
+        using var singBox = new SingBoxManager(sbSettings, http: new FakeHttpClient());
+        using var hm = new HealthMonitor(
+            singBox,
+            new StubProcessScanner(),
+            new StubFirewallManager(),
+            new MonitoringSettings
+            {
+                HealthCheckInterval = 3600,
+                MaxRestartAttempts = 3,
+                RestartOnFailure = true,
+            });
+
+        var attempts = new List<int>();
+        hm.RestartAttempted += (_, n) => attempts.Add(n);
+
+        try
+        {
+            hm.Start(new Profile { Name = "test" }, new AppSettings());
+            typeof(SingBoxManager)
+                .GetProperty(
+                    nameof(SingBoxManager.LastCrashWasLinuxTunPermissionFailure),
+                    BindingFlags.NonPublic | BindingFlags.Instance)!
+                .SetValue(singBox, true);
+
+            typeof(HealthMonitor)
+                .GetMethod("OnSingBoxCrashed", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(hm, new object?[] { null, EventArgs.Empty });
+
+            Assert.Empty(attempts);
+            Assert.False(GetHealthMonitorField<bool>(hm, "_shouldBeRunning"));
         }
         finally
         {
