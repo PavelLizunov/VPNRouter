@@ -710,7 +710,7 @@
                 Padding="16,10">
             <DockPanel>
                 <Button DockPanel.Dock="Right"
-                        Content="↓ Update"
+                        Content="{Binding L_UpdateButton}"
                         Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                         IsVisible="{Binding !UpdateVm.IsDownloading}"
                         Background="{DynamicResource WarningSolidBrush}" Foreground="White"
