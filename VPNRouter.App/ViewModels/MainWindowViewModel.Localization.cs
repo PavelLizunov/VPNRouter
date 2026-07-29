@@ -286,6 +286,9 @@ public partial class MainWindowViewModel
     public string L_TipTestAllServers => Strings.TipTestAllServers;
     public string L_TipTestTcpTls => Strings.TipTestTcpTls;
     public string L_TipZapretAutoUpdate => Strings.TipZapretAutoUpdate;
+    // R09 — update-banner button (was hardcoded "↓ Update" in MainWindow.axaml;
+    // now runtime-refreshable so it follows the Ru/En toggle).
+    public string L_UpdateButton => Strings.UpdateButton;
     public string L_UpdateIpSet => Strings.UpdateIpSet;
     public string L_WmTgProxyPort => Strings.WmTgProxyPort;
     public string L_WmTgProxySecret => Strings.WmTgProxySecret;
