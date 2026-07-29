@@ -22,12 +22,18 @@ public sealed class FreeConfigAggregator
     private readonly ILogger _logger;
 
     public FreeConfigAggregator(ILogger logger)
+        : this(logger, new FreeConfigCache(logger))
+    {
+    }
+
+    /// <summary>Test seam: inject a temp-dir <see cref="FreeConfigCache"/>.</summary>
+    internal FreeConfigAggregator(ILogger logger, FreeConfigCache cache)
     {
         _logger = logger;
         _fetcher = new FreeConfigFetcher(logger);
         _tester = new FreeConfigTester();
         _geoIp = new FreeConfigGeoIp(logger);
-        _cache = new FreeConfigCache(logger);
+        _cache = cache;
         _poolFetcher = new FreeConfigPoolFetcher(logger);
     }
 
@@ -162,12 +168,20 @@ public sealed class FreeConfigAggregator
     /// previously-Verified entries (and recent-Ok entries within the
     /// 24h window) keep their status across Refreshes. Used by
     /// <see cref="FetchPoolAsync"/>.</summary>
-    private List<FreeConfigEntry> MergeWithCache(List<FreeConfigEntry> fresh)
+    internal List<FreeConfigEntry> MergeWithCache(List<FreeConfigEntry> fresh)
     {
         try
         {
             var existing = _cache.Load();
-            var existingById = existing.Configs.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+
+            var droppedDuplicates = 0;
+            var existingById = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in existing.Configs)
+            {
+                if (!string.IsNullOrEmpty(c.Id) && !existingById.TryAdd(c.Id, c))
+                    droppedDuplicates++;
+            }
+
             foreach (var cfg in fresh)
             {
                 if (existingById.TryGetValue(cfg.Id, out var prev))
@@ -183,8 +197,28 @@ public sealed class FreeConfigAggregator
                 }
             }
 
+            var byId = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
+            var freshDuplicates = 0;
+            foreach (var c in fresh)
+            {
+                if (string.IsNullOrEmpty(c.Id))
+                    continue;
+                if (!byId.TryAdd(c.Id, c))
+                {
+                    droppedDuplicates++;
+                    freshDuplicates++;
+                }
+            }
+            if (freshDuplicates > 0)
+                fresh = byId.Values.ToList();
+            if (droppedDuplicates > 0)
+            {
+                _logger.Warning(
+                    "[FreeConfigAggregator] MergeWithCache: dropped {N} duplicate-ID entries (cache + fresh pool)",
+                    droppedDuplicates);
+            }
+
             // Also merge previously-Verified entries that the upstream pool dropped.
-            var byId = fresh.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
             PreservePreviousValidation(byId, fresh, existing.Configs, DateTime.UtcNow);
         }
         catch (Exception ex)

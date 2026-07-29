@@ -287,6 +287,37 @@ public sealed class WgturnUpdaterTests
         try { await task1; } catch { }
     }
 
+    [Fact]
+    public void Install_MoveFails_PreservesPreviousBinary()
+    {
+        using var sandbox = new TempSandbox();
+        var target = Path.Combine(sandbox.Root, "wgturn-cli");
+        var missingTemp = Path.Combine(sandbox.Root, "does-not-exist.tmp");
+        File.WriteAllText(target, "OLD-WORKING-BINARY");
+
+        var ex = Assert.Throws<WgturnDownloadException>(() =>
+            WgturnUpdater.InstallDownloadedBinary(missingTemp, target));
+        Assert.Equal(WgturnErrorCategory.FileSystem, ex.Category);
+
+        Assert.True(File.Exists(target), "working binary must survive a failed install");
+        Assert.Equal("OLD-WORKING-BINARY", File.ReadAllText(target));
+    }
+
+    [Fact]
+    public void Install_Success_ReplacesBinaryAndLeavesNoTemp()
+    {
+        using var sandbox = new TempSandbox();
+        var target = Path.Combine(sandbox.Root, "wgturn-cli");
+        var temp = Path.Combine(sandbox.Root, "staged.tmp");
+        File.WriteAllText(target, "OLD");
+        File.WriteAllText(temp, "NEW");
+
+        WgturnUpdater.InstallDownloadedBinary(temp, target);
+
+        Assert.Equal("NEW", File.ReadAllText(target));
+        Assert.False(File.Exists(temp), "staged temp must be consumed by the move");
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────
 
     /// <summary>

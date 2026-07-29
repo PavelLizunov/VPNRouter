@@ -1,4 +1,6 @@
 #nullable enable
+using System;
+using System.IO;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -105,5 +107,31 @@ public sealed class ClashLogStreamTests
         var (stream, _) = NewStream();
         stream.HandleMessage("garbage{");
         stream.HandleMessage("");
+    }
+
+    // ---- OBS-1: RedactLogsUri strips ?token= from logged URI ----
+
+    [Fact]
+    public void RedactLogsUri_StripsQuery()
+    {
+        var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", "s3cret");
+        var redacted = ClashLogStream.RedactLogsUri(uri);
+        Assert.Equal("ws://127.0.0.1:9090/logs", redacted);
+        Assert.DoesNotContain("token", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("s3cret", redacted, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RunAsync_InformationCall_UsesRedactLogsUri()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "VPNRouter.Core")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+
+        var src = File.ReadAllText(Path.Combine(
+            dir!.FullName, "VPNRouter.Core", "Services", "ClashLogStream.cs"));
+        Assert.Contains("RedactLogsUri(_logsUri)", src);
+        Assert.DoesNotContain("Information(\"[ConnHealth] Clash /logs stream connected ({Uri})\", _logsUri)", src);
     }
 }

@@ -41,7 +41,17 @@ public class EmergencyChannelManager : IDisposable
     public EmergencyChannelState State { get; private set; } = EmergencyChannelState.Disconnected;
 
     /// <summary>PID of the running wgturn-cli, or null when not running.</summary>
-    public int? Pid => _process?.HasExited == false ? _process.Id : null;
+    public int? Pid
+    {
+        get
+        {
+            // Single Volatile snapshot: a concurrent Stop/DisposeProcess
+            // Exchange must not null the field between the HasExited and Id
+            // reads, and we must never observe a successor process.
+            var p = Volatile.Read(ref _process);
+            return p is { HasExited: false } ? p.Id : null;
+        }
+    }
 
     /// <summary>Fires after a successful spawn. Carries the PID so the
     /// engine can persist it for status display / debugging.</summary>
@@ -128,19 +138,22 @@ public class EmergencyChannelManager : IDisposable
     {
         _logger.Information("[EmergencyChannelManager] Stopping wgturn-cli (PID {Pid})", Pid);
 
-        if (_process == null || _process.HasExited)
+        // Atomic claim — exactly one of Stop/OnProcessExited/Dispose disposes.
+        var p = Interlocked.Exchange(ref _process, null);
+        if (p == null || p.HasExited)
         {
+            try { p?.Dispose(); } catch { }
             State = EmergencyChannelState.Disconnected;
             CloseLogWriter();
             return;
         }
 
-        _process.EnableRaisingEvents = false;
+        p.EnableRaisingEvents = false;
 
         try
         {
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(5000);
+            p.Kill(entireProcessTree: true);
+            p.WaitForExit(5000);
         }
         catch (Exception ex)
         {
@@ -148,8 +161,7 @@ public class EmergencyChannelManager : IDisposable
         }
         finally
         {
-            _process.Dispose();
-            _process = null;
+            try { p.Dispose(); } catch { }
             State = EmergencyChannelState.Disconnected;
             CloseLogWriter();
             _logger.Information("[EmergencyChannelManager] wgturn-cli stopped");
@@ -158,25 +170,61 @@ public class EmergencyChannelManager : IDisposable
 
     private void LaunchProcess(EmergencyChannelConfig config)
     {
-        // wgturn-cli arg shape (cmd/wgturn-cli/connect_url.go):
-        //   wgturn-cli connect-url -url <wgturn://...> -vk-link <https://vk.com/call/join/...>
-        //
-        // Both forms are accepted by Go's flag package:
-        //   connect-url -url <URL> -vk-link <LINK>     ← we use this (explicit, safest)
-        //   connect-url <URL> -vk-link <LINK>          ← AVOID: Go's flag.Parse stops
-        //                                                 at first non-flag positional,
-        //                                                 so -vk-link gets eaten as a
-        //                                                 second positional and the
-        //                                                 URL/link pair is lost.
-        // Verified the explicit-flag form works in live test
-        // (plans/r9-actionable-without-stas.md Phase 2 verify step).
-        var args = ArgsBuilderOverride?.Invoke(config)
-            ?? $"connect-url -url \"{config.WgturnUrl}\" -vk-link \"{config.VkLink}\"";
+        var psi = BuildProcessStartInfo(config);
 
+        DisposeProcess();
+
+        var process = new Process { StartInfo = psi };
+        process.OutputDataReceived += OnStdLine;
+        process.ErrorDataReceived += OnStdLine;
+        // Bind to the exact instance so a stale callback can't touch a successor.
+        process.Exited += (_, _) => OnProcessExited(process);
+        _process = process;
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        State = EmergencyChannelState.Connected;
+        _logger.Information("[EmergencyChannelManager] wgturn-cli started (PID {Pid})", process.Id);
+        Started?.Invoke(process.Id);
+
+        // Enable events LAST: readers are attached and Connected/Started are
+        // already published. An already-exited handle is still observed (the
+        // OS handle is pre-signaled, so .NET queues Exited on a pool thread
+        // once watching starts) — so Started always precedes Crashed and a
+        // fast exit can never overwrite Failed with Connected.
+        process.EnableRaisingEvents = true;
+    }
+
+    /// <summary>Atomically claim and dispose <see cref="_process"/> (exactly-once).</summary>
+    private void DisposeProcess()
+    {
+        var p = Interlocked.Exchange(ref _process, null);
+        try { p?.Dispose(); } catch { }
+    }
+
+    // wgturn-cli arg shape (cmd/wgturn-cli/connect_url.go):
+    //   wgturn-cli connect-url -url <wgturn://...> -vk-link <https://vk.com/call/join/...>
+    //
+    // Both forms are accepted by Go's flag package:
+    //   connect-url -url <URL> -vk-link <LINK>     ← we use this (explicit, safest)
+    //   connect-url <URL> -vk-link <LINK>          ← AVOID: Go's flag.Parse stops
+    //                                                 at first non-flag positional,
+    //                                                 so -vk-link gets eaten as a
+    //                                                 second positional and the
+    //                                                 URL/link pair is lost.
+    // Verified the explicit-flag form works in live test
+    // (plans/r9-actionable-without-stas.md Phase 2 verify step).
+    //
+    // SEC-3 (audit R06): ArgumentList so a literal double-quote in
+    // WgturnUrl/VkLink stays one argv element (no flag injection).
+    // ArgsBuilderOverride keeps the plain-string form for stub binaries.
+    internal ProcessStartInfo BuildProcessStartInfo(EmergencyChannelConfig config)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = _exePath,
-            Arguments = args,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -185,18 +233,20 @@ public class EmergencyChannelManager : IDisposable
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _process.OutputDataReceived += OnStdLine;
-        _process.ErrorDataReceived += OnStdLine;
-        _process.Exited += (_, _) => OnProcessExited();
+        if (ArgsBuilderOverride is { } override_)
+        {
+            psi.Arguments = override_(config);
+        }
+        else
+        {
+            psi.ArgumentList.Add("connect-url");
+            psi.ArgumentList.Add("-url");
+            psi.ArgumentList.Add(config.WgturnUrl);
+            psi.ArgumentList.Add("-vk-link");
+            psi.ArgumentList.Add(config.VkLink);
+        }
 
-        _process.Start();
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
-
-        State = EmergencyChannelState.Connected;
-        _logger.Information("[EmergencyChannelManager] wgturn-cli started (PID {Pid})", _process.Id);
-        Started?.Invoke(_process.Id);
+        return psi;
     }
 
     private void OnStdLine(object _, DataReceivedEventArgs e)
@@ -205,15 +255,25 @@ public class EmergencyChannelManager : IDisposable
         WriteLogLine(e.Data);
     }
 
-    private void OnProcessExited()
+    private void OnProcessExited(Process process)
     {
+        // Exact-process claim is decisive. If a concurrent Stop() or a
+        // successor LaunchProcess already claimed _process, this callback
+        // lost the race — return without logging, state change, or event,
+        // so a stopped manager can never flip back to Failed on a stale
+        // exit. Only the winning callback captures/disposes/reports.
+        if (!ReferenceEquals(Interlocked.CompareExchange(ref _process, null, process), process))
+            return;
+
         int? exitCode = null;
         try
         {
-            if (_process is { HasExited: true } p)
-                exitCode = p.ExitCode;
+            if (process.HasExited)
+                exitCode = process.ExitCode;
         }
-        catch { /* race with Dispose / handle teardown — tolerate */ }
+        catch { /* race with handle teardown — tolerate */ }
+
+        try { process.Dispose(); } catch { }
 
         _logger.Warning(
             "[EmergencyChannelManager] wgturn-cli exited unexpectedly (exit code: {Code})",
@@ -285,7 +345,7 @@ public class EmergencyChannelManager : IDisposable
         _disposed = true;
 
         try { Stop(); } catch { }
-        try { _process?.Dispose(); } catch { }
+        DisposeProcess();
         CloseLogWriter();
         GC.SuppressFinalize(this);
     }
