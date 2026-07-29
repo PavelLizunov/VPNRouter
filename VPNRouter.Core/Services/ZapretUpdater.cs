@@ -347,10 +347,11 @@ public class ZapretUpdater
                     StopWinDivertService();
 
                     StatusChanged?.Invoke("Installing...");
+                    bool allCopied;
                     try
                     {
                         Directory.CreateDirectory(ZapretDir);
-                        CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
+                        allCopied = CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
                     }
                     catch (UnauthorizedAccessException ua)
                     {
@@ -367,11 +368,22 @@ public class ZapretUpdater
                             ioe);
                     }
 
-                    var version = ParseVersionFromServiceBat() ?? tagName;
-                    try { File.WriteAllText(VersionFilePath, version); } catch { }
-                    _logger.Information("[ZapretUpdater] Installed version {Version}", version);
-
-                    StatusChanged?.Invoke($"Installed {version}");
+                    if (allCopied)
+                    {
+                        var version = ParseVersionFromServiceBat() ?? tagName;
+                        try { File.WriteAllText(VersionFilePath, version); } catch { }
+                        _logger.Information("[ZapretUpdater] Installed version {Version}", version);
+                        StatusChanged?.Invoke($"Installed {version}");
+                    }
+                    else
+                    {
+                        // ZAP-1: a locked file (in-use winws.exe / WinDivert64.sys) leaves a
+                        // mixed old/new tree. Do NOT advance version.txt — keep the old marker
+                        // so the next update check retries, and tell the user to stop zapret.
+                        _logger.Warning("[ZapretUpdater] Some files were locked — version NOT updated. " +
+                            "Stop zapret/winws and re-run the update to complete installation.");
+                        StatusChanged?.Invoke("Partial install — some files locked. Stop zapret and retry.");
+                    }
                 }
                 catch (ZapretDownloadException)
                 {
@@ -615,10 +627,14 @@ public class ZapretUpdater
     /// <summary>
     /// Copy source tree into dest tree, overwriting files where possible,
     /// skipping files that are locked (e.g. WinDivert64.sys loaded as kernel driver).
+    /// Returns <c>true</c> only when EVERY file copied; <c>false</c> when one or more
+    /// files were skipped. Callers must gate the version marker on this result so a
+    /// partial (mixed old/new) install is never reported as current (ZAP-1).
     /// </summary>
-    private static void CopyDirectoryOverwrite(string source, string dest, ILogger logger)
+    internal static bool CopyDirectoryOverwrite(string source, string dest, ILogger logger)
     {
         Directory.CreateDirectory(dest);
+        var allCopied = true;
         foreach (var file in Directory.GetFiles(source))
         {
             var destFile = Path.Combine(dest, Path.GetFileName(file));
@@ -628,12 +644,17 @@ public class ZapretUpdater
             }
             catch (Exception ex)
             {
+                allCopied = false;
                 logger.Warning("[ZapretUpdater] Skipped locked file {File}: {Msg}",
                     Path.GetFileName(file), ex.Message);
             }
         }
         foreach (var dir in Directory.GetDirectories(source))
-            CopyDirectoryOverwrite(dir, Path.Combine(dest, Path.GetFileName(dir)), logger);
+        {
+            if (!CopyDirectoryOverwrite(dir, Path.Combine(dest, Path.GetFileName(dir)), logger))
+                allCopied = false;
+        }
+        return allCopied;
     }
 
     private static string? ParseVersionFromServiceBat()
