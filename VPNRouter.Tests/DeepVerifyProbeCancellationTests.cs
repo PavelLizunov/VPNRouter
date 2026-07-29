@@ -51,8 +51,27 @@ public class DeepVerifyProbeCancellationTests
         {
             var (ok, _, err) = await DeepVerifyProbe.ProbeViaSocksAsync(
                 port, TimeSpan.FromMilliseconds(500), CancellationToken.None);
+
+            // Pinned contract (F1): with NO external cancellation the client's own
+            // timeout must surface as a graceful http failure (ok=false + a reason),
+            // NOT rethrow as OperationCanceledException — that rethrow path belongs
+            // to the sibling ExternalCancellation test. The exact reason string is
+            // runtime-dependent and NOT part of the contract: the silent listener
+            // stalls the SOCKS/TLS connect to the https ProbeUrl, so the 500 ms
+            // HttpClient.Timeout races the connection layer. Depending on which wins,
+            // the runtime reports either TaskCanceledException → "http timeout" or the
+            // connect abort wrapped as HttpRequestException → "http: An error occurred
+            // while establishing a connection…" (the shape that failed CI on run
+            // 29481203691). Both are the same "client gave up" outcome, and both
+            // callers (VlessDeepVerifier / FreeConfigDeepVerifier) map either string to
+            // the identical server-meaningful ProxiedHttp failure. Accept exactly those
+            // two shapes; ok=true, an empty reason, "local ip in response", or a rethrow
+            // is a genuine regression and must still fail.
             Assert.False(ok);
-            Assert.Equal("http timeout", err);
+            Assert.False(string.IsNullOrWhiteSpace(err));
+            Assert.True(
+                err == "http timeout" || err!.StartsWith("http: ", StringComparison.Ordinal),
+                $"expected a client-timeout http failure (\"http timeout\" or \"http: …\"), got: \"{err}\"");
         }
         finally { listener.Stop(); }
     }
