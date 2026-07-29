@@ -18,7 +18,7 @@ public static partial class Strings
     // ── Zapret sections (master-detail) ──
     public static string ZapretSecStatus       => Ru ? "Статус" : "Status";
     public static string ZapretSecStrategy     => Ru ? "Стратегия" : "Strategy";
-    public static string ZapretSecHosts        => "Hosts";
+    public static string ZapretSecHosts        => Ru ? "Хосты" : "Hosts";
     public static string ZapretSecFilters      => Ru ? "Фильтры" : "Filters";
     public static string ZapretSecUpdates      => Ru ? "Обновления" : "Updates";
     public static string ZapretSecDiagnostics  => Ru ? "Диагностика" : "Diagnostics";

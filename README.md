@@ -19,7 +19,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/PavelLizunov/VPNRouter?color=2563EB" alt="License"/>
   </a>
-  <img src="https://img.shields.io/badge/.NET-8.0-512BD4" alt=".NET 8"/>
+  <img src="https://img.shields.io/badge/.NET-10.0-512BD4" alt=".NET 10"/>
   <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Platform"/>
   <img src="https://img.shields.io/badge/LOC-94k-blue" alt="94k LOC"/>
   <img src="https://img.shields.io/badge/tests-765-success" alt="765 tests"/>
@@ -163,7 +163,7 @@ Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + 
 - **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run sudoers setup required (guided)
 - **Linux x86_64** — kernel 5.6+ (TUN/wireguard), `glibc` 2.31+. Tested on Ubuntu 22.04 / 24.04 and Debian 12. `iptables` or `nftables` for firewall rules.
 - **Android 6.0+** (API 23+) — arm64/arm/x64/x86 universal APK. Uses Android's `VpnService` API (no root required). Camera permission only requested when scanning a QR code.
-- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — bundled in the desktop installer
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — bundled in the desktop installer
 - A VLESS+Reality server, or use the Free Configs tab for a public one
 
 ## Build from source
@@ -179,12 +179,12 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.43.0"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.47.0"
 ```
 
 ```bash
-# macOS DMG — runs on any Mac with .NET 8 SDK
-./build-mac.sh 2.43.0
+# macOS DMG — runs on any Mac with .NET 10 SDK
+./build-mac.sh 2.47.0
 ```
 
 ```bash
@@ -210,7 +210,7 @@ VPNRouter.sln (~94k LOC C# across 233 files in 7 projects)
 ### Layering
 
 - **`VPNRouter.Core`** is the single source of truth. Zero `Avalonia.*`, `System.Windows.*`, or `Mono.Android.*` references. Platform-specific code gated behind `#if PLATFORM_WINDOWS` / `#if PLATFORM_ANDROID`.
-- **Android** doesn't `ProjectReference` Core — it source-links via `<Compile Include="..\VPNRouter.Core\**\*.cs">` in the csproj (works around a multi-target restore loop; will revisit in .NET 9).
+- **Android** doesn't `ProjectReference` Core — it source-links via `<Compile Include="..\VPNRouter.Core\**\*.cs">` in the csproj (keeps Android restore separate from the desktop net10.0 graph).
 - **Free Configs `pool.json`** is built server-side every 6 hours by `VPNRouter.Tools/PoolAggregator` running in GitHub Actions, then served from a rolling `free-pool-latest` Release. Clients fetch + cache.
 
 ### Best-practice notes

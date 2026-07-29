@@ -51,7 +51,7 @@ jobs:
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
 
       - name: Restore
         run: dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj
@@ -84,6 +84,25 @@ jobs:
           path: VPNRouter.Tests/TestResults/*.trx
           retention-days: 30
 
+  # P01 UPD-2: VPNRouter.GUI/repair_test.go pins the ClickFix-safe `-File`
+  # repair invocation. The package is Windows-only (syscall.SysProcAttr fields
+  # do not cross-compile), so it cannot run in the ubuntu `test` job; run
+  # `go test` on a Windows runner instead. Separate job keeps the .NET `test`
+  # job id + filter untouched.
+  go-test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
+        with:
+          go-version: "1.21"
+      - name: Go test (VPNRouter.GUI repair stub)
+        working-directory: VPNRouter.GUI
+        run: go test ./...
+
   # audit item 12 (P1-8): MainWindowViewModelCharacterizationTests hard-fails only
   # on Windows (it soft-returns the drifted hash on non-Windows), but CI ran
   # ubuntu-only -- so the public-surface guard could NEVER fail in CI and a
@@ -101,6 +120,6 @@ jobs:
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
       - name: Characterization (Windows hard-fail on public-surface drift)
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Characterization"

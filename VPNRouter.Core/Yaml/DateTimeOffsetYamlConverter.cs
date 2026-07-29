@@ -52,7 +52,7 @@ internal sealed class DateTimeOffsetYamlConverter : IYamlTypeConverter
     public bool Accepts(Type type) =>
         type == typeof(DateTimeOffset) || type == typeof(DateTimeOffset?);
 
-    public object? ReadYaml(IParser parser, Type type)
+    public object? ReadYaml(IParser parser, Type type, ObjectDeserializer rootDeserializer)
     {
         var scalar = parser.Consume<Scalar>();
         if (string.IsNullOrEmpty(scalar.Value))
@@ -71,7 +71,7 @@ internal sealed class DateTimeOffsetYamlConverter : IYamlTypeConverter
             DateTimeStyles.RoundtripKind);
     }
 
-    public void WriteYaml(IEmitter emitter, object? value, Type type)
+    public void WriteYaml(IEmitter emitter, object? value, Type type, ObjectSerializer serializer)
     {
         if (value == null)
         {

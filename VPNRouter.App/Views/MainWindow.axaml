@@ -224,7 +224,7 @@
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource WarningFgBrush}"
-                            ToolTip.Tip="Dismiss"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
 
@@ -257,7 +257,7 @@
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource WarningFgBrush}"
-                            ToolTip.Tip="Dismiss"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
 
@@ -290,7 +290,7 @@
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource WarningFgBrush}"
-                            ToolTip.Tip="Dismiss"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
 
@@ -360,7 +360,7 @@
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource DangerFgBrush}"
-                            ToolTip.Tip="Dismiss"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
         </StackPanel>
@@ -710,7 +710,7 @@
                 Padding="16,10">
             <DockPanel>
                 <Button DockPanel.Dock="Right"
-                        Content="↓ Update"
+                        Content="{Binding L_UpdateButton}"
                         Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                         IsVisible="{Binding !UpdateVm.IsDownloading}"
                         Background="{DynamicResource WarningSolidBrush}" Foreground="White"

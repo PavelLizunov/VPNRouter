@@ -236,6 +236,14 @@ public sealed class VlessDeepVerifier
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
+        // dns-tunnel needs the slipstream sidecar the verifier never carries — same "never condemn for our own gap" invariant as AWG/xhttp.
+        if (entry.IsDnsTunnel)
+        {
+            _logger.Information("[VlessDeepVerifier] {Name}: dns-tunnel deep verify unsupported (needs slipstream sidecar)", label);
+            return DeepVerifyResult.Failed("deep verify: dns-tunnel needs the slipstream sidecar",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+        }
+
         if (!IsAvailable)
         {
             _logger.Warning("[VlessDeepVerifier] {Name}: sing-box binary missing at {Path}", label, _singBoxPath);

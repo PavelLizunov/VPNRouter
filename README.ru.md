@@ -19,7 +19,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/github/license/PavelLizunov/VPNRouter?color=2563EB" alt="Лицензия"/>
   </a>
-  <img src="https://img.shields.io/badge/.NET-8.0-512BD4" alt=".NET 8"/>
+  <img src="https://img.shields.io/badge/.NET-10.0-512BD4" alt=".NET 10"/>
   <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Платформы"/>
   <img src="https://img.shields.io/badge/LOC-94k-blue" alt="94k LOC"/>
   <img src="https://img.shields.io/badge/тестов-765-success" alt="765 тестов"/>
@@ -162,7 +162,7 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 - **Windows 10/11 x64** — права Администратора (TUN, firewall, ETW)
 - **macOS 12+** — Apple Silicon (arm64). Intel пока не собирается. Нужна одноразовая настройка sudoers при первом запуске (с подсказкой)
 - **Linux x86_64** — ядро 5.6+ (TUN/wireguard), `glibc` 2.31+. Протестировано на Ubuntu 22.04 / 24.04 и Debian 12. `iptables` или `nftables` для firewall-правил.
-- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — включён в установщик
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — включён в установщик
 - Сервер VLESS+Reality, или используйте вкладку Free Configs с публичными серверами
 
 ## Сборка из исходников
@@ -178,12 +178,12 @@ Release-сборка + упаковка:
 
 ```powershell
 # Windows (PowerShell) — производит full + update ZIP'ы + их .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.43.0"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.47.0"
 ```
 
 ```bash
-# macOS DMG — запускается на любом Mac с .NET 8 SDK
-./build-mac.sh 2.32.0
+# macOS DMG — запускается на любом Mac с .NET 10 SDK
+./build-mac.sh 2.47.0
 ```
 
 ```bash
@@ -209,7 +209,7 @@ VPNRouter.sln (~94k LOC C# в 233 файлах / 7 проектах)
 ### Layering
 
 - **`VPNRouter.Core`** — единственный источник истины. Нет ни одного `Avalonia.*`, `System.Windows.*`, `Mono.Android.*` reference. Платформенный код только через `#if PLATFORM_WINDOWS` / `#if PLATFORM_ANDROID`.
-- **Android** не `ProjectReference` Core — source-link через `<Compile Include="..\VPNRouter.Core\**\*.cs">` в csproj (обходит multi-target restore loop в .NET 8; пересмотрим в .NET 9).
+- **Android** не `ProjectReference` Core — source-link через `<Compile Include="..\VPNRouter.Core\**\*.cs">` в csproj (держит Android restore отдельно от desktop-графа net10.0).
 - **Free Configs `pool.json`** строится server-side каждые 6 часов через `VPNRouter.Tools/PoolAggregator` в GitHub Actions → выкладывается на rolling-release `free-pool-latest`. Клиенты подтягивают + кешируют.
 
 ### Best-practice заметки

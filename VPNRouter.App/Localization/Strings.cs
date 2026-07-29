@@ -83,15 +83,8 @@ public static class Strings
 
     // ── Status ──
     public static string NotConnected => global::VPNRouter.Core.Localization.Strings.NotConnected;
-    public static string Connected(string mode, string? serverName, string? serverIp)
-    {
-        var prefix = Ru ? $"Подключено [{mode}]" : $"Connected [{mode}]";
-        if (string.IsNullOrEmpty(serverName) && string.IsNullOrEmpty(serverIp))
-            return prefix;
-        var name = serverName ?? "";
-        var ip = string.IsNullOrEmpty(serverIp) ? "" : $" ({serverIp})";
-        return $"{prefix} → {name}{ip}";
-    }
+    public static string Connected(string mode, string? serverName, string? serverIp) =>
+        global::VPNRouter.Core.Localization.Strings.Connected(mode, serverName, serverIp);
 
     // v2.44.1-r6 — connected-status label shown when AutoSelectBestServer's
     // urltest hasn't yet reported which member it picked (brief clash_api race
@@ -243,7 +236,7 @@ public static class Strings
     // this dedup pass. Follow-up: switch to pass-through (Core's bilingual
     // version is strictly better) once we verify no Windows-test snapshot pins
     // the EN-only string.
-    public static string ColPing => "Ping";
+    public static string ColPing => global::VPNRouter.Core.Localization.Strings.ColPing;
     // v2.30.6-r1 (UX-23/32 fix): tooltip on Ping column header — explains
     // the "—" placeholder users see before any test has been run.
     public static string ColPingTooltip => global::VPNRouter.Core.Localization.Strings.ColPingTooltip;
@@ -334,10 +327,10 @@ public static class Strings
     // permutation of (Service installed?, App-side bootstrap exists?):
     //   • Green ✓: service installed → the existing flag-driven boot path
     //     in VPNRouterService.AutostartTgProxyAsync handles it
-    //   • Amber ⚠: no service, but App has a per-component bootstrap (after
+    //   • Amber : no service, but App has a per-component bootstrap (after
     //     DBG-2 lands the App-side bootstrap for vpn/zapret/tgproxy) → fires
     //     when the user logs into the App, not at OS boot
-    //   • Red ⛔: no service AND no App-side bootstrap → the toggle does
+    //   • Red : no service AND no App-side bootstrap → the toggle does
     //     literally nothing; show the strongest hint to install the service
     public static string AutostartStatusBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusBoot;
     public static string AutostartStatusLoginFallback => global::VPNRouter.Core.Localization.Strings.AutostartStatusLoginFallback;
@@ -359,14 +352,6 @@ public static class Strings
     // pointed at "above" assuming Section A was visible, which broke on
     // Mac. Now branches by OS.
     public static string AutostartLoginAppDescription => global::VPNRouter.Core.Localization.Strings.AutostartLoginAppDescription;
-
-    private static string AutostartLoginAppDescriptionUnix => Ru
-        ? "Запускает приложение VPNRouter в трей после входа в систему. VPN придётся стартануть вручную."
-        : "Launches VPNRouter into the tray after you sign in. VPN itself must be started manually.";
-
-    private static string AutostartLoginAppDescriptionWindows => Ru
-        ? "Запускает приложение VPNRouter после входа. VPN придётся стартануть вручную или включить «на старте Windows» выше."
-        : "Launches VPNRouter after you sign in. VPN itself must be started manually, or enable \u201Cat Windows startup\u201D above.";
 
     /// <summary>Prominent running-state line with PID, e.g. "● Running — PID 1234".
     /// Replaces the tiny pill that was easy to miss in v2.26.x.</summary>
@@ -918,7 +903,7 @@ public static class Strings
         ? "Все серверы подписки недоступны. Проверьте сеть или подписку."
         : "All subscription servers are unreachable. Check network or subscription.";
     public static string AutoFailoverCustomMode => Ru
-        ? "Кастомный конфиг не отвечает. Проверьте JSON-конфигурацию."
+        ? "Свой конфиг не отвечает. Проверьте JSON-конфигурацию."
         : "Custom config isn't responding. Check JSON configuration.";
 
     // v2.29.0 — Custom direct rules (Network → Routing → expander).
@@ -1256,6 +1241,7 @@ public static class Strings
     public static string TipTcpTlsPing => global::VPNRouter.Core.Localization.Strings.TipTcpTlsPing;
     public static string TipTestTcpTls => global::VPNRouter.Core.Localization.Strings.TipTestTcpTls;
     public static string TipCloseServerDetail => global::VPNRouter.Core.Localization.Strings.TipCloseServerDetail;
+    public static string TipDismiss => global::VPNRouter.Core.Localization.Strings.TipDismiss;
     public static string TipDeleteServer => global::VPNRouter.Core.Localization.Strings.TipDeleteServer;
     public static string TipTestAllServers => global::VPNRouter.Core.Localization.Strings.TipTestAllServers;
     public static string TipDeepVerifyServers => global::VPNRouter.Core.Localization.Strings.TipDeepVerifyServers;
@@ -1403,15 +1389,15 @@ public static class Strings
         ? "Резервный VPN через VK Calls TURN. Используется когда основной канал заблокирован."
         : "Backup VPN via VK Calls TURN. Used when the primary channel is blocked.";
 
-    public static string EmergencyChannelInstall => Ru ? "Установить (~10 MB)" : "Install (~10 MB)";
+    public static string EmergencyChannelInstall => Ru ? "Установить (~10 МБ)" : "Install (~10 MB)";
 
     public static string EmergencyChannelInstallEmbedded => Ru
-        ? "Загрузить полную версию (~120 MB)"
+        ? "Загрузить полную версию (~120 МБ)"
         : "Download full version (~120 MB)";
 
-    public static string EmergencyChannelConfigsLabel => Ru ? "Конфигурация:" : "Configuration:";
+    public static string EmergencyChannelConfigsLabel => Ru ? "Конфиг:" : "Config:";
 
-    public static string EmergencyChannelAddConfig => Ru ? "Добавить конфигурацию" : "Add configuration";
+    public static string EmergencyChannelAddConfig => Ru ? "Добавить конфиг" : "Add config";
 
     // r10 r9+ (Bug-r10-I): inputs for the inline add-config form.
     public static string EmergencyChannelAddConfigNameWatermark => Ru

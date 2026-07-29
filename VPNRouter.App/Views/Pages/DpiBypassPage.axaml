@@ -144,7 +144,7 @@
                                     Background="Transparent" BorderThickness="0"
                                     Foreground="{DynamicResource DangerFgBrush}"
                                     VerticalAlignment="Center"
-                                    ToolTip.Tip="Dismiss"/>
+                                    ToolTip.Tip="{Binding L_TipDismiss}"/>
                         </Grid>
                     </Border>
 

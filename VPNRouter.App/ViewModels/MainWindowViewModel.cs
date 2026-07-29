@@ -3379,7 +3379,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] ApplyPendingChanges failed");
-            StatusText = $"Apply failed: {ex.Message}";
+            StatusText = $"{(IsRussian ? "Не удалось применить" : "Apply failed")}: {ex.Message}";
         }
         finally { IsApplying = false; }
     }

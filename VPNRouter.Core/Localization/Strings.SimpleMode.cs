@@ -189,14 +189,14 @@ public static partial class Strings
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
     public static string SmpCfgSubscribe   => Ru ? "подписка"       : "subscribe";
     public static string SmpCfgManual      => Ru ? "вручную"        : "manual";
-    public static string SmpCfgCustom      => Ru ? "custom"         : "custom";
+    public static string SmpCfgCustom      => Ru ? "свой"           : "custom";
     public static string SmpCfgSplit       => Ru ? "сплит"          : "split";
     public static string SmpCfgFull        => Ru ? "полный"         : "full";
 
     // CTA captions — Connect / Disconnect / Cancel (not destructive; accent-solid, not red)
     public static string SmpCtaConnect    => Ru ? "Подключить"   : "Connect";
     public static string SmpCtaDisconnect => Ru ? "Отключить"    : "Disconnect";
-    public static string SmpCtaCancel     => Ru ? "Отменить"     : "Cancel";
+    public static string SmpCtaCancel     => Ru ? "Отмена"       : "Cancel";
 
     // Advanced card — new wording listing the feature surface
     public static string SmpAdvCardTitle    => Ru ? "Расширенные настройки" : "Advanced settings";
@@ -215,7 +215,7 @@ public static partial class Strings
     public static string SmpMenuTheme         => Ru ? "Тема"                   : "Theme";
     public static string SmpMenuLanguage      => Ru ? "Язык"                   : "Language";
     public static string SmpMenuOpenLogs      => Ru ? "Открыть логи"           : "Open logs";
-    public static string SmpMenuCheckLeaks    => Ru ? "Проверить утечку IP"    : "Check IP leak";
+    public static string SmpMenuCheckLeaks    => Ru ? "Проверить IP-утечку"    : "Check IP leak";
     public static string SmpMenuCheckUpdates  => Ru ? "Проверить обновления"   : "Check for updates";
     public static string SmpMenuSwitchToAdv   => Ru ? "Перейти в Advanced"     : "Switch to Advanced";
     // v2.39.0 — one-click diagnostics export (Settings -> Updates -> Support)
@@ -276,7 +276,7 @@ public static partial class Strings
     public static string AboutTitle          => Ru ? "О приложении"              : "About";
     public static string AboutBrandName      => "Virtual Penguin Network";
     public static string AboutTagline        => Ru
-        ? "Процесс-VPN роутер с поддержкой обхода DPI."
+        ? "VPN-роутер на основе процессов, с поддержкой обхода DPI."
         : "Process-based VPN router with DPI bypass support.";
     public static string AboutVersionLabel   => Ru ? "Версия"                    : "Version";
     public static string AboutSingBoxLabel   => Ru ? "sing-box"                  : "sing-box";

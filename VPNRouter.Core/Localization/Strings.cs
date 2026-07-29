@@ -40,16 +40,16 @@ public static partial class Strings
     /// servers are still cached" signal. See Z:\surito diagnosis 2026-05-29
     /// (provider DPI-flap → fetch failed → list looked empty/lost).</summary>
     public static string SubRefreshFailedCached =>
-        Ru ? "⚠ не обновилось — показаны кэшированные серверы"
-           : "⚠ refresh failed — showing cached servers";
+        Ru ? "не обновилось — показаны кэшированные серверы"
+           : "refresh failed — showing cached servers";
 
     /// <summary>v2.38.0-r7 — subscription card badge when the last refresh
     /// failed AND there are no cached servers to fall back on (provider
     /// unreachable / blocked). Distinguishes a network/block failure from
     /// genuine "empty subscription".</summary>
     public static string SubRefreshFailedEmpty =>
-        Ru ? "⚠ не удалось загрузить — провайдер недоступен (проверьте сеть/Zapret)"
-           : "⚠ couldn't load — provider unreachable (check network/Zapret)";
+        Ru ? "не удалось загрузить — провайдер недоступен (проверьте сеть/Zapret)"
+           : "couldn't load — provider unreachable (check network/Zapret)";
 
     // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
     // users were seeing "Windows" hardcoded in Simple-mode autostart card
@@ -91,7 +91,7 @@ public static partial class Strings
     public static string TabAdvApplications => Ru ? "Приложения" : "Applications";
     public static string TabAdvTools => Ru ? "Инструменты" : "Tools";
     public static string TabAdvPublic => Ru ? "Публичные" : "Public";
-    public static string AdvSimpleToggle => Ru ? "← Simple" : "← Simple";
+    public static string AdvSimpleToggle => Ru ? "◂ Простой" : "◂ Simple";
 
     // ── Config mode ──
     // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
@@ -109,8 +109,8 @@ public static partial class Strings
     // shown twice. Now just "URL подписки".
     public static string SubscriptionUrlHint => Ru ? "URL подписки" : "Subscription URL";
     public static string SyncButton => Ru ? "Обновить" : "Sync";
-    public static string Syncing => Ru ? "Синхронизация..." : "Syncing...";
-    public static string SyncComplete(int count) => Ru ? $"Получено {count} серверов" : $"Fetched {count} servers";
+    public static string Syncing => Ru ? "Обновление…" : "Syncing…";
+    public static string SyncComplete(int count) => Ru ? $"Получено серверов: {count}" : $"Fetched servers: {count}";
     public static string SyncFailed(string err) => Ru ? $"Ошибка синхронизации: {err}" : $"Sync failed: {err}";
     public static string SyncEmpty => Ru ? "Подписка вернула 0 серверов" : "Subscription returned 0 servers";
     public static string PasteVlessUri => Ru ? "Вставьте VLESS URI:" : "Paste VLESS URI(s):";
@@ -126,8 +126,8 @@ public static partial class Strings
     public static string RemoveChecked => Ru ? "Удалить выбранные" : "Remove checked";
 
     // ── Apps tab ──
-    public static string SplitTunnel => Ru ? "Split Tunnel (выбранные приложения)" : "Split Tunnel (selected apps)";
-    public static string FullTunnel => Ru ? "Full Tunnel (весь трафик)" : "Full Tunnel (all traffic)";
+    public static string SplitTunnel => Ru ? "Раздельный туннель (выбранные приложения)" : "Split Tunnel (selected apps)";
+    public static string FullTunnel => Ru ? "Полный туннель (весь трафик)" : "Full Tunnel (all traffic)";
     public static string AppsHint => Ru
         ? "Выберите группы для маршрутизации через VPN:"
         : "Check groups to route through VPN:";
@@ -184,7 +184,7 @@ public static partial class Strings
     // inventory greppable.
     public static string ServerTestCancel => Ru ? "Отмена" : "Cancel";
     public static string ServerTestAll => Ru ? "Проверить все" : "Test all";
-    public static string ServerDeepStop => Ru ? "Стоп" : "Stop";
+    public static string ServerDeepStop => Ru ? "Остановить" : "Stop";
     public static string ServerDeepVerify => Ru ? "Глубокая проверка" : "Deep verify";
     public static string ServerTestingManual => Ru ? "Проверка Manual-серверов" : "Testing Manual servers";
     public static string ServerTestingSubscriptions => Ru ? "Проверка подписочных серверов" : "Testing subscription servers";
@@ -195,7 +195,7 @@ public static partial class Strings
     // process; under an active TUN (especially full tunnel) it routes through
     // the proxy, so every server measures the SAME tunnel RTT, not its own.
     public static string PingUnavailableWhenConnected => Ru
-        ? "Пинг измеряется только при отключённом VPN — через тоннель он показывает RTT тоннеля, а не сервера"
+        ? "Пинг измеряется только при отключённом VPN — через туннель он показывает RTT туннеля, а не сервера"
         : "Ping is measured only while the VPN is disconnected — through the tunnel it shows the tunnel's RTT, not the server's";
     public static string ServerDeepVerifyManual => Ru ? "Глубокая проверка Manual" : "Deep verify Manual";
     public static string ServerDeepVerifySubscription => Ru ? "Глубокая проверка подписки" : "Deep verify subscription";
@@ -274,7 +274,7 @@ public static partial class Strings
         : $"Running [{strategy}] (PID {pid}, manual)";
     public static string ZapretSelectedStrategyFailed(string strategy) => Ru
         ? $"Стратегия {strategy} не запустилась — возможно AV блокирует winws.exe или нужен другой выбор."
-        : $"Strategy {strategy} failed to start — possibly AV blocking winws.exe or pick another.";
+        : $"Strategy {strategy} failed to start — antivirus may be blocking winws.exe, or try another one.";
 
     // v2.37.0-r10 — Zapret probe-cache UI controls (Tools expander).
     // r6 added the cache silently; r10 surfaces user controls:
@@ -332,7 +332,7 @@ public static partial class Strings
         : "Re-verify";
 
     public static string ZapretReverifyHint => Ru
-        ? "Заново подберёт лучшую стратегию (полная проверка, 2–5 минут)"
+        ? "Заново подберёт лучшую стратегию (полная проверка, 2-5 минут)"
         : "Picks the best strategy again (full sweep, 2-5 minutes)";
 
     public static string ZapretSummaryDetailsButton => Ru
@@ -422,7 +422,7 @@ public static partial class Strings
         ? "Импорт: в файле нет правил"
         : "Import: file contained no rules";
     public static string RulesImported(int count, string format) => Ru
-        ? $"Импортировано {count} правил [{format}]"
+        ? $"Импортировано правил: {count} [{format}]"
         : $"Imported {count} rule(s) [{format}]";
     public static string RulesImportWithWarnings(int count) => Ru
         ? $" — {count} предупреждение(й) (см. лог)"
@@ -434,7 +434,7 @@ public static partial class Strings
         ? "Нечего экспортировать — список правил пуст"
         : "Nothing to export — rule list is empty";
     public static string RulesExported(int count, string filename) => Ru
-        ? $"Экспортировано {count} правил в {filename}"
+        ? $"Экспортировано правил: {count} → {filename}"
         : $"Exported {count} rule(s) to {filename}";
     public static string RulesExportError(string err) => Ru
         ? $"Ошибка экспорта: {err}"
@@ -467,7 +467,7 @@ public static partial class Strings
     // the "—" placeholder users see before any test has been run.
     public static string ColPingTooltip => Ru
         ? "Задержка в мс. «—» означает «не запускалось» — нажмите «Проверить все»."
-        : "Latency in ms. \"—\" means not measured — click \"Check all\".";
+        : "Latency in ms. \"—\" means not measured — click \"Test all\".";
 
     // v2.25.4 — Settings/Routing radio-card descriptions (Phase 4 redesign).
     // Each tunnel mode gets a one-line subtitle under the title so the user
@@ -541,20 +541,20 @@ public static partial class Strings
     // permutation of (Service installed?, App-side bootstrap exists?):
     //   • Green ✓: service installed → the existing flag-driven boot path
     //     in VPNRouterService.AutostartTgProxyAsync handles it
-    //   • Amber ⚠: no service, but App has a per-component bootstrap (after
+    //   • Amber : no service, but App has a per-component bootstrap (after
     //     DBG-2 lands the App-side bootstrap for vpn/zapret/tgproxy) → fires
     //     when the user logs into the App, not at OS boot
-    //   • Red ⛔: no service AND no App-side bootstrap → the toggle does
+    //   • Red : no service AND no App-side bootstrap → the toggle does
     //     literally nothing; show the strongest hint to install the service
     public static string AutostartStatusBoot => Ru
         ? "✓ Через службу Windows (на старте ОС)"
         : "✓ Via Windows Service (at boot)";
     public static string AutostartStatusLoginFallback => Ru
-        ? "⚠ Служба не установлена — сработает после входа в приложение"
-        : "⚠ Service not installed — will fire after App login";
+        ? "Служба не установлена — сработает после входа в приложение"
+        : "Service not installed — will fire after App login";
     public static string AutostartStatusNoBoot => Ru
-        ? "⛔ Не сработает без службы Windows"
-        : "⛔ Will not fire without the Windows service";
+        ? "Не сработает без службы Windows"
+        : "Will not fire without the Windows service";
     // v2.31.1-r1 (F-4 / UX-6): inline CTA below the warning hint when the
     // service isn't installed — pre-fix the only way to install was scrolling
     // up to the master toggle, which wasn't obvious.
@@ -585,11 +585,11 @@ public static partial class Strings
             : AutostartLoginAppDescriptionUnix;
 
     private static string AutostartLoginAppDescriptionUnix => Ru
-        ? "Запускает приложение VPNRouter в трей после входа в систему. VPN придётся стартануть вручную."
+        ? "Запускает приложение VPNRouter в трей после входа в систему. VPN придётся запустить вручную."
         : "Launches VPNRouter into the tray after you sign in. VPN itself must be started manually.";
 
     private static string AutostartLoginAppDescriptionWindows => Ru
-        ? "Запускает приложение VPNRouter после входа. VPN придётся стартануть вручную или включить «на старте Windows» выше."
+        ? "Запускает приложение VPNRouter после входа. VPN придётся запустить вручную или включить «на старте Windows» выше."
         : "Launches VPNRouter after you sign in. VPN itself must be started manually, or enable \u201Cat Windows startup\u201D above.";
 
     /// <summary>Prominent running-state line with PID, e.g. "● Running — PID 1234".
@@ -664,8 +664,8 @@ public static partial class Strings
     public static string FieldServer => Ru ? "Сервер:" : "Server:";
     public static string FieldPort => Ru ? "Порт:" : "Port:";
     public static string FieldUuid => "UUID:";
-    public static string FieldPublicKey => Ru ? "Public Key:" : "Public Key:";
-    public static string FieldShortId => Ru ? "Short ID:" : "Short ID:";
+    public static string FieldPublicKey => Ru ? "Открытый ключ:" : "Public Key:";
+    public static string FieldShortId => Ru ? "Короткий ID:" : "Short ID:";
 
     // ── Hints ──
     public static string DoubleClickEditServer => Ru
@@ -691,7 +691,7 @@ public static partial class Strings
     public static string BypassRussianTrafficHint => Ru
         ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
         : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
-    public static string CheckLeaks => Ru ? "Проверить утечки" : "Check leaks";
+    public static string CheckLeaks => Ru ? "Проверить IP-утечку" : "Check IP leak";
     public static string ShowLogs => Ru ? "Логи" : "Logs";
 
     public static string StrictModeLabel => Ru
@@ -710,7 +710,7 @@ public static partial class Strings
         ? "MTU ниже 1332 может ломать Dota 2 / CS2 / TF2 / Steam SDR."
         : "MTU below 1332 may break Dota 2 / CS2 / TF2 / Steam SDR.";
     public static string MtuWarningHigh => Ru
-        ? "MTU выше 1420 может ломать VPN/proxy пути из-за PMTU. Попробуй 1400, затем 1380."
+        ? "MTU выше 1420 может ломать VPN/proxy пути из-за PMTU. Попробуйте 1400, затем 1380."
         : "MTU above 1420 may break VPN/proxy paths due to PMTU. Try 1400, then 1380.";
     public static string MtuAutoTuneButton => Ru
         ? "Подобрать MTU"
@@ -722,7 +722,7 @@ public static partial class Strings
         ? $"MTU {mtu} сохранён. Переподключите VPN, чтобы применить."
         : $"MTU {mtu} saved. Reconnect VPN to apply.";
     public static string MtuAutoTuneBlocked => Ru
-        ? "Обычный ping не проходит. Сначала выключите True Split/почините WFP, потом меряйте MTU."
+        ? "Обычный ping не проходит. Сначала выключите True Split/почините WFP, потом измеряйте MTU."
         : "Plain ping fails. Turn off True Split/fix WFP first, then measure MTU.";
     public static string MtuAutoTuneNoResult => Ru
         ? "Не нашёл рабочий DF payload. На этом пути ICMP PMTU может быть заблокирован."
@@ -797,7 +797,7 @@ public static partial class Strings
         : "Re-apply settings to the running VPN without a reconnect (hot-reload via Clash API)";
 
     public static string ChannelStable => Ru ? "● Стабильная" : "● Stable";
-    public static string ChannelExperimental => Ru ? "⚠ Эксперимент." : "⚠ Experimental";
+    public static string ChannelExperimental => Ru ? "Эксперимент." : "Experimental";
 
     // ── Autostart ──
     // ── Subscriptions (multi) ──
@@ -1176,7 +1176,7 @@ public static partial class Strings
     // Tooltips — Zapret / DPI
     public static string TipZapretAutoUpdate => Ru
         ? "Каждые 24 часа проверять обновление Zapret"
-        : "Check for zapret updates from Flowseal every 24 hours";
+        : "Check for Zapret updates every 24 hours";
 
     // Tooltips — Free Configs controls
     public static string TipFcFastScan => Ru
@@ -1216,6 +1216,7 @@ public static partial class Strings
     public static string TipTcpTlsPing       => Ru ? "Пинг через TCP + TLS" : "TCP + TLS ping";
     public static string TipTestTcpTls       => Ru ? "Проверить TCP + TLS" : "Test TCP + TLS";
     public static string TipCloseServerDetail => Ru ? "Закрыть" : "Close";
+    public static string TipDismiss => Ru ? "Скрыть" : "Dismiss";
     public static string TipDeleteServer     => Ru ? "Удалить сервер" : "Delete server";
     public static string TipTestAllServers   => Ru
         ? "TCP + TLS проверка всех серверов"
@@ -1231,8 +1232,8 @@ public static partial class Strings
     public static string LblServer    => Ru ? "Сервер:"  : "Server:";
     public static string LblPort      => Ru ? "Порт:"    : "Port:";
     public static string LblUuid      => Ru ? "UUID:"    : "UUID:";
-    public static string LblPublicKey => Ru ? "Pub Key:" : "Pub Key:";
-    public static string LblShortId   => Ru ? "Short ID:" : "Short ID:";
+    public static string LblPublicKey => Ru ? "Открытый ключ:" : "Public Key:";
+    public static string LblShortId   => Ru ? "Короткий ID:" : "Short ID:";
 
     // Descriptive labels
     public static string LblRoutingMode          => Ru ? "Режим маршрутизации" : "Routing mode";
@@ -1242,7 +1243,7 @@ public static partial class Strings
         : "Add a subscription below";
 
     // Badge
-    public static string LblCustomBadge => Ru ? "custom" : "custom";
+    public static string LblCustomBadge => Ru ? "свой" : "custom";
 
     // Watermarks
     public static string WmZapretCustomArgs => "--wf-tcp=443 --dpi-desync=…";
@@ -1270,7 +1271,7 @@ public static partial class Strings
         : "No custom configs yet";
     public static string CustomConfigsEmptyHint => Ru
         ? "Свой конфиг — это готовый JSON-файл sing-box для нестандартных протоколов (TUIC, Hysteria2, Reality+gRPC и др.). Нажми «Добавить конфиг…» внизу чтобы импортировать."
-        : "A custom config is a ready sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click «Add config…» below to import.";
+        : "A custom config is a ready-made sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click \"Add config…\" below to import.";
 
     // v2.32.0 — recovery banner shown after SettingsValidator rejected a
     // structurally-valid but semantically-broken config.yaml (typoed
@@ -1280,8 +1281,8 @@ public static partial class Strings
     // VM, so the localized string is the prefix only.
     public static string SettingsRecoveredFromBadConfig(string backupPath) => Ru
         ? string.IsNullOrEmpty(backupPath)
-            ? "Config был повреждён, восстановлен default."
-            : $"Config был повреждён, восстановлен default. Backup: {backupPath}"
+            ? "Конфиг был повреждён, восстановлены настройки по умолчанию."
+            : $"Конфиг был повреждён, восстановлены настройки по умолчанию. Резервная копия: {backupPath}"
         : string.IsNullOrEmpty(backupPath)
             ? "Config was invalid; defaults restored."
             : $"Config was invalid; defaults restored. Backup: {backupPath}";
@@ -1358,8 +1359,8 @@ public static partial class Strings
 
     /// <summary>Stale log probe — sing-box hasn't written for &gt;60 s.</summary>
     public static string DiagHealthCheckStale => Ru
-        ? "⚠ Проверка не отвечает"
-        : "⚠ Stale check";
+        ? "Проверка не отвечает"
+        : "Stale check";
 
     /// <summary>Pending first probe — shown for the first 30 s after connect.</summary>
     public static string DiagHealthCheckPending => Ru
@@ -1440,7 +1441,7 @@ public static partial class Strings
         : "QR scanner is coming in the next update — paste the URI manually for now.";
 
     public static string HintTunnel => Ru
-        ? "Состояние туннеля повторяет иконку 🔑 в строке состояния."
+        ? "Состояние туннеля повторяет иконку VPN-ключа в строке состояния."
         : "Tunnel state mirrors the system VPN-key icon in the status bar.";
 
     // Section headers
@@ -1644,7 +1645,7 @@ public static partial class Strings
 
     public static string QrShareScanHint => Ru
         ? "Подсказка: открой системную «Камеру» и наведи на QR — Android распознает URL и предложит скопировать."
-        : "Tip: open the system Camera app and point at a QR — Android recognises the URL and offers a copy action.";
+        : "Tip: open the system Camera app and point at a QR — Android recognizes the URL and offers a copy action.";
 
     public static string QrSharePasteButton => Ru ? "Применить URI" : "Apply URI";
 
@@ -1754,11 +1755,11 @@ public static partial class Strings
         ? "Серверы · {0}"
         : "Servers · {0}";
 
-    public static string SrvTestAll => Ru ? "Тест все" : "Test all";
+    public static string SrvTestAll => Ru ? "Проверить все" : "Test all";
 
-    public static string SrvTestOne => Ru ? "Тест" : "Test";
+    public static string SrvTestOne => Ru ? "Проверить" : "Test";
 
-    public static string SrvTesting => Ru ? "Тестирую…" : "Testing…";
+    public static string SrvTesting => Ru ? "Проверка…" : "Testing…";
 
     public static string SrvSortByLatencyAsc => Ru ? "по пингу ↑" : "by ping ↑";
 
@@ -1816,15 +1817,15 @@ public static partial class Strings
         : "Active server: {0}";
 
     /// <summary>Kebab menu item that opens the Free Configs overlay.</summary>
-    public static string MenuSectionFreeConfigs => Ru ? "Бесплатные конфиги" : "Free configs";
+    public static string MenuSectionFreeConfigs => Ru ? "Публичные конфиги" : "Public configs";
 
     public static string MenuItemOpenFreeConfigs => Ru ? "Найти сервер" : "Find a server";
 
-    public static string FcOverlayTitle => Ru ? "Бесплатные конфиги" : "Free configs";
+    public static string FcOverlayTitle => Ru ? "Публичные конфиги" : "Public configs";
 
     public static string FcSearchHint => Ru
-        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые. Рабочие конфиги сохраняются автоматически — открой вкладку «★ Сохранённые», чтобы их увидеть."
-        : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest. Verified configs are saved automatically — open the ★ Saved tab to see them.";
+        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые. Рабочие конфиги сохраняются автоматически — открой вкладку «Сохранённые», чтобы их увидеть."
+        : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest. Verified configs are saved automatically — open the Saved tab to see them.";
 
     public static string FcFindButton => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
 

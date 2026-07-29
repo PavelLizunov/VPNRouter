@@ -251,7 +251,9 @@ public class MainWindowViewModelCharacterizationTests
         // clean. Re-pinned to the net10 Windows actual. Prior net8 Windows hash:
         // 5406a615…551e006f. Linux net10 hash self-captures via the soft-fail
         // sentinel on the next ubuntu CI run.
-        "c77fff422464324f5dfe2e9b70b5222ac508693afe3f6313b5a4b169d9215e6b";
+        // R09 localization (2026-07-29): + L_UpdateButton proxy getter; removed
+        // hardcoded "↓ Update" runtime string. Prior Windows hash: ee6ac11f…70f14322.
+        "4e6109880c2228c2deb6fdd5be22ae80beb12c3431859d5518c117379a56f282";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

@@ -648,6 +648,29 @@ if (Test-Path $ProfilesSrc) {
     New-Item -ItemType Directory -Force -Path $UpdateProfilesDst | Out-Null
     Copy-Item "$ProfilesSrc\*" $UpdateProfilesDst -Recurse
 }
+# net8->net10 migration (2026-07-11) — cross-major auto-update fix: the
+# self-contained .NET RUNTIME DLLs must travel in the update payload too. The
+# update was otherwise app-only; a user auto-updating ACROSS a runtime major
+# (net8 -> net10) would get net10-compiled app DLLs dropped onto the FROZEN
+# net8 coreclr / System.Private.CoreLib on disk -> guaranteed crash (self-
+# contained has no cross-major roll-forward, and the GUI trampoline's app-DLL-
+# hash self-repair can't see a uniform runtime/app mismatch). Same
+# "travels-with-the-update-else-the-user-loses-it" rule as sing-box / libcronet
+# above, applied to the runtime. Copies every top-level dist file not already in
+# _bootstrap (the runtime DLLs — coreclr/clrjit/System.*/hostfxr), skipping the
+# root trampoline.
+# ponytail: always-include, not a cross-major-only flag — sing-box already makes
+# the update ~install-sized, so the runtime adds only ~compressed delta for
+# PERMANENT cross-major safety with no ship-time flag to forget. Gate behind a
+# version check only if update-download bandwidth ever becomes the constraint.
+$bootstrapNames = (Get-ChildItem $BootstrapDir -File).Name
+foreach ($f in Get-ChildItem $DistDir -File) {
+    if ($f.Name -eq "VPNRouter.GUI.exe") { continue }   # trampoline lives at root
+    if ($bootstrapNames -contains $f.Name) { continue }  # app DLL / native already copied
+    Copy-Item $f.FullName $BootstrapDir -Force
+    $updateFileCount++
+}
+Write-Host "       .NET runtime DLLs included in update (cross-major-safe)" -ForegroundColor Gray
 Copy-Item $ReadmePath $BootstrapDir
 
 Write-Host "       Update package: 1 stub at root + $updateFileCount files in _bootstrap/" -ForegroundColor Gray

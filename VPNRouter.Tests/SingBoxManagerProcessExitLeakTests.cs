@@ -28,8 +28,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -38,26 +38,40 @@ namespace VPNRouter.Tests;
 
 public sealed class SingBoxManagerProcessExitLeakTests
 {
+    private static readonly FieldInfo StopStateField =
+        typeof(SingBoxManager).GetField("_stopState", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("SingBoxManager._stopState field not found.");
+
     private static SingBoxSettings BuildIdleSettings() => new()
     {
         ExecutablePath = Path.Combine(Path.GetTempPath(), "nonexistent-sing-box-for-leak-test.exe"),
     };
 
-    // Construct + Dispose in a NoInlining helper so the JIT can't keep the
-    // local alive past the method, and return only WeakReferences. After this
-    // returns there is no managed strong reference to any manager except the
-    // (now-removed) ProcessExit subscription — so the fix must let them die.
+    // Construct + Dispose each manager in its own NoInlining frame so the JIT
+    // can't extend a loop local's lifetime. Once this returns, only the weak
+    // reference and any ProcessExit subscription can still reach the manager.
     [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference CreateAndDisposeOne()
+    {
+        var manager = new SingBoxManager(BuildIdleSettings());
+        var weakReference = new WeakReference(manager);
+
+        // An idle Windows Stop queues fire-and-forget adapter cleanup whose
+        // delegate temporarily captures the manager through _logger. That is
+        // a valid bounded root, but it is unrelated to ProcessExit and makes a
+        // GC assertion depend on PowerShell scheduling. Exercise Stop's
+        // existing concurrent-call early return so Dispose still performs the
+        // real ProcessExit unsubscribe without starting that unrelated task.
+        StopStateField.SetValue(manager, 1);
+        manager.Dispose();
+        return weakReference;
+    }
+
     private static List<WeakReference> CreateAndDispose(int count)
     {
         var refs = new List<WeakReference>(count);
         for (int i = 0; i < count; i++)
-        {
-            var mgr = new SingBoxManager(BuildIdleSettings());
-            refs.Add(new WeakReference(mgr));
-            mgr.Dispose();
-            mgr = null;
-        }
+            refs.Add(CreateAndDisposeOne());
         return refs;
     }
 
@@ -66,22 +80,10 @@ public sealed class SingBoxManagerProcessExitLeakTests
     {
         var refs = CreateAndDispose(25);
 
-        // Robust collection: LOOP forced gen-2 collects + finalizer drains.
-        // A ProcessExit-rooted instance is a HARD root — it survives every
-        // round, so a real leak still fails this. But a plain GC straggler
-        // (promoted to gen2 under test-host load, awaiting a later sweep) can
-        // outlive a single 2-collect pass; on a busy Windows runner this made
-        // the test flake at "3-4/25 alive" even though Dispose correctly
-        // unsubscribes. Looping clears the stragglers without masking a leak.
-        int alive = refs.Count;
-        for (int round = 0; round < 20 && alive > 0; round++)
-        {
-            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-            GC.WaitForPendingFinalizers();
-            Thread.Sleep(10);
-            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-            alive = refs.Count(r => r.IsAlive);
-        }
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        int alive = refs.Count(r => r.IsAlive);
 
         Assert.True(alive == 0,
             $"{alive}/25 disposed SingBoxManager instances are still alive after a full GC. " +
