@@ -183,6 +183,18 @@ public class LinuxFirewallManagerTests : IDisposable
     }
 
     [Fact]
+    public void BuildRuleset_MixedFamily_EmitsBoth()
+    {
+        var rules = LinuxFirewallManager.BuildRuleset(new List<string> { "1.2.3.4", "2001:db8::1" });
+
+        // Unchanged IPv4 rule + new IPv6 ip6-daddr rule; the IPv6 literal must
+        // not ride a malformed IPv4-family rule.
+        Assert.Contains("add rule inet vpnrouter_ks output ip daddr { 1.2.3.4 } accept", rules);
+        Assert.Contains("add rule inet vpnrouter_ks output ip6 daddr { 2001:db8::1 } accept", rules);
+        Assert.DoesNotContain("ip daddr { 2001:db8::1 }", rules);
+    }
+
+    [Fact]
     public void ReadServerIps_skips_hostnames_keeps_ips_when_no_resolver_hit()
     {
         File.WriteAllText(_cfg, @"{ ""outbounds"": [

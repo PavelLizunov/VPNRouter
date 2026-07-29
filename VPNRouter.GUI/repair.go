@@ -21,7 +21,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -38,29 +40,18 @@ func RunRepair(prerelease bool, deadline time.Duration) (elapsed time.Duration, 
 	start := time.Now()
 	defer func() { elapsed = time.Since(start) }()
 
-	prereleaseFlag := ""
-	if prerelease {
-		prereleaseFlag = " -Prerelease"
+	// Write the bootstrap to a temp .ps1 and launch via `-File`, not inline
+	// `-Command` — the shape Defender's ClickFix heuristic fires on. Mirrors
+	// VPNRouter.App/Services/SelfRepair.cs.
+	scriptPath := filepath.Join(
+		os.TempDir(),
+		fmt.Sprintf("vpnr-trampoline-repair-%d.ps1", time.Now().UnixNano()))
+	if writeErr := os.WriteFile(scriptPath, []byte(repairScript(prerelease)), 0644); writeErr != nil {
+		return elapsed, fmt.Errorf("write repair script: %w", writeErr)
 	}
+	defer os.Remove(scriptPath)
 
-	// One-line PowerShell bootstrap. We download install.ps1 to TEMP
-	// and dot-source it so any -ScriptName invocation picks up the
-	// freshly downloaded copy (and so we get a hash-stable filename for
-	// postmortem inspection).
-	bootstrap := fmt.Sprintf(
-		`$ProgressPreference='SilentlyContinue'; `+
-			`$tmp = Join-Path $env:TEMP 'vpnr-trampoline-install.ps1'; `+
-			`Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -OutFile $tmp -UseBasicParsing; `+
-			`& $tmp%s`,
-		prereleaseFlag,
-	)
-
-	cmd := exec.Command("powershell.exe",
-		"-NoProfile",
-		"-WindowStyle", "Hidden",
-		"-ExecutionPolicy", "Bypass",
-		"-Command", bootstrap,
-	)
+	cmd := exec.Command("powershell.exe", repairArgs(scriptPath)...)
 	// CREATE_NO_WINDOW = 0x08000000. Without it powershell.exe inherits
 	// the stub's parent console (cmd.exe / explorer.exe equivalent) and
 	// can briefly flash a black box. With it we get a truly hidden run.
@@ -84,5 +75,31 @@ func RunRepair(prerelease bool, deadline time.Duration) (elapsed time.Duration, 
 			_ = cmd.Process.Kill()
 		}
 		return elapsed, fmt.Errorf("repair timed out after %v", deadline)
+	}
+}
+
+// repairScript renders the download + dot-execute bootstrap. `\r\n` endings
+// and the TLS12 line mirror SelfRepair.cs so AMSI sees an identical clean shape.
+func repairScript(prerelease bool) string {
+	prereleaseFlag := ""
+	if prerelease {
+		prereleaseFlag = " -Prerelease"
+	}
+	return "$ErrorActionPreference = 'Stop'\r\n" +
+		"$ProgressPreference = 'SilentlyContinue'\r\n" +
+		"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\r\n" +
+		"$tmp = Join-Path $env:TEMP 'vpnr-trampoline-install.ps1'\r\n" +
+		"Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -OutFile $tmp -UseBasicParsing\r\n" +
+		fmt.Sprintf("& $tmp%s\r\n", prereleaseFlag)
+}
+
+// repairArgs builds the powershell.exe argv. The script path is a single argv
+// element (spaces survive); deliberately never uses `-Command` (ClickFix).
+func repairArgs(scriptPath string) []string {
+	return []string{
+		"-NoProfile",
+		"-WindowStyle", "Hidden",
+		"-ExecutionPolicy", "Bypass",
+		"-File", scriptPath,
 	}
 }

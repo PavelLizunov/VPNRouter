@@ -330,6 +330,18 @@ public class MacFirewallManagerTests : IDisposable
         Assert.DoesNotContain("set block-policy", rules); // would fail `pfctl -a … -f`
     }
 
+    [Fact]
+    public void BuildRules_MixedFamily_BothFamilies()
+    {
+        var rules = MacFirewallManager.BuildRules(new List<string> { "1.2.3.4", "2001:db8::1" });
+
+        // Per-IP family: IPv4 → inet, IPv6 → inet6 (a malformed `inet` rule for
+        // the IPv6 literal would make pfctl reject the whole atomic load).
+        Assert.Contains("pass out quick inet from any to 1.2.3.4", rules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::1", rules);
+        Assert.DoesNotContain("pass out quick inet from any to 2001:db8::1", rules);
+    }
+
     [Theory]
     [InlineData("pf enabled\nToken : 12345678", "12345678")]
     [InlineData("Token : 42", "42")]
