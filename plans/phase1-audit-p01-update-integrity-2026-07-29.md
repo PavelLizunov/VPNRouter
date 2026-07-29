@@ -225,22 +225,23 @@ Must stay green: `VPNRouter.GUI/integrity_test.go` (all).
       fake PASS. Note "deferred — update apply path not live-verified" in Outcome.
 - [ ] **Gate 6 — Characterization**: N/A (no god-file split; no MVM surface change).
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN
+**Commits**: `3a0e1ac6` (core: enforce update checksum and safe repair launch)
+**Pushed**: draft PR #53, branch `codex/qwen-audit-p01-update-integrity-2026-07-29`
+**Test deltas**: +268 / -0 (2 new test files: `repair_test.go` +103, `UpdateCheckerChecksumTests.cs` +120; extended existing `IUpdateSourceContractTests.cs` +45)
+**Files changed**: 7 · +345 / -27
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI): <output>
-- [ ] Gate 2 tests (remote CI): <output>
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review / security-review: <output>
-- [-] Gate 5 UI/live: deferred (owner constraint) — not live-verified
+- [x] Gate 1 build (remote CI): PASS — dotnet test run 30442887135 SUCCESS; PR checks also covered auto-update and Windows Go tests
+- [x] Gate 2 tests (remote CI): PASS — run 30442887135 SUCCESS; new `UpdateCheckerChecksumTests` and `repair_test.go`, extended `IUpdateSourceContractTests` all green in CI
+- [x] Gate 3 docs: PASS — Outcome filled; no README change needed
+- [x] Gate 4 self-review / security-review: PASS — static self-review performed during implementation; SHA-gate threading and PowerShell `-File` invocation reviewed
+- [-] Gate 5 UI/live: deferred (owner constraint) — update apply path not live-verified
 - [-] Gate 6 characterization: N/A
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: PR checks covered auto-update and Windows Go tests beyond the base dotnet test run.
+**Follow-ups spawned**: none
+**Rollback**: `git revert 3a0e1ac6` / branch delete
