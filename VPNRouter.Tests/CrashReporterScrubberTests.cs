@@ -40,6 +40,17 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain(uri, s);
     }
 
+    // R13-B: wgturn:// carries wireguard key material. WriteReport (crash tail)
+    // and RedactLogText (diagnostics bundle) both funnel through ScrubSecrets,
+    // so this shared-regex pin closes both export paths.
+    [Fact]
+    public void ScrubSecrets_RedactsWgturnUri()
+    {
+        var s = CrashReporter.ScrubSecrets("add config wgturn://abc123/xyz?k=secret failed");
+        Assert.Contains("wgturn://[redacted]", s);
+        Assert.DoesNotContain("secret", s);
+    }
+
     [Fact]
     public void ScrubSecrets_KeepsHttpHostButRedactsPath()
     {
