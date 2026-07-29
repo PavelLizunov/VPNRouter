@@ -1,4 +1,6 @@
-﻿using VPNRouter.Core.Models;
+﻿using System.Diagnostics;
+using System.Reflection;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
 
@@ -179,5 +181,68 @@ public class EmergencyChannelManagerTests
         {
             try { if (File.Exists(logPath)) File.Delete(logPath); } catch { }
         }
+    }
+
+    [Fact]
+    public void OnProcessExited_DisposesExitedProcess()
+    {
+        if (CrashStub() is not { } stub) return;
+        var (exe, args) = stub;
+
+        var logPath = Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log");
+        try
+        {
+            using var manager = new EmergencyChannelManager(exe, logPath);
+            manager.ArgsBuilderOverride = _ => args;
+
+            using var crashed = new ManualResetEventSlim(false);
+            manager.Crashed += (_, _) => crashed.Set();
+
+            manager.Start(ValidConfig());
+
+            Assert.True(crashed.Wait(TimeSpan.FromSeconds(10)),
+                "stub process did not exit (crash) in time");
+
+            var processField = typeof(EmergencyChannelManager)
+                .GetField("_process", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            Assert.Null(processField.GetValue(manager));
+        }
+        finally
+        {
+            try { if (File.Exists(logPath)) File.Delete(logPath); } catch { }
+        }
+    }
+
+    [Fact]
+    public void OnProcessExited_LosingCallback_DoesNotFlipStateOrRaiseCrash()
+    {
+        using var manager = MakeManager();
+
+        var crashed = false;
+        manager.Crashed += (_, _) => crashed = true;
+
+        // A process instance never assigned to _process — a stale callback
+        // for a predecessor or a successor's process. The exact-process
+        // claim must reject it: no Failed transition, no Crashed event.
+        using var foreign = new Process();
+        InvokeOnProcessExited(manager, foreign);
+
+        Assert.Equal(EmergencyChannelState.Disconnected, manager.State);
+        Assert.False(crashed, "losing callback must not raise Crashed");
+    }
+
+    private static void InvokeOnProcessExited(EmergencyChannelManager manager, Process process) =>
+        typeof(EmergencyChannelManager)
+            .GetMethod("OnProcessExited", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(manager, new object[] { process });
+
+    private static (string exe, string args)? CrashStub()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+            return File.Exists(cmd) ? (cmd, "/c exit 3") : null;
+        }
+        return File.Exists("/bin/sh") ? ("/bin/sh", "-c \"exit 3\"") : null;
     }
 }
