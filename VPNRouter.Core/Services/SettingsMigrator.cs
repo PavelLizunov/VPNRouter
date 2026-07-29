@@ -695,14 +695,14 @@ public static class SettingsMigrator
     {
         if (s.Tun == null) return s;
 
-        if (s.Tun.Mtu == 1280 || s.Tun.Mtu == 1500 || s.Tun.Mtu <= 0 || s.Tun.Mtu > 1500)
+        if (s.Tun.Mtu == 1500 || s.Tun.Mtu <= 0 || s.Tun.Mtu > 1500)
         {
             var old = s.Tun.Mtu;
             s.Tun.Mtu = TunSettings.DefaultMtu;
             logger?.Information(
                 "[SettingsMigrator] v7->v8: moved TUN MTU {Old} -> {New} " +
                 "(1420 fits observed VLESS/TUN path and avoids Steam SDR-class UDP regression; " +
-                "explicit custom MTUs are preserved)",
+                "explicit custom MTUs including 1280 are preserved)",
                 old,
                 s.Tun.Mtu);
         }

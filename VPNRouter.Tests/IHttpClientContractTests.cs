@@ -11,6 +11,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -131,6 +132,22 @@ public sealed class IHttpClientContractTests
         Assert.Equal("missing", response.AsString());
     }
 
+    [Fact]
+    public async Task Send_OversizedBody_ThrowsInvalidDataException()
+    {
+        var handler = StubHandler.Sync((_, _) =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(
+                    new ExpandingStream(PolicyHttpClient.MaxResponseBytes + 1024)),
+            });
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => http.SendAsync(
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
+            TestContext.Current.CancellationToken));
+    }
+
     // ─── FakeHttpClient contract ───────────────────────────────────────
 
     [Fact]
@@ -201,6 +218,44 @@ public sealed class IHttpClientContractTests
         {
             Interlocked.Increment(ref _callCount);
             return _respond(request, cancellationToken);
+        }
+    }
+
+    /// <summary>Yields <paramref name="totalBytes"/> zero-bytes without allocating.</summary>
+    private sealed class ExpandingStream(long totalBytes) : Stream
+    {
+        private long _remaining = totalBytes;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+
+        // Read-only, non-seekable stream: Stream's remaining abstract
+        // members must be overridden to compile. Length/Position/Seek/
+        // SetLength/Write are unsupported; Flush is a no-op.
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() { }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_remaining <= 0) return 0;
+            var n = (int)Math.Min(count, _remaining);
+            Array.Clear(buffer, offset, n);
+            _remaining -= n;
+            return n;
         }
     }
 }

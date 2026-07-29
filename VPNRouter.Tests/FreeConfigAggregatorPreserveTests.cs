@@ -1,6 +1,8 @@
-﻿using VPNRouter.Core.Models;
+﻿using Serilog;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
+using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Tests;
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -226,5 +228,52 @@ public class FreeConfigAggregatorPreserveTests
 
         Assert.Equal(0, n);
         Assert.Empty(configs);
+    }
+
+    // ─── DATA-4: MergeWithCache duplicate-ID tolerance ─────────────────
+
+    [Fact]
+    public void MergeWithCache_DuplicateIds_FirstWins_VerifiedPreserved()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
+        {
+            using var logger = new LoggerConfiguration().CreateLogger();
+            var cache = new FreeConfigCache(
+                logger, Path.Combine(tempDir.FullName, "free_configs.json"));
+            var aggregator = new FreeConfigAggregator(logger, cache);
+
+            cache.Save(new FreeConfigCache.CacheFile
+            {
+                Configs =
+                {
+                    MakeEntry("verified-gone",
+                        FreeConfigStatus.Verified,
+                        lastTestedAt: _now.AddDays(-30)),
+                    MakeEntry("cached-dup",
+                        FreeConfigStatus.Ok,
+                        lastTestedAt: _now.AddHours(-1)),
+                    MakeEntry("cached-dup"),
+                },
+            });
+
+            var first = MakeEntry("dup");
+            first.Host = "first.example.com";
+            var second = MakeEntry("dup");
+            second.Host = "second.example.com";
+
+            var result = aggregator.MergeWithCache(
+                new List<FreeConfigEntry> { first, second });
+
+            var dups = result.Where(c => c.Id == "dup").ToList();
+            Assert.Single(dups);
+            Assert.Equal("first.example.com", dups[0].Host);
+            Assert.Contains(result, c => c.Id == "verified-gone"
+                && c.Status == FreeConfigStatus.Verified);
+        }
+        finally
+        {
+            try { tempDir.Delete(recursive: true); } catch { }
+        }
     }
 }
