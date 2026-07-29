@@ -1477,10 +1477,12 @@
                   <ItemsControl ItemsSource="{Binding ReadModeDirectRules}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                        <StackPanel Spacing="0">
                         <Grid ColumnDefinitions="20,70,140,*,Auto"
                               ColumnSpacing="10"
                               Margin="14,1"
-                              Opacity="{Binding RowOpacity}">
+                              Opacity="{Binding RowOpacity}"
+                              IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <TextBlock Grid.Column="0"
                                      Text="●"
                                      FontFamily="Consolas, 'SF Mono', monospace"
@@ -1517,6 +1519,26 @@
                                   BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         </Grid>
+                        <!-- Narrow (<540 px): Action/Type over Value so the delete stays in the Auto column at MinWidth=360.
+                             IsRulesNarrow lives on MainWindowViewModel, reached via the page DataContext. -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,1" Opacity="{Binding RowOpacity}"
+                              IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
+                          <StackPanel Grid.Column="0" Spacing="1">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         Foreground="{DynamicResource SuccessFgBrush}" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding Action}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding Type}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Value}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"/>
+                          </StackPanel>
+                          <Button Grid.Column="1" Content="✕" Command="{Binding RemoveCommand}" FontSize="11" Padding="6,0" MinHeight="0"
+                                  Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        </Grid>
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
@@ -1533,10 +1555,12 @@
                   <ItemsControl ItemsSource="{Binding ReadModeProxyRules}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                        <StackPanel Spacing="0">
                         <Grid ColumnDefinitions="20,70,140,*,Auto"
                               ColumnSpacing="10"
                               Margin="14,1"
-                              Opacity="{Binding RowOpacity}">
+                              Opacity="{Binding RowOpacity}"
+                              IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <TextBlock Grid.Column="0" Text="●"
                                      FontFamily="Consolas, 'SF Mono', monospace"
                                      FontSize="11"
@@ -1564,6 +1588,25 @@
                                   Background="Transparent" BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         </Grid>
+                        <!-- Narrow variant — see direct group. -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,1" Opacity="{Binding RowOpacity}"
+                              IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
+                          <StackPanel Grid.Column="0" Spacing="1">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         Foreground="{DynamicResource SuccessFgBrush}" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding Action}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         FontWeight="Bold" Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding Type}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Value}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"/>
+                          </StackPanel>
+                          <Button Grid.Column="1" Content="✕" Command="{Binding RemoveCommand}" FontSize="11" Padding="6,0" MinHeight="0"
+                                  Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        </Grid>
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
@@ -1580,10 +1623,12 @@
                   <ItemsControl ItemsSource="{Binding ReadModeBlockRules}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                        <StackPanel Spacing="0">
                         <Grid ColumnDefinitions="20,70,140,*,Auto"
                               ColumnSpacing="10"
                               Margin="14,1"
-                              Opacity="{Binding RowOpacity}">
+                              Opacity="{Binding RowOpacity}"
+                              IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <TextBlock Grid.Column="0" Text="●"
                                      FontFamily="Consolas, 'SF Mono', monospace"
                                      FontSize="11"
@@ -1611,6 +1656,25 @@
                                   Background="Transparent" BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         </Grid>
+                        <!-- Narrow variant — see direct group. -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,1" Opacity="{Binding RowOpacity}"
+                              IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
+                          <StackPanel Grid.Column="0" Spacing="1">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         Foreground="{DynamicResource SuccessFgBrush}" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding Action}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         FontWeight="Bold" Foreground="{DynamicResource DangerFgBrush}" VerticalAlignment="Center"/>
+                              <TextBlock Text="{Binding Type}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                                         Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Value}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"/>
+                          </StackPanel>
+                          <Button Grid.Column="1" Content="✕" Command="{Binding RemoveCommand}" FontSize="11" Padding="6,0" MinHeight="0"
+                                  Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        </Grid>
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
