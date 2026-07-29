@@ -702,7 +702,12 @@ internal sealed class StartupPipeline
             _host.Logger?.Information(
                 "[StartupPipeline] Full-tunnel mode — ignoring ActiveProfile '{Profile}' and skipping process scan",
                 profileName ?? "(empty)");
-            activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+            // Carry the selected profile's kill-switch intent; empty/unresolved -> false.
+            var blockOnVpnFail = !string.IsNullOrEmpty(profileName)
+                && manager.MergeProfilesTolerant(
+                    profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
+                    out _)?.BlockOnVpnFail == true;
+            activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only", BlockOnVpnFail = blockOnVpnFail };
         }
         else if (!string.IsNullOrEmpty(profileName))
         {

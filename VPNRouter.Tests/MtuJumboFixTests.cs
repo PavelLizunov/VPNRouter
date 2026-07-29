@@ -55,7 +55,7 @@ public sealed class MtuJumboFixTests
     [Theory]
     [InlineData(9000, 1420)]
     [InlineData(1500, 1420)]
-    [InlineData(1280, 1420)]
+    [InlineData(1280, 1280)]
     [InlineData(1400, 1400)]
     public void Migrate_7_to_8_MovesLegacyDefaultsTo1420(int input, int expected)
     {

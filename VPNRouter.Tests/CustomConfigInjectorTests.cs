@@ -438,6 +438,71 @@ public class CustomConfigInjectorTests
         Assert.Equal("udp", localDns["type"]?.ToString());
     }
 
+    private static AppSettings CreateSettings(bool forceIpv4Only, bool ipv6Enabled)
+    {
+        var s = CreateSettings();
+        s.App.ForceIpv4Only = forceIpv4Only;
+        s.Tun.Ipv6Enabled = ipv6Enabled;
+        return s;
+    }
+
+    [Fact]
+    public void IncludeSplit_Ipv6Disabled_ForcesIpv4OnlyDnsStrategy()
+    {
+        // Pre-fix: ForceIpv4Only=false + Ipv6Enabled=false left strategy absent → AAAA stall + IPv6 leak.
+        var settings = CreateSettings(forceIpv4Only: false, ipv6Enabled: false);
+        var json = (JsonNode.Parse(CustomConfigInjector.Inject(LegacyConfig, new[] { "chrome.exe" }, settings)) as JsonObject)!;
+        Assert.Equal("ipv4_only", StjNodeHelpers.SelectToken(json, "dns.strategy")?.ToString());
+
+        // An authored strategy is the user's explicit contract — never overwritten absent ForceIpv4Only.
+        var authored = (JsonNode.Parse(CustomConfigInjector.Inject(RealWorldConfig, new[] { "chrome.exe" }, settings)) as JsonObject)!;
+        Assert.Equal("prefer_ipv4", StjNodeHelpers.SelectToken(authored, "dns.strategy")?.ToString());
+    }
+
+    private const string SelectorWithAutoOutbound = """
+    {
+      "outbounds": [
+        {"type": "selector", "tag": "proxy", "outbounds": ["vless-a", "vless-b"]},
+        {"type": "vless", "tag": "vless-a", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"type": "vless", "tag": "vless-b", "server": "5.6.7.8", "server_port": 443, "uuid": "test"},
+        {"type": "direct", "tag": "auto"},
+        {"type": "direct", "tag": "direct"}
+      ],
+      "route": {"rules": [], "final": "proxy"}
+    }
+    """;
+
+    [Fact]
+    public void EnsureUrltest_ExistingAutoOutbound_NoDuplicateTag()
+    {
+        // Pre-fix: injected urltest blindly tagged "auto" → duplicate tag → sing-box FATAL.
+        var json = (JsonNode.Parse(CustomConfigInjector.Inject(SelectorWithAutoOutbound, new[] { "chrome.exe" }, CreateSettings())) as JsonObject)!;
+        var outbounds = json["outbounds"] as JsonArray;
+        Assert.Contains(outbounds!, o => o["type"]?.ToString() == "urltest");
+
+        var tags = outbounds!.Select(o => o["tag"]?.ToString()).Where(t => t != null).ToList();
+        Assert.Equal(tags.Count, tags.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Validate_DuplicateOutboundTag_ReportsError()
+    {
+        // Pre-fix: no duplicate-tag check → sing-box FATAL'd opaquely at start.
+        var json = """
+        {
+          "outbounds": [
+            {"type": "vless", "tag": "proxy", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+            {"type": "direct", "tag": "proxy"}
+          ]
+        }
+        """;
+
+        var (isValid, errors) = CustomConfigInjector.Validate(json);
+
+        Assert.False(isValid);
+        Assert.Contains(errors, e => e.Contains("Duplicate outbound tag", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Inject_ActualCustomConfig_SingBoxCheck()
     {
