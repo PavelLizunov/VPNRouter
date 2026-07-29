@@ -417,31 +417,8 @@ public class WgturnUpdater
                     }
                 }
 
-                // --- Step 5: Atomic move temp → final ---
-                try
-                {
-                    if (File.Exists(CliExePath))
-                    {
-                        // On Windows, in-use exe can't be replaced. Caller is expected
-                        // to stop the running process first (UI W-4 handles that).
-                        File.Delete(CliExePath);
-                    }
-                    File.Move(tempBin, CliExePath);
-                }
-                catch (UnauthorizedAccessException ua)
-                {
-                    throw new WgturnDownloadException(
-                        WgturnErrorCategory.FileSystem,
-                        $"Permission denied writing to {CliExePath}. Run VPNRouter as administrator.",
-                        ua);
-                }
-                catch (IOException ioe)
-                {
-                    throw new WgturnDownloadException(
-                        WgturnErrorCategory.FileSystem,
-                        $"Couldn't install wgturn-cli (antivirus or in-use file?): {ioe.Message}",
-                        ioe);
-                }
+                // --- Step 5: Atomic replace temp → final ---
+                InstallDownloadedBinary(tempBin, CliExePath);
 
                 // --- Step 6: Persist version + variant markers ---
                 try
@@ -478,6 +455,7 @@ public class WgturnUpdater
             }
             finally
             {
+                // Cleans the staged temp only; the installed binary is never deleted-first.
                 try { if (File.Exists(tempBin)) File.Delete(tempBin); } catch { }
             }
         }
@@ -488,6 +466,33 @@ public class WgturnUpdater
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Replace <paramref name="targetPath"/> with the staged download via
+    /// <c>File.Move(overwrite: true)</c>. If the move fails, the working
+    /// binary stays intact. Internal for testability.
+    /// </summary>
+    internal static void InstallDownloadedBinary(string tempBin, string targetPath)
+    {
+        try
+        {
+            File.Move(tempBin, targetPath, overwrite: true);
+        }
+        catch (UnauthorizedAccessException ua)
+        {
+            throw new WgturnDownloadException(
+                WgturnErrorCategory.FileSystem,
+                $"Permission denied writing to {targetPath}. Run VPNRouter as administrator.",
+                ua);
+        }
+        catch (IOException ioe)
+        {
+            throw new WgturnDownloadException(
+                WgturnErrorCategory.FileSystem,
+                $"Couldn't install wgturn-cli (antivirus or in-use file?): {ioe.Message}",
+                ioe);
+        }
+    }
 
     /// <summary>
     /// Wrap <see cref="IHttpClient.SendAsync"/> for GitHub REST endpoints
