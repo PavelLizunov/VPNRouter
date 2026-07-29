@@ -33,6 +33,11 @@ public class RunState
 
     public string ActiveProfile { get; set; } = string.Empty;
     public int SingBoxPid { get; set; }
+
+    // CLI-1: PID of the `start` process that owns the sing-box child.
+    // Default 0 for pre-existing state files (stop falls back to child-kill).
+    public int OwnerPid { get; set; }
+
     public DateTime StartedAt { get; set; }
     public List<string> ProcessNames { get; set; } = new();
 }
