@@ -489,8 +489,8 @@ public partial class MainWindowViewModel
             {
                 _logger.Warning(ex, "[Simple] Subscription refresh failed");
                 SmpErrorText = IsRussian
-                    ? $"Не удалось получить подписку: {ex.Message}"
-                    : $"Couldn't fetch the subscription: {ex.Message}";
+                    ? $"Не удалось получить подписку: {CrashReporter.ScrubSecrets(ex.Message)}"
+                    : $"Couldn't fetch the subscription: {CrashReporter.ScrubSecrets(ex.Message)}";
                 return;
             }
         }
