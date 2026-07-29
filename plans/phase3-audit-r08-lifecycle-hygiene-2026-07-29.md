@@ -149,32 +149,114 @@ refutation proof.
 
 ## 11. Remote-only verification gates
 
-- [ ] Gate 1 — Build clean (remote CI): 0 errors (Option A) / N/A (Option B).
-- [ ] Gate 2 — Tests green (remote CI): lifecycle test passes (Option A) / N/A (Option B).
-- [ ] Gate 3 — Docs: brief Outcome filled with the refutation proof and the A/B decision.
-- [ ] Gate 4 — Self-review: confirm release-before-dispose ordering unchanged (static).
-- [ ] Gate 5 — MCP verify: N/A (Core lifecycle hygiene).
-- [ ] Gate 6 — Characterization diff: N/A.
+- [-] Gate 1 — Build clean (remote CI): N/A (Option B — no code change).
+- [-] Gate 2 — Tests green (remote CI): N/A (Option B — no code change).
+- [x] Gate 3 — Docs: brief Outcome filled with the refutation proof and the A/B decision.
+- [x] Gate 4 — Self-review: release-before-dispose ordering confirmed unchanged (static trace).
+- [-] Gate 5 — MCP verify: N/A (Core lifecycle hygiene).
+- [-] Gate 6 — Characterization diff: N/A.
 
-## 12. Outcome (PENDING — filled after merge)
+## 12. Outcome (filled 2026-07-29)
 
-**Status**: PENDING
-**Decision**: PENDING (Option A code fix / Option B close-with-no-code)
-**Commits**: PENDING
-**Pushed**: PENDING
-**Test deltas**: PENDING
-**Files changed**: PENDING
+**Status**: RESOLVED — Option B (close with no code)
+**Decision**: Option B. The residual handle-churn edge is not reachable in any
+normal supported flow. YAGNI — no product code or test change is justified.
+**Commits**: this Option B decision is recorded by the current documentation
+commit on PR #63 (no implementation commit)
+**Pushed**: PR #63 documentation branch
+**Test deltas**: +0 / -0
+**Files changed**: 1 (this brief only)
+
+### P1 refutation reconfirmed (static trace, commit b39a28c3)
+
+[FACT] `Dispose()` (`:129-143`) calls `Release()` BEFORE disposing the
+semaphore handle. `Release()` (`:108-127`) gates on `_owned`/`_semaphore`,
+NOT `_disposed`. The named semaphore count is restored on every cycle.
+
+[FACT] `SingBoxManager` stop/dispose ordering is release-before-dispose:
+1. `SingBoxManager.Dispose()` (`:335-348`) calls `Stop()` first.
+2. `Stop()` calls `StopInternal(releaseLock: true)`.
+3. All four `StopInternal` exit paths (Linux capability `:195`, pkexec/macOS
+   `:243`, Windows post-crash `:259`, Windows graceful `:354`) execute
+   `if (releaseLock) _tunLock.Release()` in their `finally` blocks.
+4. After `Stop()` returns, `Dispose()` calls `_tunLock.Dispose()` (`:348`),
+   which internally calls `Release()` again (no-op: `_owned` is already
+   false), then disposes the semaphore handle and nulls `_instance`.
+
+[FACT] The `OnAppDomainProcessExit` handler (`:253-256`) calls
+`_tunLock.Dispose()`, gated on `Volatile.Read(ref _disposed) == 0`. It
+never calls `TryAcquire()`.
+
+[INFER] The original P1 claim ("2nd Dispose returns early, never releases
+the named semaphore, blocks other processes") is impossible: the first
+`Dispose()` releases the semaphore; the second is a correct no-op. No
+cross-process brick can occur.
+
+### Caller/reachability proof for the residual edge
+
+The residual requires calling `TryAcquire()` on a disposed
+`TunOwnershipLock` instance. Complete caller trace:
+
+[FACT] **Sole production caller of `TryAcquire()`**:
+`SingBoxManager.Lifecycle.cs:34` (`StartWithJson`).
+
+[FACT] **`_tunLock` assignment**: `SingBoxManager` ctor (`:223`) via
+`TunOwnershipLock.Instance(_logger)`.
+
+[FACT] **`Instance()` recreation** (`:53-61`): returns a FRESH instance
+when `_instance is null || _instance._disposed`. After `Dispose()` nulls
+`_instance`, the next `Instance()` call creates a new singleton.
+
+[FACT] **VpnEngine lifecycle**: `TeardownInternal()` (`:769-842`) calls
+`_singBox?.Dispose()` then `_singBox = null`. `StartupPipeline` (`:1181`)
+creates a NEW `SingBoxManager` for each connection cycle, whose ctor calls
+`Instance()` and gets a fresh lock.
+
+[FACT] **Disposed-manager guards**: `Restart()` and `ReloadConfigJson()`
+both check `Volatile.Read(ref _disposed) != 0` and bail. `StartWithJson`
+lacks this guard but is only called on a freshly-constructed manager via
+`StartupPipeline.LaunchSingBoxAsync`.
+
+[FACT] **No other production code calls `TryAcquire()`**. All other
+`TunOwnershipLock` references in production code use the static
+observation APIs (`IsOwnedByAnyone()`, `ProbeOwnership()`) or
+`RegisterExecutablePath()` — none of which re-arm the semaphore on a
+disposed instance.
+
+[INFER] The stale-reference edge requires: (a) holding a reference to a
+disposed instance AND (b) calling `TryAcquire()` on it directly, bypassing
+`Instance()`. This is a programming error, not a reachable state in any
+supported flow (desktop UI connect/disconnect/reconnect, Windows Service,
+CLI, HealthMonitor restart). The singleton recreation via `Instance()` is
+the structural guard that makes this unreachable.
+
+### Option B rationale
+
+Per brief section 4: "if the residual is judged not worth a change (the
+singleton is recreated on the normal path; the churn is a single
+finalizer-closed handle in a rare edge), document that decision in the
+Outcome and close the brief WITHOUT a product change."
+
+The residual is a theoretical handle churn on a path that requires misuse
+of the API (calling `TryAcquire()` on a disposed instance obtained outside
+`Instance()`). Adding a `_disposed` guard to `TryAcquire()` would defend
+against a programming error that no current or foreseeable caller commits.
+A test for this guard would test a scenario that cannot arise in production.
+YAGNI is the correct resolution.
 
 **Gate results:**
-- [ ] Gate 1: PENDING
-- [ ] Gate 2: PENDING
-- [ ] Gate 3: PENDING
-- [ ] Gate 4: PENDING
-- [-] Gate 5: N/A — Core lifecycle hygiene
+- [-] Gate 1: N/A — no code change (Option B)
+- [-] Gate 2: N/A — no code change (Option B)
+- [x] Gate 3: brief Outcome filled with refutation proof and A/B decision
+- [x] Gate 4: self-review — release-before-dispose ordering confirmed
+      unchanged via static trace of all four StopInternal exit paths +
+      SingBoxManager.Dispose + OnAppDomainProcessExit
+- [-] Gate 5: N/A — Core lifecycle hygiene, no UI surface
 - [-] Gate 6: N/A
 
-**Surprises encountered**: PENDING
-**Follow-ups spawned**: PENDING
+**Surprises encountered**: none — the code matches the brief's analysis
+exactly; no additional callers or edge paths found.
+**Follow-ups spawned**: none
 
 ## 13. Rollback
 

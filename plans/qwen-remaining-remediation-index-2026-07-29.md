@@ -199,7 +199,12 @@ FullTunnel profile, чтобы kill-switch gate (StartupPipeline.cs:1084) мог
 существующие helpers; без speculative abstractions. Напиши 2 теста на capturing
 fake: full-tunnel + profile BlockOnVpnFail=true -> CreateBlockRules вызван с
 isFullTunnel=true (падает на старом коде); full-tunnel + нет block intent ->
-НЕ вызван (guard от over-arming). НЕ запускай локальные build/test/app/binary/
+НЕ вызван (guard от over-arming). Проверь, что baseline
+VpnEngineHotReloadLifecycleTests.cs:550-552 (ActiveProfile="") остаётся зелёным.
+Flag в PR description: §4 Simple-mode decision gate (Simple full-tunnel теперь
+армит kill-switch на Linux/macOS, потому что ActiveProfile держит SimpleSplitProfile
+с BlockOnVpnFail=true профилями — нужно явное owner sign-off; альтернатива WONTFIX).
+НЕ запускай локальные build/test/app/binary/
 service/installer, не применяй nftables/PF/netsh нигде, не скачивай binary, не
 делай VM/WinRM/ADB/MCP/live мутаций. Только чтение/поиск/редактирование кода и
 запись тестов. Commit/push/CI делает orchestrator. Без release/merge/tag/deploy.
