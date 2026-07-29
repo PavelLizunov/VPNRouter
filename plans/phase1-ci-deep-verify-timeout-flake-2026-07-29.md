@@ -1,6 +1,6 @@
 # Phase 1 — CI flake: DeepVerifyProbeCancellationTests client-timeout shape
 
-Status: PENDING (awaiting orchestrator push + GitHub CI)
+Status: PASS (code-only / remote-CI scope)
 Date: 2026-07-29
 Branch base: `origin/main` @ `b39a28c3` (Merge PR #47)
 Scope: test-only. No production code changed.
@@ -164,10 +164,34 @@ Verification happens only after the orchestrator reviews and pushes the diff:
 
 ## Outcome
 
-PENDING — diff authored and statically self-reviewed; awaiting orchestrator push
-and GitHub CI result. Fill in after the `test` check completes:
+PASS — verified for the allowed code-only / remote-CI scope.
 
-- [ ] Pushed commit SHA: ____
-- [ ] CI run id / result: ____
-- [ ] `DeepVerifyProbeCancellationTests` both methods passed: ____
-- [ ] `tools/verify-last-commit-ci.ps1` exit code: ____
+- Plan commit: `ff30eb13f45b37213d845c4c56dfce4d579e9029`
+- Implementation commit: `916c93acabc5cb07760606d6226bbb1e6251316a`
+- Draft PR: https://github.com/PavelLizunov/VPNRouter/pull/51
+- Remote GitHub CI on the implementation commit: `test` SUCCESS, `grep`
+  SUCCESS, `characterization-windows` SKIPPED (non-visual test-only change).
+  No hard-red and no in-progress checks.
+- Files changed: this brief plus
+  `VPNRouter.Tests/DeepVerifyProbeCancellationTests.cs`.
+- Test delta: no new test method; one existing flaky assertion corrected to
+  retain the cancellation contract and accept the two documented runtime
+  exception shapes.
+
+Gate results:
+
+- Gate 1 / Gate 2: verified only by remote GitHub CI (no local build/test).
+- Gate 3: brief Outcome now filled (this section).
+- Gate 4: Qwen static self-review passed.
+- Gate 5: N/A — no UI.
+- Gate 6: N/A — no god-file split.
+
+Verification caveats (do not overstate):
+
+- The local git hook attempted `dotnet build` / `dotnet test`, but SDK 10.0.301
+  was absent and the commands stopped at SDK resolution. Local tests did NOT run.
+- No app, binary, service, installer, restore, VM/WinRM/ADB/MCP, or live check
+  was run.
+- No production code changed.
+
+Rollback: revert implementation commit `916c93ac`.
