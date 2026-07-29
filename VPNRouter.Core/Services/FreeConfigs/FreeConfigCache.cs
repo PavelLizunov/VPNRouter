@@ -128,8 +128,7 @@ public sealed class FreeConfigCache
             var tmp = _path + ".tmp";
             var json = JsonSerializer.Serialize(file, VPNRouter.Core.Json.AppJsonContext.Default.CacheFile);
             File.WriteAllText(tmp, json);
-            if (File.Exists(_path)) File.Delete(_path);
-            File.Move(tmp, _path);
+            File.Move(tmp, _path, overwrite: true);
         }
         catch (Exception ex)
         {
