@@ -106,6 +106,7 @@ jobs:
           SINGBOX_VER="1.13.14"
           curl -sSL -o /tmp/singbox.tar.gz \
             "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
+          echo "::notice::SINGBOX_INPUT_SHA256=$(sha256sum /tmp/singbox.tar.gz | awk '{print $1}')"
           tar -xzf /tmp/singbox.tar.gz -C /tmp
           cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/libcronet.so" publish/linux-x64/libcronet.so
           ls -lh publish/linux-x64/sing-box publish/linux-x64/libcronet.so
