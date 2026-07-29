@@ -1,0 +1,113 @@
+{
+  "shared": "READ-ONLY AUDIT. Do not edit, create, delete, format, or stage any repository file. Do not launch VPNRouter, sing-box, installers, services, firewall commands, network-changing tests, or anything that writes ProgramData. Read AGENTS.md and the relevant zone CLAUDE.md before reviewing. Inspect the current working tree, not only the latest diff. Trace real callers and callees end to end. Ignore formatting, naming taste, speculative refactors, and issues already listed in plans/OPEN-DEFECTS.md unless you have new evidence that materially changes their severity or scope. Report only reproducible code defects or missing tests that conceal a concrete defect. Every item must cite an existing file and exact line. If nothing survives, output []. Output only one JSON array using the schema from the reviewer brief.",
+  "tasks": [
+    {
+      "id": "01_vpn_lifecycle",
+      "title": "VPN lifecycle and process ownership",
+      "scope": "VPNRouter.Core/Services/VpnEngine.cs, SingBoxManager.cs, ProcessOwnership.cs, OrphanCleanup.cs and every caller",
+      "lens": "Trace connect, apply, disconnect, crash, app shutdown, orphan cleanup, intentional stop, and concurrent command paths. Look for stale state, double-start/stop, process takeover, cancellation misuse, tunnel resurrection, disposal gaps, and a UI/service state that can disagree with the real sing-box process."
+    },
+    {
+      "id": "02_health_failover",
+      "title": "Health monitoring and automatic failover",
+      "scope": "VPNRouter.Core/Services/HealthMonitor.cs, failover/probe/auto-select services, connection-health classifier/state/log stream, and their VpnEngine integration",
+      "lens": "Follow timers, retries, probes, server selection, hot reload, restart, disconnect races, app sleep/resume, and cancellation token ownership. Seek false failover, fail-open routing, server state committed before reload success, leaked tasks, or a user disconnect that can be undone."
+    },
+    {
+      "id": "03_config_dns_routing",
+      "title": "sing-box configuration, DNS, routing and leak protection",
+      "scope": "VPNRouter.Core/Services/ConfigGenerator.cs, CustomConfigInjector.cs, LeakProtection.cs, DNS hardening services, Models/VPNConfig.cs, and all generation callers",
+      "lens": "Trace every routing mode and protocol to generated sing-box 1.13 config. Check route.final, missing outbounds, DNS detours/bootstrap, strict DNS, IPv4/IPv6, full/include/exclude modes, custom JSON migration, Apply parity, and whether malformed or empty inputs fail closed before process start."
+    },
+    {
+      "id": "04_process_split_firewall",
+      "title": "Process routing, split-tunnel driver and kill-switch",
+      "scope": "ProcessScanner, ProcessQuery, RoutingAppListEditor, SplitTunnelDriver*, FirewallManager, IFirewallManager, Platform/Linux/LinuxFirewallManager.cs, Platform/macOS/MacFirewallManager.cs and their callers",
+      "lens": "Check case preservation, wildcard resolution, process handle lifetime, kernel-driver state transitions, WFP/nftables/pf cleanup, full-tunnel intent, empty process lists, IPv6, crash recovery, privilege failures, and engage/disengage ordering. Focus on host-brick, leak, or unrelated-process impact."
+    },
+    {
+      "id": "05_inputs_subscriptions_freeconfigs",
+      "title": "Settings, migrations, subscriptions, profiles and free configs",
+      "scope": "SettingsLoader/Migrator, ProfileManager, SubscriptionFetcher/Resolver, VlessUriParser, VlessServersResolver, Services/FreeConfigs, user profile/import parsing, and their callers",
+      "lens": "Treat YAML, JSON, URIs, HTTP bodies, cache files, profile files and remote pools as untrusted. Check size/time bounds, malformed-data recovery, atomic writes, stale-cache preservation, dedupe identity, secret handling, parser ambiguity, migration data loss, and subscription-to-generator ordering."
+    },
+    {
+      "id": "06_protocol_transports",
+      "title": "Protocol and transport parity",
+      "scope": "VLESS/Reality, AWG/AmneziaWG, XHTTP, Hysteria2, TUIC, SOCKS/HTTP, naive, DNS tunnel, deep verifier, server view models and feature gates",
+      "lens": "For each accepted URI/config path, trace parse -> model -> feature gate -> generation -> leak validation -> deep verification -> display. Find fields lost or decoded twice, unsupported combinations accepted too late, desktop/Android divergence, wrong UDP-native assumptions, or a protocol path that silently routes direct."
+    },
+    {
+      "id": "07_desktop_mvvm",
+      "title": "Desktop MVVM state and user workflows",
+      "scope": "VPNRouter.App/ViewModels, MainWindowViewModel partials, SimpleInputDetector, commands, navigation, dialogs, tray/startup behavior and Core integration",
+      "lens": "Trace simple and advanced connect, edit/apply, import, auto-connect, minimize-to-tray, shutdown, diagnostics, and error flows. Seek async command reentrancy, stale closures, cross-thread property updates, incorrect CanExecute, saved state diverging from runtime, swallowed exceptions, and event/timer subscriptions that outlive the window."
+    },
+    {
+      "id": "08_avalonia_ui",
+      "title": "Avalonia views, layout, localization and accessibility",
+      "scope": "VPNRouter.App/**/*.axaml, code-behind, Styles/Tokens.axaml, Strings.cs, converters and view-related tests",
+      "lens": "Inspect every page at narrow/minimum window assumptions. Find clipped or non-wrapping controls, nested scrolling traps, invisible focus, keyboard-only blockers, invalid bindings, hardcoded user strings, missing Ru/En entries, theme contrast regressions, and code-behind lifetime/race defects. Do not report subjective visual taste."
+    },
+    {
+      "id": "09_update_install_recovery",
+      "title": "Update, install, rollback and self-repair",
+      "scope": "Updater/SelfRepair/StartupHost services, update-helper.cmd, VPNRouter.GUI, build.ps1 update packaging, packaging/windows installers, checksums and update tests",
+      "lens": "Trace stable/prerelease discovery, download, signature/hash checks, extraction, staging, trampoline/helper application, runtime bootstrap, locked files, rollback, relaunch and cleanup. Test mentally for old-version -> current-version upgrades, interrupted writes, path traversal, quoting/injection, AV quarantine, insufficient disk, and partial runtime/app mismatch."
+    },
+    {
+      "id": "10_cli_service_tools",
+      "title": "CLI, Windows Service and auxiliary tools",
+      "scope": "VPNRouter.CLI, VPNRouter.Service, VPNRouter.Tools, service install/uninstall/control paths and shared Core entry points",
+      "lens": "Check argument parsing, privilege boundaries, service stop/start races, config path identity, process ownership, stdout/stderr exit semantics, cancellation, disposal, update commands and parity with desktop safeguards. Find commands that bypass resolution/leak checks or can target unrelated processes/files."
+    },
+    {
+      "id": "11_android",
+      "title": "Android VPN lifecycle and desktop parity",
+      "scope": "VPNRouter.Android, AndroidApp.*, VpnService/libbox integration, permissions, foreground notifications, persistence, imports and Android-specific build configuration",
+      "lens": "Trace permission grant/deny, service start/stop/restart, process death, device reboot, activity recreation, background restrictions and configuration handoff. Find lifecycle leaks, stale connected state, secrets in intents/logs, missing fail-closed behavior, protocol/config divergence, and version/update mismatches."
+    },
+    {
+      "id": "12_packaging_platforms",
+      "title": "Windows, Linux and macOS packaging",
+      "scope": "packaging, build-linux.ps1, build-mac.sh, build.ps1 platform asset creation, desktop entry/service scripts, uninstallers, Homebrew/APT/winget metadata",
+      "lens": "Trace clean install, upgrade, uninstall and first launch on each OS. Check file ownership/modes, TUN capabilities, sudo boundaries, spaces/quoting, architecture selection, bundled sing-box version, config preservation, stale files, service cleanup and artifact contents. Do not execute installers."
+    },
+    {
+      "id": "13_ci_release_supply_chain",
+      "title": "CI, release gates and software supply chain",
+      "scope": ".github/workflows, build scripts, hooks, version checks, dependency download scripts, release asset generation and integrity tests",
+      "lens": "Seek paths where a red commit or incomplete/wrong-architecture asset can ship, version/tag drift, mutable or unverified executable downloads, secret exposure, cache poisoning, overly broad workflow permissions, fork-PR hazards, missing fail-fast behavior and release/update artifact mismatch."
+    },
+    {
+      "id": "14_security_privacy",
+      "title": "Security and privacy threat review",
+      "scope": "Whole repository, prioritizing process execution, shell/PowerShell/cmd construction, archive extraction, HTTP/local APIs, subscriptions, diagnostics, firewall, elevated helpers and secret-bearing models",
+      "lens": "Assume remote subscription/profile/asset data and local low-privilege inputs are malicious. Find command or argument injection, path traversal, symlink/reparse abuse, insecure temp files, local API exposure, TLS/auth bypass, TOCTOU, privilege escalation, secret logging/export, and fail-open network behavior. Require a concrete exploit path."
+    },
+    {
+      "id": "15_performance_resources",
+      "title": "Performance, concurrency and resource lifetime",
+      "scope": "Whole product code, especially polling loops, process enumeration, HttpClient/WebSocket, timers, cancellation sources, events, Avalonia dispatch, file watchers and large parsing pipelines",
+      "lens": "Find leaks and unbounded work that matter during long uptime: Process handles, sockets, streams, timers, Tasks, event handlers, UI polling while hidden, duplicate concurrent refreshes, unbounded collections/bodies, lock inversion/deadlock and synchronous UI-thread I/O. Ignore micro-optimizations."
+    },
+    {
+      "id": "16_tests_contracts",
+      "title": "Test suite validity and contract gaps",
+      "scope": "VPNRouter.Tests plus production code it characterizes, test filters, hash snapshots and CI test commands",
+      "lens": "Find false-positive tests, tests that never run in intended gates, brittle hashes masking semantic drift, platform-conditional code compiled out, dangerous code with only mocked happy paths, and production branches whose concrete failure would escape every current test. Report only gaps tied to a plausible real defect."
+    },
+    {
+      "id": "17_antiblock_updaters",
+      "title": "Zapret, TgProxy, wgturn and native dependency updaters",
+      "scope": "Zapret*, TgProxy*, Wgturn*, native dependency manifests/builders, profiles/tool integration, updater UI and related tests",
+      "lens": "Trace download -> integrity -> extraction -> install -> launch -> update -> cleanup. Check executable trust, version/architecture selection, archive traversal, quoting, process ownership, privilege, rollback, stale binaries, port conflicts, secret files and behavior when upstream metadata is malformed or unavailable."
+    },
+    {
+      "id": "18_diagnostics_observability",
+      "title": "Diagnostics, logging and recoverability",
+      "scope": "Logging, Diagnostics*, SupportBundle*, health/status reporting, crash capture, config redaction, log rotation, UI diagnostics and test-VM support paths",
+      "lens": "Check that failures surface accurately without leaking URLs, UUIDs, Reality keys, tokens, local paths or user data. Find unbounded logs/bundles, broken redaction variants, diagnostics that mutate runtime, stale status claims, exceptions swallowed without recovery, and support exports that include secrets."
+    }
+  ]
+}
