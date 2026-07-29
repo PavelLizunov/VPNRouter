@@ -610,7 +610,10 @@ update:
         Assert.Equal("Wire-TUN", settings.Tun.InterfaceName);
         Assert.Equal("10.0.0.1/24", settings.Tun.Ipv4Address);
         Assert.True(settings.Tun.Ipv6Enabled);
-        Assert.Equal(1420, settings.Tun.Mtu);
+        // DATA-3: the fixture's mtu: 1500 migrates v6->v7 to 1280, and the v7->v8
+        // step (RewritesDefaultsAndInvalidOnly) preserves an explicit 1280 rather
+        // than rewriting it to the 1420 product default.
+        Assert.Equal(1280, settings.Tun.Mtu);
         Assert.False(settings.Tun.AutoRoute);
         Assert.True(settings.Tun.StrictRoute);
         Assert.Single(settings.Tun.RouteExcludeAddress);
