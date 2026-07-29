@@ -247,22 +247,24 @@ Android build (Gradle compile in CI if enabled).
 - [ ] **Gate 5 — UI/live**: DEFERRED by explicit owner constraint (no local launch/MCP/VM/ADB). Do NOT fake PASS.
 - [ ] **Gate 6 — Characterization**: N/A (no god-file split; no MVM surface change).
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN (dotnet); ANDROID COMPILE BLOCKED/DEFERRED (upstream toolchain)
+**Commits**: `c0ef40f4` (fix(cli): stop owner gracefully and validate child)
+**Pushed**: draft PR #62, branch `codex/qwen-audit-p07-cli-android-security-v2-2026-07-29` (PR #59 CLOSED as superseded; identical diff)
+**Test deltas**: +54 / -0 (1 new test file: `P07CliStopSourceGuardTests.cs` +54)
+**Files changed**: 5 · +154 / -5
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI): <output>
-- [ ] Gate 2 tests (remote CI): <output>
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review / security-review: <output>
-- [-] Gate 5 UI/live: deferred (owner constraint) — not live-verified
+- [x] Gate 1 build (remote CI — dotnet): PASS — dotnet test run 30447625000 SUCCESS
+- [!] Gate 1 build (remote CI — Android): BLOCKED/DEFERRED — Android build probe 30446715950 (from superseded PR #59, identical diff) FAILED before Java compilation on the workflow's known upstream NU1102: `Microsoft.NETCore.App.Runtime.Mono.linux-x64` version 10.0.10 unavailable. This is an upstream toolchain limitation, not a product-code failure. AND-1 (`VpnRouterService.java` scrub) is a 5-line Java change verified by static inspection only.
+- [x] Gate 2 tests (remote CI): PASS — run 30447625000 SUCCESS; new `P07CliStopSourceGuardTests` green; full existing suite stayed green. No live CLI/Android test.
+- [x] Gate 3 docs: PASS — Outcome filled; no README change needed
+- [x] Gate 4 self-review / security-review: PASS — static self-review performed during implementation; ownership check, stop-request protocol, and Android scrub reviewed
+- [-] Gate 5 UI/live: deferred (owner constraint) — no live CLI/Android test
 - [-] Gate 6 characterization: N/A
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: Android build probe failed on upstream NU1102 (`Microsoft.NETCore.App.Runtime.Mono.linux-x64` 10.0.10 unavailable) before reaching Java compilation — a known workflow-level toolchain gap, not caused by this change.
+**Follow-ups spawned**: Android compile verification deferred until the upstream Mono runtime package is available in the CI NuGet feed.
+**Rollback**: `git revert c0ef40f4` / branch delete
