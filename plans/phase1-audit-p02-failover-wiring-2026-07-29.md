@@ -193,22 +193,23 @@ dispose-once (`FailoverRestartConcurrencyAuditTests`); user-intent rollback (`Au
 - [ ] **Gate 5 — UI/live**: DEFERRED by explicit owner constraint (no local launch/MCP/VM). Do NOT fake PASS.
 - [ ] **Gate 6 — Characterization**: N/A (no god-file split; no MVM surface change).
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN
+**Commits**: `23ed44a0` (fix(core): dispatch failover restart by phase)
+**Pushed**: draft PR #57, branch `codex/qwen-audit-p02-failover-wiring-2026-07-29`
+**Test deltas**: +209 / -0 (1 new test file: `VpnEngineFailoverPhaseDispatchTests.cs` +209)
+**Files changed**: 2 · +256 / -45
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI): <output>
-- [ ] Gate 2 tests (remote CI): <output>
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review / concurrency review: <output>
+- [x] Gate 1 build (remote CI): PASS — dotnet test run 30444418700 SUCCESS
+- [x] Gate 2 tests (remote CI): PASS — run 30444418700 SUCCESS; new `VpnEngineFailoverPhaseDispatchTests` green; full existing suite (concurrency/failover tests) stayed green
+- [x] Gate 3 docs: PASS — Outcome filled; no README change needed
+- [x] Gate 4 self-review / concurrency review: PASS — static self-review performed during implementation; phase-aware failover dispatch, lifecycle-gate/teardown/session-cancellation preservation reviewed
 - [-] Gate 5 UI/live: deferred (owner constraint) — not live-verified
 - [-] Gate 6 characterization: N/A
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: none
+**Follow-ups spawned**: none
+**Rollback**: `git revert 23ed44a0` / branch delete
