@@ -212,22 +212,23 @@ unless the test surface changes).
 - [ ] **Gate 5 — UI/live**: DEFERRED by explicit owner constraint (no local launch/MCP/VM). Do NOT fake PASS. Note "deferred — Smart Connect path not live-verified" in Outcome.
 - [ ] **Gate 6 — Characterization**: verify MVM characterization hash; if changed, confirm the delta is solely the new `SelectedSubscriptionServer` assignment.
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN
+**Commits**: `70cb3a8a` (fix(app): persist Smart Connect winner)
+**Pushed**: draft PR #56, branch `codex/qwen-audit-p06-smart-connect-persistence-2026-07-29`
+**Test deltas**: +77 / -0 (1 new test file: `SmartConnectPersistenceTests.cs` +77)
+**Files changed**: 2 · +83 / -0
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI): <output>
-- [ ] Gate 2 tests (remote CI): <output>
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review: <output>
-- [-] Gate 5 UI/live: deferred (owner constraint) — not live-verified
-- [ ] Gate 6 characterization: <output>
+- [x] Gate 1 build (remote CI): PASS — dotnet test run 30444041090 SUCCESS
+- [x] Gate 2 tests (remote CI): PASS — run 30444041090 SUCCESS; new `SmartConnectPersistenceTests` green; full existing suite (ViewModelTests, HeadlessGuiTests, characterization) stayed green
+- [x] Gate 3 docs: PASS — Outcome filled; no README change needed
+- [x] Gate 4 self-review: PASS — static self-review performed during implementation; VM state synchronization change reviewed
+- [-] Gate 5 UI/live: deferred (owner constraint) — Smart Connect path not live-verified
+- [x] Gate 6 characterization: PASS — MVM characterization hash unchanged (CI green; the fix adds a `SelectedSubscriptionServer` assignment in the Smart Connect path only, which the characterization test does not exercise)
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: none
+**Follow-ups spawned**: none
+**Rollback**: `git revert 70cb3a8a` / branch delete

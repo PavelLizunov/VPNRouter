@@ -534,6 +534,12 @@ public partial class MainWindowViewModel
                         _logger.Information(
                             "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
                         _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
+
+                        // Sync UI selection to winner before SaveSettings re-derives from it.
+                        var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
+                        if (winnerVm is not null)
+                            SelectedSubscriptionServer = winnerVm;
+
                         SaveSettings();
                     }
 
