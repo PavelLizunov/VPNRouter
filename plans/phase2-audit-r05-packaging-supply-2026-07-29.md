@@ -198,24 +198,54 @@ SUP-4) after the orchestrator pushes. No local `wget`/`curl`/`go build`/actionli
 - [ ] Gate 5 — MCP verify: N/A (build infra only).
 - [ ] Gate 6 — Characterization diff: N/A.
 
-## 12. Outcome (PENDING — filled after merge)
+## 12. Outcome (PARTIAL — pre-final-commit state)
 
-**Status**: PENDING
-**Commits**: PENDING
-**Pushed**: PENDING
-**Test deltas**: PENDING
-**Files changed**: PENDING
+**Status**: PARTIAL — final fail-closed code is uncommitted (PENDING final
+commit); final remote Linux + macOS verification after that commit still PENDING.
+
+**Branch base**: `63a4856b` (P08-v2 / PR #61).
+
+**Commits on branch**:
+- `d767586d` — docs: add R05 brief.
+- `0d5ee149` — provisional implementation + remote-only digest capture.
+- Final fail-closed code: PENDING final commit (not yet committed).
+
+**Pushed**: `d767586d` and `0d5ee149` pushed to `origin` branch.
+
+**Files changed** (cumulative diff vs base `63a4856b`): 3 files, +290/-0;
+0 new test files.
+- brief (`plans/phase2-audit-r05-packaging-supply-2026-07-29.md`) +274
+- `build-mac.sh` +14
+- `.github/workflows/build-linux.yml` +2
+
+**Remote CI runs**:
+- `30457261962` for `d767586d`: success (test + characterization-windows).
+- `30457593302` for `0d5ee149` (build-linux capture): success;
+  `upload_to_release=false`, release upload skipped; captured sing-box SHA256
+  `f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697`.
+- `30457608906` for `0d5ee149`: success (test + characterization-windows).
+
+**Self-review**: Qwen final static Ponytail review PASS — no unnecessary lines,
+no shell bug. No local build/test/script/binary/app/network/download was run.
 
 **Gate results:**
-- [ ] Gate 1: PENDING (Linux + Mac CI)
-- [ ] Gate 2: PENDING
-- [ ] Gate 3: PENDING
-- [ ] Gate 4: PENDING
+- [ ] Gate 1: PENDING — final remote Linux + macOS CI after final commit
+- [ ] Gate 2: PENDING — final remote runs after final commit
+- [x] Gate 3: PASS — brief Outcome filled; pins' capture source + update
+  procedure documented in commit message
+- [x] Gate 4: PASS — static shell/YAML review; no mutable `continuous`
+  executable URL introduced
 - [-] Gate 5: N/A — build infra only
 - [-] Gate 6: N/A
 
-**Surprises encountered**: PENDING
-**Follow-ups spawned**: PENDING
+**Surprises encountered**:
+- Upstream sing-box release metadata/body/assets and local git history carried
+  no sing-box archive digest, so the SHA256 was captured on a GitHub-hosted
+  runner (remote-only).
+- Local repo had no wgturn pin, so the GitHub metadata main HEAD
+  `416991d2633b497fd37169782f2ef2eab003fa6b` was pinned.
+
+**Follow-ups spawned**: none within R05.
 
 ## 13. Rollback
 
