@@ -220,7 +220,11 @@ no installer). Execution in remote GitHub CI.
 **Commits**: PENDING
 **Pushed**: PENDING
 **Test deltas**: PENDING
-**Files changed**: PENDING
+**Files changed**:
+- `VPNRouter.Core/Services/EmergencyChannel/EmergencyChannelManager.cs` (SEC-3)
+- `VPNRouter.Core/Services/CrashReporter.cs` (OBS-2)
+- `VPNRouter.Tests/EmergencyChannelManagerTests.cs` (+3 tests)
+- `VPNRouter.Tests/CrashReporterScrubberTests.cs` (+3 tests)
 
 **Gate results:**
 - [ ] Gate 1: PENDING

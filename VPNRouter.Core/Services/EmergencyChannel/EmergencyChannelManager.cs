@@ -158,32 +158,7 @@ public class EmergencyChannelManager : IDisposable
 
     private void LaunchProcess(EmergencyChannelConfig config)
     {
-        // wgturn-cli arg shape (cmd/wgturn-cli/connect_url.go):
-        //   wgturn-cli connect-url -url <wgturn://...> -vk-link <https://vk.com/call/join/...>
-        //
-        // Both forms are accepted by Go's flag package:
-        //   connect-url -url <URL> -vk-link <LINK>     ← we use this (explicit, safest)
-        //   connect-url <URL> -vk-link <LINK>          ← AVOID: Go's flag.Parse stops
-        //                                                 at first non-flag positional,
-        //                                                 so -vk-link gets eaten as a
-        //                                                 second positional and the
-        //                                                 URL/link pair is lost.
-        // Verified the explicit-flag form works in live test
-        // (plans/r9-actionable-without-stas.md Phase 2 verify step).
-        var args = ArgsBuilderOverride?.Invoke(config)
-            ?? $"connect-url -url \"{config.WgturnUrl}\" -vk-link \"{config.VkLink}\"";
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = _exePath,
-            Arguments = args,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        var psi = BuildProcessStartInfo(config);
 
         _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         _process.OutputDataReceived += OnStdLine;
@@ -197,6 +172,51 @@ public class EmergencyChannelManager : IDisposable
         State = EmergencyChannelState.Connected;
         _logger.Information("[EmergencyChannelManager] wgturn-cli started (PID {Pid})", _process.Id);
         Started?.Invoke(_process.Id);
+    }
+
+    // wgturn-cli arg shape (cmd/wgturn-cli/connect_url.go):
+    //   wgturn-cli connect-url -url <wgturn://...> -vk-link <https://vk.com/call/join/...>
+    //
+    // Both forms are accepted by Go's flag package:
+    //   connect-url -url <URL> -vk-link <LINK>     ← we use this (explicit, safest)
+    //   connect-url <URL> -vk-link <LINK>          ← AVOID: Go's flag.Parse stops
+    //                                                 at first non-flag positional,
+    //                                                 so -vk-link gets eaten as a
+    //                                                 second positional and the
+    //                                                 URL/link pair is lost.
+    // Verified the explicit-flag form works in live test
+    // (plans/r9-actionable-without-stas.md Phase 2 verify step).
+    //
+    // SEC-3 (audit R06): ArgumentList so a literal double-quote in
+    // WgturnUrl/VkLink stays one argv element (no flag injection).
+    // ArgsBuilderOverride keeps the plain-string form for stub binaries.
+    internal ProcessStartInfo BuildProcessStartInfo(EmergencyChannelConfig config)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = _exePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+
+        if (ArgsBuilderOverride is { } override_)
+        {
+            psi.Arguments = override_(config);
+        }
+        else
+        {
+            psi.ArgumentList.Add("connect-url");
+            psi.ArgumentList.Add("-url");
+            psi.ArgumentList.Add(config.WgturnUrl);
+            psi.ArgumentList.Add("-vk-link");
+            psi.ArgumentList.Add(config.VkLink);
+        }
+
+        return psi;
     }
 
     private void OnStdLine(object _, DataReceivedEventArgs e)

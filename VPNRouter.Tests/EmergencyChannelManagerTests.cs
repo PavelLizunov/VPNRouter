@@ -12,6 +12,71 @@ public class EmergencyChannelManagerTests
     private static EmergencyChannelConfig ValidConfig() =>
         new() { WgturnUrl = "wgturn://eyJ2IjoxfQ", VkLink = "https://vk.com/call/join/x" };
 
+    private static EmergencyChannelManager MakeManager() =>
+        new(
+            exePath: Path.Combine(Path.GetTempPath(), "nonexistent-wgturn.exe"),
+            logPath: Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log"));
+
+    // ── SEC-3 (audit R06): argument injection regression tests ──────────────
+
+    [Fact]
+    public void BuildProcessStartInfo_ProductionPath_ArgumentListShape()
+    {
+        using var manager = MakeManager();
+        var config = ValidConfig();
+
+        var psi = manager.BuildProcessStartInfo(config);
+
+        // Production path must use ArgumentList (not Arguments string).
+        Assert.Equal(5, psi.ArgumentList.Count);
+        Assert.Equal("connect-url", psi.ArgumentList[0]);
+        Assert.Equal("-url",        psi.ArgumentList[1]);
+        Assert.Equal(config.WgturnUrl, psi.ArgumentList[2]);
+        Assert.Equal("-vk-link",   psi.ArgumentList[3]);
+        Assert.Equal(config.VkLink,   psi.ArgumentList[4]);
+        // Arguments string must be empty when ArgumentList is used.
+        Assert.Equal(string.Empty, psi.Arguments);
+    }
+
+    [Fact]
+    public void BuildProcessStartInfo_UrlWithDoubleQuote_StaysSingleArgument()
+    {
+        // A crafted WgturnUrl containing a literal double-quote must remain
+        // one argv element. On the old quoted-string path the quote broke out
+        // and injected arbitrary flags (SEC-3).
+        using var manager = MakeManager();
+        var config = new EmergencyChannelConfig
+        {
+            WgturnUrl = "wgturn://evil\" -inject-flag \"pwned",
+            VkLink = "https://vk.com/call/join/x",
+        };
+
+        var psi = manager.BuildProcessStartInfo(config);
+
+        // The malicious URL must be exactly one element, unmodified.
+        Assert.Equal(5, psi.ArgumentList.Count);
+        Assert.Equal(config.WgturnUrl, psi.ArgumentList[2]);
+        // No extra elements injected.
+        Assert.DoesNotContain("-inject-flag", psi.ArgumentList);
+        Assert.DoesNotContain("pwned", psi.ArgumentList);
+    }
+
+    [Fact]
+    public void BuildProcessStartInfo_Override_UsesArgumentsString()
+    {
+        // The ArgsBuilderOverride test seam must still produce a plain
+        // Arguments string so stub binaries (cmd.exe) work correctly.
+        using var manager = MakeManager();
+        manager.ArgsBuilderOverride = _ => "/c ping -n 2 127.0.0.1";
+
+        var psi = manager.BuildProcessStartInfo(ValidConfig());
+
+        Assert.Equal("/c ping -n 2 127.0.0.1", psi.Arguments);
+        Assert.Empty(psi.ArgumentList);
+    }
+
+    // ── lifecycle state transitions ─────────────────────────────────────────
+
     [Fact]
     public void Stop_BeforeStart_IsIdempotent()
     {
