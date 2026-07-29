@@ -102,19 +102,19 @@ calls. Codex validates every Qwen claim against the repository before editing.
 
 ## Outcome (filled 2026-07-30)
 
-**Status**: PARTIAL - implementation and Windows smoke pass; GitHub Linux CI pending.
-**Commits**: implementation commit pending.
+**Status**: PARTIAL - implementation, Linux CI and Windows smoke pass;
+`test-update` rerun pending.
+**Commits**: `875b0b70` plus the pending CLI build-unblock follow-up.
 **Test deltas**: +13 focused regression cases.
-**Files changed**: 18 files, +266 / -33 before this Outcome update.
+**Files changed**: 20 files including the two-line CLI build unblock.
 
 **Verification gate results**:
 
 - [x] Changed-project build: `VPNRouter.Tests.csproj` built Core, App and
   Tests with 0 warnings and 0 errors.
-- [ ] Full solution build: blocked by two pre-existing errors in unchanged
-  `VPNRouter.CLI` (`ProcessOwnership` accessibility and the .NET 10
-  `RegisterWaitForSingleObject` timeout overload). `git diff origin/main --
-  VPNRouter.CLI` is empty.
+- [x] Full solution build: 0 errors after adding the missing CLI friend
+  assembly declaration and using the .NET 10 `Timeout.InfiniteTimeSpan`
+  overload. The build reports 227 pre-existing warnings.
 - [x] Focused tests: 13/13 green
   (`LinuxTunSandboxTests` plus
   `LinuxTunPermissionCrash_DisarmsAutomaticRestart`).
@@ -127,13 +127,17 @@ calls. Codex validates every Qwen claim against the repository before editing.
 - [x] Self-review: Qwen 3.8 completed the independent design review before
   implementation. Final adversarial diff runs were attempted in read-only
   zero-tool mode but timed out without findings; Codex static diff review and
-  focused executable tests passed.
+  focused executable tests passed. A focused Qwen 3.8 follow-up independently
+  confirmed both CLI compile fixes.
 - [x] Windows test VM: self-contained `win-x64` App launched on
   `windows-brat` (192.168.0.106), PID 924 in console session 1. UI Automation
   found one enabled responsive `MainWindow`; screenshot captured; recent log
   scan found no error patterns. The process was stopped and all temporary
   scheduled tasks were removed.
-- [ ] GitHub Linux build/tests: pending implementation push.
+- [x] GitHub Linux build/tests: `test` passed in 3m05s;
+  `go-test-windows` and `grep` passed.
+- [ ] GitHub Windows auto-update integration: first run exposed the two
+  baseline CLI compile errors; rerun pending the two-line fix.
 - [ ] Native NixOS AppImage/bubblewrap execution: no NixOS test host is
   connected. This remains a post-CI verification gap; the code does not claim
   that an unprivileged wrapper can create the host TUN.
@@ -145,10 +149,13 @@ calls. Codex validates every Qwen claim against the repository before editing.
   `dotnet-install.ps1`.
 - The repository's full Windows test suite assumes writable ProgramData and
   cannot run cleanly under the non-admin dev session.
+- The auto-update workflow publishes the entire Windows product, so touching
+  `UpdateChecker` exposed two unrelated CLI compile errors already present in
+  `main`. They were fixed with two one-line compatibility changes because the
+  package could not otherwise be tested.
 
 **Follow-ups spawned**:
 
-- Fix the two baseline `VPNRouter.CLI` .NET 10 compilation errors separately.
 - Build an official native Nix derivation/flake with a verified privileged
   sing-box deployment outside bubblewrap.
 

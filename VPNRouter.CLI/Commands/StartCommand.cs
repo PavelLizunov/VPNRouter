@@ -217,7 +217,7 @@ public class StartCommand : AsyncCommand<StartSettings>
                 stopEvent,
                 (_, _) => cts.Cancel(),
                 state: null,
-                timeout: Timeout.Infinite,
+                timeout: Timeout.InfiniteTimeSpan,
                 executeOnlyOnce: true);
         }
 
