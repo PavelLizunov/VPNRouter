@@ -10,10 +10,47 @@ Audit branch: `codex/qwen-full-app-audit-2026-07-28`
 
 Audit PR: https://github.com/PavelLizunov/VPNRouter/pull/48
 
+## 0. Qwen code-only execution mode
+
+Этот раздел имеет приоритет над любым последующим prompt/task в этом плане.
+Если позднее требование противоречит этому разделу, выполняется этот раздел.
+
+Каждая remediation-задача в этом плане выполняется через Qwen Code. Qwen —
+обязательный implementation/review engine, а не опция.
+
+Qwen разрешено:
+
+- читать, искать и редактировать source, test, workflow и documentation файлы;
+- описывать свои изменения и осматривать diff'ы;
+- использовать только лёгкие repository-inspection команды: чтение файлов,
+  `rg`, `git status`, `git diff`.
+
+Qwen запрещено:
+
+- запускать локальные build или test (`dotnet`, `go test`, Gradle, `npm`,
+  `cargo`, shell validation scripts, скомпилированные binary);
+- запускать VPNRouter, sing-box, installers, services, firewall tools,
+  update helpers, VM/WinRM/ADB automation или любое приложение;
+- скачивать или исполнять сторонние binary;
+- выполнять live platform commands, process kills, ACL changes, binary
+  updates, installer mutation или VM/device/brat validation.
+
+Qwen пишет test code, но не исполняет его локально. Validation происходит
+только в remote GitHub CI после commit/push, которые делает orchestrator.
+
+Release, ship, deploy, live verification и stable cut НЕ входят в этот план.
+Prompt P13 (rolling ship / post-ship verification) удалён из плана.
+
+Каждое упоминание «run/build/test/validate» в последующих task pools означает:
+написать или осмотреть соответствующий code, передать его orchestrator'у для
+push и дождаться remote GitHub CI; никогда не исполнять локально.
+
 ## 1. Назначение
 
 Этот документ — долговечная очередь работ по 39 находкам Qwen-аудита. Он
-предназначен для последующих Codex, Claude Code и других code-review сессий.
+предназначен для последующих Qwen Code code-only сессий (см. раздел 0).
+
+План содержит 13 prompt-пакетов: `P00`-`P12`.
 
 План решает четыре задачи:
 
@@ -57,8 +94,9 @@ adjudication: `CONFIRMED`, `PARTIALLY_CONFIRMED`, `REFUTED`, `STALE`,
 ### 3.1 До изменения кода
 
 - Зафиксировать текущий commit SHA и `git status`.
-- Выполнить session-start red-CI ritual из `AGENTS.md`.
-- Для Core/ViewModel/Android/platform задач запустить
+- Соблюсти session-start red-CI ritual из `AGENTS.md` (read-only осмотр CI
+  status; без локальных запусков).
+- Для Core/ViewModel/Android/platform задач следовать
   `.agents/skills/phase-task-launcher/SKILL.md`.
 - Прочитать все callers и sibling paths изменяемого метода.
 - Найти существующий helper/pattern до добавления нового.
@@ -69,8 +107,10 @@ adjudication: `CONFIRMED`, `PARTIALLY_CONFIRMED`, `REFUTED`, `STALE`,
 
 - Один root cause исправляется в общей точке, а не в каждом caller.
 - Не добавлять speculative abstraction или новую dependency.
-- Для нетривиальной логики оставить минимальный runnable regression check.
-- Не запускать VPNRouter, sing-box, installers, service или firewall на dev box.
+- Для нетривиальной логики оставить минимальный regression test; он
+  исполняется только в remote GitHub CI, не локально.
+- Qwen не запускает VPNRouter, sing-box, installers, service или firewall
+  нигде (см. раздел 0).
 - Не трогать `C:\Program Files\VPNRouter` и `%ProgramData%\VPNRouter`.
 - Сохранять unrelated user changes.
 
@@ -79,20 +119,13 @@ adjudication: `CONFIRMED`, `PARTIALLY_CONFIRMED`, `REFUTED`, `STALE`,
 - Каждый тематический пакет выполняется в отдельной
   `codex/<short-topic>` ветке от актуального `origin/main`.
 - Один PR содержит один root cause или небольшой связанный кластер.
-- После commit немедленно `git push -u origin HEAD`.
-- После каждого push запускать
-  `tools/verify-last-commit-ci.ps1` до следующего code change.
+- Commit и `git push -u origin HEAD` выполняет orchestrator после того, как
+  Qwen подготовил diff; Qwen ограничивается `git status`/`git diff`.
+- Проверку CI-статуса после push выполняет orchestrator
+  (`tools/verify-last-commit-ci.ps1`); Qwen не запускает validation scripts.
 - Красный PR не merge-ить.
-- Merge, tag, release, deploy и stable cut требуют явной команды владельца.
-
-### 3.4 Live verification
-
-- До release используются unit/contract/source tests.
-- После явной команды на rolling candidate обязательно выполнить
-  `post-ship-mcp-verify`.
-- Любая install/launch/UI/VPN проверка выполняется только на
-  `windows-brat` (`192.168.0.106`) через WinRM.
-- Никогда не заменять недоступный brat проверкой на dev box.
+- Merge требует явной команды владельца. Release, ship, deploy, live
+  verification и stable cut находятся вне этого плана (см. раздел 0).
 
 ## 4. Verdict и severity
 
@@ -215,11 +248,12 @@ P00 independent adjudication
   +--> P06 desktop/UI --------------+--> P11 cross-cut regression/bug-hunt
   +--> P07 CLI/Android -------------+               |
   +--> P08 packaging/supply chain --+               v
-  +--> P09 security/diagnostics ----+--> P12 ledger and PR integration
-  +--> P10 updater/resources -------+               |
-                                                  v
-                              P13 optional rolling ship, user-command only
+  +--> P09 security/diagnostics ----+--> P12 ledger and PR integration (final)
+  +--> P10 updater/resources -------+
 ```
+
+P12 — финальный documentation/ledger integration prompt. Release/ship/live
+verification удалены из плана (см. раздел 0).
 
 P01-P10 могут выполняться параллельно только после adjudication относящихся к
 ним ID. Они не должны изменять один общий worktree.
@@ -253,25 +287,26 @@ P01-P10 могут выполняться параллельно только п
 - Negative/edge case, который отличает фикс от прежнего поведения.
 - Использовать temp files/fake handlers/pure builders вместо live system state.
 - Не source-pin там, где можно проверить runtime contract.
-- Запустить targeted suite, затем required regression suite.
+- Написать targeted suite и required regression suite; Qwen не исполняет их
+  локально — исполнение только в remote GitHub CI после push orchestrator'ом.
 
 ### Type S — Safety and validation
 
-- `git diff --check`.
-- Build затронутых проектов.
-- Platform syntax/static validation.
+- `git diff --check` (осмотр diff, не запуск).
+- Никаких локальных build: статический осмотр затронутых проектов, build
+  проверяется только в remote CI.
+- Platform syntax проверяется статическим осмотром, без локального запуска.
 - Проверка отсутствия secret/absolute-path/log regressions.
-- Никаких live VPN действий на dev box.
+- Code-only режим: никаких live VPN/installer/process/firewall действий нигде.
 
 ### Type G — Git, CI and handoff
 
 - Обновить verdict/acceptance в task plan.
 - Отметить соответствующий ledger ID только после доказанного fix/refutation.
-- Commit без bypass hooks.
-- Немедленный push.
-- Дождаться фактического CI результата.
+- Commit/push выполняет orchestrator без bypass hooks.
+- Дождаться фактического результата remote GitHub CI.
 - Открыть/обновить draft PR.
-- Не ship без явной команды.
+- Release/ship/deploy/live verification вне этого плана (см. раздел 0).
 
 ## 9. Prompt P00 — завершить независимую adjudication всех 39 ID
 
@@ -302,8 +337,8 @@ P01-P10 могут выполняться параллельно только п
 
 ### Task pool T/S
 
-- [ ] Запускать только безопасные targeted tests.
-- [ ] Не запускать VPN/service/firewall/installers.
+- [ ] Read-only adjudication: не исполнять тесты локально (см. раздел 0).
+- [ ] Не запускать VPN/service/firewall/installers нигде.
 - [ ] Не менять code/ledger.
 - [ ] Проверить, что processed count равен 39.
 - [ ] Сохранить отчёт:
@@ -321,15 +356,16 @@ P01-P10 могут выполняться параллельно только п
 
 ```text
 Выполни Prompt P00 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0 «Qwen code-only execution mode»).
 Это независимая read-only adjudication 39 Qwen findings. Сначала прочитай
 AGENTS.md, .claude_handoff.md, relevant CLAUDE.md, RESULTS.md и весь Prompt P00.
 Попытайся опровергнуть каждый claim. Не меняй product code, tests или
 OPEN-DEFECTS.md. Разрешён только итоговый файл
 plans/qwen-audit-independent-verification-2026-07-28.md.
 Финал обязан содержать 39/39 verdict rows, точные file:line, final severity,
-confidence и coverage check. Не запускай VPNRouter, sing-box, installers,
-service или firewall. Не используй dev box для live validation.
+confidence и coverage check. Локальные build/test/launch запрещены; не запускай
+VPNRouter, sing-box, installers, service или firewall нигде.
 ```
 
 ## 10. Prompt P01 — desktop update integrity and repair
@@ -374,11 +410,12 @@ IDs: `UPD-1`, `UPD-2`
 
 ### Task pool S/G
 
-- [ ] Targeted update contract tests.
-- [ ] `go test`/build только для затронутого GUI helper.
-- [ ] Полный relevant updater suite.
+- [ ] Написать targeted update contract tests (исполнение только в remote CI).
+- [ ] Никаких локальных `go test`/build: статический осмотр GUI helper,
+  build проверяется в remote CI.
+- [ ] Написать/осмотреть полный relevant updater suite; исполнение в remote CI.
 - [ ] Reassess `UPD-1` P0/P1/P2 до ledger edit.
-- [ ] Draft PR; не ship.
+- [ ] Draft PR (commit/push выполняет orchestrator).
 
 ### Acceptance
 
@@ -391,12 +428,13 @@ IDs: `UPD-1`, `UPD-2`
 
 ```text
 Выполни Prompt P01 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для UPD-1/UPD-2.
-Используй phase-task-launcher. Сначала независимо adjudicate оба ID и
-зафиксируй final severity. Исправляй только confirmed root cause минимальным
-diff, переиспользуя существующие digest и SelfRepair temp-ps1 patterns.
-Добавь минимальные contract tests, выполни Type S/G, commit, немедленный push
-и draft PR. Не ship и не запускай installer/update на dev box.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для UPD-1/UPD-2 через
+Qwen Code (обязательно; см. раздел 0). Используй phase-task-launcher. Сначала
+независимо adjudicate оба ID и зафиксируй final severity. Исправляй только
+confirmed root cause минимальным diff, переиспользуя существующие digest и
+SelfRepair temp-ps1 patterns. Добавь минимальные contract tests, выполни
+Type S/G, подготовь diff для orchestrator (commit/push) и draft PR. Локальные
+build/test/launch запрещены; не запускай installer/update нигде.
 ```
 
 ## 11. Prompt P02 — lifecycle, TUN ownership and failover
@@ -441,11 +479,13 @@ IDs: `LIFE-1`, `FAIL-1`
 
 ### Task pool S/G
 
-- [ ] Run lifecycle/failover targeted suite.
-- [ ] Run mandated regression tests from `AGENTS.md`.
-- [ ] Bug-hunt the final diff.
+- [ ] Написать/осмотреть lifecycle/failover targeted suite; исполнение только
+  в remote CI.
+- [ ] Написать/осмотреть mandated regression tests из `AGENTS.md`; исполнение
+  в remote CI.
+- [ ] Bug-hunt the final diff (статический review, не запуск).
 - [ ] Ledger separates `LIFE-1` verdict from `FAIL-1`.
-- [ ] Draft PR; no release.
+- [ ] Draft PR (commit/push выполняет orchestrator).
 
 ### Acceptance
 
@@ -458,12 +498,14 @@ IDs: `LIFE-1`, `FAIL-1`
 
 ```text
 Выполни Prompt P02 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для LIFE-1/FAIL-1.
-Используй phase-task-launcher. Не считай LIFE-1 подтверждённым: сначала
-проверь Stop->Release->Dispose во всех путях. Для FAIL-1 проследи
-pre-start-dead -> post-start-failure end to end и исправь callback ownership
-в общей точке. Добавь минимальные concurrency/lifecycle tests, запусти
-bug-hunt, commit, push, CI и draft PR. Не запускай VPN на dev box.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для LIFE-1/FAIL-1 через
+Qwen Code (обязательно; см. раздел 0). Используй phase-task-launcher. Не считай
+LIFE-1 подтверждённым: сначала проверь Stop->Release->Dispose во всех путях.
+Для FAIL-1 проследи pre-start-dead -> post-start-failure end to end и исправь
+callback ownership в общей точке. Добавь минимальные concurrency/lifecycle
+tests, проведи bug-hunt (статически), подготовь diff для orchestrator
+(commit/push/CI) и draft PR. Локальные build/test/launch запрещены; не запускай
+VPN нигде.
 ```
 
 ## 12. Prompt P03 — Linux/macOS kill-switch IPv6
@@ -510,11 +552,12 @@ IDs: `FW-1`, `FW-2`
 
 ### Task pool S/G
 
-- [ ] Pure builder tests on Windows dev environment.
-- [ ] `nft --check`/PF syntax only on safe disposable test environment if available.
-- [ ] No live firewall changes on dev box.
+- [ ] Написать pure builder tests; исполнение только в remote CI, не локально.
+- [ ] `nft`/PF syntax проверять статическим осмотром правил; никаких локальных
+  `nft --check`/PF запусков.
+- [ ] No live firewall changes anywhere (code-only режим).
 - [ ] Document real cleanup/recovery, not the original exaggerated impact.
-- [ ] Draft PR; no ship.
+- [ ] Draft PR (commit/push выполняет orchestrator).
 
 ### Acceptance
 
@@ -527,12 +570,13 @@ IDs: `FW-1`, `FW-2`
 
 ```text
 Выполни Prompt P03 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для FW-1/FW-2.
-Используй phase-task-launcher. Сначала докажи reachability bare/bracketed IPv6
-через реальные parsers/current.json и перечисли cleanup paths. Исправляй
-только подтверждённую family mismatch в pure ruleset builders. Добавь mixed
-IPv4/IPv6 tests. Не применяй nftables/PF на dev box. Commit, push, CI, draft
-PR; no release.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для FW-1/FW-2 через
+Qwen Code (обязательно; см. раздел 0). Используй phase-task-launcher. Сначала
+докажи reachability bare/bracketed IPv6 через реальные parsers/current.json и
+перечисли cleanup paths. Исправляй только подтверждённую family mismatch в
+pure ruleset builders. Добавь mixed IPv4/IPv6 tests. Не применяй nftables/PF
+нигде (только статический осмотр). Подготовь diff для orchestrator
+(commit/push/CI) и draft PR. Локальные build/test/launch запрещены.
 ```
 
 ## 13. Prompt P04 — custom config and protocol parity
@@ -574,9 +618,9 @@ IDs: `CFG-1`, `CFG-2`, `PROTO-1`
 
 ### Task pool S/G
 
-- [ ] Config serialization/sanity tests.
-- [ ] Relevant Vless verifier tests.
-- [ ] No live sidecar/process launch.
+- [ ] Написать config serialization/sanity tests; исполнение только в remote CI.
+- [ ] Написать relevant Vless verifier tests; исполнение только в remote CI.
+- [ ] No live sidecar/process launch anywhere (code-only режим).
 - [ ] Small PR; if root causes independent, split P04 into two PR.
 
 ### Acceptance
@@ -589,11 +633,13 @@ IDs: `CFG-1`, `CFG-2`, `PROTO-1`
 
 ```text
 Выполни Prompt P04 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для CFG-1/CFG-2/PROTO-1.
-Используй phase-task-launcher. Сначала adjudicate каждый ID отдельно.
-Переиспользуй существующие generator/tag/verifier patterns; не добавляй новую
-abstraction. Добавь pure config/verifier tests, commit, push, CI и draft PR.
-Если root causes независимы, сделай два маленьких PR. Не запускай sing-box.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для CFG-1/CFG-2/PROTO-1
+через Qwen Code (обязательно; см. раздел 0). Используй phase-task-launcher.
+Сначала adjudicate каждый ID отдельно. Переиспользуй существующие
+generator/tag/verifier patterns; не добавляй новую abstraction. Добавь pure
+config/verifier tests, подготовь diff для orchestrator (commit/push/CI) и
+draft PR. Если root causes независимы, сделай два маленьких PR. Локальные
+build/test/launch запрещены; не запускай sing-box нигде.
 ```
 
 ## 14. Prompt P05 — settings, subscriptions and free-config data safety
@@ -646,11 +692,12 @@ IDs: `DATA-1`, `DATA-2`, `DATA-3`, `DATA-4`, `DATA-5`, `DATA-6`, `NET-1`
 
 ### Task pool S/G
 
-- [ ] Targeted settings/subscription/free-config suites.
-- [ ] Regression filters from `AGENTS.md`.
-- [ ] Secret scan in test output/log messages.
+- [ ] Написать targeted settings/subscription/free-config suites; исполнение
+  только в remote CI.
+- [ ] Написать/осмотреть regression filters из `AGENTS.md`; исполнение в remote CI.
+- [ ] Secret scan in test output/log messages (статический осмотр).
 - [ ] Split into atomic-write, input-bound, and data-semantics PRs if diff grows.
-- [ ] Correct ledger refutations before stable planning.
+- [ ] Correct ledger refutations before closing the ledger entry.
 
 ### Acceptance
 
@@ -663,12 +710,14 @@ IDs: `DATA-1`, `DATA-2`, `DATA-3`, `DATA-4`, `DATA-5`, `DATA-6`, `NET-1`
 
 ```text
 Выполни Prompt P05 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
-Используй phase-task-launcher. Не исправляй DATA-2/DATA-5 до независимого
-proof: AppJsonContext уже может иметь MaxDepth=32, а dedupe collision должен
-быть построен только через реальный parser. Для survivors используй
-существующие atomic-move и bounded-fetch patterns. Добавь temp-dir/fake-handler
-tests. Раздели независимые root causes на небольшие PR, каждый commit+push+CI.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0). Используй phase-task-launcher. Не исправляй
+DATA-2/DATA-5 до независимого proof: AppJsonContext уже может иметь
+MaxDepth=32, а dedupe collision должен быть построен только через реальный
+parser. Для survivors используй существующие atomic-move и bounded-fetch
+patterns. Добавь temp-dir/fake-handler tests. Раздели независимые root causes
+на небольшие PR; каждый diff передаётся orchestrator'у для commit/push/CI.
+Локальные build/test/launch запрещены.
 ```
 
 ## 15. Prompt P06 — Smart Connect, localization and narrow UI
@@ -714,10 +763,11 @@ IDs: `FLOW-1`, `UI-1`, `UI-2`
 ### Task pool S/G
 
 - [ ] Использовать `audit-overflow-fix` для UI scope.
-- [ ] Build Avalonia app without launching it locally.
-- [ ] Run ViewModel/UI characterization tests.
-- [ ] Bug-hunt non-trivial ViewModel diff.
-- [ ] Post-ship end-to-end UI only after explicit rolling release.
+- [ ] Никаких локальных build Avalonia app: статический осмотр, build
+  проверяется в remote CI.
+- [ ] Написать/осмотреть ViewModel/UI characterization tests; исполнение только
+  в remote CI.
+- [ ] Bug-hunt non-trivial ViewModel diff (статический review).
 
 ### Acceptance
 
@@ -729,11 +779,13 @@ IDs: `FLOW-1`, `UI-1`, `UI-2`
 
 ```text
 Выполни Prompt P06 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для FLOW-1/UI-1/UI-2.
-Используй phase-task-launcher и audit-overflow-fix. Исправь Smart Connect в
-единой selected/active state точке, не обходи SaveSettings. Для UI переиспользуй
-localization и IsRulesNarrow. Добавь минимальные VM/layout contracts, build и
-tests без локального запуска UI. Commit, push, CI, draft PR; no ship.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md для FLOW-1/UI-1/UI-2
+через Qwen Code (обязательно; см. раздел 0). Используй phase-task-launcher и
+audit-overflow-fix. Исправь Smart Connect в единой selected/active state точке,
+не обходи SaveSettings. Для UI переиспользуй localization и IsRulesNarrow.
+Добавь минимальные VM/layout contracts; build и tests проверяются только в
+remote CI. Подготовь diff для orchestrator (commit/push/CI) и draft PR.
+Локальные build/test/launch UI запрещены.
 ```
 
 ## 16. Prompt P07 — CLI ownership and Android lifecycle/privacy
@@ -783,9 +835,9 @@ IDs: `CLI-1`, `CLI-2`, `AND-1`, `AND-2`
 ### Task pool S/G
 
 - [ ] CLI and Android — отдельные PR.
-- [ ] Build CLI/Core and Android compile tests.
-- [ ] No real process kill or VPN start on dev box.
-- [ ] Android live validation only on physical device after explicit ship path.
+- [ ] Никаких локальных build CLI/Core/Android: статический осмотр, compile
+  проверяется в remote CI.
+- [ ] No real process kill or VPN start anywhere (code-only режим).
 - [ ] Correct `AND-2` ledger if refuted.
 
 ### Acceptance
@@ -799,12 +851,14 @@ IDs: `CLI-1`, `CLI-2`, `AND-1`, `AND-2`
 
 ```text
 Выполни Prompt P07 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
-Используй phase-task-launcher. Раздели CLI и Android на два PR. Для CLI
-докажи owner/restart flow и переиспользуй ProcessOwnership; не тестируй через
-реальный kill на dev box. Для Android исправляй AND-1 через общий scrubber, а
-AND-2 сначала проверь по official VpnService.onRevoke contract и закрой без
-кода, если super уже вызывает stopSelf. Commit, push, CI; no ship.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0). Используй phase-task-launcher. Раздели CLI и
+Android на два PR. Для CLI докажи owner/restart flow и переиспользуй
+ProcessOwnership; не тестируй через реальный kill нигде. Для Android исправляй
+AND-1 через общий scrubber, а AND-2 сначала проверь по official
+VpnService.onRevoke contract и закрой без кода, если super уже вызывает
+stopSelf. Подготовь diff для orchestrator (commit/push/CI). Локальные
+build/test/launch и process kill запрещены.
 ```
 
 ## 17. Prompt P08 — packaging and supply-chain reproducibility
@@ -842,11 +896,12 @@ IDs: `PKG-1`, `SUP-1`, `SUP-2`, `SUP-3`, `SUP-4`
 
 ### Task pool T
 
-- [ ] Shell syntax check.
+- [ ] Shell syntax проверить статическим осмотром (без локального запуска).
 - [ ] ARCH mapping cases arm64/x64.
 - [ ] Wrong digest fails before execute/extract.
 - [ ] Correct digest passes.
-- [ ] Workflow YAML parse/actionlint if already available.
+- [ ] Workflow YAML проверить статическим осмотром; никаких локальных
+  actionlint/parse запусков.
 - [ ] Grep test: no mutable `continuous` executable URL.
 - [ ] Grep test: no unpinned signing actions.
 - [ ] Existing build paths without wgturn unchanged.
@@ -871,12 +926,13 @@ IDs: `PKG-1`, `SUP-1`, `SUP-2`, `SUP-3`, `SUP-4`
 
 ```text
 Выполни Prompt P08 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
-Сначала adjudicate active versus latent reachability каждого ID. Используй
-существующий native dependency manifest и fail-closed checksum patterns.
-Не исполняй непроверенные downloads. Добавь минимальные shell/workflow checks,
-commit, немедленный push, дождись Linux+Mac CI и открой draft PR. Не создавай
-tag/release.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0). Сначала adjudicate active versus latent
+reachability каждого ID. Используй существующий native dependency manifest и
+fail-closed checksum patterns. Не скачивай и не исполняй непроверенные downloads
+или binary. Добавь минимальные shell/workflow checks статическим осмотром,
+подготовь diff для orchestrator (commit/push), дождись remote Linux+Mac CI и
+открой draft PR. Локальные build/test/launch запрещены. Не создавай tag/release.
 ```
 
 ## 18. Prompt P09 — secrets, ACL and diagnostics
@@ -926,16 +982,16 @@ IDs: `SEC-1`, `SEC-2`, `SEC-3`, `OBS-1`, `OBS-2`
 - [ ] Quoted malicious URI remains one argument.
 - [ ] Bounded tail reads only configured maximum bytes.
 - [ ] Small/empty/no-newline logs handled.
-- [ ] ACL unit/pure command-generation tests where possible.
-- [ ] Installer ACL validation on brat only after ship.
+- [ ] ACL unit/pure command-generation tests where possible; исполнение только
+  в remote CI.
 
 ### Task pool S/G
 
 - [ ] Разделить logging, ACL и bounded-tail на отдельные PR.
-- [ ] Security review/bug-hunt each trust-boundary diff.
+- [ ] Security review/bug-hunt each trust-boundary diff (статический review).
 - [ ] Не печатать test secrets в CI.
-- [ ] No local installer/ACL mutation.
-- [ ] Post-ship ACL check только на windows-brat.
+- [ ] No installer/ACL mutation anywhere (code-only режим: только статические
+  code changes).
 
 ### Acceptance
 
@@ -949,12 +1005,13 @@ IDs: `SEC-1`, `SEC-2`, `SEC-3`, `OBS-1`, `OBS-2`
 
 ```text
 Выполни Prompt P09 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
-Используй phase-task-launcher и раздели logging, ACL и bounded-tail на
-маленькие PR. Сначала докажи trust boundary каждого claim. Переиспользуй
-shared redactor, ArgumentList и existing bounded TailLines. Не меняй ACL и не
-запускай installer на dev box. Добавь security regression tests, bug-hunt,
-commit, push, CI; live ACL verify только на brat после явного ship.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0). Используй phase-task-launcher и раздели logging,
+ACL и bounded-tail на маленькие PR. Сначала докажи trust boundary каждого
+claim. Переиспользуй shared redactor, ArgumentList и existing bounded TailLines.
+Не меняй ACL и не запускай installer нигде (только статические code changes).
+Добавь security regression tests, проведи bug-hunt (статически), подготовь diff
+для orchestrator (commit/push/CI). Локальные build/test/launch запрещены.
 ```
 
 ## 19. Prompt P10 — updater atomicity and resource ownership
@@ -1008,9 +1065,9 @@ IDs: `ZAP-1`, `ZAP-2`, `ZAP-3`, `PERF-1`, `PERF-2`
 
 - [ ] Fake filesystem/process owners; no real binary/service mutation.
 - [ ] Separate updater and resource PRs.
-- [ ] Bug-hunt atomicity/rollback paths.
-- [ ] Targeted tests plus Core build.
-- [ ] No live Zapret/Wgturn update on dev box.
+- [ ] Bug-hunt atomicity/rollback paths (статический review).
+- [ ] Написать targeted tests; Core build проверяется только в remote CI.
+- [ ] No live Zapret/Wgturn update anywhere (code-only режим).
 
 ### Acceptance
 
@@ -1023,12 +1080,14 @@ IDs: `ZAP-1`, `ZAP-2`, `ZAP-3`, `PERF-1`, `PERF-2`
 
 ```text
 Выполни Prompt P10 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
-Используй phase-task-launcher. Отдельно adjudicate updater atomicity и resource
-ownership; не называй leak без доказанного accumulating lifetime. Для
-confirmed updater defects переиспользуй existing atomic replace/rollback
-pattern и оставь failure-injection tests. Не трогай реальные Zapret/Wgturn
-binaries. Раздели PR, bug-hunt, commit, push, CI; no ship.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0). Используй phase-task-launcher. Отдельно adjudicate
+updater atomicity и resource ownership; не называй leak без доказанного
+accumulating lifetime. Для confirmed updater defects переиспользуй existing
+atomic replace/rollback pattern и оставь failure-injection tests. Не трогай
+реальные Zapret/Wgturn binaries. Раздели PR, проведи bug-hunt (статически),
+подготовь diff для orchestrator (commit/push/CI). Локальные build/test/launch
+запрещены.
 ```
 
 ## 20. Prompt P11 — cross-cut regression and adversarial review
@@ -1054,15 +1113,18 @@ ID: `TEST-1` плюс все survivors P01-P10
 - [ ] ColdStart + BlockOnVpnFail + full passes `true`.
 - [ ] Каждый confirmed P0/P1 имеет хотя бы один behavior regression.
 - [ ] Refuted ID не получает бессмысленный production patch.
-- [ ] Full solution Release build.
-- [ ] Mandated regression filter from `AGENTS.md`.
-- [ ] Relevant platform/config/update/CLI/Android tests.
-- [ ] `git diff --check`.
+- [ ] Никаких локальных full solution Release build: build проверяется только
+  в remote CI.
+- [ ] Написать/осмотреть mandated regression filter из `AGENTS.md`; исполнение
+  в remote CI.
+- [ ] Написать relevant platform/config/update/CLI/Android tests; исполнение
+  только в remote CI.
+- [ ] `git diff --check` (осмотр diff, не запуск).
 - [ ] Characterization hashes меняются только при реальном source change.
 
 ### Task pool adversarial
 
-- [ ] Запустить `bug-hunt` на каждом non-trivial diff.
+- [ ] Провести `bug-hunt` (статический review) на каждом non-trivial diff.
 - [ ] Независимый reviewer пытается опровергнуть fix.
 - [ ] Проверить sibling paths и rollback.
 - [ ] Проверить cancellation/parallel calls.
@@ -1083,11 +1145,13 @@ ID: `TEST-1` плюс все survivors P01-P10
 ```text
 Выполни Prompt P11 из
 plans/qwen-audit-remediation-prompt-pool-2026-07-28.md на текущем remediation
-diff. Используй bug-hunt. Добавь отсутствующий StartupPipeline firewall
-behavior test и survivor-to-test matrix. Докажи, что каждый новый test падает
-на старом поведении и проходит после root fix. Запусти Release build,
-обязательные regression filters и relevant suites. Не меняй product code ради
-удобства теста. Commit, push, CI; no release.
+diff через Qwen Code (обязательно; см. раздел 0). Используй bug-hunt
+(статический review). Добавь отсутствующий StartupPipeline firewall behavior
+test и survivor-to-test matrix. Статически обоснуй, что каждый новый test
+падает на старом поведении и проходит после root fix; фактическое исполнение —
+только в remote CI. Release build, обязательные regression filters и relevant
+suites проверяются только в remote CI после push orchestrator'ом. Не меняй
+product code ради удобства теста. Локальные build/test/launch запрещены.
 ```
 
 ## 21. Prompt P12 — ledger, plans and PR integration
@@ -1102,12 +1166,12 @@ behavior test и survivor-to-test matrix. Докажи, что каждый но
 - [ ] `DUPLICATE` связать с canonical root ID.
 - [ ] `CONFIRMED` закрывать только после merged fix.
 - [ ] `PARTIALLY_CONFIRMED` переписать без старого exaggerated impact.
-- [ ] Проверить `tools/check-open-p0.ps1`.
-- [ ] Проверить, что stable gate отражает только реальные open P0/P1.
+- [ ] Осмотреть `tools/check-open-p0.ps1` статически (без локального запуска).
+- [ ] Проверить, что open-P0 gate отражает только реальные open P0/P1.
 - [ ] Добавить краткий `.claude_handoff.md` session log.
 - [ ] Обновить этот plan status/checklists.
 - [ ] Ссылаться на PR/commit, не на временный чат.
-- [ ] Не объявлять READY до фактического CI/live gates.
+- [ ] Не объявлять READY до фактического результата remote GitHub CI.
 
 ### Acceptance
 
@@ -1120,64 +1184,16 @@ behavior test и survivor-to-test matrix. Докажи, что каждый но
 
 ```text
 Выполни Prompt P12 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md.
-Сведи 39 ID, independent verification, merged fixes и CI в один ledger
-outcome. Не удаляй историю: refuted/downgraded entries закрывай с proof,
-confirmed — только с merged commit/PR. Проверь open-P0 gate, обнови plan и
-.claude_handoff.md. Commit, немедленный push, CI и обновление audit PR.
-Не ship.
+plans/qwen-audit-remediation-prompt-pool-2026-07-28.md через Qwen Code
+(обязательно; см. раздел 0). Сведи 39 ID, independent verification, merged
+fixes и remote CI в один ledger outcome. Не удаляй историю: refuted/downgraded
+entries закрывай с proof, confirmed — только с merged commit/PR. Осмотри
+open-P0 gate статически, обнови plan и .claude_handoff.md. Подготовь diff для
+orchestrator (commit/push/CI) и обновление audit PR. Локальные build/test/launch
+запрещены.
 ```
 
-## 22. Prompt P13 — optional rolling candidate and post-ship verification
-
-Статус: `[ ] forbidden until explicit user command`
-
-Этот prompt нельзя запускать из факта, что все PR зелёные. Требуется явное
-сообщение владельца: `ship`, `release`, `выпускай -rN` или эквивалент.
-
-### Task pool pre-ship
-
-- [ ] Все intended remediation PR merged.
-- [ ] `main` synced, clean worktree.
-- [ ] Session red-CI ritual clean.
-- [ ] `tools/check-open-p0.ps1` даёт expected result.
-- [ ] Full Release build green.
-- [ ] Mandatory regression suite green.
-- [ ] Version/tag chosen by rolling policy.
-- [ ] Release notes enumerate user-visible fixes.
-
-### Task pool ship
-
-- [ ] Использовать `ship-rolling-candidate` skill exactly.
-- [ ] AppVersion matches full `-rN` tag.
-- [ ] Desktop assets complete.
-- [ ] Mac/Linux CI green.
-- [ ] Commit CI green, не только tag CI.
-- [ ] Latest restored per policy.
-
-### Task pool post-ship
-
-- [ ] Немедленно использовать `post-ship-mcp-verify`.
-- [ ] Install/download only on windows-brat via WinRM.
-- [ ] End-to-end user scenario per each UI/runtime fix.
-- [ ] Bottom-of-viewport screenshot for UI overflow fixes.
-- [ ] Log scan for ERR/Exception/FATAL.
-- [ ] Core-only findings явно marked not UI-testable.
-- [ ] PASS/FAIL report per release-note item.
-- [ ] Не cut stable без separate explicit user command и live update gate.
-
-### Copy prompt
-
-```text
-Владелец явно разрешил rolling release. Выполни Prompt P13 из
-plans/qwen-audit-remediation-prompt-pool-2026-07-28.md строго через
-ship-rolling-candidate, затем автоматически post-ship-mcp-verify.
-Все install/launch/UI/VPN действия только на windows-brat 192.168.0.106 через
-WinRM. Если brat недоступен — STOP, не использовать dev box. Не cut stable:
-для stable нужна отдельная явная команда после всех gates, включая live update.
-```
-
-## 23. Рекомендуемый порядок PR
+## 22. Рекомендуемый порядок PR
 
 После P00:
 
@@ -1195,7 +1211,7 @@ WinRM. Если brat недоступен — STOP, не использоват�
 
 Не объединять все пункты в один mega-PR.
 
-## 24. Master progress board
+## 23. Master progress board
 
 | Prompt | Status | Branch/PR | CI | Outcome |
 |---|---|---|---|---|
@@ -1212,9 +1228,8 @@ WinRM. Если brat недоступен — STOP, не использоват�
 | P10 updater/resources | blocked | — | — | — |
 | P11 regression/bug-hunt | blocked | — | — | — |
 | P12 ledger integration | pending | audit PR #48 | green before this plan | — |
-| P13 rolling release | user-command only | — | — | — |
 
-## 25. Session handoff template
+## 24. Session handoff template
 
 Каждая сессия, которая выполняет prompt, добавляет в handoff:
 
@@ -1230,8 +1245,10 @@ Branch/PR:
 CI:
 Ledger updates:
 Remaining blockers:
-Live validation:
 ```
+
+Поле live validation намеренно отсутствует: release/ship/live verification
+находятся вне этого плана (см. раздел 0).
 
 Если работа остановлена из-за лимита, агент обязан заполнить этот template и
 обновить progress board до завершения сессии. Частичное сообщение в чате без
