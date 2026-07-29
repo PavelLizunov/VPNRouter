@@ -862,7 +862,7 @@ public class VpnEngine : IDisposable
         // Fix #1 (r3): restore the macOS system resolver pinned at connect.
         try { _unixDns.Restore(_logger); } catch { }
 
-        try { _etw?.Stop(); } catch { }
+        try { _etw?.Dispose(); } catch { }
 
         if (_activeProfile?.BlockOnVpnFail == true)
         {
