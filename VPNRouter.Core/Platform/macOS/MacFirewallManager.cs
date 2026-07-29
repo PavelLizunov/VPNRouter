@@ -177,8 +177,8 @@ public sealed class MacFirewallManager : IFirewallManager
                 return;
             }
             _logger.Warning(
-                "[MacFirewall] FAILED to load anchor ruleset (pfctl sudoers grant missing? {Err}) — NOT blocking; " +
-                "releasing pf-enable ref", load.stderr?.Trim());
+                "[MacFirewall] FAILED to load anchor ruleset (pfctl sudoers grant missing or malformed rule " +
+                "(wrong inet/inet6 family)? {Err}) — NOT blocking; releasing pf-enable ref", load.stderr?.Trim());
             ReleaseEnable();
             return;
         }
@@ -198,8 +198,8 @@ public sealed class MacFirewallManager : IFirewallManager
         else
         {
             _logger.Warning(
-                "[MacFirewall] FAILED to load pf ruleset (pfctl sudoers grant missing? {Err}) — NOT blocking; " +
-                "releasing pf-enable ref", legacy.stderr?.Trim());
+                "[MacFirewall] FAILED to load pf ruleset (pfctl sudoers grant missing or malformed rule " +
+                "(wrong inet/inet6 family)? {Err}) — NOT blocking; releasing pf-enable ref", legacy.stderr?.Trim());
             ReleaseEnable(); // don't leave pf enabled-by-us with no blocking ruleset
         }
     }
@@ -322,7 +322,9 @@ public sealed class MacFirewallManager : IFirewallManager
     /// <summary>
     /// Build the pf ruleset: block all outbound, then pass loopback, the
     /// private/link-local ranges, and each VPN server IP (so sing-box can
-    /// reconnect). IPv4 passes only — <c>block drop out all</c> keeps IPv6 shut.
+    /// reconnect). Each server IP is emitted with its own address-family keyword
+    /// (<c>inet</c> for IPv4, <c>inet6</c> for IPv6) so an IPv6 literal is a
+    /// well-formed rule; all other IPv6 stays shut via <c>block drop out all</c>.
     /// No <c>set</c> options: <c>set</c> is main-ruleset-only, so it would fail
     /// the P0.3 anchor load (<c>pfctl -a … -f</c>); pf's default block-policy is
     /// drop anyway, and <c>block drop</c> states it per-rule.
@@ -337,7 +339,10 @@ public sealed class MacFirewallManager : IFirewallManager
         sb.AppendLine("pass out quick inet from any to 192.168.0.0/16");
         sb.AppendLine("pass out quick inet from any to 169.254.0.0/16");
         foreach (var ip in serverIps)
-            sb.AppendLine($"pass out quick inet from any to {ip}");
+        {
+            var family = ip.Contains(':') ? "inet6" : "inet";
+            sb.AppendLine($"pass out quick {family} from any to {ip}");
+        }
         return sb.ToString();
     }
 
