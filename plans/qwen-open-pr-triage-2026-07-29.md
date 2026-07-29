@@ -381,6 +381,10 @@
 
 ## Финальная очередь действий (упорядочена)
 
+> **Update 2026-07-29:** порядок ниже supersede'ится авторитетным addendum'ом
+> «Финальный merge/retarget order — 2026-07-29» в конце файла. Детальные per-PR
+> verdicts и evidence в этой секции сохранены без изменений.
+
 Принцип: **никогда не рекомендовать merge при красном required-чеке или недостающем evidence.**
 
 1. **#46 — merge первым** (green, CLEAN, 13 live бампов). Среди dependency-PR идёт первым,
@@ -465,3 +469,56 @@
   в executive table не добавляется.
 - **Без изменений [FACT]:** #22, #42, #46 остаются **KEEP** и owner-gated (зелёные; merge
   по решению владельца). Никаких merge/release в этом разделе не утверждается.
+
+---
+
+## Финальный merge/retarget order — 2026-07-29 (authoritative addendum)
+
+> Компактный авторитетный порядок от orchestrator. **Supersede'ит** порядок в секции
+> «Финальная очередь действий» выше (детальные per-PR verdicts/evidence сохранены).
+> Стрелка `A -> B` = A родитель/prerequisite; **merge/retarget B только ПОСЛЕ A**.
+> Каждый stacked PR требует post-retarget remote CI после merge/retarget родителя.
+> Drafts остаются owner-gated — автономный merge/release НЕ подразумевается. Ничто
+> ниже не помечено как merged; merge/release/tag/deploy не выполнялись.
+
+### Порядок групп
+
+1. **#51 — первым.** Стабилизирует известный DeepVerify-флейк; prerequisite для надёжных CI-verdicts.
+2. **Docs-only:** #48, #49, #50, #52, #63 + historical #42. **#48 и #42 сейчас BEHIND** -> sync + fresh CI перед merge.
+3. **Independent code:** #71 -> #46; #76 -> #29; затем #77. **#22 нужен refresh/sync + fresh CI.**
+4. **P1 от #52** (каждый child только после parent):
+   - #52 -> #53
+   - #52 -> #55
+   - #52 -> #56
+   - #52 -> #58
+   - #52 -> #62
+   - #52 -> #57 -> #74
+   - #52 -> #60 -> #68 -> #72 -> #78
+   - #52 -> #60 -> #68 -> #80
+   - #52 -> #61 -> #75 — **#75 только ПОСЛЕ #51**
+5. **Children от docs/index #63** (каждый после #63):
+   - #64
+   - #67
+   - #69
+   - #65 -> #70
+6. **Dependabot #29 / #46 — последними.**
+
+### CI evidence (на момент addendum)
+
+| PR | CI | Workflow run |
+|---|---|---|
+| #80 | green | `30462778670` |
+| #78 | green | `30461673710` |
+| #77 | green | `30459825529` |
+| #75 | profile-specific runs green; последний red = ТОЛЬКО известный DeepVerify-флейк (НЕ product-red) | — |
+| #22 / #42 / #48 | требуют sync + fresh CI | — |
+
+### Closed / superseded ledger (стрелка = закрыт/заменён -> replacement)
+
+- #32 / #33 -> #71
+- #54 -> #55
+- #59 -> #62
+- #66 -> #67
+- #73 -> #77
+- #79 -> #80
+- stale #31 закрыт как unsafe
