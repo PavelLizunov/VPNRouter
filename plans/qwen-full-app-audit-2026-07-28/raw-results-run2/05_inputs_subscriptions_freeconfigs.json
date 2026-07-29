@@ -1,0 +1,4 @@
+The audit is complete. The two surviving findings were already delivered above as the required JSON array. Both were verified against the live working tree with exact line citations:
+
+1. **SettingsLoader.cs:537** — non-atomic `File.WriteAllText` for config.yaml (the only cache/config file in the subsystem without .tmp+rename), risking total settings loss on a mid-write crash.
+2. **SubscriptionFetcher.cs:85** — unbounded buffering of an untrusted subscription HTTP response body (no size cap before `ReadAsByteArrayAsync`), unlike `FreeConfigPoolFetcher` which enforces explicit `MaxCompressedBytes`/`MaxExpandedBytes` guards for the same threat class.

@@ -220,22 +220,23 @@ tar.gz, 3 sha256 sidecars).
 - [ ] **Gate 5 — UI/live**: N/A (CI-only change).
 - [ ] **Gate 6 — Characterization**: N/A.
 
-## Outcome (PENDING — fill after remote GitHub CI)
+## Outcome
 
-**Status**: PENDING
-**Commits**: <orchestrator fills>
-**Pushed**: <orchestrator fills>
-**Test deltas**: +0 / -0
-**Files changed**: 1 · <LOC delta>
+**Status**: IMPLEMENTED / REMOTE CI GREEN
+**Commits**: `63a4856b` (ci: pin and verify appimagetool release)
+**Pushed**: draft PR #61, branch `codex/qwen-audit-p08-appimagetool-pin-v2-2026-07-29`
+**Test deltas**: +57 / -0 (1 new test file: `BuildLinuxAppImageToolPinTests.cs` +57)
+**Files changed**: 2 · +73 / -2
 
 **Gate results:**
-- [ ] Gate 1 build (remote CI — build-linux.yml run): <output>
-- [-] Gate 2 tests: N/A (CI workflow change)
-- [ ] Gate 3 docs: <output>
-- [ ] Gate 4 self-review / supply-chain review: <output>
-- [-] Gate 5 UI/live: N/A
+- [x] Gate 1 build (remote CI — build-linux.yml run): PASS — Linux packaging run 30447028180 SUCCESS including the fail-closed digest gate
+- [x] Gate 2 tests (remote CI): PASS — dotnet test run 30447026030 SUCCESS; new `BuildLinuxAppImageToolPinTests` green; full existing suite stayed green
+- [x] Gate 3 docs: PASS — Outcome filled; digest provenance: capture run 30446330695 SUCCESS, size 15092216, SHA256 `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0`
+- [x] Gate 4 self-review / supply-chain review: PASS — static self-review performed during implementation; URL immutability (retired AppImageKit `continuous` replaced with `AppImage/appimagetool` tag `1.9.1`) and digest correctness reviewed
+- [-] Gate 5 UI/live: N/A (CI-only change)
 - [-] Gate 6 characterization: N/A
 
-**Surprises encountered**: <fill>
-**Follow-ups spawned**: <fill>
-**Rollback**: `git revert <hash>` / branch delete
+**Local build/test**: NOT run. The mandatory git hook attempted SDK resolution and found SDK 10.0.301 absent; this is not a pass.
+**Surprises encountered**: none
+**Follow-ups spawned**: none
+**Rollback**: `git revert 63a4856b` / branch delete
