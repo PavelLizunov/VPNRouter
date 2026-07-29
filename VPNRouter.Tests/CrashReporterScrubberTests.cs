@@ -83,6 +83,38 @@ public sealed class CrashReporterScrubberTests
         Assert.Equal(input, s);
     }
 
+    // ── OBS-1: token= query-param scrubbing (ws/wss clash_api secret) ────
+
+    [Fact]
+    public void ScrubSecrets_RedactsWsTokenUri()
+    {
+        const string input = "connected ws://127.0.0.1:9090/logs?level=info&token=abc123";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("token=abc123", s);
+        Assert.Contains("ws://127.0.0.1:9090/logs", s);
+        Assert.Contains("token=[REDACTED]", s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsWssTokenUri()
+    {
+        const string input = "connected wss://127.0.0.1:9090/logs?level=info&token=deadbeef00112233";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("deadbeef00112233", s);
+        Assert.Contains("wss://127.0.0.1:9090/logs", s);
+        Assert.Contains("token=[REDACTED]", s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsTokenAsFirstQueryParam()
+    {
+        const string input = "dial ws://127.0.0.1:9090/logs?token=abc123&level=info";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("token=abc123", s);
+        Assert.Contains("?token=[REDACTED]", s);
+        Assert.Contains("&level=info", s);
+    }
+
     [Fact]
     public void OverrideDataDir_RoundTripsThroughCrashesPath()
     {
