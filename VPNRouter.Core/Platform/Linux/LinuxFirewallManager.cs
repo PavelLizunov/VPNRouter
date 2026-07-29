@@ -190,7 +190,8 @@ public sealed class LinuxFirewallManager : IFirewallManager
     /// Build the nft ruleset (atomic add+flush+rules in one -f file): a dedicated
     /// <c>inet vpnrouter_ks</c> table whose output chain defaults to <c>drop</c>
     /// and passes loopback, the private/link-local ranges, and each VPN server IP
-    /// (so sing-box can reconnect). IPv6 non-loopback is dropped by the policy.
+    /// (so sing-box can reconnect), split by family into <c>ip daddr</c> (IPv4)
+    /// and <c>ip6 daddr</c> (IPv6) rules; all other IPv6 stays dropped by policy.
     /// <c>add table</c> is idempotent; <c>flush table</c> makes the load a clean
     /// replace if a stale table somehow survived.
     /// </summary>
@@ -203,8 +204,11 @@ public sealed class LinuxFirewallManager : IFirewallManager
         sb.AppendLine($"add rule inet {TableName} output oif \"lo\" accept");
         sb.AppendLine($"add rule inet {TableName} output ip daddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }} accept");
         var v4 = serverIps.Where(ip => !ip.Contains(':')).ToList();
+        var v6 = serverIps.Where(ip => ip.Contains(':')).ToList();
         if (v4.Count > 0)
             sb.AppendLine($"add rule inet {TableName} output ip daddr {{ {string.Join(", ", v4)} }} accept");
+        if (v6.Count > 0)
+            sb.AppendLine($"add rule inet {TableName} output ip6 daddr {{ {string.Join(", ", v6)} }} accept");
         return sb.ToString();
     }
 

@@ -1,4 +1,5 @@
 using Serilog;
+using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -30,8 +31,9 @@ namespace VPNRouter.Tests;
 ///   dispatch.</item>
 ///   <item><c>SetupFirewall_NoBlockOnFail_Skipped</c> — phase 6 honours
 ///   BlockOnVpnFail=false.</item>
-///   <item><c>SetupFirewall_BlockOnFail_CreatesRules</c> — phase 6 creates
-///   firewall rules in disabled state.</item>
+///   <item><c>SetupFirewall_BlockOnFail_SplitRouting_PassesIsFullTunnelFalse</c>
+///   — phase 6 passes <c>isFullTunnel=false</c> to CreateBlockRules in split
+///   mode; guards a future inversion of the RoutingMode derivation.</item>
 ///   <item><c>HotReload_ReturnsConfigJson_SkipsPhases5to8</c> — HotReload
 ///   mode short-circuit after phase 4.</item>
 ///   <item><c>StartupResult_RecordShape</c> — record + enum shape pin.</item>
@@ -307,6 +309,66 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.Null(host.SetFirewall);
     }
 
+    // Phase 6 wiring coverage: split routing must pass isFullTunnel=false to
+    // CreateBlockRules. Production is already correct; this guards a future
+    // inversion that would arm the global Linux/macOS kill-switch for a split
+    // user. The capturing firewall aborts at phase 6, so sing-box never starts.
+    [Fact]
+    public async Task SetupFirewall_BlockOnFail_SplitRouting_PassesIsFullTunnelFalse()
+    {
+        var settings = BuildBaseSettings();
+        settings.App.RoutingMode = "split";
+        settings.App.FlushDnsOnStart = false;       // avoid the DNS-flush side effect
+        settings.App.BypassRussianTraffic = false;  // avoid the geo-data download
+        settings.ActiveProfile = "Discord_Privacy"; // bundled profile, BlockOnVpnFail=true
+        settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("main", "104.194.156.93", 443) };
+        settings.Vless.ActiveServer = "main";
+
+        // Throwaway binary so DeploySingBoxBinary finds an installed exe. Windows
+        // resolves it from settings; other OSes use the fixed AppPaths.SingBoxExePath.
+        var fakeBin = OperatingSystem.IsWindows()
+            ? Path.Combine(Path.GetTempPath(), $"vpnrouter-fake-singbox-{Guid.NewGuid():N}.exe")
+            : AppPaths.SingBoxExePath;
+        var createdFakeBin = !File.Exists(fakeBin);
+        if (createdFakeBin)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(fakeBin)!);
+            File.WriteAllText(fakeBin, "fake");
+        }
+        settings.SingBox.ExecutablePath = fakeBin;
+
+        var host = new TestStartupHost();
+        host.CapturedFirewall.AbortAfterCapture = true; // stop deterministically at phase 6
+        var pipeline = new StartupPipeline(host, _store);
+
+        // SafeMode forces the FullTunnel substitute (BlockOnVpnFail=false), which
+        // would skip phase 6; turn it off so the real bundled profile resolves.
+        var prevSafeMode = SafeMode.Enabled;
+        SafeMode.Enabled = false;
+        Exception? thrown;
+        try
+        {
+            thrown = await Record.ExceptionAsync(async () =>
+                await pipeline.ExecuteAsync(
+                    new StartupContext(settings, StartupMode.ColdStart, SkipVpnConflictCheck: true),
+                    TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            SafeMode.Enabled = prevSafeMode;
+            if (createdFakeBin)
+            {
+                try { File.Delete(fakeBin); } catch { }
+            }
+        }
+
+        // The sentinel proves phase 6 ran CreateBlockRules and aborted before
+        // sing-box start; split routing must derive isFullTunnel=false.
+        Assert.IsType<FirewallCapturedSentinelException>(thrown);
+        Assert.Equal(1, host.CapturedFirewall.CreateBlockRulesCount);
+        Assert.False(host.CapturedFirewall.LastIsFullTunnel);
+    }
+
     // Phase 5: PreStartChecks skipped on HotReload (per pipeline contract).
     [Fact]
     public async Task PreStartChecks_SkippedInHotReloadMode()
@@ -448,6 +510,40 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.Equal(3, modes.Length);
     }
 
+    // ─── Firewall-capture helper ───────────────────────────
+
+    /// <summary>
+    /// Recording <see cref="IFirewallManager"/> fake: captures the phase-6
+    /// CreateBlockRules isFullTunnel argument. With AbortAfterCapture set, throws
+    /// a sentinel after the first capture so a ColdStart walk stops at phase 6.
+    /// </summary>
+    internal sealed class CapturingFirewall : IFirewallManager
+    {
+        public int CreateBlockRulesCount { get; private set; }
+        public bool? LastIsFullTunnel { get; private set; }
+        public bool AbortAfterCapture { get; set; }
+
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
+        {
+            CreateBlockRulesCount++;
+            LastIsFullTunnel = isFullTunnel;
+            if (AbortAfterCapture)
+                throw new FirewallCapturedSentinelException();
+        }
+
+        public void EnableBlockRules() { }
+        public void DisableBlockRules() { }
+        public void DeleteAllRules() { }
+        public void Dispose() { }
+    }
+
+    /// <summary>Aborts a ColdStart walk at phase 6 once CreateBlockRules is captured.</summary>
+    internal sealed class FirewallCapturedSentinelException : Exception
+    {
+        public FirewallCapturedSentinelException()
+            : base("sentinel: firewall CreateBlockRules captured (test abort)") { }
+    }
+
     // ─── Fake host for unit-testing the pipeline ───────────────────────
 
     /// <summary>
@@ -466,12 +562,18 @@ public sealed class StartupPipelineTests : IDisposable
 
         public ILogger? Logger { get; } = null;
         public IProcessScanner Scanner { get; } = new StubProcessScanner();
-        public Func<IFirewallManager> FirewallFactory { get; } =
-            () => throw new InvalidOperationException(
-                "TestStartupHost: phase 6 should not run in HotReload tests");
+        // Recording fake so a ColdStart walk can drive phase 6 and capture the
+        // CreateBlockRules arguments.
+        public CapturingFirewall CapturedFirewall { get; } = new();
+        public Func<IFirewallManager> FirewallFactory { get; }
         public Func<IProcessMonitor> MonitorFactory { get; } =
             () => throw new InvalidOperationException(
                 "TestStartupHost: phase 8 should not run in HotReload tests");
+
+        public TestStartupHost()
+        {
+            FirewallFactory = () => CapturedFirewall;
+        }
 
         public SingBoxManager? SingBox => SetSingBox;
         public IFirewallManager? Firewall => SetFirewall;
