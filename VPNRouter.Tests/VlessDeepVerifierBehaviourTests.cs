@@ -213,4 +213,30 @@ public sealed class VlessDeepVerifierBehaviourTests
         Assert.False(result.Ok);
         Assert.NotNull(result.Error);
     }
+
+    private static VlessServerEntry DnsTunnelEntry() => new()
+    {
+        Name = "dns-tunnel-test",
+        Protocol = "dns-tunnel",
+        Server = "tunnel.example.com",
+        Port = 443,
+        Uuid = "abcd1234-5678-90ab-cdef-1234567890ab",
+        DnsDomain = "tunnel.example.com",
+        DnsResolvers = new List<string> { "195.208.4.1:53" },
+    };
+
+    [Fact]
+    public async Task DnsTunnelEntry_UnsupportedByVerifier_MapsToSkipped()
+    {
+        // Pre-fix: probed as ordinary VLESS → condemned a working server that needs the slipstream sidecar.
+        var verifier = new VlessDeepVerifier(SilentLogger(), NoBinaryPath);
+        var result = await verifier.VerifyAsync(DnsTunnelEntry(), measureBandwidth: false, TestContext.Current.CancellationToken);
+
+        Assert.False(result.Ok);
+        Assert.Equal(DeepVerifyFailurePhase.UnsupportedByVerifier, result.FailurePhase);
+        Assert.Contains("dns-tunnel", result.Error!, StringComparison.OrdinalIgnoreCase);
+
+        var phases = ServerHealthPhaseMapper.FromDeepVerify(result);
+        Assert.Equal(PhaseOutcome.Skipped, phases.ProxiedHttpControl);
+    }
 }
