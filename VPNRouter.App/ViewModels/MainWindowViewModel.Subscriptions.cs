@@ -228,7 +228,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] Subscription sync failed");
-            StatusText = Strings.SyncFailed(ex.Message);
+            StatusText = Strings.SyncFailed(CrashReporter.ScrubSecrets(ex.Message));
         }
     }
 
