@@ -485,7 +485,7 @@ public partial class MainWindowViewModel
         }
         if (!EmergencyChannelConfig.TryParse(rawUrl, out _))
         {
-            _logger.Warning("[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}", rawUrl);
+            _logger.Warning("[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}", CanaryPolicy.RedactUrl(rawUrl));
             return;
         }
 

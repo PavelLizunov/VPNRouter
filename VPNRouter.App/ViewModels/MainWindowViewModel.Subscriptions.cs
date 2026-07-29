@@ -138,7 +138,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] RefreshSubscription failed for {Url}", sub.Url);
+            _logger.Error(ex, "[VM] RefreshSubscription failed for {Url}", CanaryPolicy.RedactUrl(sub.Url));
             sub.LastRefreshFailed = true;
             sub.LastServerCount = sub.UnderlyingEntry.Servers?.Count ?? 0;
         }
@@ -176,7 +176,7 @@ public partial class MainWindowViewModel
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "[VM] Refresh of {Url} failed", s.Url);
+                    _logger.Warning(ex, "[VM] Refresh of {Url} failed", CanaryPolicy.RedactUrl(s.Url));
                     s.LastRefreshFailed = true;
                     s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
                 }
@@ -228,7 +228,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] Subscription sync failed");
-            StatusText = Strings.SyncFailed(ex.Message);
+            StatusText = Strings.SyncFailed(CrashReporter.ScrubSecrets(ex.Message));
         }
     }
 
@@ -317,7 +317,7 @@ public partial class MainWindowViewModel
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "[SubRefresh] Failed for {Url}", s.Url);
+                    _logger.Warning(ex, "[SubRefresh] Failed for {Url}", CanaryPolicy.RedactUrl(s.Url));
                     s.LastRefreshFailed = true;
                     s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
                 }
