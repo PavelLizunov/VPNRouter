@@ -1,0 +1,14 @@
+[
+  {
+    "severity": "important",
+    "file": "VPNRouter.App/Views/MainWindow.axaml:713",
+    "issue": "Hardcoded English string Content=\"↓ Update\" on the update-notification download button is not routed through Strings.cs, so Russian-locale users see an English button.",
+    "fix": "Use the existing localized update text or add one localized property and bind the button content."
+  },
+  {
+    "severity": "important",
+    "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml:1482",
+    "issue": "Read-mode rule rows use fixed columns wider than the detail pane at the supported minimum window width, clipping the value column or delete action.",
+    "fix": "Use the existing IsRulesNarrow state to switch this row to a two-line narrow layout."
+  }
+]
