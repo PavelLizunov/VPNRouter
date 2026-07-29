@@ -321,6 +321,51 @@ if ($exclOk) {
     Warn "     Windows Security > Virus & threat protection > Manage settings > Exclusions > Add > Folder."
 }
 
+# == Data directory ACL (SEC-2) ==========================================
+# Tighten $DataRoot: SYSTEM + Administrators FullControl, installing user
+# Modify, drop inherited BUILTIN\Users read. Well-known SIDs are used so
+# the script works on any Windows locale. Idempotent.
+Say "Restricting data directory ACL ($DataRoot)..."
+try {
+    if (-not (Test-Path $DataRoot)) {
+        New-Item -ItemType Directory -Path $DataRoot -Force | Out-Null
+    }
+    $acl = Get-Acl $DataRoot
+    $acl.SetAccessRuleProtection($true, $true)
+
+    $inherit = [System.Security.AccessControl.InheritanceFlags]"ContainerInherit,ObjectInherit"
+    $noProp  = [System.Security.AccessControl.PropagationFlags]::None
+
+    # Well-known SIDs (locale-independent, unlike "Users"/"Administrators").
+    $systemSid = New-Object System.Security.Principal.SecurityIdentifier(
+        [System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null)
+    $adminsSid = New-Object System.Security.Principal.SecurityIdentifier(
+        [System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
+    $usersSid  = New-Object System.Security.Principal.SecurityIdentifier(
+        [System.Security.Principal.WellKnownSidType]::BuiltinUsersSid, $null)
+
+    $acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $systemSid,"FullControl",$inherit,$noProp,"Allow")))
+    $acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $adminsSid,"FullControl",$inherit,$noProp,"Allow")))
+    try {
+        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $me,"Modify",$inherit,$noProp,"Allow")))
+    } catch { }
+
+    # RemoveAccessRuleAll drops EVERY Allow ACE for BUILTIN\Users.
+    $acl.RemoveAccessRuleAll((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $usersSid,"ReadAndExecute",$inherit,$noProp,"Allow"))) | Out-Null
+
+    Set-Acl $DataRoot $acl
+    Ok "Data directory ACL restricted (SYSTEM + Administrators FullControl, Users read removed)"
+} catch {
+    Warn "Could not restrict data directory ACL: $_"
+    Warn "  => On a shared box, local users may still read $DataRoot (config / logs)."
+    Warn "     Restrict it manually: icacls `"$DataRoot`" /inheritance:r /grant:r SYSTEM:F Administrators:F"
+}
+
 # Clean up downloaded ZIP (cache in %TEMP% is fine to keep, but tidy)
 Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
