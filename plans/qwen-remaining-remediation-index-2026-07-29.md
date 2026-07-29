@@ -424,3 +424,91 @@ the audit-specific sections required by the orchestrator:
 10. Remote-only verification gates + PENDING Outcome template.
 11. Rollback.
 12. Self-contained copyable Qwen prompt.
+
+---
+
+## 6. Final outcomes and merge DAG (updated 2026-07-29)
+
+### 6.1 R01-R14 outcome summary
+
+| R-pkg | IDs | PR | State | Base | Key green run | Notes |
+|---|---|---|---|---|---|---|
+| R01 | FW-1, FW-2, TEST-1 | [#65](https://github.com/PavelLizunov/VPNRouter/pull/65) | OPEN | #63 branch | not independently confirmed | IPv6 firewall + pipeline test |
+| R02 | CFG-1, CFG-2, PROTO-1 | [#64](https://github.com/PavelLizunov/VPNRouter/pull/64) | OPEN | #63 branch | not independently confirmed | Config/protocol parity |
+| R03 | DATA-3, DATA-4, DATA-6, NET-1 | [#67](https://github.com/PavelLizunov/VPNRouter/pull/67) | OPEN | #63 branch | not independently confirmed | v2; #66 (v1) CLOSED superseded |
+| R04 | UI-2 | [#69](https://github.com/PavelLizunov/VPNRouter/pull/69) | OPEN | #63 branch | not independently confirmed | Narrow layout |
+| R05 | PKG-1, SUP-2, SUP-4 | [#75](https://github.com/PavelLizunov/VPNRouter/pull/75) | OPEN | #61 branch (P08-v2) | [30458580034](https://github.com/PavelLizunov/VPNRouter/actions/runs/30458580034) | Latest red 30459209007 = known DeepVerify flake; fixed via #51 merge order |
+| R06 | SEC-3, OBS-2 | [#68](https://github.com/PavelLizunov/VPNRouter/pull/68) | OPEN | #60 branch (P09) | not independently confirmed | Security/diagnostics |
+| R07 | ZAP-2, ZAP-3 | [#80](https://github.com/PavelLizunov/VPNRouter/pull/80) | OPEN | #68 branch (R06) | [30462778670](https://github.com/PavelLizunov/VPNRouter/actions/runs/30462778670) | v2; #79 (v1) CLOSED superseded |
+| R08 | LIFE-1 | -- | REFUTED | -- | -- | P1 claim refuted; P3 residual handle-churn not worth code change; no PR |
+| R09 | UI-1 | [#77](https://github.com/PavelLizunov/VPNRouter/pull/77) | OPEN | main | [30459825529](https://github.com/PavelLizunov/VPNRouter/actions/runs/30459825529) | v2; #73 (v1) CLOSED superseded |
+| R10 | SUP-3 | [#76](https://github.com/PavelLizunov/VPNRouter/pull/76) | OPEN | main | not independently confirmed | Signing action SHA-pins |
+| R11 | PERF-1 | [#74](https://github.com/PavelLizunov/VPNRouter/pull/74) | OPEN | #57 branch (P02) | not independently confirmed | ETW monitor dispose |
+| R12 | FW-3 | [#70](https://github.com/PavelLizunov/VPNRouter/pull/70) | OPEN | #65 branch (R01) | not independently confirmed | Full-tunnel kill-switch intent |
+| R13 | (security) | [#72](https://github.com/PavelLizunov/VPNRouter/pull/72) | OPEN | #68 branch (R06) | not independently confirmed | App URL + wgturn diagnostics redaction |
+| R14 | (security) | [#78](https://github.com/PavelLizunov/VPNRouter/pull/78) | OPEN | #72 branch (R13) | [30461673710](https://github.com/PavelLizunov/VPNRouter/actions/runs/30461673710) | UI error text scrub |
+
+### 6.2 Superseded / closed PRs (do NOT enter merge queue)
+
+| PR | Title | Reason |
+|---|---|---|
+| [#54](https://github.com/PavelLizunov/VPNRouter/pull/54) | fix(core): save settings atomically | Superseded by #55 (v2) |
+| [#59](https://github.com/PavelLizunov/VPNRouter/pull/59) | fix(cli): request graceful stop | Superseded by #62 (v2) |
+| [#66](https://github.com/PavelLizunov/VPNRouter/pull/66) | fix(core): preserve data (R03 v1) | Superseded by #67 (v2) |
+| [#73](https://github.com/PavelLizunov/VPNRouter/pull/73) | fix(app): localize update banner (R09 v1) | Superseded by #77 (v2) |
+| [#79](https://github.com/PavelLizunov/VPNRouter/pull/79) | fix(core): wgturn atomic (R07 v1) | Superseded by #80 (v2) |
+
+### 6.3 Verified merge DAG and order
+
+```text
+#51 (main)  DeepVerify stabilization — FIRST
+ │          Fixes the known timeout-assertion flake that causes red CI
+ │          on stacked branches. Do NOT copy this fix into child branches;
+ │          they inherit it when #51 merges to main and they rebase.
+ │
+ ├─ #52 (main)  P1 docs/base
+ │   ├─ #53  P01 update integrity
+ │   ├─ #55  P05 atomic settings v2
+ │   ├─ #56  P06 smart-connect persistence
+ │   ├─ #57  P02 failover wiring
+ │   │   └─ #74  R11 ETW disposal
+ │   ├─ #58  P10 zapret atomicity
+ │   ├─ #60  P09 secrets/ACL
+ │   │   └─ #68  R06 security/diagnostics
+ │   │       ├─ #72  R13 App URL redaction
+ │   │       │   └─ #78  R14 UI error scrub
+ │   │       └─ #80  R07 wgturn atomic v2
+ │   ├─ #61  P08 appimagetool pin v2
+ │   │   └─ #75  R05 packaging supply
+ │   └─ #62  P07 CLI/Android security v2
+ │
+ ├─ #63 (main)  P2/P3 docs/base (THIS PR)
+ │   ├─ #64  R02 config/protocol
+ │   ├─ #65  R01 firewall wiring
+ │   │   └─ #70  R12 full-tunnel kill-switch
+ │   ├─ #67  R03 data/network v2
+ │   └─ #69  R04 UI layout
+ │
+ ├─ #76 (main)  R10 signing action pins
+ ├─ #77 (main)  R09 localization v2
+ │
+ └─ Dependabot #46 (main) — LAST, rebase + CI after product stacks
+```
+
+Merge order rules:
+
+1. **#51 first.** Its DeepVerify stabilization resolves the flaky timeout
+   assertion. Stacked branches that show a red `dotnet test` run with ONLY
+   the DeepVerify failure are NOT product regressions — they go green via
+   rebase after #51 merges. Do NOT cherry-pick the fix into children.
+2. **#52 (P1 docs/base) merges to main**, then P1 implementation stacks
+   merge in their base-branch order (innermost first).
+3. **#61 -> #75** is gated on #51 only because the latest red run on #75
+   is the DeepVerify flake; profile-specific runs (Build Linux, Build macOS,
+   earlier dotnet test) are green.
+4. **#63 (this PR) merges to main** after P1 stacks land, then its children
+   (#64, #65, #67, #69) merge; #70 follows #65.
+5. **#76, #77** are independent main-based PRs; merge after #51.
+6. **Dependabot #46 last** — rebase onto final main and re-run CI after all
+   product stacks have merged.
+7. **Superseded/closed PRs** (section 6.2) are NOT in the merge queue.
