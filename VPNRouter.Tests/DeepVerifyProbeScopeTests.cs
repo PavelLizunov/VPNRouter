@@ -42,13 +42,62 @@ public class DeepVerifyProbeScopeTests
     // ── source pins (behaviour needs live processes + a named semaphore) ──
 
     [Fact]
-    public void Detector_GatesOnTunSemaphore_WhileProbeInFlight()
+    public void Detector_CombinesOwnedProcessWithGlobalTunSemaphore_OnEveryPoll()
     {
         var src = LoadSource("VPNRouter.Core", "Services", "RuntimeStatusDetector.cs");
         if (src == null) return; // partial checkout
         var stripped = StripLineComments(src);
-        Assert.Contains("DeepVerifyProbe.AnyProbeInFlight", stripped);
-        Assert.Contains("TunOwnershipLock.IsOwnedByAnyone", stripped);
+        Assert.Contains("TunOwnershipLock.ProbeOwnership", stripped);
+        Assert.Contains("IsTunnelPresent", stripped);
+        Assert.DoesNotContain("DeepVerifyProbe.AnyProbeInFlight", stripped);
+    }
+
+    [Fact]
+    public void CrossProcessProbe_TrustedImageWithoutGlobalTunOwnership_IsNotATunnel()
+    {
+        // A process-local DeepVerifyProbe counter cannot observe a verifier in
+        // another VPNRouter process. The global semaphore is the cross-process
+        // signal: an ownership-filtered image with a positively free lock is a
+        // verifier/orphan, not a live tunnel.
+        Assert.False(RuntimeStatusDetector.IsTunnelPresent(
+            liveTunnelChild: true,
+            ownership: TunOwnershipStatus.Free));
+    }
+
+    [Fact]
+    public void CrossProcessProbe_DifferentParent_CannotBecomeDurableV2Child()
+    {
+        const int tunnelOwnerPid = 2001;
+        var executable = Path.Combine(Path.GetTempPath(), "vpnrouter", "bin", "sing-box-lx.exe");
+        var verifier = new OwnedProcessIdentity(
+            2002,
+            3000,
+            executable,
+            ParentPid: 2999);
+        var tunnelChild = verifier with { Pid = 2003, ParentPid = tunnelOwnerPid };
+
+        Assert.False(ProcessOwnership.CanPublishChildIdentity(
+            verifier,
+            executable,
+            notBeforeUtcTicks: 2500,
+            expectedParentPid: tunnelOwnerPid,
+            enforceParent: true));
+        Assert.True(ProcessOwnership.CanPublishChildIdentity(
+            tunnelChild,
+            executable,
+            notBeforeUtcTicks: 2500,
+            expectedParentPid: tunnelOwnerPid,
+            enforceParent: true));
+    }
+
+    [Fact]
+    public void RetainedSemaphoreWithoutRecordedLiveChild_IsNotATunnel()
+    {
+        // Restart-disabled / restart-exhausted owners may retain the semaphore
+        // after their child dies. Lock ownership alone must never report VPN up.
+        Assert.False(RuntimeStatusDetector.IsTunnelPresent(
+            liveTunnelChild: false,
+            ownership: TunOwnershipStatus.Owned));
     }
 
     [Theory]
