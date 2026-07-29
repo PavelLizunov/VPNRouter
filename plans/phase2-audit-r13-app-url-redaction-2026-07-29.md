@@ -251,37 +251,35 @@ also covers historical logs already on disk.
 ### Tests written (one per DISTINCT security path)
 
 - **Source log redaction path (R13-A)** —
-  `VPNRouter.Tests/AppSubscriptionUrlRedactionTests.cs` (new file, mirrors P09's
-  `SubscriptionUrlRedactionTests` capturing-logger pattern). A focused
-  `[AvaloniaFact]` (VM needs the headless Avalonia harness via `TestAppBuilder`):
-  construct `MainWindowViewModel`, register a subscription whose `Url` carries a
-  token (`https://provider.example/api/sub?token=secret123`), drive the
-  refresh-failure path with a capturing Serilog sink, then assert the rendered log
-  text `DoesNotContain("secret123")`, `DoesNotContain("/api/sub")`, and
-  `Contains("https://provider.example")` (redacted host). If full VM construction
-  proves to require excessive state, fall back to asserting the exact sink line
-  emits `CanaryPolicy.RedactUrl(sub.Url)` shape via the same capturing-logger
-  harness against the smallest reachable VM method — but do NOT build a broad
-  fixture. Pure redaction shape is already pinned by `CanaryPolicyTests` and is
-  not re-tested here.
-- **wgturn diagnostics scrub path (R13-B)** —
-  `VPNRouter.Tests/CrashReporterScrubberWgturnTests.cs` (new file; or extend the
-  existing scrubber test file if one exists). Pure `[Fact]`s, no fixtures:
-  - `ScrubSecrets_WgturnUri_RedactsPayload`:
-    `CrashReporter.ScrubSecrets("add config wgturn://abc123/xyz?k=secret failed")`
-    → contains `wgturn://[redacted]`, `DoesNotContain("secret")`,
-    `DoesNotContain("abc123/xyz")`.
-  - `RedactLogText_WgturnUri_RedactsPayload` (mirrors
-    `DiagnosticsRedactorTests.cs:178-181` which pins the `vless://[redacted]`
-    shape): feed a `wgturn://…` line through `DiagnosticsRedactor.RedactLogText`,
-    assert `wgturn://[redacted]` present and raw payload absent — proves the
-    diagnostics-bundle path is closed end to end.
+  `VPNRouter.Tests/AppUrlRedactionSourceTests.cs` (new file, one `[Theory]` over
+  the 4 sinks = 4 cases, source-shape contract; per-file `FindRepoFile` mirrors
+  `HealthMonitorRecoveryGapTests`). Each case reads its partial and pins that the
+  `{Url}` argument IS `CanaryPolicy.RedactUrl(...)` (positive) and that the raw
+  unwrapped argument is GONE (negative). Source-shape, not runtime:
+  `MainWindowViewModel` builds its own non-injectable Serilog logger and three
+  sinks fire only on a network failure, so a capturing-logger test would need a
+  production seam + broad VM fixture (out of scope). **Limitation**: verifies call
+  shape, not rendered output — the redaction shape (scheme://host, token dropped)
+  is pinned by `CanaryPolicyTests` + P09's `SubscriptionUrlRedactionTests`, so
+  together they prove no raw URL reaches the log.
+- **wgturn diagnostics scrub path (R13-B)** — extended the EXISTING
+  `VPNRouter.Tests/CrashReporterScrubberTests.cs` (+1 `[Fact]`,
+  `ScrubSecrets_RedactsWgturnUri`): `ScrubSecrets("add config
+  wgturn://abc123/xyz?k=secret failed")` → contains `wgturn://[redacted]` (scheme
+  marker retained) and `DoesNotContain("secret")` (payload gone). One test
+  suffices: both export paths (`CrashReporter.WriteReport` crash tail and
+  `DiagnosticsRedactor.RedactLogText` diagnostics bundle) funnel through the SAME
+  `ScrubSecrets`/`_proxyUriPattern`. Greedy `\S+` payload consumption is already
+  pinned for five schemes by `ScrubSecrets_RedactsAllProxyProtocols`, and the
+  `RedactLogText → ScrubSecrets` / crash-tail routing by `DiagnosticsRedactorTests`
+  / `WriteReport_TailStillScrubbed`, so wgturn is covered end to end transitively.
 
 ### Verification approach
 
-Capturing-logger + pure-string assertions only. No live subscription fetch, no
-wgturn-cli launch, no installer, no filesystem mutation beyond xUnit temp state.
-Execution in remote GitHub CI.
+Static source-shape assertions (R13-A) + pure-string scrub assertions (R13-B)
+only. No live subscription fetch, no wgturn-cli launch, no installer, no
+filesystem mutation beyond xUnit temp state, no new production seam. Execution in
+remote GitHub CI.
 
 ## 6. Affected callers / consumers + invariants
 
@@ -308,8 +306,8 @@ Product:
 - `VPNRouter.Core/Services/CrashReporter.cs` (R13-B: `_proxyUriPattern` @ :171)
 
 Tests:
-- `VPNRouter.Tests/AppSubscriptionUrlRedactionTests.cs` (new — R13-A source path, 1 focused test)
-- `VPNRouter.Tests/CrashReporterScrubberWgturnTests.cs` (new — R13-B scrub path, 2 pure tests)
+- `VPNRouter.Tests/AppUrlRedactionSourceTests.cs` (new — R13-A source-shape contract, 1 `[Theory]` × 4 sinks)
+- `VPNRouter.Tests/CrashReporterScrubberTests.cs` (extended — R13-B scrub path, +1 `[Fact]` `ScrubSecrets_RedactsWgturnUri`)
 
 ## 8. Non-goals
 
@@ -376,13 +374,13 @@ Tests:
 **Status**: PENDING
 **Commits**: PENDING
 **Pushed**: PENDING
-**Test deltas**: PENDING
+**Test deltas**: PENDING (expected +5 cases: AppUrlRedactionSourceTests 1 `[Theory]` × 4 sinks + CrashReporterScrubberTests +1 `[Fact]`)
 **Files changed**:
 - `VPNRouter.App/ViewModels/MainWindowViewModel.Subscriptions.cs` (R13-A, 3 sinks)
 - `VPNRouter.App/ViewModels/MainWindowViewModel.Wgturn.cs` (R13-A, 1 sink)
 - `VPNRouter.Core/Services/CrashReporter.cs` (R13-B, `_proxyUriPattern`)
-- `VPNRouter.Tests/AppSubscriptionUrlRedactionTests.cs` (+1 test)
-- `VPNRouter.Tests/CrashReporterScrubberWgturnTests.cs` (+2 tests)
+- `VPNRouter.Tests/AppUrlRedactionSourceTests.cs` (new, +1 `[Theory]`/4 cases)
+- `VPNRouter.Tests/CrashReporterScrubberTests.cs` (extended, +1 `[Fact]`)
 
 **Gate results:**
 - [ ] Gate 1: PENDING
