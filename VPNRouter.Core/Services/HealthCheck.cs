@@ -177,14 +177,21 @@ public static class HealthCheck
         // they hit the failure mid-Stop.
         if (OperatingSystem.IsLinux())
         {
-            if (File.Exists("/usr/bin/pkexec"))
+            var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
+            if (blocker != null)
+            {
+                results.Add(new(Level.Warn,
+                    $"Linux sandbox blocks host TUN privileges ({blocker}). " +
+                    "Run VPNRouter outside AppImage/bubblewrap."));
+            }
+            else if (LinuxRuntimeEnvironment.ResolvePkexec() != null)
             {
                 results.Add(new(Level.Ok, "pkexec / polkit available"));
             }
             else
             {
                 results.Add(new(Level.Warn,
-                    "pkexec not found at /usr/bin/pkexec — auto-update + " +
+                    "trusted pkexec not found — auto-update + " +
                     "elevated Stop will fail unless NOPASSWD sudoers is " +
                     "configured. Install policykit-1 (apt) or polkit (dnf)."));
             }

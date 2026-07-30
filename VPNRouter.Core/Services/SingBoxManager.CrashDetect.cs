@@ -270,8 +270,12 @@ public partial class SingBoxManager
             if (count == 0)
             {
                 LastCrashWasTunOrphan = false;
+                LastCrashWasLinuxTunPermissionFailure = false;
                 return;
             }
+
+            LastCrashWasTunOrphan = false;
+            LastCrashWasLinuxTunPermissionFailure = false;
 
             // Walk the bounded snapshot. The ring buffer wraps around
             // when count > buffer length; either way, every slot we
@@ -283,6 +287,14 @@ public partial class SingBoxManager
                 var line = snapshot[i];
                 if (string.IsNullOrEmpty(line)) continue;
 
+                if (OperatingSystem.IsLinux() && IsLinuxTunPermissionFailure(line))
+                {
+                    LastCrashWasLinuxTunPermissionFailure = true;
+                    _logger.Error(
+                        "[SingBoxManager] Linux denied TUNSETIFF. Automatic restart is disabled until VPNRouter is launched outside the restricting sandbox or receives host TUN privileges.");
+                    return;
+                }
+
                 // Three signature patterns:
                 // 1. The FATAL itself — the strongest signal.
                 // 2. The broader `configure tun interface:` prefix — catches
@@ -291,12 +303,13 @@ public partial class SingBoxManager
                 // 3. The `open interface take too much time to finish`
                 //    warning that precedes the FATAL on network-interface-
                 //    change races (per PinkuDani 2026-05-21 log line 165).
-                if (line.IndexOf("Cannot create a file when that file already exists",
+                if (OperatingSystem.IsWindows() &&
+                    (line.IndexOf("Cannot create a file when that file already exists",
                         StringComparison.OrdinalIgnoreCase) >= 0
                     || line.IndexOf("configure tun interface:",
                         StringComparison.OrdinalIgnoreCase) >= 0
                     || line.IndexOf("open interface take too much time to finish",
-                        StringComparison.OrdinalIgnoreCase) >= 0)
+                        StringComparison.OrdinalIgnoreCase) >= 0))
                 {
                     LastCrashWasTunOrphan = true;
                     _logger.Warning(
@@ -306,14 +319,19 @@ public partial class SingBoxManager
                 }
             }
 
-            LastCrashWasTunOrphan = false;
         }
         catch (Exception ex)
         {
             _logger.Debug(ex,
                 "[SingBoxManager] DetectTunOrphanCrashSignature scan threw (non-fatal)");
             LastCrashWasTunOrphan = false;
+            LastCrashWasLinuxTunPermissionFailure = false;
         }
     }
+
+    internal static bool IsLinuxTunPermissionFailure(string? line) =>
+        !string.IsNullOrEmpty(line) &&
+        line.Contains("TUNSETIFF", StringComparison.OrdinalIgnoreCase) &&
+        line.Contains("operation not permitted", StringComparison.OrdinalIgnoreCase);
 
 }

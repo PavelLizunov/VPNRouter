@@ -644,6 +644,12 @@ public static partial class Strings
 
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
+    public static string LinuxTunSandboxUnsupported => Ru
+        ? "Эта песочница не позволяет sing-box создать системный TUN-интерфейс. Запустите VPNRouter вне AppImage/bubblewrap, например из нативного пакета дистрибутива."
+        : "This sandbox cannot let sing-box create the host TUN interface. Run VPNRouter outside AppImage/bubblewrap, for example from a native distro package.";
+    public static string LinuxPkexecUnavailable => Ru
+        ? "Не найден доверенный pkexec. Установите polkit или выдайте capability файлу sing-box вне песочницы."
+        : "No trusted pkexec was found. Install polkit or grant the sing-box file capability outside a sandbox.";
     public static string AddServerFirst => Ru
         ? "Сначала добавьте хотя бы один VLESS сервер."
         : "Add at least one VLESS server first.";

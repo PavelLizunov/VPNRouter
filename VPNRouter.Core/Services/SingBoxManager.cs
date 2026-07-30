@@ -194,7 +194,7 @@ public partial class SingBoxManager : IDisposable
     /// netsh-based force-disable on `VPNRouter-TUN` before the next
     /// <see cref="Restart"/> call.</para>
     ///
-    /// <para>Detection covers three substring patterns observed in field
+    /// <para>Windows-only detection covers three substring patterns observed in field
     /// logs (PinkuDani 2026-05-21, alicemoren1991 2026-05-19): the FATAL
     /// itself, the broader `configure tun interface:` prefix (catches
     /// localised variants and future TUN-config-failure modes), and the
@@ -202,6 +202,8 @@ public partial class SingBoxManager : IDisposable
     /// the FATAL in network-interface-change races.</para>
     /// </summary>
     public bool LastCrashWasTunOrphan { get; private set; }
+
+    internal bool LastCrashWasLinuxTunPermissionFailure { get; private set; }
 
     /// <param name="http">3G-2 (v3.0 refactor): HTTP seam used for Clash API
     /// hot-reload + liveness probe. Defaults to <see cref="PolicyHttpClient.Shared"/>;
@@ -337,6 +339,7 @@ public partial class SingBoxManager : IDisposable
         // teardown so a Dispose-then-rebuild path (uncommon but possible
         // in long-lived services) doesn't carry stale state.
         LastCrashWasTunOrphan = false;
+        LastCrashWasLinuxTunPermissionFailure = false;
         Stop();
         _handle?.Dispose();
         // B1 (v2.36): explicit _tunLock disposal in the normal cleanup

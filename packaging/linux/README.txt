@@ -36,10 +36,16 @@ tar.gz users: run setcap once to unlock passwordless mode —
      sudo setcap cap_net_admin,cap_net_bind_service=+eip ~/.config/vpnrouter/bin/sing-box
 
 AppImage users: AppImage is a read-only squashfs so setcap on the
-embedded binary is impossible. The app detects this and falls back to
-pkexec, which pops a GUI password prompt via your desktop polkit agent
-(GNOME / KDE / XFCE / Cinnamon all include one by default). Same UX
-as VPNRouter v2.21 — v2.27.
+embedded binary is impossible. An unsandboxed AppImage falls back to
+the host pkexec, which pops a GUI password prompt via your desktop
+polkit agent.
+
+Do not wrap the AppImage in bubblewrap or a user namespace when using
+host TUN mode. In particular, NixOS appimageTools.wrapType2 cannot
+grant the launched sing-box permission to create the host TUN
+interface: a visible file capability does not override NoNewPrivs or
+the user-namespace boundary. Use a native package that deploys and
+grants capability to a verified sing-box binary outside that sandbox.
 
 If both capability and pkexec are unavailable (headless distro with no
 polkit agent), you can still run VPNRouter.App, but Connect will fail

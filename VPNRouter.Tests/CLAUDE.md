@@ -101,6 +101,7 @@ follow the same convention.
 | `RoutingAppListEditorTests` | v2.40.0-r2 additions: `RoutingAppListEditor.IsStillRoutedByAnother` survivor-guard so `ScrubRoutingForApp` won't over-remove a process name another group still routes (21 tests) |
 | `DiagnosticsRedactorTests` | v2.39.0-r1+ diagnostics export redaction; v2.40.0-r1 additions: `obfs_password`/`plugin_opts`, URL userinfo drop, Authorization/Bearer-token redaction (15 tests) |
 | `FreeConfigsApplyGateTests` | v2.40.0 FC interaction gates: Verified-only Connect/Apply, IsBusy guard, target/maxPing clamps (3 tests) |
+| `LinuxTunSandboxTests` | NixOS/bubblewrap guard: NoNewPrivs + uid_map parsing, trusted pkexec resolution, exact Linux TUNSETIFF EPERM classification |
 
 ## Запустить
 

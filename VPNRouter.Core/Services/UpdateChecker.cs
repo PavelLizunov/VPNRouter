@@ -934,7 +934,10 @@ public class UpdateChecker : IDesktopInstaller
         // copy; tar.gz / user-extracted installs don't need it.
         var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
+        var pkexec = needsRoot ? LinuxRuntimeEnvironment.ResolvePkexec() : null;
         Log($"Needs root (pkexec): {needsRoot}");
+        if (needsRoot && pkexec == null)
+            throw new InvalidOperationException("Trusted pkexec not found; cannot update a root-owned Linux installation.");
 
         if (needsRoot)
         {
@@ -952,13 +955,13 @@ public class UpdateChecker : IDesktopInstaller
             if (!helperExists)
             {
                 Log($"WARNING: {helper} missing — falling back to inline cp/chmod (will prompt for password each time)");
-                RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath);
+                RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath, pkexec);
             }
             else
             {
                 Log($"Invoking update helper via pkexec: {helper}");
                 var (hExit, hOut, hErr) = RunWithCapture(
-                    "/usr/bin/pkexec",
+                    pkexec!,
                     $"{helper} \"{sourceDir}\" \"{installDir}\"",
                     timeoutMs: 120_000);
                 Log($"helper exit={hExit} stdout={Truncate(hOut)} stderr={Truncate(hErr)}");
@@ -983,7 +986,7 @@ public class UpdateChecker : IDesktopInstaller
         {
             // User-writable install (tar.gz extracted to $HOME etc): do the
             // cp + chmod + pkill inline. No privilege escalation needed.
-            RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath);
+            RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath, null);
         }
 
         // Drop an install receipt BEFORE attempting launch. Next boot, if
@@ -1127,7 +1130,7 @@ public class UpdateChecker : IDesktopInstaller
     /// still work.
     /// </summary>
     private void RunLegacyPrivilegedSteps(string sourceDir, string installDir,
-        Action<string> log, string logPath)
+        Action<string> log, string logPath, string? pkexec)
     {
         var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
@@ -1136,7 +1139,7 @@ public class UpdateChecker : IDesktopInstaller
         try
         {
             var (_, _, kserr) = needsRoot
-                ? RunWithCapture("/usr/bin/pkexec", "pkill -f sing-box", 5000)
+                ? RunWithCapture(pkexec!, "pkill -f sing-box", 5000)
                 : RunWithCapture("/usr/bin/pkill",  "-f sing-box",       5000);
             log($"pkill sing-box: stderr={Truncate(kserr)}");
         }
@@ -1144,7 +1147,7 @@ public class UpdateChecker : IDesktopInstaller
 
         // 2. cp -rfT
         {
-            var cpCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/cp";
+            var cpCmd  = needsRoot ? pkexec! : "/bin/cp";
             var cpArgs = needsRoot
                 ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
                 : $"-rfT \"{sourceDir}\" \"{installDir}\"";
@@ -1166,7 +1169,7 @@ public class UpdateChecker : IDesktopInstaller
         // 3. chmod +x (best effort)
         try
         {
-            var chmodCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/chmod";
+            var chmodCmd  = needsRoot ? pkexec! : "/bin/chmod";
             var chmodArgs = needsRoot
                 ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
                 : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";

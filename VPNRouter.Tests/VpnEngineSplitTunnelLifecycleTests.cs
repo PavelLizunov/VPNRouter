@@ -377,7 +377,7 @@ public sealed class VpnEngineSplitTunnelLifecycleTests
         //
         // Cross-platform constraint: same as Group 1 — Windows-only
         // because SingBoxManager's Linux path uses pkexec/sudo argv +
-        // a direct Process.Start("/usr/sbin/getcap") probe that isn't
+        // a direct Process.Start("getcap") probe that isn't
         // routed through IProcessRunner.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart drives SingBoxManager's Windows spawn path; Linux uses pkexec + getcap shell-outs not behind IProcessRunner.");

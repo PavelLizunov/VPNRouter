@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
 using Serilog;
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -81,6 +82,7 @@ public partial class SingBoxManager
         // preserves the flag so HealthMonitor's restart path still sees
         // it.)
         LastCrashWasTunOrphan = false;
+        LastCrashWasLinuxTunPermissionFailure = false;
         StopInternal(releaseLock: true);
     }
 
@@ -519,7 +521,7 @@ public partial class SingBoxManager
 
         try
         {
-            var psi = new ProcessStartInfo("/usr/sbin/getcap", $"\"{exePath}\"")
+            var psi = new ProcessStartInfo("getcap", $"\"{exePath}\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -606,6 +608,7 @@ public partial class SingBoxManager
         // scanner would re-match the OLD lines and false-positive on the
         // next OnProcessExited.
         LastCrashWasTunOrphan = false;
+        LastCrashWasLinuxTunPermissionFailure = false;
         lock (_capturedStderrLock)
         {
             _capturedStderrCount = 0;
@@ -680,6 +683,14 @@ public partial class SingBoxManager
         }
         else if (OperatingSystem.IsLinux())
         {
+            var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
+            if (blocker != null)
+            {
+                _linuxUsedPkexec = false;
+                throw new InvalidOperationException(
+                    $"{Strings.LinuxTunSandboxUnsupported} ({blocker})");
+            }
+
             // v2.28.0: Capability-first launch path (passwordless-by-default).
             //
             // If the sing-box binary has CAP_NET_ADMIN + CAP_NET_BIND_SERVICE
@@ -713,7 +724,8 @@ public partial class SingBoxManager
                 _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_bind_service=+eip {Exe}' once)",
                     exePath);
                 _linuxUsedPkexec = true;
-                spawnExe = "/usr/bin/pkexec";
+                spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()
+                    ?? throw new InvalidOperationException(Strings.LinuxPkexecUnavailable);
                 spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
             }
         }
