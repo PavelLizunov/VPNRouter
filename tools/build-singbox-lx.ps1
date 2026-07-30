@@ -54,7 +54,7 @@ function Assert-GitHead { param([string]$RepoDir, [string]$Expected, [string]$La
     $head = (& git -C $RepoDir rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw "git -C $RepoDir rev-parse HEAD failed ($LASTEXITCODE)" }
     if ($head -ne $Expected) {
-        throw "$Label HEAD drift: expected $Expected, got $head. The pinned commit did not check out cleanly (moved tag/branch?) — refusing to build an unpinned core."
+        throw "$Label HEAD drift: expected $Expected, got $head. The pinned commit did not check out cleanly (moved tag/branch?); refusing to build an unpinned core."
     }
     Write-Host "       $Label HEAD pinned OK ($head)" -ForegroundColor DarkGray
 }
