@@ -48,8 +48,9 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y-rN" -Upload
 # Cut stable (skill: cut-stable — НЕ autonomous: по явной команде user после verification, см. rule #6)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y" -Upload
 
-# Push to both remotes
-git push github HEAD:main && git push origin HEAD:main
+# Push the task branch to canonical GitHub and open a PR
+git push -u origin HEAD
+gh pr create --fill --base main
 
 # Verify release state
 gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
@@ -113,12 +114,9 @@ Open Tasks / Last session log.
 явной user-команды** ("cut" / "ok" / "promote") — см. урок v2.31.2 в
 `CLAUDE.local.md`. Safety rails ниже остаются — про destructive ops.
 
-1. **Default = autonomous до stable.** Code change → build → tests → commit →
-   push в оба remote → ship -rN → mac/linux CI → finalize prerelease → delete
-   previous -rN → **MCP+UIA test (mandatory, см. rule #1a)** → доложить
-   user'у с детальным test report'ом + ждать cut. Без вопросов между
-   intermediate шагами. **Cut stable НЕ autonomous** — только по явной
-   команде. См. rule #6.
+1. **Default = branch → PR → CI.** Code change → build → tests → commit →
+   `git push -u origin HEAD` → PR в `main` → фактические checks. Красный PR не
+   merge-ить. После зелёного PR ждать решения владельца о merge/release.
 
    **1a. MCP test после каждого ship — обязательно, не "где testable".**
    Установлено user'ом 2026-05-04 после iter#7. Flow: ship -rN → CI green →
@@ -143,9 +141,9 @@ Open Tasks / Last session log.
    `CopyFromScreen`, PNG назад по WinRM. Если brat/WinRM недоступен — STOP + спросить
    user'а, НЕ откатываться на локальную машину. См. memory
    `dev-box-not-a-test-target` + `no-devbox-input-hijack` + скилл post-ship-mcp-verify.
-2. **Push в ОБА remote** после commit'а: `git push origin HEAD:main && git push forgejo HEAD:main`.
-   Remotes: `origin`=GitHub (canonical), `forgejo`=Forgejo mirror (ssh, через VPN,
-   может быть down — retry позже). НЕТ remote с именем `github`.
+2. **Canonical remote = `origin` (GitHub).** Push только текущей task-ветки:
+   `git push -u origin HEAD`. `forgejo` — зеркало; синхронизация `main`
+   выполняется только после принятого merge/release. НЕТ remote с именем `github`.
 3. **Никогда `--no-verify` / `--no-gpg-sign`** без явного запроса. Если pre-commit
    hook упал — фиксить причину, не bypass. (Safety rail, не workflow confirm.)
 4. **Никогда `git push --force` на `main`** — destructive, можно потерять работу.
@@ -219,8 +217,8 @@ Open Tasks / Last session log.
 
 14. **Git push reminder pattern** (added 2026-05-25 после второго
     "ты опять забыл git" от user'а). После каждого commit IMMEDIATELY
-    выполняй `git push github HEAD:main && git push origin HEAD:main`
-    (или с TOLERATE_FAILURE если gate блокирует). Не задерживай push
+    выполняй `git push -u origin HEAD` для текущей task-ветки.
+    Не задерживай push
     "пока build идёт" — commit и push должны быть атомарной парой.
     Если push заблокирован gate'ом — сразу info user'у текущий state
     + что ждём. User видит remote main как single source of truth;
@@ -255,8 +253,8 @@ Open Tasks / Last session log.
 
 ## Git safety
 
-- `main` — protected (никаких force-push без запроса). Заявленные fixes идут
-  через прямые commits.
+- `main` трактуется как protected: никаких прямых/force push. Изменения идут
+  через task branch + PR.
 - Tags `vX.Y.Z` (stable) — финальные, не force-update'ить после публикации
   release.
 - Tags `vX.Y.Z-rN` (prerelease) — можно force-update'ить пока не опубликован

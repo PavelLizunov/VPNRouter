@@ -26,7 +26,7 @@ name: Verify Release Integrity
 #   4) Recomputes sha256 of each binary and compares to its bundled .sha256
 #      sidecar (Linux: "<hex>  <filename>"; Windows: bare hex; both formats
 #      handled).
-#   5) Counts assets — current convention is 14 (4 Win + 2 Mac + 6 Linux +
+#   5) Counts assets — current convention is 16 (4 Win + 4 Mac + 6 Linux +
 #      2 Android). Soft warning if missing (mac/linux/android CI may still
 #      be uploading).
 #   6) On hard failure: drafts the release (hides from users), then prepends
@@ -200,8 +200,8 @@ jobs:
           WARNINGS=()
 
           # ── 1. Asset count check ──────────────────────────────────────
-          # 14 expected: 4 Win (zip+sha256 ×2) + 2 Mac (dmg, zip — no sha256
-          # sidecars; build-mac.sh doesn't emit them) + 6 Linux (deb/AppImage/
+          # 16 expected: 4 Win (zip+sha256 ×2) + 4 Mac (dmg+sha256, zip+sha256)
+          # + 6 Linux (deb/AppImage/
           # tar.gz × bin+sha256) + 2 Android (apk + sha256, from build-android.yml).
           EXPECTED_FILES=(
             "VPNRouter-v${EXPECTED_VERSION}-win.zip"
@@ -209,7 +209,9 @@ jobs:
             "VPNRouter-update-v${EXPECTED_VERSION}-win.zip"
             "VPNRouter-update-v${EXPECTED_VERSION}-win.zip.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-mac.dmg"
+            "VPNRouter-v${EXPECTED_VERSION}-mac.dmg.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-mac.zip"
+            "VPNRouter-v${EXPECTED_VERSION}-mac.zip.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-linux-amd64.deb"
             "VPNRouter-v${EXPECTED_VERSION}-linux-amd64.deb.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-linux-x86_64.AppImage"
@@ -230,11 +232,11 @@ jobs:
             # build-android.yml) may still be uploading at the time of
             # `release: published`. Each `gh release upload --clobber`
             # fires a fresh `release: edited` that re-runs this workflow
-            # until all 14 are present.
+            # until all 16 are present.
             WARNINGS+=("Missing ${#MISSING[@]}/${#EXPECTED_FILES[@]} expected assets — parallel CI may still be uploading:")
             for m in "${MISSING[@]}"; do WARNINGS+=("  - $m"); done
           else
-            echo "✓ All 14 expected assets present"
+            echo "✓ All 16 expected assets present"
           fi
 
           # ── 2. AppVersion check on each binary asset ──────────────────

@@ -31,23 +31,18 @@ Write-Host "Version: $Version"
 Write-Host "Output:  $TarPath"
 Write-Host ""
 
-Write-Host "[1/6] Clean..." -ForegroundColor Yellow
+Write-Host "[1/5] Clean..." -ForegroundColor Yellow
 foreach ($d in @($PublishDir, $StageDir)) {
     if (Test-Path $d) { Remove-Item -Recurse -Force $d }
 }
 if (Test-Path $TarPath) { Remove-Item -Force $TarPath }
 
-Write-Host "[2/6] dotnet publish VPNRouter.App (linux-x64)..." -ForegroundColor Yellow
+Write-Host "[2/5] dotnet publish VPNRouter.App (linux-x64)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r linux-x64 --self-contained true -o $PublishDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "App publish failed" }
 
-Write-Host "[3/6] dotnet publish VPNRouter.CLI (shared runtime)..." -ForegroundColor Yellow
-dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
-    -c Release -r linux-x64 --self-contained true -o $PublishDir 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "CLI publish failed" }
-
-Write-Host "[4/6] Staging..." -ForegroundColor Yellow
+Write-Host "[3/5] Staging..." -ForegroundColor Yellow
 $AppDir = Join-Path $StageDir "VPNRouter"
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 Copy-Item -Path (Join-Path $PublishDir "*") -Destination $AppDir -Recurse -Force
@@ -121,7 +116,7 @@ if ($wgturnSrcOk -and $hasGo) {
 Write-Host "    Layout:"
 Get-ChildItem $AppDir | ForEach-Object { Write-Host "      $($_.Name)" }
 
-Write-Host "[5/6] tar.gz..." -ForegroundColor Yellow
+Write-Host "[4/5] tar.gz..." -ForegroundColor Yellow
 Push-Location $StageDir
 try {
     # Use Windows built-in tar.exe explicitly. Git Bash / MSYS2 PATHs
@@ -141,7 +136,7 @@ $shaPath = "$TarPath.sha256"
 Write-Host "    SHA256: $sha256"
 
 if ($Upload) {
-    Write-Host "[6/6] gh release upload..." -ForegroundColor Yellow
+    Write-Host "[5/5] gh release upload..." -ForegroundColor Yellow
     gh release view "v$Version" --repo $GitHubRepo --json tagName 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "    Release v$Version not found — run build.ps1 -Upload first." -ForegroundColor Red
@@ -151,7 +146,7 @@ if ($Upload) {
     if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
     Write-Host "    Uploaded." -ForegroundColor Green
 } else {
-    Write-Host "[6/6] Skipping upload." -ForegroundColor Yellow
+    Write-Host "[5/5] Skipping upload." -ForegroundColor Yellow
 }
 
 Write-Host ""

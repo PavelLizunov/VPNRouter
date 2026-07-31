@@ -81,12 +81,12 @@ jobs:
       # Phase 1 Q9 — sing-box upstream tarball cache. build.ps1 caches the
       # downloaded ZIP under tools\singbox-cache\ and skips the download
       # when the cached file is already present. Key pins SingBoxVersion
-      # (1.13.13 at the time of writing) so cache invalidates automatically
+      # (1.13.14 at the time of writing) so cache invalidates automatically
       # when build.ps1 bumps the upstream. Q11 will pin actions/cache to SHA.
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: tools/singbox-cache/
-          key: singbox-1.13.13-${{ runner.os }}
+          key: singbox-1.13.14-${{ runner.os }}
 
       - name: Setup Go (for VPNRouter.GUI stub)
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0

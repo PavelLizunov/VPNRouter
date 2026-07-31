@@ -72,14 +72,14 @@ taskkill /F /IM VPNRouter.CLI.exe >nul 2>&1
 taskkill /F /IM sing-box.exe >nul 2>&1
 ping -n 3 127.0.0.1 >nul
 
-:: == Download latest stable ==========================================
-echo [4/7] Downloading latest VPNRouter (this may take 30-60 seconds)...
+:: == Download latest stable + verify SHA256 (fail-closed) ============
+echo [4/7] Downloading latest VPNRouter + verifying SHA256 (this may take 30-60 seconds)...
 set "TMPZIP=%TEMP%\vpnr-repair.zip"
 del /Q "%TMPZIP%" >nul 2>&1
-powershell -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $r = Invoke-RestMethod 'https://api.github.com/repos/PavelLizunov/VPNRouter/releases?per_page=10'; $stable = $r | Where-Object { -not $_.prerelease -and -not $_.draft } | Select-Object -First 1; $asset = $stable.assets | Where-Object { $_.name -like 'VPNRouter-v*-win.zip' -and $_.name -notlike '*update*' } | Select-Object -First 1; if (-not $asset) { exit 1 }; Invoke-WebRequest -Uri $asset.browser_download_url -OutFile '%TMPZIP%' -UseBasicParsing"
+powershell -ExecutionPolicy Bypass -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $r = Invoke-RestMethod 'https://api.github.com/repos/PavelLizunov/VPNRouter/releases?per_page=10'; $stable = $r | Where-Object { -not $_.prerelease -and -not $_.draft } | Select-Object -First 1; $asset = $stable.assets | Where-Object { $_.name -like 'VPNRouter-v*-win.zip' -and $_.name -notlike '*update*' } | Select-Object -First 1; if (-not $asset) { Write-Host 'install ZIP asset not found'; exit 1 }; Invoke-WebRequest -Uri $asset.browser_download_url -OutFile '%TMPZIP%' -UseBasicParsing; $shaAsset = $stable.assets | Where-Object { $_.name -eq ($asset.name + '.sha256') } | Select-Object -First 1; if (-not $shaAsset) { Write-Host 'SHA256 sidecar asset not found - fail closed'; Remove-Item '%TMPZIP%' -Force -ErrorAction SilentlyContinue; exit 1 }; $shaTmp = Join-Path $env:TEMP 'vpnr-repair-sha.txt'; Invoke-WebRequest -Uri $shaAsset.browser_download_url -OutFile $shaTmp -UseBasicParsing; $expectedSha = (Get-Content -Raw $shaTmp).Trim().Split()[0].ToLower(); Remove-Item $shaTmp -Force -ErrorAction SilentlyContinue; if ($expectedSha -notmatch '^[0-9a-f]{64}$') { Write-Host 'sidecar is not a strict 64-hex SHA256 - fail closed'; Remove-Item '%TMPZIP%' -Force -ErrorAction SilentlyContinue; exit 1 }; $actualSha = (Get-FileHash -Algorithm SHA256 '%TMPZIP%').Hash.ToLower(); if ($actualSha -ne $expectedSha) { Write-Host ('SHA256 mismatch expected=' + $expectedSha + ' actual=' + $actualSha); Remove-Item '%TMPZIP%' -Force -ErrorAction SilentlyContinue; exit 1 }; Write-Host ('SHA256 verified: ' + $actualSha)"
 if errorlevel 1 (
     echo.
-    echo [ERROR] Failed to download VPNRouter. Check internet connection.
+    echo [ERROR] Download or SHA256 verification failed. Check internet connection or release assets.
     pause
     exit /b 2
 )
