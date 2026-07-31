@@ -16,6 +16,19 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Qwen follow-up audit — 2026-07-31
+
+Durable import of a Qwen follow-up mini-audit that previously existed only in
+chat (no persisted record). Entries may be candidate/unverified; none are
+confirmed defects and none are resolved. P0/P1 gating semantics unchanged (see
+file header).
+
+- [ ] **P1 IN PROGRESS** — QF-1: remote-only windows-brat verifier replaces the local VpnRouterTestMcp; implementation exists only on the open PR #88 branch (not merged) and live end-to-end verification is not yet evidenced — commit 1453fc16 / PR #88 — next rolling candidate
+- [ ] **P2 CANDIDATE** — QF-2: screenshot matrix via Qwen Vision for Simple/Advanced × RU/EN × Light/Dark × DPI 100/125/150 × narrow width × Disconnected/Connected/Error/Update × top/bottom of scroll pages — depends on QF-1 — TBD
+- [ ] **P2 CANDIDATE** — QF-3: add only ~20 stable AutomationId values for critical E2E controls after scenarios prove they are needed (current count 0) — depends on QF-1 — TBD
+- [ ] **P2 CANDIDATE** — QF-4: measurement-first perf profiles (cold start, connect, 5-minute idle/minimized) with dotnet-counters, then dotnet-trace only for a proven hotspot; known candidate = hidden-window connection-stats polling — TBD
+- [ ] **P3 DEFERRED** — QF-5: evaluate removal of ~1450 lines duplicated App localization + ~360 lines binding wrappers only after a UIA/headless safety net exists; user impact low, regression risk nontrivial — TBD
+
 ### Qwen full-application audit — 2026-07-28 (18 parallel read-only reviewers; Codex-verified)
 - [x] **P0 RESOLVED v2.48.0-r1** — desktop update SHA256 is fetched but discarded by the `IUpdateSource` adapter (`FullChecksumUrl=null`), so normal GitHub release staging skips the hash gate — `VPNRouter.Core/Services/UpdateChecker.cs:119,251` — next rolling candidate
 - [x] **P1 RESOLVED v2.48.0-r1** — `TunOwnershipLock` is a disposed singleton: the second connect/disconnect lifecycle reacquires the semaphore but `Dispose` returns early and never releases it, blocking other VPNRouter processes until app exit — `VPNRouter.Core/Services/TunOwnershipLock.cs:114` — next rolling candidate

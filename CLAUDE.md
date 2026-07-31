@@ -262,6 +262,16 @@ Open Tasks / Last session log.
       `.git-suggested-hash-bump.txt` first — if present, apply that
       bump to MainWindowViewModelCharacterizationTests.cs.
 
+16. **Все findings — в `plans/OPEN-DEFECTS.md` до реализации или отсрочки**
+    (added 2026-07-31). Любой finding из audit, review, research, bug-hunt,
+    Qwen/Codex pass или live verification записывается в
+    `plans/OPEN-DEFECTS.md` ДО того, как его реализуют или отложат. Запись
+    может быть candidate/unverified и обязана хранить: source/evidence,
+    severity/impact, disposition/status (candidate, confirmed, refuted,
+    deferred, in progress, resolved) и implementation/PR reference когда он
+    есть. Никогда не оставляй findings только в chat или во временном отчёте.
+    P0/P1 gating-семантика, уже задокументированная в OPEN-DEFECTS, не меняется.
+
 ## Git safety
 
 - `main` трактуется как protected: никаких прямых/force push. Изменения идут
