@@ -80,6 +80,24 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("verify-last-commit-ci.ps1", hook);
     }
 
+    [Fact]
+    public void PreCommitHook_EnablesPipefailBeforeGate1Build()
+    {
+        var hook = Read(".githooks", "pre-commit");
+
+        const string pipefail = "set -o pipefail";
+        const string gate1Build = "if ! dotnet build";
+
+        Assert.Contains(pipefail, hook);
+        Assert.Contains(gate1Build, hook);
+
+        var pipefailIndex = hook.IndexOf(pipefail, StringComparison.Ordinal);
+        var gate1BuildIndex = hook.IndexOf(gate1Build, StringComparison.Ordinal);
+        Assert.True(
+            pipefailIndex >= 0 && gate1BuildIndex >= 0 && pipefailIndex < gate1BuildIndex,
+            "set -o pipefail must appear before Gate 1's actual 'if ! dotnet build' command.");
+    }
+
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
 
