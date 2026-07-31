@@ -31,7 +31,7 @@ foreach ($line in $lines) {
         $inOpen = ($line -match '(?i)^##\s+Open\b')
         continue
     }
-    if ($inOpen -and ($line -match '^\s*-\s*\[\s\]\s')) {
+    if ($inOpen -and ($line -match '^\s*-\s*\[\s\]\s') -and ($line -match '\*\*P[01]\*\*')) {
         $open += $line.Trim()
     }
 }

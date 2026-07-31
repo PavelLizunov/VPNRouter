@@ -31,27 +31,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Wave 32b deferred — NU1102 for preview Mono runtime pack 10.0.8.
-    # The .NET 10 preview SDK 10.0.300 references a Mono pack that
-    # isn't on any public nuget feed yet. We tried `dotnet10`,
-    # `dotnet-experimental`, `dotnet-public` — none has the exact
-    # build version the workload manifest pins. Job-level
-    # `continue-on-error: true` (r14c attempt) didn't help — GitHub
-    # still reports the check-run conclusion as "failure", so the
-    # commit status keeps showing a red X.
-    #
-    # Honest close (r15b): gate the job to `workflow_dispatch` only.
-    # Tag pushes will SKIP the job entirely (skipped jobs report as
-    # "skipped" conclusion, which doesn't block commit status). The
-    # workflow stays in the repo for manual probing via
-    # `gh workflow run "Build Android APK"` whenever we want to test
-    # whether NU1102 has been resolved upstream.
-    #
-    # Tracked in `MEMORY.md` "Wave 32b NU1102 NuGet Mono pack
-    # workaround for CI Android — deferred". When the missing pack
-    # lands publicly (or .NET 10 ships GA), remove this `if:` line
-    # and the workflow goes back to auto-running on tag push.
-    if: github.event_name == 'workflow_dispatch'
+    # The Android publish step selects android-arm64 as its active RID.
+    # Without singular RuntimeIdentifier, publish falls back to the Linux
+    # runner RID and tries to restore an unavailable Mono.linux-x64 pack.
 
     steps:
       - name: Checkout
@@ -67,15 +49,9 @@ jobs:
       # 2026-05-25 (Wave 32c): pinned 10.0.x → 10.0.100 in r4 to dodge the
       # `Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8` NU1102
       # restore failure. **Did not help** — even SDK 10.0.100's bundled
-      # workload manifest references the same missing pack, confirming
-      # the pack was withdrawn before 10.0.100 GA shipped. Job stays
-      # gated to `workflow_dispatch` only via the `if:` line above so
-      # tag pushes don't get a red X.
-      #
-      # Real fix requires either Agent A's Option B (vendor/patch the
-      # workload manifest to remap Mono.linux-x64 to the nearest
-      # available 9.0.0-preview) or waiting for upstream to repair the
-      # manifest. Tracked in `plans/research-android-ci-unblock-2026-05-25.md`.
+      # workload manifest references the same missing pack. The SDK version
+      # was not the cause: publish had no active Android RuntimeIdentifier and
+      # fell back to the linux-x64 host RID.
       - name: Setup .NET 8 + 10 SDK
         uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
         with:
@@ -343,7 +319,7 @@ jobs:
           dotnet publish VPNRouter.Android/VPNRouter.Android.csproj \
             -c Release \
             -p:VpnRouterVersion="${{ steps.version.outputs.version }}" \
-            -p:RuntimeIdentifiers=android-arm64 \
+            -p:RuntimeIdentifier=android-arm64 \
             -p:AndroidSigningKeyStore="$GITHUB_WORKSPACE/vpnrouter.keystore" \
             -p:AndroidSigningStorePass="$KS_PASS" \
             -p:AndroidSigningKeyAlias=vpnrouter \

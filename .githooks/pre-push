@@ -30,13 +30,23 @@
 
 set -e
 
-# Detect tag pushes (let through — tag CI is fired by tag workflows).
+# Detect tag and non-main branch pushes. The CI gate protects updates to main;
+# feature branches get their own checks after push and through the PR.
+pushes_main=false
 while read local_ref local_sha remote_ref remote_sha; do
     if [[ "$local_ref" == refs/tags/* ]]; then
         echo "[pre-push] Tag push detected ($local_ref) — skipping CI check."
         exit 0
     fi
+    if [[ "$remote_ref" == "refs/heads/main" ]]; then
+        pushes_main=true
+    fi
 done
+
+if [[ "$pushes_main" != true ]]; then
+    echo "[pre-push] Non-main branch push detected — CI will run on the branch/PR."
+    exit 0
+fi
 
 # Resolve repo root.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
