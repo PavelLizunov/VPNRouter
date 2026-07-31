@@ -191,6 +191,24 @@ public sealed class HelperCmdParserGuardTests
             emittedSrc);
     }
 
+    [Fact]
+    public void HelperScriptTemplate_WaitsForServiceProcessWithRealDelay()
+    {
+        var src = ReadUpdateCheckerSourceOrSkip();
+        if (src == null) return;
+
+        var emittedSrc = StripLineComments(src);
+        var waitCall = emittedSrc.IndexOf("call :wait_service_stop", StringComparison.Ordinal);
+        var serviceKill = emittedSrc.IndexOf(
+            "taskkill /IM VPNRouter.Service.exe /F", StringComparison.Ordinal);
+        var copy = emittedSrc.IndexOf("xcopy ", StringComparison.Ordinal);
+
+        Assert.True(waitCall >= 0 && waitCall < serviceKill && serviceKill < copy,
+            "helper must stop and clear VPNRouter.Service.exe before xcopy");
+        Assert.DoesNotContain("ping -n 1", emittedSrc);
+        Assert.Contains("ping -n 2 127.0.0.1", emittedSrc);
+    }
+
     /// <summary>
     /// v2.31.10-r2 audit hazard #6: helper.cmd must self-delete at the
     /// end. Without <c>del /Q "%~f0"</c> every Windows auto-update leaves
