@@ -594,17 +594,17 @@ public class UpdateChecker : IDesktopInstaller
             $"set \"SRC={extractedDir.TrimEnd('\\')}\"",
             $"set \"DST={appDir}\"",
             "echo [%TIME%] vpnrouter-update helper start, parent=%PARENT_PID% >>\"%LOG%\"",
-            // Wait for parent to exit (max 30 s = 60 × 0.5 s).
+            // Wait for parent to exit (max ~30 s = 30 × ~1 s).
             "set /a TRIES=0",
             ":waitloop",
             "tasklist /FI \"PID eq %PARENT_PID%\" 2>nul | find \"%PARENT_PID%\" >nul",
             "if errorlevel 1 goto parentgone",
             "set /a TRIES+=1",
-            "if !TRIES! gtr 60 (",
+            "if !TRIES! gtr 30 (",
             "  echo [%TIME%] parent %PARENT_PID% still alive after 30 s, proceeding anyway >>\"%LOG%\"",
             "  goto parentgone",
             ")",
-            "ping -n 1 -w 500 127.0.0.1 >nul",
+            "ping -n 2 127.0.0.1 >nul",
             "goto waitloop",
             ":parentgone",
             "echo [%TIME%] parent gone, checking VPNRouter Windows Service >>\"%LOG%\"",
@@ -647,13 +647,17 @@ public class UpdateChecker : IDesktopInstaller
             // same class as the v2.31.7 100%-break). Moved to a TOP-LEVEL
             // :wait_service_stop subroutine (labels outside any block).
             "    call :wait_service_stop",
-            "    echo [%TIME%] Service stop confirmed >>\"%LOG%\"",
+            // SCM may report STOPPED just before the service host releases
+            // its DLL handles. Force-close only that possible lingering host.
+            "    taskkill /IM VPNRouter.Service.exe /F >nul 2>&1",
+            "    echo [%TIME%] Service process cleared for file copy >>\"%LOG%\"",
             "  )",
             ")",
             "echo [%TIME%] killing sing-box and copying files >>\"%LOG%\"",
             "taskkill /IM sing-box.exe /F >nul 2>&1",
-            // Give Windows a moment to release file handles after parent exit.
-            "ping -n 1 -w 750 127.0.0.1 >nul",
+            // `ping -n 1 localhost` returns immediately; two pings provide
+            // the real ~1 s grace period for killed child handles to close.
+            "ping -n 2 127.0.0.1 >nul",
             "xcopy \"%SRC%\\*\" \"%DST%\\\" /E /Y /Q /R /I >>\"%LOG%\" 2>&1",
             "set XCOPY_EXIT=!ERRORLEVEL!",
             "echo [%TIME%] xcopy exit=!XCOPY_EXIT! >>\"%LOG%\"",
@@ -707,11 +711,11 @@ public class UpdateChecker : IDesktopInstaller
             "sc query VPNRouter | find \"STOPPED\" >nul",
             "if not errorlevel 1 goto :eof",
             "set /a SVC_TRIES+=1",
-            "if !SVC_TRIES! gtr 20 (",
-            "  echo [%TIME%] Service still not STOPPED after 10 s, proceeding anyway >>\"%LOG%\"",
+            "if !SVC_TRIES! gtr 10 (",
+            "  echo [%TIME%] Service still not STOPPED after 10 s — forcing process exit >>\"%LOG%\"",
             "  goto :eof",
             ")",
-            "ping -n 1 -w 500 127.0.0.1 >nul",
+            "ping -n 2 127.0.0.1 >nul",
             "goto svcstoploop",
         });
 
