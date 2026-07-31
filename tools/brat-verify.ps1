@@ -36,10 +36,41 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Resolve a credential file: prefer the current checkout root (local-first),
+# then fall back to the primary worktree root via Git's common directory.
+# Never copies credentials into task worktrees; fails closed if neither exists.
+function Resolve-CredentialFile {
+    param(
+        [Parameter(Mandatory = $true)] [string]$FileName,
+        [Parameter(Mandatory = $true)] [string]$LocalRoot
+    )
+    $local = Join-Path $LocalRoot $FileName
+    if (Test-Path $local) { return $local }
+    $commonDir = $null
+    try { $commonDir = git -C $LocalRoot rev-parse --git-common-dir 2>$null } catch { }
+    if ($commonDir) {
+        $commonDir = @($commonDir)[0].ToString().Trim()
+        if ($commonDir -and $commonDir -ne '.') {
+            if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
+                $commonDir = Join-Path $LocalRoot $commonDir
+            }
+            $primaryRoot = Split-Path $commonDir -Parent
+            if ($primaryRoot) {
+                $primary = Join-Path $primaryRoot $FileName
+                if (Test-Path $primary) { return $primary }
+            }
+        }
+    }
+    # Neither location has the file. Return the local path so the caller's
+    # own Test-Path guard (New-VerifiedBratSession) produces the actionable
+    # missing-file error; this also keeps store/bootstrap paths reachable.
+    return $local
+}
+
 $Root            = Split-Path $PSScriptRoot -Parent
 $BratIp          = '192.168.0.106'
 $BratMachineName = 'WINBRAT'
-$CredFile        = Join-Path $Root '.testpc-cred-192.168.0.106.xml'
+$CredFile        = Resolve-CredentialFile -FileName '.testpc-cred-192.168.0.106.xml' -LocalRoot $Root
 $RemoteVerifyRoot = 'C:\r4review\verify'
 
 function New-VerifiedBratSession {

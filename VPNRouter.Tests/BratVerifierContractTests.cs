@@ -71,6 +71,40 @@ public sealed class BratVerifierContractTests
         Assert.Contains("NO local fallback", skill);
     }
 
+    [Fact]
+    public void Scripts_ResolveCredentials_LocalFirst_WithPrimaryWorktreeFallback_AndNeverCopyThem()
+    {
+        var brat = Read("tools", "brat-verify.ps1");
+        var testvm = Read("tools", "testvm-control.ps1");
+
+        foreach (var script in new[] { brat, testvm })
+        {
+            // Both standalone scripts carry the duplicated credential-resolution helper.
+            var fnStart = script.IndexOf("function Resolve-CredentialFile", StringComparison.Ordinal);
+            Assert.True(fnStart >= 0, "Each script must define Resolve-CredentialFile.");
+
+            // Primary-worktree fallback via Git's common directory, anchored to the
+            // checkout root ($LocalRoot) so it is independent of the caller's CWD.
+            Assert.Contains("git -C $LocalRoot rev-parse --git-common-dir", script);
+
+            // Local-first: the helper checks the current checkout before the git fallback.
+            var fn = script.Substring(fnStart);
+            var localCheck = fn.IndexOf("Test-Path $local", StringComparison.Ordinal);
+            var gitFallback = fn.IndexOf("git -C $LocalRoot rev-parse --git-common-dir", StringComparison.Ordinal);
+            Assert.True(localCheck >= 0 && gitFallback > localCheck,
+                "Resolve-CredentialFile must check the local checkout (Test-Path $local) before the git common-dir fallback.");
+        }
+
+        // Fail-closed: the callers guard on the resolved path and throw when missing.
+        Assert.Contains("Test-Path $CredFile", brat);
+        Assert.Contains("Test-Path $TokenFile", testvm);
+
+        // Credential files are never copied into task worktrees.
+        Assert.DoesNotContain("Copy-Item", testvm);
+        Assert.DoesNotContain("Copy-Item -Path $CredFile", brat);
+        Assert.DoesNotContain("Copy-Item -Path $TokenFile", brat);
+    }
+
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
 
