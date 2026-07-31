@@ -85,7 +85,7 @@ step when pushing a stable tag to Forgejo.
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `Codex.ai/design` URL — fetch + extract + map tokens |
 | `update-readme-versions` | После каждого release бампим version examples в README |
-| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (192.168.0.106) через `tools/brat-verify.ps1`: deploy → launch → remote UIA + screenshots (`artifacts/brat-verify`) → log scan на brat → PASS/FAIL report. Без local fallback. |
+| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1`: deploy → launch → remote UIA + screenshots (`artifacts/brat-verify`) → log scan на brat → PASS/FAIL report. Без local fallback. |
 
 ## Memory layer
 
@@ -126,7 +126,7 @@ Safety rails ниже остаются — про destructive ops.
 
    **КРИТИЧНО — цель = windows-brat, НЕ dev box (инцидент 2026-07-06).**
    Install / launch / connect VPNRouter и любые UIA/screenshot-действия идут
-   ТОЛЬКО на тест-VM **windows-brat (192.168.0.106, MachineName `WINBRAT`)
+   ТОЛЬКО на тест-VM **windows-brat (100.115.182.0, MachineName `WINBRAT`)
    через WinRM via `tools/brat-verify.ps1`, невидимо и fail-closed** (каждое
    действие повторно верифицирует identity WINBRAT). НИКОГДА не
    ставить/запускать/останавливать VPNRouter на машине агента (dev box)
@@ -194,7 +194,7 @@ Safety rails ниже остаются — про destructive ops.
     binary uploaded) — **MUST** запустить `post-ship-mcp-verify` skill
     (имя директории сохранено для совместимости). Skill автоматически:
     SHA256-check ZIP from GitHub release → deploy + launch на фиксированной
-    VM WINBRAT (192.168.0.106) через `tools/brat-verify.ps1` → walk через
+    VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1` → walk через
     changed pages via remote UIA (clicks/toggles) + screenshots под
     `artifacts/brat-verify/` → tail `vpnrouter*.log` на brat for
     `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL report. Реализация:

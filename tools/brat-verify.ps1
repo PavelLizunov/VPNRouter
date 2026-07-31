@@ -1,6 +1,6 @@
 ﻿# Safety: fixed target only. Never accepts a caller-supplied host/IP/hostname
 # and never falls back to the local machine; every action first verifies over
-# WinRM that 192.168.0.106 really is WINBRAT, and fails closed on any mismatch.
+# WinRM that 100.115.182.0 really is WINBRAT, and fails closed on any mismatch.
 #
 # Interactive UI work (uia/screenshot) never touches local process/input/screen
 # APIs from this dev box: a helper script is shipped to the verified brat box
@@ -68,8 +68,13 @@ function Resolve-CredentialFile {
 }
 
 $Root            = Split-Path $PSScriptRoot -Parent
-$BratIp          = '192.168.0.106'
+# Fixed transport endpoint: the windows-brat VM's Tailscale CGNAT address.
+# Caller-nonconfigurable on purpose (see header); the LAN 192.168.0.106 is retired.
+$BratIp          = '100.115.182.0'
 $BratMachineName = 'WINBRAT'
+# Credential file keeps its legacy LAN-era name on purpose: the DPAPI-encrypted
+# secret already exists under this filename, so we resolve it as-is and avoid any
+# secret copy/migration. Only the transport IP above changed, not the credential.
 $CredFile        = Resolve-CredentialFile -FileName '.testpc-cred-192.168.0.106.xml' -LocalRoot $Root
 $RemoteVerifyRoot = 'C:\r4review\verify'
 
@@ -459,7 +464,9 @@ switch ($Action) {
 
         $s = New-VerifiedBratSession
         Remove-PSSession $s
-        & (Join-Path $Root 'deploy-to-testpc.ps1') -TestHost $BratIp -Version $Version
+        # Pass the already-resolved credential explicitly so the generic deploy
+        # script never prompts or writes a credential cache named for the new IP.
+        & (Join-Path $Root 'deploy-to-testpc.ps1') -TestHost $BratIp -Version $Version -Credential (Import-Clixml $CredFile)
         if ($LASTEXITCODE) { throw "deploy-to-testpc.ps1 failed (exit $LASTEXITCODE)." }
     }
 

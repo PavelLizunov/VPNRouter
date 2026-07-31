@@ -7,7 +7,12 @@ public sealed class BratVerifierContractTests
     {
         var script = Read("tools", "brat-verify.ps1");
 
-        Assert.Contains("192.168.0.106", script);
+        // Fixed transport endpoint is the Tailscale peer; the WINBRAT identity
+        // check stays mandatory. The legacy LAN-era credential filename is
+        // retained on purpose so no secret copy/migration is required.
+        Assert.Contains("$BratIp          = '100.115.182.0'", script);
+        Assert.Contains("$BratMachineName = 'WINBRAT'", script);
+        Assert.Contains(".testpc-cred-192.168.0.106.xml", script);
         Assert.Contains("WINBRAT", script);
         Assert.DoesNotContain("$TargetHost", script);
         Assert.DoesNotContain("$TestHost", script);
@@ -65,10 +70,34 @@ public sealed class BratVerifierContractTests
         Assert.Contains("SHA256", deploy);
         Assert.Contains("mismatch", deploy);
         Assert.Contains("Failing closed", deploy);
+        // deploy hands the already-resolved credential to the generic deploy
+        // script explicitly, so it never prompts or caches a new-IP credential.
+        Assert.Contains("-Credential (Import-Clixml $CredFile)", deploy);
 
         var skill = Read(".agents", "skills", "post-ship-mcp-verify", "SKILL.md");
-        Assert.Contains("192.168.0.106", skill);
+        Assert.Contains("100.115.182.0", skill);
         Assert.Contains("NO local fallback", skill);
+    }
+
+    [Fact]
+    public void TestVmControl_DefaultsToTailscaleEndpoint_AndProbesWinRmBeforeProxmoxInEnsureReady()
+    {
+        var testvm = Read("tools", "testvm-control.ps1");
+
+        // Default WinRM transport endpoint is the fixed Tailscale peer.
+        Assert.Contains("$VmIp = '100.115.182.0'", testvm);
+
+        // ensure-ready probes the Tailscale WinRM endpoint before its first
+        // Proxmox-backed Get-VmStatus call, so an already-reachable VM reports
+        // ready with no Proxmox API/token requirement.
+        var actionStart = testvm.IndexOf("'ensure-ready' {", StringComparison.Ordinal);
+        Assert.True(actionStart >= 0, "testvm-control.ps1 must keep an 'ensure-ready' action.");
+        var ensureReady = testvm.Substring(actionStart);
+
+        var probe = ensureReady.IndexOf("Test-NetConnection -ComputerName $VmIp -Port 5985", StringComparison.Ordinal);
+        var firstStatus = ensureReady.IndexOf("Get-VmStatus", StringComparison.Ordinal);
+        Assert.True(probe >= 0, "ensure-ready must probe the Tailscale WinRM endpoint.");
+        Assert.True(firstStatus > probe, "ensure-ready must probe WinRM before its first Get-VmStatus call.");
     }
 
     [Fact]
@@ -105,8 +134,46 @@ public sealed class BratVerifierContractTests
         Assert.DoesNotContain("Copy-Item -Path $TokenFile", brat);
     }
 
+    [Fact]
+    public void ClaudeMirror_IsByteIdenticalToAgentsSkill_AndObsoleteLocalScriptsAreGone()
+    {
+        // The tracked .claude mirror must not drift from the .agents source of
+        // truth (QF-9): CLAUDE.md rule #12 points Claude agents at the .claude
+        // copy, so it must carry the exact remote-only windows-brat contract.
+        // QF-10: compare raw bytes so BOM/encoding differences cannot escape.
+        Assert.Equal(
+            ReadBytes(".agents", "skills", "post-ship-mcp-verify", "SKILL.md"),
+            ReadBytes(".claude", "skills", "post-ship-mcp-verify", "SKILL.md"));
+
+        var checklists = new[]
+        {
+            "checklist-free-configs.md",
+            "checklist-localization.md",
+            "checklist-network-settings.md",
+            "checklist-tgproxy.md",
+            "checklist-vpn-core.md",
+            "checklist-zapret.md",
+        };
+
+        foreach (var name in checklists)
+        {
+            Assert.Equal(
+                ReadBytes(".agents", "skills", "post-ship-mcp-verify", "references", name),
+                ReadBytes(".claude", "skills", "post-ship-mcp-verify", "references", name));
+        }
+
+        // The retired local-MCP scripts are gone; tools/brat-verify.ps1 is the
+        // single driver and no replacement may reappear under the mirror.
+        var root = FindRoot();
+        Assert.False(File.Exists(Path.Combine(root, ".claude", "skills", "post-ship-mcp-verify", "scripts", "post-ship-install-launch.ps1")));
+        Assert.False(File.Exists(Path.Combine(root, ".claude", "skills", "post-ship-mcp-verify", "scripts", "post-ship-collect-logs.ps1")));
+    }
+
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
+
+    private static byte[] ReadBytes(params string[] parts) =>
+        File.ReadAllBytes(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
 
     private static string FindRoot()
     {

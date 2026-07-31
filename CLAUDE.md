@@ -63,7 +63,7 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 | GitHub repo | `PavelLizunov/VPNRouter` |
 | Forgejo mirror | `ssh://git@10.9.1.1:18222/slovn/vpnrouter.git` (через AmneziaWG VPN) |
 | Mac build host (manual) | `slovn@192.168.0.246` (через host AmneziaWG route, key `id_ed25519`) |
-| Proxmox test lab | `pve-ninitux` (https://192.168.0.169:8006) — Win `windows-brat`(100)@192.168.0.106, Debian `debian-xfce`(101)@192.168.0.99; creds/детали в `.claude_handoff.md` |
+| Proxmox test lab | `pve-ninitux` (https://192.168.0.169:8006) — Win `windows-brat`(100) via Tailscale `100.115.182.0` / `windows-brat.tail9fd337.ts.net` (primary; LAN `192.168.0.106` historical/fallback), Debian `debian-xfce`(101)@192.168.0.99; creds/детали в `.claude_handoff.md` |
 | One-liner install domain | `vpn.ninitux.com` (CNAME → `pavellizunov.github.io`) |
 | Homebrew tap | `PavelLizunov/homebrew-vpnrouter` (auto-bumps на stable) |
 | APT repo | `vpn.ninitux.com/apt/` (reprepro signed, gh-pages branch) |
@@ -93,7 +93,7 @@ step when pushing a stable tag to Forgejo.
 | `merge-design-handoff` | User шлёт `claude.ai/design` URL — fetch + extract + map tokens |
 | `update-readme-versions` | После каждого release бампим version examples в README |
 | `phase-task-launcher` | START любой v3.0 refactor task / >30-строчного изменения — 6-gate lifecycle из `plans/v3.0-execution-methodology.md` |
-| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (192.168.0.106) через `tools/brat-verify.ps1`: deploy → launch → remote UIA + screenshots (`artifacts/brat-verify`) → log scan на brat → PASS/FAIL report. Без local fallback. |
+| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1`: deploy → launch → remote UIA + screenshots (`artifacts/brat-verify`) → log scan на brat → PASS/FAIL report. Без local fallback. |
 
 ## Memory layer
 
@@ -134,7 +134,7 @@ Open Tasks / Last session log.
 
    **КРИТИЧНО — цель = windows-brat, НЕ dev box (инцидент 2026-07-06).**
    Install / launch / connect VPNRouter и любые UIA/screenshot-действия идут
-   ТОЛЬКО на тест-VM **windows-brat (192.168.0.106, MachineName `WINBRAT`)
+   ТОЛЬКО на тест-VM **windows-brat (100.115.182.0, MachineName `WINBRAT`)
    через WinRM via `tools/brat-verify.ps1`, невидимо и fail-closed** (каждое
    действие повторно верифицирует identity WINBRAT). НИКОГДА не
    ставить/запускать/останавливать VPNRouter на машине агента (dev box)
@@ -203,7 +203,7 @@ Open Tasks / Last session log.
     binary uploaded) — **MUST** запустить `post-ship-mcp-verify` skill
     (имя директории сохранено для совместимости). Skill автоматически:
     SHA256-check ZIP from GitHub release → deploy + launch на фиксированной
-    VM WINBRAT (192.168.0.106) через `tools/brat-verify.ps1` → walk через
+    VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1` → walk через
     changed pages via remote UIA (clicks/toggles) + screenshots под
     `artifacts/brat-verify/` → tail `vpnrouter*.log` на brat for
     `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL report. Реализация:

@@ -48,7 +48,7 @@ param(
     [string]$PveHost = '192.168.0.169',
     [string]$Node = 'pve-ninitux',
     [int]$VmId = 100,
-    [string]$VmIp = '192.168.0.106',
+    [string]$VmIp = '100.115.182.0',
     [int]$WinRmTimeoutSec = 240
 )
 
@@ -146,6 +146,15 @@ switch ($Action) {
         Write-Host "VM $VmId graceful shutdown issued"
     }
     'ensure-ready' {
+        # Fast path: probe the fixed Tailscale WinRM endpoint first. An already
+        # reachable VM is reported ready immediately, with no Proxmox API/token
+        # requirement at all.
+        if (Test-NetConnection -ComputerName $VmIp -Port 5985 -WarningAction SilentlyContinue -InformationLevel Quiet) {
+            Write-Host "WinRM reachable at ${VmIp}:5985. VM ready."
+            exit 0
+        }
+        # Not reachable yet: fall back to the Proxmox power path, then wait for
+        # WinRM on the same Tailscale endpoint.
         if ((Get-VmStatus) -ne 'running') {
             Invoke-Pve -Method POST -Path "/nodes/$Node/qemu/$VmId/status/start" | Out-Null
             Write-Host "VM $VmId starting..."

@@ -1,11 +1,11 @@
 ---
 name: post-ship-mcp-verify
-description: MANDATORY after every rolling ship (-rN). Verifies the shipped Windows binary ONLY on the fixed remote test VM windows-brat (192.168.0.106 / WINBRAT) through tools/brat-verify.ps1 over WinRM — remote brat only, fail-closed. SHA256-checks the release ZIP, deploys + launches on brat, walks release-note checklists with semantic UIA and screenshots on brat, scans brat logs, reports PASS/FAIL. Never installs, launches, drives, screenshots, or reads app logs on the local dev box. If VM/WinRM/identity is unavailable — STOP, no fallback.
+description: MANDATORY after every rolling ship (-rN). Verifies the shipped Windows binary ONLY on the fixed remote test VM windows-brat (100.115.182.0 / WINBRAT) through tools/brat-verify.ps1 over WinRM — remote brat only, fail-closed. SHA256-checks the release ZIP, deploys + launches on brat, walks release-note checklists with semantic UIA and screenshots on brat, scans brat logs, reports PASS/FAIL. Never installs, launches, drives, screenshots, or reads app logs on the local dev box. If VM/WinRM/identity is unavailable — STOP, no fallback.
 ---
 
 > **STOP — read before any install / launch / UI / screenshot / log action.**
 > All post-ship work runs ONLY on the fixed test VM **windows-brat
-> (192.168.0.106, MachineName `WINBRAT`)** through `tools/brat-verify.ps1`
+> (100.115.182.0, MachineName `WINBRAT`)** through `tools/brat-verify.ps1`
 > over WinRM. Every action re-verifies the WINBRAT identity and fails
 > closed on any mismatch.
 > **NEVER** install, launch, stop, drive, screenshot, or read VPNRouter
@@ -35,9 +35,10 @@ powershell -ExecutionPolicy Bypass -File tools/testvm-control.ps1 -Action ensure
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action identity
 ```
 
-`ensure-ready` starts VM 100 if powered off and waits for WinRM on
-192.168.0.106:5985. `identity` must print `Verified identity: WINBRAT @
-192.168.0.106`. Missing `.testpc-cred-192.168.0.106.xml` → the error prints
+`ensure-ready` probes the fixed Tailscale WinRM endpoint first and, only if
+that is unreachable, starts VM 100 via Proxmox and waits for WinRM on
+100.115.182.0:5985. `identity` must print `Verified identity: WINBRAT @
+100.115.182.0`. Missing `.testpc-cred-192.168.0.106.xml` → the error prints
 the one-time setup command; STOP until it exists. Timeout/mismatch → STOP.
 
 ## 3. Artifact + SHA256 (fail-closed)
@@ -135,7 +136,7 @@ Compact PASS/FAIL as the LAST message of the turn:
 ```markdown
 ## Post-ship verification — v$v — PASS|FAIL
 
-**Target**: WINBRAT @ 192.168.0.106 (identity verified).
+**Target**: WINBRAT @ 100.115.182.0 (identity verified).
 **Binary**: VPNRouter-v$v-win.zip — SHA256 verified, deployed + launched.
 **Checklists**: zapret 4/4, tgproxy 3/4 (pass/total per checklist).
 **Failures/blockers**: none | <item + exact stderr or quote>.

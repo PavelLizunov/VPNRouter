@@ -14,7 +14,7 @@
 
     tools/brat-verify.ps1 (-Action deploy) wraps this script for the fixed
     remote post-ship target used by the post-ship-mcp-verify skill
-    (WINBRAT @ 192.168.0.106); this script itself stays generic and accepts
+    (WINBRAT @ 100.115.182.0); this script itself stays generic and accepts
     any -TestHost.
 
     Artifact source: the Install ZIP produced by build.ps1 at the repo root,
