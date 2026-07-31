@@ -85,7 +85,7 @@ step when pushing a stable tag to Forgejo.
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `Codex.ai/design` URL — fetch + extract + map tokens |
 | `update-readme-versions` | После каждого release бампим version examples в README |
-| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Download → install → launch → computer-use клики → log scan → PASS/FAIL report. v2.37.0-r21+. |
+| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (192.168.0.106) через `tools/brat-verify.ps1`: deploy → launch → remote UIA + screenshots (`artifacts/brat-verify`) → log scan на brat → PASS/FAIL report. Без local fallback. |
 
 ## Memory layer
 
@@ -110,28 +110,34 @@ Safety rails ниже остаются — про destructive ops.
    merge-ить. После зелёного PR ждать решения владельца о merge/release.
    Если владелец явно запустил rolling-release, применяются rule #1a и #6.
 
-   **1a. MCP test после каждого ship — обязательно, не "где testable".**
-   Установлено user'ом 2026-05-04 после iter#7. Flow: ship -rN → CI green →
-   14 desktop assets (16 with Android) → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
-   computer-use тестит изменение по сценарию который описан в release
-   notes / commit message → скриншоты + PASS/FAIL по каждому пункту →
-   доклад user'у. Без user prompt'а — это часть ship cycle. У меня есть
-   `mcp__vpnrouter-test__*` (window control / mouse / keyboard /
-   screenshot) + Bash для logs → нет нужды просить user'а скрин или
-   "проверь сам". Если изменение Core-only без UI surface (parser,
+   **1a. Remote brat verify после каждого ship — обязательно, не "где testable".**
+   Установлено user'ом 2026-05-04 после iter#7 (2026-07-31 переведено на
+   фиксированную remote-цель). Flow: ship -rN → CI green →
+   14 desktop assets (16 with Android) → НЕМЕДЛЕННО deploy + launch VPNRouter
+   на тест-VM → remote UIA + screenshots тестят изменение по сценарию который
+   описан в release notes / commit message → PASS/FAIL по каждому пункту →
+   доклад user'у. Без user prompt'а — это часть ship cycle. Весь verify идёт
+   через `tools/brat-verify.ps1` (actions identity / deploy / uia /
+   screenshot / logs) против фиксированной VM → нет нужды просить user'а
+   скрин или "проверь сам". Скриншоты — под `artifacts/brat-verify/`
+   (не комитим). Если изменение Core-only без UI surface (parser,
    migration helper, etc.) — explicit "Core-only / not UI-testable"
-   label в докладе. Иначе MCP-test обязателен.
+   label в докладе. Иначе remote brat verify обязателен.
 
    **КРИТИЧНО — цель = windows-brat, НЕ dev box (инцидент 2026-07-06).**
-   Install / launch / connect VPNRouter и любые `mcp__vpnrouter-test__*` идут
-   ТОЛЬКО на тест-VM **windows-brat (192.168.0.106) через WinRM, невидимо**.
-   НИКОГДА не ставить/запускать/останавливать VPNRouter на машине агента (dev box)
-   и не трогать `C:\Program Files\VPNRouter` — `mcp__vpnrouter-test__*` управляет
-   dev box'ом (WRONG target, хватает мышь/экран user'а). Рецепт brat: `Copy-Item
-   -ToSession` ZIP → scheduled task (Interactive principal, `RunLevel Highest`,
-   tester=admin → без UAC) → `tscon 1 /dest:console` для рендера → UIA +
-   `CopyFromScreen`, PNG назад по WinRM. Если brat/WinRM недоступен — STOP + спросить
-   user'а, НЕ откатываться на локальную машину. См. скилл post-ship-mcp-verify.
+   Install / launch / connect VPNRouter и любые UIA/screenshot-действия идут
+   ТОЛЬКО на тест-VM **windows-brat (192.168.0.106, MachineName `WINBRAT`)
+   через WinRM via `tools/brat-verify.ps1`, невидимо и fail-closed** (каждое
+   действие повторно верифицирует identity WINBRAT). НИКОГДА не
+   ставить/запускать/останавливать VPNRouter на машине агента (dev box)
+   и не трогать `C:\Program Files\VPNRouter` — локальные UI-инструменты
+   управляют dev box'ом (WRONG target, хватает мышь/экран user'а).
+   Никакого local fallback: brat/WinRM/credential недоступны — STOP +
+   спросить user'а, НЕ откатываться на локальную машину. Рецепт (внутри
+   `tools/brat-verify.ps1`): identity check WINBRAT → `Copy-Item -ToSession`
+   ZIP → scheduled task (Interactive principal, `RunLevel Highest`,
+   tester=admin → без UAC) → `tscon` на console для рендера → UIA +
+   `CopyFromScreen`, PNG назад по WinRM. См. скилл post-ship-mcp-verify.
 2. **Canonical remote = `origin` (GitHub).** Push только текущей task-ветки:
    `git push -u origin HEAD`. `forgejo` — зеркало; синхронизация `main` выполняется
    только после принятого merge/release. Не предполагай наличие remote `github`.
@@ -148,13 +154,13 @@ Safety rails ниже остаются — про destructive ops.
    само не cut'ает. Жди explicit "cut" / "ok" / "promote" перед `vX.Y.Z`
    stable. Conditions: (a) `dotnet build -c Release` 0 errors,
    (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
-   (d) `gh release view` показывает 14 desktop assets / 16 with Android, (e) MCP+UIA verify PASS
+   (d) `gh release view` показывает 14 desktop assets / 16 with Android, (e) remote brat UIA verify PASS
    где testable (или explicit "Core-only / not UI-testable" label),
    **(f) live update gate — install previous stable, trigger update к
    текущему -rN, verify success (см. cut-stable skill «Mandatory pre-cut
    live update gate» секцию + `plans/cut-stable-checklist.md`).**
    **Урок v2.31.2**: 2 из 5 stable cuts в одной session оказались
-   partial-fix slips потому что MCP verify не делался — нужен
+   partial-fix slips потому что post-ship UI verify не делался — нужен
    human-in-the-loop. **Урок v2.31.7**: helper.cmd parser bug сломал 100%
    user-upgrades, поймали через ~7 дней. Live update gate — единственный
    способ это поймать до cut'а. Tiny / config-only / typo fixes —
@@ -182,29 +188,34 @@ Safety rails ниже остаются — про destructive ops.
     ships — единственный red-X X на главной странице commits — и tag-level
     CI (build-mac/linux на тэге) скрывал что push-event CI красный.
 
-12. **Post-ship MCP verify обязательный** (added 2026-05-25, расширение
-    rule #1a). После каждого `ship-rolling-candidate` (-rN tag создан +
-    binary uploaded) — **MUST** запустить `post-ship-mcp-verify` skill.
-    Skill автоматически: download ZIP from GitHub release → install over
-    `C:/Program Files/VPNRouter/app/` → launch → walk через changed pages
-    via `mcp__vpnrouter-test__*` (clicks + screenshots) → tail
-    `vpnrouter*.log` for `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL
-    report. Реализация: `.agents/skills/post-ship-mcp-verify/SKILL.md` +
-    `scripts/post-ship-install-launch.ps1` + per-feature checklists в
+12. **Post-ship remote brat verify обязательный** (added 2026-05-25,
+    расширение rule #1a; 2026-07-31 переведено на фиксированную
+    remote-цель). После каждого `ship-rolling-candidate` (-rN tag создан +
+    binary uploaded) — **MUST** запустить `post-ship-mcp-verify` skill
+    (имя директории сохранено для совместимости). Skill автоматически:
+    SHA256-check ZIP from GitHub release → deploy + launch на фиксированной
+    VM WINBRAT (192.168.0.106) через `tools/brat-verify.ps1` → walk через
+    changed pages via remote UIA (clicks/toggles) + screenshots под
+    `artifacts/brat-verify/` → tail `vpnrouter*.log` на brat for
+    `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL report. Реализация:
+    `.agents/skills/post-ship-mcp-verify/SKILL.md` +
+    `tools/brat-verify.ps1` + per-feature checklists в
     `references/checklist-{zapret,tgproxy,vpn-core,network-settings,
-    free-configs,localization}.md`. Урок: 12 ships в r7..r18 batch с
-    красным CI И БЕЗ local MCP test потому что я полагался на тэг-level
-    CI green. Combined с rule #11 теперь невозможно skip обе проверки.
+    free-configs,localization}.md`. VM/WinRM недоступны — STOP, никакого
+    local fallback. Урок: 12 ships в r7..r18 batch с красным CI И БЕЗ
+    post-ship UI test потому что я полагался на тэг-level CI green.
+    Combined с rule #11 теперь невозможно skip обе проверки.
 
-13. **MCP verify должен ВЕСТИ к user-сценарию end-to-end, не остановиться
-    на "tab rendered"** (added 2026-05-25 после r25..r28 scroll-bug
-    thrash). Если фикс касается UI — verify должен пройти ВЕСЬ flow до
-    конечного элемента который user reported. Пример: r25..r28 я
-    shipал и claim'ил "tabs render" — но не доходил до scroll внутри
-    активной вкладки → user видел тот же bug что и до фикса 4 раза.
-    Чеклист: (a) клик целевого элемента, (b) check ВСЕ interactive
-    elements в его scope, (c) screenshot bottom of viewport, (d)
-    confirm exact strings user мог искать.
+13. **Remote brat verify должен ВЕСТИ к user-сценарию end-to-end, не
+    остановиться на "tab rendered"** (added 2026-05-25 после r25..r28
+    scroll-bug thrash). Если фикс касается UI — verify должен пройти
+    ВЕСЬ flow до конечного элемента который user reported. Пример:
+    r25..r28 я shipал и claim'ил "tabs render" — но не доходил до scroll
+    внутри активной вкладки → user видел тот же bug что и до фикса 4 раза.
+    Чеклист: (a) invoke целевого элемента (`tools/brat-verify.ps1`
+    `-Action uia`), (b) check ВСЕ interactive elements в его scope,
+    (c) screenshot bottom of viewport, (d) confirm exact strings user
+    мог искать.
 
 14. **Git push reminder pattern** (added 2026-05-25 после второго
     "ты опять забыл git" от user'а). После каждого commit IMMEDIATELY
