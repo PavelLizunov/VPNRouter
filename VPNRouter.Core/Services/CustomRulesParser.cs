@@ -6,9 +6,9 @@ namespace VPNRouter.Core.Services;
 
 /// <summary>
 /// v2.30.0 — text-format parser/serializer for <see cref="CustomRule"/>
-/// list. Extends the v2.29.0-r4 <see cref="CustomDirectRulesParser"/>
-/// (direct-only) with explicit Action keyword (direct/proxy/block) +
-/// new match types (geosite, geoip, port_range, network).
+/// list. Extends the v2.29.0-r4 direct-only rule format with explicit
+/// Action keyword (direct/proxy/block) + new match types (geosite,
+/// geoip, port_range, network).
 ///
 /// <para>Text format (one rule per line):</para>
 /// <code>

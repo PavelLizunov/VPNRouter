@@ -79,27 +79,27 @@
 - [ ] **Gate 5 — MCP verify**: N/A — у алиасов нет привязок и вызывающих, видимых изменений UI нет.
 - [ ] **Gate 6 — Characterization diff**: N/A — поверхности членов god-класса не меняются, это не разделение god-файла.
 
-## Outcome (filled after merge)
+## Outcome (filled after implementation verification)
 
-**Status**: PENDING — до реализации и верификации.
-**Commits**: `<pending>`
-**Pushed**: `<pending>`
-**Test deltas**: +0 / −2 тестовых класса (зафиксировать число удалённых тестов)
-**Files changed**: ~9 · ≈ −697 LOC
+**Status**: READY FOR COMMIT CI — реализация и локальная верификация выполнены; полная зелёность CI пока не подтверждена и не утверждается.
+**Commits**: `1258182e` (docs(plan): brief remove custom direct runtime) + реализационный коммит, содержащий этот Outcome.
+**Pushed**: `<pending>` — немедленный пуш реализационного коммита.
+**Test deltas**: +0 / −2 тестовых класса · −22 устаревших теста из двух удалённых тестовых классов
+**Files changed**: 9 · +3 / −699 строк · 3 файла удалено целиком · заменяющего кода нет
 
 **Gate results:**
-- [ ] Gate 1: `<pending: вывод сборки, напр. "0 errors, N warnings (pre-existing)">`
-- [ ] Gate 2: `<pending: фокусные классы + полный прогон>`
-- [ ] Gate 3: `<pending: Outcome заполнен, Tests/CLAUDE.md обновлён>`
-- [ ] Gate 4: `<pending: ponytail-review; security-review N/A>`
-- [-] Gate 5: N/A — нет UI-поверхности
-- [-] Gate 6: N/A — не god-file split
+- [x] Gate 1: PASS — явная Release-сборка решения на .NET 10: 0 ошибок, 227 предупреждений (все pre-existing). Android: документированный SKIP — Android SDK присутствует, но приватный `VPNRouter.Android/Lib/libbox.aar` отсутствует, поэтому локальная сборка Android-проекта невозможна.
+- [x] Gate 2: PARTIAL LOCALLY / CI REQUIRED — фокусный фильтр совместимости/текущих правил: 53/53 passed. Полный локальный набор: 2663 passed, 2 skipped, 23 failed; каждый сбой — `UnauthorizedAccessException` при записи в `C:/ProgramData/VPNRouter` на неэлевированной dev-машине, с этим диффом не связано. Полное подтверждение — в CI.
+- [x] Gate 3: PASS — инвентарь тестов обновлён, Outcome заполнён.
+- [x] Gate 4: PASS — аудит ссылок: ноль живых ссылок на удалённые парсер/методы/алиасы; KEEP-файлы схемы и миграции не изменены; проверка диффа чистая. ponytail-review: ровно «Lean already. Ship.». Security review: N/A — нет auth/TLS/исполнения процессов/файлового I/O/файрвола/поведения безопасности.
+- [-] Gate 5: N/A — нет UI-поведения
+- [-] Gate 6: N/A — нет изменений поверхности god-класса
 
 **Surprises encountered**:
-- `<pending>`
+- В safe-mode у Qwen отсутствовал инструмент удаления файлов, поэтому Qwen опустошил три файла, а их Git-удаление завершил Codex. Продуктовых сюрпризов нет.
 
 **Follow-ups spawned**:
-- `<pending>` (F3 — мёртвая схема настроек и контекстный профиль остаются в `plans/OPEN-DEFECTS.md`, вне этой фазы)
+- F3 — мёртвая схема настроек и контекстный профиль остаются в `plans/OPEN-DEFECTS.md`; в этой фазе не реализовывать.
 
 **Lessons for methodology doc** (if any):
-- `<pending>`
+- Нет сверх зафиксированного в Surprises.
