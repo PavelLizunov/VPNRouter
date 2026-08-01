@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Serilog;
@@ -88,6 +89,12 @@ public partial class MainWindowViewModel
     private void MaybePollConnStats()
     {
         if (!IsConnected || _statsApi is null) return;
+
+        // OPEN-DEFECTS.md:108 (perf-hunt F2): skip the /connections poll while the
+        // window is hidden/minimized (or null) — the stats line is off-screen.
+        var window = GetMainWindow();
+        if (window is null || !window.IsVisible || window.WindowState == WindowState.Minimized) return;
+
         if (Interlocked.CompareExchange(ref _statsInFlight, 1, 0) != 0) return;
         _ = PollConnStatsAsync();
     }
