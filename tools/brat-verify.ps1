@@ -150,7 +150,7 @@ try {
         if ($req.AutomationId) { $conds += New-Object System.Windows.Automation.PropertyCondition($ae::AutomationIdProperty, [string]$req.AutomationId) }
         if ($req.Name)         { $conds += New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, [string]$req.Name) }
         if ($req.ControlType) {
-            $ctProp = [System.Windows.Automation.ControlType].GetProperty([string]$req.ControlType, [System.Reflection.BindingFlags]'Public,Static')
+            $ctProp = [System.Windows.Automation.ControlType].GetField([string]$req.ControlType, [System.Reflection.BindingFlags]'Public,Static')
             if (-not $ctProp) { throw "Unknown ControlType '$($req.ControlType)'." }
             $conds += New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, $ctProp.GetValue($null))
         }
@@ -395,7 +395,7 @@ public static extern uint WTSGetActiveConsoleSessionId();
         if ($Mode -eq 'screenshot') {
             $localDir = Split-Path $LocalOutput -Parent
             if ($localDir -and -not (Test-Path $localDir)) { New-Item -ItemType Directory -Path $localDir -Force | Out-Null }
-            Copy-Item -Path $remotePng -Destination $LocalOutput -FromSession -Session $Session -Force
+            Copy-Item -Path $remotePng -Destination $LocalOutput -FromSession $Session -Force
         }
         return $res
     }
