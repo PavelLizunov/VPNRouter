@@ -121,34 +121,34 @@ even claims the in-flight slot, and the API call (`PollConnStatsAsync` →
 ## Verification gate
 Check off each as you complete:
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
-- [ ] **Gate 2 — Tests green**: full suite passes, new `ConnStatsVisibilityThrottleTests` included.
-- [ ] **Gate 3 — Docs**: brief Outcome filled; `plans/OPEN-DEFECTS.md:108` marked resolved. No README/CLAUDE.md change (internal perf, not user-facing/architecture).
-- [ ] **Gate 4 — Self-review**: ponytail/self-review pass over the diff; `security-review` N/A (no trust boundary crossed — same in-process loopback clash_api, no new input/secret/network surface).
-- [ ] **Gate 5 — MCP verify**: N/A — no visual/layout change; guard is a no-op when the window is visible + non-minimized.
-- [ ] **Gate 6 — Characterization diff**: N/A — not a god-file split.
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
+- [x] **Gate 2 — Tests green**: full suite passes, new `ConnStatsVisibilityThrottleTests` included.
+- [x] **Gate 3 — Docs**: brief Outcome filled; `plans/OPEN-DEFECTS.md:108` marked resolved. No README/CLAUDE.md change (internal perf, not user-facing/architecture).
+- [x] **Gate 4 — Self-review**: ponytail/self-review pass over the diff; `security-review` N/A (no trust boundary crossed — same in-process loopback clash_api, no new input/secret/network surface).
+- [-] **Gate 5 — MCP verify**: N/A — no visual/layout change; guard is a no-op when the window is visible + non-minimized.
+- [-] **Gate 6 — Characterization diff**: N/A — not a god-file split.
 
 ## Outcome (filled after merge)
 
-**Status**:
-**Commits**:
-**Pushed**:
-**Test deltas**:
-**Files changed**:
+**Status**: PASS
+**Commits**: brief `dba92dae`, implementation `1c98679f`
+**Pushed**: `origin/qwen/connstats-hidden-throttle`; draft PR #94
+**Test deltas**: +1/-0 (new `ConnStatsVisibilityThrottleTests`)
+**Files changed**: 4 — this brief (+154 pre-Outcome), `MainWindowViewModel.ConnStats.cs` (+7), new `ConnStatsVisibilityThrottleTests.cs` (+39), `plans/OPEN-DEFECTS.md` (net +1: +2/-1 — resolved entry replacement + new P2). Implementation commit `1c98679f` total +48/-1.
 
 **Gate results:**
-- [ ] Gate 1:
-- [ ] Gate 2:
-- [ ] Gate 3:
-- [ ] Gate 4:
-- [-] Gate 5: N/A — no UI surface
-- [-] Gate 6: N/A — not a god-file split
+- [x] Gate 1: explicit `dotnet build VPNRouter.sln -c Release` → 0 errors, 1 pre-existing warning (`tools/VpnRouterTestMcp/McpServer.cs`); pre-push incremental build also 0/0.
+- [x] Gate 2: focused new test 1/1; pre-push scoped suite 185/185; GitHub checks `test`, `go-test-windows`, `grep` all green on `1c98679f`. Local full suite: first run hit 23 `UnauthorizedAccess` failures against real ProgramData; with an isolated temporary ProgramData → 2706 passed / 2 skipped / 3 failed. Those same 3 fail identically on clean `origin/main` (VisualDiff Tools + DpiBypass both at 7.22%, and `VpnEngineSplitTunnelLifecycleTests.Stop_SplitTunnel_FiresRestoreThroughDnsHardening`) — base comparison confirms no feature regression; CI is authoritative green.
+- [x] Gate 3: Outcome filled; ConnStats P2 (`OPEN-DEFECTS.md:108`) marked resolved pending release; README/CLAUDE unchanged.
+- [x] Gate 4: ponytail clean; independent Qwen review found no blocker. Low/info items triaged: `PollConnStatsAsync` already catches/finally; a behavioral test would require unjustified VM/window/API seams, so the existing project-style source pin is retained; delayed auto-selected refresh is UI label/highlight only and catches up ≤2 s. `security-review` N/A — no trust boundary crossed.
+- [-] Gate 5: N/A — no visual/layout change.
+- [-] Gate 6: N/A — not a split / public surface; GitHub characterization skipped.
 
 **Surprises encountered**:
--
+- Non-elevated full suite is not hermetic after the SEC-2 ACL: 23 `UnauthorizedAccess` failures against real ProgramData, and the VisualDiff/DpiBypass + split-tunnel lifecycle base failures surface only without isolation. Recorded as evidence for the harness follow-up below. Production ACL must NOT be weakened to make tests pass.
 
 **Follow-ups spawned**:
--
+- New open P2 in `plans/OPEN-DEFECTS.md`: make the non-elevated full test suite hermetic (isolate ProgramData) so it runs clean without touching real system state. The two visual (7.22%) + one lifecycle base failures are the evidence.
 
 **Lessons for methodology doc** (if any):
--
+- None.
