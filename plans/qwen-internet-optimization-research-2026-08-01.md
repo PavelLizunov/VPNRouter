@@ -2,7 +2,7 @@
 
 Read-only исследование соответствия shipped-зависимостей VPNRouter актуальным
 upstream-фиксам sing-box / Avalonia. Цель — найти реальные exposure'ы в
-интернет-оптимизации (TUN/DNS/Clash/Android), НЕ запуская широких рефакторингов.
+интернет-оптимизации (TUN/DNS/Android), НЕ запуская широких рефакторингов.
 
 **Важно:** все находки ниже — это **статический code/version exposure**,
 подтверждённый чтением кода и build-скриптов. **Живого A/B / sustained-load
@@ -10,154 +10,228 @@ upstream-фиксам sing-box / Avalonia. Цель — найти реальн�
 уже видит баг. Каждый actionable-пункт требует measure-first валидации до любой
 имплементации (см. §Валидация и §Remediation).
 
+**Adversarial validation (2026-08-01).** Claude Opus независимо перепроверил
+Qwen-проход по локальному коду/скриптам и upstream-коммитам и **исправил
+переоценки**: убрана route-address pollution из F1, переформулирован механизм F2,
+понижен и сужен F3, F4 (Clash log) переведён в non-actionable, скорректирована
+версия-матрица и Avalonia-список. **Живых тестов при этой валидации тоже НЕ
+проводилось** — это перечитывание кода и первоисточников, не воспроизведение.
+
 Маркеры: **[FACT]** — проверено в коде/скриптах текущего checkout;
 **[INFER]** — рассуждение/оценка вероятного эффекта.
 
 ## Scope и версия-матрица
 
 Scope: sing-box core (desktop + Android) и Avalonia (desktop + Android) в части,
-касающейся интернет-трафика (TUN-стек, DNS, Clash log, Android-рендер/доступность).
+касающейся интернет-трафика (TUN-стек, DNS, Android-рендер/доступность).
 Вне scope: zapret, TgProxy, wgturn, true-split driver, firewall.
 
 Точная матрица текущего checkout (`AppVersion = 2.48.0-r3`,
 `VPNRouter.Core/AppVersion.cs:31`):
 
-| Компонент | Платформа | Версия | Где зашито |
+| Компонент | Платформа | Что реально бандлится | Где зашито |
 |---|---|---|---|
-| sing-box core | Windows | **sing-box-lx fork `1.13.13-lx-awg`** (Leadaxe/sing-box-lx commit `c7a2592e`) | [FACT] `tools/build-singbox-lx.ps1:31-38`; бандлинг `build.ps1:316,329-336` |
-| sing-box core | macOS | тот же fork `1.13.13-lx-awg` | [FACT] `build-mac.sh:60` → `tools/build-singbox-lx.sh` |
-| sing-box core | Linux | тот же fork `1.13.13-lx-awg` (`libcronet.so` — из upstream 1.13.14 архива) | [FACT] `.github/workflows/build-linux.yml` (`bash tools/build-singbox-lx.sh`) |
+| sing-box core | Windows | fork `Leadaxe/sing-box-lx`, **запиненный commit `c7a2592e`**; ldflags-лейбл версии = `1.13.13-lx-awg` | [FACT] `tools/build-singbox-lx.ps1:31,37,162`; бандлинг `build.ps1:316,329-336` |
+| sing-box core | macOS | **тот же запиненный source-commit `c7a2592e`**, но `constant.Version` **подделывается версией приложения VPNRouter** (скрипт получает её первым аргументом) | [FACT] `build-mac.sh:60` → `tools/build-singbox-lx.sh:18,23,98` |
+| sing-box core | Linux | **тот же запиненный source-commit `c7a2592e`**, `constant.Version` тоже = версия приложения; `libcronet.so` отдельно — из upstream-архива **1.13.14** с SHA256-пином | [FACT] `.github/workflows/build-linux.yml:101,106-112`; `tools/build-singbox-lx.sh:18,23,98` |
 | libbox | Android | **sing-box `1.13.10`** (`tooling-libbox-singbox-1.13.10`) | [FACT] `build-android.ps1:48` |
 | Avalonia | Desktop (App + Tests headless) | **12.0.4** | [FACT] `VPNRouter.App/VPNRouter.App.csproj:39-43`; `VPNRouter.Tests/VPNRouter.Tests.csproj:53-54` |
 | Avalonia | Android | **12.0.3** | [FACT] `VPNRouter.Android/VPNRouter.Android.csproj:132-135` |
 | SkiaSharp | Desktop | `3.119.4` stable (прямая ссылка) | [FACT] `VPNRouter.App/VPNRouter.App.csproj:51` |
-| SkiaSharp | Android | `3.119.4-preview.1.1` (транзитивный пин Avalonia 12.0.3) | [FACT] комментарий `VPNRouter.App/VPNRouter.App.csproj:48` |
+| SkiaSharp | Android | предположительно `3.119.4-preview.1.1` транзитивно — **[INFER]**, см. F5 | [INFER] прямого пина и lock-файла нет |
 
-Upstream-референс для sing-box: **1.13.14**. Fork базируется на 1.13.13, Android
-libbox — на 1.13.10; оба ниже референса.
+Уточнения по матрице (важны, чтобы не переоценивать находки):
+
+- **[FACT]** Только Windows-сборка репортит себя как `1.13.13-lx-awg`. На
+  macOS/Linux `constant.Version` **форжится версией VPNRouter**
+  (`build-singbox-lx.sh:23` `VER="${1:-…}"` → `:98` `-X …/constant.Version=$VER`),
+  поэтому **нельзя** называть их self-reported core-версию `1.13.13-lx-awg`.
+- **[FACT]** Единственное надёжное доказательство upstream-базы форка — не строка
+  версии, а **`go.mod` форка**, где `sing-tun` = **v0.8.10**:
+  https://raw.githubusercontent.com/Leadaxe/sing-box-lx/c7a2592e750406ade9ebaae1d0fdb7482fc0773e/go.mod
+- **[FACT]** Windows-релизный upload **требует fork-тегов**: `build.ps1:325-334`
+  бросает, если нет `publish\sing-box-lx.exe` или в `version` нет `with_awg` +
+  `with_xhttp`. **Локальная сборка без `-Upload`** такого требования не имеет и
+  может забандлить upstream-бинарь.
+- **[FACT]** Текущая цель сравнения upstream на 2026-08-01 — **v1.13.15
+  (релиз 2026-07-29)**: https://github.com/SagerNet/sing-box/releases/tag/v1.13.15
+  Это **кандидат на аудит/тест**, а не автоматически «безопасная» версия: её
+  собственные изменения нами не инспектированы.
 
 ## Ранжированные находки
 
 Ранг = вероятность × тяжесть эффекта при условии, что exposure сработает. Все
 пункты — exposure, не подтверждённый пользовательский баг.
 
-### F1. TUN system-stack TCP NAT collision + route-address pollution — CONFIRMED EXPOSURE (measure-first)
+### F1. TUN system-stack TCP NAT collision — CONFIRMED EXPOSURE (measure-first)
 
-- **[FACT]** Upstream 1.13.14 коммит `0b7ffba` фиксит коллизию TCP NAT в system-стеке
-  TUN и загрязнение route-address.
+Только коллизия TCP NAT. **Route-address pollution из этой находки удалена** —
+см. §Опровергнуто.
+
+- **[FACT]** sing-box `0b7ffba` — это бамп зависимости `sing-tun`; сам фикс лежит
+  в `sing-tun` `8caaa93`.
   Primary: https://github.com/SagerNet/sing-box/commit/0b7ffba
-- **[FACT]** Windows и Linux выбирают `system` TUN-стек и заполняют
-  `RouteExcludeAddress`: `VPNRouter.Core/Services/ConfigGenerator.cs:39-40`
-  (`SelectTunStack(isMacOS) => isMacOS ? "gvisor" : "system"`),
-  `:1129` (`GetEffectiveRouteExcludeAddress`), `:1148-1164` (присвоение
-  `RouteExcludeAddress` + `Stack = SelectTunStack(...)`).
-- **[FACT]** macOS использует `gvisor` (`ConfigGenerator.cs:39-40`) → **не подвержена
-  system-stack половине** этого фикса.
-- **[INFER]** Fork 1.13.13-lx-awg не содержит `0b7ffba` → Windows/Linux теоретически
-  могут ловить TCP NAT-коллизию/грязные route при определённых раскладках адресов.
-  Реальная частота и пользовательский эффект неизвестны.
-- **Статус:** confirmed version/code exposure; **user impact требует A/B до фикса.**
+  Underlying: https://github.com/SagerNet/sing-tun/commit/8caaa93f8de5697701c2e19ad39b92a17985828c
+- **[FACT]** Точный триггер: **один и тот же source IP:port переиспользуется для
+  ДРУГОГО destination, пока старая NAT-запись ещё жива** → пакеты могут уехать не
+  туда. Это про быструю переиспользуемость эфемерных портов, а НЕ про долгий
+  одиночный поток — **эксперимент Qwen с long-lived flow был неверен**.
+- **[FACT]** Windows и Linux выбирают `system` TUN-стек:
+  `VPNRouter.Core/Services/ConfigGenerator.cs:39-40`
+  (`SelectTunStack(isMacOS) => isMacOS ? "gvisor" : "system"`).
+- **[FACT]** macOS использует `gvisor` (там же) → **не подвержена**.
+- **[INFER]** Форк на запиненном `c7a2592e` (sing-tun v0.8.10 по go.mod) не содержит
+  `8caaa93` → на Windows/Linux exposure есть; частота и пользовательский эффект
+  неизвестны.
+- **Статус:** confirmed version/code exposure; **user impact требует замера до фикса.**
 
-### F2. DNS loopback shared-dedup deadlock — MEASURE FIRST
+### F2. Детерминированный self-deadlock вложенного single-flight в DNS — MEASURE FIRST
 
-- **[FACT]** Upstream 1.13.14 коммит `72a8723` фиксит deadlock в shared-дедупликации
-  DNS loopback-запросов.
-  Primary: https://github.com/SagerNet/sing-box/commit/72a8723
-- **[FACT]** Этому фиксу не хватает ни shipped fork (1.13.13), ни Android libbox (1.13.10).
-- **[FACT]** Локальная DNS-топология много-серверная и loopback-нагруженная:
-  `vpn-dns` (DoH, `DomainResolver = "local-dns"`) / `local-dns` / `dns-system`
-  (OS-resolver) / `dns-direct`, плюс `hijack-dns` route-правило и loopback
-  slipstream-endpoint'ы: `ConfigGenerator.cs:1033-1036` (`dns-system`),
-  `:1172-1174` (hijack-dns), `:1451-1454` (`dns-direct`), `:1561-1571`
-  (loopback `127.0.0.1` dns-tunnel outbound), `:2137-2167` (`BuildVpnDnsServer`,
-  `DomainResolver = "local-dns"`).
-- **[INFER]** Топология совпадает с профилем, на котором upstream-фикс значим,
-  но deadlock — вероятностный; без нагрузки не наблюдается.
-- **Статус:** **MEASURE FIRST** — sustained mixed-DNS workload на fork vs upstream
-  1.13.14 до какого-либо решения.
+- **[FACT]** Upstream-фикс: https://github.com/SagerNet/sing-box/commit/72a8723e13b9574664f4c78e588069fa4aca6fc9
+- **[FACT]** Механизм — **детерминированный**, не вероятностный: внешний DNS-запрос Q
+  на транспорте T1 внутри себя бутстрапит транспорт T2, которому нужен **тот же
+  запрос Q**; single-flight-дедупликация ждёт сама себя.
+- **[FACT]** Подходящий кандидат в нашей конфигурации ровно один класс —
+  **hostname + `DomainResolver = "local-dns"`**:
+  - `vpn-dns` в DoH-режиме: `Server = "dns.adguard-dns.com"` (при BlockAds) или
+    hostname пользовательского DoH, `DomainResolver = "local-dns"` —
+    `ConfigGenerator.cs:2137-2166`;
+  - proxy-outbound'ы, заданные **hostname** (не IP-литералом), с
+    `DomainResolver = "local-dns"` — `ConfigGenerator.cs:1643`; плюс
+    `route.default_domain_resolver = "local-dns"` — `:2121`.
+- **[FACT]** Что **НЕ** является уликой (убрано из находки): `local-dns` — это DoH по
+  **IP-литералу** `1.1.1.1` (`ConfigGenerator.cs:1003-1017`), резолвить нечего;
+  `dns-system` — `type: local` (OS-резолвер); slipstream-loopback `127.0.0.1` — тоже
+  литерал. Ни один из них вложенный бутстрап не порождает.
+- **[FACT]** `hijack-dns` route-правило — `ConfigGenerator.cs:2002`
+  (в исходной версии отчёта строка была указана неверно).
+- **[INFER]** Форк на `c7a2592e` фикса не содержит; Android libbox 1.13.10 тем более.
+- **Статус:** **MEASURE FIRST** — целевой запрос, не широкая нагрузка (см. §Валидация).
 
-### F3. Android libbox 1.13.10: DNS connection-pool leak + DNS deadline — MEASURE FIRST
+### F3. Android libbox 1.13.10 — P3, СУЖЕНО до BypassRu UDP DNS (measure-first)
 
-- **[FACT]** Android libbox = sing-box 1.13.10 (`build-android.ps1:48`); ему не хватает
-  фикса утечки DNS connection-pool `d166f0d` (1.13.12) и фикса DNS deadline `6548c17`.
-  Primary: https://github.com/SagerNet/sing-box/commit/d166f0d ,
-  https://github.com/SagerNet/sing-box/commit/6548c17
-- **[FACT]** Android использует тот же DoH `vpn-dns`-транспорт (общий
-  `ConfigGenerator`), так что DNS-путь релевантен.
-- **[INFER]** При длительной нагрузке возможны рост памяти/сокетов и DNS-stall'ы;
-  без замера это гипотеза.
-- **Статус:** **MEASURE FIRST** — память/сокеты + DNS-stall'ы под sustained load;
-  при подтверждении — ротация libbox на проверенный более новый upstream,
-  НЕ локальные workaround'и.
+Исходное утверждение Qwen про «Android DoH leak/deadline» **опровергнуто** и снято.
 
-### F4. Clash log subscriber-level fix — CONFIRMED EXPOSURE (A/B)
+- **[FACT]** Ни `d166f0d`, ни `6548c17` **не затрагивают HTTPS/DoH-транспорт** —
+  широкий вывод «все Android-пользователи с DoH затронуты» **неверен**.
+  Primary: https://github.com/SagerNet/sing-box/commit/d166f0da8b3d87ae65897989e9eb5778306d4172 ,
+  https://github.com/SagerNet/sing-box/commit/6548c1711032a1a9b89ad44184f81b96fa472c97
+- **[FACT]** Единственный **plain-UDP** DNS-путь в конфиге — RU-bypass резолвер
+  `77.88.8.8` (`type: "udp"`, `Detour = "dns-direct"`), который добавляется только
+  при включённом **BypassRu**: `ConfigGenerator.cs:848-854`.
+- **[FACT]** Desktop-форк (база 1.13.13) уже содержит фиксы 1.13.12 → **desktop вне
+  этой находки**; речь только про Android libbox `1.13.10` (`build-android.ps1:48`).
+- **[INFER]** Exposure узкий: Android + BypassRu ON + активный UDP-DNS трафик.
+  Никакого утверждения про всех Android-пользователей.
+- **Статус:** **P3, measure-first.** При подтверждении — ротация libbox на
+  проверенный более новый upstream, НЕ локальные workaround'ы.
 
-- **[FACT]** Upstream 1.13.14 коммит `6397675` фиксит обработку на уровне
-  подписчика Clash-лога.
-  Primary: https://github.com/SagerNet/sing-box/commit/6397675
-- **[FACT]** Shipped fork не содержит фикса. Локальный `ClashLogStream` подписывается
-  на `/logs?level=info` и питает health/failover:
-  `VPNRouter.Core/Services/ClashLogStream.cs:93`
-  (`return new Uri($"{scheme}://{uri.Authority}/logs?level=info{token}")`).
-- **[INFER]** Возможна разница в событиях/их числе, влияющая на health-сигналы;
-  эффект нужно измерить, не додумывать.
-- **Статус:** confirmed code/version exposure; **behavior impact требует A/B
-  event-level/count сравнения.**
+### F4 — снят как actionable
 
-### F5. Android Avalonia 12.0.3 → 12.0.4 — НЕ дефект; контролируемый upgrade-validation
+Clash-log находка переведена в §Опровергнуто / non-actionable.
+
+### F5. Android Avalonia — P3 controlled upgrade research, НЕ дефект
 
 - **[FACT]** Desktop на Avalonia 12.0.4, Android на 12.0.3 (см. матрицу).
-  Official 12.0.4 release: https://github.com/AvaloniaUI/Avalonia/releases/tag/12.0.4
-- **[FACT]** Релевантные фиксы после 12.0.3:
+  12.0.4: https://github.com/AvaloniaUI/Avalonia/releases/tag/12.0.4
+- **[FACT]** Из прежнего списка релевантны только два пункта:
   - TalkBack PointToScreen — https://github.com/AvaloniaUI/Avalonia/pull/21402
-  - cached bidi double reorder — https://github.com/AvaloniaUI/Avalonia/pull/21351
-  - ItemTemplate compiled-binding DataContext inference — https://github.com/AvaloniaUI/Avalonia/pull/21248
-  - SkiaSharp stable 3.119.4 update — https://github.com/AvaloniaUI/Avalonia/pull/21434
-- **[FACT]** Android сейчас разрешает транзитивный SkiaSharp `3.119.4-preview.1.1`
-  (пин Avalonia 12.0.3); desktop уже на stable `3.119.4`.
-- **[INFER]** Расхождение версий само по себе не баг. Фиксы 12.0.4 потенциально
-  улучшают TalkBack/bidi/ItemTemplate на Android, но это надо проверить, а не
-  предполагать.
-- **Статус:** **не дефект.** Записать контролируемое направление upgrade-validation
-  (build → RU/EN bidi visual → TalkBack → ItemTemplate-экраны → lifecycle smoke);
-  keep/revert по итогу evidence.
+  - SkiaSharp stable bump — https://github.com/AvaloniaUI/Avalonia/pull/21434
+- **[FACT]** Снято: cached bidi double reorder (RU/EN — **LTR**, bidi-путь не наш)
+  и ItemTemplate compiled-binding validation (Android-шаблоны — `FuncDataTemplate`
+  в C#, не XAML compiled bindings).
+- **[FACT]** Дополнительные кандидаты для Android:
+  - File properties — https://github.com/AvaloniaUI/Avalonia/pull/21307
+  - system-back event — https://github.com/AvaloniaUI/Avalonia/pull/21246
+- **[INFER]** (было ошибочно помечено как FACT) Android разрешает SkiaSharp
+  `3.119.4-preview.1.1`: у `Avalonia.Skia` 12.0.3 это минимальная зависимость
+  (https://www.nuget.org/packages/Avalonia.Skia/12.0.3), а прямого пина SkiaSharp в
+  `VPNRouter.Android.csproj` и lock-файла в репо нет — **фактический resolve не
+  проверен**. Доказательство: `dotnet list package --include-transitive` по
+  Android-проекту, когда доступен SDK.
+- **[FACT]** Уже существуют релизы Avalonia **12.0.5, 12.1.0, 12.1.1**
+  (https://github.com/AvaloniaUI/Avalonia/releases/tag/12.1.1) → валидировать
+  актуальную выверенную цель, а не слепо пинить 12.0.4.
+- **Статус:** **не дефект, P3** — контролируемое upgrade-research.
+
+### F6. Ротация базы форка на актуальный upstream v1.13.15 — NEW, measure-first
+
+- **[FACT]** Текущая база — запиненный `c7a2592e` (sing-tun v0.8.10). Актуальный
+  upstream на 2026-08-01 — **v1.13.15 (2026-07-29)**:
+  https://github.com/SagerNet/sing-box/releases/tag/v1.13.15
+- **[INFER]** Ротация базы форка на v1.13.15 забирает и более новый `sing-tun`
+  (включая F1-фикс `8caaa93`), но её **прочие изменения нами не инспектированы** —
+  не утверждаем, что они безопасны или что чинят что-то ещё у нас.
+- **Обязательные условия ротации:** сохранить AWG/XHTTP и downstream-патчи
+  (`tools/build-singbox-lx.ps1` / `.sh`: WSAEFAULT send+recv, H4 reserved-byte gate),
+  перепинить commit **и одновременно** перепинить версию + SHA256 `libcronet.so`
+  на Linux (`.github/workflows/build-linux.yml:106-112` — сейчас 1.13.14).
+- **Статус:** **measure-first** — сначала аудит diff'а и тест сборки, потом решение.
+  Смежно: открытый backlog-пункт про отсутствие валидации `-SingBoxPath`/SHA256
+  бандлимого бинаря (`plans/OPEN-DEFECTS.md`) — ротация усиливает его актуальность,
+  но это отдельная запись, не дублируем.
 
 ## Валидация (минимальные эксперименты)
 
 Общий принцип: **measure-first.** Никакой имплементации до результата.
 
-- **F1 (TUN):** A/B двух сборок (fork 1.13.13 vs upstream 1.13.14) на Windows/Linux
-  с `system`-стеком: прогнать трафик, дающий пересечение TUN route-address с
-  реальными маршрутами, + длительный TCP-поток; снять sing-box-лог на предмет
-  NAT-коллизии/грязных route. macOS (gvisor) — вне этого эксперимента.
-- **F2 (DNS deadlock):** sustained mixed-DNS workload (DoH vpn-dns + local-dns +
-  dns-system + hijack-dns + loopback slipstream) на fork vs upstream 1.13.14;
-  смотреть зависания/дедлоки DNS-запросов.
-- **F3 (Android DNS):** sustained load на Android-сборке; замер памяти/сокетов +
-  DNS-stall'ы; сравнить libbox 1.13.10 vs кандидата на ротацию.
-- **F4 (Clash log):** A/B event-level/count сравнение подписки `/logs?level=info`
-  на fork vs upstream 1.13.14; сверить, что health/failover видит те же события.
-- **F5 (Avalonia):** контролируемый upgrade Android до 12.0.4 → build + RU/EN bidi
-  visual, TalkBack, ItemTemplate-экраны, lifecycle smoke; keep/revert по evidence.
+- **F1 (TUN TCP NAT collision):** через system-TUN прогнать **>20 000 коротких TCP-
+  соединений за пять минут минимум на два разных destination** (быстрый оборот
+  эфемерных портов) и детектировать **доставку не тому destination**
+  (cross-destination delivery). Долгий одиночный поток триггером НЕ является.
+  macOS (gvisor) — вне эксперимента.
+- **F2 (DNS self-deadlock):** BlockAds ON, через тоннель запросить
+  **`dns.adguard-dns.com`**; повторить с **реальным hostname VLESS/proxy-сервера**
+  (когда outbound задан hostname'ом). Сравнить форк vs выверенный кандидат 1.13.15.
+  Широкая sustained-нагрузка НЕ требуется — механизм детерминированный.
+- **F3 (Android BypassRu UDP DNS):** минимальный замер **только при включённом
+  BypassRu** (путь `77.88.8.8`, `ConfigGenerator.cs:848-854`): рост сокетов/памяти +
+  DNS-stall'ы. **Negative control — DoH-only прогон** (BypassRu OFF): там эффекта
+  быть не должно.
+- **F5 (Avalonia):** сначала `dotnet list package --include-transitive` по
+  Android-проекту (подтвердить/опровергнуть SkiaSharp preview), затем контролируемый
+  upgrade на **актуальную выверенную** версию → build + TalkBack PointToScreen,
+  Android file-properties и system-back сценарии, lifecycle smoke; keep/revert по
+  evidence.
+- **F6 (base rotation):** собрать форк на базе v1.13.15 с сохранёнными
+  AWG/XHTTP+downstream-патчами, прогнать F1/F2-эксперименты на нём как на
+  сравнительной ветке; параллельно перепинить libcronet (версия + SHA256).
 
 ## Remediation (минимальное направление)
 
 Явно **без** широких переписываний и dependency-harmonization.
 
-- **F1/F2/F4 (desktop core):** при подтверждении эффектом — ротация базы fork'а
-  sing-box-lx на проверенный более новый upstream (к 1.13.14+), с сохранением
-  текущих build-time патчей (AWG/XHTTP/WSAEFAULT/H4) и re-pin коммита. Точечное
-  действие, не переписывание `ConfigGenerator`.
-- **F3 (Android):** при подтверждении — ротация libbox на проверенный более новый
-  upstream-тег; НЕ локальные workaround'и в Java/Core.
-- **F5 (Android Avalonia):** точечный bump `VPNRouter.Android.csproj` 12.0.3 → 12.0.4
-  (и синхронный SkiaSharp-переход на stable, если upgrade оставим), только после
-  положительного validation; иначе revert.
+- **F1/F2/F6 (desktop core):** при подтверждении эффектом — ротация базы fork'а
+  sing-box-lx на **выверенный** более новый upstream (кандидат — v1.13.15), с
+  сохранением текущих build-time патчей (AWG/XHTTP/WSAEFAULT/H4), re-pin коммита и
+  синхронным re-pin libcronet (версия + SHA256). Точечное действие, не переписывание
+  `ConfigGenerator`.
+- **F3 (Android):** при подтверждении на BypassRu-пути — ротация libbox на
+  проверенный более новый upstream-тег; НЕ локальные workaround'ы в Java/Core.
+- **F5 (Android Avalonia):** точечный bump `VPNRouter.Android.csproj` на актуальную
+  выверенную версию (и SkiaSharp-переход на stable, если resolve подтвердится и
+  upgrade оставим), только после положительного validation; иначе revert.
 - **Явно НЕ добавлять:** Serilog/YAML/HttpClient-рефакторы и прочую
   dependency-harmonization — они не обоснованы этим исследованием.
 
 ## Опровергнуто / non-actionable
 
+- **[FACT] Route-address pollution (бывшая половина F1) — не применима.** Фикс
+  https://github.com/SagerNet/sing-tun/commit/b1c48c12e2c667a880d9682636ae68145ca06df1
+  относится исключительно к `auto_redirect`/nftables-пути. VPNRouter **не эмитит
+  `auto_redirect`** ни в одной конфигурации → этот код у нас не исполняется.
+  `RouteExcludeAddress` к нему отношения не имеет.
+- **[FACT] Clash log subscriber-level fix (бывший F4) — non-actionable.**
+  https://github.com/SagerNet/sing-box/commit/6397675 — уровень логов по умолчанию
+  `info`, а мы запрашиваем ровно `info` (`ClashLogStream.cs:93`,
+  `/logs?level=info`), так что запрошенный уровень совпадает с дефолтным. Сам
+  стрим включается только под env-флагом **`VPNROUTER_CONN_HEALTH`**
+  (`VpnEngine.cs:90,993-1004`) и **observe-only** — не триггерит ни failover, ни
+  toast (`ConnectionHealthClassifier.cs:76-77`). Ни actionable-эффекта, ни
+  backlog-пункта.
+- **[FACT] Широкий Android DoH leak/deadline (исходный F3) — опровергнут:**
+  `d166f0d` и `6548c17` не затрагивают HTTPS/DoH-транспорт. Осталась только узкая
+  P3-формулировка про BypassRu UDP DNS (см. F3).
 - **[FACT] Android process-search regression (фикс в sing-box 1.13.11) — не применим:**
   Android маршрутизирует приложения через VpnService allowed/disallowed package-списки
   и не эмитит `process_name`-правил.
@@ -172,8 +246,7 @@ libbox — на 1.13.10; оба ниже референса.
 ## Связь
 
 - Backlog-записи: `plans/OPEN-DEFECTS.md`, секция
-  `### Internet-optimization research — 2026-08-01` (все четыре actionable
-  направления, measure-first gate).
+  `### Internet-optimization research — 2026-08-01` (measure-first gate).
 - Смежное: SDR/realtime-games кластер в `OPEN-DEFECTS.md` (AWG WSAENOBUFS/MTU) —
   не пересекать: тот кластер про lx-core bind/MTU, этот — про upstream sing-box
-  фиксы 1.13.11–1.13.14 и Avalonia.
+  фиксы и Avalonia.
