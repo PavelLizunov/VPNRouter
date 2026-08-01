@@ -19,6 +19,13 @@ LX_COMMIT="c7a2592e750406ade9ebaae1d0fdb7482fc0773e"
 WG_REPO="https://github.com/Leadaxe/wireguard-go-awg2-lx"
 WG_BRANCH="lx"
 WG_COMMIT="0c0c10b5d3236796bd3832a6813223d6dc7d0bb1"
+# Targeted upstream backports (applied build-time on the pinned fork tree). The working
+# tree is a Leadaxe/sing-box-lx clone, so origin points at Leadaxe and is NOT the proven
+# source of these two SagerNet commits — fetch the EXACT SHAs from the immutable upstream
+# URL, never origin, never a branch/tag (both mutable). Keep in sync with the .ps1.
+UPSTREAM_REPO="https://github.com/SagerNet/sing-box.git"
+TUN_BACKPORT="0b7ffbaafa5f060dd8c762dfbc751d592cba1fea"   # F1: sing-tun v0.8.11 (TUN system-stack TCP NAT collision)
+DNS_BACKPORT="72a8723e13b9574664f4c78e588069fa4aca6fc9"   # F2: DNS nested single-flight self-deadlock
 TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg"
 VER="${1:-1.13.13-lx-awg}"
 OUT="${2:-$PWD/sing-box-lx}"
@@ -59,6 +66,27 @@ echo "[1/4] Clone sing-box-lx @ $LX_COMMIT"
 git clone --quiet "$LX_REPO" "$SRC"
 git -C "$SRC" checkout --quiet "$LX_COMMIT"
 assert_git_head "$SRC" "$LX_COMMIT" "sing-box-lx"
+
+# Targeted upstream backports on the pinned fork tree (no pin rotation): cherry-pick
+# --no-commit (no Git identity needed); set -e + grep -Fq gates below fail closed.
+echo "[1.5/4] Backport upstream fixes (sing-tun NAT + DNS single-flight)"
+git -C "$SRC" fetch --quiet "$UPSTREAM_REPO" "$TUN_BACKPORT" "$DNS_BACKPORT"
+git -C "$SRC" cherry-pick --no-commit "$TUN_BACKPORT"
+git -C "$SRC" cherry-pick --no-commit "$DNS_BACKPORT"
+
+grep -Fq "github.com/sagernet/sing-tun v0.8.11" "$SRC/go.mod" \
+  || { echo "FATAL: go.mod missing 'github.com/sagernet/sing-tun v0.8.11' after TUN backport ($TUN_BACKPORT) — sing-tun bump did not apply" >&2; exit 1; }
+if grep -Fq "github.com/sagernet/sing-tun v0.8.10" "$SRC/go.mod"; then
+  echo "FATAL: go.mod still pins 'github.com/sagernet/sing-tun v0.8.10' after TUN backport ($TUN_BACKPORT) — TUN TCP NAT collision fix NOT in tree" >&2; exit 1
+fi
+grep -Fq "compatible.Map[transportCacheKey, chan struct{}]" "$SRC/dns/client.go" \
+  || { echo "FATAL: dns/client.go missing 'compatible.Map[transportCacheKey, chan struct{}]' after DNS backport ($DNS_BACKPORT)" >&2; exit 1; }
+grep -Fq "cacheKey := transportCacheKey{Question: question, transportTag: transport.Tag()}" "$SRC/dns/client.go" \
+  || { echo "FATAL: dns/client.go missing transportCacheKey cache-key construction after DNS backport ($DNS_BACKPORT)" >&2; exit 1; }
+if grep -Fq "compatible.Map[dns.Question, chan struct{}]" "$SRC/dns/client.go"; then
+  echo "FATAL: dns/client.go still uses 'compatible.Map[dns.Question, chan struct{}]' after DNS backport ($DNS_BACKPORT) — pre-fix map still present" >&2; exit 1
+fi
+echo "  backported sing-tun v0.8.11 (TUN NAT) + DNS single-flight deadlock fix; fail-closed assertions passed"
 
 WG="$SRC/submodules/wireguard-go"
 echo "[2/4] Clone wireguard-go-awg2-lx @ $WG_COMMIT -> submodules/wireguard-go"
