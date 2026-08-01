@@ -123,27 +123,35 @@
 4. Mac/Linux CI / native build — когда доступны (GitHub Actions `build-mac.yml` / `build-linux.yml`).
 5. Независимый security/supply-chain review: git fetch точных SHA из явного immutable upstream `https://github.com/SagerNet/sing-box.git` (не из origin=Leadaxe) + cherry-pick --no-commit — новый паттерн в build-скриптах.
 
-## Outcome (filled after merge)
+## Outcome
 
-**Status**: PENDING
-**Commits**: PENDING
-**Pushed**: PENDING
-**Test deltas**: PENDING
-**Files changed**: PENDING
+**Status**: PASS
+**Commits**: `f586f473` (brief), `889b0fe7` (implementation). Этот Outcome — docs-only follow-up после завершения verification.
+**Pushed**: да, draft PR #96 — https://github.com/PavelLizunov/VPNRouter/pull/96
+**Test deltas**: один новый Fact-класс `SingBoxBackportBuildScriptTests` — 22 assertion'а по исполняемым фрагментам обоих скриптов; перед матчингом тест стрипает PowerShell block-комментарии и full-line `#`-комментарии (защита от ложного срабатывания на закомментированных командах).
+**Files changed**: `tools/build-singbox-lx.ps1`, `tools/build-singbox-lx.sh`, `VPNRouter.Tests/SingBoxBackportBuildScriptTests.cs`
 
 **Gate results:**
-- [ ] Gate 1: PENDING
-- [ ] Gate 2: PENDING
-- [ ] Gate 3: PENDING
-- [ ] Gate 4: PENDING
+- [x] Gate 1: PASS — `dotnet build VPNRouter.sln -c Release`: 0 warnings / 0 errors.
+- [x] Gate 2: PASS — targeted regression 23/23; GitHub commit CI (test / go-test-windows / grep) — green. Локальный full suite: 2686 passed, 23 failed (только `UnauthorizedAccess` к `C:\ProgramData\VPNRouter` — локальный permission noise, не связан с изменением), 2 skipped; GitHub full test — passed.
+- [x] Gate 3: PASS — Outcome заполнен; README/CLAUDE.md не менялись (изменение не user-facing).
+- [x] Gate 4: PASS — Qwen ponytail review: сокращение комментариев/boilerplate; независимый Opus supply-chain review — PASS после усиления теста против закомментированных команд.
 - [-] Gate 5: N/A — no UI surface
 - [-] Gate 6: N/A — not a god-file split
 
+**Дополнительная verification (вне стандартных gates):**
+- Реальная Windows-сборка `tools/build-singbox-lx.ps1` — PASS: оба точных backport'а применены; бинарь `v1.13.13-lx-awg` с тегами `with_awg` + `with_xhttp`; AWG config `check` и runtime handshake — PASS, без WSAEFAULT.
+- `bash -n tools/build-singbox-lx.sh` локально недоступен (WSL без `/bin/bash`); синтаксис покрыт native Linux/macOS CI.
+- Native CI (head `889b0fe7`, `upload_to_release=false`): macOS — success (https://github.com/PavelLizunov/VPNRouter/actions/runs/30715941305), Linux — success (https://github.com/PavelLizunov/VPNRouter/actions/runs/30715941366).
+
 **Surprises encountered**:
-- PENDING
+- Локальный permission noise: 23 падения full suite — только `UnauthorizedAccess` к `C:\ProgramData\VPNRouter`; не связано с изменением, GitHub full test зелёный.
+- Локальный Bash недоступен (WSL без `/bin/bash`) — `bash -n` выполнить нельзя; покрыто native CI.
+- Первый diff-only Opus review не имел контекста `Invoke-Git` и выдал ложный High по обработке ошибок; проверка показала, что wrapper уже бросает исключение на ненулевой exit code.
+- Финальный full-diff review нашёл и исправил пробел в матчинге комментариев теста (усиление против закомментированных команд).
 
 **Follow-ups spawned**:
-- PENDING
+- В этот PR не spawned: полная ротация базы форка (F6) и Android libbox / Avalonia (F3/F5) остаются отдельными backlog-задачами.
 
 **Lessons for methodology doc** (if any):
-- PENDING
+- Независимым ревьюерам нужно передавать untracked-файлы и контракты релевантных helper'ов (например, `Invoke-Git`), иначе diff-only review даёт ложные срабатывания.
