@@ -38,7 +38,7 @@ DR-01–DR-05 можно выполнять независимо, но кажд�
 
 ### Результат
 
-Удалить лишний test-only collector. Покрытие при необходимости уже может собираться встроенным Microsoft Code Coverage через `Microsoft.NET.Test.Sdk`.
+Удалить лишний test-only collector. Текущий pipeline вообще не собирает coverage, поэтому замена не нужна; внедрение покрытия в будущем должно быть отдельной задачей с выбранным и явно включённым collector-ом.
 
 ### Файлы
 
@@ -50,7 +50,7 @@ DR-01–DR-05 можно выполнять независимо, но кажд�
 1. Повторно найти `coverlet`, `XPlat Code Coverage`, `CoverletOutput` и `CollectCoverage` во всём репозитории.
 2. Если реальных вызовов нет, удалить только `PackageReference` на `coverlet.collector`.
 3. Собрать test project и запустить полный тестовый набор.
-4. При необходимости один раз проверить встроенный collector командой с `--collect:"Code Coverage;Format=Cobertura"`; generated results не коммитить.
+4. Не добавлять замену ради несуществующего coverage flow.
 
 ### Приёмка
 
@@ -68,7 +68,7 @@ DR-01–DR-05 можно выполнять независимо, но кажд�
 
 Сначала обязательно запусти read-only проверку именно Qwen 3.8 (qwen3.8-max-preview; без замены моделью): найди все вызовы coverlet, XPlat Code Coverage, CoverletOutput и CollectCoverage и подтверди, что пакет не участвует в CI или локальных scripts. Qwen не должен менять файлы. Codex проверяет вывод и выполняет правку.
 
-Если потребителей нет, удали только PackageReference coverlet.collector из VPNRouter.Tests/VPNRouter.Tests.csproj. Не добавляй новую библиотеку: Microsoft Code Coverage уже доступен через Microsoft.NET.Test.Sdk. Собери test project и запусти все тесты. Generated coverage files не коммить. Не меняй другие версии пакетов.
+Если потребителей нет, удали только PackageReference coverlet.collector из VPNRouter.Tests/VPNRouter.Tests.csproj. Не добавляй новую библиотеку: текущий pipeline не собирает coverage, а будущая система покрытия должна проектироваться отдельно. Собери test project и запусти все тесты. Не меняй другие версии пакетов.
 
 После зелёной проверки создай один commit, сразу push текущей ветки и draft PR в main; проверь CI. Не используй --no-verify, не создавай release/tag, не выполняй merge.
 ```
