@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Codebase/context reduction audit — 2026-08-01 (static/call-graph verified, NO live behavior change for F1 — full report `plans/qwen-context-footprint-and-code-reduction-audit-2026-08-01.md`)
+- [ ] **P2** — dead CustomDirectRules runtime/parser/generator/aliases + their two dedicated tests are confirmed removable (~697 LOC, ~6-8k tokens); KEEP the migration/schema contract (`AppConfig.CustomDirectRules`, `CustomDirectRule` model, `AppSettingsSane`, `SettingsMigrator.Migrate_1_to_2`, `YamlStaticContext` registration, migration/roundtrip/robustness tests) — [report §F1](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md) — next PR
+- [ ] **P3** — dead settings schema cleanup: `AutoDownload` + `DownloadUrl` are dead, `ProcessScanInterval` is unused by runtime but has a live validator — remove only in a coordinated schema cleanup (validator + tests together); unknown YAML keys already safe via `IgnoreUnmatchedProperties` (~15 product LOC + tests) — [report §F3](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md) — later cleanup
+- [ ] **P3** — tiered whole-review context profile (search-driven Tier 0-3 retrieval; a dedicated review profile may exclude historical plans/evidence/design + bulk tests while keeping them searchable); adopt only after one dry-run proves <=1M token bundle; NO blanket default `.qwenignore`, NO repo deletion — developer tooling only — [report §5](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md) — TBD
+- [ ] **P3** — docs/context hygiene: context-exclude (optionally archive) closed plans + `plans/test-screenshots` dated XML/evidence + historical design artifacts from the whole-review bundle, and fix stale `CURRENT_STATE.md` + `plans/CLAUDE.md` active-version list + broken `docs/REVIEW_AGENT_PROMPT.md` target; NO mass archive/move until links validated — [report §6](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md) — TBD
+
 ### Internet-optimization research — 2026-08-01 (static code/version exposure; NO live repro yet — full report `plans/qwen-internet-optimization-research-2026-08-01.md`; Claude Opus adversarially validated the Qwen pass on 2026-08-01 and corrected the overclaims below)
 
 **Measurement gate for EVERY entry below:** these are version/code exposures only, NOT confirmed user bugs. NO implementation starts until the report's validation result justifies it — measure-first, do not optimize on static evidence alone.
