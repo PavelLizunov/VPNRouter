@@ -74,4 +74,30 @@ Several call sites allocate disposable SHA instances and manually lowercase hexa
 
 ## Outcome
 
-To be filled after implementation and verification.
+**Status**: PASS
+
+**Commits**: `dde56968` (brief), `e72771c8` (implementation)
+
+**Pushed**: `origin/codex/dr-04-bcl-hashing` at `e72771c8`
+
+**Test deltas**: +0 / -0
+
+**Files changed**: implementation 16 files · +24 / -31 lines
+
+**Gate results:**
+
+- [x] Gate 1: PR CI restored and built the .NET 10 solution successfully. Local build was unavailable because the host exposes SDK 8.0.418 while `global.json` requires 10.0.301.
+- [x] Gate 2: main test job successful — 2652 total, 2605 passed, 47 skipped, 0 failed; dedicated `test-update` job passed.
+- [x] Gate 3: Outcome filled; README and zone instructions unchanged because there is no user-facing or architectural change.
+- [x] Gate 4: Qwen 3.8 (`qwen3.8-max-preview`) completed pre-change inventory and post-change security-equivalence review with `SAFE TO COMMIT`; the repository has no callable `security-review` skill. `simplify` was not required for the 55-line mechanical diff.
+- [-] Gate 5: N/A — no UI behavior change.
+- [-] Gate 6: N/A — not a god-file split; public hash output and casing remain byte-for-byte identical.
+
+**Surprises encountered**:
+
+- `WgturnUpdater` and `FreeConfigAggregator` intentionally emit uppercase hashes; both contracts were preserved.
+- The updater-specific CI gate ran automatically because `UpdateChecker.cs` changed and passed.
+
+**Follow-ups spawned**: none.
+
+**Rollback**: `git revert e72771c8` or close the branch.
