@@ -67,13 +67,29 @@ actual Android scanner or file-based config share flow.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: solution Release build has 0 errors.
+- [x] **Gate 1 — Build clean**: desktop solution and Android Release builds have 0 errors.
 - [ ] **Gate 2 — Tests green**: focused config-share/Android tests and full CI pass.
-- [ ] **Gate 3 — Docs**: Outcome is filled; NOTICE remains accurate.
-- [ ] **Gate 4 — Self-review**: final Qwen reference/deletion review has no blocker.
-- [ ] **Gate 5 — MCP verify**: N/A — no production or UI behavior changes.
-- [ ] **Gate 6 — Characterization diff**: public production surface is unchanged because the deleted type had no caller.
+- [x] **Gate 3 — Docs**: Outcome is filled; live ZXing NOTICE is preserved.
+- [x] **Gate 4 — Self-review**: final Qwen reference/deletion review returned `APPROVE` with no blocker.
+- [x] **Gate 5 — MCP verify**: N/A — no production or UI behavior changes.
+- [x] **Gate 6 — Characterization diff**: Android source characterization remains green; the deleted type had no caller.
 
 ## Outcome
 
-To be filled after implementation and verification.
+- Deleted the 599-line `QrCode` encoder, its 142-line dedicated test file, and
+  exactly three misplaced encoder-only methods from `ConfigShareDocumentTests`.
+  Net working diff before this Outcome: 788 deletions and 9 additions.
+- The remaining ConfigShareDocument tests retain schema, serialization, parsing,
+  validation, preview, filename, and null-default coverage. Their stale summary
+  no longer references the removed encoder.
+- Repository production/reflection/generated symbol search for `QrCode` is
+  empty. Android's source-link compile and its real ZXing camera scan/apply flow
+  remain intact; NOTICE keeps the live ZXing Apache-2.0 entry.
+- Qwen 3.8 max-preview returned `DELETE` before the edit and `APPROVE` after the
+  edit. Two unrelated Android comment/license-name findings are recorded in
+  `plans/refactor-backlog.md`; the final review found nothing else.
+- Release solution build: 0 errors. Real `net10.0-android36.0` Release build: 0
+  errors. Focused ConfigShare/Android characterization tests: 31 passed.
+  Accessible regression: 2631 passed, 2 skipped, 0 failed — exactly nine fewer
+  tests than the pre-change 2640 because only encoder self-tests were removed.
+- Clean-environment CI is the remaining Gate 2 check.
