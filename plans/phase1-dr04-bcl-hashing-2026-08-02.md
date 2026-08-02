@@ -76,13 +76,13 @@ Several call sites allocate disposable SHA instances and manually lowercase hexa
 
 **Status**: PASS
 
-**Commits**: `dde56968` (brief), `e72771c8` (implementation)
+**Commits**: `dde56968` (brief), `e72771c8` (main implementation), `13e1dc1a` (PoolAggregator follow-up)
 
-**Pushed**: `origin/codex/dr-04-bcl-hashing` at `e72771c8`
+**Pushed**: `origin/codex/dr-04-bcl-hashing` at `13e1dc1a`
 
 **Test deltas**: +0 / -0
 
-**Files changed**: implementation 16 files · +24 / -31 lines
+**Files changed**: implementation 17 files · +25 / -33 lines
 
 **Gate results:**
 
@@ -96,8 +96,9 @@ Several call sites allocate disposable SHA instances and manually lowercase hexa
 **Surprises encountered**:
 
 - `WgturnUpdater` and `FreeConfigAggregator` intentionally emit uppercase hashes; both contracts were preserved.
+- A final repository-wide search found the same legacy SHA-1 pattern in `VPNRouter.Tools/PoolAggregator/Program.cs`, outside the initial App/Core/Tests inventory. The already-present parallel-worktree diff was independently reviewed by Qwen 3.8 as `SAFE TO INCLUDE`, then committed separately; its 8-byte uppercase identifier contract is unchanged.
 - The updater-specific CI gate ran automatically because `UpdateChecker.cs` changed and passed.
 
 **Follow-ups spawned**: none.
 
-**Rollback**: `git revert e72771c8` or close the branch.
+**Rollback**: `git revert 13e1dc1a e72771c8` or close the branch.
