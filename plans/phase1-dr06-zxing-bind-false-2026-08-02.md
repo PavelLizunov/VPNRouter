@@ -68,13 +68,53 @@ the same Release command and a real scanner flow must prove the result.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: bindless Android Release build has 0 errors.
-- [ ] **Gate 2 — Device E2E**: A101BM scan flow and JNI/log checks pass.
-- [ ] **Gate 3 — Measurements**: exact before/after build time, APK size, generated file count/bytes recorded.
-- [ ] **Gate 4 — Qwen/self-review**: final packaging diff has no blocker.
+- [x] **Gate 1 — Build clean**: bindless Android Release build has 0 errors.
+- [x] **Gate 2 — Device E2E**: A101BM scanner launch, permission deny/grant,
+  camera preview, cancel return, successful decode, result handoff, and JNI/log
+  checks pass.
+- [x] **Gate 3 — Measurements**: exact before/after build time, APK size, generated file count/bytes recorded.
+- [x] **Gate 4 — Qwen/self-review**: exact `qwen3.8-max-preview` final review
+  passed; deleting `Metadata.xml` is safe because every rule targeted only the
+  disabled ZXing bindings.
 - [ ] **Gate 5 — Push/PR**: permitted only after Gates 1–4 pass.
 - [ ] **Gate 6 — CI**: final pushed head is green.
 
 ## Outcome
 
-To be filled after the experiment.
+The clean .NET 10 Release experiment and physical-device E2E validate the
+reduction. The change is eligible for a commit and draft PR.
+
+| Measurement | Baseline | Bindless final | Delta |
+|---|---:|---:|---:|
+| Build wall time | 99.720 s | 88.159 s | -11.561 s (-11.6%) |
+| Signed APK | 88,367,134 B | 87,199,774 B | -1,167,360 B (-1.3%) |
+| Generated ZXing C# | 166 files / 1,529,826 B | 0 / 0 B | -166 / -1,529,826 B |
+| `api.xml` | 1,589,405 B | 269,830 B | -1,319,575 B |
+| Build warnings | 208 | 133 | -75 |
+
+The SDK auto-imports all AAR/JAR files. Therefore child `Bind=false` metadata
+on another `Include` was not enough: it created a duplicate while the original
+auto-imported item stayed `Bind=true`. The working minimal change uses
+`AndroidLibrary Update=... Bind=false`; evaluated metadata then shows one ZXing
+AAR and one ZXing JAR, both `Bind=false` and `Pack=true`. `Metadata.xml` became
+unused and was deleted. APK analysis confirms that `QrScanLauncher`,
+`CaptureActivity`, and `QRCodeReader` remain in DEX and the merged manifest
+still declares `CaptureActivity`.
+
+A separate debug-signed package (`com.ninitux.vpnrouter.dr06test`) was installed
+beside the production app on A101BM without touching production data. Permission
+deny and grant, live camera preview, back/cancel return, and a log scan for
+`ClassNotFoundException`, `NoClassDefFoundError`, `UnsatisfiedLinkError`, JNI,
+and fatal exceptions all passed. The device then decoded the QR in 74 ms,
+returned the text through the reflective Java/C# boundary, persisted the
+`DR06-E2E` server, requested connection, and completed the Android VPN-consent
+flow. The UI not copying the result into `_serverInput.Text` is the expected v3
+one-step scan behavior: save and connect immediately.
+
+The later service-start failure belongs only to the side-by-side test package:
+its temporary application ID was `com.ninitux.vpnrouter.dr06test`, while the
+service class keeps the production Java package. The stock application preserves
+the required application-ID/package invariant, and DR-06 does not touch service
+registration. No product fix is warranted. Production-key install/update
+verification remains a shared release-signing gate, not a DR-06 correctness
+gate.
