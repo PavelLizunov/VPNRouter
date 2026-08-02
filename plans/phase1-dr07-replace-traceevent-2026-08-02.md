@@ -79,7 +79,8 @@ on windows-brat.
   TraceEvent files are recorded.
 - [x] **Gate 5 — Qwen/self-review**: final qwen3.8-max-preview verdict is ACCEPT;
   Codex independently fixed and regression-tested the same-worker Stop path.
-- [ ] **Gate 6 — Push/PR/CI**: permitted only after Gates 1–5 pass; final head is green.
+- [x] **Gate 6 — Push/PR/CI**: draft PR #106 is open; final product-code head is
+  green (`test`, `grep`, and `go-test-windows`; characterization job intentionally skipped).
 
 ## Outcome
 
