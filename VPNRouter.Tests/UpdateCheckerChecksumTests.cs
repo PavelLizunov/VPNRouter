@@ -38,7 +38,7 @@ public class UpdateCheckerChecksumTests
     }
 
     private static string Sha256Hex(byte[] bytes) =>
-        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        Convert.ToHexStringLower(SHA256.HashData(bytes));
 
     private static UpdateInfo Info(string version, string? inlineSha) => new()
     {

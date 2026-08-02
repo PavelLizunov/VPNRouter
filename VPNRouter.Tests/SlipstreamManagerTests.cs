@@ -26,7 +26,7 @@ public class SlipstreamManagerTests
     private static readonly string SamplePem =
         "-----BEGIN CERTIFICATE-----\n" + Convert.ToBase64String(FakeDer) + "\n-----END CERTIFICATE-----";
     private static readonly string SampleFingerprint =
-        Convert.ToHexString(SHA256.HashData(FakeDer)).ToLowerInvariant();
+        Convert.ToHexStringLower(SHA256.HashData(FakeDer));
 
     private static VlessServerEntry MakeEntry(string fingerprint = "")
         => new()

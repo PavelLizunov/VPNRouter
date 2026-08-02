@@ -146,7 +146,7 @@ public sealed class AppAutostartTgProxyTests
         // still gets a working proxy instead of a silent skip.
         Assert.Contains("IsNullOrWhiteSpace(TgProxySecret)", stripped);
         Assert.Contains("RandomNumberGenerator.GetBytes(16)", stripped);
-        Assert.Contains("Convert.ToHexString", stripped);
+        Assert.Contains("Convert.ToHexStringLower", stripped);
     }
 
     [Fact]

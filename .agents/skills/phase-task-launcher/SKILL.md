@@ -79,7 +79,7 @@ The 6 gates from §3:
 4. **Self-review**:
    - For diff >100 LOC OR touching public API → run `simplify` skill on the diff
    - For changes touching auth / TLS / process exec / file I/O / firewall / placeholder defense → run `security-review` skill
-5. **MCP verify** (UI changes only): take screenshot via `mcp__computer-use__screenshot` or `mcp__vpnrouter-test__screenshot`, PASS/FAIL per UI feature point, attach screenshot ref to brief Outcome.
+5. **Remote brat UI verify** (UI changes only): `tools/brat-verify.ps1` (`-Action uia` / `-Action screenshot`) against the fixed test VM WINBRAT (192.168.0.106), PASS/FAIL per UI feature point, screenshots under `artifacts/brat-verify/`, attach refs to brief Outcome. VM/WinRM unavailable → BLOCKED, never a local fallback.
 6. **Characterization diff** (god-file splits only): pre-split snapshot test must match post-split snapshot test. Zero behavior drift allowed.
 
 **If any gate fails: STOP.** Do not commit. Do not push. Surface the failure to the user with: (a) the gate that failed, (b) the diagnostic output, (c) recommended next step (fix the implementation, expand the test, document the deviation if intentional).
@@ -102,7 +102,7 @@ Append to the brief file:
 - [x] Gate 2 tests: 765/765 green (+X new)
 - [x] Gate 3 docs: ...
 - [x/-] Gate 4 self-review: simplify ran / security-review ran / N/A
-- [x/-] Gate 5 MCP verify: screenshot @ plans/<task>-mcp.png / N/A
+- [x/-] Gate 5 remote brat UI verify: screenshot @ artifacts/brat-verify/<task>.png / N/A
 - [x/-] Gate 6 characterization diff: snapshot match / N/A
 **Surprises encountered**: <list>
 **Follow-ups spawned**: <task chips OR plans/ entries>
@@ -134,7 +134,7 @@ Stop the workflow and surface to user when:
 4. **Implementation without `dotnet test` green** — Gate 2 failed
 5. **Behavior change without new test** — methodology §5 violation
 6. **God-file split without characterization snapshot** — Gate 6 cannot be checked
-7. **UI change without MCP screenshot** — Gate 5 missing
+7. **UI change without remote brat UI verify screenshot** — Gate 5 missing (VM/WinRM unavailable = BLOCKED, no local fallback)
 8. **Diff >100 LOC without `simplify` run** — Gate 4 missing
 9. **Security-relevant change without `security-review` run** — Gate 4 missing
 10. **Commit attempt without `Co-Authored-By` trailer** — hook will reject anyway, but flag upstream
@@ -182,7 +182,7 @@ If a task is blocked and you can't figure out which gate, walk through:
 5. Are docs updated for user-facing changes?  → §3 Gate 3
 6. Did `simplify` run if diff > 100 LOC?  → §3 Gate 4
 7. Did `security-review` run if security-relevant?  → §3 Gate 4
-8. Did MCP screenshot run if UI changed?  → §3 Gate 5
+8. Did remote brat UI verify run if UI changed?  → §3 Gate 5
 9. Did characterization snapshot match if god-file split?  → §3 Gate 6
 10. Is Outcome section filled?  → §2 template
 

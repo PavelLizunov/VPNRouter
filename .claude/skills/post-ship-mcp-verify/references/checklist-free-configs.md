@@ -1,83 +1,23 @@
-# Free Configs page checklist
+# Free Configs verification (windows-brat)
 
-Use when release notes mention free configs / public pool /
-FreeConfigAggregator / FreeConfigDeepVerifier / GeoIP.
+Use for public-pool, refresh, source, parsing, import, and Free Configs UI changes. Set `$v`.
 
-## Setup
+1. Navigate visually to Free Configs and capture the initial plus bottom-of-viewport state. If navigation or status text has no explicit selector, record `selector hardening: future work`.
 
-1. Window already launched.
-2. Click "Расширенные настройки" → "Публичные" tab (or "Free Configs"
-   in EN).
+2. Read the current RU refresh/action Name from the UI. Inspect then invoke it semantically; do not invent an AutomationId or translation:
 
-## Verify page layout
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<current RU refresh/action Name>" -ControlType Button -UiaOperation Inspect
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<current RU refresh/action Name>" -ControlType Button -UiaOperation Invoke -TimeoutSeconds 120
+```
 
-3. Screenshot.
-4. Confirm 6 master-detail sections (left tree, right detail pane):
-   - Dashboard (counts: Total / Working / Timeout / Unreachable / TLS
-     failed / Verified / Fake).
-   - Configs table.
-   - Saved subset.
-   - Deep verify form.
-   - Cleanup tools.
-   - Sources management.
+3. Screenshot the completed result and verify source/status text, non-empty rows when the source succeeds, no duplicate/blank entries, and every changed row action. For offline/source failure releases, verify the exact intended error and preservation behavior instead of requiring rows.
 
-## Trigger Refresh
+4. If release notes change import/apply behavior, invoke the current proven RU action and verify the resulting selected config without exposing server secrets in screenshots or the report.
 
-5. Click "↻ Обновить список" / "Refresh list".
-6. Status text below should update with batched-search progress:
-   - "Поиск 50 рабочих конфигов из пула 1500..."
-   - "Найдено 5/50 · батч 1/30 · проверено 50/50".
-7. Wait 1-2 minutes for batches to complete.
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput "artifacts/brat-verify/$v/free-configs-final.png" -TimeoutSeconds 120
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs
+```
 
-## Verify Deep verify
-
-8. Click "✓✓ Найти рабочие конфиги" / "Find working configs".
-9. Status updates per-probe:
-   - "Найдено 3/10 · проверяю server.example.com:443 [DE]..."
-10. Wait for completion: "Готово: найдено N реально рабочих (✓✓)".
-
-## Connect to a verified config
-
-11. Click on a row with ✓✓ status.
-12. Click "Подключить" / "Connect" button at bottom.
-13. VPN should connect within 30 seconds.
-14. Stop after verification.
-
-## Cleanup tools
-
-15. Click "Убрать мусор" — removes dead entries.
-16. Click "Только ✓✓" — keeps only verified.
-17. Verify Dashboard counts update.
-
-## Per-feature log checks
-
-| Looking for | Pattern |
-|---|---|
-| Refresh started | `[FreeConfigAggregator] RefreshAsync started` |
-| Pool fetched | `[FreeConfigPoolFetcher] Fetched N entries from server-side pool` |
-| Batch progress | `[FreeConfigAggregator] Batch N/M` |
-| Deep verify | `[FreeConfigDeepVerifier] Probing server:port` |
-| GeoIP enrichment | `[FreeConfigGeoIp] MaxMind lookup` |
-| Cache migration heal | `[FreeConfigCache] Healed N sub-5ms entries` |
-
-## Expected log noise
-
-- `[FreeConfigTester] TCP-only probe timeout for server:port` —
-  expected during refresh, just means that server is dead.
-- `[FreeConfigPoolFetcher] Skip-2-stages: pool >= 1000 entries` —
-  expected optimization.
-
-## Pass criteria summary
-
-- Page renders all 6 sections.
-- Refresh fetches + tests configs.
-- Deep verify finds 1+ verified configs.
-- Connect to a verified row works.
-- Cleanup tools mutate dashboard counts.
-
-## Screenshots to attach
-
-- `tmp-rN-freeconfigs-dashboard.png` — initial state with counts.
-- `tmp-rN-freeconfigs-refreshing.png` — mid-refresh status.
-- `tmp-rN-freeconfigs-verified.png` — row with ✓✓ status.
-- `tmp-rN-freeconfigs-connected.png` — after Connect.
+Pass only if the complete refresh/result/import scenario matches release notes, the viewport bottom is captured, secrets are redacted, and remote logs are clean.
