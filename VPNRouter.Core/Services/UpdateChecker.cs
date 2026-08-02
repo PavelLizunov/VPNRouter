@@ -278,11 +278,10 @@ public class UpdateChecker : IDesktopInstaller
                     $"Checksum is not a valid SHA256 (got {expectedSha.Length} hex chars, expected 64).");
 
             string actualSha;
-            using (var sha = System.Security.Cryptography.SHA256.Create())
             await using (var fs = File.OpenRead(zipPath))
             {
-                var hashBytes = await sha.ComputeHashAsync(fs, ct);
-                actualSha = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                var hashBytes = await System.Security.Cryptography.SHA256.HashDataAsync(fs, ct);
+                actualSha = Convert.ToHexStringLower(hashBytes);
             }
 
             if (!string.Equals(actualSha, expectedSha, StringComparison.Ordinal))

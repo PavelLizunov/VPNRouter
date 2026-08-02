@@ -23,7 +23,7 @@ public sealed class TgProxyDigestVerifyTests : IDisposable
     public void Dispose() { try { if (File.Exists(_f)) File.Delete(_f); } catch { } }
 
     private string ActualSha() =>
-        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_f))).ToLowerInvariant();
+        Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(_f)));
 
     [Fact]
     public void MatchingDigest_DoesNotThrow()
