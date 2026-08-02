@@ -36,3 +36,29 @@ ledger (each item tracked there with how it was/would be verified).
   separate .NET 10 + gomobile toolchain), and `NetPortUtil` being `internal` won't
   cross to the Android assembly (would need `public` or `InternalsVisibleTo`
   Android). Do on a session that runs the local Android build. Plan ref: §4 T2-A/B/C.
+
+- [ ] **DR-07 remove the unused process-stop contract** — deferred 2026-08-02.
+  `IProcessMonitor.ProcessStopped` has no production subscribers; it survives only in
+  `PollingProcessMonitor`, its focused test, and eleven lifecycle fakes. Remove the
+  event and stopped-snapshot diff in a separate mechanical cleanup so the dependency
+  replacement remains easy to review. Plan ref: `phase1-dr07-replace-traceevent-2026-08-02.md`.
+
+- [ ] **DR-07 remove unused `ProcessEventArgs.ParentProcessId`** — deferred
+  2026-08-02. No production consumer reads this field, and the cross-platform poller
+  can only populate zero. This is distinct from `ProcessScanner`'s WMI parent-PID
+  traversal, which uses its own local values and must remain. Remove the event field
+  and update test fakes when the monitor contract is next touched.
+
+- [ ] **DR-07 consolidate partial-start teardown in `VpnEngine.Dispose`** —
+  deferred 2026-08-02. The `IsRunning == false` branch restores DNS/firewall but does
+  not dispose `_processMonitor`, `_healthMonitor`, or `_singBox`; a late startup
+  failure followed by a fast sing-box exit can therefore retain lifecycle objects.
+  Route both branches through one idempotent teardown only after adding a focused
+  failed-start lifecycle test; do not widen the TraceEvent-removal diff.
+
+- [ ] **Harden `DeepVerifyProbeCancellationTests` timing** — observed 2026-08-02
+  during DR-07 verification. One full-suite run failed
+  `ExternalCancellation_Rethrows_NotHttpTimeout` after 20ms because no cancellation
+  exception arrived; three immediate focused reruns passed 2/2. Keep this as test
+  reliability debt and replace the wall-clock race with a deterministic request
+  barrier when the deep-verify tests are next touched.

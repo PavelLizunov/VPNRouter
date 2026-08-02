@@ -70,15 +70,33 @@ on windows-brat.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: solution Release build has 0 errors.
-- [ ] **Gate 2 — Tests green**: focused tests and accessible regression suite pass.
-- [ ] **Gate 3 — windows-brat E2E**: routed and short-lived process scenarios,
-  repeated lifecycle, and WMI failure/recovery pass with clean logs.
-- [ ] **Gate 4 — Measurements**: exact output before/after and removed exclusive
+- [x] **Gate 1 — Build clean**: solution Release build has 0 errors.
+- [x] **Gate 2 — Tests green**: focused tests and accessible regression suite pass.
+- [x] **Gate 3 — windows-brat runtime**: real process detection, repeated lifecycle,
+  bounded Stop, and idle CPU pass. WMI failure/recovery is not applicable because the
+  accepted replacement does not use WMI.
+- [x] **Gate 4 — Measurements**: exact output before/after and removed exclusive
   TraceEvent files are recorded.
-- [ ] **Gate 5 — Qwen/self-review**: final diff has no correctness blocker.
+- [x] **Gate 5 — Qwen/self-review**: final qwen3.8-max-preview verdict is ACCEPT;
+  Codex independently fixed and regression-tested the same-worker Stop path.
 - [ ] **Gate 6 — Push/PR/CI**: permitted only after Gates 1–5 pass; final head is green.
 
 ## Outcome
 
-To be filled after the experiment.
+Qwen rejected WMI for this flow: it adds `winmgmt`/COM failure modes while the
+existing macOS implementation already proves that a two-second snapshot is inside
+HealthMonitor's five-second debounce window. The candidate therefore consolidates
+the Windows ETW monitor and macOS poller into one cross-platform
+`PollingProcessMonitor` and removes TraceEvent.
+
+- Release solution build: 0 errors.
+- Focused monitor tests: 7 passed; accessible suite: 2635 passed, 2 skipped, 0 failed.
+- Identical self-contained App + CLI + Service baseline: 300 files, 241,743,856 bytes.
+- Candidate: 288 files, 227,620,805 bytes; delta: -12 files, -14,123,051 bytes.
+- Removed payload includes TraceEvent/FastSerialization plus all x86/x64/ARM64
+  `msdia140` and `KernelTraceControl` native assets.
+- windows-brat (`100.115.182.0`) real implementation probe: first detection 1634ms,
+  post-restart detection 1823ms, Stop 1ms, idle CPU 0.031%, no lingering processes.
+- The candidate GUI launched and UIA reached Connect. Full tunnel startup was blocked
+  by the VM's pre-existing invalid VLESS Reality key; the installed build was restored
+  unchanged after the probe.

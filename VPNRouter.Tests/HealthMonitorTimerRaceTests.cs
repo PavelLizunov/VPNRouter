@@ -4,7 +4,7 @@ using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 /// <summary>v2.31.0-r1 (CO-1 audit fix): debounce timer swap uses
-/// Interlocked.Exchange to be atomic against concurrent ETW callbacks.
+/// Interlocked.Exchange to be atomic against concurrent process-monitor callbacks.
 /// Verify the contract by hammering OnNewProcessDetected from many threads
 /// and asserting no exceptions surface and the final timer is non-null.</summary>
 public class HealthMonitorTimerRaceTests

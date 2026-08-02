@@ -9,7 +9,7 @@ namespace VPNRouter.Core.Services;
 /// <summary>
 /// Unified VPN engine that encapsulates the full lifecycle:
 /// load config → resolve profile → scan processes → generate sing-box config →
-/// firewall → start sing-box → ETW monitor → health monitor.
+/// firewall → start sing-box → process monitor → health monitor.
 ///
 /// Used by GUI (in-process), and can replace CLI/Service startup logic.
 /// </summary>
@@ -17,7 +17,7 @@ public class VpnEngine : IDisposable
 {
     private SingBoxManager? _singBox;
     private HealthMonitor? _healthMonitor;
-    private IProcessMonitor? _etw;
+    private IProcessMonitor? _processMonitor;
     private IFirewallManager? _firewall;
     private Profile? _activeProfile;
     private ScanResult? _scanResult;
@@ -145,7 +145,7 @@ public class VpnEngine : IDisposable
     /// <summary>Fired when engine status changes (e.g. "Loading profiles...", "sing-box started")</summary>
     public event Action<string>? StatusChanged;
 
-    /// <summary>Fired when a targeted process is detected by ETW</summary>
+    /// <summary>Fired when a targeted process is detected by the process monitor.</summary>
     public event Action<string, int>? ProcessDetected;
 
     /// <summary>Fired on sing-box restart attempt (attemptNumber, maxAttempts)</summary>
@@ -452,7 +452,7 @@ public class VpnEngine : IDisposable
             // Running app → live image path; else a where.exe PATH search resolves a not-yet-launched app
             // so the driver splits it the moment it starts (in-kernel process-arrival tracking). Only if
             // BOTH miss (not running AND not on PATH, e.g. Discord in %LocalAppData%) does the post-capture
-            // process_name rule carry it — ETW-driven late re-engage for that residual is a follow-up (§5.4).
+            // process_name rule carry it — process-start-driven late re-engage for that residual is a follow-up (§5.4).
             var p = ProcessImagePath.ResolveRunningPath(name) ?? ProcessImagePath.ResolveNameToPath(name);
             if (!string.IsNullOrEmpty(p)) dosPaths.Add(p!);
             else _logger?.Information("[VpnEngine] Split-tunnel: '{Name}' not running/unresolved — post-capture rule covers it", name);
@@ -652,7 +652,7 @@ public class VpnEngine : IDisposable
         {
             // Phase 3C (2026-05-18): run phases 1-4 of the StartupPipeline
             // in HotReload mode to regenerate the sing-box JSON. The
-            // pipeline does NOT touch sing-box / firewall / ETW /
+            // pipeline does NOT touch sing-box / firewall / process monitoring /
             // HealthMonitor in HotReload mode -- those are already up and
             // carrying state. Closes Phase 2F-A follow-up: the third
             // inline pipeline that pre-3C lived in this method is now
@@ -862,7 +862,7 @@ public class VpnEngine : IDisposable
         // Fix #1 (r3): restore the macOS system resolver pinned at connect.
         try { _unixDns.Restore(_logger); } catch { }
 
-        try { _etw?.Dispose(); } catch { }
+        try { _processMonitor?.Dispose(); } catch { }
 
         if (_activeProfile?.BlockOnVpnFail == true)
         {
@@ -875,7 +875,7 @@ public class VpnEngine : IDisposable
         _singBox = null;
         _slipstream = null;
         _healthMonitor = null;
-        _etw = null;
+        _processMonitor = null;
         _firewall = null;
 
         // v2.27.2 — passive diagnostic: log TUN adapter state *after* a
@@ -1502,7 +1502,7 @@ public class VpnEngine : IDisposable
 
         public void SetFirewallManager(IFirewallManager firewall) => _engine._firewall = firewall;
 
-        public void SetProcessMonitor(IProcessMonitor etw) => _engine._etw = etw;
+        public void SetProcessMonitor(IProcessMonitor monitor) => _engine._processMonitor = monitor;
 
         public void SetHealthMonitor(HealthMonitor monitor) => _engine._healthMonitor = monitor;
 

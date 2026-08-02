@@ -267,7 +267,7 @@ public sealed class StartupPipelineTests : IDisposable
         // never instantiated. The host's SetSingBoxManager was not called.
         Assert.Null(host.SetSingBox);
 
-        // Pin: HotReload does NOT touch firewall / ETW / HealthMonitor.
+        // Pin: HotReload does NOT touch firewall / process monitoring / HealthMonitor.
         Assert.Null(host.SetFirewall);
         Assert.Null(host.SetEtw);
         Assert.Null(host.SetHealth);

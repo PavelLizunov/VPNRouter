@@ -4,10 +4,6 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.UpdateSources;
 
-#if !PLATFORM_WINDOWS
-using VPNRouter.Core.Platform.macOS;
-#endif
-
 namespace VPNRouter.Core.Platform;
 
 /// <summary>
@@ -46,11 +42,7 @@ public static class PlatformServices
 
     public static Func<IProcessMonitor> CreateMonitorFactory(ILogger? logger = null)
     {
-#if PLATFORM_WINDOWS
-        return () => new EtwProcessMonitor(logger);
-#else
-        return () => new MacProcessMonitor(logger: logger);
-#endif
+        return () => new PollingProcessMonitor(logger);
     }
 
     /// <summary>

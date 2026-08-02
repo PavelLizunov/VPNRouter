@@ -16,7 +16,7 @@ namespace VPNRouter.Tests;
 ///
 /// <para><strong>Why platform-specific hashes?</strong> MainWindowViewModel
 /// has 26 <c>#if PLATFORM_WINDOWS</c> blocks for Win-only services
-/// (PowerEventListener, ETW, Mutex). The Linux build strips these blocks,
+/// (PowerEventListener, process monitoring, Mutex). The Linux build strips these blocks,
 /// yielding a different reflection-visible public surface than the Windows
 /// build. Pinning per-platform hashes lets us catch drift on EITHER platform
 /// — a Linux-only refactor that accidentally renames a cross-platform member

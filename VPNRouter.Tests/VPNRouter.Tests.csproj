@@ -24,12 +24,8 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
-  <!-- v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): mirror Core's PLATFORM_WINDOWS
-       symbol so test files can `#if PLATFORM_WINDOWS` to gate references to
-       Windows-only types (EtwProcessMonitor lives behind that fence and the
-       Microsoft.Diagnostics.Tracing package is Windows-only too). Without
-       this, EtwProcessMonitorTests would fail to compile on non-Windows CI
-       even though it's gated correctly. -->
+  <!-- Mirror Core's PLATFORM_WINDOWS symbol so tests can gate references to
+       Windows-only services without diverging from the product compilation. -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <DefineConstants>$(DefineConstants);PLATFORM_WINDOWS</DefineConstants>
   </PropertyGroup>

@@ -34,7 +34,7 @@ namespace VPNRouter.Core.Services;
 //                              disabled state + pre-start TUN cleanup.
 //   7. StartSingBox          — SingBoxManager.StartWithJson + warmup + post-
 //                              start probe wiring.
-//   8. StartMonitors         — ETW + HealthMonitor + WindowsDnsHardening
+//   8. StartMonitors         — process monitor + HealthMonitor + WindowsDnsHardening
 //                              (Windows only).
 //
 // ── Why this exists ──────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ namespace VPNRouter.Core.Services;
 // definitively — any new pre-start step propagates to every caller for free.
 //
 // ── What's NOT extracted ─────────────────────────────────────────────────
-// • VpnEngine still owns lifecycle state (_singBox, _healthMonitor, _etw,
+// • VpnEngine still owns lifecycle state (_singBox, _healthMonitor, _processMonitor,
 //   _firewall, _sanityCheck, _failover, _probeCts) + Dispose ordering +
 //   public properties (IsRunning, ActiveServerAddress, etc.). Pipeline mutates
 //   these via the supplied IStartupHost callbacks — keeps state ownership
@@ -139,7 +139,7 @@ public enum StartupMode
     /// <summary>
     /// Hot-reload (user changed settings on a running engine). Phases 1-4
     /// re-run to regenerate config + emit it via Clash API PUT. Phases
-    /// 5-8 are SKIPPED — sing-box, firewall, ETW, and HealthMonitor are
+    /// 5-8 are SKIPPED — sing-box, firewall, process monitoring, and HealthMonitor are
     /// already up + carrying state. Falls back to full restart inside
     /// SingBoxManager.ReloadConfigJson if Clash API refuses the new config.
     /// </summary>
@@ -174,7 +174,7 @@ internal interface IStartupHost
     /// <summary>Firewall factory (injected via VpnEngine ctor).</summary>
     Func<IFirewallManager> FirewallFactory { get; }
 
-    /// <summary>Process monitor (ETW) factory (injected via VpnEngine ctor).</summary>
+    /// <summary>Process monitor factory (injected via VpnEngine ctor).</summary>
     Func<IProcessMonitor> MonitorFactory { get; }
 
     /// <summary>Raise the engine's StatusChanged event.</summary>
@@ -215,7 +215,7 @@ internal interface IStartupHost
     /// <summary>Forward an F-E failover user-facing message.</summary>
     void OnAutoFailoverTriggered(string message);
 
-    /// <summary>Forward an ETW-detected targeted process to listeners.</summary>
+    /// <summary>Forward a detected targeted process to listeners.</summary>
     void OnProcessDetected(string name, int pid);
 
     /// <summary>Store the active server's address for status display.</summary>
@@ -245,8 +245,8 @@ internal interface IStartupHost
     /// <summary>Store the lifecycle-owned firewall manager.</summary>
     void SetFirewallManager(IFirewallManager firewall);
 
-    /// <summary>Store the lifecycle-owned ETW monitor.</summary>
-    void SetProcessMonitor(IProcessMonitor etw);
+    /// <summary>Store the lifecycle-owned process monitor.</summary>
+    void SetProcessMonitor(IProcessMonitor monitor);
 
     /// <summary>Store the lifecycle-owned HealthMonitor.</summary>
     void SetHealthMonitor(HealthMonitor monitor);
@@ -418,7 +418,7 @@ internal sealed class StartupPipeline
 
         // HotReload returns immediately — the caller drives ReloadConfigJson
         // with the freshly-generated JSON. Phases 5-8 are SKIPPED because
-        // sing-box / ETW / HealthMonitor are already running. ApplyAsync
+        // sing-box / process monitoring / HealthMonitor are already running. ApplyAsync
         // owns the structural-change detection (RoutingMode mismatch,
         // TunFingerprint mismatch, process-list change) that the pipeline
         // can't make in the absence of ApplyAsync's "pre-reload baseline"
@@ -1359,10 +1359,10 @@ internal sealed class StartupPipeline
         }, ct);
     }
 
-    // ─── Phase 8: StartMonitors (ETW + HealthMonitor + Windows DNS) ────────
+    // ─── Phase 8: StartMonitors (process monitor + HealthMonitor + Windows DNS) ──
 
     /// <summary>
-    /// Wire up the ETW process monitor + HealthMonitor + apply Windows DNS
+    /// Wire up the process monitor + HealthMonitor + apply Windows DNS
     /// hardening (Windows only — SMHNR off, TUN metric, etc.).
     /// </summary>
     private void StartMonitorsPhase(
@@ -1371,10 +1371,10 @@ internal sealed class StartupPipeline
         ScanResult scanResult)
     {
         var profile = activeProfile;
-        // ETW + HealthMonitor are owned by VpnEngine via Set* callbacks so
+        // The process monitor + HealthMonitor are owned by VpnEngine via Set* callbacks so
         // Stop()/Dispose() can dispose them.
-        var etw = _host.MonitorFactory();
-        _host.SetProcessMonitor(etw);
+        var processMonitor = _host.MonitorFactory();
+        _host.SetProcessMonitor(processMonitor);
 
         // The SingBoxManager + IFirewallManager have already been wired to
         // the host in phases 6+7. Pull them back via a lightweight
@@ -1395,7 +1395,7 @@ internal sealed class StartupPipeline
             clashApiBase: settings.SingBox?.ClashApi,
             clashApiSecret: settings.SingBox?.ClashApiSecret);
 
-        etw.ProcessStarted += (_, e) =>
+        processMonitor.ProcessStarted += (_, e) =>
         {
             var isTargeted = profile.Processes
                 .Any(r => r.ScanPatterns
@@ -1415,7 +1415,7 @@ internal sealed class StartupPipeline
         // (swap to a healthy server) instead of silently giving up.
         healthMonitor.FailoverRequested += (_, reason) => _host.OnFailoverRequested(reason);
 
-        etw.Start();
+        processMonitor.Start();
         healthMonitor.Start(profile, settings, scanResult);
 
         _host.SetHealthMonitor(healthMonitor);

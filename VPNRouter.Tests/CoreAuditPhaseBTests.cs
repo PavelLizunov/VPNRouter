@@ -16,7 +16,7 @@ namespace VPNRouter.Tests;
 /// RoutingAppListEditorTests, LeakAuditFixTests). It found B3-1 HIGH: scan_patterns
 /// (untrusted — GitHub/Local profile JSON + the Apps UI) compiled to a regex with
 /// no match timeout, so a catastrophic-backtracking pattern (e.g. "a*a*...b.exe")
-/// could pin a thread for seconds on the ETW process-launch / rescan hot paths and
+/// could pin a thread for seconds on the process-launch / rescan hot paths and
 /// wedge the routing engine (intended apps then leak by starvation). Fix added a
 /// 250ms match timeout + fail-safe catch. These tests lock that in plus the
 /// anchored/escaped regex-construction invariants.</para>

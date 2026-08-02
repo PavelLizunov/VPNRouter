@@ -52,7 +52,7 @@
 //      direct-drive test from the engine-lifecycle angle.
 //
 //   3. Apply_OnRunningEngine_PreservesFirewallAndMonitorReferences — Apply
-//      does NOT replace _firewall or _etw on the engine (those stayed
+//      does NOT replace _firewall or _processMonitor on the engine (those stayed
 //      from initial Start). Confirms the lifecycle distinction:
 //      ReloadConfig restarts sing-box but does NOT re-do phases 6/8.
 //
@@ -530,8 +530,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
     public async Task Apply_OnRunningEngine_PreservesFirewallAndMonitorReferences()
     {
         // Lifecycle invariant: ApplyAsync does NOT re-create firewall
-        // or ETW monitor. Phase 6 (firewall setup) + Phase 8 (ETW + DNS)
-        // are skipped on HotReload, so the same _firewall and _etw
+        // or process monitor. Phase 6 (firewall setup) + Phase 8 (monitor + DNS)
+        // are skipped on HotReload, so the same _firewall and _processMonitor
         // references from the initial ColdStart must still be active.
         //
         // We assert by checking that the firewall + monitor capture
@@ -556,7 +556,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         Assert.True(ok);
 
         // After Apply: monitor.Start was NOT called again (HotReload
-        // doesn't recreate ETW). firewall.CreateBlockRules also not
+        // doesn't recreate process monitoring). firewall.CreateBlockRules also not
         // called again. Counters stay at their post-ColdStart values.
         Assert.Equal(1, monitor.StartCount);
         Assert.Equal(0, monitor.StopCount);   // monitor.Stop is Stop-only, not Apply

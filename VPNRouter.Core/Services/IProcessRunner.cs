@@ -9,7 +9,7 @@
 //
 // Audit E (plans/test-coverage-audit-2026-05-17.md §"Missing abstractions")
 // flagged four services as direct-Process consumers with no mocking seam:
-// EtwProcessMonitor, ZapretActions, HostsManager (`runas` elevation),
+// ZapretActions, HostsManager (`runas` elevation),
 // WindowsDnsHardening (netsh). This file is the first step of that fix.
 //
 // Two surface methods cover the two patterns we use in the codebase:

@@ -175,7 +175,7 @@ internal static class ProcessImagePath
     /// Handle-safe (the child <see cref="Process"/> is always disposed) and never throws.
     ///
     /// <para><b>Limitation:</b> apps NOT on <c>PATH</c> (e.g. Discord in <c>%LocalAppData%</c>) still
-    /// won't resolve pre-launch — that residual (ETW-driven late re-engage) is a documented follow-up
+    /// won't resolve pre-launch — that residual (process-start-driven late re-engage) is a documented follow-up
     /// (arch plan §5.4). The post-capture <c>process_name → direct</c> rule covers them meanwhile.</para>
     /// </summary>
     public static string? ResolveNameToPath(string? processName, IProcessRunner? runner = null)

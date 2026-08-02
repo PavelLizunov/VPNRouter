@@ -328,7 +328,7 @@ public class HealthMonitor : IDisposable
             try { cts.Cancel(); } catch (ObjectDisposedException) { }
             cts.Dispose();
         }
-        // v2.31.0-r1 (CO-1): atomic swap on shutdown so a late ETW callback
+        // v2.31.0-r1 (CO-1): atomic swap on shutdown so a late monitor callback
         // racing OnNewProcessDetected can't observe a half-disposed state.
         var ht = System.Threading.Interlocked.Exchange(ref _healthTimer, null);
         var dt = System.Threading.Interlocked.Exchange(ref _debounceTimer, null);
@@ -361,7 +361,7 @@ public class HealthMonitor : IDisposable
     }
 
     /// <summary>
-    /// Call when a new process is detected by ETW/polling that might need to be added.
+    /// Call when a new process is detected that might need to be added.
     /// Resets the debounce timer — actual reload happens 5s after the last call.
     ///
     /// IMPORTANT: skips debounce entirely if the process name is already in
@@ -384,8 +384,8 @@ public class HealthMonitor : IDisposable
         _logger.Debug("[HealthMonitor] New process detected: {Name} — debouncing", processName);
 
         // v2.31.0-r1 (CO-1 audit fix): atomic-swap the debounce timer.
-        // Pre-fix this read+null+new sequence was non-atomic; ETW callbacks
-        // fire on multiple threadpool threads (EtwProcessMonitor.cs:98-130),
+        // Pre-fix this read+null+new sequence was non-atomic; monitor callbacks
+        // can race when process events arrive close together,
         // so two concurrent calls could:
         //   - both read the same _debounceTimer reference → both call
         //     Dispose on the same instance (ObjectDisposedException) AND

@@ -369,7 +369,7 @@ public sealed class VpnEngineSplitTunnelLifecycleTests
         //  • Resolved the profile from the bundled catalogue (NOT the
         //    FullTunnel synthetic that Group 1's tests exercise).
         //  • Fired Phase 8's Apply seam exactly once.
-        //  • ETW process monitor was started.
+        //  • Process monitor was started.
         //  • ActiveProfileName carries "Browsers".
         //  • Firewall block rules were NOT created (Browsers profile
         //    has block_on_vpn_fail=false in profiles/default.json).
@@ -417,7 +417,7 @@ public sealed class VpnEngineSplitTunnelLifecycleTests
         // honoured the profile-level flag, didn't force-create.
         Assert.Equal(0, firewall.CreateBlockRulesCount);
 
-        // Phase 8 started the ETW monitor.
+        // Phase 8 started the process monitor.
         Assert.Equal(1, monitor.StartCount);
 
         // FakeProcessHandle hasn't exited — sing-box is "alive".
@@ -455,7 +455,7 @@ public sealed class VpnEngineSplitTunnelLifecycleTests
             Assert.False(engine.IsRunning);
             Assert.True(handle.HasExited);
 
-            // ETW monitor stopped.
+            // Process monitor stopped.
             Assert.True(monitor.StopCount >= 1);
 
             // Firewall: Browsers profile has BlockOnVpnFail=false, so

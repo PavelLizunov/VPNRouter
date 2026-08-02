@@ -154,7 +154,7 @@ public class ProcessScanner : IProcessScanner
         }
         catch (RegexMatchTimeoutException)
         {
-            // B3-1: fail-safe. This runs on the ETW process-launch hot path
+            // B3-1: fail-safe. This runs on the process-launch hot path
             // (StartupPipeline), so a pattern that can't decide within 250ms is
             // treated as no-match rather than stalling every process launch.
             return false;
@@ -243,7 +243,7 @@ public class ProcessScanner : IProcessScanner
     // come from untrusted profile JSON (GitHub > Local source priority) and the
     // Apps UI; a pattern like "a*a*a*...b.exe" compiles to "^a.*a.*...b\.exe$",
     // which catastrophically backtracks (measured ~8.5s on a single non-matching
-    // long process name). The match runs on hot paths — the ETW process-launch
+    // long process name). The match runs on hot paths — the process-launch
     // handler (per launch, system-wide) and every debounced rescan — so an
     // unbounded match wedges the routing engine and INTENDED apps leak by
     // starvation. 250ms is >1000x a legitimate match (process names are short),

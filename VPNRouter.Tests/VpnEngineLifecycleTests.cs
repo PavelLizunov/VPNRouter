@@ -539,7 +539,7 @@ public sealed class VpnEngineLifecycleTests
         // Pin: phase 6 honoured the flag.
         Assert.Equal(0, firewall.CreateBlockRulesCount);
 
-        // Phase 8 started the ETW monitor.
+        // Phase 8 started the process monitor.
         Assert.Equal(1, monitor.StartCount);
 
         // FakeProcessHandle hasn't exited — sing-box is "alive" from the
@@ -579,7 +579,7 @@ public sealed class VpnEngineLifecycleTests
             Assert.False(engine.IsRunning);
             Assert.True(handle.HasExited);
 
-            // ETW monitor disposed (Dispose calls Stop internally).
+            // Process monitor disposed (Dispose calls Stop internally).
             Assert.Equal(1, monitor.DisposeCount);
         }
         finally
@@ -594,7 +594,7 @@ public sealed class VpnEngineLifecycleTests
         // Pin: start → stop → start re-fires Apply (count == 2) but
         // Restore only once (from the intermediate Stop). The second
         // Start must NOT inherit stale state from the first cycle —
-        // each ColdStart owns a fresh SingBoxManager + ETW monitor
+        // each ColdStart owns a fresh SingBoxManager + process monitor
         // + HealthMonitor.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart prerequisite is Windows-only.");

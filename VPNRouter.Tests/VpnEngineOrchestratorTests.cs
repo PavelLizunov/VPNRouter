@@ -403,7 +403,7 @@ public sealed class VpnEngineOrchestratorTests
     public void Dispose_CallsStopWhenRunning_LifecycleInvariant()
     {
         // The Dispose contract: if IsRunning, Stop must be called before
-        // teardown so the sing-box process, firewall rules, and ETW
+        // teardown so the sing-box process, firewall rules, and process monitor
         // thread are released cleanly. Without this, a window-close or
         // GC-driven Dispose would leak sing-box (root-owned via pkexec
         // on Linux / orphaned wintun adapter on Windows).
