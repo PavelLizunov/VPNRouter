@@ -31,7 +31,7 @@ Exit 0 → proceed. Exit 1/2/3 → STOP.
 ## 2. VM readiness + identity
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/testvm-control.ps1 -Action ensure-ready
+powershell -ExecutionPolicy Bypass -File tools/testvm-control.ps1 -Action ensure-ready -PveHost 127.0.0.1
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action identity
 ```
 

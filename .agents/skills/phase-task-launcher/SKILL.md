@@ -79,7 +79,7 @@ The 6 gates from §3:
 4. **Self-review**:
    - For diff >100 LOC OR touching public API → run `simplify` skill on the diff
    - For changes touching auth / TLS / process exec / file I/O / firewall / placeholder defense → run `security-review` skill
-5. **Remote brat UI verify** (UI changes only): `tools/brat-verify.ps1` (`-Action uia` / `-Action screenshot`) against the fixed test VM WINBRAT (192.168.0.106), PASS/FAIL per UI feature point, screenshots under `artifacts/brat-verify/`, attach refs to brief Outcome. VM/WinRM unavailable → BLOCKED, never a local fallback.
+5. **Remote brat UI verify** (UI changes only): `tools/brat-verify.ps1` (`-Action uia` / `-Action screenshot`) against the fixed Tailscale test VM WINBRAT (`100.115.182.0`), PASS/FAIL per UI feature point, screenshots under `artifacts/brat-verify/`, attach refs to brief Outcome. VM/WinRM unavailable → BLOCKED, never a local fallback.
 6. **Characterization diff** (god-file splits only): pre-split snapshot test must match post-split snapshot test. Zero behavior drift allowed.
 
 **If any gate fails: STOP.** Do not commit. Do not push. Surface the failure to the user with: (a) the gate that failed, (b) the diagnostic output, (c) recommended next step (fix the implementation, expand the test, document the deviation if intentional).

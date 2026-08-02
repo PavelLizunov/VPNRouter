@@ -53,6 +53,8 @@ public sealed class BratVerifierContractTests
         Assert.Contains("-UserId 'SYSTEM' -LogonType ServiceAccount", script);
         // Cleanup stops the transient task before unregister/delete.
         Assert.Contains("Stop-ScheduledTask", script);
+        Assert.Contains("Remote helper cleanup failed", script);
+        Assert.Contains("Remove-Item -LiteralPath $RequestPath", script);
         // UIA target prefers VPNRouter.GUI and only falls back to VPNRouter.App.
         var gui = script.IndexOf("Get-Process -Name VPNRouter.GUI", StringComparison.Ordinal);
         var app = script.IndexOf("Get-Process -Name VPNRouter.App", StringComparison.Ordinal);
@@ -73,18 +75,46 @@ public sealed class BratVerifierContractTests
         // deploy hands the already-resolved credential to the generic deploy
         // script explicitly, so it never prompts or caches a new-IP credential.
         Assert.Contains("-Credential (Import-Clixml $CredFile)", deploy);
+        Assert.Contains("-ExpectedMachineName $BratMachineName", deploy);
 
         var logsStart = script.IndexOf("'logs' {", StringComparison.Ordinal);
         Assert.True(logsStart >= 0, "brat-verify.ps1 must keep a remote logs action.");
         var logs = script.Substring(logsStart);
         Assert.Contains("LogWindowMinutes", logs);
         Assert.Contains("TryParseExact", logs);
+        Assert.Contains("$maxLines = 50000", logs);
+        Assert.Contains("verification window exceeds", logs);
+        Assert.DoesNotContain("-Tail 1000", logs);
         Assert.Contains("recentEntryCount -eq 0", logs);
         Assert.Contains("Cannot verify recent remote logs", logs);
 
         var skill = Read(".agents", "skills", "post-ship-mcp-verify", "SKILL.md");
         Assert.Contains("100.115.182.0", skill);
         Assert.Contains("NO local fallback", skill);
+    }
+
+    [Fact]
+    public void GenericDeploy_PinsIdentityBeforeMutation_AndFailsWhenLaunchFails()
+    {
+        var deploy = Read("deploy-to-testpc.ps1");
+
+        Assert.Contains("[string]$ExpectedMachineName", deploy);
+        var identity = deploy.IndexOf("$actualMachineName = Invoke-Command", StringComparison.Ordinal);
+        var stop = deploy.IndexOf("Stopping running VPNRouter", StringComparison.Ordinal);
+        Assert.True(identity >= 0 && stop > identity,
+            "The deployment session must verify the expected machine before stopping processes.");
+        Assert.Contains("throw \"VPNRouter.App.exe is not running", deploy);
+    }
+
+    [Fact]
+    public void VerificationArtifacts_AreIgnored_AndCiGateDoesNotTreatSuccessfulGhStderrAsFatal()
+    {
+        var ignore = Read(".gitignore");
+        var gate = Read("tools", "verify-last-commit-ci.ps1");
+
+        Assert.Contains("/artifacts/brat-verify/", ignore);
+        Assert.Contains("gh auth status 1>$null 2>$null", gate);
+        Assert.DoesNotContain("gh auth status 2>&1", gate);
     }
 
     [Fact]
