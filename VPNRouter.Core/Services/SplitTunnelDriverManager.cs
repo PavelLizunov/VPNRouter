@@ -437,9 +437,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 _log.Debug("[SplitTunnel] {File} not listed in checksums.sha256 — skipping integrity diagnostic", DriverFileName);
                 return;
             }
-            using var sha = System.Security.Cryptography.SHA256.Create();
             using var fs = File.OpenRead(_sysPath);
-            var actual = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+            var actual = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(fs));
             if (actual == expected)
                 _log.Debug("[SplitTunnel] Driver integrity OK (sha256 matches sidecar)");
             else

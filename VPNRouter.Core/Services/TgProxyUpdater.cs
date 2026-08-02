@@ -374,9 +374,8 @@ public class TgProxyUpdater
     /// pulls down (Python interpreter + wheels).</summary>
     internal static void VerifyPinnedSha256Static(string filePath, string expectedSha256, string label, ILogger? logger = null)
     {
-        using var sha = System.Security.Cryptography.SHA256.Create();
         using var fs = File.OpenRead(filePath);
-        var actual = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+        var actual = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(fs));
         var expected = (expectedSha256 ?? string.Empty).Trim().ToLowerInvariant();
         if (actual != expected)
             throw new InvalidOperationException(
