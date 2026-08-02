@@ -477,10 +477,6 @@ internal static class Localization
     public static string RulesHelpB3Bold => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Bold;
     public static string RulesHelpB3Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Suf;
     public static string RulesHelpBanner => global::VPNRouter.Core.Localization.Strings.RulesHelpBanner;
-    public static string CustomDirectRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesTitle;
-    public static string CustomDirectRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesDescription;
-    public static string CustomDirectRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesPlaceholder;
-    public static string CustomDirectRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesErrorHeader;
     public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;
     // Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10).
     public static string AdvAppsCategoryNamePlaceholder => global::VPNRouter.Core.Localization.Strings.AdvAppsCategoryNamePlaceholder;

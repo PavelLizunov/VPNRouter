@@ -12,9 +12,10 @@
            v
       [test machine] stop old -> extract app\ over install dir -> relaunch
 
-    Mirrors the install/launch logic the project already uses in
-    .claude/skills/post-ship-mcp-verify/scripts/post-ship-install-launch.ps1,
-    but performed remotely against -TestHost instead of locally.
+    tools/brat-verify.ps1 (-Action deploy) wraps this script for the fixed
+    remote post-ship target used by the post-ship-mcp-verify skill
+    (WINBRAT @ 100.115.182.0); this script itself stays generic and accepts
+    any -TestHost.
 
     Artifact source: the Install ZIP produced by build.ps1 at the repo root,
     named "VPNRouter-v<Version>-win.zip" (its archive root contains app\ +

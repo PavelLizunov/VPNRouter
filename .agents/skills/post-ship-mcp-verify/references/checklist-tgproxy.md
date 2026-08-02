@@ -1,81 +1,46 @@
-# TgProxy feature checklist
+# TgProxy verification (windows-brat)
 
-Use when release notes mention TgProxy / Telegram proxy / MTProto / tg://.
+Use when release notes mention Telegram proxy, MTProto, `tg://`, or TgProxy.
 
-## Setup
+All interaction runs through `tools/brat-verify.ps1` on fixed WINBRAT. Set `$v` to the shipped version. Never use local UI tools.
 
-1. Window already launched. Focus + screenshot.
-2. If in Simple mode, click "Расширенные настройки".
-3. From Advanced mode tab strip, click "Инструменты" → sub-tab "Telegram-прокси".
+## End-to-end scenario
 
-## Verify hero card (stopped state)
+1. Navigate visually to **Tools > Telegram proxy** and capture the stopped state:
 
-4. Screenshot.
-5. Confirm:
-   - Plane icon (paper-plane glyph, accent color).
-   - Title: "Включить Telegram" / "Activate Telegram".
-   - Lede: "Поднимем локальный MTProto, откроем ссылку и Telegram сам подцепит секрет..."
-   - Big magic button: "Запустить и открыть Telegram".
-   - 3 step chips visible.
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput "artifacts/brat-verify/$v/tgproxy-stopped.png"
+```
 
-## Trigger Start
+Navigation and status TextBlocks lack explicit stable selectors. Confirm the page/title/three setup steps visually and record `selector hardening: future work`.
 
-6. Click the magic button. State transitions:
-   - Status text near footer: "Загрузка..." / "Скачивание зависимостей..." (if first run, downloads Python+wheels+source).
-   - On success: title flips to "Telegram через MTProto" / "Telegram via MTProto".
-   - Air-pill appears in hero center: "В эфире · :1443".
+2. Read the current RU main-action label shown in the screenshot. The button has `AutomationProperties.Name="{Binding LblTgProxyMainAction}"`; inspect it, then invoke it:
 
-## Verify TgProxyStats display (r15/r16)
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<current RU main-action Name>" -ControlType Button -UiaOperation Inspect
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<current RU main-action Name>" -ControlType Button -UiaOperation Invoke -TimeoutSeconds 120
+```
 
-7. **r15 change**: wait ~10-15 seconds after start for first stats refresh.
-8. Screenshot.
-9. Air-pill should now show stats appended: "В эфире · :1443 Активных: N | Всего: N | ↑N ↓N" (or English equivalent in EN locale).
-10. **r16 change**: confirm "Активных:" / "Всего:" labels are Russian when language=RU. Pre-r16 they were English ("Active:" / "Total:") regardless of locale.
+3. Wait for startup/download completion and capture the running state. Confirm the running title, `:1443` air-pill, localized active/total stats, and no error banner. Telegram Desktop absence may show the expected copy-link warning.
 
-## Open in Telegram (optional)
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput "artifacts/brat-verify/$v/tgproxy-running.png" -TimeoutSeconds 120
+```
 
-11. Telegram Desktop must be installed for the auto-open flow. If
-    installed, clicking the magic button should:
-    - Open `tg://proxy?server=127.0.0.1&port=1443&secret=XXX` URL.
-    - Telegram Desktop receives the deep link, prompts to use proxy.
-12. If Telegram Desktop is NOT installed (common on dev VMs), a banner
-    appears: "Telegram Desktop не найден. Прокси работает, но открыть
-    его автоматически нельзя — скопируйте ссылку..."
+4. If the release touches link handling, inspect and invoke the copy-link button using its current RU label; it has `AutomationProperties.Name="{Binding L_TgProxyCopyLink}"`. Port and secret inputs also expose bound accessibility names. Do not guess their runtime translations.
 
-## Stop
+5. Read the current running main-action label, inspect every interactive control in the visible scope, invoke Stop, and confirm the stopped state returns and the air-pill disappears.
 
-13. Click the magic button again (now labeled "Остановить" or similar).
-14. State transitions back to stopped, air-pill disappears.
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<current RU stop-action Name>" -ControlType Button -UiaOperation Invoke
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput "artifacts/brat-verify/$v/tgproxy-final.png"
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs
+```
 
-## Per-feature log checks
+## Pass gate
 
-| Looking for | Pattern |
-|---|---|
-| Proxy spawned | `[TgProxy] python.*proxy.py` |
-| Port bound | `:1443` |
-| Stats refresh | `[TgProxy] StatsUpdated` |
-| Scheme registered | `[TgProxy] tg-scheme: registered=` |
-| Stop confirmed | `[TgProxy] proxy stopped` |
-| Crash | `[TgProxy] proxy exited unexpectedly` |
-
-## Expected log noise
-
-- `[TgProxyManager] Already running on port 1443` — expected if user
-  clicks Start twice rapidly.
-- `[TgProxyUpdater] Step 1/3: Downloading Python 3.12` — expected on
-  first launch (one-time download).
-
-## Pass criteria summary
-
-- Hero card renders both stopped + running states.
-- Air-pill shows port number.
-- Air-pill shows stats text after first refresh (r15+).
-- Stats labels localized when locale=RU (r16+).
-- Stop button transitions cleanly.
-- Log shows expected lifecycle events.
-
-## Screenshots to attach
-
-- `tmp-rN-tgproxy-stopped.png` — hero in stopped state.
-- `tmp-rN-tgproxy-running.png` — air-pill with stats text.
-- `tmp-rN-tgproxy-banner.png` — scheme-missing warning (if applicable).
+- Stopped, downloading/running, stats, and stopped-again states render correctly.
+- Expected lifecycle includes proxy spawn, port `1443`, stats refresh, scheme registration, and clean stop.
+- `Already running on port 1443` is benign only after a deliberate repeated Start.
+- First-run dependency download is benign; unexpected proxy exit is a failure.
+- Attach all three screenshot paths and the remote log result.

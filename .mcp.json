@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "vpnrouter-test": {
-      "command": "./tools/VpnRouterTestMcp/bin/Release/net10.0-windows/VpnRouterTestMcp.exe",
-      "args": [],
-      "env": {}
-    }
-  }
-}

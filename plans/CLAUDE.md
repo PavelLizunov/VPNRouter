@@ -71,6 +71,13 @@ Stable v2.38.2; in-flight prerelease v2.40.0-r4 (folds v2.39 + v2.40).
 пока не сделано — план-файлов уже ~230 (+ release-notes/evidence), но скрипт
 прокручивает быстро.
 
+Любой finding (audit / review / research / bug-hunt / Qwen/Codex pass / live
+verification) persists в `plans/OPEN-DEFECTS.md` ДО реализации или отсрочки —
+см. root Golden rule #16. Запись может быть candidate/unverified, но хранит
+source/evidence, severity/impact, disposition (candidate, confirmed, refuted,
+deferred, in progress, resolved) и implementation/PR ref когда есть. Findings
+только в chat или во временном отчёте — не считаются записанными.
+
 ## Cross-references
 
 - `CLAUDE.local.md` (user-private) → release process, version policy

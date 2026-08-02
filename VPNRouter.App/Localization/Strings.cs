@@ -1052,11 +1052,6 @@ public static class Strings
     // RulesHelpHeader + RulesHelpB1..B3* set instead.
     public static string RulesHelpBanner => global::VPNRouter.Core.Localization.Strings.RulesHelpBanner;
 
-    // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
-    public static string CustomDirectRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesTitle;
-    public static string CustomDirectRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesDescription;
-    public static string CustomDirectRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesPlaceholder;
-    public static string CustomDirectRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesErrorHeader;
     public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;
 
     // Tooltips — Network tab
