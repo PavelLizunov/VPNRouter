@@ -76,8 +76,10 @@ the same Release command and a real scanner flow must prove the result.
 - [x] **Gate 4 — Qwen/self-review**: exact `qwen3.8-max-preview` final review
   passed; deleting `Metadata.xml` is safe because every rule targeted only the
   disabled ZXing bindings.
-- [ ] **Gate 5 — Push/PR**: permitted only after Gates 1–4 pass.
-- [ ] **Gate 6 — CI**: final pushed head is green.
+- [x] **Gate 5 — Push/PR**: pushed as `codex/dr-06-zxing-bind-false` and
+  opened as draft PR #107 after Gates 1–4 passed.
+- [x] **Gate 6 — CI**: `test`, `grep`, and `go-test-windows` passed;
+  `characterization-windows` skipped as expected because no ViewModel changed.
 
 ## Outcome
 
