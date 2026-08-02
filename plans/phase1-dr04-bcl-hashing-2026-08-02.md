@@ -78,27 +78,29 @@ Several call sites allocate disposable SHA instances and manually lowercase hexa
 
 **Commits**: `dde56968` (brief), `e72771c8` (main implementation), `13e1dc1a` (PoolAggregator follow-up)
 
-**Pushed**: `origin/codex/dr-04-bcl-hashing` at `13e1dc1a`
+**Pushed**: `origin/codex/dr-04-bcl-hashing`; tracked by draft PR #104
 
-**Test deltas**: +0 / -0
+**Test deltas**: one existing source assertion tightened; no new test file
 
-**Files changed**: implementation 17 files · +25 / -33 lines
+**Files changed**: 18 code/test files after the PoolAggregator fix and exact source assertion
 
 **Gate results:**
 
-- [x] Gate 1: PR CI restored and built the .NET 10 solution successfully. Local build was unavailable because the host exposes SDK 8.0.418 while `global.json` requires 10.0.301.
-- [x] Gate 2: main test job successful — 2652 total, 2605 passed, 47 skipped, 0 failed; dedicated `test-update` job passed.
+- [x] Gate 1: the explicit local .NET 10 Release solution build completed with 0 errors; PR CI also built successfully.
+- [x] Gate 2: focused checksum/update/secret/characterization tests passed 103/103; the accessible local regression set passed 2640 with 2 skipped and 0 failed; clean-environment CI and dedicated `test-update` passed.
 - [x] Gate 3: Outcome filled; README and zone instructions unchanged because there is no user-facing or architectural change.
-- [x] Gate 4: Qwen 3.8 (`qwen3.8-max-preview`) completed pre-change inventory and post-change security-equivalence review with `SAFE TO COMMIT`; the repository has no callable `security-review` skill. `simplify` was not required for the 55-line mechanical diff.
+- [x] Gate 4: recovery Qwen 3.8 (`qwen3.8-max-preview`) rejected the first diff for the missed PoolAggregator SHA1 copy; after `13e1dc1a`, its repo-wide security-equivalence review returned `APPROVE` with no blocking finding.
 - [-] Gate 5: N/A — no UI behavior change.
 - [-] Gate 6: N/A — not a god-file split; public hash output and casing remain byte-for-byte identical.
 
 **Surprises encountered**:
 
 - `WgturnUpdater` and `FreeConfigAggregator` intentionally emit uppercase hashes; both contracts were preserved.
+- `WgturnUpdater` compares the uppercase result with `StringComparison.OrdinalIgnoreCase`; Qwen's casing concern is resolved.
 - A final repository-wide search found the same legacy SHA-1 pattern in `VPNRouter.Tools/PoolAggregator/Program.cs`, outside the initial App/Core/Tests inventory. The already-present parallel-worktree diff was independently reviewed by Qwen 3.8 as `SAFE TO INCLUDE`, then committed separately; its 8-byte uppercase identifier contract is unchanged.
+- The autostart source assertion now requires `Convert.ToHexStringLower` instead of accepting any `Convert.ToHexString*` call.
 - The updater-specific CI gate ran automatically because `UpdateChecker.cs` changed and passed.
 
-**Follow-ups spawned**: none.
+**Follow-ups spawned**: low-value lint and persisted BuildId casing ideas are recorded in `plans/refactor-backlog.md` rather than expanding DR-04.
 
 **Rollback**: `git revert 13e1dc1a e72771c8` or close the branch.
