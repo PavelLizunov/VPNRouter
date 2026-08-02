@@ -58,8 +58,6 @@ offscreen-render → `window.CaptureRenderedFrame()` для PNG snapshots.
 | `FreeConfigFreshnessTierTests` | v2.28.6 Phase 5: freshness math (tier classification, opacity, sort key) |
 | `FreeConfigRecheckMergeTests` | Recheck merge: success keeps fresh values; failure restores prior good values |
 | `AutostartHelperShapeTests` | v2.29.0-r2: cross-platform AutostartHelper shape + idempotency |
-| `CustomDirectRulesGeneratorTests` | v2.29.0-r4: `ConfigGenerator.BuildCustomDirectRouteRule` + `ApplyCustomDirectRules` insertion order |
-| `CustomDirectRulesParserTests` | v2.29.0-r4: text-format parser/serializer for "Custom direct rules" textbox |
 | `FreeConfigDeepVerifyCheckpointTests` | v2.29.0-r7+ Phase 3C: `LastDeepVerifyAt` field + 6h skip window |
 | `CustomRulesV2_30_ParserTests` | v2.30.0: full custom rules engine — parser branch |
 | `CustomRulesV2_30_GeneratorTests` | v2.30.0: full custom rules engine — ConfigGenerator branch |
