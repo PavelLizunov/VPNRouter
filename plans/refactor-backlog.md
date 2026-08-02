@@ -59,11 +59,12 @@ ledger (each item tracked there with how it was/would be verified).
   `Bind=false` cannot suppress transitive bindings. Update after DR-06 is
   accepted; the csproj's directly affected comment is fixed in the experiment.
 
-- [ ] **Recover and re-verify the offline Android production signing-key
-  backup** — operational release blocker found during DR-06 on 2026-08-02.
-  `plans/android-keystore-backup-2026-06-02.md` names offline copies on the old
-  dev VM/shared folder, but neither the current workstation nor windows-brat has
-  them at the documented or searched paths. The installed A101BM certificate is
-  still the expected SHA-256 `6e50af0f...45a221`; GitHub Actions can sign with
-  its write-only secrets but cannot restore the key. Locate the claimed offline
-  copy and verify its certificate before relying on local device/update gates.
+- [x] **Recover and re-verify the offline Android production signing-key
+  backup** — completed 2026-08-02. GitHub Actions produced a temporary
+  AES-256-encrypted recovery bundle, which was downloaded to the Windows dev
+  host, windows-brat, and Mac build host. Recovery material is protected by
+  DPAPI on both Windows profiles and restricted permissions on Mac. A real
+  decrypt-and-keytool restore verified alias `vpnrouter` and certificate
+  SHA-256 `6e50af0f...45a221`; the temporary GitHub artifact, secret, and export
+  branch were then deleted. Durable locations and hash are recorded in
+  `plans/android-keystore-backup-2026-06-02.md`.
