@@ -245,9 +245,8 @@ public sealed class FreeConfigAggregator
 
     private static string BuildId(string host, int port, string uuid)
     {
-        using var sha = SHA1.Create();
         var key = $"{host.ToLowerInvariant()}:{port}:{uuid.ToLowerInvariant()}";
-        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(key));
+        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(key));
         return Convert.ToHexString(hash, 0, 8); // 16-char prefix is unique enough for ~100k configs.
     }
 

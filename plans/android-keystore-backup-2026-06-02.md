@@ -19,11 +19,28 @@ user is stranded on their current version forever.
 - **Cert DN:** `CN=VPNRouter, O=VPNRouter, C=RU` (proper DN — no longer the
   debug-DN cosmetic label).
 - **Where it lives:** GitHub Actions secrets `ANDROID_KEYSTORE_BASE64` +
-  `ANDROID_KEYSTORE_PASSWORD` (rotated 2026-06-05), **plus** offline backups:
-  `C:\Users\vboxuser\vpnrouter.keystore` (dev VM) and
-  `Z:\vpnrouter-keystore-backup\` (host shared folder). The store password lives
-  in `vpnrouter-keystore-credentials.txt` alongside each backup — **NOT in git,
-  NOT in this doc**.
+  `ANDROID_KEYSTORE_PASSWORD` (rotated 2026-06-05), plus the verified encrypted
+  recovery bundle created on 2026-08-02. The old `vboxuser` and `Z:` locations
+  no longer exist and must not be treated as backups.
+
+### Verified recovery map (2026-08-02)
+
+The bundle contains the production PKCS12 keystore and its credentials. It is
+encrypted with AES-256-CBC/PBKDF2-SHA256 (600,000 iterations); neither the raw
+keystore nor a plaintext password is stored in git.
+
+| Host | Encrypted bundle | Recovery key |
+|---|---|---|
+| Windows dev | `C:\Users\x3d_mutant\.vpnrouter-secure\android-signing\android-signing-backup-20260802.tar.enc` | same directory: `backup-recovery-key.dpapi.xml`, protected by the current Windows user's DPAPI |
+| windows-brat | `C:\Users\tester\.vpnrouter-secure\android-signing\android-signing-backup-20260802.tar.enc` | same directory: `backup-recovery-key.dpapi.xml`, protected by tester's DPAPI |
+| Mac build host | `/Users/slovn/.vpnrouter-secure/android-signing/android-signing-backup-20260802.tar.enc` | same directory: `backup-recovery-key.local`, mode `0600` inside a mode `0700` directory |
+
+Encrypted bundle SHA-256:
+`6055c75b975daec29ee90d680ded2f243a063f0bef0ef19038daddb312ded562`.
+Windows and windows-brat copies have protected ACLs; Mac files are mode `0600`.
+An actual decrypt-to-temporary-directory recovery on the Mac verified alias
+`vpnrouter` and certificate SHA-256 `6e50af0f...45a221`. Temporary GitHub
+artifact, recovery secret, and export branch were deleted after verification.
 
 ### Previous key (superseded 2026-06-05)
 - Old cert `c3fc0cea…d37a`, DN `CN=Android Debug, O=Android, C=US`, store-pass
@@ -42,8 +59,8 @@ can read a secret's value back out. So the secret can *use* the keystore (in CI)
 but can never *return* it. **If the only copy is the secret, the keystore is
 effectively already lost** — you just won't find out until the day you need it.
 
-Therefore the **original keystore file on disk is the only recoverable copy**,
-and it MUST be backed up offline.
+Therefore a separately recoverable encrypted bundle is mandatory. The verified
+2026-08-02 bundle above is the current disaster-recovery source.
 
 ## What to back up (3 things)
 
@@ -65,8 +82,8 @@ and it MUST be backed up offline.
 2. **Verify it's the right one** — its cert must match what CI ships:
    ```bash
    keytool -list -v -keystore vpnrouter.keystore -alias vpnrouter | grep -i "SHA-?256\|Owner"
-   # SHA256 fingerprint (strip colons) must == c3fc0ceab00a0b8b...c8d3d37a
-   # Owner must == CN=Android Debug, O=Android, C=US
+   # SHA256 fingerprint (strip colons) must == 6e50af0f...45a221
+   # Owner must == CN=VPNRouter, O=VPNRouter, C=RU
    ```
 3. **Store ≥2 offline copies**: e.g. an encrypted USB drive + your password
    manager's secure-file vault. Put the password in the password manager entry
