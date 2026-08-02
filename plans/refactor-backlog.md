@@ -10,6 +10,12 @@ ledger (each item tracked there with how it was/would be verified).
 
 ## Deferred
 
+- [ ] **DR-04 hashing follow-ups** — add a repo lint only if legacy
+  `SHA*.Create()` or manual hex-lowercase patterns actually recur. Keep the
+  persisted Free Config BuildId prefixes uppercase unless a separately planned
+  storage migration justifies changing their casing. Both are low-value today:
+  the repo-wide grep is clean and existing IDs must remain stable.
+
 - [ ] **T2-D Zapret/TgProxy path centralization** — deferred 2026-06-25. The one
   **behavior-affecting** item in the codebase-reduction plan: delegating
   `ZapretUpdater` / `TgProxyUpdater`'s bespoke `CommonApplicationData` `_dataDir` to
