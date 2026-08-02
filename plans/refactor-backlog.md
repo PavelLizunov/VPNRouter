@@ -10,6 +10,13 @@ ledger (each item tracked there with how it was/would be verified).
 
 ## Deferred
 
+- [ ] **Serilog follow-ups from DR-03 Qwen review** — triage after sink ownership
+  is stable: decide whether aligning Core/App/CLI/Service/Android base Serilog
+  versions has measured value; consider sharing App's early and ViewModel logger
+  configuration without changing startup diagnostics; keep the already-planned
+  Android Core source-link to `ProjectReference` migration tied to the v3 roadmap.
+  None blocks DR-03 and none is a confirmed defect.
+
 - [ ] **T2-D Zapret/TgProxy path centralization** — deferred 2026-06-25. The one
   **behavior-affecting** item in the codebase-reduction plan: delegating
   `ZapretUpdater` / `TgProxyUpdater`'s bespoke `CommonApplicationData` `_dataDir` to

@@ -58,13 +58,29 @@
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: solution Release build has 0 errors; Android build included when toolchain is available.
+- [x] **Gate 1 — Build clean**: solution Release build has 0 errors; Android build included when toolchain is available.
 - [ ] **Gate 2 — Tests green**: full repository test suite passes.
-- [ ] **Gate 3 — Docs**: this brief's Outcome is filled; no README change is expected.
-- [ ] **Gate 4 — Self-review**: N/A unless the implementation exceeds 100 LOC or touches a security surface.
-- [ ] **Gate 5 — MCP verify**: N/A — no UI behavior changes.
-- [ ] **Gate 6 — Characterization diff**: N/A — not a god-file split.
+- [x] **Gate 3 — Docs**: this brief's Outcome is filled; no README change is expected.
+- [x] **Gate 4 — Self-review**: N/A; the implementation is a 5-project manifest/docs diff under 100 LOC and does not touch a security surface.
+- [x] **Gate 5 — MCP verify**: N/A — no UI behavior changes.
+- [x] **Gate 6 — Characterization diff**: N/A — not a god-file split.
 
 ## Outcome
 
-To be filled after implementation and verification.
+- Qwen 3.8 max-preview independently approved the ownership map before the
+  edit and approved the final diff with no blocking findings or new backlog.
+- Core and Android no longer own Console/File sinks. App directly owns both;
+  PoolAggregator directly owns Console. CLI's direct
+  `Serilog.Extensions.Logging` reference was removed because the same 10.0.0
+  assembly remains resolved through Service -> `Serilog.Extensions.Hosting`.
+- Resolved output matches the target graph; in particular Service no longer
+  resolves `Serilog.Sinks.Console`.
+- Release solution build: 0 errors. Individual App, CLI, Service, and
+  PoolAggregator builds: 0 errors. Android `net10.0-android36.0` Release build
+  with the local JDK/SDK/libbox toolchain: 0 errors.
+- Accessible local tests: 2640 passed, 2 skipped, 0 failed. The unfiltered run
+  also passed 2683 tests but retained 25 documented dev-box failures caused by
+  denied writes under `C:\ProgramData\VPNRouter`; clean-environment CI is the
+  remaining Gate 2 check.
+- Qwen's three out-of-scope suggestions were recorded in
+  `plans/refactor-backlog.md`; none expanded DR-03.

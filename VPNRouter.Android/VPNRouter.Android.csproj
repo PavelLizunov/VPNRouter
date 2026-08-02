@@ -102,8 +102,6 @@
        migrated to STJ; Core no longer references Newtonsoft. -->
   <ItemGroup>
     <PackageReference Include="Serilog" Version="3.1.1" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
-    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <!-- Phase 6 Wave 31a (commit b446f3d) added Vecc.YamlDotNet.Analyzers.StaticGenerator
          to Core.csproj for the StaticDeserializerBuilder swap in
