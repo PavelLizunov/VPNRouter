@@ -68,7 +68,7 @@ actual Android scanner or file-based config share flow.
 ## Verification gate
 
 - [x] **Gate 1 — Build clean**: desktop solution and Android Release builds have 0 errors.
-- [ ] **Gate 2 — Tests green**: focused config-share/Android tests and full CI pass.
+- [x] **Gate 2 — Tests green**: focused config-share/Android tests and full CI pass.
 - [x] **Gate 3 — Docs**: Outcome is filled; live ZXing NOTICE is preserved.
 - [x] **Gate 4 — Self-review**: final Qwen reference/deletion review returned `APPROVE` with no blocker.
 - [x] **Gate 5 — MCP verify**: N/A — no production or UI behavior changes.
@@ -92,4 +92,5 @@ actual Android scanner or file-based config share flow.
   errors. Focused ConfigShare/Android characterization tests: 31 passed.
   Accessible regression: 2631 passed, 2 skipped, 0 failed — exactly nine fewer
   tests than the pre-change 2640 because only encoder self-tests were removed.
-- Clean-environment CI is the remaining Gate 2 check.
+- PR #105 clean-environment CI passed: Linux test, Windows Go test, and grep
+  are green; characterization was expectedly skipped for the non-MVM diff.
