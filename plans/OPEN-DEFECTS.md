@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### MTU end-to-end audit — 2026-08-03 (static contract defects; runtime underlay/Android impact remains measurement-gated — full report `plans/mtu-end-to-end-audit-2026-08-03.md`)
+- [ ] **P2** — generic user TUN MTU is ignored whenever the active proxy is AWG: code emits 1420 unconditionally although `TunSettings`, ConfigGenerator comments, and the resolved ledger promise `min(user,1420)`; confirmed setting defect, while actual loss on PPPoE/mobile/nested underlays remains measurement-gated — `VPNRouter.Core/Services/ConfigGenerator.cs:1144-1146` / `VPNRouter.Tests/AwgDnsAndMtuTests.cs:96-105` — [report §MTU-1](mtu-end-to-end-audit-2026-08-03.md) — next focused MTU PR
+- [ ] **P2** — MTU input contract is inconsistent and silently changes accepted settings: UI saves 576..9000, validator accepts 576..65535, generator rewrites >1500 to 1420, and `config.example.yaml` still demonstrates 9000 — `VPNRouter.App/ViewModels/MainWindowViewModel.cs:3834` / `VPNRouter.Core/Services/SettingsValidator.cs:233-248` / `VPNRouter.Core/Services/ConfigGenerator.cs:31-34` / `config.example.yaml:77` — [report §MTU-2](mtu-end-to-end-audit-2026-08-03.md) — next focused MTU PR
+- [ ] **P2** — IPv6-enabled TUN accepts MTU 576..1279 even though RFC 8200 §5 requires an IPv6 link MTU of at least 1280 unless the lower layer supplies fragmentation/reassembly; make `<1280` fatal only when `Tun.Ipv6Enabled` — `VPNRouter.Core/Services/SettingsValidator.cs:227-249` / `VPNRouter.Core/Models/TunSettings.cs:25-36` — [report §MTU-3](mtu-end-to-end-audit-2026-08-03.md) — next focused MTU PR
+- [ ] **P3** — Windows MTU "auto-tune" is presented as path tuning but measures only IPv4 DF ping payloads to fixed `8.8.8.8`; it does not establish the active proxy endpoint/route/family/transport overhead. Scope and label it honestly; preserve the conservative algorithm until a separate measurement task justifies change — `VPNRouter.Core/Services/HealthCheck.cs:621-687` / `VPNRouter.App/ViewModels/MainWindowViewModel.Settings.cs:171-216` — [report §MTU-4](mtu-end-to-end-audit-2026-08-03.md) — next focused MTU PR
+
 ### Remote-only post-ship verification — 2026-08-03
 
 - [x] **P1 RESOLVED pending v2.48.0-r4** — local mouse/keyboard MCP replaced by the fixed Tailscale target `100.115.182.0` with mandatory `WINBRAT` identity verification; credentials resolve local-first with primary-worktree fallback and are never copied — PR #88

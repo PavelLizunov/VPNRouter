@@ -8,6 +8,17 @@ focused session.
 Source of truth for verification context: `codebase-reduction-and-split-plan.md` §7
 ledger (each item tracked there with how it was/would be verified).
 
+## Context constraints (informational, no new product refactor)
+
+- The 2026-08-03 logical-module audit measured `AndroidApp` at ~194,855 tokens
+  and `MainWindowViewModel` at ~177,706; both exceed 128k whole, while all 261
+  logical source modules fit 256k and all five measured task closures fit 1M.
+  For 128k/256k work, load the target feature partial plus exact anchor-symbol
+  slices and focused tests. Do not split product files solely for context fit.
+  This refines the existing OPEN P3 tiered-review item rather than creating a
+  second implementation track. Full record:
+  `context-logical-segments-audit-2026-08-03.md`.
+
 ## Deferred
 
 - [ ] **DR-04 hashing follow-ups** — add a repo lint only if legacy
@@ -40,7 +51,18 @@ ledger (each item tracked there with how it was/would be verified).
   scattered and tangled with conflict-action orchestration referenced across the
   connection flow (`MainWindowViewModel.cs:4053/4161/4171/6939`). Lower value
   (~40 lines); needs a careful per-member scattered extraction. Hash-neutral if done
-  as a pure move. Plan ref: §3 T1-C.
+  as a pure move. The 2026-08-03 context audit measured the anchor at ~102,359
+  tokens, but this extraction would save under 3%; do not revive it solely for a
+  context score. Plan ref: §3 T1-C.
+
+- [ ] **MTU documentation/comment cleanup** — coordinate with the confirmed MTU
+  contract PR, not as a standalone refactor. Correct `AppSettings` prose that
+  says 1280 migrates to 1420 (code/tests preserve it), the migration claim that
+  1280 is guaranteed to traverse any path, Android's false "1500 is the
+  Android/sing-box default" comment, over-broad fragmentation/PMTUD comments,
+  and the stale `config.example.yaml` value 9000. Do not change Android runtime
+  MTU or migrate stored 1280 without the measurement/provenance evidence in
+  `mtu-end-to-end-audit-2026-08-03.md`.
 
 - [ ] **Android copies of T2-A/B/C** (`DeepVerifyConstants` + `NetPortUtil`) —
   deferred 2026-06-25. The Core dedup is done; `AndroidFreeConfigDeepVerifier` still
