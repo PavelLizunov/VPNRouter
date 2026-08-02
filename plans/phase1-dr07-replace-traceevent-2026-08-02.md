@@ -100,3 +100,6 @@ the Windows ETW monitor and macOS poller into one cross-platform
 - The candidate GUI launched and UIA reached Connect. Full tunnel startup was blocked
   by the VM's pre-existing invalid VLESS Reality key; the installed build was restored
   unchanged after the probe.
+- First PR CI caught and fixed one platform-only compile regression: the shared macOS
+  namespace import is still required by process-scanner/firewall types after deleting
+  `MacProcessMonitor`.

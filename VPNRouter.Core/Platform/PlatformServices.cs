@@ -4,6 +4,10 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.UpdateSources;
 
+#if !PLATFORM_WINDOWS
+using VPNRouter.Core.Platform.macOS;
+#endif
+
 namespace VPNRouter.Core.Platform;
 
 /// <summary>
