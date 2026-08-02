@@ -45,6 +45,9 @@ tools/*
 !tools/live-test-*.ps1
 # Autonomous Proxmox test-VM control (scoped API token; live-verify env access).
 !tools/testvm-control.ps1
+# Fail-closed remote-only verifier for the windows-brat test VM (fixed target
+# 192.168.0.106 / WINBRAT; UIA + screenshots run on brat, never the dev box).
+!tools/brat-verify.ps1
 # Re-include: pve-guest-exec.ps1 (run commands in a Linux test VM via guest-agent).
 !tools/pve-guest-exec.ps1
 # Re-include: smoke-update.ps1 (v2.29.0-r7 ship-time pre-tag verification).

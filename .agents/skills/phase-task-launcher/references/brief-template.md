@@ -31,7 +31,7 @@
 - `<TestClass>.<TestMethod>` — edge case X
 
 ### Verification approach
-<how we know it works: full test suite, characterization snapshot, MCP screenshot, etc.>
+<how we know it works: full test suite, characterization snapshot, remote brat UIA verify/screenshot, etc.>
 
 ## Verification gate
 Check off each as you complete:
@@ -40,7 +40,7 @@ Check off each as you complete:
 - [ ] **Gate 2 — Tests green**: full suite passes (current count: 765). New tests included.
 - [ ] **Gate 3 — Docs**: brief Outcome filled. README + CLAUDE.md updated if user-facing / architecture change.
 - [ ] **Gate 4 — Self-review**: `simplify` skill ran (if diff >100 LOC) AND/OR `security-review` ran (if security-relevant). Note "N/A" if not applicable.
-- [ ] **Gate 5 — MCP verify**: screenshot taken if UI changed. Attach reference (e.g. `plans/<task>-mcp.png`). "N/A" if no UI surface.
+- [ ] **Gate 5 — Remote brat UI verify**: if UI changed, run `tools/brat-verify.ps1` (`-Action uia` / `-Action screenshot`) against WINBRAT @ 192.168.0.106; screenshots under `artifacts/brat-verify/` (attach reference, e.g. `artifacts/brat-verify/<task>.png`). VM/WinRM unavailable → BLOCKED, no local fallback. "N/A" if no UI surface.
 - [ ] **Gate 6 — Characterization diff**: pre-split snapshot matches post-split (god-file splits only). "N/A" otherwise.
 
 ## Outcome (filled after merge)

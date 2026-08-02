@@ -16,6 +16,14 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Remote-only post-ship verification — 2026-08-03
+
+- [x] **P1 RESOLVED pending v2.48.0-r4** — local mouse/keyboard MCP replaced by the fixed Tailscale target `100.115.182.0` with mandatory `WINBRAT` identity verification; credentials resolve local-first with primary-worktree fallback and are never copied — PR #88
+- [x] **P1 RESOLVED pending v2.48.0-r4** — pre-commit build/test pipelines now enable `pipefail`, so a failed `dotnet` command cannot be hidden by `tail` — PR #88
+- [x] **P1 RESOLVED pending v2.48.0-r4** — `.agents` and `.claude` post-ship instructions are byte-identical and the obsolete local-MCP scripts/project are removed — PR #88
+- [ ] **P2** — screenshot matrix and about 20 stable AutomationIds remain measurement-driven follow-ups; add only for user scenarios that the remote UIA verifier cannot express reliably — after r4
+- [ ] **P3** — duplicated localization/binding wrappers remain deferred until a headless/UIA safety net proves deletion is worthwhile — TBD
+
 ### Codebase/context reduction audit — 2026-08-01 (static/call-graph verified, NO live behavior change for F1 — full report `plans/qwen-context-footprint-and-code-reduction-audit-2026-08-01.md`)
 - [ ] **P2** — dead CustomDirectRules runtime/parser/generator/aliases + their two dedicated tests are confirmed removable (~697 LOC, ~6-8k tokens); KEEP the migration/schema contract (`AppConfig.CustomDirectRules`, `CustomDirectRule` model, `AppSettingsSane`, `SettingsMigrator.Migrate_1_to_2`, `YamlStaticContext` registration, migration/roundtrip/robustness tests) — [report §F1](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md) — next PR
 - [ ] **P3** — dead settings schema cleanup: `AutoDownload` + `DownloadUrl` are dead, `ProcessScanInterval` is unused by runtime but has a live validator — remove only in a coordinated schema cleanup (validator + tests together); unknown YAML keys already safe via `IgnoreUnmatchedProperties` (~15 product LOC + tests) — [report §F3](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md) — later cleanup

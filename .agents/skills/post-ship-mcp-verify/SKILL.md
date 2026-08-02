@@ -1,193 +1,160 @@
 ---
 name: post-ship-mcp-verify
-description: After every successful ship of a -rN candidate, run this skill to actually verify the new binary works — on the windows-brat TEST VM (192.168.0.106) over WinRM, NEVER the local dev box (see the STOP banner in the body). Downloads the freshly-shipped ZIP, deploys it onto brat, launches + drives it there via UIA over WinRM, screenshots each verification point, tails `vpnrouter*.log` for errors, and produces a PASS/FAIL report. Auto-triggered after `ship-rolling-candidate` completes. DO NOT skip even for "tiny" changes — past sessions shipped 12 candidates without local verification and the user caught it via screenshots. This skill makes "I forgot to test" impossible.
-when: After `ship-rolling-candidate` finishes Step 8 (Mac+Linux CI green, 12-14 assets present), but BEFORE reporting completion to the user. Also run manually when user says "verify last ship" or "check if r19 actually works".
+description: MANDATORY after every rolling ship (-rN). Verifies the shipped Windows binary ONLY on the fixed remote test VM windows-brat (100.115.182.0 / WINBRAT) through tools/brat-verify.ps1 over WinRM — remote brat only, fail-closed. SHA256-checks the release ZIP, deploys + launches on brat, walks release-note checklists with semantic UIA and screenshots on brat, scans brat logs, reports PASS/FAIL. Never installs, launches, drives, screenshots, or reads app logs on the local dev box. If VM/WinRM/identity is unavailable — STOP, no fallback.
 ---
 
-> **STOP — TARGET MACHINE. Read before any install/launch/connect.**
-> The "dev-VM / user's machine" wording below is MISLEADING and caused an incident
-> (2026-07-06): an agent installed VPNRouter onto the operator's own dev box.
-> **NEVER install, launch, connect, overwrite, stop, or MCP-drive VPNRouter on the
-> machine you are running on (the dev box).** Do NOT touch `C:\Program Files\VPNRouter`
-> on this box. `mcp__vpnrouter-test__*` controls the DEV BOX (not a VM) — it is the
-> WRONG target; using it seizes the operator's real mouse/screen.
-> **ALL post-ship verification runs on the test VM `windows-brat` (192.168.0.106) over
-> WinRM, invisibly.** Recipe: `Copy-Item -ToSession` the ZIP to `C:\r4review\pkg` on
-> brat → launch via a scheduled task (Interactive principal, `RunLevel Highest` = no
-> UAC, `tester` is admin) → make the session render with `tscon 1 /dest:console` →
-> drive + screenshot via UIA + `CopyFromScreen` in that session → pull PNGs back over
-> WinRM. Cred: `.testpc-cred-192.168.0.106.xml`. See memories `no-devbox-input-hijack`
-> + `dev-box-not-a-test-target`. If brat/WinRM is unavailable, STOP and ask the user —
-> do NOT fall back to the local machine.
+> **STOP — read before any install / launch / UI / screenshot / log action.**
+> All post-ship work runs ONLY on the fixed test VM **windows-brat
+> (100.115.182.0, MachineName `WINBRAT`)** through `tools/brat-verify.ps1`
+> over WinRM. Every action re-verifies the WINBRAT identity and fails
+> closed on any mismatch.
+> **NEVER** install, launch, stop, drive, screenshot, or read VPNRouter
+> logs on the dev box (the machine you run on). Do not touch
+> `C:\Program Files\VPNRouter` here. No local UI tooling of any kind.
+> **If the VM, WinRM, the credential file, or the identity check is
+> unavailable — STOP and ask the user. There is NO local fallback.**
 
-# Post-Ship MCP Verification — actually launch + click + check
+# Post-ship verification — remote brat only
 
-VPNRouter ships rolling candidates rapidly. Tests pass in CI. CI fan-out
-goes green. The release page shows 14 assets. Then we declare victory
-without ever launching the binary.
+`$v` = shipped version (`VPNRouter.Core/AppVersion.cs`, e.g. `2.48.0-r3`).
+Phases run in order; any phase 1–5 failure → STOP, surface exact stderr,
+do not report success.
 
-**That's the failure mode.** Sessions 2026-05-25 r7..r18 shipped 12
-candidates without local MCP verification. User caught a real XAML
-binding bug only because he checked the commits page himself. The skill
-exists to make this impossible to skip.
+## 1. CI gate
 
-## When this skill fires
-
-- **Auto-trigger**: at the end of `ship-rolling-candidate` Step 8 (after
-  CI fan-out complete + asset count verified). Chained via the skill's
-  description so the agent invokes it automatically as the natural next
-  step.
-- **Manual trigger**: user says "verify last ship", "check if rN works",
-  or any phrasing that implies post-ship live test.
-- **Re-trigger after bugfix**: shipped a fix for a verification failure?
-  Run again after the new ship lands.
-
-## The 6 phases
-
-Each phase has a script for the deterministic parts and a checklist for
-the interactive ones. Don't skip phases.
-
-### Phase 1 — CI gate
-
-```bash
+```powershell
 powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1
 ```
 
-Exit 0 → proceed. Exit 1/2/3 → STOP, surface the failure to the user
-before attempting any local verification. There's no point testing a
-binary if the source it was built from has a red commit.
+Exit 0 → proceed. Exit 1/2/3 → STOP.
 
-### Phase 2 — Download + install + launch
+## 2. VM readiness + identity
 
-```bash
-powershell -ExecutionPolicy Bypass -File .agents/skills/post-ship-mcp-verify/scripts/post-ship-install-launch.ps1 -Version "2.X.Y-rN"
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/testvm-control.ps1 -Action ensure-ready
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action identity
 ```
 
-The script does ALL the non-interactive setup:
+`ensure-ready` probes the fixed Tailscale WinRM endpoint first and, only if
+that is unreachable, starts VM 100 via Proxmox and waits for WinRM on
+100.115.182.0:5985. `identity` must print `Verified identity: WINBRAT @
+100.115.182.0`. Missing `.testpc-cred-192.168.0.106.xml` → the error prints
+the one-time setup command; STOP until it exists. Timeout/mismatch → STOP.
 
-1. Read `VPNRouter.Core/AppVersion.cs` to confirm the version expected.
-2. Stop any running `VPNRouter.*` process (kill before file write).
-3. `gh release download vX.Y.Z-rN --pattern "VPNRouter-vX.Y.Z-rN-win.zip"` to `.r-publish/`.
-4. Verify the SHA256 against the `.sha256` sidecar.
-5. Extract over `C:/Program Files/VPNRouter/app/` (requires the dev-VM to
-   already have the install dir from a prior install).
-6. `Start-Process 'C:/Program Files/VPNRouter/app/VPNRouter.GUI.exe'`.
-7. Wait 6 seconds for the window to appear.
-8. Output: success → next phase; failure → surface error.
+## 3. Artifact + SHA256 (fail-closed)
 
-### Phase 3 — Version + smoke screenshot
+The exact pair `VPNRouter-v$v-win.zip` + `VPNRouter-v$v-win.zip.sha256`
+must exist in the repo root. If either is absent, download exactly those
+two assets:
 
-Use `mcp__vpnrouter-test__list_windows` to confirm `VPNRouter` window
-exists. Take a screenshot of the main window via
-`mcp__vpnrouter-test__screenshot`. Visually confirm:
+```powershell
+gh release download "v$v" --pattern "VPNRouter-v$v-win.zip" --pattern "VPNRouter-v$v-win.zip.sha256"
+```
 
-- Window renders (not a blank Avalonia placeholder).
-- Title shows correct version (check About page or status footer if the
-  title bar doesn't show it).
-- No exception dialog visible.
+Then verify — mismatch or missing sidecar is a HARD STOP, never deploy an
+unverified ZIP:
 
-### Phase 4 — Per-feature checklist
+```powershell
+$expected = (Get-Content "VPNRouter-v$v-win.zip.sha256" -Raw).Trim().ToLower()
+$actual   = (Get-FileHash -Algorithm SHA256 "VPNRouter-v$v-win.zip").Hash.ToLower()
+if ($expected -ne $actual) { throw "SHA256 MISMATCH: expected=$expected actual=$actual — STOP" }
+```
 
-Read the release notes for this -rN (in `plans/release-notes-vX.Y.Z-rN.md`)
-to identify what changed. Pick the matching checklist from
-`references/`:
+## 4. Deploy + launch on brat
 
-| Change scope (matched by release notes section header) | Checklist file |
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action deploy -Version $v
+```
+
+Stops the old app on brat, installs the verified ZIP over
+`C:\Program Files\VPNRouter\app`, relaunches the GUI on brat's desktop.
+
+## 5. Baseline screenshot
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput "artifacts/brat-verify/$v/baseline.png"
+```
+
+Visually confirm: window rendered (not a blank placeholder), version
+footer/About matches `$v`, no exception dialog. Never commit screenshots.
+
+## 6. Release-note checklists — semantic UIA + screenshots only
+
+Read the release notes for `$v` (`gh release view "v$v"`, or local
+`release-notes-v$v.md` if present) and select every matching checklist:
+
+| Change scope | Checklist |
 |---|---|
-| Zapret (`Zapret*`, `DpiBypass`, probe, cache, hosts) | `references/checklist-zapret.md` |
-| TgProxy (`TgProxy*`, `Telegram`, `tg://`) | `references/checklist-tgproxy.md` |
-| VPN core (subscriptions, vless, sing-box, TUN) | `references/checklist-vpn-core.md` |
-| Network/Settings/Apps page (autostart, lockdown, custom rules) | `references/checklist-network-settings.md` |
-| Free Configs (`FreeConfig*`, public pool) | `references/checklist-free-configs.md` |
-| Localization-only (Strings.cs members swept) | `references/checklist-localization.md` |
+| Zapret / DPI bypass / probe / strategy cache / hosts | `references/checklist-zapret.md` |
+| TgProxy / Telegram / MTProto / tg:// | `references/checklist-tgproxy.md` |
+| VPN core: subscriptions, servers, sing-box, TUN | `references/checklist-vpn-core.md` |
+| Network / Settings / Apps / autostart / rules | `references/checklist-network-settings.md` |
+| Free Configs / public pool | `references/checklist-free-configs.md` |
+| Localization-only sweeps | `references/checklist-localization.md` |
 
-Each checklist enumerates the clicks + assertions to perform via
-`mcp__vpnrouter-test__*` tools. Open the chosen file, walk through every
-item, screenshot at each step.
+Mix multiple checklists when one ship touches multiple scopes. Walk every
+item; screenshot each state change into `artifacts/brat-verify/$v/`.
 
-**Mix multiple checklists** when one ship touches multiple areas (e.g.
-r10 = Zapret cache UI + r17 = ServerTesting labels → run both).
+UI interaction is only this command plus `-Action screenshot`:
 
-### Phase 5 — Log inspection
-
-```bash
-powershell -ExecutionPolicy Bypass -File .agents/skills/post-ship-mcp-verify/scripts/post-ship-collect-logs.ps1
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<exact RU name>" -ControlType <Button|CheckBox|ListItem> [-UiaOperation <Inspect|Invoke|Toggle|Expand|SetValue>] [-Value <text>]
 ```
 
-Tails the last 200 lines of the most-recent `vpnrouter*.log`, scans for
-known-bad patterns (`[ERR]`, `Exception`, `FATAL`, `crashed`, `Failed
-to`), surfaces matches with surrounding context. Empty result = good.
+- Semantic selectors only (Name/AutomationId/ControlType). Use exact Name
+  strings from current XAML/`Strings.cs` (RU locale) as listed in the
+  checklists. Never invent selectors; never add product XAML from this skill.
+- `Inspect` (default) asserts presence and prints Name/AutomationId/
+  IsEnabled — assert before mutating. "Pattern unsupported" → the Inspect
+  assertion still passed; record the actuation gap, continue with screenshots.
+- No stable selector → screenshot, assert visually, record "selector
+  hardening = future work".
+- UIA/screenshot require a logged-on interactive session on brat; the
+  script fails closed otherwise.
 
-### Phase 6 — Report to user
+**End-to-end rule (AGENTS.md #13):** walk the FULL user scenario to the
+element reported, not "tab rendered": (a) invoke the target element,
+(b) check ALL interactive elements in its scope, (c) screenshot the bottom
+of the viewport, (d) confirm the exact strings a user could be looking for.
 
-Generate a compact report:
+## 7. Remote logs
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs -LogWindowMinutes 120
+```
+
+Scans recent timestamped entries in the newest `vpnrouter*.log` under
+`C:\ProgramData\VPNRouter\logs` ON BRAT for `[ERR]` / `Exception` /
+`FATAL`; exit 1 prints the hits. Historical failures outside the verification
+window are ignored. Triage hits only against the checklist's "known benign
+noise" section; anything else is a FAIL. Missing log dir/file or no recent
+timestamped entries fails closed.
+
+## 8. Report
+
+Compact PASS/FAIL as the LAST message of the turn:
 
 ```markdown
-## Post-ship verification — v2.37.0-rN
+## Post-ship verification — v$v — PASS|FAIL
 
-**Binary**: launched successfully (PID NNNN, version 2.37.0-rN).
-**Checklists run**: zapret, tgproxy
-**Pass**: 7/8
-**Fail**: 1 — air-pill missing TgProxyStats text (screenshot @ tmp-rN-airpill.png)
-**Log scan**: clean (last 200 lines, no [ERR]/Exception/FATAL).
-
-**Recommended next**: ship r(N+1) with TgProxyStats binding fix, OR
-defer if user wants to triage manually first.
+**Target**: WINBRAT @ 100.115.182.0 (identity verified).
+**Binary**: VPNRouter-v$v-win.zip — SHA256 verified, deployed + launched.
+**Checklists**: zapret 4/4, tgproxy 3/4 (pass/total per checklist).
+**Failures/blockers**: none | <item + exact stderr or quote>.
+**Screenshots**: artifacts/brat-verify/$v/baseline.png, <others>.
+**Log scan**: clean | N hits: <quoted lines>.
+**Next**: ship r(N+1) with <fix> | triage first.
 ```
 
-Surface this to the user as the LAST message in the agent's turn. Don't
-proceed to the next code change until user has at least seen the report.
+Core-only ships with no UI surface: label "Core-only / not UI-testable"
+explicitly instead of faking a green.
 
-## Failure modes
+## Standing rules
 
-When this skill detects a problem:
-
-- **Phase 2 script fails** (download / install / launch broken) — STOP.
-  Don't pretend the verification succeeded. Surface the script's
-  stderr + suggest manual install via `C:/Program Files/VPNRouter/app/`
-  inspection.
-- **Phase 4 checklist item fails** — screenshot the broken state,
-  attach to report. DON'T silently retry — broken UI doesn't fix itself
-  with another click.
-- **Phase 5 log scan returns matches** — quote the offending lines in
-  the report. Some warnings are expected (Bug-r9-G AV-toast, etc.); use
-  the checklist's "expected log noise" section to triage.
-
-## What this skill is NOT
-
-- **Not a unit test runner** — use `dotnet test` in the pre-flight gate
-  for that. This skill verifies the BINARY's UI behavior, not the code
-  units.
-- **Not a stable-cut gate** — stable cut requires explicit user
-  confirmation per `AGENTS.md` rule #6. This skill's GREEN report is
-  just an *enabler* for asking "shall I cut stable?", not the cut
-  itself.
-- **Not silent** — every run must produce a visible report. Past
-  sessions had MCP verify steps that left no record; that's how we ended
-  up shipping 12 unverified candidates.
-
-## Anthropic best-practice alignment
-
-Per [Anthropic Skill best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
-and the [Skill Creator skill](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md):
-
-- **Progressive disclosure**: SKILL.md (this file) under 500 lines holds
-  the workflow; scripts in `scripts/`; per-feature detail in
-  `references/`. Codex reads only the relevant checklist for the
-  current change, not all 6 at once.
-- **Pushy description**: the YAML frontmatter explicitly says "DO NOT
-  skip even for 'tiny' changes" because past sessions did exactly that.
-- **Triggering**: the description mentions "after ship-rolling-candidate
-  completes" + manual phrasing variants so the auto-load matches.
-- **Bundled scripts** for the deterministic parts (download, install,
-  launch, log scan) so the agent doesn't reinvent them per run.
-
-## Cross-references
-
-- `tools/verify-last-commit-ci.ps1` — Phase 1 dependency (CI gate)
-- `.githooks/pre-push` — sister enforcement (blocks pushing red)
-- `.agents/skills/ship-rolling-candidate/SKILL.md` — upstream skill that
-  chains into this one
-- `AGENTS.md` rule #1a — "MCP test mandatory after every ship" (the
-  policy this skill enforces)
-- `AGENTS.md` rule #11 — CI-gate after every push (Phase 1 underpinning)
+- **No stable-cut authorization.** PASS is one readiness condition only;
+  cutting `vX.Y.Z` stable requires the user's explicit command
+  ("cut" / "ok" / "promote") — AGENTS.md rule #6.
+- Re-run the whole skill after shipping a fix for a verification failure.
+- `tools/brat-verify.ps1` is the ONLY driver this skill uses; the only
+  other scripts are `tools/testvm-control.ps1` (phase 2) and
+  `tools/verify-last-commit-ci.ps1` (phase 1).

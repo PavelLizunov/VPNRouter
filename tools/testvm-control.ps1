@@ -48,12 +48,44 @@ param(
     [string]$PveHost = '192.168.0.169',
     [string]$Node = 'pve-ninitux',
     [int]$VmId = 100,
-    [string]$VmIp = '192.168.0.106',
+    [string]$VmIp = '100.115.182.0',
     [int]$WinRmTimeoutSec = 240
 )
 
 $ErrorActionPreference = 'Stop'
-$TokenFile = Join-Path $PSScriptRoot '..\.pve-api-token.xml'
+
+# Resolve a credential file: prefer the current checkout root (local-first),
+# then fall back to the primary worktree root via Git's common directory.
+# Never copies credentials into task worktrees; fails closed if neither exists.
+function Resolve-CredentialFile {
+    param(
+        [Parameter(Mandatory = $true)] [string]$FileName,
+        [Parameter(Mandatory = $true)] [string]$LocalRoot
+    )
+    $local = Join-Path $LocalRoot $FileName
+    if (Test-Path $local) { return $local }
+    $commonDir = $null
+    try { $commonDir = git -C $LocalRoot rev-parse --git-common-dir 2>$null } catch { }
+    if ($commonDir) {
+        $commonDir = @($commonDir)[0].ToString().Trim()
+        if ($commonDir -and $commonDir -ne '.') {
+            if (-not [System.IO.Path]::IsPathRooted($commonDir)) {
+                $commonDir = Join-Path $LocalRoot $commonDir
+            }
+            $primaryRoot = Split-Path $commonDir -Parent
+            if ($primaryRoot) {
+                $primary = Join-Path $primaryRoot $FileName
+                if (Test-Path $primary) { return $primary }
+            }
+        }
+    }
+    # Neither location has the file. Return the local path so the caller's
+    # own Test-Path guard (Get-PveToken) produces the actionable missing-file
+    # error; this also keeps -Action store-token bootstrap reachable.
+    return $local
+}
+
+$TokenFile = Resolve-CredentialFile -FileName '.pve-api-token.xml' -LocalRoot (Split-Path $PSScriptRoot -Parent)
 
 # Proxmox ships a self-signed cert; Windows PowerShell 5.1 has no
 # -SkipCertificateCheck, so install a trust-all policy (scoped to this process).
@@ -114,6 +146,15 @@ switch ($Action) {
         Write-Host "VM $VmId graceful shutdown issued"
     }
     'ensure-ready' {
+        # Fast path: probe the fixed Tailscale WinRM endpoint first. An already
+        # reachable VM is reported ready immediately, with no Proxmox API/token
+        # requirement at all.
+        if (Test-NetConnection -ComputerName $VmIp -Port 5985 -WarningAction SilentlyContinue -InformationLevel Quiet) {
+            Write-Host "WinRM reachable at ${VmIp}:5985. VM ready."
+            exit 0
+        }
+        # Not reachable yet: fall back to the Proxmox power path, then wait for
+        # WinRM on the same Tailscale endpoint.
         if ((Get-VmStatus) -ne 'running') {
             Invoke-Pve -Method POST -Path "/nodes/$Node/qemu/$VmId/status/start" | Out-Null
             Write-Host "VM $VmId starting..."
