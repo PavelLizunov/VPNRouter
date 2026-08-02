@@ -80,9 +80,9 @@ the split exposes an unpinned structural failure mode.
 
 ## Outcome (filled after implementation verification)
 
-**Status**: READY FOR CI
-**Commits**: `cbf613b2` (brief); implementation commit pending
-**Pushed**: brief pushed; implementation push pending
+**Status**: PASS
+**Commits**: `cbf613b2` (brief); `2c4dd6d2` (implementation); this Outcome update
+**Pushed**: `codex/ph2-mvm-partial-split`; draft PR #101
 **Test deltas**: no new behavior tests; three source-contract tests now read the
 new concern files instead of assuming every member lives in the main file
 **Files changed**: six new partials, the reduced main file, three source-contract
@@ -102,8 +102,10 @@ tests, three module/roadmap maps, and this Outcome
 
 **Gate results:**
 - [x] Gate 1: Release solution build, 0 warnings / 0 errors
-- [~] Gate 2: focused App 30/30; split-sensitive source contracts 26/26;
-  locally accessible suite 2643 passed / 2 skipped. Full GitHub CI pending.
+- [x] Gate 2: focused App 30/30; split-sensitive source contracts 26/26;
+  locally accessible suite 2643 passed / 2 skipped; GitHub manual run
+  [30724625917](https://github.com/PavelLizunov/VPNRouter/actions/runs/30724625917)
+  passed Linux full tests, Windows characterization and Windows Go tests.
 - [x] Gate 3: App/Android inventories and Phase 2B/2C roadmap refreshed
 - [x] Gate 4: full Qwen diff review `[]`; targeted final test-boundary review
   `[]`; Ponytail result `Lean already. Ship.`
