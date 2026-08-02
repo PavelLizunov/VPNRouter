@@ -35,7 +35,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <!-- Wave 12 Phase 3 (2026-05-18) — xUnit v2.5.3 -> xUnit.v3 3.2.x.
          Required by Avalonia.Headless.XUnit 12 which depends on
          xunit.v3.extensibility.core (>= 3.2.2). The v3 package is
