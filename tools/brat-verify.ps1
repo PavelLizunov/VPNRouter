@@ -29,6 +29,10 @@ param(
     # screenshot local destination (must stay inside the checkout root).
     [string]$LocalOutput,
 
+    # logs: only inspect entries written during the recent verification window.
+    [ValidateRange(1, 1440)]
+    [int]$LogWindowMinutes = 120,
+
     [ValidateRange(5, 120)]
     [int]$TimeoutSeconds = 30
 )
@@ -504,23 +508,51 @@ switch ($Action) {
     'logs' {
         $s = New-VerifiedBratSession
         try {
-            $scan = Invoke-Command -Session $s -ScriptBlock {
+            $sinceText = [DateTimeOffset]::Now.AddMinutes(-$LogWindowMinutes).ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
+            $scan = Invoke-Command -Session $s -ArgumentList $sinceText -ScriptBlock {
+                param($sinceText)
+                $since = [DateTimeOffset]::ParseExact(
+                    $sinceText,
+                    'o',
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::RoundtripKind)
                 $dir = 'C:\ProgramData\VPNRouter\logs'
                 if (-not (Test-Path $dir)) { return @{ Found = $false; File = $null; Hits = @(); Note = "no log dir at $dir" } }
                 $f = Get-ChildItem $dir -Filter 'vpnrouter*.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
                 if (-not $f) { return @{ Found = $false; File = $null; Hits = @(); Note = "no vpnrouter*.log in $dir" } }
-                $hits = @(Get-Content $f.FullName -Tail 500 | Where-Object { $_ -match '\[ERR\]|Exception|FATAL' })
+                $hits = @()
+                $include = $false
+                $recentEntryCount = 0
+                foreach ($line in (Get-Content $f.FullName -Tail 1000)) {
+                    if ($line -match '^(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2})') {
+                        $parsed = [DateTimeOffset]::MinValue
+                        $include = [DateTimeOffset]::TryParseExact(
+                            $Matches.timestamp,
+                            'yyyy-MM-dd HH:mm:ss.fff zzz',
+                            [System.Globalization.CultureInfo]::InvariantCulture,
+                            [System.Globalization.DateTimeStyles]::None,
+                            [ref]$parsed) -and $parsed -ge $since
+                        if ($include) { $recentEntryCount++ }
+                    }
+                    if ($include -and $line -match '\[ERR\]|Exception|FATAL') { $hits += $line }
+                }
+                if ($recentEntryCount -eq 0) {
+                    return @{ Found = $false; File = $f.Name; Hits = @(); Note = "no log entries since $since" }
+                }
                 @{ Found = ($hits.Count -gt 0); File = $f.Name; Hits = $hits; Note = $null }
             }
             if (-not $scan.File) {
                 throw "Cannot verify remote logs on $BratMachineName`: $($scan.Note). Failing closed."
+            }
+            if ($scan.Note) {
+                throw "Cannot verify recent remote logs on $BratMachineName`: $($scan.Note). Failing closed."
             }
             if ($scan.Found) {
                 Write-Host "[!] $($scan.Hits.Count) error pattern(s) in remote $($scan.File):" -ForegroundColor Red
                 $scan.Hits | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
                 exit 1
             }
-            Write-Host "CLEAN: no [ERR]/Exception/FATAL in last 500 lines of remote $($scan.File)." -ForegroundColor Green
+            Write-Host "CLEAN: no [ERR]/Exception/FATAL in the last $LogWindowMinutes minute(s) of remote $($scan.File)." -ForegroundColor Green
         }
         finally { Remove-PSSession $s }
     }

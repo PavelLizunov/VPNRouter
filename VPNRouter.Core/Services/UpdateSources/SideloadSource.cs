@@ -189,11 +189,10 @@ public sealed class SideloadSource : IUpdateSource
         if (!string.IsNullOrEmpty(info.AssetSha256))
         {
             string actual;
-            using (var sha = SHA256.Create())
             await using (var fs = File.OpenRead(apkPath))
             {
-                var hash = await sha.ComputeHashAsync(fs, ct).ConfigureAwait(false);
-                actual = Convert.ToHexString(hash).ToLowerInvariant();
+                var hash = await SHA256.HashDataAsync(fs, ct).ConfigureAwait(false);
+                actual = Convert.ToHexStringLower(hash);
             }
             if (!string.Equals(actual, info.AssetSha256, StringComparison.Ordinal))
             {

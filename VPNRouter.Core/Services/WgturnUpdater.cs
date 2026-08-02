@@ -579,8 +579,7 @@ public class WgturnUpdater
     private static async Task<string> ComputeSha256Async(string path, CancellationToken ct)
     {
         await using var stream = File.OpenRead(path);
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        var hash = await sha.ComputeHashAsync(stream, ct).ConfigureAwait(false);
+        var hash = await System.Security.Cryptography.SHA256.HashDataAsync(stream, ct).ConfigureAwait(false);
         return Convert.ToHexString(hash);
     }
 }

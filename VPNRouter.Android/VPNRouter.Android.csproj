@@ -179,21 +179,11 @@
          merger picks it up automatically. Core ZXing decoder ships as
          a plain .jar (com.google.zxing:core) that the embedded aar
          depends on at runtime. -->
-    <AndroidLibrary Include="Lib\zxing-android-embedded-4.3.0.aar">
-      <!-- Bind metadata: Mono.Android's binding generator chokes on a
-           handful of generic-heavy classes (ResultParser hierarchy,
-           ScanContract, Size with Comparable<T>). Bind="false" is
-           documented as the escape hatch but in current .NET 8 Android
-           it still walks transitive types — see Transforms/Metadata.xml
-           for the targeted "remove-node" rules that hide just the broken
-           subset from C#, leaving the .class entries intact at runtime
-           for QrScanLauncher.java to use. -->
-      <Bind>true</Bind>
-    </AndroidLibrary>
-    <AndroidLibrary Include="Lib\zxing-core-3.5.3.jar">
-      <Bind>true</Bind>
-    </AndroidLibrary>
-    <TransformFile Include="Transforms\Metadata.xml" />
+    <!-- The Android SDK already includes every aar/jar. Update those items;
+         Include would add duplicates whose default Bind=true still generates
+         the unused managed wrappers. Pack remains true by default. -->
+    <AndroidLibrary Update="Lib\zxing-android-embedded-4.3.0.aar" Bind="false" />
+    <AndroidLibrary Update="Lib\zxing-core-3.5.3.jar" Bind="false" />
   </ItemGroup>
 
   <!-- Java service implementation. .NET Android compiles AndroidJavaSource

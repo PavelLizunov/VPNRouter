@@ -18,8 +18,7 @@ public static class AppSettingsSane
 {
     /// <summary>32-hex-char cryptographically random Clash-API bearer secret.</summary>
     internal static string GenerateClashApiSecret()
-        => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
-            .ToLowerInvariant();
+        => Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
 
     /// <summary>Walk the AppSettings tree and replace every null
     /// sub-object / collection with a fresh empty default.</summary>

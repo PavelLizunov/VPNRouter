@@ -74,6 +74,14 @@ public sealed class BratVerifierContractTests
         // script explicitly, so it never prompts or caches a new-IP credential.
         Assert.Contains("-Credential (Import-Clixml $CredFile)", deploy);
 
+        var logsStart = script.IndexOf("'logs' {", StringComparison.Ordinal);
+        Assert.True(logsStart >= 0, "brat-verify.ps1 must keep a remote logs action.");
+        var logs = script.Substring(logsStart);
+        Assert.Contains("LogWindowMinutes", logs);
+        Assert.Contains("TryParseExact", logs);
+        Assert.Contains("recentEntryCount -eq 0", logs);
+        Assert.Contains("Cannot verify recent remote logs", logs);
+
         var skill = Read(".agents", "skills", "post-ship-mcp-verify", "SKILL.md");
         Assert.Contains("100.115.182.0", skill);
         Assert.Contains("NO local fallback", skill);

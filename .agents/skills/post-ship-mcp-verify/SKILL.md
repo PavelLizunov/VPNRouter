@@ -120,14 +120,15 @@ of the viewport, (d) confirm the exact strings a user could be looking for.
 ## 7. Remote logs
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs -LogWindowMinutes 120
 ```
 
-Scans the last 500 lines of the newest `vpnrouter*.log` under
+Scans recent timestamped entries in the newest `vpnrouter*.log` under
 `C:\ProgramData\VPNRouter\logs` ON BRAT for `[ERR]` / `Exception` /
-`FATAL`; exit 1 prints the hits. Triage hits only against the checklist's
-"known benign noise" section; anything else is a FAIL. Missing log
-dir/file fails closed.
+`FATAL`; exit 1 prints the hits. Historical failures outside the verification
+window are ignored. Triage hits only against the checklist's "known benign
+noise" section; anything else is a FAIL. Missing log dir/file or no recent
+timestamped entries fails closed.
 
 ## 8. Report
 
