@@ -127,7 +127,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $result = [ordered]@{ Success = $false; Error = $null }
 try {
-    $req = Get-Content -Path $RequestPath -Raw | ConvertFrom-Json
+    $reqText = Get-Content -Path $RequestPath -Raw
+    Remove-Item -LiteralPath $RequestPath -Force -ErrorAction SilentlyContinue
+    $req = $reqText | ConvertFrom-Json
     $deadline = (Get-Date).AddSeconds([int]$req.TimeoutSeconds)
 
     if ($req.Mode -eq 'uia') {
@@ -320,6 +322,8 @@ public static extern uint WTSGetActiveConsoleSessionId();
         }
     }
 
+    $operationError = $null
+    $operationResult = $null
     try {
         Invoke-Command -Session $Session -ArgumentList $remoteDir, $remoteHelper, $remoteReq, $helper, $requestJson -ScriptBlock {
             param($dir, $h, $rq, $helperText, $reqText)
@@ -401,36 +405,44 @@ public static extern uint WTSGetActiveConsoleSessionId();
             if ($localDir -and -not (Test-Path $localDir)) { New-Item -ItemType Directory -Path $localDir -Force | Out-Null }
             Copy-Item -Path $remotePng -Destination $LocalOutput -FromSession $Session -Force
         }
-        return $res
+        $operationResult = $res
     }
-    finally {
-        try {
-            Invoke-Command -Session $Session -ArgumentList $taskName, $remoteDir -ScriptBlock {
-                param($tn, $dir)
-                # Stop the transient task first; only unregister it and delete
-                # its run directory once it is confirmed not Running. If it is
-                # still Running after Stop-ScheduledTask plus 10 s of polling,
-                # warn and leave both in place for manual cleanup.
-                $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
-                if ($t -and $t.State -eq 'Running') {
-                    Stop-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
-                    $stopDeadline = (Get-Date).AddSeconds(10)
-                    while ((Get-Date) -lt $stopDeadline) {
-                        $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
-                        if (-not $t -or $t.State -ne 'Running') { break }
-                        Start-Sleep -Milliseconds 200
-                    }
-                    if ($t -and $t.State -eq 'Running') {
-                        Write-Warning "Transient task '$tn' on $env:COMPUTERNAME is still Running after Stop-ScheduledTask + 10 s; leaving the task and '$dir' in place for manual cleanup."
-                        return
-                    }
+    catch { $operationError = $_ }
+
+    $cleanupError = $null
+    try {
+        Invoke-Command -Session $Session -ArgumentList $taskName, $remoteDir -ScriptBlock {
+            param($tn, $dir)
+            $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+            if ($t -and $t.State -eq 'Running') {
+                Stop-ScheduledTask -TaskName $tn -ErrorAction Stop
+                $stopDeadline = (Get-Date).AddSeconds(10)
+                while ((Get-Date) -lt $stopDeadline) {
+                    $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+                    if (-not $t -or $t.State -ne 'Running') { break }
+                    Start-Sleep -Milliseconds 200
                 }
-                Unregister-ScheduledTask -TaskName $tn -Confirm:$false -ErrorAction SilentlyContinue
-                Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
+                if ($t -and $t.State -eq 'Running') {
+                    throw "Transient task '$tn' is still running after cleanup timeout."
+                }
+            }
+            if (Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue) {
+                Unregister-ScheduledTask -TaskName $tn -Confirm:$false -ErrorAction Stop
+            }
+            if (Test-Path $dir) { Remove-Item $dir -Recurse -Force -ErrorAction Stop }
+            if ((Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue) -or (Test-Path $dir)) {
+                throw "Transient task or helper directory remained after cleanup."
             }
         }
-        catch { }
     }
+    catch { $cleanupError = $_ }
+
+    if ($cleanupError) {
+        $primary = if ($operationError) { " Primary failure: $($operationError.Exception.Message)" } else { '' }
+        throw "Remote helper cleanup failed on $BratMachineName`: $($cleanupError.Exception.Message).$primary"
+    }
+    if ($operationError) { throw $operationError }
+    return $operationResult
 }
 
 switch ($Action) {
@@ -466,11 +478,9 @@ switch ($Action) {
         if ($actual -ne $expected) { throw "SHA256 mismatch for $zipName`: sidecar=$expected actual=$actual. Failing closed; not deploying." }
         Write-Host "SHA256 verified for $zipName`: $actual" -ForegroundColor Green
 
-        $s = New-VerifiedBratSession
-        Remove-PSSession $s
-        # Pass the already-resolved credential explicitly so the generic deploy
-        # script never prompts or writes a credential cache named for the new IP.
-        & (Join-Path $Root 'deploy-to-testpc.ps1') -TestHost $BratIp -Version $Version -Credential (Import-Clixml $CredFile)
+        # The generic deploy script verifies WINBRAT on the same session it uses
+        # for process stop/copy/install, avoiding a check-then-reconnect gap.
+        & (Join-Path $Root 'deploy-to-testpc.ps1') -TestHost $BratIp -Version $Version -Credential (Import-Clixml $CredFile) -ExpectedMachineName $BratMachineName
         if ($LASTEXITCODE) { throw "deploy-to-testpc.ps1 failed (exit $LASTEXITCODE)." }
     }
 
@@ -518,28 +528,42 @@ switch ($Action) {
                     [System.Globalization.DateTimeStyles]::RoundtripKind)
                 $dir = 'C:\ProgramData\VPNRouter\logs'
                 if (-not (Test-Path $dir)) { return @{ Found = $false; File = $null; Hits = @(); Note = "no log dir at $dir" } }
-                $f = Get-ChildItem $dir -Filter 'vpnrouter*.log' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                if (-not $f) { return @{ Found = $false; File = $null; Hits = @(); Note = "no vpnrouter*.log in $dir" } }
+                $allFiles = @(Get-ChildItem $dir -Filter 'vpnrouter*.log' -File | Sort-Object LastWriteTime)
+                if (-not $allFiles) { return @{ Found = $false; File = $null; Hits = @(); Note = "no vpnrouter*.log in $dir" } }
+                $files = @($allFiles | Where-Object { $_.LastWriteTimeUtc -ge $since.UtcDateTime })
+                if (-not $files) {
+                    return @{ Found = $false; File = $allFiles[-1].Name; Hits = @(); Note = "no log entries since $since" }
+                }
                 $hits = @()
-                $include = $false
                 $recentEntryCount = 0
-                foreach ($line in (Get-Content $f.FullName -Tail 1000)) {
-                    if ($line -match '^(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2})') {
-                        $parsed = [DateTimeOffset]::MinValue
-                        $include = [DateTimeOffset]::TryParseExact(
-                            $Matches.timestamp,
-                            'yyyy-MM-dd HH:mm:ss.fff zzz',
-                            [System.Globalization.CultureInfo]::InvariantCulture,
-                            [System.Globalization.DateTimeStyles]::None,
-                            [ref]$parsed) -and $parsed -ge $since
-                        if ($include) { $recentEntryCount++ }
+                $maxLines = 50000
+                foreach ($f in $files) {
+                    $lines = @(Get-Content $f.FullName -Tail $maxLines)
+                    $include = $false
+                    $oldestParsed = $null
+                    foreach ($line in $lines) {
+                        if ($line -match '^(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2})') {
+                            $parsed = [DateTimeOffset]::MinValue
+                            $parsedOk = [DateTimeOffset]::TryParseExact(
+                                $Matches.timestamp,
+                                'yyyy-MM-dd HH:mm:ss.fff zzz',
+                                [System.Globalization.CultureInfo]::InvariantCulture,
+                                [System.Globalization.DateTimeStyles]::None,
+                                [ref]$parsed)
+                            if ($parsedOk -and $null -eq $oldestParsed) { $oldestParsed = $parsed }
+                            $include = $parsedOk -and $parsed -ge $since
+                            if ($include) { $recentEntryCount++ }
+                        }
+                        if ($include -and $line -match '\[ERR\]|Exception|FATAL') { $hits += "$($f.Name): $line" }
                     }
-                    if ($include -and $line -match '\[ERR\]|Exception|FATAL') { $hits += $line }
+                    if ($lines.Count -ge $maxLines -and ($null -eq $oldestParsed -or $oldestParsed -ge $since)) {
+                        return @{ Found = $false; File = $f.Name; Hits = @(); Note = "verification window exceeds the $maxLines-line safety cap in $($f.Name)" }
+                    }
                 }
                 if ($recentEntryCount -eq 0) {
-                    return @{ Found = $false; File = $f.Name; Hits = @(); Note = "no log entries since $since" }
+                    return @{ Found = $false; File = ($files.Name -join ', '); Hits = @(); Note = "no log entries since $since" }
                 }
-                @{ Found = ($hits.Count -gt 0); File = $f.Name; Hits = $hits; Note = $null }
+                @{ Found = ($hits.Count -gt 0); File = ($files.Name -join ', '); Hits = $hits; Note = $null }
             }
             if (-not $scan.File) {
                 throw "Cannot verify remote logs on $BratMachineName`: $($scan.Note). Failing closed."

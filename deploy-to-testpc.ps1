@@ -56,6 +56,10 @@
     used to launch the GUI on the visible desktop via a transient scheduled
     task. Defaults to the connecting credential's user name.
 
+.PARAMETER ExpectedMachineName
+    Optional fail-closed identity pin checked on the same WinRM session used
+    for deployment, before any process is stopped or file is copied.
+
 .EXAMPLE
     # First-time install to a fresh test box, build fresh, then launch
     .\deploy-to-testpc.ps1 -TestHost 192.168.0.50 -Build -FirstInstall
@@ -93,7 +97,8 @@ param(
     [switch]$TailLog,
     [System.Management.Automation.PSCredential]$Credential,
     [switch]$ForgetCredential,
-    [string]$InteractiveUser
+    [string]$InteractiveUser,
+    [string]$ExpectedMachineName
 )
 
 $ErrorActionPreference = "Stop"
@@ -170,6 +175,14 @@ try {
 }
 
 try {
+    if ($ExpectedMachineName) {
+        $actualMachineName = Invoke-Command -Session $session -ScriptBlock { [Environment]::MachineName }
+        if ($actualMachineName -ine $ExpectedMachineName) {
+            throw "Identity check failed: $TestHost reported MachineName '$actualMachineName', expected '$ExpectedMachineName'. Refusing to deploy."
+        }
+        Write-Step "Verified target identity: $actualMachineName"
+    }
+
     # -----------------------------------------------------------------------
     # 5. Stop any running VPNRouter on the target
     # -----------------------------------------------------------------------
@@ -251,9 +264,7 @@ try {
         if ($launchResult.Running) {
             Write-Host "    LAUNCHED: VPNRouter.App.exe PID $($launchResult.Pid) on $TestHost" -ForegroundColor Green
         } else {
-            Write-Host "[!] VPNRouter.App.exe not running 6s after launch." -ForegroundColor Red
-            Write-Host "    Check %ProgramData%\VPNRouter\logs\ on $TestHost (use -TailLog)." -ForegroundColor Yellow
-            Write-Host "    Note: interactive launch needs $InteractiveUser actually logged in on the target." -ForegroundColor Yellow
+            throw "VPNRouter.App.exe is not running 6s after launch on $TestHost. Check %ProgramData%\VPNRouter\logs\; interactive launch requires $InteractiveUser to be logged in."
         }
     }
 

@@ -24,7 +24,7 @@ if (-not $head -or $LASTEXITCODE -ne 0) {
 $head = $head.Trim()
 Write-Host "Verifying CI for $Commit : $head" -ForegroundColor Cyan
 
-$null = (gh auth status 2>&1)
+gh auth status 1>$null 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: gh CLI not authenticated." -ForegroundColor Red
     exit 3

@@ -40,7 +40,7 @@ Check off each as you complete:
 - [ ] **Gate 2 — Tests green**: full suite passes (current count: 765). New tests included.
 - [ ] **Gate 3 — Docs**: brief Outcome filled. README + CLAUDE.md updated if user-facing / architecture change.
 - [ ] **Gate 4 — Self-review**: `simplify` skill ran (if diff >100 LOC) AND/OR `security-review` ran (if security-relevant). Note "N/A" if not applicable.
-- [ ] **Gate 5 — Remote brat UI verify**: if UI changed, run `tools/brat-verify.ps1` (`-Action uia` / `-Action screenshot`) against WINBRAT @ 192.168.0.106; screenshots under `artifacts/brat-verify/` (attach reference, e.g. `artifacts/brat-verify/<task>.png`). VM/WinRM unavailable → BLOCKED, no local fallback. "N/A" if no UI surface.
+- [ ] **Gate 5 — Remote brat UI verify**: if UI changed, run `tools/brat-verify.ps1` (`-Action uia` / `-Action screenshot`) against WINBRAT @ `100.115.182.0` over Tailscale; screenshots under `artifacts/brat-verify/` (attach reference, e.g. `artifacts/brat-verify/<task>.png`). VM/WinRM unavailable → BLOCKED, no local fallback. "N/A" if no UI surface.
 - [ ] **Gate 6 — Characterization diff**: pre-split snapshot matches post-split (god-file splits only). "N/A" otherwise.
 
 ## Outcome (filled after merge)

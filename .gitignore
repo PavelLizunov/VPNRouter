@@ -28,6 +28,7 @@ logs/
 # Live-review screenshots pulled off the test VM — may contain the subscription
 # URL / other secrets on screen; never commit.
 rdp-shots/
+/artifacts/brat-verify/
 
 # OS
 Thumbs.db

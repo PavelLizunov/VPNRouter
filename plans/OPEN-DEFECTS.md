@@ -27,8 +27,16 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [x] **P1 RESOLVED pending v2.48.0-r4** — local mouse/keyboard MCP replaced by the fixed Tailscale target `100.115.182.0` with mandatory `WINBRAT` identity verification; credentials resolve local-first with primary-worktree fallback and are never copied — PR #88
 - [x] **P1 RESOLVED pending v2.48.0-r4** — pre-commit build/test pipelines now enable `pipefail`, so a failed `dotnet` command cannot be hidden by `tail` — PR #88
 - [x] **P1 RESOLVED pending v2.48.0-r4** — `.agents` and `.claude` post-ship instructions are byte-identical and the obsolete local-MCP scripts/project are removed — PR #88
+- [x] **P1 RESOLVED pending v2.48.0-r4** — deploy now pins `WINBRAT` on the same WinRM session used for process stop/copy/install and fails when the launched app is not running; the former check-then-reconnect and false-success paths are closed — `tools/brat-verify.ps1` / `deploy-to-testpc.ps1`
+- [x] **P2 RESOLVED pending v2.48.0-r4** — post-ship log scan now covers every rolled `vpnrouter*.log` touched inside the requested time window and fails closed when a 50k-line/file cap cannot prove full coverage; the former newest-1000-lines scan could miss earlier errors — `tools/brat-verify.ps1`
+- [x] **P2 RESOLVED pending v2.48.0-r4** — UIA helper cleanup is verified fail-closed, request values are deleted immediately after reading, and secret-bearing screenshots are excluded by `/artifacts/brat-verify/` — `tools/brat-verify.ps1` / `.gitignore`
+- [x] **P2 RESOLVED pending v2.48.0-r4** — post-ship power fallback explicitly uses the established localhost Proxmox tunnel, phase instructions use the Tailscale WINBRAT endpoint, and the CI preflight no longer treats successful `gh auth status` stderr as a terminating error — `.agents/skills/post-ship-mcp-verify/SKILL.md` / `.agents/skills/phase-task-launcher/SKILL.md` / `tools/verify-last-commit-ci.ps1`
 - [ ] **P2** — screenshot matrix and about 20 stable AutomationIds remain measurement-driven follow-ups; add only for user scenarios that the remote UIA verifier cannot express reliably — after r4
 - [ ] **P3** — duplicated localization/binding wrappers remain deferred until a headless/UIA safety net proves deletion is worthwhile — TBD
+
+### r4 release-gate follow-up — 2026-08-03
+
+- [x] **P2 RESOLVED pending v2.48.0-r4** — split-tunnel teardown test still expected direct `IProcessMonitor.Stop()` after PR #74 intentionally changed the owned monitor lifecycle to `Dispose()` (which calls `Stop()` and releases the ETW wait handle); aligned the missed sibling assertion with the existing lifecycle test — `VPNRouter.Tests/VpnEngineSplitTunnelLifecycleTests.cs`
 
 ### Codebase/context reduction audit — 2026-08-01 (static/call-graph verified, NO live behavior change for F1 — full report `plans/qwen-context-footprint-and-code-reduction-audit-2026-08-01.md`)
 - [x] **P2 RESOLVED pending v2.48.0-r4** — removed the dead CustomDirectRules parser/generator/localization aliases and their obsolete self-only tests (~697 LOC, ~6-8k tokens); preserved `AppConfig.CustomDirectRules`, `CustomDirectRule`, `AppSettingsSane`, `SettingsMigrator.Migrate_1_to_2`, `YamlStaticContext`, and migration/roundtrip/robustness coverage — PR #98 / [report §F1](qwen-context-footprint-and-code-reduction-audit-2026-08-01.md)

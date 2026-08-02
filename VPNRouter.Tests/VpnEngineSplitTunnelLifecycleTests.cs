@@ -455,8 +455,8 @@ public sealed class VpnEngineSplitTunnelLifecycleTests
             Assert.False(engine.IsRunning);
             Assert.True(handle.HasExited);
 
-            // ETW monitor stopped.
-            Assert.True(monitor.StopCount >= 1);
+            // ETW monitor disposed (Dispose calls Stop internally).
+            Assert.Equal(1, monitor.DisposeCount);
 
             // Firewall: Browsers profile has BlockOnVpnFail=false, so
             // the Stop path's DisableBlockRules+DeleteAllRules branch
