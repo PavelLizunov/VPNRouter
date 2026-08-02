@@ -619,7 +619,7 @@ public class SlipstreamManager : IDisposable
             body = new string(body.Where(c => !char.IsWhiteSpace(c)).ToArray());
             if (body.Length == 0) return null;
             var der = Convert.FromBase64String(body);
-            return Convert.ToHexString(SHA256.HashData(der)).ToLowerInvariant();
+            return Convert.ToHexStringLower(SHA256.HashData(der));
         }
         catch
         {

@@ -2516,8 +2516,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // UI feedback. Same RNG + format used by StartTgProxy below.
         if (value && string.IsNullOrWhiteSpace(TgProxySecret))
         {
-            var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
-            TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
+            TgProxySecret = Convert.ToHexStringLower(
+                System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
             TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
         }
 
@@ -6460,8 +6460,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // Generate secret if empty
             if (string.IsNullOrWhiteSpace(TgProxySecret))
             {
-                var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
-                TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
+                TgProxySecret = Convert.ToHexStringLower(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
             }
 
             _logger.Information(
@@ -6742,8 +6742,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort);
 
-        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
-        TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
+        TgProxySecret = Convert.ToHexStringLower(
+            System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
         TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
         SaveSettings();
 

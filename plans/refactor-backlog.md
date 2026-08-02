@@ -10,6 +10,12 @@ ledger (each item tracked there with how it was/would be verified).
 
 ## Deferred
 
+- [ ] **DR-04 hashing follow-ups** — add a repo lint only if legacy
+  `SHA*.Create()` or manual hex-lowercase patterns actually recur. Keep the
+  persisted Free Config BuildId prefixes uppercase unless a separately planned
+  storage migration justifies changing their casing. Both are low-value today:
+  the repo-wide grep is clean and existing IDs must remain stable.
+
 - [ ] **DR-05 Android QR documentation follow-ups** — remove stale comments in
   `AndroidApp.axaml.cs` and `MainActivity.cs` that still name the already-removed
   `QrCodeDecoder` photo-capture implementation. Separately verify whether NOTICE
