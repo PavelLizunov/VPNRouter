@@ -80,25 +80,52 @@ the split exposes an unpinned structural failure mode.
 
 ## Outcome (filled after implementation verification)
 
-**Status**: PENDING
-**Commits**: pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR CI
+**Commits**: `cbf613b2` (brief); implementation commit pending
+**Pushed**: brief pushed; implementation push pending
+**Test deltas**: no new behavior tests; three source-contract tests now read the
+new concern files instead of assuming every member lives in the main file
+**Files changed**: six new partials, the reduced main file, three source-contract
+tests, three module/roadmap maps, and this Outcome
+
+**Resulting context units** (`bytes / 3.6` convention):
+
+| File | LOC | Approx. tokens |
+|---|---:|---:|
+| `MainWindowViewModel.cs` | 1,711 | 22,531 |
+| `MainWindowViewModel.Connection.cs` | 1,216 | 17,102 |
+| `MainWindowViewModel.CustomRules.cs` | 1,648 | 22,017 |
+| `MainWindowViewModel.Servers.cs` | 290 | 3,429 |
+| `MainWindowViewModel.SettingsPersistence.cs` | 606 | 8,473 |
+| `MainWindowViewModel.TgProxy.cs` | 557 | 6,574 |
+| `MainWindowViewModel.Zapret.cs` | 1,829 | 23,277 |
 
 **Gate results:**
-- [ ] Gate 1: pending
-- [ ] Gate 2: pending
-- [ ] Gate 3: pending
-- [ ] Gate 4: pending
+- [x] Gate 1: Release solution build, 0 warnings / 0 errors
+- [~] Gate 2: focused App 30/30; split-sensitive source contracts 26/26;
+  locally accessible suite 2643 passed / 2 skipped. Full GitHub CI pending.
+- [x] Gate 3: App/Android inventories and Phase 2B/2C roadmap refreshed
+- [x] Gate 4: full Qwen diff review `[]`; targeted final test-boundary review
+  `[]`; Ponytail result `Lean already. Ship.`
 - [-] Gate 5: N/A — no visible UI change
-- [ ] Gate 6: pending
+- [x] Gate 6: characterization 1/1 both before and after; pinned hashes unchanged
 
 **Surprises encountered**:
-- Pending.
+- The fresh worktree initially lacked four NuGet assets files; a normal restore
+  fixed the prerequisite and the solution then built cleanly.
+- The first local mechanical script represented nested PowerShell ranges as
+  arrays, which PowerShell flattened. The generated files were discarded,
+  range records were made explicit, and the split was rerun from `HEAD`.
+- Six source-contract tests were coupled to `MainWindowViewModel.cs` by filename.
+  The product build and reflection characterization were already green, but the
+  full suite exposed the stale test paths; the tests now follow their concerns.
+- A full unelevated dev-box run reached 2679 passed / 2 skipped / 29 failed.
+  Six split-related failures were fixed above; the other 23 are the pre-existing
+  protected-`ProgramData` test limitation already recorded in `OPEN-DEFECTS.md`.
 
 **Follow-ups spawned**:
-- Pending.
+- None. The remaining Banners extraction stays in the existing
+  `plans/refactor-backlog.md` T1-C entry; it is not needed for the context target.
 
 **Lessons for methodology doc**:
 - The historical `v3.0-prep` branch no longer exists. This task follows the current root policy: branch from `origin/main`, push to `origin`, open a draft PR.

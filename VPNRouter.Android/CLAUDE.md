@@ -15,8 +15,8 @@ branches activate when compiled into this assembly.
 ## AndroidApp partial-class layout
 
 The Android port hosts a god-class `AndroidApp : Avalonia.Application`
-that is the cross-platform entry point. After Phase 2C (Wave 9,
-2026-05-18) it spans 14 partial files. The main file
+that is the cross-platform entry point. After Phase 2C and later concern
+extractions it spans 19 partial files. The main file
 (`AndroidApp.axaml.cs`) holds the constructor / framework init / shared
 field declarations / cross-concern orchestration; each sibling partial
 owns one concern.
@@ -26,7 +26,7 @@ AndroidApp.axaml             ← XAML scaffolding (App.Resources only)
 AndroidApp.axaml.cs          ← OnFrameworkInitializationCompleted, ApplyTheme,
                                 BuildSimplePageView, kebab menu wiring,
                                 language toggle, app picker, custom-categories
-                                shell (~4,900 LOC after 2C split)
+                                shell (~2,300 LOC)
 
 # Phase 2C Wave 9 extractions (2026-05-18)
 AndroidApp.Notifications.cs  ← log viewer overlay, crash log viewer,
@@ -51,10 +51,15 @@ AndroidApp.UiBindings.cs     ← Settings/Network tab builders + card helpers
 AndroidApp.AdvancedShell.cs  ← Advanced overlay shell + per-tab content host
 AndroidApp.AutoUpdate.cs     ← auto-update banner + APK download/install
 AndroidApp.ConfigShare.cs    ← export/import overlays
+AndroidApp.CustomConfig.cs   ← custom sing-box config editor/apply flow
 AndroidApp.DpiBypass.cs      ← DPI bypass tab content
 AndroidApp.FreeConfigs.cs    ← Free Configs page (master-detail)
+AndroidApp.KebabMenu.cs      ← simple-page overflow menu
+AndroidApp.PerAppFilter.cs   ← per-app routing picker/filter UI
+AndroidApp.Profiles.cs       ← profile/category loading and selection
 AndroidApp.QrScanApply.cs    ← Bug-AND-023 QR scan magic 1-action apply
 AndroidApp.ServerList.cs     ← per-subscription server testing UI
+AndroidApp.SettingsHandlers.cs ← settings control event handlers
 AndroidApp.SubscribePage.cs  ← Subscribe tab UI
 AndroidApp.Tools.cs          ← Tools tab (Zapret + Telegram, Phase D merge)
 ```

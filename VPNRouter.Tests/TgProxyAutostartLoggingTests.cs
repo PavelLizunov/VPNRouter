@@ -164,7 +164,7 @@ public sealed class TgProxyAutostartLoggingTests
         // AutostartTgProxyAsync yet, but the manual-Start handler in
         // ToggleTgProxyAsync mirrors the structured-log pattern so
         // logs from manual + autostart paths grep the same way.
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.TgProxy.cs");
         if (src == null) return;
 
         var stripped = StripLineComments(src);

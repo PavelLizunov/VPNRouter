@@ -114,8 +114,8 @@ public sealed class ServiceAppCoexistenceTests
         // into no-ops when Service held the lock — "press disconnect,
         // it stays connected" UX regression.
 
-        // Stop button branch (MainWindowViewModel.cs)
-        var vm = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        // Stop button branch (MainWindowViewModel.Connection.cs)
+        var vm = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
         if (vm != null)
         {
             // Both VM call sites (Stop branch + Connect branch) carry
@@ -130,7 +130,7 @@ public sealed class ServiceAppCoexistenceTests
 
             Assert.True(
                 optOutCount >= 2,
-                $"Expected >=2 KillOrphans(respectTunLock:false) calls in MainWindowViewModel.cs (Stop + Connect branches); found {optOutCount}");
+                $"Expected >=2 KillOrphans(respectTunLock:false) calls in MainWindowViewModel.Connection.cs (Stop + Connect branches); found {optOutCount}");
         }
 
         // Update apply branch (UpdateNotificationViewModel.cs) —

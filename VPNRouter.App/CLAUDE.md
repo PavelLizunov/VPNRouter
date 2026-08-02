@@ -11,17 +11,26 @@ App.axaml                          ← глобальные ресурсы + The
 Styles/Tokens.axaml                ← дизайн-токены: цвета, отступы, радиусы. Использовать СЕМАНТИЧЕСКИЕ имена
 Localization/Strings.cs            ← вся локализация. Bilingual (Ru/En). Static getters L_FieldName.
 ViewModels/
-  MainWindowViewModel.cs                  ← основная VM (~7250 строк god-file, partial — 10 sibling-файлов выделено; дальнейший split — открытый Phase 2B hygiene)
+  MainWindowViewModel.cs                  ← shared state, constructor, bootstrap/lifetime orchestration (~1710 строк)
   MainWindowViewModel.AutostartBootstrap.cs
+  MainWindowViewModel.Connection.cs       ← VPN start/stop/reconnect/status handling
+  MainWindowViewModel.ConnStats.cs
+  MainWindowViewModel.CustomRules.cs      ← custom-rule editor, validation, import/export
   MainWindowViewModel.FreeConfigs.cs      ← Phase 2B Wave 8: ApplyFreeConfigAsync + ShowFreeConfigSecurityWarningAsync
   MainWindowViewModel.Localization.cs
+  MainWindowViewModel.LocalizedLabels.cs
   MainWindowViewModel.Profiles.cs         ← Phase 2B Wave 8: LoadApps + app/category commands + DeployBundledProfiles + StripExe
   MainWindowViewModel.RuntimeStatus.cs
+  MainWindowViewModel.Servers.cs          ← server selection and custom-config commands
   MainWindowViewModel.ServerTesting.cs
   MainWindowViewModel.Settings.cs         ← Phase 2B Wave 8: Version/About/Reset/Theme/Lang/UiMode/Autostart commands
+  MainWindowViewModel.SettingsPersistence.cs ← load/save settings and UI hydration
   MainWindowViewModel.SimpleMode.cs
   MainWindowViewModel.Subscriptions.cs    ← Phase 2B Wave 8: subscription CRUD + auto-refresh timer
+  MainWindowViewModel.TgProxy.cs          ← Telegram proxy lifecycle and settings
+  MainWindowViewModel.ThemeAndLogo.cs
   MainWindowViewModel.Wgturn.cs
+  MainWindowViewModel.Zapret.cs           ← Zapret setup, diagnostics and one-click orchestration
   FreeConfigs/
     FreeConfigsPageViewModel.cs    ← Free Configs page VM
     FreeConfigItemViewModel.cs     ← row VM
@@ -70,17 +79,12 @@ private async Task ConnectAsync() { ... }
 ```
 
 ### Partial classes
-`MainWindowViewModel` разбит на 10 partial файлов (после Phase 2B Wave 8,
-2026-05-18) чтоб не плодить 6750-строчный god-object. Каждый partial — одна
-тематика (Localization / RuntimeStatus / ServerTesting / SimpleMode / Wgturn /
-AutostartBootstrap + Phase 2B: Profiles / Subscriptions / FreeConfigs /
-Settings). Главный `MainWindowViewModel.cs` — **~7250 строк** (вырос обратно
-в v2.37.0 cycle из-за большой ZapretOneClick-оркестрации; дальнейший split
-Connection/CustomRules/Recovery — открытый Phase 2B hygiene, безопасен т.к.
-public-surface запинен characterization-хэшем)
-(constructor + cross-concern orchestration: LoadSettingsIntoUI / SaveSettings /
-ToggleConnectionAsync / Reconnect / Zapret + TgProxy commands / OnEngineStatus
-event handler / Quit / Dispose остаются в нём).
+`MainWindowViewModel` разбит на главный файл и 19 concern partial-файлов.
+Phase 2B split 2026-08-02 вынес из 7692-строчного main-файла Connection,
+CustomRules, Servers, SettingsPersistence, TgProxy и Zapret без изменения
+членов класса. Главный `MainWindowViewModel.cs` теперь **~1710 строк** и хранит
+shared state, constructor, platform bootstrap и lifetime helpers. Каждый файл
+MVM укладывается примерно в 24k токенов; полный concern можно проверять отдельно.
 
 **Characterization snapshot**: `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs`
 pin'ит public-surface SHA-256 hash. Любая будущая extraction из MVM
