@@ -298,7 +298,7 @@ public sealed class IUpdateSourceContractTests
         var bytes = Encoding.UTF8.GetBytes("fake APK contents for SHA test");
         var ct = TestContext.Current.CancellationToken;
         await File.WriteAllBytesAsync(tempPath, bytes, ct);
-        var expectedSha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var expectedSha = Convert.ToHexStringLower(SHA256.HashData(bytes));
 
         try
         {

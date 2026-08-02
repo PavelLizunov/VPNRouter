@@ -49,16 +49,6 @@
          stable version trips NU1605 downgrade-detected). API surface used
          (SKGraphics statics) is unchanged across the 2 -> 3 jump. -->
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
-    <!-- Avalonia 12 renamed the diagnostics package to
-         AvaloniaUI.DiagnosticsSupport (separate side-cart on its own version
-         track — 2.x). The attach helper changed from AttachDevTools to
-         AttachDeveloperTools. We don't actually call it in App.axaml.cs
-         (Avalonia auto-attaches in Debug when the package is referenced),
-         so the rename is package-only here. -->
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.2">
-      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-    </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 

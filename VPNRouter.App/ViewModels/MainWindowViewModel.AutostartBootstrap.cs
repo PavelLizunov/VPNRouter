@@ -146,8 +146,8 @@ public partial class MainWindowViewModel
             // generate a secret if missing rather than refusing to start.
             if (string.IsNullOrWhiteSpace(TgProxySecret))
             {
-                var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
-                var generatedSecret = Convert.ToHexString(bytes).ToLowerInvariant();
+                var generatedSecret = Convert.ToHexStringLower(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     TgProxySecret = generatedSecret;

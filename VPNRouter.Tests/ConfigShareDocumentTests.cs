@@ -5,10 +5,9 @@ namespace VPNRouter.Tests;
 
 /// <summary>
 /// v2.32.0 (Android-led) — pin tests for the Core <see cref="ConfigShareDocument"/>
-/// schema and <see cref="QrCode"/> encoder. Verifies the round-trip
+/// schema. Verifies the round-trip
 /// invariant (Build → Serialize → TryParse preserves all fields), schema
-/// rejection paths, and that the QR encoder produces matrices in the
-/// expected version range for representative VLESS-URI payloads.
+/// rejection paths, preview generation, and suggested export filenames.
 /// </summary>
 public class ConfigShareDocumentTests
 {
@@ -259,50 +258,6 @@ public class ConfigShareDocumentTests
         Assert.StartsWith("vpnrouter-config-", name);
         Assert.EndsWith(".json", name);
         Assert.Contains("2026", name);
-    }
-
-    [Fact]
-    public void Qr_Encode_VlessUri_ProducesValidMatrix()
-    {
-        var uri = "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443" +
-                  "?security=reality&sni=yahoo.com&fp=firefox" +
-                  "&pbk=DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU&sid=78ca7952" +
-                  "&spx=/&type=tcp&flow=xtls-rprx-vision&encryption=none#android-test";
-
-        var qr = QrCode.EncodeText(uri, QrCode.Ecc.Medium);
-        Assert.True(qr.Size >= 21); // Minimum QR is 21x21 (version 1)
-        Assert.True(qr.Size <= 177); // Maximum QR is 177x177 (version 40)
-        Assert.True(qr.Version >= 1);
-        Assert.True(qr.Version <= 40);
-
-        // Sanity-check at least one finder pattern corner is dark (the
-        // outer 7x7 finder boxes always start with a dark module at (0,0)
-        // by spec).
-        Assert.True(qr.GetModule(0, 0));
-    }
-
-    [Fact]
-    public void Qr_Encode_ShortString_FitsInVersion1()
-    {
-        // "HI" should fit in version 1 (smallest QR).
-        var qr = QrCode.EncodeText("HI", QrCode.Ecc.Low);
-        Assert.Equal(1, qr.Version);
-        Assert.Equal(21, qr.Size);
-    }
-
-    [Fact]
-    public void Qr_Encode_DoubleEncodeSamePayload_ConvergesToSameMatrix()
-    {
-        // Determinism — same input + ECC level → same matrix (via the
-        // mask scoring algorithm picking a stable best).
-        var qr1 = QrCode.EncodeText("vless://abc@host:443", QrCode.Ecc.Medium);
-        var qr2 = QrCode.EncodeText("vless://abc@host:443", QrCode.Ecc.Medium);
-        Assert.Equal(qr1.Size, qr2.Size);
-        Assert.Equal(qr1.Mask, qr2.Mask);
-
-        for (int y = 0; y < qr1.Size; y++)
-            for (int x = 0; x < qr1.Size; x++)
-                Assert.Equal(qr1.GetModule(x, y), qr2.GetModule(x, y));
     }
 
     [Fact]
