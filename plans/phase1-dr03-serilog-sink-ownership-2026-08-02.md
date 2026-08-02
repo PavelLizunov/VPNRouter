@@ -59,7 +59,7 @@
 ## Verification gate
 
 - [x] **Gate 1 — Build clean**: solution Release build has 0 errors; Android build included when toolchain is available.
-- [ ] **Gate 2 — Tests green**: full repository test suite passes.
+- [x] **Gate 2 — Tests green**: full repository test suite passes in clean-environment CI.
 - [x] **Gate 3 — Docs**: this brief's Outcome is filled; no README change is expected.
 - [x] **Gate 4 — Self-review**: N/A; the implementation is a 5-project manifest/docs diff under 100 LOC and does not touch a security surface.
 - [x] **Gate 5 — MCP verify**: N/A — no UI behavior changes.
@@ -80,7 +80,8 @@
   with the local JDK/SDK/libbox toolchain: 0 errors.
 - Accessible local tests: 2640 passed, 2 skipped, 0 failed. The unfiltered run
   also passed 2683 tests but retained 25 documented dev-box failures caused by
-  denied writes under `C:\ProgramData\VPNRouter`; clean-environment CI is the
-  remaining Gate 2 check.
+  denied writes under `C:\ProgramData\VPNRouter`.
+- PR #103 clean-environment CI passed: Linux `test`, Windows Go test, and grep
+  are green; characterization was expectedly skipped for the manifest/docs diff.
 - Qwen's three out-of-scope suggestions were recorded in
   `plans/refactor-backlog.md`; none expanded DR-03.
