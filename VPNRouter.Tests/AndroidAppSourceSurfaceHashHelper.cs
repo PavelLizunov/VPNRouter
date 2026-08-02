@@ -98,7 +98,7 @@ internal static class AndroidAppSourceSurfaceHashHelper
 
         var json = JsonSerializer.Serialize(descriptions);
         var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        return Convert.ToHexString(hashBytes).ToLowerInvariant();
+        return Convert.ToHexStringLower(hashBytes);
     }
 
     /// <summary>
