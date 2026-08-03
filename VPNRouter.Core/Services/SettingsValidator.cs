@@ -226,13 +226,15 @@ public static class SettingsValidator
         var t = s.Tun;
         if (t == null) return;
 
-        // 576 is the IPv4 minimum-MTU you'll ever see in the wild;
-        // 65535 is the upper bound of a 16-bit IP total-length field.
-        // Anything outside this range almost guarantees sing-box
-        // refuses to bring TUN up.
-        if (t.Mtu < 576 || t.Mtu > 65535)
+        if (t.Mtu < TunSettings.MinimumMtu || t.Mtu > TunSettings.MaximumMtu)
         {
-            fatal.Add($"tun.mtu must be 576..65535, got {t.Mtu}");
+            fatal.Add(
+                $"tun.mtu must be {TunSettings.MinimumMtu}..{TunSettings.MaximumMtu}, got {t.Mtu}");
+        }
+        else if (t.Ipv6Enabled && t.Mtu < TunSettings.MinimumIpv6Mtu)
+        {
+            fatal.Add(
+                $"tun.mtu must be at least {TunSettings.MinimumIpv6Mtu} when IPv6 is enabled, got {t.Mtu}");
         }
 
         if (t.Mtu < 1332)

@@ -26,12 +26,13 @@ public static class ConfigGenerator
     // which stalls Roblox DNS + joins -> Error 277 (diag 20260627-203104: tester
     // on schema v6 + mtu 9000 + 1023 DNS exchanges >=10s; same subscription is
     // fine for users on a sane non-jumbo MTU). Clamp here so a stuck persisted
-    // value can never reach sing-box, independent of migration state. Fallback
-    // is the current 1420 default; users on narrower paths can set 1400/1380.
-    private const int MaxSafeTunMtu = 1500;
-    private const int SafeTunMtuFallback = TunSettings.DefaultMtu;
+    // value can never reach sing-box, independent of migration state. Values
+    // outside the product's persisted MTU contract fall back to the current
+    // default; valid narrower settings are preserved.
     internal static int NormalizeTunMtu(int mtu)
-        => (mtu <= 0 || mtu > MaxSafeTunMtu) ? SafeTunMtuFallback : mtu;
+        => mtu < TunSettings.MinimumMtu || mtu > TunSettings.MaximumMtu
+            ? TunSettings.DefaultMtu
+            : mtu;
 
     // macOS 26.5 + sing-box-lx: the system stack installs utun99 routes but
     // never receives TCP from the host (live repro 2026-07-11: 0 TCP inbounds,
@@ -42,9 +43,9 @@ public static class ConfigGenerator
     // v2.45.0-r11 (2026-07-02): AmneziaWG/WireGuard endpoint MTU = 1420 (the
     // wireguard-go DefaultMTU for a ~1500 underlay; AWG transport overhead == WG,
     // the obfuscation junk is handshake-only). A UDP WireGuard endpoint has NO
-    // adaptive clamp, and the sing-box system stack DROPS IP fragments
-    // (sing-tun stack_system.go:571-575) with no PMTUD signaling — so the TUN MTU
-    // must fit the largest DF-UDP an app sends WITHOUT fragmentation.
+    // adaptive clamp, and the relevant sing-tun system-stack IPv4 fragment path
+    // drops unsupported fragments without supplying an application-level MTU
+    // fallback. Keep the TUN no larger than the endpoint.
     // WHY NOT 1280 (the r8 value — it was a regression): SDR (Dota/CS2) sends UDP
     // payloads up to 1300 B (1328 B IP) with NO PMTUD (GameNetworkingSockets#22);
     // a 1280 cap silently drops them -> match-connect dies even once region pings
@@ -1022,6 +1023,7 @@ public static class ConfigGenerator
         // (deduped). The auto subnets are runtime-only and never persisted; see
         // TunSettings.GetEffectiveRouteExcludeAddress / StartupPipeline step 4.5.
         var routeExcludes = settings.Tun.GetEffectiveRouteExcludeAddress();
+        var mtu = NormalizeTunMtu(settings.Tun.Mtu);
         return new List<SingBoxInbound>
         {
             new()
@@ -1030,15 +1032,11 @@ public static class ConfigGenerator
                 Tag                     = "tun-in",
                 InterfaceName           = OperatingSystem.IsMacOS() ? "utun99" : settings.Tun.InterfaceName,
                 Address                 = new List<string> { settings.Tun.Ipv4Address },
-                // AmneziaWG is a native WireGuard tunnel: its TUN MTU IS the endpoint
-                // MTU (1420, the WG standard). Do NOT derive it from the generic
-                // Tun.Mtu — a 1280 TUN silently drops SDR's 1328-byte DF-UDP
-                // game packets (no MSS-clamp, no fragment, no PMTUD on this stack; see
-                // plans/mtu-fragmentation-robustness-2026-07-02.md). Per-underlay
-                // tuning (<1500) is a future AWG-specific setting.
+                // AWG's TUN must not exceed its 1420 endpoint MTU, but a user may
+                // deliberately choose a lower value for a narrower underlay.
                 Mtu                     = proxyIsUdpNative
-                                            ? AwgEndpointMtu
-                                            : NormalizeTunMtu(settings.Tun.Mtu),
+                                            ? Math.Min(mtu, AwgEndpointMtu)
+                                            : mtu,
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors
                 RouteExcludeAddress     = routeExcludes.Count > 0

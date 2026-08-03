@@ -38,9 +38,9 @@ public class AppSettings
     /// See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
     ///
     /// <para>v8 bump (2026-07-06, Roblox + Steam SDR MTU): moves generic
-    /// VLESS/TCP TUN default from 1280 to 1420. Known legacy defaults
-    /// (<c>1280</c>, <c>1500</c>) and invalid values migrate to 1420; explicit
-    /// custom values stay.</para>
+    /// VLESS/TCP TUN default from 1280 to 1420. The legacy <c>1500</c> default
+    /// and invalid values migrate to 1420; explicit custom values, including
+    /// 1280, stay.</para>
     /// </summary>
     public const int CurrentSchemaVersion = 8;
 

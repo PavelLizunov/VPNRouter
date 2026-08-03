@@ -66,28 +66,49 @@ still applies if this change is later shipped.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
 - [ ] **Gate 2 — Tests green**: full suite passes. New tests included.
-- [ ] **Gate 3 — Docs**: brief Outcome and MTU ledgers updated.
-- [ ] **Gate 4 — Self-review**: read-only Qwen review plus Codex diff review.
-- [ ] **Gate 5 — Remote brat UI verify**: N/A for this PR — no release artifact;
+- [x] **Gate 3 — Docs**: brief Outcome and MTU ledgers updated.
+- [x] **Gate 4 — Self-review**: read-only Qwen review plus Codex diff review.
+- [-] **Gate 5 — Remote brat UI verify**: N/A for this PR — no release artifact;
   copy-only NetworkPage surface is covered headlessly. Post-ship verify remains
   mandatory for a later rolling release.
-- [ ] **Gate 6 — Characterization diff**: N/A — not a god-file split.
+- [-] **Gate 6 — Characterization diff**: N/A — not a god-file split.
 
 ## Outcome
 
-**Status**: PENDING
-**Commits**: pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: PARTIAL — implementation and local verification complete; PR CI pending
+**Commits**: `9a28a328` brief · implementation commit pending
+**Pushed**: brief at `origin/codex/mtu-contract-fix-2026-08-03`; implementation pending
+**Test deltas**: +5 xUnit cases / -0
+**Files changed**: 17 product/test/sample files plus 3 plan ledgers · product diff +99/-71 before ledger updates
 
-**Gate results:** pending
+**Gate results:**
 
-**Surprises encountered**: pending
+- [x] Gate 1: final Release solution build completed with 0 errors and 226
+  pre-existing analyzer warnings.
+- [ ] Gate 2: focused MTU/validator/diagnostic set passed 64/64; NetworkPage
+  headless render passed 1/1. Full local suite passed 2666, skipped 2, failed 25:
+  23 known dev-box `C:\ProgramData\VPNRouter` permission cases and 2 global
+  TUN-lock cases. Clean-environment PR CI is pending.
+- [x] Gate 3: defect and cleanup ledgers point to draft PR #113; README and zone
+  instructions unchanged because the contract is already documented by the audit.
+- [x] Gate 4: Qwen 0.21.3 exact `qwen3.8-max-preview`, no tools/recording,
+  returned `APPROVE`. Codex refuted its test-gap note because the unchanged suite
+  already pins 1500→1420 and endpoint 1420, and incorporated its valid UI-save
+  observation by applying the IPv6-aware minimum before persistence.
+- [-] Gate 5: N/A — no release artifact or view structure change; NetworkPage
+  headless rendering passed. Post-ship WINBRAT verification remains mandatory.
+- [-] Gate 6: N/A — not a god-file split.
+
+**Surprises encountered**:
+
+- The system SDK is 8.0.418; the repository's existing
+  `C:\Users\x3d_mutant\.dotnet10\dotnet.exe` supplied the pinned 10.0.301 SDK.
+- The local full-suite baseline cannot write its protected ProgramData fixtures
+  or acquire the global TUN lock. No local VPN process/state was touched.
 
 **Follow-ups spawned**: none planned; runtime underlay and Android questions stay
 measurement-gated in the source audit.
 
-**Lessons for methodology doc**: pending
+**Lessons for methodology doc**: none.

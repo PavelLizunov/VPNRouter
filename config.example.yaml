@@ -74,7 +74,7 @@ tun:
   interface_name: VPNRouter-TUN
   ipv4_address: "172.19.0.1/30"
   ipv6_enabled: false
-  mtu: 9000
+  mtu: 1420
   auto_route: true
   strict_route: false  # Keep false — true breaks dual stack
   # Exclude address ranges from TUN routing — traffic to these goes via system routes.

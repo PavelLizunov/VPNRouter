@@ -174,7 +174,7 @@ public partial class MainWindowViewModel
     {
         if (!OperatingSystem.IsWindows())
         {
-            MtuAutoTuneStatus = Strings.MtuAutoTuneNoResult;
+            MtuAutoTuneStatus = Strings.MtuAutoTuneWindowsOnly;
             return;
         }
 
@@ -201,7 +201,7 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            TunMtu = Math.Clamp(payload, 576, TunSettings.DefaultMtu);
+            TunMtu = Math.Clamp(payload, TunSettings.MinimumMtu, TunSettings.DefaultMtu);
             SaveSettings();
             MtuAutoTuneStatus = Strings.MtuAutoTuneApplied(TunMtu);
         }

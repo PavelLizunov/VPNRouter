@@ -55,14 +55,14 @@ ledger (each item tracked there with how it was/would be verified).
   tokens, but this extraction would save under 3%; do not revive it solely for a
   context score. Plan ref: §3 T1-C.
 
-- [ ] **MTU documentation/comment cleanup** — coordinate with the confirmed MTU
-  contract PR, not as a standalone refactor. Correct `AppSettings` prose that
+- [ ] **MTU documentation/comment cleanup — IMPLEMENTED IN DRAFT PR #113; close
+  on merge.** Coordinated with the confirmed MTU contract repair. Corrected
+  `AppSettings` prose that
   says 1280 migrates to 1420 (code/tests preserve it), the migration claim that
   1280 is guaranteed to traverse any path, Android's false "1500 is the
   Android/sing-box default" comment, over-broad fragmentation/PMTUD comments,
-  and the stale `config.example.yaml` value 9000. Do not change Android runtime
-  MTU or migrate stored 1280 without the measurement/provenance evidence in
-  `mtu-end-to-end-audit-2026-08-03.md`.
+  and the stale `config.example.yaml` value 9000. Android runtime MTU and stored
+  1280 remain unchanged, per `mtu-end-to-end-audit-2026-08-03.md`.
 
 - [ ] **Android copies of T2-A/B/C** (`DeepVerifyConstants` + `NetPortUtil`) —
   deferred 2026-06-25. The Core dedup is done; `AndroidFreeConfigDeepVerifier` still

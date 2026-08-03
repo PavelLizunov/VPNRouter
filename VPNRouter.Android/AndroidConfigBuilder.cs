@@ -437,18 +437,11 @@ public static class AndroidConfigBuilder
                     // correctness > a few % CPU.
                     inb["stack"] = "gvisor";
 
-                    // v3.0 Phase 6.3 — drop MTU 9000 → 1500. The desktop
-                    // 9000 MTU was tuned for Wireguard-style native TUN
-                    // where the kernel handles fragmentation. On Android
-                    // the VpnService.Builder MTU must match what the OS
-                    // can actually deliver, and the underlying network
-                    // (wifi/cellular) is almost always 1500 or smaller.
-                    // Setting 9000 means every IP packet ≥1500 bytes from
-                    // an app gets fragmented or dropped before reaching
-                    // sing-box, which can manifest as connection hangs.
-                    //
-                    // 1500 matches Android system VPN default and what
-                    // sing-box-for-android uses out of the box.
+                    // v3.0 Phase 6.3 — replace the inherited jumbo 9000 with
+                    // VPNRouter's fixed Android policy of 1500. This is not an
+                    // Android or sing-box default and does not prove that a
+                    // mobile underlay can carry 1500; runtime auto-MTU remains
+                    // measurement-gated.
                     inb["mtu"] = 1500;
                 }
             }
