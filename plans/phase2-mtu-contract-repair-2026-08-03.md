@@ -72,15 +72,17 @@ below. The mandatory post-ship gate still applies if this change is released.
 - [x] **Gate 3 — Docs**: brief Outcome and MTU ledgers updated.
 - [x] **Gate 4 — Self-review**: read-only Qwen review plus Codex diff review.
 - [-] **Gate 5 — Remote brat UI verify**: PARTIAL — scoped MTU UI/save checks
-  completed on WINBRAT; end-to-end tunnel/log-clean status was blocked by the
-  VM's pre-existing dummy VLESS profile. Post-ship verify remains mandatory for
-  a later rolling release with a valid test profile.
+  and real-subscription protocol/UDP datapath checks completed on WINBRAT, but
+  the fail-closed log gate is red because each cold Start hits a recoverable
+  TUN-ownership conflict before HealthMonitor relaunches the core. Wintun is
+  the contention surface, not an assigned root cause. This is not a clean
+  post-ship PASS.
 - [-] **Gate 6 — Characterization diff**: N/A — not a god-file split.
 
 ## Outcome
 
-**Status**: PASS for the scoped contract repair; remote tunnel gate PARTIAL with
-one new P2 persistence follow-up
+**Status**: PASS for the scoped contract repair; remote protocol datapath PASS,
+remote log-clean gate FAIL/PARTIAL with persistence and lifecycle follow-ups
 **Commits**: `9a28a328` brief · `78cf1b57` implementation · outcome in this commit
 **Pushed**: `origin/codex/mtu-contract-fix-2026-08-03` · draft PR #113
 **Test deltas**: +5 xUnit cases / -0
@@ -102,9 +104,12 @@ one new P2 persistence follow-up
   already pins 1500→1420 and endpoint 1420, and incorporated its valid UI-save
   observation by applying the IPv6-aware minimum before persistence.
 - [-] Gate 5: PARTIAL — the branch artifact was deployed to verified WINBRAT and
-  the MTU UI/save contract was exercised. The installed dummy VLESS profile
-  cannot establish a tunnel, so a clean end-to-end connect/disconnect result is
-  not claimed. Post-ship verification remains mandatory with a valid profile.
+  the MTU UI/save contract was exercised. A second artifact using the official
+  lx core then selected every protocol family present in a real subscription
+  and passed UDP at the 1420 inner-IPv4 boundary after a 30-second stabilization
+  window. The log scanner still fails: cold Start repeatedly crashes once on a
+  TUN adapter contention path before automatic recovery. Post-ship verification
+  is therefore not clean.
 - [-] Gate 6: N/A — not a god-file split.
 
 **Surprises encountered**:
@@ -143,5 +148,53 @@ one new P2 persistence follow-up
 **Follow-ups spawned**: MTU-5 manual persistence needs a focused product PR;
 runtime underlay, Android, AWG live transport, and IPv6 live behavior remain
 measurement-gated in the source audit.
+
+### Real-subscription protocol/MTU follow-up — 2026-08-03
+
+- Rebuilt the same branch application with the official released
+  `sing-box 1.13.13-lx-awg` core (`with_awg`, `with_xhttp`, `with_wireguard`,
+  `with_quic`, `with_naive_outbound`). The 72.3 MB ZIP SHA-256 was
+  `1da1e575c7ee92bb946b44e32e72af1c9c2f0aa736e8472f7874a860c1d3afaa`.
+  No tag or release was created.
+- Imported the user's real subscription only through the WINBRAT UI. The URL,
+  token, credentials, endpoints, and generated config were not copied into the
+  checkout or report. Inventory: 3 VLESS Reality, 1 Naive, 4 Hysteria2, 4 AWG,
+  3 VLESS WS, and 4 VLESS XHTTP; no TUIC or Shadowsocks was present.
+- Quick test reached 14/19. Deep verify classified VLESS 3/3, Naive 1/1,
+  Hysteria2 4/4, and AWG 2/4 as working; two AWG rows had no final verdict,
+  three WS rows stayed untested with `invalid public_key`, and XHTTP 0/4 was
+  reported protocol-failed.
+- For each available family, selected a representative row in Full Tunnel,
+  waited 30 seconds, confirmed the running state, and sent a DF UDP/STUN packet
+  producing an inner IPv4 size of exactly 1420. VLESS Reality, Naive/HY2 pair,
+  Hysteria2, one healthy AWG row, WS, and XHTTP passed. One other AWG row timed
+  out even at 64-byte UDP against both STUN and DNS, while the second AWG row
+  passed; this is endpoint-specific, not an MTU threshold.
+- Exact boundary: UDP payload 1392 / inner IPv4 1420 passed; payload 1396 /
+  inner 1424 and payload 1400 / inner 1428 returned `MessageSize`. This proves
+  the configured Windows interface boundary, not universal PMTU safety.
+- Every cold Start logged `configure tun interface: create adapter already
+  exists / open existing adapter: element not found` roughly 13-15 seconds
+  after the first Connected signal. HealthMonitor relaunched about seven
+  seconds later; the strict 30-second checks then saw one process, one Up TUN,
+  and working UDP. The lifecycle/recovery failure and misleading Connected
+  state during the process gap are confirmed; root-cause ownership and leak
+  impact are unmeasured. Any direct-IP or DNS leak in that gap escalates to P1.
+- Deep verify versus selected WS/XHTTP behavior remains measurement-gated
+  because ConfigGenerator can include same-IP siblings. A secret-free
+  single-outbound fixture must isolate the verifier before a fix is authorized.
+- Final VM state: disconnected, Split Tunnel restored, MTU 1420, zero sing-box
+  processes, zero VPNRouter TUN adapters. The subscription remains installed
+  for reproducibility.
+- Independent read-only Qwen `qwen3.8-max-preview` review accepted the 1420
+  interface/end-to-end scope and required two wording corrections that were
+  applied: do not assign the lifecycle race to Wintun before tracing ownership,
+  and do not attribute WS/XHTTP traffic to a single outbound while same-IP
+  pairing is active.
+
+**Follow-ups updated**: MTU-5 remains focused and confirmed; the recoverable
+cold-start lifecycle/TUN ownership failure is a separate confirmed P2 defect;
+WS/XHTTP Deep verify disagreement, stale `19 / 19` progress text, and one AWG
+row's UDP black hole remain explicitly measurement-gated.
 
 **Lessons for methodology doc**: none.

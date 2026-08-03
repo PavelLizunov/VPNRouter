@@ -1,9 +1,11 @@
 # VPNRouter MTU end-to-end audit — 2026-08-03
 
-Status: the research/code-audit phase was read-only. A user-requested
+Status: the research/code-audit phase was read-only. User-requested
 post-implementation verification was later run only on the fixed WINBRAT test
-VM; no product code, release, tag, merge, local user configuration, or dev-box
-VPN state was changed. The test VM MTU was restored to 1420.
+VM, first with the existing dummy profile and then with a real 19-server
+subscription. No product code, release, tag, merge, local user configuration,
+or dev-box VPN state was changed. The test VM was left disconnected with Split
+Tunnel restored, MTU 1420, and no sing-box process or VPNRouter TUN adapter.
 
 ## 1. Verdict
 
@@ -26,6 +28,13 @@ separate focused manual-commit persistence fix: one accepted range, an IPv6
 lower-bound check, `min(user, 1420)` on the AWG TUN inbound, honest diagnostic
 wording, and one save edge for the field. Android's hard-coded 1500 and any
 automatic underlay-derived value remain measurement-gated.
+
+The real-subscription run also showed that 1420 is a coherent Windows TUN
+boundary on this specific underlay: a DF UDP/STUN datagram producing an inner
+IPv4 packet of exactly 1420 bytes passed, while 1424 and 1428 were rejected
+locally with `MessageSize`. This is evidence for the configured interface
+contract, not a universal safe MTU for mobile, nested-VPN, IPv6, or other
+underlays.
 
 ## 2. Method, worker isolation, and limits
 
@@ -301,7 +310,113 @@ Do not do now:
 Pass criteria must be transport-specific. A rendered page, successful ping, or
 TCP request does not prove UDP PMTU correctness.
 
-## 10. Exact prompts for next tasks
+### 9.3 Real-subscription protocol and game-like UDP run on WINBRAT
+
+Environment and safety:
+
+- Fixed target identity was rechecked as `WINBRAT` at `100.115.182.0`.
+- The branch application was rebuilt with the official released
+  `sing-box 1.13.13-lx-awg` core carrying `with_awg`, `with_xhttp`,
+  `with_wireguard`, `with_quic`, and `with_naive_outbound`. The test ZIP was
+  72.3 MB, SHA-256
+  `1da1e575c7ee92bb946b44e32e72af1c9c2f0aa736e8472f7874a860c1d3afaa`.
+- The subscription was entered only through the remote app. Its URL, token,
+  credentials, server addresses, and generated config were not read into the
+  checkout or written to this report. A screenshot that briefly contained the
+  URL was immediately overwritten and is not evidence.
+- Tests used Full Tunnel and configured TUN MTU 1420. The original Split
+  Tunnel setting was restored afterward.
+
+Subscription inventory, classified without retaining endpoint details:
+
+| Family | Rows | Quick/deep result before real connect |
+|---|---:|---|
+| VLESS Reality | 3 | Deep verify 3/3 `Works via VPN` |
+| NaiveProxy | 1 | Deep verify 1/1 `Works via VPN` |
+| Hysteria2 / HY2 | 4 | Deep verify 4/4 `Works via VPN` |
+| AmneziaWG | 4 | 2/4 `Works via VPN`; 2/4 no final verdict |
+| VLESS WebSocket | 3 | 3/3 remained protocol-untested; verifier core logged `invalid public_key` |
+| VLESS XHTTP | 4 | 4/4 host reachable but verifier reported protocol failure |
+
+The subscription contained no TUIC or Shadowsocks row, so those families were
+not tested. The quick TCP/TLS pass reached 14/19; Deep verify processed all
+19 rows. The Deep verify progress label remained at `19 / 19` rather than a
+final `Done` message, which is recorded as a low-severity candidate UI finding.
+
+Real connect and UDP result:
+
+| Selected family | 30-second stable state | UDP 64/512/1200/1392 payload | Minimum observed latency | Qualification |
+|---|---|---|---:|---|
+| VLESS Reality | PASS | 2/2 at every size | 54 ms | Full size sweep to inner IPv4 1420 passed. |
+| NaiveProxy | PASS | 2/2 at every size | 37 ms | UDP may use its configured HY2 sibling by design. |
+| Hysteria2 | PASS | 2/2 at every size | 125 ms | Selected UDP-native family remained stable after recovery. |
+| AmneziaWG, first verified row | Connect reached running state | 0/2 at every size; DNS UDP also timed out | — | Server-specific UDP black hole; not an MTU threshold because 64 bytes also failed. |
+| AmneziaWG, second verified row | PASS | 2/2 at every size | 54 ms | Proves AWG as a family is not broken; first-row result is endpoint-specific. |
+| VLESS WebSocket | PASS | 2/2 at every size | 379 ms | Selected family passed, but same-IP pairing means this is not a single-outbound isolation proof. |
+| VLESS XHTTP | PASS | 2/2 at every size | 37 ms | Same pairing qualification as WS. |
+
+Each strict PASS means: after Start, wait 30 seconds, confirm the Stop action is
+still present, then pass a DF UDP/STUN request whose 1392-byte UDP payload plus
+20-byte IPv4 and 8-byte UDP headers produces an inner packet of 1420 bytes.
+Latency values are not a benchmark: the rows use different servers, pairing,
+and transports, and the direct no-VPN STUN control was blocked on this VM.
+
+Boundary result on the active XHTTP-selected configuration:
+
+| UDP payload | Inner IPv4 size | Result |
+|---:|---:|---|
+| 1392 | 1420 | Success |
+| 1396 | 1424 | `MessageSize` |
+| 1400 | 1428 | `MessageSize` |
+
+The ICMP DF control similarly accepted inner IPv4 sizes through 1420 and
+returned `PacketTooBig` at 1500, but its 0 ms replies indicate local or
+synthetic handling. It is useful only as a TUN boundary check, not internet
+PMTU evidence.
+
+This is a game-like MTU stress test, not Dota 2 or Roblox emulation. It sends
+real UDP through the full tunnel at small sizes and at the maximum configured
+inner IPv4 size. It does not reproduce Steam SDR or RakNet packet sequencing,
+matchmaking, NAT rebinding, bursts, jitter, loss recovery, or game-server
+routing. The useful conclusion is narrow: packets up to the configured 1420
+boundary can traverse every selected family on at least one working row.
+
+Additional runtime findings:
+
+1. Every cold Start first reached `Connected`, then around 13-15 seconds later
+   the first sing-box process exited on TUN adapter contention (`create adapter
+   already exists` plus `open existing adapter: element not found`).
+   HealthMonitor relaunched the core about seven seconds later; after 30 seconds
+   there was exactly one process and one Up TUN adapter, and UDP 1420 passed.
+   The product lifecycle/recovery failure and misleading Connected state during
+   the process gap are confirmed; whether the root cause is stale teardown,
+   manager state, or another continuation is open. Any direct/DNS leak during
+   the recovery gap is unmeasured and would escalate this to P1.
+2. Deep verify disagrees with selected-family operation for WS and XHTTP. A
+   verifier defect is plausible, but the live generator intentionally includes
+   same-IP siblings, so the run does not prove that its TCP control used only
+   the selected outbound. Keep the root cause measurement-gated until a
+   secret-free single-outbound fixture reproduces it.
+3. One AWG row black-holed both small and maximum-size UDP while another AWG
+   row passed. This is endpoint/provider-specific evidence, not a reason to
+   lower global MTU or change AWG generation.
+
+## 10. Updated decisions after the live protocol run
+
+- Keep 1420 as the desktop default and AWG cap. The test validates the boundary
+  on one Windows/underlay combination; it does not authorize a larger default.
+- Do not add game presets such as "Dota MTU" or "Roblox MTU". Both games depend
+  on more than packet size, and the maximum-size UDP probe already covers the
+  relevant interface boundary without pretending to emulate a title.
+- Do not lower MTU because one AWG endpoint dropped 64-byte UDP. A threshold
+  smaller than 64 cannot be a 1420 PMTU issue.
+- Fix MTU-5 separately. Investigate the repeatable cold-start lifecycle/TUN
+  ownership churn before treating a clean Stop button as a complete startup
+  gate.
+- Treat WS/XHTTP Deep verify disagreement as a focused diagnostic candidate,
+  not as proof that the subscription rows are invalid.
+
+## 11. Exact prompts for next tasks
 
 ### Task 1 — repair the confirmed MTU contract
 
@@ -343,4 +458,24 @@ Fix only MTU-5 from plans/mtu-end-to-end-audit-2026-08-03.md. Manual edits of th
 Trace the repository's existing TextBox commit/save patterns first. Persist a valid MTU once on focus loss or Enter after the binding commits; do not call SaveSettings on every digit and do not add a generic settings abstraction. Reuse the existing IPv4/IPv6 bounds, set the displayed TunMtu to the normalized stored value, and leave AutoTuneMtu plus Apply/reconnect semantics unchanged.
 
 Add the smallest regression that proves manual 1200 survives reload, 575 becomes 576, 1600 becomes 1500, and IPv6 1279 becomes 1280. Re-run the focused MTU tests and a WINBRAT UIA pass that edits the field, leaves/reopens the page, restarts the app, and confirms persistence. Do not release, tag, merge, or touch the dev-box VPN.
+```
+
+### Task 5 — isolate the WS/XHTTP Deep verify disagreement
+
+```text
+Diagnose the measurement-gated WS/XHTTP verifier disagreement recorded in plans/mtu-end-to-end-audit-2026-08-03.md section 9.3. Do not use or print the real subscription URL, credentials, endpoint addresses, or generated user config.
+
+First build secret-free VlessServerEntry fixtures for TLS+WebSocket and for XHTTP using valid synthetic credentials. Compare VlessDeepVerifier.BuildSingleOutboundConfig with the relevant ConfigGenerator output and run the released sing-box-lx `check` command against both. Specifically verify that TLS/Reality selection follows entry.Security rather than merely Reality.Enabled, that WS Host headers survive, that XHTTP drops Vision flow, and that the released core feature gates are active.
+
+If and only if a false-fail reproduces with the synthetic fixture, implement the smallest shared-root fix in VlessDeepVerifier and add wire-shape tests for WS and XHTTP. Do not copy user configs into tests, do not weaken real invalid-public-key validation, and do not change ConfigGenerator routing/pairing. Re-run focused verifier tests and a WINBRAT Deep verify on sanitized test entries. Product changes use a new task branch and draft PR; no release, tag, merge, or dev-box VPN action.
+```
+
+### Task 6 — diagnose the repeatable cold-start lifecycle/TUN ownership churn
+
+```text
+Diagnose the confirmed WINBRAT startup sequence recorded in plans/mtu-end-to-end-audit-2026-08-03.md section 9.3: one Start reaches Connected, then about 13-15 seconds later the core exits with `configure tun interface: create adapter already exists / open existing adapter: element not found`, and HealthMonitor relaunches successfully about seven seconds later. Treat Wintun only as the contention surface; do not assign root cause before tracing lifecycle ownership.
+
+Use only the fixed WINBRAT target through tools/brat-verify.ps1. Start from zero sing-box processes and zero VPNRouter adapters. Capture a sanitized timeline of one UI Invoke, SingBoxManager state/PID transitions, TUN adapter creation/removal, warmup Connected, process exit, and recovery. Prove whether the first process is prematurely or stale-reported Connected, whether a stale adapter survives the previous stop, or whether another lifecycle continuation performs an unlogged restart. During the seven-second process gap, test whether protected traffic is blocked or leaks direct; any direct IP/DNS egress makes the finding P1. Do not assume a double click and do not read/output config secrets.
+
+Record the finding in plans/OPEN-DEFECTS.md before implementation. If a product root cause is proven, fix the single shared lifecycle gate and add one state-transition regression covering Start -> Connected -> delayed TUN failure -> recovery without duplicate ownership or a false stable UI. Verify one 60-second connection, exactly one core process, one Up adapter, UDP inner IPv4 1420 success, and a clean new log window. No release, tag, merge, or dev-box VPN action.
 ```
