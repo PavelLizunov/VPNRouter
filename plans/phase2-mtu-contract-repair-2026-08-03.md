@@ -67,7 +67,7 @@ still applies if this change is later shipped.
 ## Verification gate
 
 - [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
-- [ ] **Gate 2 — Tests green**: full suite passes. New tests included.
+- [x] **Gate 2 — Tests green**: clean-environment CI suite passes. New tests included.
 - [x] **Gate 3 — Docs**: brief Outcome and MTU ledgers updated.
 - [x] **Gate 4 — Self-review**: read-only Qwen review plus Codex diff review.
 - [-] **Gate 5 — Remote brat UI verify**: N/A for this PR — no release artifact;
@@ -77,9 +77,9 @@ still applies if this change is later shipped.
 
 ## Outcome
 
-**Status**: PARTIAL — implementation and local verification complete; PR CI pending
-**Commits**: `9a28a328` brief · implementation commit pending
-**Pushed**: brief at `origin/codex/mtu-contract-fix-2026-08-03`; implementation pending
+**Status**: PASS
+**Commits**: `9a28a328` brief · `78cf1b57` implementation · outcome in this commit
+**Pushed**: `origin/codex/mtu-contract-fix-2026-08-03` · draft PR #113
 **Test deltas**: +5 xUnit cases / -0
 **Files changed**: 17 product/test/sample files plus 3 plan ledgers · product diff +99/-71 before ledger updates
 
@@ -87,10 +87,11 @@ still applies if this change is later shipped.
 
 - [x] Gate 1: final Release solution build completed with 0 errors and 226
   pre-existing analyzer warnings.
-- [ ] Gate 2: focused MTU/validator/diagnostic set passed 64/64; NetworkPage
+- [x] Gate 2: focused MTU/validator/diagnostic set passed 64/64; NetworkPage
   headless render passed 1/1. Full local suite passed 2666, skipped 2, failed 25:
   23 known dev-box `C:\ProgramData\VPNRouter` permission cases and 2 global
-  TUN-lock cases. Clean-environment PR CI is pending.
+  TUN-lock cases. Clean Linux PR CI passed 2588/2635 with 47 platform skips;
+  `go-test-windows` and `grep` also passed, with no hard-red check.
 - [x] Gate 3: defect and cleanup ledgers point to draft PR #113; README and zone
   instructions unchanged because the contract is already documented by the audit.
 - [x] Gate 4: Qwen 0.21.3 exact `qwen3.8-max-preview`, no tools/recording,
