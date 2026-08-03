@@ -411,6 +411,7 @@ public static class Strings
     public static string MtuWarningHigh => global::VPNRouter.Core.Localization.Strings.MtuWarningHigh;
     public static string MtuAutoTuneButton => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneButton;
     public static string MtuAutoTuneRunning => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneRunning;
+    public static string MtuAutoTuneWindowsOnly => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneWindowsOnly;
     public static string MtuAutoTuneApplied(int mtu) => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneApplied(mtu);
     public static string MtuAutoTuneBlocked => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneBlocked;
     public static string MtuAutoTuneNoResult => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneNoResult;

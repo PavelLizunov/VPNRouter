@@ -673,16 +673,16 @@ public static class HealthCheck
 
         if (bestPayload == null)
             return new(Level.Warn,
-                "DF MTU probe got no successful payload; ICMP PMTU may be blocked on this path.");
+                "IPv4 DF ping to 8.8.8.8 got no successful payload; ICMP may be blocked on this route.");
 
         var ipMtu = bestPayload.Value + 28;
         if (configuredMtu > ipMtu)
             return new(Level.Warn,
-                $"TUN MTU {configuredMtu} is above measured DF path MTU about {ipMtu} (largest ping payload {bestPayload}). For Roblox disconnects try TUN MTU {bestPayload}, then 1320.");
+                $"TUN MTU {configuredMtu} is above the IPv4 DF-ping result to 8.8.8.8, about {ipMtu} (largest payload {bestPayload}). This fixed target does not measure the VPN server path or IPv6. For Roblox disconnects try TUN MTU {bestPayload}, then 1320.");
 
         if (configuredMtu >= ipMtu - 8)
             return new(Level.Warn,
-                $"TUN MTU {configuredMtu} is very close to measured DF path MTU about {ipMtu} (largest ping payload {bestPayload}). If Roblox disconnects, try {bestPayload}, then 1320.");
+                $"TUN MTU {configuredMtu} is close to the IPv4 DF-ping result to 8.8.8.8, about {ipMtu} (largest payload {bestPayload}). This fixed target does not measure the VPN server path or IPv6. If Roblox disconnects, try {bestPayload}, then 1320.");
 
         return null;
     }

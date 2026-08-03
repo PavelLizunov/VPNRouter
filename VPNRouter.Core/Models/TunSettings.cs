@@ -5,7 +5,10 @@ namespace VPNRouter.Core.Models;
 
 public class TunSettings
 {
+    public const int MinimumMtu = 576;
+    public const int MinimumIpv6Mtu = 1280;
     public const int DefaultMtu = 1420;
+    public const int MaximumMtu = 1500;
 
     public static readonly string[] MandatoryLocalRouteExcludeAddress =
     {
@@ -31,7 +34,8 @@ public class TunSettings
     // v2.46.0-r10: default 1420. Roblox/VLESS path probing showed 1420 passes
     // while 1423 fragments; 1280 was too low for Steam SDR-class game UDP
     // (~1328B IP packets). Users on narrow mobile/PPPoE/nested-VPN paths can
-    // still set 1400/1380 explicitly.
+    // still set a lower value explicitly; IPv6-enabled TUNs require at least
+    // MinimumIpv6Mtu.
     [YamlMember(Alias = "mtu")]
     public int Mtu { get; set; } = DefaultMtu;
 

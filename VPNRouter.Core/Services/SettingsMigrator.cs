@@ -643,8 +643,8 @@ public static class SettingsMigrator
     /// Confirmed via diagnose.ps1 on a real user (h2 FAIL + tun mtu 9000).
     ///
     /// <para>Only rewrites the exact old default (9000) so a user who deliberately
-    /// set a custom MTU keeps it. 1280 = the IPv6 minimum MTU — guaranteed to
-    /// traverse any path (mobile / PPPoE / lossy links included). Idempotent.</para>
+    /// set a custom MTU keeps it. 1280 is the IPv6 minimum link MTU, not a
+    /// guarantee that every underlay path can carry it unchanged. Idempotent.</para>
     /// </summary>
     private static AppSettings Migrate_5_to_6(AppSettings s, ILogger? logger)
     {
@@ -654,7 +654,7 @@ public static class SettingsMigrator
             logger?.Information(
                 "[SettingsMigrator] v5->v6: lowered TUN MTU 9000 -> 1280 (jumbo MTU broke " +
                 "HTTP/2 over TCP-only proxies -> browser ERR_CONNECTION_CLOSED on YouTube; " +
-                "1280 = IPv6 minimum, traverses any path)");
+                "1280 = IPv6 minimum; narrower underlays still require measurement)");
         }
         return s;
     }
@@ -695,7 +695,9 @@ public static class SettingsMigrator
     {
         if (s.Tun == null) return s;
 
-        if (s.Tun.Mtu == 1500 || s.Tun.Mtu <= 0 || s.Tun.Mtu > 1500)
+        if (s.Tun.Mtu == 1500 ||
+            s.Tun.Mtu < TunSettings.MinimumMtu ||
+            s.Tun.Mtu > TunSettings.MaximumMtu)
         {
             var old = s.Tun.Mtu;
             s.Tun.Mtu = TunSettings.DefaultMtu;

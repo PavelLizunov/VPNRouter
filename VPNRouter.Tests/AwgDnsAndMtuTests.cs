@@ -94,14 +94,12 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     }
 
     [Fact]
-    public void Awg_TunMtu_IsEndpointMtu_IgnoresGenericSetting()
+    public void Awg_TunMtuPreservesLowerUserSetting()
     {
-        // AWG TUN MTU = the endpoint MTU (1420, WG standard), NOT the generic
-        // Tun.Mtu — AWG is pinned to the WG-standard endpoint MTU.
         var config = Generate(AwgSettings(tunMtu: 1200));
 
         var tun = Assert.Single(config.Inbounds, i => i.Type == "tun");
-        Assert.Equal(ConfigGenerator.AwgEndpointMtu, tun.Mtu);  // 1420, not 1200
+        Assert.Equal(1200, tun.Mtu);
     }
 
     [Fact]

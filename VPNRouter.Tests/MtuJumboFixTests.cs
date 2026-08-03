@@ -24,10 +24,13 @@ public sealed class MtuJumboFixTests
     [InlineData(4000, 1420)]   // any > 1500 -> clamped
     [InlineData(0, 1420)]      // invalid -> fallback
     [InlineData(-1, 1420)]     // invalid -> fallback
+    [InlineData(575, 1420)]    // below persisted contract -> fallback
+    [InlineData(576, 576)]     // IPv4 minimum is valid
+    [InlineData(1501, 1420)]   // above persisted contract -> fallback
     [InlineData(1500, 1500)]   // legacy default passes the clamp (migration lowers it)
     [InlineData(1420, 1420)]   // current default unchanged
     [InlineData(1400, 1400)]   // deliberate custom preserved
-    public void NormalizeTunMtu_ClampsJumboOnly(int input, int expected)
+    public void NormalizeTunMtu_ClampsOutsideContract(int input, int expected)
         => Assert.Equal(expected, ConfigGenerator.NormalizeTunMtu(input));
 
     [Fact]

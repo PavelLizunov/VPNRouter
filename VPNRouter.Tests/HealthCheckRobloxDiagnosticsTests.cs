@@ -49,6 +49,8 @@ public sealed class HealthCheckRobloxDiagnosticsTests
         Assert.Equal(HealthCheck.Level.Warn, warning.Value.Severity);
         Assert.Contains("Roblox", warning.Value.Message);
         Assert.Contains("1350", warning.Value.Message);
+        Assert.Contains("IPv4 DF-ping result to 8.8.8.8", warning.Value.Message);
+        Assert.Contains("does not measure the VPN server path or IPv6", warning.Value.Message);
     }
 
     [Fact]

@@ -3831,7 +3831,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         // Strict mode
         _settings.App.StrictMode = StrictMode;
-        _settings.Tun.Mtu = TunMtu < 576 ? 576 : (TunMtu > 9000 ? 9000 : TunMtu);
+        var minimumTunMtu = _settings.Tun.Ipv6Enabled
+            ? TunSettings.MinimumIpv6Mtu
+            : TunSettings.MinimumMtu;
+        _settings.Tun.Mtu = Math.Clamp(TunMtu, minimumTunMtu, TunSettings.MaximumMtu);
 
         // IPv4 + DNS flush + Strict DNS
         _settings.App.ForceIpv4Only = ForceIpv4Only;

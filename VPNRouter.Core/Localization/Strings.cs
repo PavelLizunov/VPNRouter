@@ -710,8 +710,8 @@ public static partial class Strings
         ? "MTU TUN-интерфейса"
         : "TUN interface MTU";
     public static string MtuHint => Ru
-        ? "Размер пакета TUN-интерфейса. По умолчанию 1420: лучше для Steam SDR и realtime-игр. 1400/1380 — запасные варианты для узких mobile/PPPoE/nested VPN путей. Значения ниже 1332 могут ломать Dota 2 / CS2 / TF2, выше 1420 — VPN/proxy пути из-за PMTU. Применяется при переподключении."
-        : "TUN interface packet size. Default 1420: better for Steam SDR and realtime games. 1400/1380 are fallbacks for narrow mobile/PPPoE/nested VPN paths. Values below 1332 may break Dota 2 / CS2 / TF2; above 1420 may break VPN/proxy paths due to PMTU. Applied on reconnect.";
+        ? "Размер пакета TUN-интерфейса (576–1500; при IPv6 минимум 1280). По умолчанию 1420: лучше для Steam SDR и realtime-игр. 1400/1380 — запасные варианты для узких mobile/PPPoE/nested VPN путей. Кнопка Windows проверяет только IPv4 DF ping до 8.8.8.8, а не путь до VPN-сервера или IPv6. Применяется при переподключении."
+        : "TUN interface packet size (576–1500; minimum 1280 with IPv6). Default 1420: better for Steam SDR and realtime games. 1400/1380 are fallbacks for narrow mobile/PPPoE/nested VPN paths. The Windows button checks only IPv4 DF ping to 8.8.8.8, not the VPN server path or IPv6. Applied on reconnect.";
     public static string MtuWarningLow => Ru
         ? "MTU ниже 1332 может ломать Dota 2 / CS2 / TF2 / Steam SDR."
         : "MTU below 1332 may break Dota 2 / CS2 / TF2 / Steam SDR.";
@@ -719,23 +719,26 @@ public static partial class Strings
         ? "MTU выше 1420 может ломать VPN/proxy пути из-за PMTU. Попробуйте 1400, затем 1380."
         : "MTU above 1420 may break VPN/proxy paths due to PMTU. Try 1400, then 1380.";
     public static string MtuAutoTuneButton => Ru
-        ? "Подобрать MTU"
-        : "Auto-pick MTU";
+        ? "Подобрать по IPv4 ping"
+        : "Pick from IPv4 ping";
     public static string MtuAutoTuneRunning => Ru
-        ? "Проверяю путь до 8.8.8.8..."
-        : "Probing path to 8.8.8.8...";
+        ? "Проверяю IPv4 DF ping до 8.8.8.8..."
+        : "Running IPv4 DF ping to 8.8.8.8...";
+    public static string MtuAutoTuneWindowsOnly => Ru
+        ? "IPv4 DF-проба доступна только в Windows."
+        : "The IPv4 DF probe is available only on Windows.";
     public static string MtuAutoTuneApplied(int mtu) => Ru
-        ? $"MTU {mtu} сохранён. Переподключите VPN, чтобы применить."
-        : $"MTU {mtu} saved. Reconnect VPN to apply.";
+        ? $"По IPv4 DF ping до 8.8.8.8 сохранён консервативный MTU {mtu}. Переподключите VPN, чтобы применить."
+        : $"IPv4 DF ping to 8.8.8.8 selected conservative MTU {mtu}. Reconnect VPN to apply.";
     public static string MtuAutoTuneBlocked => Ru
-        ? "Обычный ping не проходит. Сначала выключите True Split/почините WFP, потом измеряйте MTU."
-        : "Plain ping fails. Turn off True Split/fix WFP first, then measure MTU.";
+        ? "Обычный IPv4 ping до 8.8.8.8 не проходит. Сначала выключите True Split/почините WFP."
+        : "Plain IPv4 ping to 8.8.8.8 fails. Turn off True Split/fix WFP first.";
     public static string MtuAutoTuneNoResult => Ru
-        ? "Не нашёл рабочий DF payload. На этом пути ICMP PMTU может быть заблокирован."
-        : "No working DF payload found. ICMP PMTU may be blocked on this path.";
+        ? "IPv4 DF ping до 8.8.8.8 не нашёл рабочий payload; ICMP может быть заблокирован."
+        : "IPv4 DF ping to 8.8.8.8 found no working payload; ICMP may be blocked.";
     public static string MtuAutoTuneTooLow(int mtu) => Ru
-        ? $"Нашёл только MTU {mtu}. Это ниже безопасного пола 1332 для Steam SDR, автоматически не сохраняю."
-        : $"Only MTU {mtu} worked. It is below the 1332 Steam SDR safety floor, so it was not saved automatically.";
+        ? $"До 8.8.8.8 прошёл только IPv4 DF payload {mtu}. Он ниже пола 1332 для Steam SDR, автоматически не сохраняю."
+        : $"Only IPv4 DF payload {mtu} reached 8.8.8.8. It is below the 1332 Steam SDR floor, so it was not saved automatically.";
     public static string ForceIpv4Label => Ru
         // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
         // a Russian sentence. Use natural RU "IPv6-утечек".

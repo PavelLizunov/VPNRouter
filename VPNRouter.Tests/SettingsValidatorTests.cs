@@ -150,6 +150,7 @@ public class SettingsValidatorTests
     [Theory]
     [InlineData(0)]
     [InlineData(100)]
+    [InlineData(1501)]
     [InlineData(70000)]
     public void TunMtu_OutOfRange_IsInvalid(int mtu)
     {
@@ -160,6 +161,23 @@ public class SettingsValidatorTests
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Reasons, r => r.Contains("tun.mtu"));
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void TunMtu_BelowIpv6Minimum_IsInvalidOnlyWhenIpv6Enabled(
+        bool ipv6Enabled,
+        bool expectedValid)
+    {
+        var s = NewValid();
+        s.Tun.Mtu = TunSettings.MinimumIpv6Mtu - 1;
+        s.Tun.Ipv6Enabled = ipv6Enabled;
+
+        var result = SettingsValidator.Validate(s);
+
+        Assert.Equal(expectedValid, result.IsValid);
+        Assert.Equal(!expectedValid, result.Reasons.Any(r => r.Contains("when IPv6 is enabled")));
     }
 
     [Theory]

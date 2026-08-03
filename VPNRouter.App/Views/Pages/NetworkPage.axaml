@@ -1959,8 +1959,9 @@
           <!-- TUN interface MTU — connection/performance setting (not leak
                protection, hence its own card). int-bound TextBox (not
                NumericUpDown, which pushes decimal? null on clear and would
-               break the int binding). Persisted value is clamped 576..9000
-               in SaveSettings so a bad entry can't brick the TUN. -->
+               break the int binding). Persisted value is clamped 576..1500
+               (minimum 1280 with IPv6) in SaveSettings so a bad entry can't
+               brick the TUN. -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
