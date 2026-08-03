@@ -107,14 +107,23 @@ public sealed class BratVerifierContractTests
     }
 
     [Fact]
-    public void VerificationArtifacts_AreIgnored_AndCiGateDoesNotTreatSuccessfulGhStderrAsFatal()
+    public void VerificationArtifacts_AreIgnored_AndCiGateScopesNativeStderrHandling()
     {
         var ignore = Read(".gitignore");
         var gate = Read("tools", "verify-last-commit-ci.ps1");
 
         Assert.Contains("/artifacts/brat-verify/", ignore);
-        Assert.Contains("gh auth status 1>$null 2>$null", gate);
-        Assert.DoesNotContain("gh auth status 2>&1", gate);
+        Assert.DoesNotContain("gh auth status", gate);
+
+        var savePreference = gate.IndexOf("$previousErrorActionPreference = $ErrorActionPreference", StringComparison.Ordinal);
+        var relaxPreference = gate.IndexOf("$ErrorActionPreference = \"Continue\"", StringComparison.Ordinal);
+        var api = gate.IndexOf("$json = gh api $apiPath 2>&1", StringComparison.Ordinal);
+        var captureExit = gate.IndexOf("$apiExitCode = $LASTEXITCODE", StringComparison.Ordinal);
+        var restorePreference = gate.IndexOf("$ErrorActionPreference = $previousErrorActionPreference", StringComparison.Ordinal);
+        var failClosed = gate.IndexOf("if ($apiExitCode -ne 0)", StringComparison.Ordinal);
+        Assert.True(savePreference >= 0 && relaxPreference > savePreference && api > relaxPreference &&
+                    captureExit > api && restorePreference > captureExit && failClosed > restorePreference,
+            "The gh API call must scope native stderr handling, restore Stop, then fail closed.");
     }
 
     [Fact]
