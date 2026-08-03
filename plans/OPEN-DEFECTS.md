@@ -160,4 +160,8 @@ Both paths: runtime major swapped, app boots + renders (Avalonia 12 on net10), n
 
 ## Resolved (history)
 
+- [x] **P0 RESOLVED v2.48.0-r4 (2026-08-03)** — Android release CI accepted and published debug-signed APKs because the .NET Android publish command supplied the production keystore properties without the required `AndroidKeyStore=true`; rotating the GitHub secrets alone could not affect signing. Both temporary incompatible R4 APK asset pairs were deleted before handoff. Fixed by enabling the production keystore and pinning the finished APK certificate SHA-256 before upload (PR #111). The final R4 APK matches production cert `6e50af0f…45a221`, passed SHA256 verification, update-installed over `2.48.0-r1`, and launched as `2.48.0-r4` on device. GitHub signing secrets were restored from the verified encrypted backup; plaintext recovery files were removed after use — `.github/workflows/build-android.yml`
+
+- [x] **P2 RESOLVED after v2.48.0-r4 (2026-08-03)** — the CI pre-push verifier could terminate before its own exit-code handling on Windows PowerShell 5.1 because native `gh` stderr becomes a terminating `ErrorRecord` while `$ErrorActionPreference=Stop`. Removed the redundant `gh auth status` preflight and scoped `Continue` only around the real `gh api` authentication/availability check, then restored the caller preference and preserved fail-closed exit 3. Verified both authenticated success and a forced API-error path — `tools/verify-last-commit-ci.ps1`
+
 - [x] **P0** — Auto-failover false-positive teardown of a healthy connection (post-start delay-test 503 → tore down a working server) — RESOLVED v2.44.2 (warmup-confirmed gate, `VpnEngine.ShouldAutoFailoverAfterProbe`)
