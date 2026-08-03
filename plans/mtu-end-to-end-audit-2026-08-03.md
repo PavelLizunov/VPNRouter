@@ -1,12 +1,15 @@
 # VPNRouter MTU end-to-end audit — 2026-08-03
 
-Status: read-only research and code audit. No product code, settings, user
-configuration, release state, or runtime host was changed.
+Status: the research/code-audit phase was read-only. A user-requested
+post-implementation verification was later run only on the fixed WINBRAT test
+VM; no product code, release, tag, merge, local user configuration, or dev-box
+VPN state was changed. The test VM MTU was restored to 1420.
 
 ## 1. Verdict
 
 The useful work is narrow. VPNRouter does not need a new speculative
-auto-MTU subsystem. It does need four existing contracts made honest:
+auto-MTU subsystem. The static audit found four contracts for repair, and the
+later WINBRAT pass confirmed one additional manual-persistence defect:
 
 1. A lower user MTU is ignored on the AWG path even though the model and the
    resolved defect ledger say it remains available for narrow paths.
@@ -15,11 +18,14 @@ auto-MTU subsystem. It does need four existing contracts made honest:
 3. IPv6 can be enabled with an interface MTU below the RFC-required 1280.
 4. The Windows "auto-tune" is a conservative ICMPv4 heuristic to a fixed
    public target, not a measurement of the active proxy transport path.
+5. Editing the MTU field manually changes the ViewModel but does not persist it,
+   despite the settings footer claiming that autosave is active.
 
-The minimal safe future change is therefore contract repair: one accepted
-range, an IPv6 lower-bound check, `min(user, 1420)` on the AWG TUN inbound,
-and honest diagnostic wording. Android's hard-coded 1500 and any automatic
-underlay-derived value remain measurement-gated.
+The minimal safe work is therefore the contract repair in draft PR #113 plus a
+separate focused manual-commit persistence fix: one accepted range, an IPv6
+lower-bound check, `min(user, 1420)` on the AWG TUN inbound, honest diagnostic
+wording, and one save edge for the field. Android's hard-coded 1500 and any
+automatic underlay-derived value remain measurement-gated.
 
 ## 2. Method, worker isolation, and limits
 
@@ -189,6 +195,31 @@ make the target/result semantics visible. Do not add endpoint auto-selection,
 transport overhead tables, or automatic underlay tracking until controlled
 measurements justify them.
 
+### MTU-5 — manual MTU edit is not persisted
+
+Evidence:
+
+- `NetworkPage.axaml` binds the MTU `TextBox` directly to `TunMtu` and displays
+  the unconditional `Auto-saved` footer.
+- `MainWindowViewModel.cs` has no `OnTunMtuChanged` or MTU commit command;
+  `SaveSettings` clamps correctly but is reached only through other actions.
+- On WINBRAT, entering `1600` immediately updated the warning and visible field.
+  Leaving the page did not normalize it, and an app restart loaded the previous
+  `1420`, proving the manual edit had not reached storage.
+- Repeating the same input and invoking the existing Start-VPN save path before
+  its expected dummy-server validation failure made the next restart load
+  `1500`. The same procedure made `575` reload as `576`. Therefore PR #113's
+  clamp is correct once save is invoked; the missing edge is manual persistence.
+
+Confirmed symptom: the user receives an explicit autosave success cue but loses
+the manual MTU value on restart unless some unrelated action happens to call
+`SaveSettings` first.
+
+Minimum future fix: reuse an existing TextBox commit pattern and save once on a
+valid focus-loss/Enter commit, not on every keystroke. Normalize both the stored
+value and the displayed `TunMtu` so UI and disk agree. Do not add a settings
+framework or change the fixed-target probe.
+
 ## 6. Confirmed cleanup drift, not separate runtime defects
 
 These belong in `plans/refactor-backlog.md`, not in a new runtime architecture:
@@ -302,4 +333,14 @@ Return raw commands, packet/counter evidence, and a result table. Separate obser
 
 ```text
 Design, but do not implement, an endpoint-specific MTU measurement only after Task 2 supplies repeatable evidence. Use RFC 8899 as the protocol constraint. Define exactly which packetization layer is measured, active endpoint/family selection, transport overhead ownership, connected/disconnected route state, ICMP-blocked behavior, black-hole detection, rollback, and per-platform capability. Prove why the design is safer than the current fixed-target advisory. Reject the feature if the proof requires guessed overhead tables or cannot be tested on Windows, macOS, Linux, and Android.
+```
+
+### Task 4 — repair the confirmed manual MTU persistence defect
+
+```text
+Fix only MTU-5 from plans/mtu-end-to-end-audit-2026-08-03.md. Manual edits of the Leak Protection TunMtu TextBox currently update the ViewModel/warning but are lost on restart while the footer says Auto-saved.
+
+Trace the repository's existing TextBox commit/save patterns first. Persist a valid MTU once on focus loss or Enter after the binding commits; do not call SaveSettings on every digit and do not add a generic settings abstraction. Reuse the existing IPv4/IPv6 bounds, set the displayed TunMtu to the normalized stored value, and leave AutoTuneMtu plus Apply/reconnect semantics unchanged.
+
+Add the smallest regression that proves manual 1200 survives reload, 575 becomes 576, 1600 becomes 1500, and IPv6 1279 becomes 1280. Re-run the focused MTU tests and a WINBRAT UIA pass that edits the field, leaves/reopens the page, restarts the app, and confirms persistence. Do not release, tag, merge, or touch the dev-box VPN.
 ```

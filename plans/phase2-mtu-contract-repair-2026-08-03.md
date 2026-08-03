@@ -60,9 +60,10 @@ algorithm or changing Android runtime behavior.
 
 Focused xUnit regressions run first, followed by `dotnet build VPNRouter.sln -c
 Release` and the complete `VPNRouter.Tests` Release suite. NetworkPage headless
-rendering covers the copy-only UI surface. Remote brat deployment is not part of
-this PR because no release artifact is created; the mandatory post-ship gate
-still applies if this change is later shipped.
+rendering covers the copy-only UI surface. Remote brat deployment was initially
+not required because no release artifact exists, but the user explicitly
+requested a branch-artifact WINBRAT pass on 2026-08-03; results are recorded
+below. The mandatory post-ship gate still applies if this change is released.
 
 ## Verification gate
 
@@ -70,14 +71,16 @@ still applies if this change is later shipped.
 - [x] **Gate 2 — Tests green**: clean-environment CI suite passes. New tests included.
 - [x] **Gate 3 — Docs**: brief Outcome and MTU ledgers updated.
 - [x] **Gate 4 — Self-review**: read-only Qwen review plus Codex diff review.
-- [-] **Gate 5 — Remote brat UI verify**: N/A for this PR — no release artifact;
-  copy-only NetworkPage surface is covered headlessly. Post-ship verify remains
-  mandatory for a later rolling release.
+- [-] **Gate 5 — Remote brat UI verify**: PARTIAL — scoped MTU UI/save checks
+  completed on WINBRAT; end-to-end tunnel/log-clean status was blocked by the
+  VM's pre-existing dummy VLESS profile. Post-ship verify remains mandatory for
+  a later rolling release with a valid test profile.
 - [-] **Gate 6 — Characterization diff**: N/A — not a god-file split.
 
 ## Outcome
 
-**Status**: PASS
+**Status**: PASS for the scoped contract repair; remote tunnel gate PARTIAL with
+one new P2 persistence follow-up
 **Commits**: `9a28a328` brief · `78cf1b57` implementation · outcome in this commit
 **Pushed**: `origin/codex/mtu-contract-fix-2026-08-03` · draft PR #113
 **Test deltas**: +5 xUnit cases / -0
@@ -98,8 +101,10 @@ still applies if this change is later shipped.
   returned `APPROVE`. Codex refuted its test-gap note because the unchanged suite
   already pins 1500→1420 and endpoint 1420, and incorporated its valid UI-save
   observation by applying the IPv6-aware minimum before persistence.
-- [-] Gate 5: N/A — no release artifact or view structure change; NetworkPage
-  headless rendering passed. Post-ship WINBRAT verification remains mandatory.
+- [-] Gate 5: PARTIAL — the branch artifact was deployed to verified WINBRAT and
+  the MTU UI/save contract was exercised. The installed dummy VLESS profile
+  cannot establish a tunnel, so a clean end-to-end connect/disconnect result is
+  not claimed. Post-ship verification remains mandatory with a valid profile.
 - [-] Gate 6: N/A — not a god-file split.
 
 **Surprises encountered**:
@@ -109,7 +114,34 @@ still applies if this change is later shipped.
 - The local full-suite baseline cannot write its protected ProgramData fixtures
   or acquire the global TUN lock. No local VPN process/state was touched.
 
-**Follow-ups spawned**: none planned; runtime underlay and Android questions stay
+### User-requested WINBRAT verification — 2026-08-03
+
+- Target identity: `WINBRAT` at `100.115.182.0`, connected as
+  `WINBRAT\tester`; no dev-box UI/network action was used.
+- Branch install artifact: `VPNRouter-v2.48.0-r4-win.zip`, 68.7 MB,
+  SHA-256 `32e58b8af54275c92bc9c0cd62f91dc2f8a5d403df0fb206ff2c530bf349e1e6`.
+- UI copy/reachability: `TUN interface MTU` and `Pick from IPv4 ping` were
+  reachable through semantic UIA. The high/low warnings rendered for 1600/575.
+- Save contract: after an explicit existing save path plus restart,
+  `1600→1500` and IPv4-only `575→576` both passed. Final stored/displayed value
+  was restored to `1420`.
+- Fixed-target probe: ran IPv4 DF ping to `8.8.8.8`, returned
+  `found no working payload; ICMP may be blocked`, and preserved `1420`; this is
+  the expected fail-safe behavior and does not establish path MTU.
+- Newly confirmed defect: manual edit alone did not invoke `SaveSettings`;
+  `1600` reverted to the previous `1420` after restart despite the `Auto-saved`
+  footer. Logged as MTU-5 / P2; no product fix was added to this PR.
+- Tunnel/log limit: the VM profile is a known dummy VLESS entry and Start VPN
+  failed validation for its missing Reality public key. The remote scanner found
+  only the three deliberately triggered validation errors, with no MTU-specific
+  exception. AWG transport and IPv6 live behavior were not claimed; focused
+  branch tests cover their static contracts.
+- Evidence: `artifacts/brat-verify/pr113-mtu/` (gitignored), including
+  `mtu-1600-entered.png`, `ipv4-ping-complete.png`,
+  `ipv4-low-save-trigger.png`, and `final-restored-1420.png`.
+
+**Follow-ups spawned**: MTU-5 manual persistence needs a focused product PR;
+runtime underlay, Android, AWG live transport, and IPv6 live behavior remain
 measurement-gated in the source audit.
 
 **Lessons for methodology doc**: none.
