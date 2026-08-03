@@ -24,15 +24,17 @@ if (-not $head -or $LASTEXITCODE -ne 0) {
 $head = $head.Trim()
 Write-Host "Verifying CI for $Commit : $head" -ForegroundColor Cyan
 
-gh auth status 1>$null 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: gh CLI not authenticated." -ForegroundColor Red
-    exit 3
-}
-
 $apiPath = "repos/$Repo/commits/$head/check-runs?per_page=30"
-$json = gh api $apiPath 2>&1
-if ($LASTEXITCODE -ne 0) {
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = "Continue"
+    $json = gh api $apiPath 2>&1
+    $apiExitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+if ($apiExitCode -ne 0) {
     Write-Host "ERROR: gh api failed." -ForegroundColor Red
     Write-Host $json
     exit 3
