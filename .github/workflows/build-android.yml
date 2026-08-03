@@ -320,6 +320,7 @@ jobs:
             -c Release \
             -p:VpnRouterVersion="${{ steps.version.outputs.version }}" \
             -p:RuntimeIdentifier=android-arm64 \
+            -p:AndroidKeyStore=true \
             -p:AndroidSigningKeyStore="$GITHUB_WORKSPACE/vpnrouter.keystore" \
             -p:AndroidSigningStorePass="$KS_PASS" \
             -p:AndroidSigningKeyAlias=vpnrouter \
@@ -347,6 +348,23 @@ jobs:
           cp "$APK_SRC" "$APK_OUT"
           ls -lh "$APK_OUT"
           echo "apk=$APK_OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production signing identity
+        if: >-
+          steps.keystore_decode.outputs.skip != 'true' &&
+          steps.libbox_provision.outputs.skip != 'true'
+        env:
+          EXPECTED_CERT_SHA256: 6e50af0f51ff021db30883eca9fd5d4e66c18d7d64fab3b1b346942bf045a221
+        run: |
+          set -euo pipefail
+          APK="${{ steps.apk.outputs.apk }}"
+          ACTUAL_CERT_SHA256=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | tr '[:upper:]' '[:lower:]')
+          if [ "$ACTUAL_CERT_SHA256" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::Android signing certificate mismatch: expected=$EXPECTED_CERT_SHA256 actual=$ACTUAL_CERT_SHA256"
+            exit 1
+          fi
 
       - name: Compute SHA256
         if: >-
