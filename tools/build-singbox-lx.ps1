@@ -158,6 +158,33 @@ if (($bindChk -notmatch [regex]::Escape($allocNew)) -or ($bindChk -notmatch [reg
 }
 Write-Host "Patched: empty-OOB nil-guard send+recv (golang/go#77875) + AWG H4 reserved-byte receive-clear gate + WSAENOBUFS send-retry." -ForegroundColor Green
 
+# Wintun's deterministic RequestedGUID path can create a half-visible adapter,
+# wait 15 seconds, then fail with ERROR_ALREADY_EXISTS and remove it before
+# sing-tun's OpenAdapter fallback runs. Vendor after the AWG source patches so
+# both fixes are compiled from the same materialized dependency tree.
+Write-Host "[2.75/4] Patch sing-tun Wintun RequestedGUID" -ForegroundColor Yellow
+& go -C $src mod vendor
+if ($LASTEXITCODE -ne 0) { throw "go mod vendor failed ($LASTEXITCODE)" }
+$vendorBindStd = Join-Path $src 'vendor\github.com\sagernet\wireguard-go\conn\bind_std.go'
+if (-not (Test-Path $vendorBindStd)) { throw "FATAL: vendored patched wireguard-go source not found." }
+$vendorBindChk = Get-Content -Raw $vendorBindStd
+if (($vendorBindChk -notmatch [regex]::Escape($allocNew)) -or ($vendorBindChk -notmatch [regex]::Escape($sendNew)) -or ($vendorBindChk -notmatch [regex]::Escape($clearNew)) -or ($vendorBindChk -notmatch [regex]::Escape($timeNew))) {
+    throw "FATAL: go mod vendor did not preserve the patched AWG wireguard-go source."
+}
+$tunWindows = Join-Path $src 'vendor\github.com\sagernet\sing-tun\tun_windows.go'
+if (-not (Test-Path $tunWindows)) { throw "FATAL: $tunWindows not found; re-vet the Wintun RequestedGUID patch." }
+$tunSrc = Get-Content -Raw $tunWindows
+$tunCreateOld = 'wintun.CreateAdapter(options.Name, TunnelType, generateGUIDByDeviceName(options.Name))'
+$tunCreateNew = 'wintun.CreateAdapter(options.Name, TunnelType, nil)'
+if (([regex]::Matches($tunSrc, [regex]::Escape($tunCreateOld))).Count -ne 1) {
+    throw "FATAL: expected exactly one deterministic Wintun CreateAdapter call; fork source changed."
+}
+$tunSrc = $tunSrc.Replace($tunCreateOld, $tunCreateNew)
+[System.IO.File]::WriteAllText($tunWindows, $tunSrc, (New-Object System.Text.UTF8Encoding $false))
+if (([regex]::Matches((Get-Content -Raw $tunWindows), [regex]::Escape($tunCreateNew))).Count -ne 1) {
+    throw "FATAL: Wintun RequestedGUID patch did not apply exactly once."
+}
+
 Write-Host "[3/4] go build -tags $TAGS" -ForegroundColor Yellow
 $ldflags = "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=$VER"
 Push-Location $src

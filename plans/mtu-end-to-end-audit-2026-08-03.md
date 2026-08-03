@@ -383,15 +383,17 @@ boundary can traverse every selected family on at least one working row.
 
 Additional runtime findings:
 
-1. Every cold Start first reached `Connected`, then around 13-15 seconds later
-   the first sing-box process exited on TUN adapter contention (`create adapter
-   already exists` plus `open existing adapter: element not found`).
-   HealthMonitor relaunched the core about seven seconds later; after 30 seconds
-   there was exactly one process and one Up TUN adapter, and UDP 1420 passed.
-   The product lifecycle/recovery failure and misleading Connected state during
-   the process gap are confirmed; whether the root cause is stale teardown,
-   manager state, or another continuation is open. Any direct/DNS leak during
-   the recovery gap is unmeasured and would escalate this to P1.
+1. Follow-up tracing ruled out stale teardown, duplicate app starts, generated
+   duplicate inbounds, and failover before the first failure. From a clean state,
+   one sing-box PID made `VPNRouter-TUN` appear, then failed exactly at Wintun's
+   15-second `WaitForInterface` boundary; the failed create removed the adapter,
+   so sing-tun's `OpenAdapter` fallback returned `Element not found`. The r6 lx
+   build passes `nil` instead of sing-tun's deterministic `RequestedGUID`.
+   Three clean WINBRAT cold starts then kept one PID and one Up TUN through the
+   former failure window; two passed DF UDP payload 1392 (inner IPv4 1420), each
+   Stop left zero PID/TUN, and the 15-minute r6 log window was clean. Random GUID
+   NLA-profile churn remains measurement-gated. The direct HTTP warmup still is
+   not a valid proof of TUN readiness and remains a separate defect.
 2. Deep verify disagrees with selected-family operation for WS and XHTTP. A
    verifier defect is plausible, but the live generator intentionally includes
    same-IP siblings, so the run does not prove that its TCP control used only
@@ -410,9 +412,9 @@ Additional runtime findings:
   relevant interface boundary without pretending to emulate a title.
 - Do not lower MTU because one AWG endpoint dropped 64-byte UDP. A threshold
   smaller than 64 cannot be a 1420 PMTU issue.
-- Fix MTU-5 separately. Investigate the repeatable cold-start lifecycle/TUN
-  ownership churn before treating a clean Stop button as a complete startup
-  gate.
+- Fix MTU-5 separately. The repeatable cold-start Wintun failure is resolved in
+  r6; replace the misleading direct HTTP readiness signal only in a focused
+  lifecycle change with a measured TUN/core-local gate.
 - Treat WS/XHTTP Deep verify disagreement as a focused diagnostic candidate,
   not as proof that the subscription rows are invalid.
 
@@ -472,10 +474,12 @@ If and only if a false-fail reproduces with the synthetic fixture, implement the
 
 ### Task 6 — diagnose the repeatable cold-start lifecycle/TUN ownership churn
 
+Completed by the r6 A/B above. The remaining follow-up is intentionally narrower:
+
+### Task 6a — replace the false desktop TUN readiness signal
+
 ```text
-Diagnose the confirmed WINBRAT startup sequence recorded in plans/mtu-end-to-end-audit-2026-08-03.md section 9.3: one Start reaches Connected, then about 13-15 seconds later the core exits with `configure tun interface: create adapter already exists / open existing adapter: element not found`, and HealthMonitor relaunches successfully about seven seconds later. Treat Wintun only as the contention surface; do not assign root cause before tracing lifecycle ownership.
+Using qwen3.8-max-preview as the read-only analytical worker and Codex as verifier, trace StartupPipeline's desktop TUN warmup and every consumer of its Connected result. Start from the confirmed WINBRAT evidence in plans/mtu-end-to-end-audit-2026-08-03.md section 9.3: an HTTP request from VPNRouter.exe succeeded about one second after spawn while the same sing-box process was still inside Wintun initialization and later failed at 15 seconds. The r6 RequestedGUID hotfix removes that specific core crash but does not make the HTTP signal a TUN proof.
 
-Use only the fixed WINBRAT target through tools/brat-verify.ps1. Start from zero sing-box processes and zero VPNRouter adapters. Capture a sanitized timeline of one UI Invoke, SingBoxManager state/PID transitions, TUN adapter creation/removal, warmup Connected, process exit, and recovery. Prove whether the first process is prematurely or stale-reported Connected, whether a stale adapter survives the previous stop, or whether another lifecycle continuation performs an unlogged restart. During the seven-second process gap, test whether protected traffic is blocked or leaks direct; any direct IP/DNS egress makes the finding P1. Do not assume a double click and do not read/output config secrets.
-
-Record the finding in plans/OPEN-DEFECTS.md before implementation. If a product root cause is proven, fix the single shared lifecycle gate and add one state-transition regression covering Start -> Connected -> delayed TUN failure -> recovery without duplicate ownership or a false stable UI. Verify one 60-second connection, exactly one core process, one Up adapter, UDP inner IPv4 1420 success, and a clean new log window. No release, tag, merge, or dev-box VPN action.
+Find the smallest existing core-local readiness signal that proves the managed PID is alive and its TUN/API initialization completed without using external direct egress or a fixed sleep. Verify whether the Clash API can answer before TUN post-start completes; if it can, reject it as the sole gate. Do not change MTU, cleanup, routing, failover policy, or add speculative retries. Record findings in plans/OPEN-DEFECTS.md before implementation. Add one focused regression for false readiness, then verify on WINBRAT with one clean Start, exactly one PID/one Up TUN for 60 seconds, proxied traffic, clean Stop, and a clean log window. No secret/config output and no dev-box VPN action.
 ```
