@@ -155,4 +155,33 @@ public class AndroidAppCharacterizationTests
                 $"changed.");
         }
     }
+
+    [Fact]
+    public void TypedSubscriptionConnect_RefreshesBeforeTunnelRequest()
+    {
+        var dir = AndroidAppSourceSurfaceHashHelper.FindAndroidProjectDir();
+        if (dir is null || !Directory.Exists(dir)) return;
+
+        var lifecycle = File.ReadAllText(Path.Combine(dir, "AndroidApp.VpnLifecycle.cs"));
+        var handlerStart = lifecycle.IndexOf("private async void OnConnectClicked", StringComparison.Ordinal);
+        Assert.True(handlerStart >= 0);
+        var handlerEnd = lifecycle.IndexOf("private void OnIntentChanged", handlerStart, StringComparison.Ordinal);
+        Assert.True(handlerEnd > handlerStart);
+
+        var handler = lifecycle[handlerStart..handlerEnd];
+        var refresh = handler.IndexOf("await ApplyScannedSubscriptionUrlAsync(subscriptionUrl);", StringComparison.Ordinal);
+        var connect = handler.LastIndexOf("activity.RequestConnect();", StringComparison.Ordinal);
+        Assert.True(refresh >= 0 && connect > refresh);
+
+        var applySource = File.ReadAllText(Path.Combine(dir, "AndroidApp.QrScanApply.cs"));
+        var applyStart = applySource.IndexOf("private async Task ApplyScannedSubscriptionUrlAsync", StringComparison.Ordinal);
+        Assert.True(applyStart >= 0);
+        var applyEnd = applySource.IndexOf("private static string ExtractDisplayNameFromUrl", applyStart, StringComparison.Ordinal);
+        Assert.True(applyEnd > applyStart);
+
+        var apply = applySource[applyStart..applyEnd];
+        Assert.Contains("var subs = AndroidStorage.GetSubscriptions();", apply, StringComparison.Ordinal);
+        Assert.Contains("_subs = subs;", apply, StringComparison.Ordinal);
+        Assert.Contains("entry.Enabled = true;", apply, StringComparison.Ordinal);
+    }
 }

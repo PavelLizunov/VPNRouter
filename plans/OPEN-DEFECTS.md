@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Android typed-subscription connect — 2026-08-07
+
+- [x] **P1 RESOLVED pending v2.48.0-r7** — on a fresh Android install, typing an HTTP(S) subscription on the Simple page only persisted the URL; Connect immediately called `RequestConnect()` without refreshing/selecting a server, so `GetActiveServer()` returned null and surfaced "server not configured". Typed Connect now reuses the fetch/select/connect path, reloads subscriptions from `AndroidStorage` so Simple/QR cannot overwrite persisted entries, and re-enables a deliberately re-entered subscription — `VPNRouter.Android/AndroidApp.VpnLifecycle.cs` / `AndroidApp.QrScanApply.cs` / `VPNRouter.Tests/AndroidAppCharacterizationTests.cs`
+
 ### MTU end-to-end audit — 2026-08-03 (static contract defects; runtime underlay/Android impact remains measurement-gated — full report `plans/mtu-end-to-end-audit-2026-08-03.md`)
 - [ ] **P2 FIX IN DRAFT PR #113** — AWG now emits `min(normalized user MTU, 1420)` instead of overwriting a deliberately lower setting; 1200 preservation, 1500 cap, and endpoint 1420 are regression-pinned. Actual underlay loss remains measurement-gated — [report §MTU-1](mtu-end-to-end-audit-2026-08-03.md) — [draft PR #113](https://github.com/PavelLizunov/VPNRouter/pull/113); close on merge
 - [ ] **P2 FIX IN DRAFT PR #113** — one 576..1500 contract now drives desktop save, validation, generation fallback, and the example config; out-of-contract runtime values fall back to 1420 — [report §MTU-2](mtu-end-to-end-audit-2026-08-03.md) — [draft PR #113](https://github.com/PavelLizunov/VPNRouter/pull/113); close on merge
