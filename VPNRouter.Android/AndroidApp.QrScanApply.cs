@@ -197,7 +197,8 @@ public partial class AndroidApp
     /// </summary>
     private async Task ApplyScannedSubscriptionUrlAsync(string url)
     {
-        var subs = _subs ?? new List<SubscriptionEntry>();
+        var subs = AndroidStorage.GetSubscriptions();
+        _subs = subs;
 
         // Dedupe by URL — if the user re-scans the same subscription QR,
         // we don't want a "Sub #2" duplicate row.
@@ -209,6 +210,7 @@ public partial class AndroidApp
         if (existing is not null)
         {
             entry = existing;
+            entry.Enabled = true;
             isNew = false;
         }
         else
@@ -221,7 +223,6 @@ public partial class AndroidApp
                 Enabled = true,
             };
             subs.Add(entry);
-            _subs = subs;
             AndroidStorage.SetSubscriptions(subs);
             isNew = true;
         }

@@ -54,7 +54,7 @@ public partial class AndroidApp
     // plans/android-status-card-stale-lifecycle-investigation-2026-06-13.md.
     private bool _lifecycleEventsAttached;
 
-    private void OnConnectClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void OnConnectClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
@@ -64,6 +64,8 @@ public partial class AndroidApp
         }
         else
         {
+            var previousSubscriptionUrl = AndroidStorage.GetSubscriptionUrl();
+
             // v2.32.0 desktop parity (2026-05-10): Connect implicitly persists
             // whatever is in the input field before requesting the tunnel —
             // mirrors SmpToggleConnectAsync. The Save button is gone from the
@@ -81,6 +83,23 @@ public partial class AndroidApp
                     return;
                 }
             }
+
+            var subscriptionUrl = AndroidStorage.GetSubscriptionUrl();
+            if (!string.IsNullOrEmpty(subscriptionUrl))
+            {
+                var cachedSubscription = AndroidStorage.GetSubscriptions().Find(s =>
+                    s.Enabled &&
+                    string.Equals(s.Url, subscriptionUrl, StringComparison.OrdinalIgnoreCase) &&
+                    s.Servers is { Count: > 0 });
+
+                if (cachedSubscription is null ||
+                    !string.Equals(previousSubscriptionUrl, subscriptionUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    await ApplyScannedSubscriptionUrlAsync(subscriptionUrl);
+                    return;
+                }
+            }
+
             // v3.0 Phase 7.1 — flip VPN chip to Connecting immediately so
             // the user gets feedback while the system VPN consent dialog
             // is on screen (most visible during first-launch consent
