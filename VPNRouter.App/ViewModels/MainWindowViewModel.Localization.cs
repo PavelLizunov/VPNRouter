@@ -233,6 +233,7 @@ public partial class MainWindowViewModel
     public string L_CustomConfigsEmptyHint => Strings.CustomConfigsEmptyHint;
     public string L_SmpMenuDiagnosticsSection => Strings.SmpMenuDiagnosticsSection;
     public string L_SmpMenuHealthCheck => Strings.SmpMenuHealthCheck;
+    public string L_SmpMenuSetupWizard => Strings.SmpMenuSetupWizard;
     public string L_SmpMenuOpenLogs => Strings.SmpMenuOpenLogs;
     public string L_DiagSupportHeader => Strings.DiagSupportHeader;
     public string L_DiagExportButton => Strings.DiagExportButton;
@@ -281,6 +282,7 @@ public partial class MainWindowViewModel
     public string L_TipRemoveSubscription => Strings.TipRemoveSubscription;
     public string L_TipSmpMenuAbout => Strings.TipSmpMenuAbout;
     public string L_TipSmpMenuHealthCheck => Strings.TipSmpMenuHealthCheck;
+    public string L_TipSmpMenuSetupWizard => Strings.TipSmpMenuSetupWizard;
     public string L_TipSmpMenuResetConfig => Strings.TipSmpMenuResetConfig;
     public string L_TipSmpMenuSafeMode => Strings.TipSmpMenuSafeMode;
     public string L_TipTestAllServers => Strings.TipTestAllServers;

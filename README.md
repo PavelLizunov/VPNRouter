@@ -86,6 +86,7 @@ Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](h
 - **VLESS+Reality + custom configs** — use the built-in VLESS setup or bring your own sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing is injected either way.
 - **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool.
 - **Server testing** — one-click TCP+TLS probe on any server. Deep verification (real HTTP round-trip + 5 MB bandwidth) for your own servers and subscription pools.
+- **Setup and diagnostics wizard (desktop)** — checks configuration, TUN, DNS and reachability, can reset MTU to the safe default `1420`, preserves the chosen routing mode, and offers undo plus redacted diagnostics export. Safe Mode remains a separate temporary start.
 - **Safe auto-update** — each release ships with a `.sha256` companion file; the in-app updater verifies hash before extracting, so a truncated download never installs silently.
 - **Status dashboard + Arctic dark theme + RU/EN UI** — live VPN / Zapret / TgProxy badges in the header, custom Avalonia theme, fully translated interface.
 

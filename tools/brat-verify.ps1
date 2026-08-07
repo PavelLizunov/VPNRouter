@@ -22,7 +22,7 @@ param(
     [string]$Name,
     [string]$ControlType,
 
-    [ValidateSet('Inspect', 'Invoke', 'Toggle', 'Expand', 'SetValue')]
+    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'SetValue')]
     [string]$UiaOperation = 'Inspect',
     [string]$Value,
 
@@ -109,7 +109,7 @@ function Invoke-BratInteractive {
         [string]$AutomationId,
         [string]$Name,
         [string]$ControlType,
-        [ValidateSet('Inspect', 'Invoke', 'Toggle', 'Expand', 'SetValue')]
+        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'SetValue')]
         [string]$UiaOperation = 'Inspect',
         [string]$Value,
         [string]$LocalOutput,
@@ -144,9 +144,9 @@ try {
         if (-not $proc) { throw "VPNRouter.GUI / VPNRouter.App process not found." }
 
         $root = $ae::RootElement
+        $pidCond = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, $proc.Id)
         $window = $null
         while (-not $window -and (Get-Date) -lt $deadline) {
-            $pidCond = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, $proc.Id)
             $window = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $pidCond)
             if (-not $window) { Start-Sleep -Milliseconds 300 }
         }
@@ -164,10 +164,13 @@ try {
         for ($i = 1; $i -lt $conds.Count; $i++) {
             $findCond = New-Object System.Windows.Automation.AndCondition $findCond, $conds[$i]
         }
+        $processFindCond = New-Object System.Windows.Automation.AndCondition $pidCond, $findCond
 
         $target = $null
         while (-not $target -and (Get-Date) -lt $deadline) {
-            $target = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $findCond)
+            # Search every top-level window owned by the app process. Avalonia
+            # flyouts and modal dialogs are siblings of the main window in UIA.
+            $target = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $processFindCond)
             if (-not $target) { Start-Sleep -Milliseconds 300 }
         }
         if (-not $target) { throw "No descendant matched AutomationId='$($req.AutomationId)' Name='$($req.Name)' ControlType='$($req.ControlType)' before timeout." }
@@ -186,10 +189,37 @@ try {
                 if (-not $target.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pat)) { throw "InvokePattern unsupported by matched element." }
                 $pat.Invoke()
             }
+            'InvokeThen' {
+                if (-not $req.Value) { throw "InvokeThen requires Value with the follow-up element Name." }
+                $pat = $null
+                if (-not $target.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pat)) { throw "InvokePattern unsupported by matched element." }
+                $pat.Invoke()
+
+                $nextName = New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, [string]$req.Value)
+                $nextCond = New-Object System.Windows.Automation.AndCondition $pidCond, $nextName
+                $next = $null
+                while (-not $next -and (Get-Date) -lt $deadline) {
+                    $next = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nextCond)
+                    if (-not $next) { Start-Sleep -Milliseconds 200 }
+                }
+                if (-not $next) { throw "No process element named '$($req.Value)' appeared after invoking '$($req.Name)'." }
+                $nextPat = $null
+                if (-not $next.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$nextPat)) { throw "Follow-up element '$($req.Value)' does not support InvokePattern." }
+                $nextPat.Invoke()
+            }
             'Toggle' {
                 $pat = $null
                 if (-not $target.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$pat)) { throw "TogglePattern unsupported by matched element." }
+                $before = $pat.Current.ToggleState
                 $pat.Toggle()
+                $after = $before
+                for ($i = 0; $i -lt 20 -and $after -eq $before; $i++) {
+                    Start-Sleep -Milliseconds 100
+                    $after = $pat.Current.ToggleState
+                }
+                Start-Sleep -Milliseconds 750
+                $after = $pat.Current.ToggleState
+                if ($after -eq $before) { throw "TogglePattern returned without changing the matched element state." }
             }
             'Expand' {
                 $pat = $null
@@ -487,6 +517,7 @@ switch ($Action) {
     'uia' {
         if (-not ($AutomationId -or $Name)) { throw "uia requires -AutomationId and/or -Name." }
         if ($UiaOperation -eq 'SetValue' -and -not $PSBoundParameters.ContainsKey('Value')) { throw "-UiaOperation SetValue requires -Value." }
+        if ($UiaOperation -eq 'InvokeThen' -and -not $PSBoundParameters.ContainsKey('Value')) { throw "-UiaOperation InvokeThen requires -Value with the follow-up element Name." }
         $s = New-VerifiedBratSession
         try {
             $res = Invoke-BratInteractive -Session $s -Mode 'uia' -AutomationId $AutomationId -Name $Name -ControlType $ControlType -UiaOperation $UiaOperation -Value $Value -TimeoutSeconds $TimeoutSeconds

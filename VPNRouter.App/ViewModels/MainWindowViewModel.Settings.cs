@@ -120,6 +120,71 @@ public partial class MainWindowViewModel
 
     // ── Troubleshooting: health check (v2.24.1) ──
     [RelayCommand]
+    private void OpenSetupWizard()
+    {
+        try
+        {
+            var viewModel = new SetupWizardViewModel(
+                TunMtu,
+                IsSplitTunnel,
+                ApplySetupWizardSettings,
+                VPNRouter.Core.Services.HealthCheck.RunAll,
+                ExportDiagnosticsAsync);
+            var dialog = new VPNRouter.App.Views.SetupWizardWindow(viewModel);
+
+            var app = Application.Current?.ApplicationLifetime
+                as IClassicDesktopStyleApplicationLifetime;
+            if (app?.MainWindow is { } owner)
+                dialog.ShowDialog(owner);
+            else
+                dialog.Show();
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[ViewModel] Failed to open setup wizard");
+        }
+    }
+
+    private void ApplySetupWizardSettings(int mtu, bool splitTunnel)
+    {
+        var previousMtu = TunMtu;
+        var previousSplitTunnel = IsSplitTunnel;
+        var previousRoutingMode = _settings.App.RoutingMode;
+        var previousProfile = _settings.ActiveProfile;
+
+        try
+        {
+            TunMtu = mtu;
+            if (IsSplitTunnel != splitTunnel)
+                IsSplitTunnel = splitTunnel; // Existing handler saves and handles a connected tunnel.
+            else
+                SaveSettings();
+
+            if (previousMtu != mtu && IsConnected)
+                HasPendingAppChanges = true;
+        }
+        catch
+        {
+            // Keep the live ViewModel consistent when persistence fails. The
+            // settings store already keeps a rolling .bak on disk.
+            _isLoadingUI = true;
+            try
+            {
+                TunMtu = previousMtu;
+                IsSplitTunnel = previousSplitTunnel;
+                _settings.Tun.Mtu = previousMtu;
+                _settings.App.RoutingMode = previousRoutingMode;
+                _settings.ActiveProfile = previousProfile;
+            }
+            finally
+            {
+                _isLoadingUI = false;
+            }
+            throw;
+        }
+    }
+
+    [RelayCommand]
     private void RunHealthCheck()
     {
         try

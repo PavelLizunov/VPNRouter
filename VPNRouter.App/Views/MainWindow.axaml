@@ -649,6 +649,12 @@
                                                Text="{Binding L_SmpMenuTroubleshootingSection}"/>
 
                                     <Button Classes="menu-item"
+                                            Command="{Binding OpenSetupWizardCommand}"
+                                            ToolTip.Tip="{Binding L_TipSmpMenuSetupWizard}">
+                                        <TextBlock Text="{Binding L_SmpMenuSetupWizard}"
+                                                   TextWrapping="Wrap"/>
+                                    </Button>
+                                    <Button Classes="menu-item"
                                             Command="{Binding RunHealthCheckCommand}"
                                             Content="{Binding L_SmpMenuHealthCheck}"
                                             ToolTip.Tip="{Binding L_TipSmpMenuHealthCheck}"/>

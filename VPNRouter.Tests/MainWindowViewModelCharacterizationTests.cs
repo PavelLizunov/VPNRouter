@@ -253,7 +253,9 @@ public class MainWindowViewModelCharacterizationTests
         // sentinel on the next ubuntu CI run.
         // R09 localization (2026-07-29): + L_UpdateButton proxy getter; removed
         // hardcoded "↓ Update" runtime string. Prior Windows hash: ee6ac11f…70f14322.
-        "4e6109880c2228c2deb6fdd5be22ae80beb12c3431859d5518c117379a56f282";
+        // Setup wizard (2026-08-07): + OpenSetupWizardCommand and two menu
+        // localization getters. The private apply bridge reuses SaveSettings.
+        "d44c861459eb262e7f344483e2088fef169594bca8bacf9d731fc2b5831fe9c2";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
