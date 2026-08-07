@@ -1,0 +1,234 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VPNRouter.App.ViewModels"
+        x:Class="VPNRouter.App.Views.SetupWizardWindow"
+        x:CompileBindings="True"
+        x:DataType="vm:SetupWizardViewModel"
+        Title="{Binding TitleText}"
+        Width="620" Height="640"
+        MinWidth="360" MinHeight="520"
+        CanResize="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBaseBrush}">
+
+  <Window.Styles>
+    <Style Selector="Button.wizard-primary">
+      <Setter Property="Padding" Value="18,9"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.wizard-secondary">
+      <Setter Property="Padding" Value="14,8"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="Border.wizard-card">
+      <Setter Property="Padding" Value="16"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+      <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Border Grid.Row="0" Padding="22,18,22,14"
+            BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding TitleText}" FontSize="20" FontWeight="Bold" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+          <TextBlock Text="{Binding SubtitleText}" FontSize="11" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+        </StackPanel>
+        <Border Grid.Column="1" Padding="10,5" VerticalAlignment="Center"
+                CornerRadius="{StaticResource RadiusSm}"
+                Background="{DynamicResource AccentBgSubtleBrush}">
+          <TextBlock Text="{Binding ProgressText}" FontSize="11" FontWeight="SemiBold"
+                     Foreground="{DynamicResource AccentFgBrush}"/>
+        </Border>
+      </Grid>
+    </Border>
+
+    <ScrollViewer Grid.Row="1"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <Grid Margin="22,18">
+        <StackPanel IsVisible="{Binding IsStepOne}" Spacing="14">
+          <TextBlock Text="{Binding RoutingTitle}" FontSize="18" FontWeight="Bold"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+          <TextBlock Text="{Binding RoutingBody}" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+          <Border Classes="wizard-card">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <RadioButton Grid.Column="0" GroupName="WizardRouting"
+                           IsChecked="{Binding SelectedSplitTunnel}" VerticalAlignment="Top"/>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="{Binding SplitTitle}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                <TextBlock Text="{Binding SplitHint}" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <Border Classes="wizard-card">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+              <RadioButton Grid.Column="0" GroupName="WizardRouting"
+                           IsChecked="{Binding SelectedFullTunnel}" VerticalAlignment="Top"/>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="{Binding FullTitle}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                <TextBlock Text="{Binding FullHint}" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <Border Padding="14" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource WarningBgBrush}"
+                  BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding KillSwitchTitle}" FontWeight="SemiBold" TextWrapping="Wrap"
+                         Foreground="{DynamicResource WarningFgBrush}"/>
+              <TextBlock Text="{Binding KillSwitchBody}" FontSize="11" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding IsStepTwo}" Spacing="14">
+          <TextBlock Text="{Binding ChecksTitle}" FontSize="18" FontWeight="Bold"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+          <TextBlock Text="{Binding ChecksBody}" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+          <Button Classes="wizard-primary" Command="{Binding RunChecksCommand}"
+                  IsEnabled="{Binding !IsBusy}" HorizontalAlignment="Left">
+            <TextBlock Text="{Binding RunChecksText}" TextWrapping="Wrap"/>
+          </Button>
+          <TextBlock Text="{Binding CheckSummary}" FontWeight="SemiBold" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+          <ItemsControl ItemsSource="{Binding CheckResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SetupWizardCheckItem">
+                <Border Classes="wizard-card" Margin="0,0,0,8" Padding="12">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <TextBlock Text="{Binding Level}" FontSize="10" FontWeight="Bold"
+                               Foreground="{DynamicResource AccentFgBrush}"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Message}" FontSize="11"
+                               TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding IsStepThree}" Spacing="14">
+          <TextBlock Text="{Binding RepairTitle}" FontSize="18" FontWeight="Bold"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+          <TextBlock Text="{Binding RepairBody}" TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+          <TextBlock Text="{Binding OperationStatus}" TextWrapping="Wrap"
+                     Foreground="{DynamicResource DangerFgBrush}"/>
+
+          <Border Classes="wizard-card">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding MtuText}" FontSize="16" FontWeight="Bold" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextPrimaryBrush}"/>
+              <TextBlock Text="{Binding MtuHint}" FontSize="11" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+              <Button Classes="wizard-secondary" Command="{Binding ResetMtuCommand}"
+                      IsEnabled="{Binding !IsBusy}" HorizontalAlignment="Left">
+                <TextBlock Text="{Binding ResetMtuText}" TextWrapping="Wrap"/>
+              </Button>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="wizard-card">
+            <StackPanel Spacing="9">
+              <Button Classes="wizard-primary" Command="{Binding RestoreSafeSettingsCommand}"
+                      IsEnabled="{Binding !IsBusy}" HorizontalAlignment="Stretch">
+                <TextBlock Text="{Binding RestoreText}" TextWrapping="Wrap" TextAlignment="Center"/>
+              </Button>
+              <TextBlock Text="{Binding RestoreHint}" FontSize="11" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </StackPanel>
+          </Border>
+
+          <Border Padding="14" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource AccentBgSubtleBrush}">
+            <TextBlock Text="{Binding SafeModeDifference}" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+          </Border>
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding IsStepFour}" Spacing="14">
+          <TextBlock Text="{Binding ResultTitle}" FontSize="18" FontWeight="Bold"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+          <Border Classes="wizard-card">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding OperationStatus}" FontWeight="SemiBold" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextPrimaryBrush}"/>
+              <TextBlock Text="{Binding CheckSummary}" FontSize="11" TextWrapping="Wrap"
+                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </StackPanel>
+          </Border>
+          <ItemsControl ItemsSource="{Binding CheckResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SetupWizardCheckItem">
+                <Border Classes="wizard-card" Margin="0,0,0,8" Padding="12">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <TextBlock Text="{Binding Level}" FontSize="10" FontWeight="Bold"
+                               Foreground="{DynamicResource AccentFgBrush}"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Message}" FontSize="11"
+                               TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8">
+            <Button Classes="wizard-secondary" Command="{Binding UndoCommand}"
+                    IsEnabled="{Binding CanUndo}">
+              <TextBlock Text="{Binding UndoText}" TextWrapping="Wrap"/>
+            </Button>
+            <Button Classes="wizard-secondary" Command="{Binding ExportDiagnosticsCommand}">
+              <TextBlock Text="{Binding ExportText}" TextWrapping="Wrap"/>
+            </Button>
+          </WrapPanel>
+        </StackPanel>
+      </Grid>
+    </ScrollViewer>
+
+    <Border Grid.Row="2" Padding="22,12"
+            BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0" Classes="wizard-secondary" Command="{Binding BackCommand}"
+                IsVisible="{Binding IsBackVisible}" IsEnabled="{Binding !IsBusy}">
+          <TextBlock Text="{Binding BackText}" TextWrapping="Wrap"/>
+        </Button>
+        <Button Grid.Column="2" Classes="wizard-secondary" Command="{Binding CloseCommand}"
+                IsVisible="{Binding !IsStepFour}">
+          <TextBlock Text="{Binding CloseText}" TextWrapping="Wrap"/>
+        </Button>
+        <Button Grid.Column="3" Classes="wizard-primary" Command="{Binding NextCommand}"
+                IsVisible="{Binding IsNextVisible}" IsEnabled="{Binding !IsBusy}">
+          <TextBlock Text="{Binding NextText}" TextWrapping="Wrap"/>
+        </Button>
+        <Button Grid.Column="3" Classes="wizard-primary" Command="{Binding CloseCommand}"
+                IsVisible="{Binding IsStepFour}">
+          <TextBlock Text="{Binding FinishText}" TextWrapping="Wrap"/>
+        </Button>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

@@ -1175,11 +1175,13 @@ public static class Strings
     public static string DiagExportHint => global::VPNRouter.Core.Localization.Strings.DiagExportHint;
     // v2.24.4 troubleshooting items (Level 2/3 self-healing)
     public static string SmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.SmpMenuHealthCheck;
+    public static string SmpMenuSetupWizard => global::VPNRouter.Core.Localization.Strings.SmpMenuSetupWizard;
     // v2.30.5-r1 (UX-68 fix): localize "Safe Mode" in Russian.
     public static string SmpMenuSafeMode => global::VPNRouter.Core.Localization.Strings.SmpMenuSafeMode;
     public static string SmpMenuResetConfig => global::VPNRouter.Core.Localization.Strings.SmpMenuResetConfig;
     public static string SmpMenuResetConfirm => global::VPNRouter.Core.Localization.Strings.SmpMenuResetConfirm;
     public static string TipSmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.TipSmpMenuHealthCheck;
+    public static string TipSmpMenuSetupWizard => global::VPNRouter.Core.Localization.Strings.TipSmpMenuSetupWizard;
     public static string TipSmpMenuSafeMode => global::VPNRouter.Core.Localization.Strings.TipSmpMenuSafeMode;
     public static string TipSmpMenuResetConfig => global::VPNRouter.Core.Localization.Strings.TipSmpMenuResetConfig;
 

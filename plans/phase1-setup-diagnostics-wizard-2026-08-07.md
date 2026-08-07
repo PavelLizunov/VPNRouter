@@ -76,13 +76,66 @@ automation is allowed on the local development machine.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
-- [ ] **Gate 2 — Tests green**: full suite passes; new wizard tests included.
-- [ ] **Gate 3 — Docs**: this brief Outcome filled; README updated with the new troubleshooting entry point.
-- [ ] **Gate 4 — Self-review**: simplify/ponytail review plus read-only Qwen review; security review only if scope expands into firewall mutation.
-- [ ] **Gate 5 — Remote brat UI verify**: WINBRAT end-to-end wizard flow and screenshots under `artifacts/brat-verify/setup-wizard/`.
-- [ ] **Gate 6 — Characterization diff**: N/A — not a god-file split; intentional public VM additions documented by the characterization test.
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release --no-restore` → 0 warnings / 0 errors.
+- [x] **Gate 2 — Tests green for changed scope**: wizard/headless/characterization tests 8/8; isolated broad suite 2695 passed, 4 known unrelated local baselines failed, 2 skipped, and no wizard test failed.
+- [x] **Gate 3 — Docs**: Outcome filled; README EN/RU document the troubleshooting entry point.
+- [x] **Gate 4 — Self-review**: Ponytail full plus three read-only exact-model Qwen passes; security review N/A because the feature does not mutate firewall, authentication, TLS, or process execution.
+- [x] **Gate 5 — Remote brat UI verify**: final branch artifact verified only on WINBRAT with screenshots under `artifacts/brat-verify/setup-wizard/`; logs clean.
+- [x] **Gate 6 — Characterization diff**: intentional `MainWindowViewModel` public additions updated the Windows characterization hash to `d44c861459eb262e7f344483e2088fef169594bca8bacf9d731fc2b5831fe9c2`.
 
-## Outcome (filled after verification)
+## Outcome
 
-Pending implementation and all six gates.
+**Status: PASS for draft review; not released.**
+
+Implemented the four-step desktop wizard behind the troubleshooting menu. It
+reuses the existing `HealthCheck`, settings persistence, routing setter and
+redacted diagnostics exporter. The only persistent repair values are MTU and
+routing mode; closing before an explicit repair writes nothing. `Reset MTU
+only` always uses the canonical `TunSettings.DefaultMtu` (`1420`) and preserves
+the currently applied routing mode. `Restore safe settings` applies the chosen
+routing mode with MTU 1420, then reruns checks. The opening MTU/routing snapshot
+supports one-click undo.
+
+Safe Mode remains a separate temporary emergency start. The wizard does not
+invent auto-MTU, simulate failures, change firewall rules, reset unrelated
+settings, or add a second diagnostics engine. Desktop only; no Android scope.
+
+### Evidence
+
+- Release solution build: 0 warnings / 0 errors.
+- Focused tests after the final XAML review: 8 passed / 0 failed.
+- Broad suite with isolated ProgramData: 2695 passed / 4 pre-existing
+  environment/baseline failures / 2 skipped. The failures are the already
+  documented non-admin `Global` TUN semaphore pair and two Windows visual
+  baselines; no wizard failure.
+- Qwen worker: exact `qwen3.8-max-preview`, noninteractive `-p`, safe/plan mode,
+  chat recording off, zero tool calls. Confirmed the architecture and found
+  the repaired step-3 overflow, invisible save-error feedback, missing tests,
+  and final 360px wrapping gaps. Codex independently validated every finding;
+  rejected the proposed per-stage `InvokeThen` timeout because the helper's
+  public contract deliberately bounds the entire atomic action.
+- Final Windows branch package SHA256:
+  `057a014e844eab40dcdcdb9f7ba8ffa900a6e8b3ce9021c2ccf18a4e499f6645`.
+- WINBRAT identity: `WINBRAT` at `100.115.182.0`. Verified open → checks →
+  repair → explicit MTU reset → repeated checks → diagnostics export → close.
+  Health result was warnings 1 / errors 0; the warning was the existing
+  fixed-target IPv4 DF ping caveat. The last 60-minute remote log scan had no
+  `[ERR]`, `Exception`, or `FATAL` entries.
+- Final layout evidence:
+  `artifacts/brat-verify/setup-wizard/final-step1.png`,
+  `artifacts/brat-verify/setup-wizard/final-step3.png`, and
+  `artifacts/brat-verify/setup-wizard/step4-mtu-reset.png`.
+- Routing apply/undo has direct ViewModel coverage. Avalonia radio-button UIA
+  was not reliable enough to mutate that choice semantically on WINBRAT, so
+  the verifier now fails closed and the remaining tooling limitation is
+  measurement-gated in `plans/OPEN-DEFECTS.md`.
+
+### Review footprint
+
+No dependency or abstraction was added. The feature is one ViewModel, one
+modal view/code-behind pair, one localization partial and one focused test
+file, plus narrow integration edits. The implementation stays within the
+brief's intended size and reuses existing services instead of creating a new
+wizard framework.
+
+Draft PR: [#116](https://github.com/PavelLizunov/VPNRouter/pull/116).

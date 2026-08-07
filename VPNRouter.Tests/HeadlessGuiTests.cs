@@ -74,6 +74,29 @@ public class HeadlessGuiTests
         Assert.NotNull(window);
     }
 
+    [AvaloniaFact]
+    public void SetupWizardWindow_Shows_WithBindingsResolved()
+    {
+        var viewModel = new VPNRouter.App.ViewModels.SetupWizardViewModel(
+            VPNRouter.Core.Models.TunSettings.DefaultMtu,
+            true,
+            (_, _) => { },
+            () => [],
+            () => System.Threading.Tasks.Task.CompletedTask);
+        var window = new SetupWizardWindow(viewModel);
+        try
+        {
+            window.Show();
+            Assert.True(window.Bounds.Width > 0);
+            Assert.True(window.Bounds.Height > 0);
+            Assert.Equal(viewModel.TitleText, window.Title);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     /// <summary>
     /// Captures the full MainWindow at three widths to repro the v2.27.0-r2
     /// user report: "обводки/фоны у отдельных лейблов (VPN/Zapret/TG pills,
