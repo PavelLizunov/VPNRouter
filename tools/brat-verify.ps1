@@ -22,7 +22,7 @@ param(
     [string]$Name,
     [string]$ControlType,
 
-    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'SetValue')]
+    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'Select', 'ScrollIntoView', 'SetValue')]
     [string]$UiaOperation = 'Inspect',
     [string]$Value,
 
@@ -109,7 +109,7 @@ function Invoke-BratInteractive {
         [string]$AutomationId,
         [string]$Name,
         [string]$ControlType,
-        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'SetValue')]
+        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'Select', 'ScrollIntoView', 'SetValue')]
         [string]$UiaOperation = 'Inspect',
         [string]$Value,
         [string]$LocalOutput,
@@ -225,6 +225,18 @@ try {
                 $pat = $null
                 if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$pat)) { throw "ExpandCollapsePattern unsupported by matched element." }
                 $pat.Expand()
+            }
+            'Select' {
+                $pat = $null
+                if (-not $target.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pat)) { throw "SelectionItemPattern unsupported by matched element." }
+                $pat.Select()
+                for ($i = 0; $i -lt 20 -and -not $pat.Current.IsSelected; $i++) { Start-Sleep -Milliseconds 100 }
+                if (-not $pat.Current.IsSelected) { throw "SelectionItemPattern returned without selecting the matched element." }
+            }
+            'ScrollIntoView' {
+                $pat = $null
+                if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$pat)) { throw "ScrollItemPattern unsupported by matched element." }
+                $pat.ScrollIntoView()
             }
             'SetValue' {
                 $pat = $null

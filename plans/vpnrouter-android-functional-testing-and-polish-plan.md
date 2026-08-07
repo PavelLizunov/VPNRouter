@@ -8,7 +8,7 @@
 
 **Test asset (user-provided)**:
 ```
-https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+<redacted-test-subscription-url>
 ```
 Real subscription URL — use for end-to-end VPN test on phone.
 
@@ -107,7 +107,7 @@ Per item: tap → expected action → screenshot proof.
 | # | Action | Expected |
 |---|---|---|
 | 3.1 | Empty state visible (no subs yet) | "No servers in any subscription yet — add one below and click ↻" |
-| 3.2 | Type Name "Test" + URL `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee` + tap "+ Add" | Subscription appears in Subscriptions section |
+| 3.2 | Type Name "Test" + URL `<redacted-test-subscription-url>` + tap "+ Add" | Subscription appears in Subscriptions section |
 | 3.3 | Tap "Refresh all" | Server table populates with servers from the test sub |
 | 3.4 | Verify aggregated table shows server count (e.g., 5 servers) | Visible servers with Server/IP/Ping/Port |
 | 3.5 | Tap "Test all" | Latency probes complete, Ping column shows ms |
@@ -181,7 +181,7 @@ Critical real-world flow. Phone has internet via WiFi/cellular before this test.
 | # | Step | Expected |
 |---|---|---|
 | 8.1 | Clear app data, fresh first-launch | Simple page baseline |
-| 8.2 | Open Advanced > Subscribe → add `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee` (Name "Test") | Sub appears |
+| 8.2 | Open Advanced > Subscribe → add `<redacted-test-subscription-url>` (Name "Test") | Sub appears |
 | 8.3 | Tap "Refresh all" | Server list populates |
 | 8.4 | Switch to Advanced > Servers → verify aggregated servers visible | Servers shown |
 | 8.5 | Tap "Test all" → wait for ping results | All servers show ms latency |
@@ -255,7 +255,7 @@ When you compact dialog and we spawn:
 
 ## Test asset details
 
-- **Test subscription URL**: `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee`
+- **Test subscription URL**: `<redacted-test-subscription-url>`
 - **Test name**: "Test" or "ninitux"
 - **Expected protocol**: VLESS+Reality (likely)
 - **Expected server count**: TBD (will see when refresh runs)

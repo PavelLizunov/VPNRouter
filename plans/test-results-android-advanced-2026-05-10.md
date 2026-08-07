@@ -8,7 +8,7 @@
 
 **Tester**: Claude Code session, automated via `adb shell input tap` / `screencap` / `uiautomator dump`.
 
-**Test asset**: `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee`
+**Test asset**: `<redacted-test-subscription-url>`
 (deferred — could not exercise; see blockers).
 
 ---
@@ -172,7 +172,7 @@ Because TEST-1..8 are blocked, the following were **not exercised** this session
 
 - Kebab functions: theme toggle, language toggle, log viewer, IP-leak check, update check, health check, safe-mode restart, reset settings.
 - Advanced shell: Servers list, Custom Config sub-tab, vless/hy2/tuic paste & test.
-- Advanced shell: Subscribe tab — including the user-provided test URL `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee`.
+- Advanced shell: Subscribe tab — including the user-provided test URL `<redacted-test-subscription-url>`.
 - Advanced shell: Settings sub-sections (Routing / Rules / Leak Protection / Content / Updates / Autostart).
 - Advanced shell: Applications categories, per-app picker.
 - Advanced shell: Tools (Zapret modes, Telegram intent).

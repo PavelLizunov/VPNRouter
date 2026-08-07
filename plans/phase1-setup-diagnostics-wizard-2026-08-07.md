@@ -139,3 +139,19 @@ brief's intended size and reuses existing services instead of creating a new
 wizard framework.
 
 Draft PR: [#116](https://github.com/PavelLizunov/VPNRouter/pull/116).
+
+## Post-ship addendum — 2026-08-08
+
+The feature shipped in `v2.48.0-r8` and was reverified from the published ZIP
+on WINBRAT. The released wizard opens in EN/RU, completes checks, persists an
+MTU-only reset to `1420` without changing routing, restores the selected safe
+routing plus MTU only after explicit action, supports undo, and exports the
+redacted diagnostics bundle. The RU first step renders without clipping at the
+verified window size.
+
+The subsequent full-page audit found no need for another recovery pipeline.
+Cross-page state/copy follow-ups, subscription-test evidence and the next exact
+prompts are in
+`plans/qol-interface-and-recovery-audit-2026-08-08.md`. The app-wide log scan
+found three repeatable WS Deep-verifier `invalid public_key` entries; this is
+the existing measurement-gated verifier candidate, not a wizard failure.

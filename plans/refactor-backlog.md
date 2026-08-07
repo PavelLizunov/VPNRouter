@@ -21,6 +21,17 @@ ledger (each item tracked there with how it was/would be verified).
 
 ## Deferred
 
+- [ ] **Cross-page effective-routing presentation projection** — the 2026-08-08
+  WINBRAT audit confirmed that Simple, Routing and Applications describe the
+  same routing state independently, allowing `Full Tunnel` copy to omit the
+  active Russian-direct exception and presentation flags to drift after browsing
+  an empty Custom JSON tab. Fix the confirmed state/copy defects first. If the
+  focused patch still needs three separate condition trees, extract one small
+  read-only projection/property over existing VM state and reuse it across the
+  three views. Do not add a routing service, new persistence schema or engine
+  abstraction; context/reviewability is the only cleanup goal. Full record:
+  `qol-interface-and-recovery-audit-2026-08-08.md` §§4-5.
+
 - [ ] **DR-04 hashing follow-ups** — add a repo lint only if legacy
   `SHA*.Create()` or manual hex-lowercase patterns actually recur. Keep the
   persisted Free Config BuildId prefixes uppercase unless a separately planned

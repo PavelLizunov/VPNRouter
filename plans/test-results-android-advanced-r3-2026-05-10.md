@@ -6,7 +6,7 @@
 
 **Phone**: KYOCERA A101BM (`A101BM`, serial `54499112209`), Android 12, USB-connected to Mac mini `slovn@192.168.0.246` (adb via SSH).
 
-**Test asset**: `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee` — **end-to-end PASS** this run.
+**Test asset**: `<redacted-test-subscription-url>` — **end-to-end PASS** this run.
 
 ---
 

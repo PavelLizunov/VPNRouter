@@ -98,7 +98,7 @@ item; screenshot each state change into `artifacts/brat-verify/$v/`.
 UI interaction is only this command plus `-Action screenshot`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<exact RU name>" -ControlType <Button|CheckBox|ListItem> [-UiaOperation <Inspect|Invoke|Toggle|Expand|SetValue>] [-Value <text>]
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<exact RU name>" -ControlType <Button|CheckBox|ListItem> [-UiaOperation <Inspect|Invoke|InvokeThen|Toggle|Expand|Select|ScrollIntoView|SetValue>] [-Value <text>]
 ```
 
 - Semantic selectors only (Name/AutomationId/ControlType). Use exact Name
@@ -107,6 +107,9 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 - `Inspect` (default) asserts presence and prints Name/AutomationId/
   IsEnabled — assert before mutating. "Pattern unsupported" → the Inspect
   assertion still passed; record the actuation gap, continue with screenshots.
+- `Select` uses the native `SelectionItemPattern` for list navigation;
+  `ScrollIntoView` uses `ScrollItemPattern` on an already-materialized semantic
+  descendant. Both fail closed when the provider exposes no usable pattern.
 - No stable selector → screenshot, assert visually, record "selector
   hardening = future work".
 - UIA/screenshot require a logged-on interactive session on brat; the
