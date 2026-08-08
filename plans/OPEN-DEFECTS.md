@@ -30,6 +30,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P2 CONFIRMED / IN PROGRESS 2026-08-08** — the endpoint did not impose the fixed ten-minute WebSocket session bound, and the browser page did not classify a remote close before its own completion as a WebSocket failure — `VPNRouter.Tools/LoadTarget/Program.cs` — review follow-up, PR #124
 - [ ] **P2 CONFIRMED / IN PROGRESS 2026-08-08** — the final GameUdp check ran after its intentional drain even though its continuous-sending guard made it unreachable, obscuring the intended no-false-blackout semantics — `VPNRouter.Tools/WinbratLoadGen/Program.cs` — review follow-up, PR #124
 - [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — the current verifier intentionally has no signed fixed-profile payload launch or per-process split-tunnel attestation, so a tunnel route alone cannot authorize a live profile or prove that the browser/load generator is split-routed — `tools/brat-verify.ps1` — review follow-up, PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — the live verifier needs a source-built fixed payload identified by an explicit SHA-256 allowlist plus fail-closed, boolean-only outbound attestation for the exact load-generator (and browser only when applicable); without that bounded contract, it must remain `BLOCKED` rather than exposing remote execution or raw logs — `tools/brat-verify.ps1` / `tools/brat-loadtest.ps1` — authorized implementation, PR #124
 
 ### Setup/diagnostics wizard Qwen review — 2026-08-07
 

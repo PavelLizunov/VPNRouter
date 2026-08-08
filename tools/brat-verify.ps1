@@ -92,6 +92,18 @@ $BratMachineName = 'WINBRAT'
 $CredFile        = Resolve-CredentialFile -FileName '.testpc-cred-192.168.0.106.xml' -LocalRoot $Root
 $RemoteVerifyRoot = 'C:\r4review\verify'
 
+# Empty until an operator provisions a source-built archive and its exact
+# digest is reviewed into this script. A sidecar alone is not authorization.
+$ApprovedWinbratLoadPayloadSha256 = @()
+
+function Test-ApprovedWinbratLoadPayload {
+    $archive = Join-Path $Root 'artifacts\brat-loadtest-payload\WinbratLoadGen-win-x64.zip'
+    if (-not (Test-Path $archive) -or $ApprovedWinbratLoadPayloadSha256.Count -eq 0) { return $false }
+    $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+    return $ApprovedWinbratLoadPayloadSha256 -contains $hash
+}
+
+
 function New-VerifiedBratSession {
     if (-not (Test-Path $CredFile)) {
         throw "Credential file missing: $CredFile. Create it once (interactive): Get-Credential -Message 'Local admin on $BratIp ($BratMachineName)' | Export-Clixml '$CredFile'"
@@ -829,10 +841,11 @@ switch ($Action) {
     'loadtest' {
         # The route check is intentionally separate from the old public canary
         # probes: synthetic traffic is allowed only to the fixed owned target.
+        $payloadApproved = Test-ApprovedWinbratLoadPayload
         $s = New-VerifiedBratSession
         try {
-            $result = Invoke-Command -Session $s -ArgumentList $LoadProfile, $TimeoutSeconds -ScriptBlock {
-                param($profile, $timeoutSeconds)
+            $result = Invoke-Command -Session $s -ArgumentList $LoadProfile, $TimeoutSeconds, $payloadApproved -ScriptBlock {
+                param($profile, $timeoutSeconds, $payloadApproved)
 
                 $hostName = 'loadtest.vpn.ninitux.com'
                 $routeScope = 'Unknown'
@@ -863,16 +876,16 @@ switch ($Action) {
                     finally { $http.Dispose() }
                 }
 
-                # Remote execution remains deliberately disabled until a signed
-                # fixed-profile payload and per-process split-tunnel attestation
-                # are provisioned. A tunnel route alone cannot prove the workload
-                # process used the tunnel, so every live profile stays BLOCKED.
+                # This action intentionally never launches a payload yet: the
+                # process-level measurement gate is a separate endpoint-backed
+                # prerequisite. Route health cannot stand in for it.
                 [ordered]@{
-                    Status = if ($ready) { 'BLOCKED' } else { 'BLOCKED' }
+                    Status = 'BLOCKED'
                     Profile = $profile
                     RouteScope = $routeScope
                     DurationSeconds = if ($profile -eq 'GameUdp') { 300 } elseif ($profile -eq 'BrowserBurst') { 600 } else { 900 }
                     Caps = if ($profile -eq 'GameUdp') { '20pps-256B-burst50pps' } elseif ($profile -eq 'BrowserBurst') { '32x64KiB-5s-4x64Bps' } else { 'GameUdp+BrowserBurst' }
+                    Lifecycle = if (-not $payloadApproved) { 'PayloadNotApproved' } elseif (-not $ready) { 'EndpointUnavailable' } else { 'MeasurementGated' }
                 }
             }
             # Reconstruct a strict schema locally to prevent WinRM metadata and
@@ -883,6 +896,7 @@ switch ($Action) {
                 RouteScope = [string]$result.RouteScope
                 DurationSeconds = [int]$result.DurationSeconds
                 Caps = [string]$result.Caps
+                Lifecycle = [string]$result.Lifecycle
             }
             Write-Output ($clean | ConvertTo-Json -Compress)
         }

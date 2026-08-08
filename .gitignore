@@ -54,6 +54,7 @@ tools/*
 # all remote work delegates to brat-verify.ps1.
 !tools/brat-stability.ps1
 !tools/brat-loadtest.ps1
+!tools/build-winbrat-loadtest-payload.ps1
 /artifacts/brat-loadtest/
 # Re-include: pve-guest-exec.ps1 (run commands in a Linux test VM via guest-agent).
 !tools/pve-guest-exec.ps1

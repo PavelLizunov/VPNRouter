@@ -207,14 +207,21 @@ public sealed class WinbratLoadTestMvpTests
         var verifier = ReadRepoFile("tools", "brat-verify.ps1");
         var coordinator = ReadRepoFile("tools", "brat-loadtest.ps1");
         var target = ReadRepoFile("VPNRouter.Tools", "LoadTarget", "Program.cs");
+        var payloadBuilder = ReadRepoFile("tools", "build-winbrat-loadtest-payload.ps1");
         var loadAction = Slice(verifier, "    'loadtest' {", "    'lifecycle' {");
 
         Assert.Contains("'loadtest'", verifier, StringComparison.Ordinal);
         Assert.Contains("loadtest.vpn.ninitux.com", loadAction, StringComparison.Ordinal);
         Assert.Contains("RouteScope", loadAction, StringComparison.Ordinal);
         Assert.Contains("Status = 'BLOCKED'", loadAction, StringComparison.Ordinal);
-        Assert.Contains("signed", loadAction, StringComparison.Ordinal);
-        Assert.Contains("per-process split-tunnel attestation", loadAction, StringComparison.Ordinal);
+        Assert.Contains("Test-ApprovedWinbratLoadPayload", verifier, StringComparison.Ordinal);
+        Assert.Contains("$ApprovedWinbratLoadPayloadSha256 = @()", verifier, StringComparison.Ordinal);
+        Assert.Contains("$LoadProfile, $TimeoutSeconds, $payloadApproved", verifier, StringComparison.Ordinal);
+        Assert.Contains("PayloadNotApproved", loadAction, StringComparison.Ordinal);
+        Assert.Contains("EndpointUnavailable", loadAction, StringComparison.Ordinal);
+        Assert.Contains("MeasurementGated", loadAction, StringComparison.Ordinal);
+        Assert.Contains("dotnet publish", payloadBuilder, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash -Algorithm SHA256", payloadBuilder, StringComparison.Ordinal);
         Assert.True(loadAction.IndexOf("Add-Type -AssemblyName System.Net.Http", StringComparison.Ordinal) < loadAction.IndexOf("New-Object System.Net.Http.HttpClient", StringComparison.Ordinal));
         Assert.DoesNotContain("Set-Content", loadAction, StringComparison.Ordinal);
         Assert.DoesNotContain("Set-Vpn", coordinator, StringComparison.OrdinalIgnoreCase);
@@ -224,6 +231,7 @@ public sealed class WinbratLoadTestMvpTests
         Assert.DoesNotContain("Start-Process", coordinator, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Profile =", coordinator, StringComparison.Ordinal);
         Assert.Contains("Metrics =", coordinator, StringComparison.Ordinal);
+        Assert.Contains("Verifier returned an invalid lifecycle enum", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("Token =", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("Target =", coordinator, StringComparison.Ordinal);
         Assert.Contains("response.Length <= packet.Buffer.Length", target, StringComparison.Ordinal);
