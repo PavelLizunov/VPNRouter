@@ -14,6 +14,9 @@ public sealed class WinbratLoadTestMvpTests
     private static readonly DateTimeOffset KnownNow = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
 
     [Fact]
+    public void Contract_UsesDedicatedUdpPort() => Assert.Equal(19000, LoadTestContract.UdpPort);
+
+    [Fact]
     public void Cookie_DifferentSourceOrExpired_IsRejected()
     {
         var auth = new UdpCookieAuthenticator(KnownSecret);

@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P1 RESOLVED 2026-08-08** — the owned GameUdp endpoint and fixed client both used UDP `443`, but live ingress already owns it for Caddy HTTP/3. The shared fixed contract now uses dedicated UDP `19000`; exact source built in isolated LXC 105 and passed 17 focused tests plus local authenticated-cookie exchange without disturbing QUIC — `VPNRouter.Tools/LoadTest.Protocol/LoadTestProtocol.cs` — draft PR #124
+
 ### WINBRAT operator-owned load-test MVP — 2026-08-08
 
 - [ ] **P2 TOOLING GAP / EXTERNAL PROVISIONING / MEASUREMENT-GATED** — live GameUdp, BrowserBurst and Mixed acceptance cannot run until the fixed operator-owned endpoint is deployed and each workload can be measured without raw evidence: compare opaque run-token ingress with a direct control and TUN on/off byte correlation. Current logs have no unambiguous process-to-proxy link, so route proof alone cannot authorize a live profile. The runner returns `BLOCKED` without changing selected apps or configuration; this is unavailable live coverage, not a product release gate — `plans/phase2-winbrat-load-test-mvp-2026-08-08.md` / `tools/brat-verify.ps1` — owner endpoint/measurement prerequisite

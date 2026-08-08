@@ -10,7 +10,7 @@ public static class LoadTestContract
 {
     public const string HostName = "loadtest.vpn.ninitux.com";
     public const int HttpPort = 443;
-    public const int UdpPort = 443;
+    public const int UdpPort = 19000;
     public const int BlobBytes = 64 * 1024;
     public const int MaxDatagramBytes = 1200;
     public const int CookieRequestBytes = 40;
