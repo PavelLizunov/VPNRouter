@@ -202,16 +202,19 @@ The independent review found a behavioral impact missed in the first pass:
 - after the peek both transient flags are false, so Simple Connect dials the
   persisted active row without checking whether it is alive;
 - `MaybeRefreshAutoSelectedAsync` also stops updating the runtime urltest label;
+- `StartSubRefreshTimer` and `RefreshSubscriptionSilentAsync` stop the periodic
+  subscription refresh after the same page visit;
 - the resolver still reads persisted `ConfigMode=subscribe`, so the generated
   tunnel remains a subscription tunnel. The defect is degraded server selection,
   not a wrong config mode or proven routing leak.
 
 Smallest safe design: preserve the Servers-page peek flags, because they drive
-that page's visible sub-tab. Extract one private effective-mode decision from
-the existing `SaveSettings` guard and reuse it for the Simple summary, Smart
-Connect gate and connected auto-selected label. Do not mutate the view flags
-inside `SaveSettings`, do not touch the resolver, and pin the whole transition
-through Connect rather than asserting only the label.
+that page's visible sub-tab. Runtime and connection consumers read persisted
+`ConfigMode` inline; adding a private helper is deliberately avoided because
+the strict MainWindowViewModel characterization includes private members and
+would require a meaningless hash re-pin. Do not mutate the view flags inside
+`SaveSettings`, do not touch the resolver, and pin the transition plus the
+Smart Connect/urltest gates.
 
 ### QOL-2 — “All traffic” omits active direct exceptions — P2
 
@@ -402,10 +405,11 @@ qwen3.8-max-preview as a read-only reviewer with safe/plan/no-recording and all
 tools disabled; pass only sanitized code excerpts.
 
 Preserve the existing SaveSettings subscription guard and Servers-page Custom
-peek visuals. Extract the smallest private effective-mode decision needed by
-SimpleConfigModeSummary, Simple Smart Connect and the connected urltest label;
-do not mutate IsVlessMode/IsSubscribeMode inside SaveSettings and do not touch
-the resolver or MainWindowViewModel.cs:4264.
+peek visuals. Make SimpleConfigModeSummary, Simple Smart Connect, periodic
+subscription refresh and the connected urltest label read persisted ConfigMode
+inline; do not add a MainWindowViewModel helper, mutate
+IsVlessMode/IsSubscribeMode inside SaveSettings, or touch the resolver or
+MainWindowViewModel.cs:4264.
 
 First add an Avalonia-headless EN<->RU test with Gaming selected. Always reject
 ConnectionIntentIndex < 0 before persistence; add more selection restoration

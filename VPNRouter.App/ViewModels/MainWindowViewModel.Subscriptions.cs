@@ -248,7 +248,8 @@ public partial class MainWindowViewModel
     private void StartSubRefreshTimer()
     {
         StopSubRefreshTimer();
-        if (!IsSubscribeMode) return;
+        if (!(_settings.App.ConfigMode ?? "generated")
+            .Equals("subscribe", StringComparison.OrdinalIgnoreCase)) return;
         // v2.31.0-r3 (VM-1): multi-sub model uses Subscriptions[] — pre-fix
         // condition only checked the legacy single SubscriptionUrl field, so
         // users who had migrated to the multi-sub UI never got auto-refresh
@@ -279,7 +280,8 @@ public partial class MainWindowViewModel
     /// </summary>
     private async Task RefreshSubscriptionSilentAsync()
     {
-        if (!IsConnected || !IsSubscribeMode) return;
+        if (!IsConnected || !(_settings.App.ConfigMode ?? "generated")
+            .Equals("subscribe", StringComparison.OrdinalIgnoreCase)) return;
 
         var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
         if (enabled.Count == 0) return;
