@@ -48,49 +48,56 @@ public static class GameUdpMvp
 
     public static async Task<GameUdpSummary> RunAsync(CancellationToken cancellationToken)
     {
-        using var udp = new UdpClient();
-        var address = (await Dns.GetHostAddressesAsync(LoadTestContract.HostName, cancellationToken))
-            .FirstOrDefault(candidate => candidate.AddressFamily == AddressFamily.InterNetwork);
-        if (address is null) throw new InvalidOperationException("fixed UDP endpoint did not resolve to IPv4");
-        await udp.Client.ConnectAsync(address, LoadTestContract.UdpPort, cancellationToken);
-
-        var cookies = new GameUdpCookieState(await GetCookieAsync(udp, cancellationToken));
         var metrics = new GameUdpMetrics();
-        using var receiveStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var receiver = ReceiveAsync(udp, cookies, metrics, receiveStop.Token);
-        var started = DateTimeOffset.UtcNow;
-        var deadline = started + GameUdpProfile.Duration;
-        var nextSend = started;
-        var sequence = 0L;
-
         try
         {
-            while (DateTimeOffset.UtcNow < deadline)
+            using var udp = new UdpClient();
+            var address = (await Dns.GetHostAddressesAsync(LoadTestContract.HostName, cancellationToken))
+                .FirstOrDefault(candidate => candidate.AddressFamily == AddressFamily.InterNetwork);
+            if (address is null) return metrics.Snapshot("NetworkFailure");
+            await udp.Client.ConnectAsync(address, LoadTestContract.UdpPort, cancellationToken);
+
+            var cookies = new GameUdpCookieState(await GetCookieAsync(udp, cancellationToken));
+            using var receiveStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var receiver = ReceiveAsync(udp, cookies, metrics, receiveStop.Token);
+            var started = DateTimeOffset.UtcNow;
+            var deadline = started + GameUdpProfile.Duration;
+            var nextSend = started;
+            var sequence = 0L;
+            var status = "Completed";
+            try
             {
-                var now = DateTimeOffset.UtcNow;
-                var delay = nextSend - now;
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken);
-                now = DateTimeOffset.UtcNow;
-                if (cookies.TryBeginRefresh(now)) await udp.SendAsync(CreateCookieRequest(), cancellationToken);
+                while (DateTimeOffset.UtcNow < deadline)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    var delay = nextSend - now;
+                    if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken);
+                    now = DateTimeOffset.UtcNow;
+                    if (cookies.TryBeginRefresh(now)) await udp.SendAsync(CreateCookieRequest(), cancellationToken);
 
-                var request = CreateEchoRequest(cookies.CurrentCookie, sequence);
-                metrics.Sent(sequence, now);
-                await udp.SendAsync(request, cancellationToken);
-                if (metrics.HasFailureGap(now)) throw new InvalidOperationException("sent-but-unanswered gap reached three seconds");
+                    var request = CreateEchoRequest(cookies.CurrentCookie, sequence);
+                    metrics.Sent(sequence, now);
+                    await udp.SendAsync(request, cancellationToken);
+                    if (metrics.HasFailureGap(now)) { status = "ReplyGap"; break; }
 
-                sequence++;
-                nextSend += GameUdpProfile.IntervalAt(now - started);
+                    sequence++;
+                    nextSend += GameUdpProfile.IntervalAt(now - started);
+                }
+
+                if (status == "Completed") await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
             }
-
-            await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
-            return metrics.Snapshot();
+            finally
+            {
+                receiveStop.Cancel();
+                try { await receiver; }
+                catch { /* aggregate status remains the only remote evidence */ }
+            }
+            return metrics.Snapshot(status);
         }
-        finally
-        {
-            receiveStop.Cancel();
-            try { await receiver; }
-            catch (OperationCanceledException) when (receiveStop.IsCancellationRequested) { }
-        }
+        catch (SocketException) { return metrics.Snapshot("NetworkFailure"); }
+        catch (OperationCanceledException) { return metrics.Snapshot("CookieFailure"); }
+        catch (InvalidOperationException) { return metrics.Snapshot("CookieFailure"); }
+        catch { return metrics.Snapshot("InternalFailure"); }
     }
 
     private static async Task ReceiveAsync(UdpClient udp, GameUdpCookieState cookies, GameUdpMetrics metrics, CancellationToken cancellationToken)

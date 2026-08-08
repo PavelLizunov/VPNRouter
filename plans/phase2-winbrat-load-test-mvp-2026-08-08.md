@@ -186,3 +186,19 @@ Evidence: `artifacts/brat-loadtest/20260808-182139-30m-endpoint-baseline.json`.
   attestation, followed by one independent non-hairpin control source. Keep the
   current strict lifecycle FAIL until the single unknown event is safely
   classified from redacted diagnostics.
+
+## Post-outcome live enablement (2026-08-09)
+
+GameUdp is no longer blocked: the exact source-built payload was approved,
+Full Tunnel plus fixed-destination Tunnel routing and TUN-byte correlation were
+proven on WINBRAT, and the live HY2/AWG matrix ran. BrowserBurst and Mixed remain
+`MeasurementGated`; there is still no browser-process attribution and enabling
+them would not explain the newly observed UDP-only gaps.
+
+The detailed measurements and cleanup proof are in
+`phase2-winbrat-protocol-load-matrix-2026-08-08.md`. The important result is not
+"AWG fixes games": HY2 and AWG each reached the fixed three-second no-reply
+failure threshold while core/TUN/lifecycle stayed healthy; their last completed
+acknowledged gaps were 1.05 and 2.65 seconds. Independent dev-host endpoint
+controls did not reproduce a multi-second pause. Attribution
+remains measurement-gated pending server counters and another underlay.

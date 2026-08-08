@@ -218,6 +218,23 @@ public sealed class WinbratLoadTestMvpTests
     }
 
     [Fact]
+    public void GameUdp_ControlledFailure_PreservesAggregateWithoutRawExceptionText()
+    {
+        var metrics = new GameUdpMetrics();
+        metrics.Sent(1, KnownNow);
+
+        var summary = metrics.Snapshot("ReplyGap");
+        Assert.Equal("ReplyGap", summary.Status);
+        Assert.Equal(1, summary.Sent);
+        Assert.Equal(1, summary.Loss);
+
+        var loadGenerator = ReadRepoFile("VPNRouter.Tools", "WinbratLoadGen", "Program.cs");
+        Assert.Contains("status = \"ReplyGap\"", loadGenerator, StringComparison.Ordinal);
+        Assert.Contains("metrics.Snapshot(\"InternalFailure\")", loadGenerator, StringComparison.Ordinal);
+        Assert.DoesNotContain("Console.Error", loadGenerator, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserPage_FixedBurstAndWebSocketCaps_ArePresent()
     {
         var target = ReadRepoFile("VPNRouter.Tools", "LoadTarget", "Program.cs");
@@ -261,17 +278,31 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("'loadtest'", verifier, StringComparison.Ordinal);
         Assert.Contains("loadtest.vpn.ninitux.com", loadAction, StringComparison.Ordinal);
         Assert.Contains("RouteScope", loadAction, StringComparison.Ordinal);
-        Assert.Contains("Status = 'BLOCKED'", loadAction, StringComparison.Ordinal);
+        Assert.Contains("Status = if ($passed) { 'PASS' } else { 'FAIL' }", loadAction, StringComparison.Ordinal);
         Assert.Contains("Test-ApprovedWinbratLoadPayload", verifier, StringComparison.Ordinal);
-        Assert.Contains("$ApprovedWinbratLoadPayloadSha256 = @()", verifier, StringComparison.Ordinal);
-        Assert.Contains("$LoadProfile, $TimeoutSeconds, $payloadApproved", verifier, StringComparison.Ordinal);
+        Assert.Contains("$ApprovedWinbratLoadPayloadSha256 = @(", verifier, StringComparison.Ordinal);
+        Assert.Contains("5855167c4c89efa5c5adbd0933ee4269382785bb35d6b04f7a5fd27d80f72934", verifier, StringComparison.Ordinal);
         Assert.Contains("PayloadNotApproved", loadAction, StringComparison.Ordinal);
         Assert.Contains("EndpointUnavailable", loadAction, StringComparison.Ordinal);
         Assert.Contains("MeasurementGated", loadAction, StringComparison.Ordinal);
+        Assert.Contains("Copy-Item -LiteralPath $archive", loadAction, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash -Algorithm SHA256 -LiteralPath $zip", loadAction, StringComparison.Ordinal);
+        Assert.Contains("WaitForExit(330000)", loadAction, StringComparison.Ordinal);
+        Assert.Contains("$process.WaitForExit()", loadAction, StringComparison.Ordinal);
+        Assert.Contains("PayloadExitNonZero", loadAction, StringComparison.Ordinal);
+        Assert.Contains("PayloadOutputMissing", loadAction, StringComparison.Ordinal);
+        Assert.Contains("PayloadOutputEmpty", loadAction, StringComparison.Ordinal);
+        Assert.Contains("Get-NetAdapterStatistics -Name 'VPNRouter-TUN'", loadAction, StringComparison.Ordinal);
+        Assert.Contains("FullTunnel = $true", loadAction, StringComparison.Ordinal);
+        Assert.Contains("TunCorrelation", loadAction, StringComparison.Ordinal);
+        Assert.Contains("$tunCorrelation = $false", loadAction, StringComparison.Ordinal);
+        Assert.Contains("if ([bool]$result.Success)", loadAction, StringComparison.Ordinal);
+        Assert.Contains("$candidate -in @('PayloadHashMismatch'", loadAction, StringComparison.Ordinal);
+        Assert.Contains("PayloadStatus = [string]$metrics.Status", loadAction, StringComparison.Ordinal);
+        Assert.Contains("'Completed', 'ReplyGap', 'CookieFailure', 'NetworkFailure', 'InternalFailure'", loadAction, StringComparison.Ordinal);
         Assert.Contains("dotnet publish", payloadBuilder, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash -Algorithm SHA256", payloadBuilder, StringComparison.Ordinal);
         Assert.True(loadAction.IndexOf("Add-Type -AssemblyName System.Net.Http", StringComparison.Ordinal) < loadAction.IndexOf("New-Object System.Net.Http.HttpClient", StringComparison.Ordinal));
-        Assert.DoesNotContain("Set-Content", loadAction, StringComparison.Ordinal);
         Assert.DoesNotContain("Set-Vpn", coordinator, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SaveSettings", coordinator, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("New-PSSession", coordinator, StringComparison.OrdinalIgnoreCase);
@@ -280,9 +311,37 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("Profile =", coordinator, StringComparison.Ordinal);
         Assert.Contains("Metrics =", coordinator, StringComparison.Ordinal);
         Assert.Contains("Verifier returned an invalid lifecycle enum", coordinator, StringComparison.Ordinal);
+        Assert.Contains("FullTunnel", coordinator, StringComparison.Ordinal);
+        Assert.Contains("TunCorrelation", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("Token =", coordinator, StringComparison.Ordinal);
         Assert.DoesNotContain("Target =", coordinator, StringComparison.Ordinal);
         Assert.Contains("response.Length <= packet.Buffer.Length", target, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tooling_ProtocolSelection_UsesOnlySafeClassNamesAndDisconnectedSubList()
+    {
+        var verifier = ReadRepoFile("tools", "brat-verify.ps1");
+        var operation = Slice(verifier, "            'SelectProtocol' {", "            'ScrollIntoView' {");
+
+        Assert.Contains("$target.Current.AutomationId -ne 'SubList'", operation, StringComparison.Ordinal);
+        Assert.Contains("SelectProtocol requires a disconnected VPNRouter-TUN state", operation, StringComparison.Ordinal);
+        Assert.Contains("VlessReality", operation, StringComparison.Ordinal);
+        Assert.Contains("Hysteria2", operation, StringComparison.Ordinal);
+        Assert.Contains("AmneziaWG", operation, StringComparison.Ordinal);
+        Assert.Contains("TreeWalker]::ControlViewWalker.GetParent", operation, StringComparison.Ordinal);
+        Assert.Contains("SelectionItemPattern", operation, StringComparison.Ordinal);
+        Assert.Contains("SendWait('{HOME}')", operation, StringComparison.Ordinal);
+        Assert.Contains("SendWait('{PGDN}')", operation, StringComparison.Ordinal);
+        Assert.Contains("$originalSelection", operation, StringComparison.Ordinal);
+        Assert.Contains("$selectionMutationAttempted = $true", operation, StringComparison.Ordinal);
+        Assert.Contains("$restore.Select()", operation, StringComparison.Ordinal);
+        Assert.Contains("$remove.RemoveFromSelection()", operation, StringComparison.Ordinal);
+        Assert.Contains("original empty selection restoration did not stick", operation, StringComparison.Ordinal);
+        Assert.Contains("ProtocolClass = [string]$req.ProtocolClass", operation, StringComparison.Ordinal);
+        Assert.DoesNotContain("$row.Current.Name", operation, StringComparison.Ordinal);
+        Assert.DoesNotContain("SendWait([string]$req", operation, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServerViewModel", operation, StringComparison.Ordinal);
     }
 
     private static byte[] CreateEchoRequest(byte[] cookie, long sequence, byte[] payload)

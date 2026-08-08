@@ -2,7 +2,7 @@
 
 namespace VPNRouter.Tools.WinbratLoadGen;
 
-public sealed record GameUdpSummary(int Sent, int Received, int Loss, int Duplicate, int Reorder, int Corruption, int Unknown, double RttP50Ms, double RttP95Ms, double RttP99Ms, double MaxAcknowledgedGapMs);
+public sealed record GameUdpSummary(string Status, int Sent, int Received, int Loss, int Duplicate, int Reorder, int Corruption, int Unknown, double RttP50Ms, double RttP95Ms, double RttP99Ms, double MaxAcknowledgedGapMs);
 
 public static class GameUdpProfile
 {
@@ -69,10 +69,10 @@ public sealed class GameUdpMetrics
                 now - (_lastAcknowledgementAt ?? first) >= TimeSpan.FromSeconds(3);
     }
 
-    public GameUdpSummary Snapshot()
+    public GameUdpSummary Snapshot(string status = "Completed")
     {
         lock (_gate)
-            return new(_sent, _received.Count, _sent - _received.Count, _duplicate, _reorder, _corruption, _unknown, Percentile(.50), Percentile(.95), Percentile(.99), _maxAcknowledgedGap);
+            return new(status, _sent, _received.Count, _sent - _received.Count, _duplicate, _reorder, _corruption, _unknown, Percentile(.50), Percentile(.95), Percentile(.99), _maxAcknowledgedGap);
     }
 
     private double Percentile(double fraction)
