@@ -156,6 +156,54 @@ zone documentation and defect ledger
   selector; visible row names currently include endpoint data.
 - Sustained game-like UDP cadence waits for an operator-controlled echo target.
 
+## Load and browser-game follow-up decision
+
+The completed soak was intentionally a low-rate liveness run, not a load test.
+It did not create concurrent browser streams, WebSocket/HTTP3 churn, sustained
+UDP cadence or mixed TCP+UDP contention. Public Google/STUN and ordinary sites
+remain canaries only and must not receive synthetic load.
+
+The smallest useful next stage is blocked until an operator-owned endpoint is
+available. That endpoint must provide capped HTTPS/H2/H3 bodies, WebSocket or
+WebTransport echo, and an authenticated UDP echo whose response is never larger
+than its request. UDP pacing and the aggregate cap follow
+[RFC 8085](https://www.rfc-editor.org/rfc/rfc8085.html); acknowledged size probes
+follow [RFC 8899](https://www.rfc-editor.org/rfc/rfc8899.html). Browser UDP
+surfaces are intentionally separated: WebRTC data channels use SCTP/DTLS/UDP
+([RFC 8831](https://www.rfc-editor.org/rfc/rfc8831.html)), while WebTransport
+exposes HTTP/3 streams and datagrams
+([W3C WebTransport](https://www.w3.org/TR/webtransport/)).
+
+Ordered implementation, with product code unchanged:
+
+1. `GameUdpMvp`: one connected owned echo flow, 20 packets/s, 256-byte payload,
+   five minutes, plus one paced two-second 50 packets/s burst. Fail only on a
+   sent-but-unanswered gap of at least three seconds, route escape, lifecycle
+   failure or payload corruption. Loss and latency quantiles are measurement-only.
+2. `BrowserBurst`: an actual Edge test page runs 32 parallel cache-busted
+   64-KiB fetch operations every five seconds (application streams, not a claim
+   of 32 TCP connections) and four 64-byte WebSocket echoes/s for ten minutes.
+3. `QuicWeb`: four server-confirmed HTTP/3/WebTransport sessions, each sending
+   ten 256-byte datagrams/s plus one 64-KiB reliable stream transfer/s for ten
+   minutes. A policy that intentionally blocks QUIC yields `SKIPPED_BY_POLICY`,
+   not a VPN failure.
+4. `Mixed`: run the steady UDP profile concurrently with BrowserBurst and then
+   QuicWeb. Phase boundaries and a short warm-up window are recorded so planned
+   teardown is not misclassified as a disconnect.
+
+Every profile is fail-closed unless the exact workload is proven to traverse
+`VPNRouter-TUN` under the current split policy. The runner does not add the
+browser/load generator to selected apps and does not alter configuration. The
+copied evidence contains only profile/cap/duration, aggregate sent/received,
+loss/duplicate/reorder, RTT p50/p95/p99, maximum acknowledged gap, session-reset
+and sanitized lifecycle counts. It contains no target, IP, port, PID, route,
+token, config, server label, raw log, packet capture or screenshot.
+
+This is synthetic failure-class coverage, not Dota 2, Roblox or any proprietary
+game protocol emulation. Exact performance thresholds wait for three repeated
+same-endpoint idle and mixed-load baselines; tunnel/core disconnects, route
+escape, corruption and a sent-but-unanswered three-second UDP gap fail immediately.
+
 **Lessons for methodology doc**:
 
 - Full Windows test results must distinguish product regressions from existing
