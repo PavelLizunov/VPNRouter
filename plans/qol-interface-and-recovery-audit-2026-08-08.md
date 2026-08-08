@@ -2,21 +2,25 @@
 
 ## Decision
 
-The published Windows build `v2.48.0-r8` is stable enough for the tested
-configuration, and the new setup/diagnostics wizard works on WINBRAT. The next
-useful work is a small clarity/state-consistency patch, not another recovery
-framework:
+The published Windows build `v2.48.0-r8` kept the tested session stable, and the
+new setup/diagnostics wizard works on WINBRAT. After the independent GPT Pro
+review and the owner's clarification that intermittent connect failure and game
+disconnects are the real priority, do **not** implement this audit as one broad
+QoL batch. The focused decision is:
 
-1. rotate the test subscription link that appeared in historical tracked plans;
-2. keep the wizard as the single guided diagnose/repair path;
-3. fix the Custom JSON -> Simple mode display drift;
-4. show an honest effective-routing summary with active direct exceptions;
-5. correct Public-page instructions and measure whether its local Connect action
-   needs clearer copy;
-6. preserve the connection-intent selection and volatile status language after
-   an in-process locale switch;
-7. make Deep verify's final summary distinguish processed, passed, failed and
-   untested rows.
+1. **Fix now:** Custom JSON peeking must not make Simple Connect skip Smart
+   Connect. This is a confirmed connection-path defect, not only display drift.
+2. **Prove then fix if reproduced:** headless-test EN<->RU with a non-General
+   Connection Intent; reject `SelectedIndex=-1` so Gaming cannot silently fall
+   back to General.
+3. **Measure before design:** capture one real game disconnect with active
+   protocol, HTTP/core health, UDP-path health and the failover pick. Do not
+   automatically switch to AWG until that evidence assigns ownership.
+
+Public copy, Deep Verify presentation, URL-row masking, effective RU-bypass
+status and MTU autosave remain valid findings, but they are deliberately outside
+the connectivity-first patch. The test subscription link found in historical
+plans still requires owner-side rotation.
 
 Do not add speculative auto-MTU, a second “repair everything” button, coordinate
 UI automation, or automatic firewall/killswitch changes. MTU reset to the
@@ -172,7 +176,7 @@ already redacted. The owner must rotate or revoke the link because the old value
 remains recoverable from repository history; history rewriting is deliberately
 outside this audit.
 
-### QOL-1 — Custom JSON browsing desynchronizes the displayed mode — P2
+### QOL-1 — Custom JSON browsing disables Simple Smart Connect — P1
 
 Reproduction:
 
@@ -191,9 +195,23 @@ Root cause:
 - `SimpleConfigModeSummary` reads the stale presentation flags instead of the
   persisted/effective mode.
 
-Smallest safe design: when an active subscription makes Custom a browse-only
-view, do not leave the mode flags in custom state. Preserve the persistence
-guard and add a transition test; do not redesign ConfigMode.
+The independent review found a behavioral impact missed in the first pass:
+
+- `SmpToggleConnectAsync` gates the complete protocol-aware
+  `ServerHealthProbe` + `ConnectionIntentScorer` path on `IsSubscribeMode`;
+- after the peek both transient flags are false, so Simple Connect dials the
+  persisted active row without checking whether it is alive;
+- `MaybeRefreshAutoSelectedAsync` also stops updating the runtime urltest label;
+- the resolver still reads persisted `ConfigMode=subscribe`, so the generated
+  tunnel remains a subscription tunnel. The defect is degraded server selection,
+  not a wrong config mode or proven routing leak.
+
+Smallest safe design: preserve the Servers-page peek flags, because they drive
+that page's visible sub-tab. Extract one private effective-mode decision from
+the existing `SaveSettings` guard and reuse it for the Simple summary, Smart
+Connect gate and connected auto-selected label. Do not mutate the view flags
+inside `SaveSettings`, do not touch the resolver, and pin the whole transition
+through Connect rather than asserting only the label.
 
 ### QOL-2 — “All traffic” omits active direct exceptions — P2
 
@@ -203,13 +221,17 @@ effective summary. Display a compact exception, for example:
 
 > Full tunnel · Russian destinations direct
 
-The same projection should feed Simple and Routing. Details remain in Routing;
-do not expand the Simple page with rule internals.
+Only the Simple current-state summary needs this suffix. Routing already shows
+the RU-bypass card beside Full Tunnel, and its radio subtitle describes the
+meaning of the option rather than claiming the complete effective state. Build
+the suffix from effective geo availability, not merely the checked toggle.
 
 ### QOL-3 — Public empty state names a missing action — P2
 
-`Cache is empty — click 'Refresh'` conflicts with `Find working configs`.
-Change the instruction to the actual action. Do not add a second Refresh button.
+Two live strings conflict with `Find working configs`: `FcStatusEmpty` names
+`Refresh`, and `FcStatusNoDeepCandidates` names `Refresh list`. Change both to
+the actual action. Do not add a second button. `FcRefreshSources` is not rendered
+by desktop and remains a separate Android-aware cleanup question.
 
 ### QOL-4 — Subscription row repeats a sensitive opaque URL — P2
 
@@ -221,19 +243,31 @@ stored URL and never write it to diagnostics.
 ### QOL-5 — Locale switch can blank the connection-intent choice — P2
 
 Changing EN -> RU replaces `ConnectionIntentChoices`; the ComboBox loses its
-visible selection while `ConnectionIntentStatusText` still says general.
-Preserve/reapply the index after refreshing localized choices. Pin both locale
-directions in a headless binding test.
+visible selection while `ConnectionIntentStatusText` falls to General. Since
+the two-way index handler maps every unknown value, including `-1`, to General
+and saves immediately, it may also erase a Gaming choice that prefers AWG/HY2.
+The blank UI is live-confirmed; the disk write remains measurement-gated. First
+pin both locale directions in a headless binding test. A negative-index guard is
+safe; rebuild/restore logic is needed only if the test proves the guard alone is
+insufficient.
 
-### QOL-6 — Deep verify final state lacks outcome counts — P2
+### QOL-6 — Deep verify final state is overwritten by queued progress — P2
 
-Show, at completion:
+The first audit wording was incomplete: a final `Done. Verified: N / total`
+summary already exists. The progress callback is already a `Progress<T>` created
+on the UI command path, but posts a second `Dispatcher.UIThread.Post`. The last
+callback can therefore enqueue its inner `processed / total` update after the
+awaited continuation writes `Done`, reproducing the WINBRAT `20 / 20` final
+screen and the earlier MTU-audit `19 / 19` observation.
+
+Remove the redundant UI post first. After that ordering fix, the final copy may
+be expanded from existing row verdicts to:
 
 > Processed 20 · working N · protocol failed M · untested K
 
-Exact buckets must come from existing row verdicts; this is presentation only.
-Do not treat “processed” as “passed” and do not change protocol thresholds in
-the same task.
+Exact buckets must come from existing `IsDeepVerified`, `IsDeepFailed` and
+`IsDeepInconclusive` verdicts. Do not add state or change protocol thresholds.
+This is not part of the connectivity-first patch.
 
 ### QOL-7 — Volatile test text stays in the previous language — P3
 
@@ -259,66 +293,65 @@ manual-field contract defect disappear.
 | “Start without risky stored settings” | Restart in Safe Mode | temporary launch only | Keep separate; its semantics differ from repair |
 | “Collect support evidence” | Export diagnostics | redacted ZIP only | Done; keep redaction copy visible |
 | “Refresh my subscription” | Refresh all / per-sub refresh | subscription cache | Done; no new one-click wrapper |
-| “Choose a usable server” | quick test, Deep verify, optional auto-select | selected/health state | Improve result copy; do not tune from one sample |
+| “Choose a usable server” | Smart Connect, quick test, Deep verify, optional auto-select | selected/health state | Fix the confirmed Smart Connect skip first; do not tune from one sample |
 | “Find a free config” | Find working configs | public cache/selection | Done; fix stale Refresh wording |
 | “Fix DPI / Telegram” | one-click Zapret / Start and open Telegram | feature-specific | Done; these reuse existing surfaces |
-| “Understand what is routed” | pieces across Simple/Routing/Apps/Rules | none | Add one read-only effective-routing summary projection |
+| “Understand what is routed” | pieces across Simple/Routing/Apps/Rules | none | Defer broad projection; later add only a truthful Simple suffix if still useful |
 
-The useful new concept is not another button. It is one short, shared answer to
-“what is active now?” with details on demand:
+The useful immediate concept is not another button or a new routing layer. It is
+one reliable answer inside the already-visible Simple line:
 
 ```text
-VPN off
-Profile: subscription
-Routing: full tunnel · Russian destinations direct
-Protection: IPv4 only · DNS cache flush
+subscription · full · RU direct (only when geo data is effective)
 ```
 
-Only already-known state belongs here. Do not compute reachability, infer MTU,
-or claim firewall guarantees in this summary.
+This copy remains deferred from the connectivity patch. Do not compute
+reachability, infer MTU, or claim firewall guarantees in the summary.
 
 ## 6. Stability and comprehension test matrix
 
-### Unit / ViewModel
+The matrix below is deliberately the **focused next patch**, not QOL-1..QOL-7
+as a batch.
 
-- `Subscribe -> Servers -> Custom(empty) -> Simple` keeps effective mode and
-  persisted `ConfigMode` coherent.
+### Unit / ViewModel — now
+
+- `Subscribe -> Servers -> Custom(empty) -> Simple` keeps persisted
+  `ConfigMode=subscribe`, shows effective subscribe mode and enters the existing
+  Smart Connect probe/scorer on Connect.
+- Dead active row plus one live candidate selects the live candidate after the
+  Custom peek.
 - Same transitions with a real custom config and no enabled subscription still
   select custom mode.
-- Effective-routing summary covers split/full, Russian bypass, and no bypass.
-- Deep final summary counts passed/failed/untested independently of processed.
-- EN/RU choice refresh preserves `ConnectionIntentIndex`.
-- MTU-only wizard reset preserves routing; restore and undo remain pinned by
-  existing tests.
+- The connected auto-selected label gate reads effective subscription mode.
+- A negative `ConnectionIntentIndex` cannot overwrite a stored Gaming intent.
 
-### Headless Avalonia
+### Headless Avalonia — prove before expanding the fix
 
-- Simple, Subscribe, Public Search and Wizard render at 520, 440 and 360 widths
-  in EN and RU.
-- Runtime language switch preserves the visible intent selection.
-- Public empty-state instruction exactly names its primary button.
-- Public empty state and `Find working configs` expose matching visible and
-  accessible instructions.
-- Sensitive subscription display uses the masked presentation value while the
-  model retains the original URL.
+- EN->RU and RU->EN with Gaming selected preserve both visible index and stored
+  intent.
+- Restart after the locale switch still hydrates Gaming.
+- If the one-line negative-index guard is insufficient, only then add explicit
+  selection restoration around the collection refresh.
 
-### Visual regression
+### Visual regression — now
 
-- Keep existing page baselines; add only the confirmed regression surfaces:
-  Simple effective summary, Subscribe RU intent, Public empty state, Deep final
-  summary and the RU wizard first step.
-- Do not baseline raw URLs, server IPs or timing values.
+- Keep existing baselines; add only Simple effective mode and Subscribe Gaming
+  selection if the headless result changes layout-visible state.
+- Public, Deep Verify, URL masking and RU-bypass status get no baseline in this
+  patch because they are deferred.
 
-### Published-binary WINBRAT E2E
+### Published-binary WINBRAT E2E — now
 
 1. identity and SHA256 gate;
-2. Simple EN/RU screenshot at default and narrow widths;
-3. active subscription -> Custom empty -> Simple state-coherence scenario;
-4. quick test -> Deep verify -> final outcome counts;
-5. Public Search empty state names the visible primary action;
-6. Wizard checks -> MTU reset -> undo -> restore -> diagnostics export;
-7. bottom-of-page semantic assertion for Autostart;
-8. 120-minute remote log scan.
+2. active subscription -> Custom empty -> Simple state-coherence scenario;
+3. Connect and prove `[ServerHealthProbe]` / Gaming scoring runs and does not
+   dial a known-dead active row when a live row exists;
+4. EN<->RU with Gaming selected, restart, and verify it remains Gaming;
+5. disconnect cleanly and scan the complete test-window logs.
+
+The game-disconnect measurement is a separate observation run: record active
+protocol, exact event time, core/HTTP health, bounded UDP health and any
+restart/failover decision. It does not authorize an automatic AWG switch.
 
 RadioButton/Expander/virtualized-list E2E remains fail-closed. Add stable
 `AutomationId` or an Appium flow only for a release-critical scenario that
@@ -355,30 +388,63 @@ not reopened here.
 
 ## 8. Exact next-task prompts
 
-### Prompt A — minimal confirmed QoL patch
+### Prompt A — connectivity-first state fix only
 
 ```text
-Implement only confirmed findings QOL-1 through QOL-7 from
-plans/qol-interface-and-recovery-audit-2026-08-08.md. Start with AGENTS.md,
-.claude_handoff.md when present, VPNRouter.App/CLAUDE.md, OPEN-DEFECTS and the
-audit. Use qwen3.8-max-preview as a read-only independent reviewer with safe
-mode, plan approval, chat recording off and all tools disabled; never pass it
-URLs, keys, user configs or screenshots containing identifiers.
+Fix only the confirmed connectivity-first QOL-1 defect from
+plans/qol-interface-and-recovery-audit-2026-08-08.md and the adjacent
+Connection Intent measurement gate. Do not include Public copy, URL masking,
+Deep Verify UI, RU-bypass copy, MTU persistence or any other QoL item.
 
-Constraints: no new recovery framework, no auto-MTU, no firewall behavior
-change, no protocol threshold change, no connection-pipeline merge. Preserve
-the existing ConfigMode subscription guard. Make the smallest shared state/copy
-fixes, add focused unit/headless tests, update each OPEN-DEFECTS disposition,
-and verify the published candidate only on WINBRAT through brat-verify.
+Start with AGENTS.md, .claude_handoff.md when present,
+VPNRouter.App/CLAUDE.md, OPEN-DEFECTS and audit section 9. Use exact
+qwen3.8-max-preview as a read-only reviewer with safe/plan/no-recording and all
+tools disabled; pass only sanitized code excerpts.
 
-Required acceptance: Custom-empty browsing cannot change the Simple effective
-mode; full routing names active direct exceptions; Public names the real action;
-subscription row masks the opaque path; EN/RU switch preserves intent; Deep
-summary shows processed/passed/failed/untested; volatile status never remains in
-the old language. Commit, push task branch, open draft PR; do not release.
+Preserve the existing SaveSettings subscription guard and Servers-page Custom
+peek visuals. Extract the smallest private effective-mode decision needed by
+SimpleConfigModeSummary, Simple Smart Connect and the connected urltest label;
+do not mutate IsVlessMode/IsSubscribeMode inside SaveSettings and do not touch
+the resolver or MainWindowViewModel.cs:4264.
+
+First add an Avalonia-headless EN<->RU test with Gaming selected. Always reject
+ConnectionIntentIndex < 0 before persistence; add more selection restoration
+only if the headless test proves the guard insufficient.
+
+Acceptance: Subscribe -> Servers -> empty Custom -> Simple still shows the
+effective subscribe mode; Connect enters ServerHealthProbe and gaming scoring;
+a dead active row is not dialed blindly when a live candidate exists; connected
+auto-selected status can refresh; locale switch and app restart preserve Gaming.
+Unit/headless tests plus published-candidate WINBRAT E2E are mandatory. Update
+OPEN-DEFECTS, commit, push and open a draft PR; do not release.
 ```
 
-### Prompt B — measurement-gated protocol/verifier experiment
+### Prompt B — game disconnect measurement, no behavior change
+
+```text
+Investigate only the owner's intermittent game disconnect on the current
+published candidate. Do not change product behavior, protocol priority,
+failover, MTU or thresholds. Read AGENTS.md, the Gaming connection-stability
+entry in OPEN-DEFECTS and audit section 9. Use exact qwen3.8-max-preview only as
+a read-only reviewer of sanitized excerpts; never pass subscription URLs,
+server addresses, keys, configs or raw logs.
+
+Run only on WINBRAT through brat-verify. Before the game session record the
+effective config mode, selected Connection Intent, active row identity as an
+opaque local label, protocol family, HealthMonitor serving state and failover
+cycle. At the exact disconnect time compare existing core/Clash HTTP health
+with a bounded secret-free UDP-path check; do not add continuous traffic or a
+new production monitor. Record whether sing-box crashed, HealthMonitor restarted,
+AutoFailover chose a row, HTTP remained healthy while UDP failed, or no VPN-side
+event occurred.
+
+Classify: dead server/core failure, blind failover pick, UDP-only degradation,
+provider/endpoint event, game-only event, or inconclusive. Only if ownership is
+proven write a separate minimal implementation prompt. Restore the test machine,
+update OPEN-DEFECTS and the audit, commit/push a docs-only result; no release.
+```
+
+### Prompt C — measurement-gated protocol/verifier experiment
 
 ```text
 Investigate only the repeated Deep-verify WS invalid_public_key candidate from
@@ -394,7 +460,7 @@ until ownership is proven. Record every finding in OPEN-DEFECTS before any fix;
 Qwen is read-only and receives fixtures/code excerpts only. No release.
 ```
 
-### Prompt C — parallel GPT Pro review
+### Prompt D — parallel GPT Pro review
 
 ```text
 Perform an independent adversarial UX/recovery audit of VPNRouter v2.48.0-r8.
@@ -421,14 +487,53 @@ Return a short priority table, disagreements with the audit, and a minimal
 patch sequence; do not release.
 ```
 
-## 9. Final verdict
+## 9. Adversarial reconciliation and priority
+
+The attached GPT Pro review was checked against the released source and then
+given to exact `qwen3.8-max-preview` as sanitized facts with every tool excluded.
+Accepted corrections:
+
+- QOL-1 affects Smart Connect and the urltest label, not only presentation;
+- QOL-2 should change Simple current-state copy, not the Routing option text;
+- QOL-3 has two live misleading strings;
+- QOL-5 may persist General, but that consequence needs a headless/disk proof;
+- QOL-6 already has a final Verified summary; the nested dispatcher post can
+  overwrite it;
+- wizard Undo can persist a previously unsaved MTU, but the existing MTU-5 fix
+  removes that path without new wizard machinery;
+- RU bypass has no effective-state signal when geo data is unavailable.
+
+Corrections to the external review:
+
+- `P1-lite` is not a ledger severity. QOL-1 is recorded as P1 because it skips
+  the pre-connect health/intent path in the owner's current primary scenario;
+- the stale Deep Verify result existed in the MTU report, not as a duplicate
+  `OPEN-DEFECTS` entry before this audit;
+- blind runtime failover is real, but moving it into the NOW patch would be
+  speculative. It selects the first structural candidate, while no evidence yet
+  proves the game disconnect coincides with a dead HTTP/core probe or a UDP-only
+  failure. Measure that divergence before changing selection.
+
+Priority after reconciliation:
+
+| Order | Decision | Why |
+|---|---|---|
+| NOW | Effective subscribe mode for Simple Smart Connect | Direct confirmed path to intermittent failed connect |
+| PROVE/NEXT | Preserve non-General intent across locale refresh | Could silently remove AWG/HY2 gaming preference; disk impact not yet measured |
+| MEASURE | Game disconnect: active protocol + HTTP/core + bounded UDP + failover row | Required before automatic AWG/protocol failover |
+| DEFER | Deep result copy, Public text, URL-row masking, RU status, MTU autosave | Valid but not owners of the reported connectivity symptom |
+
+## 10. Final connectivity-first verdict
 
 - Wizard: useful, working and already sufficient as the guided recovery entry.
 - Stability: no app crash or main-tunnel failure observed; the final log scan
   found the repeatable three-row WS verifier candidate, not a UI/session crash.
-- Highest-value next change: presentation/state coherence, especially Custom
-  browsing and effective-routing truth.
+- Highest-value next change: make Simple Connect use the persisted effective
+  subscription mode after Custom browsing so Smart Connect and Gaming scoring
+  cannot be skipped.
 - Lowest-value ideas: another wizard, another reset button, automatic MTU,
   automatic firewall repair, or a universal “fix everything” pipeline.
-- Release decision: this audit makes no stable-cut or new-release request. Ship
-  a later candidate only after a focused QoL patch and the layered gates above.
+- Release decision: do not release the broad QoL list. Ship a later candidate
+  only after the focused connectivity state fix passes unit/headless and the
+  full WINBRAT connect scenario. Automatic AWG failover waits for one measured
+  game-disconnect trace.
