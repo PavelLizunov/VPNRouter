@@ -67,6 +67,52 @@ site, STUN host or local VPNRouter execution is used as a substitute.
   workload acceptance is BLOCKED by the recorded provisioning dependency.
 - [x] **Gate 6 — Characterization diff**: N/A — no product god-file split.
 
-## Outcome (filled after implementation)
+## Outcome (filled 2026-08-08)
 
-**Status**: IN PROGRESS
+**Status**: PARTIAL — the Phase-1 contract implementation is build- and
+focused-test verified. Live GameUdp, BrowserBurst and Mixed acceptance remains
+BLOCKED until the recorded owner provisioning and tunnel-proof dependency is
+met; no remote load, VPNRouter installation or configuration mutation occurred.
+
+**Commits**: implementation commit pending
+
+**Test deltas**: +8 focused MVP contract/unit tests (13 focused load/stability
+tooling tests total).
+
+**Files changed**: endpoint/protocol/load-generator tooling, verifier,
+coordinator, focused tests and tracked planning evidence; product code unchanged.
+
+**Gate results:**
+
+- [x] Gate 1: `VPNRouter.sln` Release build plus both new tooling projects pass
+  with 0 errors (pre-existing solution warnings remain).
+- [x] Gate 2: the focused MVP and existing stability contracts pass 13/13.
+  The attempted non-elevated full local suite reached the known
+  `%ProgramData%` ACL failures already recorded in `OPEN-DEFECTS.md`, then was
+  stopped after it held the test host; it is not attributed to this change.
+  The stacked-branch preflight full suite and placeholder workflow were green
+  before implementation; post-push CI is required for the changed revision.
+- [x] Gate 3: this brief and `OPEN-DEFECTS.md` record the endpoint block and
+  worker outcome; no README/zone contract change is needed.
+- [x] Gate 4: Ponytail full review retained only shared-framework primitives and
+  fixed constants; manual security review verified environment-only secret use,
+  HMAC/source/expiry/replay validation, capped UDP response, fixed rate limits,
+  no target/config/log fields in coordinator evidence and no generic coordinator
+  remoting. Exact DeepSeek-in-Qwen review was attempted with the required
+  read-only zero-tool flags and failed closed without a finding.
+- [x] Gate 5: N/A — no product/UI change. Live workload acceptance is explicitly
+  BLOCKED, not substituted with a public service.
+- [x] Gate 6: N/A — no product god-file split.
+
+**Surprises encountered**:
+
+- The local shell did not expose the pinned SDK on `PATH`; the checkout's
+  bundled .NET 10 SDK was used for verification without changing the machine.
+- The known non-elevated full-suite ACL limitation also leaves a child test host
+  alive after failures, so it was stopped before the focused re-run.
+
+**Follow-ups spawned**:
+
+- Owner provisions the fixed endpoint and a fixed remote browser/load-generator
+  payload, then proves both workloads route through `VPNRouter-TUN` before
+  enabling live acceptance.

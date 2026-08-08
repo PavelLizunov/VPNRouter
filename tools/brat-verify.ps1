@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'state', 'probe', 'lifecycle')]
+    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'state', 'probe', 'lifecycle', 'loadtest')]
     [string]$Action,
 
     [string]$Version,
@@ -38,6 +38,9 @@ param(
 
     [ValidateSet('Control', 'Boundary')]
     [string]$ProbeProfile = 'Control',
+
+    [ValidateSet('GameUdp', 'BrowserBurst', 'Mixed')]
+    [string]$LoadProfile = 'GameUdp',
 
     # lifecycle: caller-provided timestamp only; log paths and raw lines never
     # leave the verified test VM for this action.
@@ -819,6 +822,67 @@ switch ($Action) {
                 Udp        = $cleanUdp
             }
             Write-Output ($cleanProbe | ConvertTo-Json -Depth 6 -Compress)
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'loadtest' {
+        # The route check is intentionally separate from the old public canary
+        # probes: synthetic traffic is allowed only to the fixed owned target.
+        $s = New-VerifiedBratSession
+        try {
+            $result = Invoke-Command -Session $s -ArgumentList $LoadProfile, $TimeoutSeconds -ScriptBlock {
+                param($profile, $timeoutSeconds)
+
+                $hostName = 'loadtest.vpn.ninitux.com'
+                $routeScope = 'Unknown'
+                try {
+                    $address = [System.Net.Dns]::GetHostAddresses($hostName) |
+                        Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+                        Select-Object -First 1
+                    if ($address) {
+                        $route = Find-NetRoute -RemoteIPAddress $address.IPAddressToString -ErrorAction Stop | Select-Object -First 1
+                        $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction Stop
+                        $routeScope = if ($adapter.Name -eq 'VPNRouter-TUN' -and $adapter.Status -eq 'Up') { 'Tunnel' } else { 'Direct' }
+                    }
+                }
+                catch { $routeScope = 'Unknown' }
+
+                # Provisioning is intentionally a prerequisite, not a fallback:
+                # this action never alters selected apps or VPNRouter settings.
+                $ready = $false
+                if ($routeScope -eq 'Tunnel') {
+                    $http = New-Object System.Net.Http.HttpClient
+                    $http.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
+                    try {
+                        $response = $http.GetAsync("https://$hostName/health").GetAwaiter().GetResult()
+                        try { $ready = ([int]$response.StatusCode -eq 200) } finally { $response.Dispose() }
+                    }
+                    catch { $ready = $false }
+                    finally { $http.Dispose() }
+                }
+
+                # Remote execution remains deliberately disabled until a signed,
+                # fixed-profile payload is provisioned with the endpoint. Returning
+                # BLOCKED is safer than treating a direct route or public target as success.
+                [ordered]@{
+                    Status = if ($ready) { 'BLOCKED' } else { 'BLOCKED' }
+                    Profile = $profile
+                    RouteScope = $routeScope
+                    DurationSeconds = if ($profile -eq 'GameUdp') { 300 } elseif ($profile -eq 'BrowserBurst') { 600 } else { 900 }
+                    Caps = if ($profile -eq 'GameUdp') { '20pps-256B-burst50pps' } elseif ($profile -eq 'BrowserBurst') { '32x64KiB-5s-4x64Bps' } else { 'GameUdp+BrowserBurst' }
+                }
+            }
+            # Reconstruct a strict schema locally to prevent WinRM metadata and
+            # endpoint details escaping into coordinator evidence.
+            $clean = [ordered]@{
+                Status = 'BLOCKED'
+                Profile = [string]$result.Profile
+                RouteScope = [string]$result.RouteScope
+                DurationSeconds = [int]$result.DurationSeconds
+                Caps = [string]$result.Caps
+            }
+            Write-Output ($clean | ConvertTo-Json -Compress)
         }
         finally { Remove-PSSession $s }
     }
