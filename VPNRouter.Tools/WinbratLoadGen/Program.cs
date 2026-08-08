@@ -15,7 +15,7 @@ public sealed class GameUdpCookieState(byte[] cookie)
 {
     private byte[] _cookie = cookie;
     private DateTimeOffset _expiry = UdpCookieAuthenticator.GetExpiry(cookie);
-    private bool _refreshPending;
+    private DateTimeOffset _nextRefreshAt;
 
     public byte[] CurrentCookie => Volatile.Read(ref _cookie);
 
@@ -23,19 +23,21 @@ public sealed class GameUdpCookieState(byte[] cookie)
     {
         lock (this)
         {
-            if (_refreshPending || now < _expiry.AddSeconds(-5)) return false;
-            _refreshPending = true;
+            if (now < _expiry.AddSeconds(-5) || now < _nextRefreshAt) return false;
+            _nextRefreshAt = now.AddSeconds(1);
             return true;
         }
     }
 
-    public void Accept(byte[] cookie)
+    public bool Accept(byte[] cookie)
     {
+        var expiry = UdpCookieAuthenticator.GetExpiry(cookie);
         lock (this)
         {
+            if (expiry < _expiry) return false;
             Volatile.Write(ref _cookie, cookie);
-            _expiry = UdpCookieAuthenticator.GetExpiry(cookie);
-            _refreshPending = false;
+            _expiry = expiry;
+            return true;
         }
     }
 }

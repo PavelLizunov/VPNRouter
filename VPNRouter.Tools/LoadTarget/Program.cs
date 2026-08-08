@@ -73,11 +73,11 @@ static class BrowserPage
 {
     public const string Html = """
 <!doctype html><meta charset="utf-8"><title>VPNRouter BrowserBurst</title><pre id=out>starting</pre><script>
-const out=document.querySelector('#out'), state={fetchOk:0,fetchFail:0,wsOk:0,wsFail:0,done:false};
+const out=document.querySelector('#out'), state={fetchOk:0,fetchFail:0,wsOk:0,wsFail:0,done:false}, aborter=new AbortController();
 const show=()=>out.textContent=JSON.stringify(state);
 let busy=false,stopped=false,burstTimer,stopTimer;const sockets=[],sendTimers=[];
-async function burst(){if(busy||stopped)return;busy=true;try{await Promise.all([...Array(32)].map(async(_,i)=>{try{let r=await fetch('/blob?run='+Date.now()+'-'+i,{cache:'no-store'});if((await r.arrayBuffer()).byteLength===65536)state.fetchOk++;else state.fetchFail++;}catch{state.fetchFail++;}}));}finally{busy=false;show();}}
-function stop(){if(stopped)return;stopped=true;clearInterval(burstTimer);clearTimeout(stopTimer);sendTimers.forEach(clearInterval);sockets.forEach(ws=>ws.close());state.done=true;show();}
+async function burst(){if(busy||stopped)return;busy=true;try{await Promise.all([...Array(32)].map(async(_,i)=>{try{let r=await fetch('/blob?run='+Date.now()+'-'+i,{cache:'no-store',signal:aborter.signal});if((await r.arrayBuffer()).byteLength===65536)state.fetchOk++;else state.fetchFail++;}catch{if(!stopped)state.fetchFail++;}}));}finally{busy=false;show();}}
+function stop(){if(stopped)return;stopped=true;clearInterval(burstTimer);clearTimeout(stopTimer);aborter.abort();sendTimers.forEach(clearInterval);sockets.forEach(ws=>ws.close());state.done=true;show();}
 for(let i=0;i<4;i++){let ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');sockets.push(ws);ws.binaryType='arraybuffer';ws.onmessage=e=>{if(e.data.byteLength===64)state.wsOk++;else state.wsFail++;show()};ws.onerror=()=>{state.wsFail++;show()};ws.onclose=()=>{if(!stopped){state.wsFail++;show()}};sendTimers.push(setInterval(()=>{if(!stopped&&ws.readyState===1)ws.send(new Uint8Array(64));},1000));}
 burst();burstTimer=setInterval(burst,5000);stopTimer=setTimeout(stop,600000);</script>
 """;

@@ -102,30 +102,34 @@ public sealed class UdpCookieAuthenticator
 
 public sealed class FixedRateLimiter
 {
+    private readonly object _gate = new();
     private readonly Dictionary<string, (long Second, int Count)> _perSource = new(StringComparer.Ordinal);
     private long _globalSecond = long.MinValue;
     private int _globalCount;
 
     public bool TryTake(IPAddress source, DateTimeOffset now)
     {
-        var second = now.ToUnixTimeSeconds();
-        if (_globalSecond != second)
+        lock (_gate)
         {
-            _globalSecond = second;
-            _globalCount = 0;
-            _perSource.Clear();
+            var second = now.ToUnixTimeSeconds();
+            if (_globalSecond != second)
+            {
+                _globalSecond = second;
+                _globalCount = 0;
+                _perSource.Clear();
+            }
+            if (_globalCount >= LoadTestContract.GlobalPacketsPerSecond) return false;
+
+            var key = source.ToString();
+            var entry = _perSource.TryGetValue(key, out var prior) && prior.Second == second
+                ? prior
+                : (Second: second, Count: 0);
+            if (entry.Count >= LoadTestContract.PerSourcePacketsPerSecond) return false;
+
+            _perSource[key] = (second, entry.Count + 1);
+            _globalCount++;
+            return true;
         }
-        if (_globalCount >= LoadTestContract.GlobalPacketsPerSecond) return false;
-
-        var key = source.ToString();
-        var entry = _perSource.TryGetValue(key, out var prior) && prior.Second == second
-            ? prior
-            : (Second: second, Count: 0);
-        if (entry.Count >= LoadTestContract.PerSourcePacketsPerSecond) return false;
-
-        _perSource[key] = (second, entry.Count + 1);
-        _globalCount++;
-        return true;
     }
 }
 

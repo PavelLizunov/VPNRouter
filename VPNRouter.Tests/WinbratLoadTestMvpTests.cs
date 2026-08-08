@@ -91,15 +91,43 @@ public sealed class WinbratLoadTestMvpTests
     }
 
     [Fact]
+    public void RateLimiter_ConcurrentRequests_NeverExceedPerSourceCap()
+    {
+        var limiter = new FixedRateLimiter();
+        var accepted = 0;
+
+        Parallel.For(0, 1_000, _ =>
+        {
+            if (limiter.TryTake(KnownSource, KnownNow)) Interlocked.Increment(ref accepted);
+        });
+
+        Assert.True(accepted <= LoadTestContract.PerSourcePacketsPerSecond);
+    }
+
+    [Fact]
     public void CookieRotation_AfterOriginalExpiry_UsesRenewedCookie()
     {
         var auth = new UdpCookieAuthenticator(KnownSecret);
         var state = new GameUdpCookieState(auth.CreateCookie(KnownSource, new byte[8], KnownNow));
 
         Assert.True(state.TryBeginRefresh(KnownNow.AddSeconds(25)));
-        state.Accept(auth.CreateCookie(KnownSource, new byte[8], KnownNow.AddSeconds(25)));
+        Assert.True(state.Accept(auth.CreateCookie(KnownSource, new byte[8], KnownNow.AddSeconds(25))));
 
         Assert.False(state.TryBeginRefresh(KnownNow.AddSeconds(LoadTestContract.CookieLifetimeSeconds + 1)));
+    }
+
+    [Fact]
+    public void CookieRefresh_RetriesAfterOneSecondAndRejectsStaleCookie()
+    {
+        var auth = new UdpCookieAuthenticator(KnownSecret);
+        var initial = auth.CreateCookie(KnownSource, new byte[8], KnownNow);
+        var state = new GameUdpCookieState(initial);
+
+        Assert.True(state.TryBeginRefresh(KnownNow.AddSeconds(25)));
+        Assert.False(state.TryBeginRefresh(KnownNow.AddSeconds(25.5)));
+        Assert.True(state.TryBeginRefresh(KnownNow.AddSeconds(26)));
+        Assert.True(state.Accept(auth.CreateCookie(KnownSource, new byte[8], KnownNow.AddSeconds(25))));
+        Assert.False(state.Accept(initial));
     }
 
     [Fact]
@@ -157,6 +185,20 @@ public sealed class WinbratLoadTestMvpTests
     }
 
     [Fact]
+    public void Metrics_ConcurrentSendAndReceive_DoNotCorruptAggregateState()
+    {
+        var metrics = new GameUdpMetrics();
+
+        Parallel.Invoke(
+            () => Parallel.For(0, 1_000, sequence => metrics.Sent(sequence, KnownNow)),
+            () => Parallel.For(0, 1_000, sequence => metrics.Received(sequence, true, KnownNow.AddMilliseconds(1))));
+
+        var summary = metrics.Snapshot();
+        Assert.Equal(1_000, summary.Sent);
+        Assert.InRange(summary.Received, 0, summary.Sent);
+    }
+
+    [Fact]
     public void Profile_Scheduling_UsesFixedNormalAndBurstIntervals()
     {
         Assert.Equal(GameUdpProfile.NormalInterval, GameUdpProfile.IntervalAt(TimeSpan.Zero));
@@ -185,6 +227,9 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("if(busy||stopped)return", target, StringComparison.Ordinal);
         Assert.Contains("setTimeout(stop,600000)", target, StringComparison.Ordinal);
         Assert.Contains("sockets.forEach(ws=>ws.close())", target, StringComparison.Ordinal);
+        Assert.Contains("aborter.abort()", target, StringComparison.Ordinal);
+        Assert.Contains("signal:aborter.signal", target, StringComparison.Ordinal);
+        Assert.Contains("if(!stopped)state.fetchFail++", target, StringComparison.Ordinal);
         Assert.Contains("state.done=true", target, StringComparison.Ordinal);
         Assert.Contains("ws.onclose=()=>{if(!stopped){state.wsFail++;show()}}", target, StringComparison.Ordinal);
     }

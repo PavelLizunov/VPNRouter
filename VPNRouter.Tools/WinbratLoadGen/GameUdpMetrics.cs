@@ -18,6 +18,7 @@ public static class GameUdpProfile
 
 public sealed class GameUdpMetrics
 {
+    private readonly object _gate = new();
     private readonly Dictionary<long, DateTimeOffset> _outstanding = new();
     private readonly HashSet<long> _received = new();
     private readonly List<double> _rtts = new();
@@ -34,32 +35,45 @@ public sealed class GameUdpMetrics
 
     public void Sent(long sequence, DateTimeOffset at)
     {
-        _sent++;
-        _firstSentAt ??= at;
-        _lastSentAt = at;
-        _outstanding[sequence] = at;
+        lock (_gate)
+        {
+            _sent++;
+            _firstSentAt ??= at;
+            _lastSentAt = at;
+            _outstanding[sequence] = at;
+        }
     }
 
     public void Received(long sequence, bool payloadMatches, DateTimeOffset at)
     {
-        if (_received.Contains(sequence)) { _duplicate++; return; }
-        if (!_outstanding.TryGetValue(sequence, out var sentAt)) { _unknown++; return; }
-        if (!payloadMatches) { _corruption++; return; }
+        lock (_gate)
+        {
+            if (_received.Contains(sequence)) { _duplicate++; return; }
+            if (!_outstanding.TryGetValue(sequence, out var sentAt)) { _unknown++; return; }
+            if (!payloadMatches) { _corruption++; return; }
 
-        _received.Add(sequence);
-        _outstanding.Remove(sequence);
-        if (sequence < _highestSequence) _reorder++; else _highestSequence = sequence;
-        _rtts.Add((at - sentAt).TotalMilliseconds);
-        if (_lastAcknowledgementAt is { } last) _maxAcknowledgedGap = Math.Max(_maxAcknowledgedGap, (at - last).TotalMilliseconds);
-        _lastAcknowledgementAt = at;
+            _received.Add(sequence);
+            _outstanding.Remove(sequence);
+            if (sequence < _highestSequence) _reorder++; else _highestSequence = sequence;
+            _rtts.Add((at - sentAt).TotalMilliseconds);
+            if (_lastAcknowledgementAt is { } last) _maxAcknowledgedGap = Math.Max(_maxAcknowledgedGap, (at - last).TotalMilliseconds);
+            _lastAcknowledgementAt = at;
+        }
     }
 
-    public bool HasFailureGap(DateTimeOffset now) =>
-        _firstSentAt is { } first &&
-        _lastSentAt is { } lastSent && now - lastSent <= TimeSpan.FromMilliseconds(250) &&
-        now - (_lastAcknowledgementAt ?? first) >= TimeSpan.FromSeconds(3);
+    public bool HasFailureGap(DateTimeOffset now)
+    {
+        lock (_gate)
+            return _firstSentAt is { } first &&
+                _lastSentAt is { } lastSent && now - lastSent <= TimeSpan.FromMilliseconds(250) &&
+                now - (_lastAcknowledgementAt ?? first) >= TimeSpan.FromSeconds(3);
+    }
 
-    public GameUdpSummary Snapshot() => new(_sent, _received.Count, _sent - _received.Count, _duplicate, _reorder, _corruption, _unknown, Percentile(.50), Percentile(.95), Percentile(.99), _maxAcknowledgedGap);
+    public GameUdpSummary Snapshot()
+    {
+        lock (_gate)
+            return new(_sent, _received.Count, _sent - _received.Count, _duplicate, _reorder, _corruption, _unknown, Percentile(.50), Percentile(.95), Percentile(.99), _maxAcknowledgedGap);
+    }
 
     private double Percentile(double fraction)
     {
