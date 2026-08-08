@@ -27,6 +27,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P2 CONFIRMED / IN PROGRESS 2026-08-08** — BrowserBurst timers could overlap and never terminated WebSocket/fetch activity after its fixed profile duration — `VPNRouter.Tools/LoadTarget/Program.cs` — PR #124
 - [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — fixed HTTP/blob/WebSocket responses lacked request/message rate gates, leaving the owned endpoint unnecessarily receptive to abusive traffic — `VPNRouter.Tools/LoadTarget/Program.cs` — PR #124
 - [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — the verifier load-test preflight used `System.Net.Http.HttpClient` in the remote Windows PowerShell session without loading its assembly, so it failed after tunnel route proof but before fixed health validation — `tools/brat-verify.ps1` — WINBRAT preflight, PR #124
+- [ ] **P2 CONFIRMED / IN PROGRESS 2026-08-08** — the endpoint did not impose the fixed ten-minute WebSocket session bound, and the browser page did not classify a remote close before its own completion as a WebSocket failure — `VPNRouter.Tools/LoadTarget/Program.cs` — review follow-up, PR #124
+- [ ] **P2 CONFIRMED / IN PROGRESS 2026-08-08** — the final GameUdp check ran after its intentional drain even though its continuous-sending guard made it unreachable, obscuring the intended no-false-blackout semantics — `VPNRouter.Tools/WinbratLoadGen/Program.cs` — review follow-up, PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — the current verifier intentionally has no signed fixed-profile payload launch or per-process split-tunnel attestation, so a tunnel route alone cannot authorize a live profile or prove that the browser/load generator is split-routed — `tools/brat-verify.ps1` — review follow-up, PR #124
 
 ### Setup/diagnostics wizard Qwen review — 2026-08-07
 

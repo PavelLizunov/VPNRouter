@@ -81,7 +81,6 @@ public static class GameUdpMvp
             }
 
             await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
-            if (metrics.HasFailureGap(DateTimeOffset.UtcNow)) throw new InvalidOperationException("sent-but-unanswered gap reached three seconds");
             return metrics.Snapshot();
         }
         finally

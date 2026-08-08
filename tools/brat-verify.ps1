@@ -863,9 +863,10 @@ switch ($Action) {
                     finally { $http.Dispose() }
                 }
 
-                # Remote execution remains deliberately disabled until a signed,
-                # fixed-profile payload is provisioned with the endpoint. Returning
-                # BLOCKED is safer than treating a direct route or public target as success.
+                # Remote execution remains deliberately disabled until a signed
+                # fixed-profile payload and per-process split-tunnel attestation
+                # are provisioned. A tunnel route alone cannot prove the workload
+                # process used the tunnel, so every live profile stays BLOCKED.
                 [ordered]@{
                     Status = if ($ready) { 'BLOCKED' } else { 'BLOCKED' }
                     Profile = $profile

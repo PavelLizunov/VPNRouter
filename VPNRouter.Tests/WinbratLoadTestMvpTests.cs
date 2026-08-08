@@ -165,6 +165,14 @@ public sealed class WinbratLoadTestMvpTests
     }
 
     [Fact]
+    public void GameUdp_FinalDrainDoesNotRunADeadFailureGapCheck()
+    {
+        var loadGenerator = ReadRepoFile("VPNRouter.Tools", "WinbratLoadGen", "Program.cs");
+
+        Assert.DoesNotContain("metrics.HasFailureGap(DateTimeOffset.UtcNow)", loadGenerator, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BrowserPage_FixedBurstAndWebSocketCaps_ArePresent()
     {
         var target = ReadRepoFile("VPNRouter.Tools", "LoadTarget", "Program.cs");
@@ -178,6 +186,7 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("setTimeout(stop,600000)", target, StringComparison.Ordinal);
         Assert.Contains("sockets.forEach(ws=>ws.close())", target, StringComparison.Ordinal);
         Assert.Contains("state.done=true", target, StringComparison.Ordinal);
+        Assert.Contains("ws.onclose=()=>{if(!stopped){state.wsFail++;show()}}", target, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -189,6 +198,7 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("Results.StatusCode(429)", target, StringComparison.Ordinal);
         Assert.Contains("WebSocketCloseStatus.PolicyViolation", target, StringComparison.Ordinal);
         Assert.Contains("RateLimited(context, rate)", target, StringComparison.Ordinal);
+        Assert.Contains("session.CancelAfter(TimeSpan.FromMinutes(10))", target, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -203,6 +213,8 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("loadtest.vpn.ninitux.com", loadAction, StringComparison.Ordinal);
         Assert.Contains("RouteScope", loadAction, StringComparison.Ordinal);
         Assert.Contains("Status = 'BLOCKED'", loadAction, StringComparison.Ordinal);
+        Assert.Contains("signed", loadAction, StringComparison.Ordinal);
+        Assert.Contains("per-process split-tunnel attestation", loadAction, StringComparison.Ordinal);
         Assert.True(loadAction.IndexOf("Add-Type -AssemblyName System.Net.Http", StringComparison.Ordinal) < loadAction.IndexOf("New-Object System.Net.Http.HttpClient", StringComparison.Ordinal));
         Assert.DoesNotContain("Set-Content", loadAction, StringComparison.Ordinal);
         Assert.DoesNotContain("Set-Vpn", coordinator, StringComparison.OrdinalIgnoreCase);
