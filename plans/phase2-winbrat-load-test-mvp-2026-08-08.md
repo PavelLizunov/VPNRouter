@@ -132,3 +132,57 @@ for a load profile, which remains BLOCKED.
   high-burst UDP boundary is measurement-gated after the owned-endpoint
   baseline; this MVP makes no capacity-stress claim and does not raise public
   HTTP limits.
+
+## Live 30-minute evidence (2026-08-08)
+
+### Scope boundary
+
+Two bounded checks ran concurrently and must not be conflated:
+
+- WINBRAT ran the lifecycle soak with one connected core, a TUN state sample
+  and paired HTTP/UDP control probe every 15 seconds.
+- The fixed GameUdp executable ran from the dev host against the owned public
+  endpoint in six independent five-minute sessions. This validates the
+  endpoint and public NAT path, but it is not yet process-attributed WINBRAT
+  tunnel load.
+
+### WINBRAT lifecycle soak
+
+- 30-minute requested window; 83 paired samples were recorded.
+- 81 samples were `HH` (HTTP and UDP healthy). Samples 19 and 29 were isolated
+  `HNotU` UDP timeouts and the immediately following samples recovered.
+- The initial and final boundary probes passed at 64, 512, 1200 and 1392-byte
+  UDP sizes; HTTP stayed healthy through both isolated UDP events.
+- The app kept exactly one core and an Up TUN. No crash, core restart or FATAL
+  event was classified. Working set settled rather than growing: 66.2 MiB near
+  minute 5, 64.7 MiB near minute 15 and 64.7 MiB near minute 25.
+- Lifecycle sanitization reported one unknown error-level event. The harness
+  therefore returned strict `FAIL`; it did not reinterpret that event as
+  harmless. Cleanup passed with zero core processes and no TUN.
+
+Evidence: `artifacts/brat-stability/20260808-182140-Soak.jsonl`.
+
+### Owned GameUdp endpoint baseline
+
+- Total: 36,366 sent, 34,627 received, 1,739 lost (4.7819%).
+- Per-run losses: 882, 604, 249, 0, 0 and 4. The first half was materially
+  worse; the last three sessions were clean or near-clean.
+- Duplicate, reorder, corruption and unknown reply counts were all zero.
+- Worst per-run RTT p99 was 409.9 ms; the worst acknowledged gap was 607.1 ms.
+- After the run the endpoint remained active. Linux UDP counters showed zero
+  `InErrors`, `RcvbufErrors` and `SndbufErrors`; the container interface showed
+  zero RX/TX errors or drops and systemd reported zero service restarts.
+
+Evidence: `artifacts/brat-loadtest/20260808-182139-30m-endpoint-baseline.json`.
+
+### Decision
+
+- Do not call this an end-to-end WINBRAT load PASS: the workload process was
+  not yet approved and measured on WINBRAT.
+- Do not tune server limits or VPNRouter MTU from this run. The loss is
+  measurement-gated because it is concentrated before the container and the
+  direct test used the home public hairpin/NAT path.
+- Next useful test is the same fixed payload from WINBRAT with opaque egress
+  attestation, followed by one independent non-hairpin control source. Keep the
+  current strict lifecycle FAIL until the single unknown event is safely
+  classified from redacted diagnostics.
