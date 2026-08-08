@@ -94,25 +94,54 @@ session helper. No screenshots or raw log output are collected by default.
 
 ## Outcome (filled after implementation)
 
-**Status**: PENDING  
-**Commits**: pending  
-**Pushed**: pending  
-**Test deltas**: pending  
-**Files changed**: pending
+**Status**: IMPLEMENTED AND LIVE-VERIFIED — implementation, cold cycles and
+the two-hour soak pass; remote GitHub CI remains the post-push gate.
+
+**Commits**: implementation commit pending; prerequisite brief commit `e15dc431`.
+
+**Pushed**: brief only; implementation not pushed yet.
+
+**Test deltas**: +5 tooling contract tests; 5/5 pass.
+
+**Files changed**: `.gitignore`, `tools/brat-verify.ps1`, new
+`tools/brat-stability.ps1`, new `BratStabilityToolingContractTests.cs`, test
+zone documentation and defect ledger
 
 **Gate results:**
 
-- [ ] Gate 1: pending
-- [ ] Gate 2: pending
-- [ ] Gate 3: pending
-- [ ] Gate 4: pending
-- [ ] Gate 5: pending
+- [x] Gate 1: solution Release build passes with 0 warnings / 0 errors after
+  normal restore in the fresh worktree
+- [ ] Gate 2: tooling contracts pass 5/5; non-elevated full Windows run passed
+  2,679/2,706 and hit 25 existing ProgramData/global-lock environment failures;
+  normal GitHub full-suite run remains the required final gate
+- [x] Gate 3: brief, test-zone map and `OPEN-DEFECTS.md` updated with final
+  cold/soak evidence and explicit measurement boundaries
+- [x] Gate 4: ponytail and manual security reviews complete; exact
+  `qwen3.8-max-preview` design review and bounded implementation-contract review
+  pass. A full-diff Qwen attempt timed out and is not counted as a pass
+- [x] Gate 5: identity/deploy/clean-state pass; one shakedown and 10/10 cold
+  cycles pass with Tunnel route, HTTPS 204 and STUN sizes 64/512/1200/1392.
+  The 121-minute soak completed 357 paired samples (`355 HH`, two isolated
+  `HNotU`, zero incidents), two successful boundary sweeps, zero fatal/unknown
+  lifecycle errors, no restart/failover and a clean final GUI/core/TUN state
 - [-] Gate 6: N/A — tooling only
 
 **Surprises encountered**:
 
 - Split Tunnel makes an ordinary shell probe untrustworthy unless its route is
   proven to traverse the VPN; the existing verifier did not expose that proof.
+- Remoting automatically appended `PSComputerName`/runspace metadata to returned
+  objects; every new action now reconstructs a strict local output schema.
+- The first lifecycle serializer returned a remoted hashtable shape that could
+  not be safely converted; event counts now cross the boundary as typed pairs.
+- Self-review found and fixed cleanup-without-mutex ownership and a per-file
+  rather than whole-window lifecycle cap before commit.
+- Two isolated single-request STUN timeouts occurred roughly one hour apart
+  while TUN, route and HTTPS remained healthy; both recovered on the next
+  sample. This is measurement evidence, not endpoint/product attribution.
+- The WinRM control channel reconnected once near the end; subsequent VPN
+  probes, final boundary sweep and cleanup passed, so it is not counted as a
+  VPNRouter dataplane incident.
 
 **Follow-ups spawned**:
 
@@ -122,4 +151,7 @@ session helper. No screenshots or raw log output are collected by default.
 
 **Lessons for methodology doc**:
 
-- pending
+- Full Windows test results must distinguish product regressions from existing
+  non-elevated ProgramData/global-mutex harness constraints, then use the normal
+  GitHub runner as the full-suite authority; never relax production ACLs to make
+  a local gate green.

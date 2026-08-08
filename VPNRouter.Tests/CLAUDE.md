@@ -101,6 +101,12 @@ follow the same convention.
 | `FreeConfigsApplyGateTests` | v2.40.0 FC interaction gates: Verified-only Connect/Apply, IsBusy guard, target/maxPing clamps (3 tests) |
 | `LinuxTunSandboxTests` | NixOS/bubblewrap guard: NoNewPrivs + uid_map parsing, trusted pkexec resolution, exact Linux TUNSETIFF EPERM classification |
 
+### v2.48.0 tooling additions
+
+| Class / file | Coverage |
+|---|---|
+| `BratStabilityToolingContractTests` | Fixed-WINBRAT stability tooling boundary: fixed targets, tunnel-route gate before probes, sanitized lifecycle output, coordinator isolation from WinRM/UI/process APIs, unconditional cleanup and ignored evidence. |
+
 ## Запустить
 
 ```bash

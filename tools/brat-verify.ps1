@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs')]
+    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'state', 'probe', 'lifecycle')]
     [string]$Action,
 
     [string]$Version,
@@ -34,7 +34,14 @@ param(
     [int]$LogWindowMinutes = 120,
 
     [ValidateRange(5, 120)]
-    [int]$TimeoutSeconds = 30
+    [int]$TimeoutSeconds = 30,
+
+    [ValidateSet('Control', 'Boundary')]
+    [string]$ProbeProfile = 'Control',
+
+    # lifecycle: caller-provided timestamp only; log paths and raw lines never
+    # leave the verified test VM for this action.
+    [string]$SinceUtc
 )
 
 Set-StrictMode -Version Latest
@@ -154,7 +161,21 @@ try {
 
         $conds = @()
         if ($req.AutomationId) { $conds += New-Object System.Windows.Automation.PropertyCondition($ae::AutomationIdProperty, [string]$req.AutomationId) }
-        if ($req.Name)         { $conds += New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, [string]$req.Name) }
+        if ($req.Name) {
+            $requestedNames = @(([string]$req.Name).Split(
+                [string[]]@('||'),
+                [System.StringSplitOptions]::RemoveEmptyEntries))
+            if ($requestedNames.Count -eq 1) {
+                $conds += New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $requestedNames[0])
+            }
+            else {
+                $nameConditions = @($requestedNames | ForEach-Object {
+                    New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $_)
+                })
+                $conds += [System.Windows.Automation.OrCondition]::new(
+                    [System.Windows.Automation.Condition[]]$nameConditions)
+            }
+        }
         if ($req.ControlType) {
             $ctProp = [System.Windows.Automation.ControlType].GetField([string]$req.ControlType, [System.Reflection.BindingFlags]'Public,Static')
             if (-not $ctProp) { throw "Unknown ControlType '$($req.ControlType)'." }
@@ -554,6 +575,375 @@ switch ($Action) {
         try {
             Invoke-BratInteractive -Session $s -Mode 'screenshot' -LocalOutput $fullOutput -TimeoutSeconds $TimeoutSeconds | Out-Null
             Write-Host "Screenshot saved to $fullOutput" -ForegroundColor Green
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'state' {
+        $s = New-VerifiedBratSession
+        try {
+            $state = Invoke-Command -Session $s -ScriptBlock {
+                $guiPaths = @('C:\Program Files\VPNRouter\app\VPNRouter.App.exe')
+                $corePath = 'C:\ProgramData\VPNRouter\bin\sing-box.exe'
+
+                $owned = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+                    $path = [string]$_.ExecutablePath
+                    $guiPaths -icontains $path -or $path -ieq $corePath
+                })
+                $gui = @($owned | Where-Object { $guiPaths -icontains ([string]$_.ExecutablePath) })
+                $core = @($owned | Where-Object { ([string]$_.ExecutablePath) -ieq $corePath })
+
+                $tun = Get-NetAdapter -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue | Select-Object -First 1
+                $tunState = if ($tun) { [string]$tun.Status } else { 'Absent' }
+
+                function Get-FixedProbeRouteScope {
+                    $hosts = @('www.gstatic.com', 'stun.l.google.com')
+                    $scopes = foreach ($hostName in $hosts) {
+                        try {
+                            $address = [System.Net.Dns]::GetHostAddresses($hostName) |
+                                Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+                                Select-Object -First 1
+                            if (-not $address) { 'Unknown'; continue }
+                            $route = Find-NetRoute -RemoteIPAddress $address.IPAddressToString -ErrorAction Stop |
+                                Select-Object -First 1
+                            $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction Stop
+                            if ($adapter.Name -eq 'VPNRouter-TUN' -and $adapter.Status -eq 'Up') { 'Tunnel' } else { 'Direct' }
+                        }
+                        catch { 'Unknown' }
+                    }
+                    if (@($scopes | Where-Object { $_ -eq 'Direct' }).Count -gt 0) { return 'Direct' }
+                    if (@($scopes | Where-Object { $_ -eq 'Tunnel' }).Count -eq $hosts.Count) { return 'Tunnel' }
+                    return 'Unknown'
+                }
+
+                $workingSetBytes = ($owned | Measure-Object -Property WorkingSetSize -Sum).Sum
+                if ($null -eq $workingSetBytes) { $workingSetBytes = 0 }
+                $handleCount = ($owned | Measure-Object -Property HandleCount -Sum).Sum
+                if ($null -eq $handleCount) { $handleCount = 0 }
+                $threadCount = ($owned | Measure-Object -Property ThreadCount -Sum).Sum
+                if ($null -eq $threadCount) { $threadCount = 0 }
+
+                [ordered]@{
+                    AtUtc        = [DateTimeOffset]::UtcNow.ToString('o')
+                    GuiCount     = $gui.Count
+                    CoreCount    = $core.Count
+                    TunState     = $tunState
+                    RouteScope   = Get-FixedProbeRouteScope
+                    WorkingSetMb = [Math]::Round(([double]$workingSetBytes / 1MB), 1)
+                    Handles      = [int]$handleCount
+                    Threads      = [int]$threadCount
+                }
+            }
+            $cleanState = [ordered]@{
+                AtUtc        = [string]$state.AtUtc
+                GuiCount     = [int]$state.GuiCount
+                CoreCount    = [int]$state.CoreCount
+                TunState     = [string]$state.TunState
+                RouteScope   = [string]$state.RouteScope
+                WorkingSetMb = [double]$state.WorkingSetMb
+                Handles      = [int]$state.Handles
+                Threads      = [int]$state.Threads
+            }
+            Write-Output ($cleanState | ConvertTo-Json -Compress)
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'probe' {
+        $s = New-VerifiedBratSession
+        try {
+            $probe = Invoke-Command -Session $s -ArgumentList $ProbeProfile, $TimeoutSeconds -ScriptBlock {
+                param($profile, $timeoutSeconds)
+
+                $httpsHost = 'www.gstatic.com'
+                $httpsUrl = 'https://www.gstatic.com/generate_204'
+                $stunHost = 'stun.l.google.com'
+                $stunPort = 19302
+
+                function Resolve-FixedIpv4([string]$hostName) {
+                    [System.Net.Dns]::GetHostAddresses($hostName) |
+                        Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+                        Select-Object -First 1
+                }
+
+                function Get-RouteScope([System.Net.IPAddress[]]$addresses) {
+                    $scopes = foreach ($address in $addresses) {
+                        if (-not $address) { 'Unknown'; continue }
+                        try {
+                            $route = Find-NetRoute -RemoteIPAddress $address.IPAddressToString -ErrorAction Stop |
+                                Select-Object -First 1
+                            $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction Stop
+                            if ($adapter.Name -eq 'VPNRouter-TUN' -and $adapter.Status -eq 'Up') { 'Tunnel' } else { 'Direct' }
+                        }
+                        catch { 'Unknown' }
+                    }
+                    if (@($scopes | Where-Object { $_ -eq 'Direct' }).Count -gt 0) { return 'Direct' }
+                    if (@($scopes | Where-Object { $_ -eq 'Tunnel' }).Count -eq $addresses.Count) { return 'Tunnel' }
+                    return 'Unknown'
+                }
+
+                function Get-ProbeErrorKind([Exception]$exception) {
+                    $current = $exception
+                    while ($current.InnerException) { $current = $current.InnerException }
+                    if ($current -is [System.TimeoutException] -or
+                        $current -is [System.Threading.Tasks.TaskCanceledException]) { return 'Timeout' }
+                    if ($current -is [System.Net.Sockets.SocketException]) {
+                        if ($current.SocketErrorCode -eq [System.Net.Sockets.SocketError]::TimedOut) {
+                            return 'Timeout'
+                        }
+                        return 'Socket'
+                    }
+                    return 'Other'
+                }
+
+                function New-StunBindingRequest([int]$packetSize) {
+                    if ($packetSize -lt 24 -or ($packetSize % 4) -ne 0) {
+                        throw 'Invalid fixed STUN packet size.'
+                    }
+                    $request = New-Object byte[] $packetSize
+                    $messageLength = $packetSize - 20
+                    $request[0] = 0x00; $request[1] = 0x01
+                    $request[2] = [byte](($messageLength -shr 8) -band 0xff)
+                    $request[3] = [byte]($messageLength -band 0xff)
+                    $request[4] = 0x21; $request[5] = 0x12; $request[6] = 0xA4; $request[7] = 0x42
+                    $transactionId = New-Object byte[] 12
+                    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+                    try { $rng.GetBytes($transactionId) } finally { $rng.Dispose() }
+                    [Array]::Copy($transactionId, 0, $request, 8, 12)
+
+                    # Unknown comprehension-optional attribute. RFC STUN peers
+                    # ignore it; its fixed padding makes request-size boundaries
+                    # measurable without inventing a game traffic generator.
+                    $attributeLength = $packetSize - 24
+                    $request[20] = 0xC0; $request[21] = 0x01
+                    $request[22] = [byte](($attributeLength -shr 8) -band 0xff)
+                    $request[23] = [byte]($attributeLength -band 0xff)
+                    for ($i = 24; $i -lt $packetSize; $i++) { $request[$i] = 0x58 }
+
+                    [pscustomobject]@{ Bytes = $request; TransactionId = $transactionId }
+                }
+
+                $httpsAddress = Resolve-FixedIpv4 $httpsHost
+                $stunAddress = Resolve-FixedIpv4 $stunHost
+                $routeScope = Get-RouteScope @($httpsAddress, $stunAddress)
+                if ($routeScope -ne 'Tunnel') {
+                    throw "Fixed probes are not tunnel-scoped (scope=$routeScope). Dataplane verification is blocked."
+                }
+
+                Add-Type -AssemblyName System.Net.Http
+                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+                $httpResult = [ordered]@{ Success = $false; Status = 0; LatencyMs = 0; Error = 'Other' }
+                $http = New-Object System.Net.Http.HttpClient
+                $http.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
+                $httpWatch = [System.Diagnostics.Stopwatch]::StartNew()
+                try {
+                    $response = $http.GetAsync($httpsUrl).GetAwaiter().GetResult()
+                    try {
+                        $httpWatch.Stop()
+                        $httpResult.Status = [int]$response.StatusCode
+                        $httpResult.LatencyMs = [int]$httpWatch.ElapsedMilliseconds
+                        $httpResult.Success = ($httpResult.Status -eq 204)
+                        $httpResult.Error = if ($httpResult.Success) { 'None' } else { 'HttpStatus' }
+                    }
+                    finally { $response.Dispose() }
+                }
+                catch {
+                    $httpWatch.Stop()
+                    $httpResult.LatencyMs = [int]$httpWatch.ElapsedMilliseconds
+                    $httpResult.Error = Get-ProbeErrorKind $_.Exception
+                }
+                finally { $http.Dispose() }
+
+                $sizes = if ($profile -eq 'Boundary') { @(64, 512, 1200, 1392) } else { @(64) }
+                $udpResults = @()
+                foreach ($size in $sizes) {
+                    $row = [ordered]@{ Size = $size; Success = $false; LatencyMs = 0; Error = 'Other' }
+                    $udp = New-Object System.Net.Sockets.UdpClient([System.Net.Sockets.AddressFamily]::InterNetwork)
+                    $udp.Client.ReceiveTimeout = $timeoutSeconds * 1000
+                    $udpWatch = [System.Diagnostics.Stopwatch]::StartNew()
+                    try {
+                        $request = New-StunBindingRequest $size
+                        $udp.Connect($stunAddress, $stunPort)
+                        [void]$udp.Send($request.Bytes, $request.Bytes.Length)
+                        $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+                        $responseBytes = $udp.Receive([ref]$remote)
+                        $udpWatch.Stop()
+                        $valid = $responseBytes.Length -ge 20 -and
+                            $responseBytes[0] -eq 0x01 -and $responseBytes[1] -eq 0x01
+                        if ($valid) {
+                            for ($i = 0; $i -lt 12; $i++) {
+                                if ($responseBytes[8 + $i] -ne $request.TransactionId[$i]) { $valid = $false; break }
+                            }
+                        }
+                        $row.Success = $valid
+                        $row.LatencyMs = [int]$udpWatch.ElapsedMilliseconds
+                        $row.Error = if ($valid) { 'None' } else { 'InvalidResponse' }
+                    }
+                    catch {
+                        $udpWatch.Stop()
+                        $row.LatencyMs = [int]$udpWatch.ElapsedMilliseconds
+                        $row.Error = Get-ProbeErrorKind $_.Exception
+                    }
+                    finally { $udp.Dispose() }
+                    $udpResults += [pscustomobject]$row
+                }
+
+                [ordered]@{
+                    AtUtc      = [DateTimeOffset]::UtcNow.ToString('o')
+                    Profile    = $profile
+                    RouteScope = $routeScope
+                    Success    = ($httpResult.Success -and @($udpResults | Where-Object { -not $_.Success }).Count -eq 0)
+                    Http       = [pscustomobject]$httpResult
+                    Udp        = $udpResults
+                }
+            }
+            $cleanUdp = @($probe.Udp | ForEach-Object {
+                [ordered]@{
+                    Size      = [int]$_.Size
+                    Success   = [bool]$_.Success
+                    LatencyMs = [int]$_.LatencyMs
+                    Error     = [string]$_.Error
+                }
+            })
+            $cleanProbe = [ordered]@{
+                AtUtc      = [string]$probe.AtUtc
+                Profile    = [string]$probe.Profile
+                RouteScope = [string]$probe.RouteScope
+                Success    = [bool]$probe.Success
+                Http       = [ordered]@{
+                    Success   = [bool]$probe.Http.Success
+                    Status    = [int]$probe.Http.Status
+                    LatencyMs = [int]$probe.Http.LatencyMs
+                    Error     = [string]$probe.Http.Error
+                }
+                Udp        = $cleanUdp
+            }
+            Write-Output ($cleanProbe | ConvertTo-Json -Depth 6 -Compress)
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'lifecycle' {
+        if (-not $SinceUtc) { throw 'lifecycle requires -SinceUtc in round-trip ISO-8601 format.' }
+        $since = [DateTimeOffset]::MinValue
+        if (-not [DateTimeOffset]::TryParseExact(
+            $SinceUtc,
+            'o',
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::RoundtripKind,
+            [ref]$since)) {
+            throw 'SinceUtc must use round-trip ISO-8601 format.'
+        }
+        if ($since -gt [DateTimeOffset]::UtcNow.AddMinutes(1) -or
+            $since -lt [DateTimeOffset]::UtcNow.AddHours(-24)) {
+            throw 'SinceUtc must be within the last 24 hours and not in the future.'
+        }
+
+        $s = New-VerifiedBratSession
+        try {
+            $summary = Invoke-Command -Session $s -ArgumentList $since.ToString('o') -ScriptBlock {
+                param($sinceText)
+                $since = [DateTimeOffset]::ParseExact(
+                    $sinceText,
+                    'o',
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::RoundtripKind)
+                $logDir = 'C:\ProgramData\VPNRouter\logs'
+                if (-not (Test-Path $logDir)) { throw 'Lifecycle log source is unavailable.' }
+
+                $events = @()
+                $counts = @{}
+                $errorCount = 0
+                $fatalCount = 0
+                $unknownErrorCount = 0
+                $recentCount = 0
+                $maxLines = 50000
+                $files = @(Get-ChildItem $logDir -Filter 'vpnrouter*.log' -File | Sort-Object LastWriteTime)
+                if (-not $files) { throw 'Lifecycle log source is unavailable.' }
+
+                foreach ($file in $files) {
+                    $lines = @(Get-Content $file.FullName -Tail $maxLines)
+                    $include = $false
+                    $at = $null
+                    foreach ($line in $lines) {
+                        if ($line -match '^(?<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2})') {
+                            $parsed = [DateTimeOffset]::MinValue
+                            $ok = [DateTimeOffset]::TryParseExact(
+                                $Matches.timestamp,
+                                'yyyy-MM-dd HH:mm:ss.fff zzz',
+                                [System.Globalization.CultureInfo]::InvariantCulture,
+                                [System.Globalization.DateTimeStyles]::None,
+                                [ref]$parsed)
+                            $include = $ok -and $parsed -ge $since
+                            $at = if ($include) { $parsed } else { $null }
+                            if ($include) {
+                                $recentCount++
+                                if ($recentCount -gt $maxLines) {
+                                    throw 'Lifecycle window exceeds the bounded line cap.'
+                                }
+                            }
+                        }
+                        if (-not $include -or -not $at) { continue }
+
+                        $isErrorLine = $line -match '\[ERR\]|Exception|FATAL'
+                        if ($isErrorLine) {
+                            $errorCount++
+                            if ($line -match 'FATAL') { $fatalCount++ }
+                        }
+
+                        $kind = $null
+                        if ($line -match '\[VpnEngine\].*sing-box started|TUN interface ready|TUN ready') {
+                            $kind = if ($line -match 'TUN') { 'TunReady' } else { 'CoreStarted' }
+                        }
+                        elseif ($line -match '\[HealthMonitor\] Started') { $kind = 'MonitorStarted' }
+                        elseif ($line -match '\[HealthMonitor\] Stopped') { $kind = 'MonitorStopped' }
+                        elseif ($line -match '\[HealthMonitor\] Health check failed') { $kind = 'HealthFailed' }
+                        elseif ($line -match '\[HealthMonitor\] sing-box WEDGED') { $kind = 'CoreWedged' }
+                        elseif ($line -match '\[HealthMonitor\] Restarting sing-box') { $kind = 'RestartRequested' }
+                        elseif ($line -match '\[HealthMonitor\] sing-box restarted successfully') { $kind = 'RestartSucceeded' }
+                        elseif ($line -match '\[HealthMonitor\].*requesting failover') { $kind = 'FailoverRequested' }
+                        elseif ($line -match '\[AutoFailover\].*switched|AutoFailover.*commit') { $kind = 'FailoverCommitted' }
+                        elseif ($line -match '\[HealthMonitor\] VPN is up') { $kind = 'HealthRecovered' }
+                        if ($isErrorLine -and -not $kind) { $unknownErrorCount++ }
+
+                        if ($kind) {
+                            if (-not $counts.ContainsKey($kind)) { $counts[$kind] = 0 }
+                            $counts[$kind]++
+                            $events += [pscustomobject]@{ AtUtc = $at.ToUniversalTime().ToString('o'); Kind = $kind }
+                        }
+                    }
+                }
+                if ($recentCount -eq 0) { throw 'Lifecycle window contains no timestamped entries.' }
+
+                [ordered]@{
+                    SinceUtc          = $since.ToUniversalTime().ToString('o')
+                    RecentEntryCount  = $recentCount
+                    EventCounts       = @($counts.GetEnumerator() | ForEach-Object {
+                        [pscustomobject]@{ Kind = [string]$_.Key; Count = [int]$_.Value }
+                    })
+                    Events            = $events
+                    ErrorCount        = $errorCount
+                    FatalCount        = $fatalCount
+                    UnknownErrorCount = $unknownErrorCount
+                }
+            }
+            $cleanCounts = [ordered]@{}
+            foreach ($pair in @($summary.EventCounts)) {
+                $cleanCounts[[string]$pair.Kind] = [int]$pair.Count
+            }
+            $cleanEvents = @($summary.Events | ForEach-Object {
+                [ordered]@{ AtUtc = [string]$_.AtUtc; Kind = [string]$_.Kind }
+            })
+            $cleanSummary = [ordered]@{
+                SinceUtc          = [string]$summary.SinceUtc
+                RecentEntryCount  = [int]$summary.RecentEntryCount
+                EventCounts       = $cleanCounts
+                Events            = $cleanEvents
+                ErrorCount        = [int]$summary.ErrorCount
+                FatalCount        = [int]$summary.FatalCount
+                UnknownErrorCount = [int]$summary.UnknownErrorCount
+            }
+            Write-Output ($cleanSummary | ConvertTo-Json -Depth 6 -Compress)
         }
         finally { Remove-PSSession $s }
     }
