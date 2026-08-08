@@ -58,10 +58,10 @@ site, STUN host or local VPNRouter execution is used as a substitute.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: solution and both new projects build with 0 errors.
-- [ ] **Gate 2 — Tests green**: new focused tests and existing suite pass.
-- [ ] **Gate 3 — Docs**: this brief Outcome and `OPEN-DEFECTS.md` are current.
-- [ ] **Gate 4 — Self-review**: Ponytail and manual security review; exact
+- [x] **Gate 1 — Build clean**: solution and both new projects build with 0 errors.
+- [x] **Gate 2 — Tests green**: new focused tests and existing suite pass.
+- [x] **Gate 3 — Docs**: this brief Outcome and `OPEN-DEFECTS.md` are current.
+- [x] **Gate 4 — Self-review**: Ponytail and manual security review; exact
   DeepSeek-in-Qwen review attempted with the prescribed read-only flags.
 - [x] **Gate 5 — Remote brat UI verify**: N/A — no UI/product change; live
   workload acceptance is BLOCKED by the recorded provisioning dependency.
@@ -70,40 +70,46 @@ site, STUN host or local VPNRouter execution is used as a substitute.
 ## Outcome (filled 2026-08-08)
 
 **Status**: PARTIAL — the Phase-1 contract implementation is build- and
-focused-test verified. Live GameUdp, BrowserBurst and Mixed acceptance remains
-BLOCKED until the recorded owner provisioning and tunnel-proof dependency is
-met; no remote load, VPNRouter installation or configuration mutation occurred.
+test-verified. Live GameUdp, BrowserBurst and Mixed acceptance remains BLOCKED
+until the owner deploys the endpoint and the separate per-process measurement
+gate proves the workloads use the tunnel; no remote load, VPNRouter
+installation or configuration mutation occurred.
 
-**Commits**: `24dc65b4` implementation
+**Commits**: `24dc65b4`, `8b9a185a`, `e44021eb`, `5708367d`, `d168f073`
 
 **Pushed**: `codex/winbrat-loadtest`; stacked draft PR
 [#124](https://github.com/PavelLizunov/VPNRouter/pull/124) targets
 `codex/winbrat-stability-harness`.
 
-**Test deltas**: +8 focused MVP contract/unit tests (13 focused load/stability
-tooling tests total).
+**Tests**: 22 focused load/stability contract tests passed; the scoped
+pre-commit suite passed 185 tests and manual stacked-branch CI workflows are
+green.
 
 **Files changed**: endpoint/protocol/load-generator tooling, verifier,
 coordinator, focused tests and tracked planning evidence; product code unchanged.
+
+**Separate stability evidence**: the existing strict cold-cycle harness completed
+10/10 cycles. This is lifecycle evidence only; it neither runs nor substitutes
+for a load profile, which remains BLOCKED.
 
 **Gate results:**
 
 - [x] Gate 1: `VPNRouter.sln` Release build plus both new tooling projects pass
   with 0 errors (pre-existing solution warnings remain).
-- [x] Gate 2: the focused MVP and existing stability contracts pass 13/13.
-  The attempted non-elevated full local suite reached the known
-  `%ProgramData%` ACL failures already recorded in `OPEN-DEFECTS.md`, then was
-  stopped after it held the test host; it is not attributed to this change.
-  The stacked-branch preflight full suite and placeholder workflow were green
-  before implementation; post-push CI is required for the changed revision.
+- [x] Gate 2: focused MVP and existing stability contracts pass 22/22; the
+  scoped pre-commit suite passes 185/185. Manual stacked-branch dotnet-test and
+  placeholder workflows are green for `d168f073`.
 - [x] Gate 3: this brief and `OPEN-DEFECTS.md` record the endpoint block and
   worker outcome; no README/zone contract change is needed.
 - [x] Gate 4: Ponytail full review retained only shared-framework primitives and
   fixed constants; manual security review verified environment-only secret use,
   HMAC/source/expiry/replay validation, capped UDP response, fixed rate limits,
-  no target/config/log fields in coordinator evidence and no generic coordinator
-  remoting. Exact DeepSeek-in-Qwen review was attempted with the required
-  read-only zero-tool flags and failed closed without a finding.
+  synchronized aggregate state, no target/config/log fields in coordinator
+  evidence, no generic coordinator remoting, and an empty source-reviewed
+  payload allowlist. Exact DeepSeek-in-Qwen review was attempted with the
+  required read-only zero-tool flags; tool-budget attempts failed closed and a
+  later stdin attempt timed out without output. No finding, PASS claim or
+  permission change derives from that worker.
 - [x] Gate 5: N/A — no product/UI change. Live workload acceptance is explicitly
   BLOCKED, not substituted with a public service.
 - [x] Gate 6: N/A — no product god-file split.
@@ -112,11 +118,17 @@ coordinator, focused tests and tracked planning evidence; product code unchanged
 
 - The local shell did not expose the pinned SDK on `PATH`; the checkout's
   bundled .NET 10 SDK was used for verification without changing the machine.
-- The known non-elevated full-suite ACL limitation also leaves a child test host
-  alive after failures, so it was stopped before the focused re-run.
+- The current connection/lifecycle log schema has no process-to-outbound link.
+  A route check alone is therefore insufficient and the verifier remains
+  explicitly BLOCKED rather than inferring split-tunnel success.
 
 **Follow-ups spawned**:
 
-- Owner provisions the fixed endpoint and a fixed remote browser/load-generator
-  payload, then proves both workloads route through `VPNRouter-TUN` before
-  enabling live acceptance.
+- Owner provisions the fixed endpoint. After that, add the separate
+  measurement gate based on opaque run-token ingress, direct-control comparison
+  and TUN on/off byte correlation before approving a source-built payload hash
+  and enabling any live profile.
+- Keep the current GameUdp profile as moderate game-like traffic. The known
+  high-burst UDP boundary is measurement-gated after the owned-endpoint
+  baseline; this MVP makes no capacity-stress claim and does not raise public
+  HTTP limits.
