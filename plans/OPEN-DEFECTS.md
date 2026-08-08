@@ -16,6 +16,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### WINBRAT operator-owned load-test MVP — 2026-08-08
+
+- [ ] **P2 BLOCKED / EXTERNAL PROVISIONING** — live GameUdp, BrowserBurst and Mixed acceptance cannot run until the fixed operator-owned endpoint is deployed and both browser and load-generator routes are proven `Tunnel` under the current split configuration. The runner must return `BLOCKED` without changing selected apps or configuration while either proof is unavailable — `plans/phase2-winbrat-load-test-mvp-2026-08-08.md` — owner provisioning required
+- [x] **P3 REFUTED 2026-08-08** — the mandated DeepSeek-in-Qwen read-only review was attempted with safe mode and a zero tool budget, but the worker tried one tool and exited fail-closed; no review finding was produced and its tool permissions were not relaxed — task evidence only
+
 ### Setup/diagnostics wizard Qwen review — 2026-08-07
 
 - [x] **P2 RESOLVED in draft PR #116** — final read-only Qwen review found that footer button labels and two card titles did not opt into wrapping at the supported 360px minimum width. They now follow the wizard's existing wrapping pattern — `VPNRouter.App/Views/SetupWizardWindow.axaml`
