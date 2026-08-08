@@ -45,6 +45,27 @@ public sealed class WinbratLoadTestMvpTests
     }
 
     [Fact]
+    public void Echo_ExpiredCookieReplayState_AllowsSameSequenceForRenewedCookie()
+    {
+        var processor = new UdpEchoProcessor(KnownSecret);
+        var cookieRequest = new byte[LoadTestContract.CookieRequestBytes];
+        cookieRequest[0] = 1;
+        cookieRequest[1] = (byte)UdpPacketKind.CookieRequest;
+        var issued = processor.Process(KnownSource, cookieRequest, KnownNow, out var firstCookie);
+        var first = processor.Process(KnownSource, CreateEchoRequest(firstCookie!, 1, new byte[256]), KnownNow, out _);
+        var renewedAt = KnownNow.AddSeconds(LoadTestContract.CookieLifetimeSeconds + 1);
+        var renewed = processor.Process(KnownSource, cookieRequest, renewedAt, out var secondCookie);
+        var accepted = processor.Process(KnownSource, CreateEchoRequest(secondCookie!, 1, new byte[256]), renewedAt, out _);
+
+        Assert.Equal(UdpEchoDisposition.Echo, issued);
+        Assert.Equal(UdpEchoDisposition.Echo, first);
+        Assert.Equal(UdpEchoDisposition.Echo, renewed);
+        Assert.Equal(UdpEchoDisposition.Echo, accepted);
+        Assert.Equal(1, processor.ReplayEntryCount);
+        Assert.True(processor.ReplayEntryCount <= LoadTestContract.MaxReplayEntries);
+    }
+
+    [Fact]
     public void RateLimiter_PerSourceCap_RejectsOneHundredAndFirstPacket()
     {
         var limiter = new FixedRateLimiter();
@@ -70,15 +91,15 @@ public sealed class WinbratLoadTestMvpTests
     }
 
     [Fact]
-    public void Metrics_SentButUnansweredGap_UsesOutstandingPacketsNotSenderIdle()
+    public void CookieRotation_AfterOriginalExpiry_UsesRenewedCookie()
     {
-        var metrics = new GameUdpMetrics();
-        metrics.Sent(1, KnownNow);
-        metrics.Sent(2, KnownNow.AddSeconds(1));
-        metrics.Received(1, true, KnownNow.AddSeconds(1.1));
+        var auth = new UdpCookieAuthenticator(KnownSecret);
+        var state = new GameUdpCookieState(auth.CreateCookie(KnownSource, new byte[8], KnownNow));
 
-        Assert.False(metrics.HasFailureGap(KnownNow.AddSeconds(3.9)));
-        Assert.True(metrics.HasFailureGap(KnownNow.AddSeconds(4)));
+        Assert.True(state.TryBeginRefresh(KnownNow.AddSeconds(25)));
+        state.Accept(auth.CreateCookie(KnownSource, new byte[8], KnownNow.AddSeconds(25)));
+
+        Assert.False(state.TryBeginRefresh(KnownNow.AddSeconds(LoadTestContract.CookieLifetimeSeconds + 1)));
     }
 
     [Fact]
@@ -102,6 +123,45 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Equal(1, summary.Reorder);
         Assert.Equal(1, summary.Corruption);
         Assert.Equal(20, summary.RttP95Ms);
+        Assert.True(GameUdpMvp.PayloadFor(2).SequenceEqual(GameUdpMvp.PayloadFor(2)));
+        Assert.False(GameUdpMvp.PayloadFor(1).SequenceEqual(GameUdpMvp.PayloadFor(2)));
+    }
+
+    [Fact]
+    public void Metrics_ContinuousAcknowledgements_DoNotTurnOneOldLossIntoBlackout()
+    {
+        var metrics = new GameUdpMetrics();
+        metrics.Sent(1, KnownNow);
+        metrics.Sent(2, KnownNow.AddSeconds(1));
+        metrics.Received(2, true, KnownNow.AddSeconds(1.1));
+        metrics.Sent(3, KnownNow.AddSeconds(3.9));
+        metrics.Received(3, true, KnownNow.AddSeconds(4));
+
+        Assert.False(metrics.HasFailureGap(KnownNow.AddSeconds(4.1)));
+        metrics.Sent(4, KnownNow.AddSeconds(7.1));
+        Assert.True(metrics.HasFailureGap(KnownNow.AddSeconds(7.1)));
+    }
+
+    [Fact]
+    public void Metrics_UnknownResponse_DoesNotAcknowledgeUnsentSequence()
+    {
+        var metrics = new GameUdpMetrics();
+        metrics.Sent(1, KnownNow);
+        metrics.Received(99, true, KnownNow.AddMilliseconds(10));
+
+        var summary = metrics.Snapshot();
+
+        Assert.Equal(0, summary.Received);
+        Assert.Equal(1, summary.Loss);
+        Assert.Equal(1, summary.Unknown);
+    }
+
+    [Fact]
+    public void Profile_Scheduling_UsesFixedNormalAndBurstIntervals()
+    {
+        Assert.Equal(GameUdpProfile.NormalInterval, GameUdpProfile.IntervalAt(TimeSpan.Zero));
+        Assert.Equal(GameUdpProfile.BurstInterval, GameUdpProfile.IntervalAt(GameUdpProfile.BurstStart));
+        Assert.Equal(GameUdpProfile.NormalInterval, GameUdpProfile.IntervalAt(GameUdpProfile.BurstStart + GameUdpProfile.BurstDuration));
     }
 
     [Fact]
@@ -114,6 +174,21 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("setInterval(burst,5000)", target, StringComparison.Ordinal);
         Assert.Contains("for(let i=0;i<4;i++)", target, StringComparison.Ordinal);
         Assert.Contains("new Uint8Array(64)", target, StringComparison.Ordinal);
+        Assert.Contains("if(busy||stopped)return", target, StringComparison.Ordinal);
+        Assert.Contains("setTimeout(stop,600000)", target, StringComparison.Ordinal);
+        Assert.Contains("sockets.forEach(ws=>ws.close())", target, StringComparison.Ordinal);
+        Assert.Contains("state.done=true", target, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Endpoint_HttpAndWebSocketShareFixedRateGate()
+    {
+        var target = ReadRepoFile("VPNRouter.Tools", "LoadTarget", "Program.cs");
+
+        Assert.Contains("AddSingleton<FixedRateLimiter>", target, StringComparison.Ordinal);
+        Assert.Contains("Results.StatusCode(429)", target, StringComparison.Ordinal);
+        Assert.Contains("WebSocketCloseStatus.PolicyViolation", target, StringComparison.Ordinal);
+        Assert.Contains("RateLimited(context, rate)", target, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -128,6 +203,7 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("loadtest.vpn.ninitux.com", loadAction, StringComparison.Ordinal);
         Assert.Contains("RouteScope", loadAction, StringComparison.Ordinal);
         Assert.Contains("Status = 'BLOCKED'", loadAction, StringComparison.Ordinal);
+        Assert.True(loadAction.IndexOf("Add-Type -AssemblyName System.Net.Http", StringComparison.Ordinal) < loadAction.IndexOf("New-Object System.Net.Http.HttpClient", StringComparison.Ordinal));
         Assert.DoesNotContain("Set-Content", loadAction, StringComparison.Ordinal);
         Assert.DoesNotContain("Set-Vpn", coordinator, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SaveSettings", coordinator, StringComparison.OrdinalIgnoreCase);

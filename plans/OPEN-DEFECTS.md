@@ -20,6 +20,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 - [ ] **P2 BLOCKED / EXTERNAL PROVISIONING** — live GameUdp, BrowserBurst and Mixed acceptance cannot run until the fixed operator-owned endpoint is deployed and both browser and load-generator routes are proven `Tunnel` under the current split configuration. The runner must return `BLOCKED` without changing selected apps or configuration while either proof is unavailable — `plans/phase2-winbrat-load-test-mvp-2026-08-08.md` — owner provisioning required
 - [x] **P3 REFUTED 2026-08-08** — the mandated DeepSeek-in-Qwen read-only review was attempted with safe mode and a zero tool budget, but the worker tried one tool and exited fail-closed; no review finding was produced and its tool permissions were not relaxed — task evidence only
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — GameUdp retained one short-lived UDP cookie for its entire fixed-duration profile, so valid traffic becomes deterministically unauthenticated shortly after the cookie expiry — `VPNRouter.Tools/WinbratLoadGen/Program.cs` — PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — GameUdp coupled paced send and receive into one loop, imposing a receive wait on each packet and validating delayed replies against the wrong random payload — `VPNRouter.Tools/WinbratLoadGen/Program.cs` — PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — GameUdp interpreted any old outstanding datagram as a flow blackout and accepted unknown sequence numbers as acknowledgements, producing false failures and inflated success metrics — `VPNRouter.Tools/WinbratLoadGen/GameUdpMetrics.cs` — PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — UDP replay tracking could retain one sequence entry per fresh authenticated cookie without expiry/cap cleanup — `VPNRouter.Tools/LoadTest.Protocol/LoadTestProtocol.cs` — PR #124
+- [ ] **P2 CONFIRMED / IN PROGRESS 2026-08-08** — BrowserBurst timers could overlap and never terminated WebSocket/fetch activity after its fixed profile duration — `VPNRouter.Tools/LoadTarget/Program.cs` — PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — fixed HTTP/blob/WebSocket responses lacked request/message rate gates, leaving the owned endpoint unnecessarily receptive to abusive traffic — `VPNRouter.Tools/LoadTarget/Program.cs` — PR #124
+- [ ] **P1 CONFIRMED / IN PROGRESS 2026-08-08** — the verifier load-test preflight used `System.Net.Http.HttpClient` in the remote Windows PowerShell session without loading its assembly, so it failed after tunnel route proof but before fixed health validation — `tools/brat-verify.ps1` — WINBRAT preflight, PR #124
 
 ### Setup/diagnostics wizard Qwen review — 2026-08-07
 

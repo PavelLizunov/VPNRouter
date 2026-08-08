@@ -2,34 +2,64 @@
 
 namespace VPNRouter.Tools.WinbratLoadGen;
 
-public sealed record GameUdpSummary(int Sent, int Received, int Loss, int Duplicate, int Reorder, int Corruption, double RttP50Ms, double RttP95Ms, double RttP99Ms, double MaxAcknowledgedGapMs);
+public sealed record GameUdpSummary(int Sent, int Received, int Loss, int Duplicate, int Reorder, int Corruption, int Unknown, double RttP50Ms, double RttP95Ms, double RttP99Ms, double MaxAcknowledgedGapMs);
+
+public static class GameUdpProfile
+{
+    public static readonly TimeSpan Duration = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan BurstStart = TimeSpan.FromMinutes(2.5);
+    public static readonly TimeSpan BurstDuration = TimeSpan.FromSeconds(2);
+    public static readonly TimeSpan NormalInterval = TimeSpan.FromMilliseconds(50);
+    public static readonly TimeSpan BurstInterval = TimeSpan.FromMilliseconds(20);
+
+    public static TimeSpan IntervalAt(TimeSpan elapsed) =>
+        elapsed >= BurstStart && elapsed < BurstStart + BurstDuration ? BurstInterval : NormalInterval;
+}
 
 public sealed class GameUdpMetrics
 {
     private readonly Dictionary<long, DateTimeOffset> _outstanding = new();
     private readonly HashSet<long> _received = new();
     private readonly List<double> _rtts = new();
+    private DateTimeOffset? _firstSentAt;
+    private DateTimeOffset? _lastSentAt;
+    private DateTimeOffset? _lastAcknowledgementAt;
     private long _highestSequence = -1;
     private double _maxAcknowledgedGap;
     private int _sent;
     private int _duplicate;
     private int _reorder;
     private int _corruption;
+    private int _unknown;
 
-    public void Sent(long sequence, DateTimeOffset at) { _sent++; _outstanding[sequence] = at; }
+    public void Sent(long sequence, DateTimeOffset at)
+    {
+        _sent++;
+        _firstSentAt ??= at;
+        _lastSentAt = at;
+        _outstanding[sequence] = at;
+    }
 
     public void Received(long sequence, bool payloadMatches, DateTimeOffset at)
     {
+        if (_received.Contains(sequence)) { _duplicate++; return; }
+        if (!_outstanding.TryGetValue(sequence, out var sentAt)) { _unknown++; return; }
         if (!payloadMatches) { _corruption++; return; }
-        if (!_received.Add(sequence)) { _duplicate++; return; }
+
+        _received.Add(sequence);
+        _outstanding.Remove(sequence);
         if (sequence < _highestSequence) _reorder++; else _highestSequence = sequence;
-        if (_outstanding.Remove(sequence, out var sentAt)) _rtts.Add((at - sentAt).TotalMilliseconds);
-        if (_outstanding.Count > 0) _maxAcknowledgedGap = Math.Max(_maxAcknowledgedGap, _outstanding.Values.Max(sentAt => (at - sentAt).TotalMilliseconds));
+        _rtts.Add((at - sentAt).TotalMilliseconds);
+        if (_lastAcknowledgementAt is { } last) _maxAcknowledgedGap = Math.Max(_maxAcknowledgedGap, (at - last).TotalMilliseconds);
+        _lastAcknowledgementAt = at;
     }
 
-    public bool HasFailureGap(DateTimeOffset now) => _outstanding.Count > 0 && _outstanding.Values.Any(sentAt => now - sentAt >= TimeSpan.FromSeconds(3));
+    public bool HasFailureGap(DateTimeOffset now) =>
+        _firstSentAt is { } first &&
+        _lastSentAt is { } lastSent && now - lastSent <= TimeSpan.FromMilliseconds(250) &&
+        now - (_lastAcknowledgementAt ?? first) >= TimeSpan.FromSeconds(3);
 
-    public GameUdpSummary Snapshot() => new(_sent, _received.Count, _sent - _received.Count, _duplicate, _reorder, _corruption, Percentile(.50), Percentile(.95), Percentile(.99), _maxAcknowledgedGap);
+    public GameUdpSummary Snapshot() => new(_sent, _received.Count, _sent - _received.Count, _duplicate, _reorder, _corruption, _unknown, Percentile(.50), Percentile(.95), Percentile(.99), _maxAcknowledgedGap);
 
     private double Percentile(double fraction)
     {

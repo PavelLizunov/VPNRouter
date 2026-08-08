@@ -852,6 +852,7 @@ switch ($Action) {
                 # this action never alters selected apps or VPNRouter settings.
                 $ready = $false
                 if ($routeScope -eq 'Tunnel') {
+                    Add-Type -AssemblyName System.Net.Http
                     $http = New-Object System.Net.Http.HttpClient
                     $http.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
                     try {
