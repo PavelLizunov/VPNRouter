@@ -74,7 +74,11 @@ focused-test verified. Live GameUdp, BrowserBurst and Mixed acceptance remains
 BLOCKED until the recorded owner provisioning and tunnel-proof dependency is
 met; no remote load, VPNRouter installation or configuration mutation occurred.
 
-**Commits**: implementation commit pending
+**Commits**: `24dc65b4` implementation
+
+**Pushed**: `codex/winbrat-loadtest`; stacked draft PR
+[#124](https://github.com/PavelLizunov/VPNRouter/pull/124) targets
+`codex/winbrat-stability-harness`.
 
 **Test deltas**: +8 focused MVP contract/unit tests (13 focused load/stability
 tooling tests total).
