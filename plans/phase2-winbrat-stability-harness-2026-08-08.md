@@ -70,12 +70,12 @@ session helper. No screenshots or raw log output are collected by default.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
-- [ ] **Gate 2 — Tests green**: full suite passes; new tooling contracts included.
-- [ ] **Gate 3 — Docs**: this Outcome and `OPEN-DEFECTS.md` are current; README/zone docs updated only if the operator contract changes.
-- [ ] **Gate 4 — Self-review**: ponytail review plus exact Qwen and manual security review; named `simplify`/`security-review` skills are unavailable.
-- [ ] **Gate 5 — Remote brat verify**: identity/state/cleanup and cold-cycle result recorded; soak runs only with tunnel-scoped probes.
-- [ ] **Gate 6 — Characterization diff**: N/A — tooling only, no god-file split.
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
+- [x] **Gate 2 — Tests green**: full suite passes; new tooling contracts included.
+- [x] **Gate 3 — Docs**: this Outcome and `OPEN-DEFECTS.md` are current; README/zone docs updated only if the operator contract changes.
+- [x] **Gate 4 — Self-review**: ponytail review plus exact Qwen and manual security review; named `simplify`/`security-review` skills are unavailable.
+- [x] **Gate 5 — Remote brat verify**: identity/state/cleanup and cold-cycle result recorded; soak runs only with tunnel-scoped probes.
+- [x] **Gate 6 — Characterization diff**: N/A — tooling only, no god-file split.
 
 ## Acceptance
 
@@ -97,9 +97,12 @@ session helper. No screenshots or raw log output are collected by default.
 **Status**: IMPLEMENTED AND LIVE-VERIFIED — implementation, cold cycles and
 the two-hour soak pass; remote GitHub CI remains the post-push gate.
 
-**Commits**: implementation commit pending; prerequisite brief commit `e15dc431`.
+**Commits**: prerequisite brief `e15dc431`; implementation `9036a632`;
+final Outcome/PR reference in the follow-up docs commit.
 
-**Pushed**: brief only; implementation not pushed yet.
+**Pushed**: `codex/winbrat-stability-harness`; draft PR
+[#123](https://github.com/PavelLizunov/VPNRouter/pull/123), stacked on the QoL
+audit branch/PR #118.
 
 **Test deltas**: +5 tooling contract tests; 5/5 pass.
 
@@ -111,9 +114,13 @@ zone documentation and defect ledger
 
 - [x] Gate 1: solution Release build passes with 0 warnings / 0 errors after
   normal restore in the fresh worktree
-- [ ] Gate 2: tooling contracts pass 5/5; non-elevated full Windows run passed
-  2,679/2,706 and hit 25 existing ProgramData/global-lock environment failures;
-  normal GitHub full-suite run remains the required final gate
+- [x] Gate 2: tooling contracts pass 5/5 and pre-commit scope passes 185/185.
+  The non-elevated local full Windows run passed 2,679/2,706 and hit 25 existing
+  ProgramData/global-lock environment failures; the authoritative GitHub run
+  then passed the full Linux suite, Windows characterization and Go
+  ([run 31251254061](https://github.com/PavelLizunov/VPNRouter/actions/runs/31251254061));
+  placeholder grep also passed
+  ([run 31251255062](https://github.com/PavelLizunov/VPNRouter/actions/runs/31251255062))
 - [x] Gate 3: brief, test-zone map and `OPEN-DEFECTS.md` updated with final
   cold/soak evidence and explicit measurement boundaries
 - [x] Gate 4: ponytail and manual security reviews complete; exact
