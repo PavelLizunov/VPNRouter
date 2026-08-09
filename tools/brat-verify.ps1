@@ -22,7 +22,7 @@ param(
     [string]$Name,
     [string]$ControlType,
 
-    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'SetValue')]
+    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'Select', 'SetValue')]
     [string]$UiaOperation = 'Inspect',
     [string]$Value,
 
@@ -109,7 +109,7 @@ function Invoke-BratInteractive {
         [string]$AutomationId,
         [string]$Name,
         [string]$ControlType,
-        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'SetValue')]
+        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'Select', 'SetValue')]
         [string]$UiaOperation = 'Inspect',
         [string]$Value,
         [string]$LocalOutput,
@@ -137,10 +137,11 @@ try {
         Add-Type -AssemblyName UIAutomationTypes
         $ae = [System.Windows.Automation.AutomationElement]
 
-        # Prefer the GUI host; only fall back to VPNRouter.App when no GUI
-        # process exists. Never pick an arbitrary first result across both names.
-        $proc = Get-Process -Name VPNRouter.GUI -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $proc) { $proc = Get-Process -Name VPNRouter.App -ErrorAction SilentlyContinue | Select-Object -First 1 }
+        # VPNRouter.GUI is the bootstrap/update host and can remain alive without
+        # owning Avalonia controls. Target the real app first; retain the host as
+        # a legacy fallback for older package layouts.
+        $proc = Get-Process -Name VPNRouter.App -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $proc) { $proc = Get-Process -Name VPNRouter.GUI -ErrorAction SilentlyContinue | Select-Object -First 1 }
         if (-not $proc) { throw "VPNRouter.GUI / VPNRouter.App process not found." }
 
         $root = $ae::RootElement
@@ -225,6 +226,13 @@ try {
                 $pat = $null
                 if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$pat)) { throw "ExpandCollapsePattern unsupported by matched element." }
                 $pat.Expand()
+            }
+            'Select' {
+                $pat = $null
+                if (-not $target.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pat)) { throw "SelectionItemPattern unsupported by matched element." }
+                $pat.Select()
+                for ($i = 0; $i -lt 20 -and -not $pat.Current.IsSelected; $i++) { Start-Sleep -Milliseconds 100 }
+                if (-not $pat.Current.IsSelected) { throw "SelectionItemPattern returned without selecting the matched element." }
             }
             'SetValue' {
                 $pat = $null
