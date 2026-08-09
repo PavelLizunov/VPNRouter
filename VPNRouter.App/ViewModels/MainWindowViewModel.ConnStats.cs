@@ -172,7 +172,8 @@ public partial class MainWindowViewModel
 
     private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
     {
-        if (!AutoSelectBestServer || !IsSubscribeMode)
+        if (!AutoSelectBestServer || !(_settings.App.ConfigMode ?? "generated")
+                .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             return;
 
         // Every 3rd tick only (the FIRST tick fires immediately so the label

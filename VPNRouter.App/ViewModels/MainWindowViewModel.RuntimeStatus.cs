@@ -230,9 +230,12 @@ public partial class MainWindowViewModel
         {
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
-            var configLabel = IsSubscribeMode
+            var configuredMode = _settings.App.ConfigMode ?? "generated";
+            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
                 ? (IsRussian ? "подписка" : "subscribe")
-                : IsVlessMode ? (IsRussian ? "ручной" : "manual") : (IsRussian ? "свой" : "custom");
+                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
+                    ? (IsRussian ? "ручной" : "manual")
+                    : (IsRussian ? "свой" : "custom");
             var tunnelLabel = IsSplitTunnel ? (IsRussian ? "сплит" : "split") : (IsRussian ? "полный" : "full");
             var mode = $"{configLabel}/{tunnelLabel}";
             StatusText = IsRussian
@@ -346,7 +349,8 @@ public partial class MainWindowViewModel
         // IS the VPN controls), so the badge click is a no-op rather than
         // a confusing tab-switch to a hidden layer.
         if (IsSimpleMode) return;
-        SelectedTabIndex = IsSubscribeMode ? 1 : 0;
+        SelectedTabIndex = (_settings.App.ConfigMode ?? "generated")
+            .Equals("subscribe", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
     }
 
     /// <summary>Zapret badge click: switch to Tools tab AND select Zapret sub-section.

@@ -281,9 +281,12 @@ public partial class MainWindowViewModel
     {
         get
         {
-            var configLabel = IsSubscribeMode ? Strings.SmpCfgSubscribe
-                             : IsVlessMode    ? Strings.SmpCfgManual
-                             :                  Strings.SmpCfgCustom;
+            var configuredMode = _settings.App.ConfigMode ?? "generated";
+            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
+                ? Strings.SmpCfgSubscribe
+                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
+                    ? Strings.SmpCfgManual
+                    : Strings.SmpCfgCustom;
             var tunnelLabel = IsSplitTunnel ? Strings.SmpCfgSplit : Strings.SmpCfgFull;
             return $"{configLabel} · {tunnelLabel}";
         }
@@ -304,9 +307,10 @@ public partial class MainWindowViewModel
             var ip = _engine?.ActiveServerAddress;
             if (string.IsNullOrEmpty(ip)) return string.Empty;
 
-            string? name = IsSubscribeMode
+            var configuredMode = _settings.App.ConfigMode ?? "generated";
+            string? name = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
                 ? (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName
-                : IsVlessMode
+                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
                     ? (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName
                     : null; // Custom mode — no per-server name from settings.
 
@@ -501,7 +505,8 @@ public partial class MainWindowViewModel
         // the active pick if it's alive; else fastest live; else honest error.
         // Inlined (no new VM member) so the characterization surface is unchanged;
         // the pick decision is unit-tested in ServerHealthProbe.PickForConnect.
-        if (IsSubscribeMode)
+        if ((_settings.App.ConfigMode ?? "generated")
+            .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
         {
             var candidates = (_settings.App.Subscriptions
                     ?? new System.Collections.Generic.List<SubscriptionEntry>())

@@ -2968,7 +2968,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
-            var configLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+            var configuredMode = _settings.App.ConfigMode ?? "generated";
+            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
+                ? "subscribe"
+                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
             var tunnelLabel = IsSplitTunnel ? "split" : "full";
             var mode = $"{configLabel}/{tunnelLabel}";
             StatusText = IsRussian
@@ -3390,7 +3393,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (!IsConnected) return;
         var (serverName, serverIp) = DeriveConnectedServerLabel();
 
-        var configLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+        var configuredMode = _settings.App.ConfigMode ?? "generated";
+        var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
+            ? "subscribe"
+            : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
         var tunnelLabel = IsSplitTunnel ? "split" : "full";
         var modeLabel = $"{configLabel}/{tunnelLabel}";
 
@@ -3410,7 +3416,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private (string? name, string? ip) DeriveConnectedServerLabel()
     {
         var serverIp = _engine.ActiveServerAddress;
-        if (IsSubscribeMode)
+        var configuredMode = _settings.App.ConfigMode ?? "generated";
+        if (configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
         {
             return AutoSelectStatus.ResolveSubscribeLabel(
                 AutoSelectBestServer,
@@ -3421,7 +3428,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName,
                 serverIp);
         }
-        if (IsVlessMode)
+        if (configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase))
             return ((SelectedServer ?? Servers.FirstOrDefault())?.DisplayName, serverIp);
         var c = CustomConfigs.FirstOrDefault(x => x.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault();
         return (c?.Name, serverIp);
