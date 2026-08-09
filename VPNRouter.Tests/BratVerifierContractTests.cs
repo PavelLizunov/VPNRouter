@@ -63,6 +63,30 @@ public sealed class BratVerifierContractTests
         Assert.Contains("'Select'", script);
         Assert.Contains("SelectionItemPattern", script);
         Assert.Contains("if (-not $pat.Current.IsSelected)", script);
+        Assert.Contains("$result.Element.ToggleState", script);
+        Assert.Contains("$candidate.Current.IsEnabled -and -not $candidate.Current.IsOffscreen", script);
+        Assert.Contains("CheckUpdate is restricted to the update button", script);
+        Assert.Contains("UpdateCheckState = $state", script);
+        Assert.Contains("'updateprobe'", script);
+        Assert.Contains("'liveupdate'", script);
+        Assert.Contains("ApiReachable", script);
+        Assert.Contains("ManualCheckFailed", script);
+        Assert.Contains("$safe = [ordered]@{", script);
+        var updateProbeStart = script.IndexOf("'updateprobe' {", StringComparison.Ordinal);
+        var liveUpdateStart = script.IndexOf("'liveupdate' {", StringComparison.Ordinal);
+        Assert.True(updateProbeStart >= 0 && liveUpdateStart > updateProbeStart);
+        var updateProbe = script.Substring(updateProbeStart, liveUpdateStart - updateProbeStart);
+        Assert.DoesNotContain("Exception.Message", updateProbe);
+        Assert.DoesNotContain("$probe | ConvertTo-Json", script);
+        Assert.Contains("VPNROUTER_CI", script);
+        Assert.Contains("test-update --target $version", script);
+        Assert.Contains("'C:\\Program Files\\VPNRouter\\app'", script);
+        Assert.Contains("helper done", script);
+        Assert.Contains("xcopy exit=0", script);
+        Assert.Contains("CopiedCountSane", script);
+        Assert.Contains("FailedMarkerAbsent", script);
+        Assert.Contains("VPNRouterLiveUpdateLaunch-", script);
+        Assert.Contains("$result.HelperDone -is [bool]", script);
 
         // The deploy action must gate on the exact artifact + sidecar SHA256
         // before it ever contacts the brat box (fail closed on any problem).
