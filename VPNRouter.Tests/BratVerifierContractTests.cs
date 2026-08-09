@@ -55,10 +55,14 @@ public sealed class BratVerifierContractTests
         Assert.Contains("Stop-ScheduledTask", script);
         Assert.Contains("Remote helper cleanup failed", script);
         Assert.Contains("Remove-Item -LiteralPath $RequestPath", script);
-        // UIA target prefers VPNRouter.GUI and only falls back to VPNRouter.App.
+        // UIA target prefers the real Avalonia app; VPNRouter.GUI is only the
+        // bootstrap/update host and may remain alive without owning controls.
         var gui = script.IndexOf("Get-Process -Name VPNRouter.GUI", StringComparison.Ordinal);
         var app = script.IndexOf("Get-Process -Name VPNRouter.App", StringComparison.Ordinal);
-        Assert.True(gui >= 0 && app > gui, "brat-verify.ps1 must prefer VPNRouter.GUI and fall back to VPNRouter.App.");
+        Assert.True(app >= 0 && gui > app, "brat-verify.ps1 must prefer VPNRouter.App and fall back to VPNRouter.GUI.");
+        Assert.Contains("'Select'", script);
+        Assert.Contains("SelectionItemPattern", script);
+        Assert.Contains("if (-not $pat.Current.IsSelected)", script);
 
         // The deploy action must gate on the exact artifact + sidecar SHA256
         // before it ever contacts the brat box (fail closed on any problem).
