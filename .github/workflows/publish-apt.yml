@@ -238,9 +238,11 @@ jobs:
               # v2.22.4: retry — release.published fires the moment the
               # release is created, but the Linux CI upload of the .deb
               # may still be in flight. Wait up to ~3 minutes for the
-              # asset to show up before giving up.
+    # asset to show up before giving up. Stable v2.48.0's Linux build
+    # completed just after the former ~3-minute ceiling, so keep six
+    # minutes of headroom without changing the release ordering.
               download_ok=0
-              for attempt in 1 2 3 4 5 6; do
+    for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
                   if gh release download "$TAG" \
                       --repo "${{ github.repository }}" \
                       --pattern "*-linux-amd64.deb" \
@@ -253,7 +255,7 @@ jobs:
                   sleep 30
               done
               if [ "$download_ok" = "0" ]; then
-                  echo "::error::No linux-amd64.deb asset on release $TAG after 6 attempts (~3 min). Aborting."
+        echo "::error::No linux-amd64.deb asset on release $TAG after 12 attempts (~6 min). Aborting."
                   exit 1
               fi
           else
