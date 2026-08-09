@@ -59,6 +59,8 @@ tools/*
 !tools/loadtest-direct-observer.ps1
 !tools/verify-official-alt-clients.ps1
 !tools/build-winbrat-browser-probe-payload.ps1
+!tools/brat-official-ab.ps1
+!tools/brat-official-awg-remote.ps1
 /artifacts/brat-loadtest/
 /artifacts/brat-protocol-matrix/
 /artifacts/brat-loadtest-payload/

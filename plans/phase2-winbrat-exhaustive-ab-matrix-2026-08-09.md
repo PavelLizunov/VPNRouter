@@ -1,7 +1,7 @@
 # Phase 2 — exhaustive WINBRAT protocol-row and client A/B matrix
 
 **Owner**: Codex  
-**Branch**: `codex/winbrat-loadtest`  
+**Branch**: `codex/winbrat-official-ab`
 **Parent**: `plans/phase2-winbrat-protocol-load-matrix-2026-08-08.md`  
 **Risk**: HIGH — six to sixteen hours of repeated remote tunnel changes on the dedicated WINBRAT VM  
 **Blast radius**: test tooling and WINBRAT only; no product/runtime code
@@ -14,6 +14,14 @@ matched AWG and HY2 profiles with independent official clients. Determine
 whether the observed three-second UDP reply gaps follow VPNRouter, a protocol
 family, a particular row/cohort, the common WINBRAT underlay, or the remote
 server path.
+
+**Current status, 2026-08-09**: Phase A completed all 60 planned VPNRouter
+cycles and Phase A2 completed three ten-minute BrowserBurst cycles. The fixed
+official-AmneziaWG runner is implemented and the pinned `2.0.2` client is
+installed on WINBRAT without launching a tunnel. Both official Control and
+Target preflights stop at `FixtureMissing`; Phase B live traffic has not
+started and remains explicitly blocked on operator-provisioned opaque fixtures
+and their protected Tailscale-safe attestation markers.
 
 ## Discovered matrix
 
@@ -49,16 +57,23 @@ called server-specific without a separate privacy-safe runtime proof.
 
 Expected duration: about six to seven hours including 60 cold connections.
 
-Live progress, started `2026-08-08T23:00:27Z`:
-
-- VLESS Reality ordinals 0, 1 and 2 completed `PASS`, three cold repeats each;
-- no measured VPN `ReplyGap`, core restart, TUN loss or cleanup failure in
-  those nine samples;
-- ordinal 3 is running; later rows remain pending;
-- the paired direct observer remains active and is interpreted independently
-  from the VPN samples.
+Completed `2026-08-09T06:42:17Z`: all 20 rows and 60 cold repeats finished.
+The result was 57 `PASS` and three controlled network measurements: one XHTTP
+`ReplyGap`, plus one AWG `ReplyGap` and one AWG `CookieFailure` on AWG ordinal
+1. VPNRouter remained connected with one core and an Up TUN after every load;
+all lifecycle windows were free of error/FATAL/unknown events and final cleanup
+restored zero core, absent TUN and Direct routing. The complete per-family
+aggregates and paired-observer interpretation are in the parent Outcome.
 
 ## Phase A2 — browser and mixed load
+
+Outcome: three independent ten-minute BrowserBurst cycles completed `PASS`
+with 11,488 successful fetches, 7,188 successful WebSocket replies and zero
+fetch/WebSocket errors. Each cycle proved Full Tunnel, process/TUN-byte
+correlation and clean teardown. The broader per-row and Mixed plan below was
+deliberately not executed: no browser symptom reproduced, so more row churn
+would add cost without improving UDP attribution. Mixed remains
+`MeasurementGated` until a simultaneous browser+UDP failure is observed.
 
 The exhaustive GameUdp matrix proves repeated TUN startup, low-rate UDP
 cadence, bounded bursts and multi-second reply-gap behaviour. It does not prove
@@ -126,8 +141,10 @@ hours, before targeted official-client A/B.
 - Optional VLESS: v2rayN only when `xray.exe` native TUN is proven; a sing-box
   wrapper is not an independent core comparison.
 
-Pinned official binaries prepared locally under ignored `artifacts/` but not
-installed on WINBRAT while Phase A is running:
+Pinned official binaries prepared locally under ignored `artifacts/`. After
+Phase A completed, the exact AmneziaWG package was installed once on WINBRAT
+with `DO_NOT_LAUNCH`; no official tunnel was launched. Hysteria remains
+uninstalled and blocked behind its separate CGNAT-address safety gate:
 
 - AmneziaWG Windows client `2.0.2`, `amneziawg-amd64-2.0.2.msi`, SHA-256
   `1b7308d0c74685193dee5d30fd30f370b5a2748a7f648869cd16f25286efc784`;
@@ -146,8 +163,9 @@ Profiles must be provisioned as opaque test fixtures without Codex reading or
 copying keys. Before any full-tunnel alternative starts, preserve the
 Tailscale/WinRM control route, exclude `100.64.0.0/10`, arm a client-specific
 local watchdog, and verify cleanup without broad adapter-disable commands.
-Until those fixtures and a fixed allowlisted alternative runner exist, Phase B
-is `BLOCKED`, never approximated with another sing-box GUI.
+The fixed allowlisted AmneziaWG runner now exists. Phase B remains `BLOCKED`
+only because the two opaque matched fixtures and their attestation markers are
+absent; it is never approximated with another sing-box GUI.
 
 The fixed Phase B contract is symmetric and time-bracketed:
 
@@ -189,7 +207,8 @@ state; they never read, hash, copy, print or retain fixture contents.
 
 | Client | Fixed fixture | Fixed runtime identity |
 |---|---|---|
-| AmneziaWG | `C:\ProgramData\VPNRouterTestFixtures\AWG\VPNRouter-AB-AWG.conf.dpapi` | service `AmneziaWGTunnel$VPNRouter-AB-AWG`, adapter `VPNRouter-AB-AWG` |
+| AmneziaWG Control (healthy AWG ordinal 0) | `C:\ProgramData\VPNRouterTestFixtures\AWG\VPNRouter-AB-AWG-Control.conf.dpapi` | service `AmneziaWGTunnel$VPNRouter-AB-AWG-Control`, adapter `VPNRouter-AB-AWG-Control` |
+| AmneziaWG Target (AWG ordinal 1) | `C:\ProgramData\VPNRouterTestFixtures\AWG\VPNRouter-AB-AWG.conf.dpapi` | service `AmneziaWGTunnel$VPNRouter-AB-AWG`, adapter `VPNRouter-AB-AWG` |
 | Hysteria | `C:\ProgramData\VPNRouterTestFixtures\HY2\VPNRouter-AB-HY2.yaml` | executable hash for `2.12.0`, adapter `VPNRouter-AB-HY2` |
 
 Both fixture directories must deny inherited broad user access and permit only
@@ -197,6 +216,15 @@ Both fixture directories must deny inherited broad user access and permit only
 explicitly define the fixed TUN name, a non-CGNAT IPv4 address, full IPv4
 routing and `100.64.0.0/10` exclusion. AmneziaWG uses the official DPAPI form;
 the test runner must never create or decrypt it.
+
+Each AWG fixture also requires a protected empty attestation marker beside it:
+`VPNRouter-AB-AWG-Control.tailscale-safe` and
+`VPNRouter-AB-AWG.tailscale-safe`. Creating a marker is an operator assertion
+that the corresponding opaque profile uses split defaults
+`0.0.0.0/1` + `128.0.0.0/1` (and the two IPv6 halves when applicable), not a
+single `/0` that enables the official client's WFP kill switch. The runner
+never infers this from or reads the DPAPI payload; missing marker is
+`FixtureAttestationMissing`.
 
 After start, runtime-only proof must show:
 
@@ -219,6 +247,41 @@ The direct observer must record bounded start/end times so its windows can be
 matched to app and official-client runs. Its fixed 256-byte profile covers UDP
 liveness, loss, reorder and multi-second reply gaps; it does not prove MTU or
 fragmentation behaviour. No official-client raw logs are retained.
+
+### Phase B runner and live readiness outcome — 2026-08-09
+
+The tooling surface is fixed and non-generic:
+
+- `brat-verify -Action altclient` accepts only `AmneziaWG`, fixed
+  `Preflight|Install|Cycle|Cleanup` operations and `Control|Target` profiles;
+- `brat-official-ab -Mode Run3 -Profile Target` runs three Control cycles first
+  and allows three Target cycles only if every Control cycle passes;
+- every cycle pins the package/client/payload hashes, arms a ten-minute local
+  watchdog before tunnel start, proves the live WinRM peer remains routed over
+  Tailscale, proves the endpoint route and positive adapter-byte correlation,
+  then requires exact teardown;
+- watchdog expiry, transport loss, dirty state, malformed booleans, missing
+  aggregate fields, corrupt/unknown replies and cleanup uncertainty are
+  `ABORTED` or `BLOCKED`, never counted as a network failure;
+- fixture bytes, hashes, keys, raw client output, addresses, routes, process IDs
+  and endpoint metadata never leave WINBRAT.
+
+The exact official AmneziaWG `2.0.2` MSI was installed successfully through
+this flow. Subsequent privacy-safe preflights for both profiles returned only
+`BLOCKED / FixtureMissing`; management connectivity and clean state remained
+intact, and no official tunnel/workload ran. After the operator provisions both
+final-name DPAPI fixtures and markers with protected ACLs, the only approved
+continuation is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/brat-official-ab.ps1 -Mode Preflight -Profile Control
+powershell -ExecutionPolicy Bypass -File tools/brat-official-ab.ps1 -Mode Preflight -Profile Target
+powershell -ExecutionPolicy Bypass -File tools/brat-official-ab.ps1 -Mode Run3 -Profile Target
+```
+
+`Install` is a required separate bootstrap on a fresh WINBRAT; it has already
+completed on the current VM. Exact DeepSeek-in-Qwen zero-tool review was
+attempted and timed out without a verdict; permissions were not relaxed.
 
 ## Interpretation
 
@@ -249,9 +312,11 @@ layer.
 
 ## Gates
 
-- [ ] Selector contract tests and live ordinal proof pass.
-- [ ] Phase A completes with exact cleanup and sanitized aggregate evidence.
-- [ ] Alternative clients are official, pinned and independently verified.
+- [x] Selector contract tests and live ordinal proof pass.
+- [x] Phase A completes with exact cleanup and sanitized aggregate evidence.
+- [x] AmneziaWG is official, pinned, independently verified and installed
+  without launching a tunnel.
 - [ ] Matched opaque profiles and Tailscale-safe watchdog are provisioned.
-- [ ] Phase B completes or is explicitly reported blocked.
-- [ ] Findings and outcome are recorded before commit/push/PR update.
+- [x] Phase B is explicitly reported blocked before live traffic because both
+  opaque fixtures are absent.
+- [x] Findings and current outcome are recorded before commit/push/PR update.

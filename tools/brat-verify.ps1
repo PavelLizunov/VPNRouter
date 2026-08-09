@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'state', 'probe', 'lifecycle', 'loadtest')]
+    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'state', 'probe', 'lifecycle', 'loadtest', 'altclient')]
     [string]$Action,
 
     [string]$Version,
@@ -46,6 +46,15 @@ param(
 
     [ValidateSet('GameUdp', 'BrowserBurst', 'Mixed')]
     [string]$LoadProfile = 'GameUdp',
+
+    [ValidateSet('AmneziaWG')]
+    [string]$AltClient = 'AmneziaWG',
+
+    [ValidateSet('Preflight', 'Install', 'Cycle', 'Cleanup')]
+    [string]$AltOperation = 'Preflight',
+
+    [ValidateSet('Control', 'Target')]
+    [string]$AltProfile = 'Target',
 
     # lifecycle: caller-provided timestamp only; log paths and raw lines never
     # leave the verified test VM for this action.
@@ -115,6 +124,10 @@ $BrowserCandidates = @(
     [ordered]@{ Path = 'C:\Program Files\Google\Chrome\Application\chrome.exe'; Vendor = 'Google' }
     [ordered]@{ Path = 'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'; Vendor = 'Google' }
 )
+$OfficialAwgMsi = Join-Path $Root 'artifacts\official-alt-clients\amneziawg-amd64-2.0.2.msi'
+$OfficialAwgMsiSha256 = '1b7308d0c74685193dee5d30fd30f370b5a2748a7f648869cd16f25286efc784'
+$OfficialAwgSignerThumbprint = '141D90A1BA8F61863FBEDDF7DD1D66C1D1E0B128'
+$OfficialAwgRemoteHelper = Join-Path $PSScriptRoot 'brat-official-awg-remote.ps1'
 
 function Test-ApprovedWinbratLoadPayload {
     $archive = Join-Path $Root 'artifacts\brat-loadtest-payload\WinbratLoadGen-win-x64.zip'
@@ -128,6 +141,15 @@ function Test-ApprovedWinbratBrowserProbePayload {
     if (-not (Test-Path $archive) -or $ApprovedWinbratBrowserProbePayloadSha256.Count -eq 0) { return $false }
     $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
     return $ApprovedWinbratBrowserProbePayloadSha256 -contains $hash
+}
+
+function Test-ApprovedOfficialAwgInstaller {
+    if (-not (Test-Path -LiteralPath $OfficialAwgMsi -PathType Leaf)) { return $false }
+    if ((Get-FileHash -LiteralPath $OfficialAwgMsi -Algorithm SHA256).Hash.ToLowerInvariant() -ne $OfficialAwgMsiSha256) { return $false }
+    $signature = Get-AuthenticodeSignature -LiteralPath $OfficialAwgMsi
+    return $signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid -and
+        $null -ne $signature.SignerCertificate -and
+        $signature.SignerCertificate.Thumbprint -eq $OfficialAwgSignerThumbprint
 }
 
 function Test-ApprovedChromeForTestingArchive {
@@ -1529,6 +1551,252 @@ switch ($Action) {
             }
             finally { Remove-PSSession $s }
         }
+    }
+
+    'altclient' {
+        if ($AltClient -ne 'AmneziaWG') { throw 'Only the fixed official AmneziaWG client is approved.' }
+        if (-not (Test-Path -LiteralPath $OfficialAwgRemoteHelper -PathType Leaf)) {
+            throw 'The fixed official AmneziaWG remote helper is missing.'
+        }
+
+        $startedUtc = [DateTimeOffset]::UtcNow.ToString('o')
+        $remoteRoot = 'C:\r4review\official-ab\current'
+        $remoteMsi = Join-Path $remoteRoot 'amneziawg.msi'
+        $remotePayload = Join-Path $remoteRoot 'payload.zip'
+        $payloadArchive = Join-Path $Root 'artifacts\brat-loadtest-payload\WinbratLoadGen-win-x64.zip'
+        $payloadApproved = Test-ApprovedWinbratLoadPayload
+
+        function Write-LocalAltClientBlock {
+            param([Parameter(Mandatory = $true)] [string]$Lifecycle)
+            Write-Output ([ordered]@{
+                Status = 'BLOCKED'; Client = 'AmneziaWG'; Profile = $AltProfile; Operation = $AltOperation
+                Lifecycle = $Lifecycle; StartedUtc = $startedUtc; EndedUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                ManagementRouteIntact = $false; ExpectedAdapterRoute = $false
+                AdapterByteCorrelation = $false; CleanTeardown = $true; Metrics = [ordered]@{}
+            } | ConvertTo-Json -Depth 5 -Compress)
+        }
+
+        function Get-RequiredOfficialBoolean {
+            param(
+                [Parameter(Mandatory = $true)] [object]$InputObject,
+                [Parameter(Mandatory = $true)] [string]$Name
+            )
+            $property = $InputObject.PSObject.Properties[$Name]
+            if ($null -eq $property -or $property.Value -isnot [bool]) {
+                throw 'Official-client helper returned an invalid boolean proof.'
+            }
+            return [bool]$property.Value
+        }
+
+        function ConvertTo-SafeOfficialMetrics {
+            param(
+                [object]$InputObject,
+                [bool]$RequireComplete
+            )
+            if ($null -eq $InputObject) {
+                if ($RequireComplete) { throw 'Official-client helper omitted the fixed aggregate schema.' }
+                return [ordered]@{}
+            }
+
+            $safe = [ordered]@{}
+            foreach ($name in @('Sent', 'Received', 'Loss', 'Duplicate', 'Reorder', 'Corruption', 'Unknown')) {
+                $property = $InputObject.PSObject.Properties[$name]
+                if ($null -eq $property) {
+                    if ($RequireComplete) { throw 'Official-client helper omitted the fixed aggregate schema.' }
+                    continue
+                }
+                if ($property.Value -isnot [ValueType] -or $property.Value -is [bool]) {
+                    throw 'Official-client metrics contain an invalid counter.'
+                }
+                try { $value = [int64]$property.Value }
+                catch { throw 'Official-client metrics contain an invalid counter.' }
+                if ($value -lt 0 -or [decimal]$value -ne [decimal]$property.Value) {
+                    throw 'Official-client metrics contain an invalid counter.'
+                }
+                $safe[$name] = $value
+            }
+            foreach ($name in @('RttP50Ms', 'RttP95Ms', 'RttP99Ms', 'MaxAcknowledgedGapMs')) {
+                $property = $InputObject.PSObject.Properties[$name]
+                if ($null -eq $property) {
+                    if ($RequireComplete) { throw 'Official-client helper omitted the fixed aggregate schema.' }
+                    continue
+                }
+                if ($property.Value -isnot [ValueType] -or $property.Value -is [bool]) {
+                    throw 'Official-client metrics contain an invalid duration.'
+                }
+                try { $value = [double]$property.Value }
+                catch { throw 'Official-client metrics contain an invalid duration.' }
+                if ($value -lt 0 -or [double]::IsNaN($value) -or [double]::IsInfinity($value)) {
+                    throw 'Official-client metrics contain an invalid duration.'
+                }
+                $safe[$name] = $value
+            }
+            if ($RequireComplete -and
+                ($safe.Received -gt $safe.Sent -or $safe.Loss -ne ($safe.Sent - $safe.Received) -or
+                 $safe.RttP50Ms -gt $safe.RttP95Ms -or $safe.RttP95Ms -gt $safe.RttP99Ms)) {
+                throw 'Official-client metrics violate fixed aggregate invariants.'
+            }
+            return $safe
+        }
+
+        if ($AltOperation -eq 'Install' -and -not (Test-ApprovedOfficialAwgInstaller)) {
+            Write-LocalAltClientBlock -Lifecycle InstallerNotApproved
+            break
+        }
+        if ($AltOperation -eq 'Cycle' -and -not $payloadApproved) {
+            Write-LocalAltClientBlock -Lifecycle PayloadNotApproved
+            break
+        }
+
+        $s = New-VerifiedBratSession
+        try {
+            if ($AltOperation -in @('Install', 'Cycle')) {
+                $preCleanRaw = @(Invoke-Command -Session $s -FilePath $OfficialAwgRemoteHelper -ArgumentList @('Cleanup', $AltProfile))
+                $preCleanText = ($preCleanRaw -join [Environment]::NewLine).Trim()
+                try { $preClean = $preCleanText | ConvertFrom-Json }
+                catch { throw 'Official-client pre-cleanup returned invalid JSON.' }
+                $preCleanTeardown = Get-RequiredOfficialBoolean -InputObject $preClean -Name CleanTeardown
+                if ([string]$preClean.Status -ne 'PASS' -or [string]$preClean.Lifecycle -ne 'Cleaned' -or
+                    [string]$preClean.Client -ne 'AmneziaWG' -or [string]$preClean.Operation -ne 'Cleanup' -or
+                    -not $preCleanTeardown) {
+                    throw 'Official-client pre-cleanup did not prove a clean state.'
+                }
+                Invoke-Command -Session $s -ScriptBlock {
+                    $dir = 'C:\r4review\official-ab\current'
+                    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                }
+                if ($AltOperation -eq 'Install') {
+                    Copy-Item -LiteralPath $OfficialAwgMsi -Destination $remoteMsi -ToSession $s -Force
+                }
+                else {
+                    Copy-Item -LiteralPath $payloadArchive -Destination $remotePayload -ToSession $s -Force
+                }
+            }
+
+            $raw = $null
+            try {
+                $raw = @(Invoke-Command -Session $s -FilePath $OfficialAwgRemoteHelper -ArgumentList @($AltOperation, $AltProfile))
+            }
+            catch {
+                if ($AltOperation -ne 'Cycle') {
+                    throw 'Official-client helper failed before a live cycle completed.'
+                }
+
+                Remove-PSSession $s -ErrorAction SilentlyContinue
+                $s = $null
+                $deadline = [DateTimeOffset]::UtcNow.AddMinutes(12)
+                $recovered = $false
+                $watchdogFired = $false
+                $cleanTeardown = $false
+                $managementSafe = $false
+                do {
+                    try {
+                        $s = New-VerifiedBratSession
+                        $observedWatchdogFired = Invoke-Command -Session $s -ScriptBlock {
+                            $state = 'C:\r4review\official-ab\current\watchdog-state.txt'
+                            if (-not (Test-Path -LiteralPath $state -PathType Leaf)) { return $false }
+                            try { return ((Get-Content -LiteralPath $state -Raw).Trim() -eq 'Fired') }
+                            catch { return $false }
+                        }
+                        if ($observedWatchdogFired -isnot [bool]) { throw 'Official-client watchdog returned an invalid state.' }
+                        if ($observedWatchdogFired) { $watchdogFired = $true }
+                        $cleanupRaw = @(Invoke-Command -Session $s -FilePath $OfficialAwgRemoteHelper -ArgumentList @('Cleanup', $AltProfile))
+                        $cleanupText = ($cleanupRaw -join [Environment]::NewLine).Trim()
+                        try { $cleanup = $cleanupText | ConvertFrom-Json }
+                        catch { throw 'Official-client recovery cleanup returned invalid JSON.' }
+                        $cleanTeardown = Get-RequiredOfficialBoolean -InputObject $cleanup -Name CleanTeardown
+                        $managementSafe = Get-RequiredOfficialBoolean -InputObject $cleanup -Name ManagementRouteIntact
+                        $recovered = [string]$cleanup.Status -eq 'PASS' -and
+                            [string]$cleanup.Lifecycle -eq 'Cleaned' -and
+                            [string]$cleanup.Client -eq 'AmneziaWG' -and
+                            [string]$cleanup.Operation -eq 'Cleanup' -and
+                            $cleanTeardown -and $managementSafe
+                    }
+                    catch {
+                        if ($s) { Remove-PSSession $s -ErrorAction SilentlyContinue; $s = $null }
+                    }
+                    if (-not $recovered) { Start-Sleep -Seconds 15 }
+                } while (-not $recovered -and [DateTimeOffset]::UtcNow -lt $deadline)
+
+                if (-not $recovered) {
+                    throw 'WINBRAT did not recover within the fixed official-client watchdog budget.'
+                }
+                $raw = @([ordered]@{
+                    Status = 'ABORTED'; Client = 'AmneziaWG'; Profile = $AltProfile; Operation = 'Cycle'
+                    Lifecycle = if ($watchdogFired) { 'WatchdogFired' } else { 'TransportLost' }
+                    StartedUtc = $startedUtc; EndedUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                    ManagementRouteIntact = $managementSafe; ExpectedAdapterRoute = $false
+                    AdapterByteCorrelation = $false; CleanTeardown = $cleanTeardown; Metrics = [ordered]@{}
+                } | ConvertTo-Json -Depth 5 -Compress)
+            }
+
+            $text = ($raw -join [Environment]::NewLine).Trim()
+            try { $result = $text | ConvertFrom-Json }
+            catch { throw 'Official-client helper returned invalid JSON.' }
+
+            $statuses = @('PASS', 'FAIL', 'BLOCKED', 'ABORTED')
+            $lifecycles = @(
+                'Ready', 'InstallerNotApproved', 'ClientNotInstalled', 'ClientBinaryInvalid',
+                'FixtureMissing', 'FixtureAttestationMissing', 'FixtureAclUnsafe', 'VpnRouterNotClean',
+                'ManagementRouteUnsafe', 'DirtyClientState', 'InstallFailed', 'Installed',
+                'EndpointUnavailable', 'RouteNotTunnel', 'TunnelStateUnavailable', 'PayloadNotApproved',
+                'PayloadHashMismatch', 'PayloadMissing', 'PayloadTimeout', 'PayloadExitNonZero',
+                'PayloadOutputMissing', 'PayloadOutputEmpty', 'PayloadResultInvalid', 'Completed',
+                'ReplyGap', 'CookieFailure', 'NetworkFailure', 'PayloadIntegrityFailure', 'InternalFailure', 'WatchdogFired',
+                'TransportLost', 'CleanupFailed', 'Cleaned'
+            )
+            if ([string]$result.Status -notin $statuses -or [string]$result.Lifecycle -notin $lifecycles -or
+                [string]$result.Client -ne 'AmneziaWG' -or [string]$result.Profile -ne $AltProfile -or
+                [string]$result.Operation -ne $AltOperation) {
+                throw 'Official-client helper returned an unapproved enum.'
+            }
+
+            $started = [DateTimeOffset]::MinValue
+            $ended = [DateTimeOffset]::MinValue
+            $dateStyle = [System.Globalization.DateTimeStyles]::RoundtripKind
+            $culture = [System.Globalization.CultureInfo]::InvariantCulture
+            if (-not [DateTimeOffset]::TryParseExact([string]$result.StartedUtc, 'o', $culture, $dateStyle, [ref]$started) -or
+                -not [DateTimeOffset]::TryParseExact([string]$result.EndedUtc, 'o', $culture, $dateStyle, [ref]$ended) -or
+                $ended -lt $started) {
+                throw 'Official-client helper returned an invalid evidence interval.'
+            }
+
+            $managementSafe = Get-RequiredOfficialBoolean -InputObject $result -Name ManagementRouteIntact
+            $expectedRoute = Get-RequiredOfficialBoolean -InputObject $result -Name ExpectedAdapterRoute
+            $byteCorrelation = Get-RequiredOfficialBoolean -InputObject $result -Name AdapterByteCorrelation
+            $cleanTeardown = Get-RequiredOfficialBoolean -InputObject $result -Name CleanTeardown
+            if ($AltOperation -eq 'Cycle') {
+                if ([string]$result.Status -eq 'PASS' -and [string]$result.Lifecycle -ne 'Completed') {
+                    throw 'Official-client PASS did not complete the fixed payload.'
+                }
+                if ([string]$result.Status -eq 'FAIL' -and [string]$result.Lifecycle -notin @('ReplyGap', 'CookieFailure', 'NetworkFailure')) {
+                    throw 'Official-client FAIL was not a classified network measurement.'
+                }
+                if ([string]$result.Status -ne 'FAIL' -and [string]$result.Lifecycle -in @('ReplyGap', 'CookieFailure', 'NetworkFailure')) {
+                    throw 'Official-client network lifecycle was not a measured failure.'
+                }
+                if (([string]$result.Lifecycle -eq 'PayloadIntegrityFailure') -ne ([string]$result.Status -eq 'ABORTED')) {
+                    throw 'Official-client integrity lifecycle was not fail-closed.'
+                }
+                if ([string]$result.Status -in @('PASS', 'FAIL') -and
+                    (-not $managementSafe -or -not $expectedRoute -or -not $byteCorrelation -or -not $cleanTeardown)) {
+                    throw 'Official-client network result lost route, byte or teardown attribution.'
+                }
+            }
+
+            $metricsProperty = $result.PSObject.Properties['Metrics']
+            $cleanMetrics = ConvertTo-SafeOfficialMetrics -InputObject $(if ($metricsProperty) { $metricsProperty.Value } else { $null }) -RequireComplete ([string]$result.Status -in @('PASS', 'FAIL'))
+
+            $sanitized = [ordered]@{
+                Status = [string]$result.Status; Client = 'AmneziaWG'; Profile = $AltProfile; Operation = $AltOperation
+                Lifecycle = [string]$result.Lifecycle; StartedUtc = $started.ToUniversalTime().ToString('o')
+                EndedUtc = $ended.ToUniversalTime().ToString('o'); ManagementRouteIntact = $managementSafe
+                ExpectedAdapterRoute = $expectedRoute; AdapterByteCorrelation = $byteCorrelation
+                CleanTeardown = $cleanTeardown; Metrics = $cleanMetrics
+            }
+            Write-Output ($sanitized | ConvertTo-Json -Depth 5 -Compress)
+        }
+        finally { if ($s) { Remove-PSSession $s -ErrorAction SilentlyContinue } }
     }
 
     'lifecycle' {

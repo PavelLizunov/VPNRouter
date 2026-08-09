@@ -321,25 +321,46 @@ protocol switch is not justified by this evidence. Mixed browser+GameUdp load
 is deferred until a real simultaneous-failure symptom makes the additional
 complexity attribution-useful.
 
-### Exact next-task prompt — matched official-client A/B
+### Official AmneziaWG A/B readiness — 2026-08-09
+
+The fixed official-client harness is implemented on branch
+`codex/winbrat-official-ab`. It accepts no arbitrary client, executable,
+profile, endpoint, rate or duration. The official AmneziaWG `2.0.2` package was
+hash/signature verified and installed on WINBRAT with `DO_NOT_LAUNCH`; no
+official tunnel has been started.
+
+Pre-live adversarial review found and fixed watchdog task teardown races,
+reparse-unsafe recursive cleanup, incomplete ACL rights checks, acceptance of a
+stale Down `VPNRouter-TUN`, Boolean JSON type confusion, partial aggregate
+schemas and data-integrity misclassification. Local parsers and 12/12 focused
+contracts pass. Exact DeepSeek zero-tool review timed out without a verdict and
+its permissions were not relaxed.
+
+Read-only Control and Target preflights now stop only at `FixtureMissing`.
+Phase B therefore remains `BLOCKED`, not failed: it still needs two separately
+provisioned opaque final-name DPAPI fixtures, a healthy AWG ordinal-0 Control
+and the ordinal-1 Target, plus their protected Tailscale-safe attestation
+markers. Neither fixture contents nor keys may be read, copied, hashed or
+derived by Codex. After they exist, the runner will execute three Control
+cycles and permits three Target cycles only if all Control cycles pass.
+
+### Exact next-task prompt — continue matched official-client A/B
 
 ```text
 Continue the WINBRAT stability study from the completed 20×3 VPNRouter matrix
 and 3×10-minute BrowserBurst evidence. Work only in a new test-tooling branch;
 do not change product code, subscription state, keys, endpoints or user config.
 
-Prerequisite: the operator must provision an opaque equivalent fixture for the
-exact AmneziaWG ordinal-1 row at the already planned fixed fixture location.
-Never read, print, copy, hash or derive that fixture. If it is absent or its ACL
-shape is unsafe, stop as BLOCKED.
+Prerequisite: the operator must provision both already-planned final-name opaque
+DPAPI fixtures on WINBRAT: Control matched to healthy AWG ordinal 0 and Target
+matched to AWG ordinal 1, plus their protected `.tailscale-safe` markers. The
+markers attest split `/1 + /1` defaults instead of a single `/0` WFP kill
+switch. Never read, print, copy, hash or derive either fixture. If either is
+absent or its ACL shape is unsafe, stop as BLOCKED.
 
-Implement the smallest fixed official-AmneziaWG runner: exact approved official
-binary hash/signature; VPNRouter disconnected; Tailscale/WinRM management route
-preserved; a client-specific local watchdog armed before launch; intended route
-plus positive tunnel-adapter delta above a quiet baseline; the same approved
-five-minute GameUdp payload; three cold repeats; client-specific teardown and a
-clean-state proof after every repeat. Accept no arbitrary executable, target,
-rate, duration or config argument and return only allowlisted aggregate metrics.
+Use the existing fixed official-AmneziaWG runner. Re-run read-only Control and
+Target preflights, then run `brat-official-ab.ps1 -Mode Run3 -Profile Target`.
+Do not add arbitrary executable, target, rate, duration or config arguments.
 
 For attribution, bracket the failing row closely as VPNRouter → official client
 → VPNRouter under the same direct-observer windows. A failed control, watchdog
