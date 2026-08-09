@@ -102,12 +102,51 @@ $RemoteVerifyRoot = 'C:\r4review\verify'
 $ApprovedWinbratLoadPayloadSha256 = @(
     '5855167c4c89efa5c5adbd0933ee4269382785bb35d6b04f7a5fd27d80f72934'
 )
+$ApprovedWinbratBrowserProbePayloadSha256 = @(
+    '5db024a6cf67ac88b56955144b1cfbea9e9234a1dc38a0a117ee28ce8c966290'
+)
+$ChromeForTestingArchive = Join-Path $Root 'artifacts\chrome-for-testing\150.0.7871.129\chrome-win64.zip'
+$ApprovedChromeForTestingSha256 = '4543709a8b323e655b8550d2203468eeeed69cd0fa21e4ae0499f314d53e470d'
+$ChromeForTestingEntryCount = 308
+$ChromeForTestingExe = 'chrome-win64/chrome.exe'
+$BrowserCandidates = @(
+    [ordered]@{ Path = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'; Vendor = 'Microsoft' }
+    [ordered]@{ Path = 'C:\Program Files\Microsoft\Edge\Application\msedge.exe'; Vendor = 'Microsoft' }
+    [ordered]@{ Path = 'C:\Program Files\Google\Chrome\Application\chrome.exe'; Vendor = 'Google' }
+    [ordered]@{ Path = 'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'; Vendor = 'Google' }
+)
 
 function Test-ApprovedWinbratLoadPayload {
     $archive = Join-Path $Root 'artifacts\brat-loadtest-payload\WinbratLoadGen-win-x64.zip'
     if (-not (Test-Path $archive) -or $ApprovedWinbratLoadPayloadSha256.Count -eq 0) { return $false }
     $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
     return $ApprovedWinbratLoadPayloadSha256 -contains $hash
+}
+
+function Test-ApprovedWinbratBrowserProbePayload {
+    $archive = Join-Path $Root 'artifacts\brat-browser-probe-payload\WinbratBrowserProbe-win-x64.zip'
+    if (-not (Test-Path $archive) -or $ApprovedWinbratBrowserProbePayloadSha256.Count -eq 0) { return $false }
+    $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+    return $ApprovedWinbratBrowserProbePayloadSha256 -contains $hash
+}
+
+function Test-ApprovedChromeForTestingArchive {
+    if (-not (Test-Path -LiteralPath $ChromeForTestingArchive -PathType Leaf)) { return $false }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $ChromeForTestingArchive).Hash.ToLower() -ne $ApprovedChromeForTestingSha256) { return $false }
+    $zip = $null
+    try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($ChromeForTestingArchive)
+        $entries = @($zip.Entries)
+        return $entries.Count -eq $ChromeForTestingEntryCount -and
+            @($entries | Where-Object {
+                -not $_.FullName.StartsWith('chrome-win64/', [StringComparison]::Ordinal) -or
+                $_.FullName -match '(^|[\\/])\.\.([\\/]|$)'
+            }).Count -eq 0 -and
+            @($entries | Where-Object { $_.FullName -ceq $ChromeForTestingExe }).Count -eq 1
+    }
+    catch { return $false }
+    finally { if ($zip) { $zip.Dispose() } }
 }
 
 
@@ -303,185 +342,179 @@ try {
                     throw "SelectProtocol requires a disconnected VPNRouter-TUN state."
                 }
 
-                $allowedNames = switch ([string]$req.ProtocolClass) {
-                    'VlessReality'   { @('tcp + reality', 'reality') }
-                    'VlessWebSocket' { @('ws + reality', 'ws + tls') }
-                    'VlessXhttp'     { @('xhttp + reality', 'xhttp + tls') }
-                    'Hysteria2'      { @('hysteria2', 'hysteria2 + salamander') }
-                    'Tuic'           { @('tuic', 'tuic + bbr', 'tuic + cubic', 'tuic + new_reno') }
-                    'AmneziaWG'      { @('amneziawg', 'amneziawg + obfs') }
-                    'Naive'          { @('naive', 'naive + hy2') }
-                    'DnsTunnel'      { @('dns-tunnel') }
-                    'Shadowsocks'    { @('Fallback', 'Резерв') }
-                    default          { throw "SelectProtocol requires an allowlisted ProtocolClass." }
+                $protocolNames = [ordered]@{
+                    VlessReality   = @('tcp + reality', 'reality')
+                    VlessWebSocket = @('ws + reality', 'ws + tls')
+                    VlessXhttp     = @('xhttp + reality', 'xhttp + tls')
+                    Hysteria2      = @('hysteria2', 'hysteria2 + salamander')
+                    Tuic           = @('tuic', 'tuic + bbr', 'tuic + cubic', 'tuic + new_reno')
+                    AmneziaWG      = @('amneziawg', 'amneziawg + obfs')
+                    Naive          = @('naive', 'naive + hy2')
+                    DnsTunnel      = @('dns-tunnel')
+                    Shadowsocks    = @('Fallback', 'Резерв')
                 }
-
-                $nameConditions = @($allowedNames | ForEach-Object {
-                    New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $_)
-                })
-                $safeName = if ($nameConditions.Count -eq 1) { $nameConditions[0] } else {
-                    [System.Windows.Automation.OrCondition]::new([System.Windows.Automation.Condition[]]$nameConditions)
+                $expectedCounts = [ordered]@{
+                    VlessReality = 4; VlessWebSocket = 3; VlessXhttp = 4
+                    Hysteria2 = 4; Tuic = 0; AmneziaWG = 4
+                    Naive = 1; DnsTunnel = 0; Shadowsocks = 0
+                }
+                if (-not $protocolNames.Contains([string]$req.ProtocolClass)) {
+                    throw "SelectProtocol requires an allowlisted ProtocolClass."
                 }
                 $textType = New-Object System.Windows.Automation.PropertyCondition(
                     $ae::ControlTypeProperty,
                     [System.Windows.Automation.ControlType]::Text)
-                $safeText = New-Object System.Windows.Automation.AndCondition $safeName, $textType
-                $scroll = $null
-                $canScroll = $target.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$scroll) -and
-                    $scroll.Current.VerticallyScrollable
-                $rangeScroll = $null
-                if (-not $canScroll) {
-                    # Avalonia's ListBox can expose its internal ScrollViewer as
-                    # a child provider instead of forwarding ScrollPattern from
-                    # the ListBox automation peer. Find only a scroll-capable
-                    # descendant; never inspect or return its Name.
-                    $descendants = $target.FindAll(
-                        [System.Windows.Automation.TreeScope]::Descendants,
-                        [System.Windows.Automation.Condition]::TrueCondition)
-                    foreach ($candidate in $descendants) {
-                        $candidateScroll = $null
-                        if ($candidate.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$candidateScroll) -and
-                            $candidateScroll.Current.VerticallyScrollable) {
-                            $scroll = $candidateScroll
-                            $canScroll = $true
-                            break
+                $safeTextByClass = @{}
+                foreach ($entry in $protocolNames.GetEnumerator()) {
+                    $nameConditions = @($entry.Value | ForEach-Object {
+                        New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $_)
+                    })
+                    $safeName = if ($nameConditions.Count -eq 1) { $nameConditions[0] } else {
+                        [System.Windows.Automation.OrCondition]::new([System.Windows.Automation.Condition[]]$nameConditions)
+                    }
+                    $safeTextByClass[$entry.Key] = New-Object System.Windows.Automation.AndCondition $safeName, $textType
+                }
+                $ownedCorePath = 'C:\ProgramData\VPNRouter\bin\sing-box.exe'
+                $ownedCores = @(Get-Process -Name 'sing-box' -ErrorAction SilentlyContinue | Where-Object {
+                    try { [System.IO.Path]::GetFullPath($_.Path).Equals($ownedCorePath, [StringComparison]::OrdinalIgnoreCase) }
+                    catch { $false }
+                })
+                if ($ownedCores.Count -ne 0) { throw 'SelectProtocol requires zero owned sing-box processes.' }
+                if (Get-NetAdapter -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up') {
+                    throw 'SelectProtocol requires an absent or down VPNRouter-TUN.'
+                }
+
+                $autoNames = @('Auto-select via quick web test', 'Авто-выбор по быстрому веб-тесту')
+                $autoNameConditions = @($autoNames | ForEach-Object {
+                    New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $_)
+                })
+                $autoName = [System.Windows.Automation.OrCondition]::new(
+                    [System.Windows.Automation.Condition[]]$autoNameConditions)
+                $checkBox = New-Object System.Windows.Automation.PropertyCondition(
+                    $ae::ControlTypeProperty,
+                    [System.Windows.Automation.ControlType]::CheckBox)
+                $autoToggleElement = $window.FindFirst(
+                    [System.Windows.Automation.TreeScope]::Descendants,
+                    (New-Object System.Windows.Automation.AndCondition $autoName, $checkBox))
+                if (-not $autoToggleElement) { throw 'SelectProtocol requires the visible Subscribe Auto-select control.' }
+                $autoToggle = $null
+                if (-not $autoToggleElement.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$autoToggle)) {
+                    throw 'SelectProtocol cannot verify the Subscribe Auto-select state.'
+                }
+                if ($autoToggle.Current.ToggleState -ne [System.Windows.Automation.ToggleState]::Off) {
+                    throw 'SelectProtocol requires Auto-select to already be Off.'
+                }
+
+                $listItemType = New-Object System.Windows.Automation.PropertyCondition(
+                    $ae::ControlTypeProperty,
+                    [System.Windows.Automation.ControlType]::ListItem)
+                $getSelectedRows = {
+                    $selectedRows = @()
+                    foreach ($candidate in $target.FindAll([System.Windows.Automation.TreeScope]::Descendants, $listItemType)) {
+                        $candidateSelection = $null
+                        if ($candidate.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$candidateSelection) -and
+                            $candidateSelection.Current.IsSelected) {
+                            $selectedRows += $candidate
                         }
                     }
+                    return $selectedRows
                 }
-                if ($canScroll) {
-                    $scroll.SetScrollPercent([System.Windows.Automation.ScrollPattern]::NoScroll, 0)
-                    Start-Sleep -Milliseconds 250
-                }
-                else {
-                    # Some Avalonia peers expose only the vertical ScrollBar's
-                    # standard RangeValuePattern. It is still semantic UIA and
-                    # does not require coordinates or reading row identities.
-                    $scrollBarType = New-Object System.Windows.Automation.PropertyCondition(
-                        $ae::ControlTypeProperty,
-                        [System.Windows.Automation.ControlType]::ScrollBar)
-                    $vertical = New-Object System.Windows.Automation.PropertyCondition(
-                        $ae::OrientationProperty,
-                        [System.Windows.Automation.OrientationType]::Vertical)
-                    $verticalScrollBar = $target.FindFirst(
-                        [System.Windows.Automation.TreeScope]::Descendants,
-                        (New-Object System.Windows.Automation.AndCondition $scrollBarType, $vertical))
-                    if ($verticalScrollBar -and
-                        $verticalScrollBar.TryGetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern, [ref]$rangeScroll) -and
-                        -not $rangeScroll.Current.IsReadOnly -and
-                        $rangeScroll.Current.Maximum -gt $rangeScroll.Current.Minimum) {
-                        $rangeScroll.SetValue($rangeScroll.Current.Minimum)
-                        Start-Sleep -Milliseconds 250
+                $classifyRow = {
+                    param([System.Windows.Automation.AutomationElement]$row)
+                    $matches = @($protocolNames.Keys | Where-Object {
+                        $null -ne $row.FindFirst(
+                            [System.Windows.Automation.TreeScope]::Descendants,
+                            $safeTextByClass[$_])
+                    })
+                    if ($matches.Count -ne 1) {
+                        throw 'SubList row does not expose exactly one allowlisted protocol class.'
                     }
-                    else { $rangeScroll = $null }
+                    return [string]$matches[0]
                 }
-                $originalSelection = $null
-                $snapshotPattern = $null
-                if ($target.TryGetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern, [ref]$snapshotPattern)) {
-                    $originalSelection = @($snapshotPattern.Current.GetSelection()) | Select-Object -First 1
-                }
-                $keyboardScroll = $false
+                $originalSelectedRows = @(& $getSelectedRows)
+                if ($originalSelectedRows.Count -gt 1) { throw 'SubList exposes more than one selected row.' }
+                $originalSelection = $originalSelectedRows | Select-Object -First 1
                 $selectionMutationAttempted = $false
                 try {
-                    $keyboardScroll = -not $canScroll -and -not $rangeScroll
-                    if ($keyboardScroll) {
-                    # Last-resort Avalonia virtualization fallback: fixed keys
-                    # only, sent to the already-verified SubList while the VPN
-                    # is disconnected. This may move selection during survey,
-                    # but never reads or returns endpoint-bearing row Names.
-                        Add-Type -AssemblyName System.Windows.Forms
-                        $keyboardFocus = $originalSelection
-                        if (-not $keyboardFocus) {
-                            $listItemType = New-Object System.Windows.Automation.PropertyCondition(
-                                $ae::ControlTypeProperty,
-                                [System.Windows.Automation.ControlType]::ListItem)
-                            $keyboardFocus = $target.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $listItemType)
-                        }
-                        if (-not $keyboardFocus) { throw 'SubList has no focusable materialized row for fixed-key scrolling.' }
-                        $keyboardFocus.SetFocus()
-                        $selectionMutationAttempted = $true
-                        [System.Windows.Forms.SendKeys]::SendWait('{HOME}')
-                        Start-Sleep -Milliseconds 250
+                    Add-Type -AssemblyName System.Windows.Forms
+                    $keyboardFocus = $originalSelection
+                    if (-not $keyboardFocus) {
+                        $keyboardFocus = $target.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $listItemType)
                     }
+                    if (-not $keyboardFocus) { throw 'SubList has no focusable materialized row for fixed-key traversal.' }
+                    $keyboardFocus.SetFocus()
+                    $selectionMutationAttempted = $true
+                    [System.Windows.Forms.SendKeys]::SendWait('{HOME}')
+                    Start-Sleep -Milliseconds 250
 
-                    $seen = @{}
                     $matched = 0
-                    $chosen = $null
-                    for ($page = 0; $page -lt 64 -and -not $chosen; $page++) {
-                    $texts = $target.FindAll([System.Windows.Automation.TreeScope]::Descendants, $safeText)
-                    foreach ($text in $texts) {
-                        $row = $text
-                        for ($depth = 0; $depth -lt 12 -and $row; $depth++) {
-                            if ($row.Current.ControlType -eq [System.Windows.Automation.ControlType]::ListItem) { break }
-                            $row = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($row)
+                    $chosenAbsoluteOrdinal = $null
+                    $observedCounts = @{}
+                    foreach ($class in $expectedCounts.Keys) { $observedCounts[$class] = 0 }
+                    $expectedTotal = 20
+                    for ($absoluteOrdinal = 0; $absoluteOrdinal -lt $expectedTotal; $absoluteOrdinal++) {
+                        $currentSelection = @(& $getSelectedRows)
+                        if ($currentSelection.Count -ne 1) { throw 'SubList traversal requires exactly one selected row.' }
+                        $row = $currentSelection[0]
+                        if ($row.Current.ControlType -ne [System.Windows.Automation.ControlType]::ListItem) {
+                            throw 'SubList selected element is not a ListItem.'
                         }
-                        if (-not $row -or $row.Current.ControlType -ne [System.Windows.Automation.ControlType]::ListItem) { continue }
-                        $runtimeKey = [string]::Join('.', $row.GetRuntimeId())
-                        if ($seen.ContainsKey($runtimeKey)) { continue }
-                        $seen[$runtimeKey] = $true
-                        if ($matched -eq [int]$req.ProtocolOrdinal) { $chosen = $row; break }
-                        $matched++
+                        $rowClass = & $classifyRow $row
+                        $observedCounts[$rowClass]++
+                        if ($rowClass -eq [string]$req.ProtocolClass) {
+                            if ($matched -eq [int]$req.ProtocolOrdinal) {
+                                $chosenAbsoluteOrdinal = $absoluteOrdinal
+                            }
+                            $matched++
+                        }
+
+                        if ($absoluteOrdinal -lt ($expectedTotal - 1)) {
+                            [System.Windows.Forms.SendKeys]::SendWait('{DOWN}')
+                            Start-Sleep -Milliseconds 150
+                        }
                     }
-                    if ($chosen) { break }
-                    if ($canScroll) {
-                        if ($scroll.Current.VerticalScrollPercent -ge 100) { break }
-                        $beforeScroll = $scroll.Current.VerticalScrollPercent
-                        $scroll.Scroll([System.Windows.Automation.ScrollAmount]::NoAmount, [System.Windows.Automation.ScrollAmount]::LargeIncrement)
-                        Start-Sleep -Milliseconds 250
-                        if ($scroll.Current.VerticalScrollPercent -le $beforeScroll) { break }
+                    foreach ($class in $expectedCounts.Keys) {
+                        if ([int]$observedCounts[$class] -ne [int]$expectedCounts[$class]) {
+                            throw 'SubList protocol composition changed during fixed traversal.'
+                        }
                     }
-                    elseif ($rangeScroll) {
-                        $beforeScroll = $rangeScroll.Current.Value
-                        if ($beforeScroll -ge $rangeScroll.Current.Maximum) { break }
-                        $increment = $rangeScroll.Current.LargeChange
-                        if ($increment -le 0) { $increment = $rangeScroll.Current.SmallChange }
-                        if ($increment -le 0) { $increment = 1 }
-                        $nextScroll = [Math]::Min($rangeScroll.Current.Maximum, $beforeScroll + $increment)
-                        $rangeScroll.SetValue($nextScroll)
-                        Start-Sleep -Milliseconds 250
-                        if ($rangeScroll.Current.Value -le $beforeScroll) { break }
+                    if ($null -eq $chosenAbsoluteOrdinal) {
+                        throw "No allowlisted row matched the requested protocol class and ordinal (matched rows: $matched)."
                     }
-                    elseif ($keyboardScroll) {
-                        [System.Windows.Forms.SendKeys]::SendWait('{PGDN}')
-                        Start-Sleep -Milliseconds 250
+                    $current = @(& $getSelectedRows) | Select-Object -First 1
+                    if (-not $current) { throw 'SubList traversal lost its final selection.' }
+                    $current.SetFocus()
+                    [System.Windows.Forms.SendKeys]::SendWait('{HOME}')
+                    for ($step = 0; $step -lt [int]$chosenAbsoluteOrdinal; $step++) {
+                        [System.Windows.Forms.SendKeys]::SendWait('{DOWN}')
                     }
-                    else { break }
+                    Start-Sleep -Milliseconds 250
+                    $chosenRows = @(& $getSelectedRows)
+                    if ($chosenRows.Count -ne 1 -or (& $classifyRow $chosenRows[0]) -ne [string]$req.ProtocolClass) {
+                        throw 'Protocol row selection did not reach the verified safe coordinate.'
                     }
-                    if (-not $chosen) {
-                        $scrollKind = if ($canScroll) { 'ScrollPattern' } elseif ($rangeScroll) { 'RangeValue' } else { 'FixedKeys' }
-                        throw "No allowlisted row matched the requested protocol class and ordinal (safe scroll provider: $scrollKind; matched rows: $matched)."
-                    }
+                    $chosen = $chosenRows[0]
                     $pat = $null
                     if (-not $chosen.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pat)) { throw "Matched protocol row does not support SelectionItemPattern." }
-                    $selectionMutationAttempted = $true
-                    $pat.Select()
-                    for ($i = 0; $i -lt 20 -and -not $pat.Current.IsSelected; $i++) { Start-Sleep -Milliseconds 100 }
                     if (-not $pat.Current.IsSelected) { throw "Protocol row selection did not stick." }
-                    $result.Element = [ordered]@{ ProtocolClass = [string]$req.ProtocolClass; Ordinal = [int]$req.ProtocolOrdinal }
+                    $result.Element = [ordered]@{
+                        ProtocolClass = [string]$req.ProtocolClass
+                        Ordinal = [int]$req.ProtocolOrdinal
+                        AbsoluteOrdinal = [int]$chosenAbsoluteOrdinal
+                    }
                 }
                 catch {
-                    if ($keyboardScroll -or $selectionMutationAttempted) {
-                        if ($originalSelection) {
-                            $restore = $null
-                            if (-not $originalSelection.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$restore)) {
-                                throw 'Protocol selection failed and the original row cannot be restored.'
+                    if ($selectionMutationAttempted) {
+                        foreach ($selected in @(& $getSelectedRows)) {
+                            $remove = $null
+                            if (-not $selected.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$remove)) {
+                                throw 'Protocol selection failed and the safe empty cleanup is unavailable.'
                             }
-                            $restore.Select()
-                            for ($i = 0; $i -lt 20 -and -not $restore.Current.IsSelected; $i++) { Start-Sleep -Milliseconds 100 }
-                            if (-not $restore.Current.IsSelected) { throw 'Protocol selection failed and the original row restoration did not stick.' }
+                            $remove.RemoveFromSelection()
                         }
-                        elseif ($snapshotPattern) {
-                            foreach ($selected in @($snapshotPattern.Current.GetSelection())) {
-                                $remove = $null
-                                if (-not $selected.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$remove)) {
-                                    throw 'Protocol selection failed and the original empty selection cannot be restored.'
-                                }
-                                $remove.RemoveFromSelection()
-                            }
-                            if (@($snapshotPattern.Current.GetSelection()).Count -ne 0) {
-                                throw 'Protocol selection failed and the original empty selection restoration did not stick.'
-                            }
+                        if (@(& $getSelectedRows).Count -ne 0) {
+                            throw 'Protocol selection failed and the safe empty cleanup did not stick.'
                         }
-                        else { throw 'Protocol selection failed and the original selection state is unavailable.' }
                     }
                     throw
                 }
@@ -742,6 +775,252 @@ public static extern uint WTSGetActiveConsoleSessionId();
     return $operationResult
 }
 
+function Invoke-BrowserBurstLoad {
+    $payloadApproved = Test-ApprovedWinbratBrowserProbePayload
+    if (-not $payloadApproved) {
+        Write-Output ([ordered]@{
+            Status = 'BLOCKED'; Profile = 'BrowserBurst'; RouteScope = 'Unknown'
+            FullTunnel = $false; TunCorrelation = $false; DurationSeconds = 600
+            Caps = '32x64KiB-5s-4x64Bps'; Metrics = [ordered]@{}; Lifecycle = 'PayloadNotApproved'
+        } | ConvertTo-Json -Depth 4 -Compress)
+        return
+    }
+
+    $archive = Join-Path $Root 'artifacts\brat-browser-probe-payload\WinbratBrowserProbe-win-x64.zip'
+    $approvedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLower()
+    $portableApproved = Test-ApprovedChromeForTestingArchive
+    $runId = [guid]::NewGuid().ToString('N')
+    $remoteRoot = "C:\r4review\browser-load\$runId"
+    $remoteArchive = "$remoteRoot\payload.zip"
+    $remoteChromeArchive = "$remoteRoot\chrome-win64.zip"
+    $s = New-VerifiedBratSession
+    try {
+        $fullUi = $false
+        try {
+            $full = Invoke-BratInteractive -Session $s -Mode 'uia' -Name 'подписка · полный||subscribe · full' -ControlType Text -UiaOperation Inspect -TimeoutSeconds 15
+            $fullUi = $null -ne $full.Element
+        }
+        catch { $fullUi = $false }
+
+        $preflight = Invoke-Command -Session $s -ArgumentList $TimeoutSeconds, $BrowserCandidates, $portableApproved -ScriptBlock {
+            param($timeoutSeconds, $browserCandidates, $portableApproved)
+            $hostName = 'loadtest.vpn.ninitux.com'
+            $routeScope = 'Unknown'
+            $endpointAddress = ''
+            try {
+                $address = [System.Net.Dns]::GetHostAddresses($hostName) |
+                    Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+                    Select-Object -First 1
+                if ($address) {
+                    $endpointAddress = $address.IPAddressToString
+                    $route = Find-NetRoute -RemoteIPAddress $address.IPAddressToString -ErrorAction Stop | Select-Object -First 1
+                    $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction Stop
+                    $routeScope = if ($adapter.Name -eq 'VPNRouter-TUN' -and $adapter.Status -eq 'Up') { 'Tunnel' } else { 'Direct' }
+                }
+            }
+            catch { $routeScope = 'Unknown' }
+            $ready = $false
+            if ($routeScope -eq 'Tunnel') {
+                Add-Type -AssemblyName System.Net.Http
+                $http = New-Object System.Net.Http.HttpClient
+                $http.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
+                try {
+                    $response = $http.GetAsync("https://$hostName/health").GetAwaiter().GetResult()
+                    try { $ready = ([int]$response.StatusCode -eq 200) } finally { $response.Dispose() }
+            }
+            catch { $ready = $false }
+            finally { $http.Dispose() }
+            }
+            $browser = $null
+            $browserExists = [bool]$portableApproved
+            $browserSigned = $false
+            $browserKind = if ($portableApproved) { 'Portable' } else { 'Machine' }
+            if ($portableApproved) {
+                $browserSigned = $true
+            }
+            else {
+                foreach ($candidate in $browserCandidates) {
+                    if (-not (Test-Path -LiteralPath $candidate.Path -PathType Leaf)) { continue }
+                    $browserExists = $true
+                    try {
+                        $signature = Get-AuthenticodeSignature -FilePath $candidate.Path -ErrorAction Stop
+                        $browserSigned = $signature.Status -eq 'Valid' -and $null -ne $signature.SignerCertificate -and
+                            $signature.SignerCertificate.Subject -like ("*" + [string]$candidate.Vendor + "*")
+                    }
+                    catch { $browserSigned = $false }
+                    if ($browserSigned) { $browser = $candidate; break }
+                }
+            }
+            $corePath = 'C:\ProgramData\VPNRouter\bin\sing-box.exe'
+            $coreCount = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+                ([string]$_.ExecutablePath) -ieq $corePath
+            }).Count
+            $tun = Get-NetAdapter -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue | Select-Object -First 1
+            $stats = if ($tun -and $tun.Status -eq 'Up') { Get-NetAdapterStatistics -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue } else { $null }
+            [ordered]@{
+                RouteScope = $routeScope; Ready = $ready; BrowserExists = $browserExists; BrowserSigned = $browserSigned; CoreCount = $coreCount
+                TunUp = [bool]($tun -and $tun.Status -eq 'Up')
+                TunBytes = if ($stats) { [uint64]$stats.ReceivedBytes + [uint64]$stats.SentBytes } else { [uint64]0 }
+                EndpointAddress = $endpointAddress
+                BrowserKind = $browserKind
+                BrowserPath = if ($browser) { [string]$browser.Path } else { '' }
+            }
+        }
+        if (-not $fullUi -or -not $preflight.Ready -or -not $preflight.BrowserSigned -or
+            $preflight.RouteScope -ne 'Tunnel' -or $preflight.CoreCount -ne 1 -or -not $preflight.TunUp -or
+            [string]::IsNullOrWhiteSpace($preflight.EndpointAddress)) {
+            $blockedReason = if (-not $preflight.BrowserExists) { 'BrowserMissing' }
+                elseif (-not $preflight.BrowserSigned) { 'BrowserSignatureUnverified' }
+                elseif (-not $preflight.Ready -or [string]::IsNullOrWhiteSpace($preflight.EndpointAddress)) { 'EndpointUnavailable' }
+                elseif (-not $fullUi) { 'FullTunnelNotProven' }
+                elseif ($preflight.RouteScope -ne 'Tunnel') { 'RouteNotTunnel' }
+                else { 'TunnelStateUnavailable' }
+            Write-Output ([ordered]@{
+                Status = 'BLOCKED'; Profile = 'BrowserBurst'; RouteScope = [string]$preflight.RouteScope
+                FullTunnel = [bool]$fullUi; TunCorrelation = $false; DurationSeconds = 600
+                Caps = '32x64KiB-5s-4x64Bps'; Metrics = [ordered]@{}
+                Lifecycle = $blockedReason
+            } | ConvertTo-Json -Depth 4 -Compress)
+            return
+        }
+
+        Invoke-Command -Session $s -ArgumentList $remoteRoot -ScriptBlock {
+            param($dir)
+            if (-not $dir.StartsWith('C:\r4review\browser-load\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixed browser-load directory.' }
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $archive -Destination $remoteArchive -ToSession $s -Force
+        if ($preflight.BrowserKind -eq 'Portable') {
+            Copy-Item -LiteralPath $ChromeForTestingArchive -Destination $remoteChromeArchive -ToSession $s -Force
+        }
+        $result = Invoke-Command -Session $s -ArgumentList $remoteRoot, $remoteArchive, $approvedHash, ([uint64]$preflight.TunBytes), ([string]$preflight.EndpointAddress), ([string]$preflight.BrowserKind), ([string]$preflight.BrowserPath), $remoteChromeArchive, $ApprovedChromeForTestingSha256, $ChromeForTestingEntryCount, $ChromeForTestingExe -ScriptBlock {
+            param($dir, $zip, $expectedHash, $tunBefore, $endpointAddress, $browserKind, $browserPath, $portableArchive, $portableHash, $portableEntryCount, $portableExe)
+            $probe = Join-Path $dir 'VPNRouter.Tools.WinbratBrowserProbe.exe'
+            $stdout = Join-Path $dir 'result.json'
+            $stderr = Join-Path $dir 'error.txt'
+            $process = $null
+            try {
+                if ((Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLower() -ne $expectedHash) { return [ordered]@{ Success = $false; Failure = 'PayloadHashMismatch' } }
+                Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+                if (-not (Test-Path -LiteralPath $probe)) { return [ordered]@{ Success = $false; Failure = 'PayloadMissing' } }
+                if ($browserKind -eq 'Portable') {
+                    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $portableArchive).Hash.ToLower() -ne $portableHash) { return [ordered]@{ Success = $false; Failure = 'PayloadFailed' } }
+                    $portableZip = $null
+                    try {
+                        Add-Type -AssemblyName System.IO.Compression.FileSystem
+                        $portableZip = [System.IO.Compression.ZipFile]::OpenRead($portableArchive)
+                        $entries = @($portableZip.Entries)
+                        $validPortable = $entries.Count -eq $portableEntryCount -and
+                            @($entries | Where-Object {
+                                -not $_.FullName.StartsWith('chrome-win64/', [StringComparison]::Ordinal) -or
+                                $_.FullName -match '(^|[\\/])\.\.([\\/]|$)'
+                            }).Count -eq 0 -and
+                            @($entries | Where-Object { $_.FullName -ceq $portableExe }).Count -eq 1
+                        if (-not $validPortable) { return [ordered]@{ Success = $false; Failure = 'PayloadFailed' } }
+                    }
+                    catch { return [ordered]@{ Success = $false; Failure = 'PayloadFailed' } }
+                    finally { if ($portableZip) { $portableZip.Dispose() } }
+                    Expand-Archive -LiteralPath $portableArchive -DestinationPath $dir -Force
+                    $browserPath = Join-Path $dir ($portableExe -replace '/', '\')
+                    if (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { return [ordered]@{ Success = $false; Failure = 'PayloadFailed' } }
+                }
+                $process = Start-Process -FilePath $probe -WorkingDirectory $dir -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+                $edgeTree = $false
+                $tunCorrelation = $false
+                $proofDeadline = (Get-Date).AddSeconds(45)
+                while (-not $process.HasExited -and (Get-Date) -lt $proofDeadline) {
+                    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+                    $byId = @{}
+                    foreach ($candidate in $all) { $byId[[uint32]$candidate.ProcessId] = $candidate }
+                    foreach ($candidate in $all | Where-Object { ([string]$_.ExecutablePath) -ieq $browserPath }) {
+                        $ancestor = $candidate
+                        for ($depth = 0; $depth -lt 8 -and $ancestor; $depth++) {
+                            if ([uint32]$ancestor.ParentProcessId -eq [uint32]$process.Id) {
+                                $edgeTree = $true
+                                break
+                            }
+                            $ancestor = $byId[[uint32]$ancestor.ParentProcessId]
+                        }
+                    }
+                    $tun = Get-NetAdapter -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue | Select-Object -First 1
+                    $stats = if ($tun -and $tun.Status -eq 'Up') { Get-NetAdapterStatistics -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue } else { $null }
+                    if ($stats -and (([uint64]$stats.ReceivedBytes + [uint64]$stats.SentBytes) -gt [uint64]$tunBefore)) { $tunCorrelation = $true }
+                    if ($edgeTree -and $tunCorrelation) { break }
+                    Start-Sleep -Milliseconds 250
+                    $process.Refresh()
+                }
+                if (-not $edgeTree) { return [ordered]@{ Success = $false; Failure = 'BrowserProcessNotProven' } }
+                if (-not $tunCorrelation) { return [ordered]@{ Success = $false; Failure = 'TunCorrelationNotProven' } }
+                if (-not $process.WaitForExit(660000)) { $process.Kill(); return [ordered]@{ Success = $false; Failure = 'PayloadTimeout' } }
+                $process.WaitForExit()
+                if (-not (Test-Path -LiteralPath $stdout) -or (Get-Item -LiteralPath $stdout).Length -gt 8192) { return [ordered]@{ Success = $false; Failure = 'PayloadOutputMissing' } }
+                try { $metrics = Get-Content -LiteralPath $stdout -Raw | ConvertFrom-Json }
+                catch { return [ordered]@{ Success = $false; Failure = 'PayloadResultInvalid' } }
+                $probeFailure = [string]$metrics.Lifecycle
+                if ($probeFailure -ne 'Completed') {
+                    if ($probeFailure -in @('InputRejected', 'AlreadyRunning', 'PlatformUnsupported', 'BrowserMissing', 'EdgeLaunchFailed',
+                        'BrowserExited', 'DevToolsUnavailable', 'PageUnavailable', 'PagePollingFailure', 'DevToolsFailure', 'InvalidPageState',
+                        'TimedOut', 'InternalFailure', 'CleanupFailure')) {
+                        return [ordered]@{ Success = $false; Failure = "BrowserProbe$probeFailure" }
+                    }
+                    return [ordered]@{ Success = $false; Failure = 'BrowserProbeLifecycleUnrecognized' }
+                }
+                if (-not [bool]$metrics.Done) { return [ordered]@{ Success = $false; Failure = 'PayloadFailed' } }
+                $corePath = 'C:\ProgramData\VPNRouter\bin\sing-box.exe'
+                $coreCount = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { ([string]$_.ExecutablePath) -ieq $corePath }).Count
+                $tun = Get-NetAdapter -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue | Select-Object -First 1
+                $routeStable = $false
+                try {
+                    $routeAfter = Find-NetRoute -RemoteIPAddress $endpointAddress -ErrorAction Stop | Select-Object -First 1
+                    $adapterAfter = Get-NetAdapter -InterfaceIndex $routeAfter.InterfaceIndex -ErrorAction Stop
+                    $routeStable = $adapterAfter.Name -eq 'VPNRouter-TUN' -and $adapterAfter.Status -eq 'Up'
+                }
+                catch { $routeStable = $false }
+                [ordered]@{
+                    Success = $true; CoreStable = [bool]($coreCount -eq 1 -and $tun -and $tun.Status -eq 'Up'); TunCorrelation = $tunCorrelation; RouteStable = $routeStable
+                    FetchOk = [int]$metrics.FetchOk; FetchFail = [int]$metrics.FetchFail; WsOk = [int]$metrics.WsOk; WsFail = [int]$metrics.WsFail
+                    Done = [bool]$metrics.Done; MaxFetchNoProgressMs = [int64]$metrics.MaxFetchNoProgressMs; MaxWsNoProgressMs = [int64]$metrics.MaxWsNoProgressMs
+                }
+            }
+            finally {
+                if ($process -and -not $process.HasExited) { try { $process.Kill(); $process.WaitForExit() } catch { } }
+            }
+        }
+        $metrics = [ordered]@{}
+        $passed = $false
+        $tunCorrelation = $false
+        $lifecycle = 'PayloadFailed'
+        if ([bool]$result.Success) {
+            foreach ($name in @('FetchOk','FetchFail','WsOk','WsFail','Done','MaxFetchNoProgressMs','MaxWsNoProgressMs')) { $metrics[$name] = $result.$name }
+            $tunCorrelation = [bool]$result.TunCorrelation
+            $passed = [bool]($result.CoreStable -and $result.RouteStable -and $tunCorrelation -and $result.Done -and $result.FetchOk -ge 3200 -and $result.WsOk -ge 2000 -and $result.FetchFail -eq 0 -and $result.WsFail -eq 0 -and $result.MaxFetchNoProgressMs -le 15000 -and $result.MaxWsNoProgressMs -le 5000)
+            $lifecycle = 'Completed'
+        }
+        else {
+            $candidate = [string]$result.Failure
+            if ($candidate -in @('PayloadHashMismatch', 'PayloadMissing', 'PayloadTimeout', 'PayloadExitNonZero', 'PayloadOutputMissing', 'PayloadFailed', 'PayloadResultInvalid', 'BrowserProcessNotProven', 'TunCorrelationNotProven',
+                'BrowserProbeInputRejected', 'BrowserProbeAlreadyRunning', 'BrowserProbePlatformUnsupported', 'BrowserProbeBrowserMissing', 'BrowserProbeEdgeLaunchFailed',
+                'BrowserProbeBrowserExited', 'BrowserProbeDevToolsUnavailable', 'BrowserProbePageUnavailable', 'BrowserProbePagePollingFailure', 'BrowserProbeDevToolsFailure', 'BrowserProbeInvalidPageState',
+                'BrowserProbeTimedOut', 'BrowserProbeInternalFailure', 'BrowserProbeCleanupFailure', 'BrowserProbeLifecycleUnrecognized')) { $lifecycle = $candidate }
+        }
+        Write-Output ([ordered]@{
+            Status = if ($passed) { 'PASS' } else { 'FAIL' }; Profile = 'BrowserBurst'; RouteScope = 'Tunnel'; FullTunnel = $true
+            TunCorrelation = $tunCorrelation; DurationSeconds = 600; Caps = '32x64KiB-5s-4x64Bps'; Metrics = $metrics; Lifecycle = $lifecycle
+        } | ConvertTo-Json -Depth 4 -Compress)
+    }
+    finally {
+        try {
+            Invoke-Command -Session $s -ArgumentList $remoteRoot -ScriptBlock {
+                param($dir)
+                if (-not $dir.StartsWith('C:\r4review\browser-load\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid fixed browser-load cleanup directory.' }
+                if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+                if (Test-Path -LiteralPath $dir) { throw 'Fixed browser-load cleanup failed.' }
+            }
+        }
+        finally { Remove-PSSession $s }
+    }
+}
+
 switch ($Action) {
     'identity' {
         $s = New-VerifiedBratSession
@@ -792,7 +1071,7 @@ switch ($Action) {
             $res = Invoke-BratInteractive -Session $s -Mode 'uia' -AutomationId $AutomationId -Name $Name -ControlType $ControlType -UiaOperation $UiaOperation -Value $Value -ProtocolClass $ProtocolClass -ProtocolOrdinal $ProtocolOrdinal -TimeoutSeconds $TimeoutSeconds
             if ($UiaOperation -in @('Inspect', 'EnsureToggle', 'SelectProtocol')) {
                 Write-Host "Inspect result on $BratMachineName`:" -ForegroundColor Green
-                Write-Host ($res.Element | ConvertTo-Json -Compress)
+                Write-Output ($res.Element | ConvertTo-Json -Compress)
             } else {
                 Write-Host "OK: $UiaOperation completed on $BratMachineName." -ForegroundColor Green
             }
@@ -1060,17 +1339,19 @@ switch ($Action) {
     }
 
     'loadtest' {
-        $payloadApproved = Test-ApprovedWinbratLoadPayload
-        if ($LoadProfile -ne 'GameUdp') {
+        if ($LoadProfile -eq 'BrowserBurst') {
+            Invoke-BrowserBurstLoad
+            break
+        }
+        if ($LoadProfile -eq 'Mixed') {
             Write-Output ([ordered]@{
-                Status = 'BLOCKED'; Profile = $LoadProfile; RouteScope = 'Unknown'
-                FullTunnel = $false; TunCorrelation = $false
-                DurationSeconds = if ($LoadProfile -eq 'BrowserBurst') { 600 } else { 900 }
-                Caps = if ($LoadProfile -eq 'BrowserBurst') { '32x64KiB-5s-4x64Bps' } else { 'GameUdp+BrowserBurst' }
-                Metrics = [ordered]@{}; Lifecycle = 'MeasurementGated'
+                Status = 'BLOCKED'; Profile = 'Mixed'; RouteScope = 'Unknown'
+                FullTunnel = $false; TunCorrelation = $false; DurationSeconds = 900
+                Caps = 'GameUdp+BrowserBurst'; Metrics = [ordered]@{}; Lifecycle = 'MeasurementGated'
             } | ConvertTo-Json -Depth 4 -Compress)
             break
         }
+        $payloadApproved = Test-ApprovedWinbratLoadPayload
         if (-not $payloadApproved) {
             Write-Output ([ordered]@{
                 Status = 'BLOCKED'; Profile = 'GameUdp'; RouteScope = 'Unknown'

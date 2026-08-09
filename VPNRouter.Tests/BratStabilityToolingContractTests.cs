@@ -98,6 +98,95 @@ public sealed class BratStabilityToolingContractTests
         Assert.Contains("!tools/brat-stability.ps1", gitignore, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BratStability_SuccessWritesTerminalEvidenceAfterCleanup()
+    {
+        var source = ReadRepoFile("tools", "brat-stability.ps1");
+
+        var cleanup = source.LastIndexOf("finally {", StringComparison.Ordinal);
+        var completed = source.LastIndexOf("Write-Evidence -Kind 'RunCompleted'", StringComparison.Ordinal);
+        var summary = source.LastIndexOf("Write-Output ($summary", StringComparison.Ordinal);
+
+        Assert.True(cleanup >= 0);
+        Assert.True(completed > cleanup);
+        Assert.True(summary > completed);
+        Assert.Contains("-not $RunFailure -and -not $CleanupFailure -and -not $DataPlaneBlocked", source, StringComparison.Ordinal);
+        Assert.Contains("MeasuredFailures = $MeasuredFailureCount", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BratStability_ProtocolLoadUsesSafeCoordinatesAndColdRepeats()
+    {
+        var source = ReadRepoFile("tools", "brat-stability.ps1");
+
+        Assert.Contains("'ProtocolLoad'", source, StringComparison.Ordinal);
+        Assert.Contains("SelectProtocol", source, StringComparison.Ordinal);
+        Assert.Contains("ProtocolClass", source, StringComparison.Ordinal);
+        Assert.Contains("ProtocolOrdinal", source, StringComparison.Ordinal);
+        Assert.Contains("AbsoluteOrdinal", source, StringComparison.Ordinal);
+        Assert.Contains("Invoke-GameUdpLoad", source, StringComparison.Ordinal);
+        Assert.Contains("Ensure-Disconnected", source, StringComparison.Ordinal);
+        Assert.Contains("MEASURED_FAILURES", source, StringComparison.Ordinal);
+        Assert.Contains("'Completed', 'ReplyGap', 'CookieFailure', 'NetworkFailure'", source, StringComparison.Ordinal);
+        Assert.Contains("harness-integrity failure", source, StringComparison.Ordinal);
+        Assert.Contains("Start VPN", source, StringComparison.Ordinal);
+        Assert.Contains("Stop VPN", source, StringComparison.Ordinal);
+        Assert.Contains("Open-SubscribePage", source, StringComparison.Ordinal);
+        Assert.Contains("Switch-ToSimplePage", source, StringComparison.Ordinal);
+        Assert.Contains("All traffic", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServerName", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServerHost", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServerPort", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubscriptionUrl", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BratStability_BrowserLoadUsesThreeFixedCleanCyclesWithoutSelectionMutation()
+    {
+        var source = ReadRepoFile("tools", "brat-stability.ps1");
+        var browserLoad = Slice(source, "function Invoke-BrowserLoad", "function Invoke-ProtocolLoad");
+
+        Assert.Contains("'BrowserLoad'", source, StringComparison.Ordinal);
+        Assert.Contains("for ($cycle = 1; $cycle -le 3; $cycle++)", browserLoad, StringComparison.Ordinal);
+        Assert.Contains("LoadProfile = 'BrowserBurst'", source, StringComparison.Ordinal);
+        Assert.Contains("Ensure-Disconnected", browserLoad, StringComparison.Ordinal);
+        Assert.Contains("Connect-And-Wait", browserLoad, StringComparison.Ordinal);
+        Assert.Contains("Get-BratState", browserLoad, StringComparison.Ordinal);
+        Assert.Contains("Get-Lifecycle", browserLoad, StringComparison.Ordinal);
+        Assert.True(browserLoad.IndexOf("Get-Lifecycle", StringComparison.Ordinal) <
+                    browserLoad.LastIndexOf("Ensure-Disconnected", StringComparison.Ordinal));
+        Assert.DoesNotContain("Open-SubscribePage", browserLoad, StringComparison.Ordinal);
+        Assert.DoesNotContain("Select-ProtocolRow", browserLoad, StringComparison.Ordinal);
+        Assert.DoesNotContain("Switch-ToSimplePage", browserLoad, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BratProtocolMatrix_IsFixedCheckpointedAndRestoresOriginalSelection()
+    {
+        var source = ReadRepoFile("tools", "brat-protocol-matrix.ps1");
+        var gitignore = ReadRepoFile(".gitignore");
+        var forbidden = new[] { "New-PSSession", "Invoke-Command", "Start-Process", "Get-NetAdapter", "Get-Process", "Copy-Item" };
+
+        Assert.Contains("VlessReality'; Count = 4", source, StringComparison.Ordinal);
+        Assert.Contains("VlessWebSocket'; Count = 3", source, StringComparison.Ordinal);
+        Assert.Contains("VlessXhttp'; Count = 4", source, StringComparison.Ordinal);
+        Assert.Contains("Hysteria2'; Count = 4", source, StringComparison.Ordinal);
+        Assert.Contains("AmneziaWG'; Count = 4", source, StringComparison.Ordinal);
+        Assert.Contains("Naive'; Count = 1", source, StringComparison.Ordinal);
+        Assert.Contains("CellCompleted", source, StringComparison.Ordinal);
+        Assert.Contains("CellSkippedCompleted", source, StringComparison.Ordinal);
+        Assert.Contains("ProtocolClass Hysteria2 -ProtocolOrdinal 0", source, StringComparison.Ordinal);
+        Assert.Contains("FinalCleanupPassed", source, StringComparison.Ordinal);
+        Assert.Contains("ErrorClass", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ErrorMessage", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SubscriptionUrl", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServerHost", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ServerPort", source, StringComparison.Ordinal);
+        foreach (var token in forbidden)
+            Assert.DoesNotContain(token, source, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/artifacts/brat-protocol-matrix/", gitignore, StringComparison.Ordinal);
+    }
+
     private static string ReadRepoFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

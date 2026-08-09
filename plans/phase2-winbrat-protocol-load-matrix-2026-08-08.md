@@ -68,12 +68,12 @@ each family without reading or returning subscription URLs, hosts, ports or keys
 
 ## Outcome
 
-**Status**: PARTIAL / LIVE FINDING — the fixed GameUdp path and safe
-protocol-category selection work end to end on WINBRAT. The gaming-priority
-HY2 and AWG families were exercised, but the result is not a product defect and
-not a blanket AWG PASS: both families produced an isolated multi-second UDP
-gap while VPNRouter itself stayed connected. VLESS and browser/mixed profiles
-were not run because they do not improve attribution of the current incident.
+**Status**: COMPLETE / LIVE MEASUREMENT — the fixed GameUdp matrix and
+BrowserBurst path work end to end on WINBRAT. The exhaustive UDP matrix found
+three controlled liveness failures while VPNRouter itself stayed connected;
+the later browser HTTPS/WebSocket load passed all three ten-minute cold runs.
+No VPNRouter product defect is confirmed and AWG is not a blanket recovery:
+the exact selected row matters more than the protocol label alone.
 
 ### Implemented tooling
 
@@ -82,11 +82,10 @@ were not run because they do not improve attribution of the current incident.
   Avalonia exposed neither `ScrollPattern` nor a range-valued scrollbar on
   WINBRAT, so the bounded fallback uses fixed Home/PageDown keys on a
   materialized row, still with no coordinates or arbitrary input.
-- `loadtest` approves one exact source-built archive hash, copies and rechecks
-  only that payload, runs the fixed five-minute GameUdp profile with no caller
-  target/rate/size/duration, and returns only aggregate metrics and fixed
-  lifecycle enums. BrowserBurst and Mixed remain fail-closed
-  `MeasurementGated`.
+- `loadtest` approves exact source-built archive hashes, copies and rechecks
+  only fixed no-argument payloads, and returns only aggregate metrics and fixed
+  lifecycle enums. GameUdp and Full-Tunnel BrowserBurst are live verified;
+  Mixed remains fail-closed `MeasurementGated`.
 - The payload now emits a fixed status and aggregate snapshot on every
   controlled exit. The verifier distinguishes timeout, missing/empty/invalid
   output and non-zero exit without returning stderr or exception text.
@@ -143,14 +142,210 @@ Auto-select Off and the pre-existing Full Tunnel mode were restored.
 
 - [x] Gate 1 — final `VPNRouter.sln` Release build completed with 0 errors
   (pre-existing warnings remain).
-- [x] Gate 2 — final focused verifier/load suite passed 26/26 and the root
-  regression filter passed 22/22.
+- [x] Gate 2 — final focused browser/verifier/load suite passed 47/47. The
+  non-elevated full suite passed 2,721, skipped 2 and hit the 25 already-ledgered
+  `%ProgramData%` ACL failures; production ACLs were not weakened and the normal
+  GitHub workflow remains the full-suite environment gate.
 - [x] Gate 3 — this Outcome and `plans/OPEN-DEFECTS.md` contain the live
   measurements and attribution boundary.
 - [x] Gate 4 — Ponytail/security review kept the fixed-profile design, found
   and fixed exact-selection rollback for unavailable categories, and rejected
-  speculative browser enablement. Final configured DeepSeek-in-Qwen zero-tool
-  reviews returned PASS for both selector and payload/runner excerpts.
+  speculative Mixed enablement. Exact DeepSeek-in-Qwen zero-tool reviews were
+  attempted but timed out or failed closed without findings; Codex independently
+  completed the source/security review and did not relax worker permissions.
 - [x] Gate 5 — WINBRAT identity, safe HY2/AWG selection, live GameUdp,
   boundary probes and clean restoration verified.
 - [x] Gate 6 — N/A; product/runtime code and characterization surface unchanged.
+
+### Exhaustive 20×3 follow-up — 2026-08-09 (completed)
+
+The resumable fixed manifest now covers every one of the 20 visible subscription
+rows with three independent cold five-minute GameUdp runs. Each run starts from
+zero owned core processes and an absent TUN, selects only by the fixed non-secret
+protocol class/ordinal, proves Full Tunnel plus the fixed route and TUN-byte
+correlation, and disconnects back to a clean state. A simultaneous independent
+direct observer exercises the same owned UDP endpoint without VPNRouter.
+
+Final completed matrix:
+
+| Protocol class | Rows | Cold runs | Sent | Replies | Loss | Controlled network failures | Worst completed acknowledged gap |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| VLESS Reality | 4/4 | 12/12 | 72,731 | 72,691 | 40 | 0 | 1,538.2 ms |
+| VLESS WebSocket | 3/3 | 9/9 | 54,549 | 54,536 | 13 | 0 | 2,579.7 ms |
+| VLESS XHTTP | 4/4 | 12/12 | 68,350 | 68,211 | 139 | 1 ReplyGap | 1,949.9 ms |
+| Hysteria2 | 4/4 | 12/12 | 72,733 | 72,652 | 81 | 0 | 2,302.9 ms |
+| AmneziaWG | 4/4 | 12/12 | 62,205 | 62,047 | 158 | 1 ReplyGap + 1 CookieFailure | 988.3 ms |
+| Naive effective bundle | 1/1 | 3/3 | 18,183 | 18,179 | 4 | 0 | 199.1 ms |
+
+Across all 20 rows and 60 cold runs, 57 completed and three returned controlled
+network failures: one XHTTP `ReplyGap`, plus one AWG `ReplyGap` and one AWG
+`CookieFailure` on the same ordinal-1 row. The payload sent 348,751 authenticated
+datagrams and received 348,316 replies (435 lost, 0.1247%), with zero duplicate,
+corrupt or unknown replies. All 60 runs proved Full Tunnel, TUN-byte correlation
+and Tunnel routing. VPNRouter remained connected with one owned core and an Up
+TUN after load in 60/60 runs; all 60 lifecycle windows contained zero
+error/FATAL/unknown events. Every one of 100 clean-state checkpoints observed
+one GUI, zero owned core, an absent TUN and Direct routing.
+
+The planned direct observer completed 84/84 cycles independently of VPNRouter:
+509,129 sends, 508,736 replies, 393 losses (0.0772%), one reordered reply, zero
+corruption and a 2,907.3 ms worst acknowledged gap. It produced no controlled
+three-second failure. These data demonstrate substantial external-path noise but
+do not erase the clean-observer tunnel divergences listed below.
+
+The XHTTP terminal event occurred on ordinal 0 repeat 1 after 1,680 sends and
+1,619 replies. VPNRouter retained one core, an Up TUN and Tunnel routing; the
+paired direct observer was clean. The same row then passed twice, and ordinal 1
+passed all three runs. Ordinal 2 reproduced two non-terminal degraded runs
+(38/36 lost; 1,949.9/1,843.6 ms gaps) followed by a clean 6,061/6,061 run. This
+is evidence of intermittent selected-path quality, not an application disconnect
+and not yet an attributable VPNRouter defect.
+
+The direct observer independently produced both clean intervals and external
+degradation, including 49/6,061 loss with a 2,507.4 ms gap while an overlapping
+VPN run was clean. Conversely, both observer intervals overlapping XHTTP ordinal
+2 repeat 2 were clean while that tunnel lost 36/6,061. XHTTP ordinal 3 then
+passed all three cold runs with 18,181/18,183 replies and a 112.8 ms worst gap;
+its four overlapping observer intervals were also loss-free. The paired evidence proves
+that both the external observer path and individual tunneled/provider paths can
+degrade independently. It does not identify the client core, access network,
+provider node, proxy server or UDP egress as owner.
+
+Hysteria2 ordinal 1 passed all three cold runs and retained one core, an Up TUN
+and Tunnel routing throughout every load interval. Its third run lost 45/6,061
+replies and reached a 2,302.9 ms acknowledged gap; the simultaneously overlapping
+direct-observer interval independently lost 44/6,061 and reached 2,246.8 ms. The
+near-identical timing and magnitude is strong evidence of a shared external
+underlay/endpoint-path event rather than a VPNRouter disconnect. The first two
+runs were loss-free with 86.7/93.6 ms gaps, and final cleanup was clean.
+
+Hysteria2 ordinal 2 also passed all three cold runs. Repeat 2 lost 34/6,061
+with a 1,759.0 ms gap while its overlapping direct observer was loss-free at
+6,061/6,061 with a 106.9 ms gap; repeats 1 and 3 were loss-free with 79.5/77.6
+ms gaps. This is one intermittent selected tunneled/provider-path divergence,
+not a deterministic HY2 failure. VPNRouter remained connected and every
+lifecycle and final-cleanup check passed.
+
+Hysteria2 ordinal 3 was loss-free in all three runs (18,183/18,183) with a
+275.0 ms worst gap. During its last run the independent direct observer instead
+produced two degraded intervals (58/55 lost; 2,907.3/2,792.7 ms gaps) while the
+tunnel completed 6,061/6,061 with a 275.0 ms gap. The complete HY2 family is
+therefore 12/12 PASS with no terminal ReplyGap or VPNRouter lifecycle failure;
+its one selected-path degraded run and the separate common/direct-path events
+remain attribution measurements, not protocol-family or product defects.
+
+AmneziaWG ordinal 0 passed all three cold runs with 18,173/18,183 replies,
+10 losses (all in repeat 1) and a 362.7 ms worst gap. VPNRouter remained
+connected, lifecycle was clean and every run returned to zero core/absent TUN.
+This first row is stable but does not by itself prove AWG is a universal
+recovery: the earlier long AWG sequence still contains one isolated ReplyGap,
+and the remaining three rows must complete under the same profile.
+
+AmneziaWG ordinal 1 is the first reproducibly unhealthy row in this matrix.
+Repeat 1 passed 6,060/6,061 with a 153.3 ms gap. Repeat 2 then stopped at the
+fixed terminal ReplyGap after 1,597 sends/1,535 replies, while the overlapping
+direct observer was clean at 6,062/6,062 with a 92.0 ms gap. Repeat 3 failed the
+initial authenticated UDP-cookie exchange before sending workload traffic; its
+broader overlapping direct-observer window also degraded by 49/6,061 with a
+2,497.9 ms gap, so this second failure coincided with real underlay/endpoint-path
+noise rather than isolating cleanly to the tunnel.
+Both failures retained one core, an Up TUN and Tunnel routing, and both lifecycle
+and cleanup checks were clean. This is strong selected tunneled/provider-path
+evidence and makes this exact opaque row the first official AmneziaWG A/B
+priority; it is still not attribution to VPNRouter without that matched bracket.
+
+AmneziaWG ordinal 2 passed all three runs with 18,138/18,181 replies and a
+519.2 ms worst gap. Repeat 2 lost 42/6,059 while the overlapping direct observer
+was clean, but repeats 1 and 3 were essentially clean and no controlled failure
+occurred. This neighbor is materially healthier than ordinal 1 and supports a
+row/provider-path distinction rather than an AWG-family failure.
+
+AmneziaWG ordinal 3 passed all three runs with 18,141/18,183 replies and a
+988.3 ms worst gap. Its first run lost 39/6,061 while the observer was clean;
+the next two runs passed with 0/3 losses and 153.0/235.7 ms gaps. Across all
+four AWG rows, ordinals 0, 2 and 3 completed 9/9 runs without a controlled
+failure; both controlled failures occurred on ordinal 1. This concentration is
+why ordinal 1, not generic AWG, is the matched A/B target.
+
+The single Naive row passed all three runs with 18,179/18,183 replies and a
+199.1 ms worst gap. This is explicitly an effective-row result, not a claim of
+protocol-pure Naive UDP: the current production resolver may pair Naive TCP with
+same-IP Hysteria2 UDP. The original direct observer completed 84 fixed five-minute
+cycles and covered the first Naive run. Before repeats 2 and 3, a replacement
+observer failed closed because the dev-host route to the owned endpoint was no
+longer independent of VPNRouter; no local route or VPN state was changed. Those
+last two runs therefore retain WINBRAT Full-Tunnel/TUN/lifecycle evidence but no
+simultaneous direct control.
+
+The matrix refutes an application/core/TUN disconnect in this eight-hour window
+but confirms intermittent UDP liveness failures while the tunnel remains Up.
+No product/config/failover change is authorized from these measurements. The
+next high-value A/B target is the exact opaque AmneziaWG ordinal-1 configuration;
+that remains gated on an operator-provisioned equivalent fixture and a
+management-safe official-client runner. The isolated XHTTP event is second
+priority and additionally requires a vetted exact Xray-core build, not an
+arbitrary latest prerelease. The completed BrowserBurst follow-up below covers
+browser HTTPS/WebSocket stability; Mixed remains measurement-gated.
+
+### BrowserBurst 3×10-minute follow-up — 2026-08-09 (completed)
+
+Three independent cold BrowserBurst cycles ran on WINBRAT in Full Tunnel. Each
+cycle started from zero owned core processes and an absent TUN, connected one
+owned core, proved the fixed endpoint route through `VPNRouter-TUN`, observed a
+positive TUN-byte delta from the exact spawned browser tree, ran the fixed page
+for 600 seconds, then disconnected back to zero core, absent TUN and Direct
+routing. A pinned official Chrome for Testing archive was expanded only beneath
+the verifier-owned transient directory and removed during cleanup; it was not
+installed system-wide.
+
+| Cycle | Fetch success | Fetch errors | WebSocket replies | WebSocket errors | Worst fetch no-progress | Worst WS no-progress | Result |
+|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 3,840 | 0 | 2,396 | 0 | 5,090 ms | 2,007 ms | PASS |
+| 2 | 3,840 | 0 | 2,396 | 0 | 5,077 ms | 2,245 ms | PASS |
+| 3 | 3,808 | 0 | 2,396 | 0 | 11,073 ms | 2,042 ms | PASS |
+| **Total** | **11,488** | **0** | **7,188** | **0** | — | — | **3/3 PASS** |
+
+All three cycles completed with `StayedConnected=true`, one owned core, an Up
+TUN and Tunnel routing after load. Their lifecycle windows contained zero
+error, FATAL or unknown events. Per-cycle and final cleanup returned one GUI,
+zero owned core, absent TUN and Direct routing. The third cycle's 11.1-second
+fetch no-progress interval stayed within the fixed 15-second limit and did not
+affect WebSocket progress; it is a measurement, not a failure.
+
+Combined with the UDP matrix, this supports a narrow conclusion: during the
+observed period ordinary browser HTTPS/WebSocket traffic was stable, while rare
+UDP liveness failures occurred on particular tunneled/provider paths without an
+application, core or TUN disconnect. This does not prove every destination or
+future session is healthy. It does show that a generic app restart or automatic
+protocol switch is not justified by this evidence. Mixed browser+GameUdp load
+is deferred until a real simultaneous-failure symptom makes the additional
+complexity attribution-useful.
+
+### Exact next-task prompt — matched official-client A/B
+
+```text
+Continue the WINBRAT stability study from the completed 20×3 VPNRouter matrix
+and 3×10-minute BrowserBurst evidence. Work only in a new test-tooling branch;
+do not change product code, subscription state, keys, endpoints or user config.
+
+Prerequisite: the operator must provision an opaque equivalent fixture for the
+exact AmneziaWG ordinal-1 row at the already planned fixed fixture location.
+Never read, print, copy, hash or derive that fixture. If it is absent or its ACL
+shape is unsafe, stop as BLOCKED.
+
+Implement the smallest fixed official-AmneziaWG runner: exact approved official
+binary hash/signature; VPNRouter disconnected; Tailscale/WinRM management route
+preserved; a client-specific local watchdog armed before launch; intended route
+plus positive tunnel-adapter delta above a quiet baseline; the same approved
+five-minute GameUdp payload; three cold repeats; client-specific teardown and a
+clean-state proof after every repeat. Accept no arbitrary executable, target,
+rate, duration or config argument and return only allowlisted aggregate metrics.
+
+For attribution, bracket the failing row closely as VPNRouter → official client
+→ VPNRouter under the same direct-observer windows. A failed control, watchdog
+expiry, dirty cleanup or missing attribution is BLOCKED/ABORTED, never a network
+failure. Compare recurrence only; do not claim server, client or product root
+cause unless the matched bracket separates them. Record every finding in
+plans/OPEN-DEFECTS.md before implementation and update this Outcome with exact
+sanitized evidence. Do not release or merge.
+```

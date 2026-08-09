@@ -4,7 +4,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('ColdCycles', 'Soak', 'Cleanup')]
+    [ValidateSet('ColdCycles', 'Soak', 'ProtocolLoad', 'BrowserLoad', 'Cleanup')]
     [string]$Mode,
 
     [ValidatePattern('^[0-9A-Za-z.-]{1,32}$')]
@@ -17,7 +17,13 @@ param(
     [int]$DurationMinutes = 120,
 
     [ValidateRange(5, 300)]
-    [int]$SampleSeconds = 15
+    [int]$SampleSeconds = 15,
+
+    [ValidateSet('VlessReality', 'VlessWebSocket', 'VlessXhttp', 'Hysteria2', 'Tuic', 'AmneziaWG', 'Naive', 'DnsTunnel', 'Shadowsocks')]
+    [string]$ProtocolClass,
+
+    [ValidateRange(0, 20)]
+    [int]$ProtocolOrdinal = 0
 )
 
 Set-StrictMode -Version Latest
@@ -32,11 +38,15 @@ $EvidencePath = Join-Path $EvidenceRoot "$RunId-$Mode.jsonl"
 $DataPlaneBlocked = $false
 $RunFailure = $null
 $CleanupFailure = $null
+$MeasuredFailureCount = 0
 $Mutex = New-Object System.Threading.Mutex($false, 'Local\VPNRouterBratStability')
 $MutexHeld = $false
 
 if ($Mode -ne 'Cleanup' -and [string]::IsNullOrWhiteSpace($Version)) {
-    throw '-Version is required for ColdCycles and Soak evidence.'
+    throw '-Version is required for non-cleanup evidence.'
+}
+if ($Mode -eq 'ProtocolLoad' -and [string]::IsNullOrWhiteSpace($ProtocolClass)) {
+    throw '-ProtocolClass is required for ProtocolLoad.'
 }
 if (-not (Test-Path $VerifyScript)) { throw 'tools/brat-verify.ps1 is missing.' }
 
@@ -117,7 +127,23 @@ function Get-CtaNames {
         @(0x041E, 0x0442, 0x043A, 0x043B, 0x044E, 0x0447, 0x0438, 0x0442, 0x044C)
     }
     $localized = -join @($codePoints | ForEach-Object { [char]$_ })
-    return "$Target||$localized"
+    if ($Target -eq 'Connect') {
+        $advancedRuCodePoints = @(
+            0x0417, 0x0430, 0x043F, 0x0443, 0x0441, 0x0442, 0x0438, 0x0442, 0x044C,
+            0x20, 0x56, 0x50, 0x4E)
+        $advancedRuText = -join @($advancedRuCodePoints | ForEach-Object { [char]$_ })
+        $advancedEn = ([char]0x25B6) + '  Start VPN'
+        $advancedRu = ([char]0x25B6) + '  ' + $advancedRuText
+    }
+    else {
+        $advancedRuCodePoints = @(
+            0x041E, 0x0441, 0x0442, 0x0430, 0x043D, 0x043E, 0x0432, 0x0438, 0x0442, 0x044C,
+            0x20, 0x56, 0x50, 0x4E)
+        $advancedRuText = -join @($advancedRuCodePoints | ForEach-Object { [char]$_ })
+        $advancedEn = ([char]0x2B1B) + '  Stop VPN'
+        $advancedRu = ([char]0x2B1B) + '  ' + $advancedRuText
+    }
+    return "$Target||$localized||$advancedEn||$advancedRu"
 }
 
 function Invoke-Cta {
@@ -187,6 +213,189 @@ function Get-Lifecycle {
     }
     Write-Evidence -Kind 'Lifecycle' -Data $result
     return $result
+}
+
+function Open-SubscribePage {
+    # Protocol selection lives only in Advanced mode. The first Invoke may
+    # fail when the page is already Advanced; that is an expected idempotent
+    # probe, followed by a semantic tab selection and SubList assertion.
+    try {
+        Invoke-BratVerify -Arguments @{
+            Action = 'uia'; Name = 'Advanced settings'; ControlType = 'Button'
+            UiaOperation = 'Invoke'; TimeoutSeconds = 5
+        } | Out-Null
+    }
+    catch { }
+    Invoke-BratVerify -Arguments @{
+        Action = 'uia'; Name = 'Subscribe'; ControlType = 'ListItem'
+        UiaOperation = 'Select'; TimeoutSeconds = 10
+    } | Out-Null
+    Invoke-BratVerify -Arguments @{
+        Action = 'uia'; AutomationId = 'SubList'; UiaOperation = 'Inspect'; TimeoutSeconds = 10
+    } | Out-Null
+}
+
+function Switch-ToSimplePage {
+    Invoke-BratVerify -Arguments @{
+        Action = 'uia'; Name = ([char]0x25C2) + ' Simple'; ControlType = 'Button'
+        UiaOperation = 'Invoke'; TimeoutSeconds = 10
+    } | Out-Null
+    Invoke-BratVerify -Arguments @{
+        Action = 'uia'; Name = 'All traffic'; ControlType = 'RadioButton'
+        UiaOperation = 'Inspect'; TimeoutSeconds = 10
+    } | Out-Null
+}
+
+function Select-ProtocolRow {
+    $raw = @(Invoke-BratVerify -Arguments @{
+        Action          = 'uia'
+        AutomationId    = 'SubList'
+        UiaOperation    = 'SelectProtocol'
+        ProtocolClass   = $ProtocolClass
+        ProtocolOrdinal = $ProtocolOrdinal
+        TimeoutSeconds  = 25
+    })
+    $line = ($raw | Select-String -Pattern '^\{"ProtocolClass"').Line | Select-Object -Last 1
+    if (-not $line) { throw 'Protocol selector returned no safe coordinate JSON.' }
+    try { $selected = $line | ConvertFrom-Json }
+    catch { throw 'Protocol selector returned invalid safe coordinate JSON.' }
+    if ([string]$selected.ProtocolClass -ne $ProtocolClass -or
+        [int]$selected.Ordinal -ne $ProtocolOrdinal -or
+        [int]$selected.AbsoluteOrdinal -lt 0) {
+        throw 'Protocol selector returned a mismatched safe coordinate.'
+    }
+    Write-Evidence -Kind 'ProtocolSelected' -Data $selected
+    return $selected
+}
+
+function Invoke-GameUdpLoad {
+    $result = Invoke-BratVerifyJson -Arguments @{
+        Action = 'loadtest'
+        LoadProfile = 'GameUdp'
+    }
+    if ([string]$result.Status -notin @('PASS', 'FAIL', 'BLOCKED')) {
+        throw 'Load verifier returned an invalid status.'
+    }
+    if ([string]$result.Lifecycle -notin @(
+        'PayloadNotApproved', 'EndpointUnavailable', 'MeasurementGated',
+        'Completed', 'ReplyGap', 'CookieFailure', 'NetworkFailure', 'InternalFailure',
+        'PayloadHashMismatch', 'PayloadMissing', 'PayloadTimeout', 'PayloadExitNonZero',
+        'PayloadOutputMissing', 'PayloadOutputEmpty', 'PayloadFailed', 'PayloadResultInvalid')) {
+        throw 'Load verifier returned an invalid lifecycle enum.'
+    }
+    Write-Evidence -Kind 'GameUdp' -Data $result
+    return $result
+}
+
+function Invoke-BrowserBurstLoad {
+    $result = Invoke-BratVerifyJson -Arguments @{
+        Action = 'loadtest'
+        LoadProfile = 'BrowserBurst'
+    }
+    if ([string]$result.Status -notin @('PASS', 'FAIL', 'BLOCKED')) {
+        throw 'Browser load verifier returned an invalid status.'
+    }
+    if ([string]$result.Lifecycle -notin @(
+        'PayloadNotApproved', 'EndpointUnavailable', 'FullTunnelNotProven', 'BrowserMissing', 'BrowserSignatureUnverified',
+        'RouteNotTunnel', 'TunnelStateUnavailable', 'MeasurementGated', 'Completed',
+        'PayloadHashMismatch', 'PayloadMissing', 'PayloadTimeout', 'PayloadExitNonZero',
+        'PayloadOutputMissing', 'PayloadFailed', 'PayloadResultInvalid',
+        'BrowserProcessNotProven', 'TunCorrelationNotProven',
+        'BrowserProbeInputRejected', 'BrowserProbeAlreadyRunning', 'BrowserProbePlatformUnsupported', 'BrowserProbeBrowserMissing',
+        'BrowserProbeEdgeLaunchFailed', 'BrowserProbeBrowserExited', 'BrowserProbeDevToolsUnavailable', 'BrowserProbePageUnavailable',
+        'BrowserProbePagePollingFailure', 'BrowserProbeDevToolsFailure', 'BrowserProbeInvalidPageState', 'BrowserProbeTimedOut', 'BrowserProbeInternalFailure',
+        'BrowserProbeCleanupFailure', 'BrowserProbeLifecycleUnrecognized')) {
+        throw 'Browser load verifier returned an invalid lifecycle enum.'
+    }
+    Write-Evidence -Kind 'BrowserBurst' -Data $result
+    return $result
+}
+
+function Invoke-BrowserLoad {
+    $script:DataPlaneBlocked = $false
+    Ensure-Disconnected | Out-Null
+    for ($cycle = 1; $cycle -le 3; $cycle++) {
+        $cycleStarted = [DateTimeOffset]::UtcNow
+        Write-Evidence -Kind 'BrowserCycleStarted' -Data ([ordered]@{ Cycle = $cycle })
+        $connected = Connect-And-Wait
+        if ([string]$connected.RouteScope -ne 'Tunnel') {
+            throw 'Browser load requires the fixed owned route to be Tunnel.'
+        }
+
+        $load = Invoke-BrowserBurstLoad
+        if ([string]$load.Status -eq 'BLOCKED') {
+            throw 'Browser load lost payload, endpoint, full-tunnel or workload attribution.'
+        }
+        if ([string]$load.Lifecycle -ne 'Completed') {
+            throw 'Browser load encountered a harness-integrity failure rather than a measurement.'
+        }
+
+        $held = Get-BratState
+        $stillConnected = Test-ConnectedState $held
+        Write-Evidence -Kind 'BrowserPostLoadState' -Data $held
+        $lifecycle = Get-Lifecycle -Since $cycleStarted
+        Ensure-Disconnected | Out-Null
+
+        $cyclePassed = [string]$load.Status -eq 'PASS' -and $stillConnected -and
+            [int]$lifecycle.FatalCount -eq 0 -and [int]$lifecycle.UnknownErrorCount -eq 0
+        if (-not $cyclePassed) { $script:MeasuredFailureCount++ }
+        Write-Evidence -Kind 'BrowserCycleResult' -Data ([ordered]@{
+            Cycle = $cycle
+            Result = if ($cyclePassed) { 'PASS' } else { 'MEASURED_FAILURE' }
+            LoadStatus = [string]$load.Status
+            Lifecycle = [string]$load.Lifecycle
+            StayedConnected = [bool]$stillConnected
+        })
+    }
+}
+
+function Invoke-ProtocolLoad {
+    Ensure-Disconnected | Out-Null
+    for ($cycle = 1; $cycle -le $Cycles; $cycle++) {
+        $cycleStarted = [DateTimeOffset]::UtcNow
+        Write-Evidence -Kind 'ProtocolCycleStarted' -Data ([ordered]@{
+            ProtocolClass = $ProtocolClass
+            ProtocolOrdinal = $ProtocolOrdinal
+            Repeat = $cycle
+        })
+
+        Open-SubscribePage
+        Select-ProtocolRow | Out-Null
+        Switch-ToSimplePage
+        $connected = Connect-And-Wait
+        if ([string]$connected.RouteScope -ne 'Tunnel') {
+            throw 'Protocol load requires the fixed probe route to be Tunnel.'
+        }
+
+        $load = Invoke-GameUdpLoad
+        if ([string]$load.Status -eq 'BLOCKED') {
+            throw 'Protocol load lost payload, endpoint, full-tunnel or route attribution.'
+        }
+        if ([string]$load.Lifecycle -notin @('Completed', 'ReplyGap', 'CookieFailure', 'NetworkFailure')) {
+            throw 'Protocol load encountered a harness-integrity failure rather than a network measurement.'
+        }
+
+        $held = Get-BratState
+        $stillConnected = Test-ConnectedState $held
+        Write-Evidence -Kind 'ProtocolPostLoadState' -Data $held
+        Ensure-Disconnected | Out-Null
+        $lifecycle = Get-Lifecycle -Since $cycleStarted
+
+        $cyclePassed = [string]$load.Status -eq 'PASS' -and
+            $stillConnected -and
+            [int]$lifecycle.FatalCount -eq 0 -and
+            [int]$lifecycle.UnknownErrorCount -eq 0
+        if (-not $cyclePassed) { $script:MeasuredFailureCount++ }
+        Write-Evidence -Kind 'ProtocolCycleResult' -Data ([ordered]@{
+            ProtocolClass = $ProtocolClass
+            ProtocolOrdinal = $ProtocolOrdinal
+            Repeat = $cycle
+            Result = if ($cyclePassed) { 'PASS' } else { 'MEASURED_FAILURE' }
+            LoadStatus = [string]$load.Status
+            Lifecycle = [string]$load.Lifecycle
+            StayedConnected = [bool]$stillConnected
+        })
+    }
 }
 
 function Invoke-ColdCycles {
@@ -283,11 +492,14 @@ try {
     if (-not $MutexHeld) { throw 'Another WINBRAT stability run is active.' }
     Write-Evidence -Kind 'RunStarted' -Data ([ordered]@{
         Cycles = $Cycles; DurationMinutes = $DurationMinutes; SampleSeconds = $SampleSeconds
+        ProtocolClass = $ProtocolClass; ProtocolOrdinal = $ProtocolOrdinal
     })
 
     switch ($Mode) {
         'ColdCycles' { Invoke-ColdCycles }
         'Soak'       { Invoke-Soak }
+        'ProtocolLoad' { Invoke-ProtocolLoad }
+        'BrowserLoad' { Invoke-BrowserLoad }
         'Cleanup'    { Ensure-Disconnected | Out-Null }
     }
 }
@@ -308,12 +520,20 @@ finally {
 }
 
 $status = if ($RunFailure -or $CleanupFailure) { 'FAIL' }
+    elseif ($MeasuredFailureCount -gt 0) { 'MEASURED_FAILURES' }
     elseif ($DataPlaneBlocked) { 'LIFECYCLE_PASS_DATAPLANE_BLOCKED' }
     else { 'PASS' }
 $summary = [ordered]@{
     Status = $status
     Mode = $Mode
+    MeasuredFailures = $MeasuredFailureCount
     Evidence = $EvidencePath.Substring($Root.Length).TrimStart('\')
+}
+if (-not $RunFailure -and -not $CleanupFailure -and -not $DataPlaneBlocked) {
+    Write-Evidence -Kind 'RunCompleted' -Data ([ordered]@{
+        Status = $status
+        MeasuredFailures = $MeasuredFailureCount
+    })
 }
 Write-Output ($summary | ConvertTo-Json -Compress)
 

@@ -72,6 +72,7 @@
     <ProjectReference Include="..\VPNRouter.App\VPNRouter.App.csproj" />
     <ProjectReference Include="..\VPNRouter.Tools\LoadTest.Protocol\VPNRouter.Tools.LoadTest.Protocol.csproj" />
     <ProjectReference Include="..\VPNRouter.Tools\LoadTarget\VPNRouter.Tools.LoadTarget.csproj" />
+    <ProjectReference Include="..\VPNRouter.Tools\WinbratBrowserProbe\VPNRouter.Tools.WinbratBrowserProbe.csproj" />
     <ProjectReference Include="..\VPNRouter.Tools\WinbratLoadGen\VPNRouter.Tools.WinbratLoadGen.csproj" />
   </ItemGroup>
 

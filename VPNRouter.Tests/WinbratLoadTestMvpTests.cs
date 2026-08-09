@@ -329,19 +329,71 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("VlessReality", operation, StringComparison.Ordinal);
         Assert.Contains("Hysteria2", operation, StringComparison.Ordinal);
         Assert.Contains("AmneziaWG", operation, StringComparison.Ordinal);
-        Assert.Contains("TreeWalker]::ControlViewWalker.GetParent", operation, StringComparison.Ordinal);
         Assert.Contains("SelectionItemPattern", operation, StringComparison.Ordinal);
         Assert.Contains("SendWait('{HOME}')", operation, StringComparison.Ordinal);
-        Assert.Contains("SendWait('{PGDN}')", operation, StringComparison.Ordinal);
+        Assert.Contains("SendWait('{DOWN}')", operation, StringComparison.Ordinal);
+        Assert.DoesNotContain("SendWait('{PGDN}')", operation, StringComparison.Ordinal);
+        Assert.Contains("requires zero owned sing-box processes", operation, StringComparison.Ordinal);
+        Assert.Contains("C:\\ProgramData\\VPNRouter\\bin\\sing-box.exe", operation, StringComparison.Ordinal);
+        Assert.Contains("requires Auto-select to already be Off", operation, StringComparison.Ordinal);
+        Assert.Contains("$expectedTotal = 20", operation, StringComparison.Ordinal);
+        Assert.Contains("VlessReality = 4", operation, StringComparison.Ordinal);
+        Assert.Contains("VlessWebSocket = 3", operation, StringComparison.Ordinal);
+        Assert.Contains("SubList protocol composition changed", operation, StringComparison.Ordinal);
         Assert.Contains("$originalSelection", operation, StringComparison.Ordinal);
         Assert.Contains("$selectionMutationAttempted = $true", operation, StringComparison.Ordinal);
-        Assert.Contains("$restore.Select()", operation, StringComparison.Ordinal);
         Assert.Contains("$remove.RemoveFromSelection()", operation, StringComparison.Ordinal);
-        Assert.Contains("original empty selection restoration did not stick", operation, StringComparison.Ordinal);
+        Assert.Contains("safe empty cleanup did not stick", operation, StringComparison.Ordinal);
         Assert.Contains("ProtocolClass = [string]$req.ProtocolClass", operation, StringComparison.Ordinal);
+        Assert.Contains("AbsoluteOrdinal = [int]$chosenAbsoluteOrdinal", operation, StringComparison.Ordinal);
         Assert.DoesNotContain("$row.Current.Name", operation, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetRuntimeId()", operation, StringComparison.Ordinal);
         Assert.DoesNotContain("SendWait([string]$req", operation, StringComparison.Ordinal);
         Assert.DoesNotContain("ServerViewModel", operation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Tooling_DirectObserver_IsFixedHashCappedAndCannotDriveVpnRouter()
+    {
+        var observer = ReadRepoFile("tools", "loadtest-direct-observer.ps1");
+
+        Assert.Contains("[ValidateRange(1, 96)]", observer, StringComparison.Ordinal);
+        Assert.Contains("5855167c4c89efa5c5adbd0933ee4269382785bb35d6b04f7a5fd27d80f72934", observer, StringComparison.Ordinal);
+        Assert.Contains("VPNRouter.Tools.WinbratLoadGen.exe", observer, StringComparison.Ordinal);
+        Assert.Contains("loadtest.vpn.ninitux.com", observer, StringComparison.Ordinal);
+        Assert.Contains("20pps-256B-burst50pps", observer, StringComparison.Ordinal);
+        Assert.Contains("Find-NetRoute", observer, StringComparison.Ordinal);
+        Assert.Contains("The observer route is not independent of VPNRouter", observer, StringComparison.Ordinal);
+        Assert.Contains("The observer route changed to VPNRouter during the run", observer, StringComparison.Ordinal);
+        Assert.Contains("ObserverResult", observer, StringComparison.Ordinal);
+        Assert.Contains("StartedAtUtc", observer, StringComparison.Ordinal);
+        Assert.Contains("EndedAtUtc", observer, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string]$Target", observer, StringComparison.Ordinal);
+        Assert.DoesNotContain("[string]$Profile", observer, StringComparison.Ordinal);
+        Assert.DoesNotContain("[int]$PacketsPerSecond", observer, StringComparison.Ordinal);
+        Assert.DoesNotContain("New-PSSession", observer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Invoke-Command", observer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Start-Process", observer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("vpnrouter.exe", observer, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Tooling_OfficialAlternativeClients_AreOfflineAndPinned()
+    {
+        var verifier = ReadRepoFile("tools", "verify-official-alt-clients.ps1");
+
+        Assert.Contains("amneziawg-amd64-2.0.2.msi", verifier, StringComparison.Ordinal);
+        Assert.Contains("1b7308d0c74685193dee5d30fd30f370b5a2748a7f648869cd16f25286efc784", verifier, StringComparison.Ordinal);
+        Assert.Contains("141D90A1BA8F61863FBEDDF7DD1D66C1D1E0B128", verifier, StringComparison.Ordinal);
+        Assert.Contains("hysteria-windows-amd64.exe", verifier, StringComparison.Ordinal);
+        Assert.Contains("f1f782532aa20fe72574393a0e3775cfe10f7edb07f9af6b7bca5c85e2afdd6c", verifier, StringComparison.Ordinal);
+        Assert.Contains("Get-AuthenticodeSignature", verifier, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", verifier, StringComparison.Ordinal);
+        Assert.DoesNotContain("Invoke-WebRequest", verifier, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Start-Process", verifier, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("msiexec", verifier, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("New-PSSession", verifier, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Invoke-Command", verifier, StringComparison.OrdinalIgnoreCase);
     }
 
     private static byte[] CreateEchoRequest(byte[] cookie, long sequence, byte[] payload)

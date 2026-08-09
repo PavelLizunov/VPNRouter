@@ -55,7 +55,18 @@ tools/*
 !tools/brat-stability.ps1
 !tools/brat-loadtest.ps1
 !tools/build-winbrat-loadtest-payload.ps1
+!tools/brat-protocol-matrix.ps1
+!tools/loadtest-direct-observer.ps1
+!tools/verify-official-alt-clients.ps1
+!tools/build-winbrat-browser-probe-payload.ps1
 /artifacts/brat-loadtest/
+/artifacts/brat-protocol-matrix/
+/artifacts/brat-loadtest-payload/
+/artifacts/brat-browser-probe-payload/
+/artifacts/direct-observer/
+/artifacts/official-alt-clients/
+/artifacts/chrome-for-testing/
+/artifacts/dotnet-sdk-10.0.301/
 # Re-include: pve-guest-exec.ps1 (run commands in a Linux test VM via guest-agent).
 !tools/pve-guest-exec.ps1
 # Re-include: smoke-update.ps1 (v2.29.0-r7 ship-time pre-tag verification).
