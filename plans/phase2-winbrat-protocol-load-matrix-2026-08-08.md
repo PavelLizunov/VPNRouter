@@ -177,6 +177,16 @@ Final completed matrix:
 | AmneziaWG | 4/4 | 12/12 | 62,205 | 62,047 | 158 | 1 ReplyGap + 1 CookieFailure | 988.3 ms |
 | Naive effective bundle | 1/1 | 3/3 | 18,183 | 18,179 | 4 | 0 | 199.1 ms |
 
+Privacy-safe post-run UIA mapping resolved the public country label for every
+tested row without returning endpoint-bearing text. The only controlled XHTTP
+failure maps to **Latvia / XHTTP ordinal 0**. Both controlled AWG failures map
+to **Germany / AWG ordinal 1**. All Reality rows passed in Latvia, Germany,
+Iceland and the Netherlands; all Hysteria2 rows also passed in those four
+countries. WebSocket passed in Germany, Iceland and the Netherlands, and the
+single Naive effective bundle passed in Latvia. Country aggregation is cohort
+evidence only: it does not identify an endpoint and does not prove a
+country-wide provider fault.
+
 Across all 20 rows and 60 cold runs, 57 completed and three returned controlled
 network failures: one XHTTP `ReplyGap`, plus one AWG `ReplyGap` and one AWG
 `CookieFailure` on the same ordinal-1 row. The payload sent 348,751 authenticated

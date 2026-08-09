@@ -145,35 +145,69 @@ measurement.
 
 ### What
 
-Add one test-tooling-only UIA survey to `tools/brat-verify.ps1` and one focused
-contract test. The result is a 20-row array containing only protocol class,
-per-class ordinal, canonical two-letter region code and canonical country name.
-Product/runtime code and subscription data stay unchanged.
+Extend the existing test-tooling-only `SelectProtocol` UIA operation and its
+focused contract test. Its existing safe coordinate result gains only a
+canonical two-letter region code and canonical country name. Product/runtime
+code and subscription data stay unchanged.
 
 ### How
 
 Reuse the fixed 20-row keyboard traversal and protocol classifier. While each
-row is materialized, inspect visible Text descendants only inside WINBRAT,
-derive a region from a Unicode flag or an installed-culture country token, and
-discard every raw string before returning. Restore the exact prior selection in
-all paths. Unknown or ambiguous geography returns `Unknown`; it never falls
-back to the endpoint-bearing ListItem name, config, URI or screenshot.
+row is materialized, inspect its first visible Text descendant only inside
+WINBRAT, derive a region from a Unicode flag or an installed-culture country
+token, and discard the raw string before returning. The caller first opens and
+asserts Advanced/Subscribe, establishes the documented Hysteria2 ordinal-0
+baseline and restores that selection plus Simple mode in `finally`. Unknown or
+ambiguous geography returns `Unknown`; it never falls back to the
+endpoint-bearing ListItem name, config, URI or screenshot.
 
 ### Verification gate
 
-- [ ] matrix and observer processes are stopped; VPNRouter is disconnected;
-- [ ] exact protocol composition remains 4 Reality / 3 WS / 4 XHTTP / 4 HY2 /
+- [x] matrix and observer processes are stopped; VPNRouter is disconnected;
+- [x] exact protocol composition remains 4 Reality / 3 WS / 4 XHTTP / 4 HY2 /
       4 AWG / 1 Naive;
-- [ ] output schema contains only `ProtocolClass`, `Ordinal`, `RegionCode` and
-      `Country`;
-- [ ] raw UI text, ListItem name, endpoint, port, URL, key and runtime ID are
+- [x] output extends the existing safe `ProtocolClass`, `Ordinal` and
+      `AbsoluteOrdinal` coordinate only with `RegionCode` and `Country`;
+- [x] raw UI text, ListItem name, endpoint, port, URL, key and runtime ID are
       absent by static contract;
-- [ ] original selection is restored exactly, including the empty-selection
-      case;
-- [ ] PowerShell parser, focused tests, Release build and remote survey pass.
+- [x] documented Hysteria2 ordinal-0 selection and Simple mode are restored;
+- [x] PowerShell parser, 22/22 focused tests, Release build with zero errors
+      and the 20/20 remote survey pass.
 
 **Risk**: MEDIUM — UI selection is temporarily traversed on the dedicated VM,
 but no tunnel is started and fail-closed restoration is mandatory.
+
+### Outcome
+
+Live survey: **PASS** on all 20 rows. It returned only canonical geography and
+safe coordinates; every row resolved without `Unknown`. The final state was
+one GUI, zero owned cores, absent TUN and Direct routing, with Hysteria2
+ordinal 0 and Simple mode restored.
+
+| Protocol | Latvia | Germany | Iceland | Netherlands |
+|---|---|---|---|---|
+| VLESS Reality | ordinal 0, 3/3 PASS | ordinal 1, 3/3 PASS | ordinal 2, 3/3 PASS | ordinal 3, 3/3 PASS |
+| VLESS WebSocket | n/a | ordinal 0, 3/3 PASS | ordinal 1, 3/3 PASS | ordinal 2, 3/3 PASS |
+| VLESS XHTTP | ordinal 0, 2/3 PASS; 1 ReplyGap | ordinal 1, 3/3 PASS | ordinal 2, 3/3 PASS | ordinal 3, 3/3 PASS |
+| Hysteria2 | ordinal 0, 3/3 PASS | ordinal 1, 3/3 PASS | ordinal 2, 3/3 PASS | ordinal 3, 3/3 PASS |
+| AmneziaWG | ordinal 0, 3/3 PASS | ordinal 1, 1/3 PASS; 1 ReplyGap + 1 CookieFailure | ordinal 2, 3/3 PASS | ordinal 3, 3/3 PASS |
+| Naive effective bundle | ordinal 0, 3/3 PASS | n/a | n/a | n/a |
+
+Country aggregates preserve the attribution boundary: they describe the
+tested subscription cohorts, not an endpoint identity or a country-wide
+service conclusion.
+
+| Country | Rows | Cold runs | Sent | Replies | Loss | Loss rate | Controlled failures |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Latvia | 5 | 15 | 86,533 | 86,449 | 84 | 0.0971% | 1 |
+| Germany | 5 | 15 | 80,389 | 80,280 | 109 | 0.1356% | 2 |
+| Iceland | 5 | 15 | 90,914 | 90,718 | 196 | 0.2156% | 0 |
+| Netherlands | 5 | 15 | 90,915 | 90,869 | 46 | 0.0506% | 0 |
+
+The affected rows are therefore **Latvia / VLESS XHTTP ordinal 0** and
+**Germany / AmneziaWG ordinal 1**. This does not prove a Latvia-wide or
+Germany-wide server defect: the neighboring protocols in both countries
+passed, and all three failures retained a connected GUI/core/TUN lifecycle.
 
 ## Phase B — independent-client A/B
 

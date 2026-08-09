@@ -519,10 +519,63 @@ try {
                     $pat = $null
                     if (-not $chosen.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pat)) { throw "Matched protocol row does not support SelectionItemPattern." }
                     if (-not $pat.Current.IsSelected) { throw "Protocol row selection did not stick." }
+
+                    # Country evidence is derived only from the visible first TextBlock.
+                    # Raw row text never leaves WINBRAT.
+                    $regionResult = [ordered]@{ RegionCode = 'Unknown'; Country = 'Unknown' }
+                    $displayText = $chosen.FindFirst(
+                        [System.Windows.Automation.TreeScope]::Descendants,
+                        $textType)
+                    if ($displayText) {
+                        $visibleLabel = [string]$displayText.Current.Name
+                        $regions = @{}
+                        foreach ($culture in [System.Globalization.CultureInfo]::GetCultures(
+                            [System.Globalization.CultureTypes]::SpecificCultures)) {
+                            try {
+                                $region = [System.Globalization.RegionInfo]::new($culture.Name)
+                                $code = $region.TwoLetterISORegionName.ToUpperInvariant()
+                                if ($code -notmatch '^[A-Z]{2}$' -or $regions.ContainsKey($code)) { continue }
+                                $flag = [string]::Concat(
+                                    [char]::ConvertFromUtf32(0x1F1E6 + ([int][char]$code[0] - [int][char]'A')),
+                                    [char]::ConvertFromUtf32(0x1F1E6 + ([int][char]$code[1] - [int][char]'A')))
+                                $tokens = @($region.EnglishName, $region.NativeName, $region.DisplayName) |
+                                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                                    Sort-Object -Unique
+                                $regions[$code] = [pscustomobject]@{
+                                    RegionCode = $code
+                                    Country = $region.EnglishName
+                                    Flag = $flag
+                                    Tokens = $tokens
+                                }
+                            }
+                            catch { }
+                        }
+
+                        $matches = @($regions.Values | Where-Object {
+                            $candidate = $_
+                            if ($visibleLabel.Contains([string]$candidate.Flag)) { return $true }
+                            foreach ($token in @($candidate.Tokens)) {
+                                $pattern = '(?<!\p{L})' + [regex]::Escape([string]$token) + '(?!\p{L})'
+                                if ([regex]::IsMatch(
+                                    $visibleLabel,
+                                    $pattern,
+                                    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor
+                                    [System.Text.RegularExpressions.RegexOptions]::CultureInvariant)) { return $true }
+                            }
+                            return $false
+                        })
+                        $visibleLabel = $null
+                        if ($matches.Count -eq 1) {
+                            $regionResult.RegionCode = [string]$matches[0].RegionCode
+                            $regionResult.Country = [string]$matches[0].Country
+                        }
+                    }
                     $result.Element = [ordered]@{
                         ProtocolClass = [string]$req.ProtocolClass
                         Ordinal = [int]$req.ProtocolOrdinal
                         AbsoluteOrdinal = [int]$chosenAbsoluteOrdinal
+                        RegionCode = [string]$regionResult.RegionCode
+                        Country = [string]$regionResult.Country
                     }
                 }
                 catch {

@@ -346,6 +346,16 @@ public sealed class WinbratLoadTestMvpTests
         Assert.Contains("safe empty cleanup did not stick", operation, StringComparison.Ordinal);
         Assert.Contains("ProtocolClass = [string]$req.ProtocolClass", operation, StringComparison.Ordinal);
         Assert.Contains("AbsoluteOrdinal = [int]$chosenAbsoluteOrdinal", operation, StringComparison.Ordinal);
+        Assert.Contains("[System.Globalization.RegionInfo]::new($culture.Name)", operation, StringComparison.Ordinal);
+        Assert.Contains("$displayText.Current.Name", operation, StringComparison.Ordinal);
+        Assert.Contains("RegionCode = 'Unknown'; Country = 'Unknown'", operation, StringComparison.Ordinal);
+        Assert.Contains("if ($matches.Count -eq 1)", operation, StringComparison.Ordinal);
+        Assert.Contains("$visibleLabel = $null", operation, StringComparison.Ordinal);
+        Assert.Contains("RegionCode = [string]$regionResult.RegionCode", operation, StringComparison.Ordinal);
+        Assert.Contains("Country = [string]$regionResult.Country", operation, StringComparison.Ordinal);
+        var safeResult = operation[operation.LastIndexOf("$result.Element = [ordered]@{", StringComparison.Ordinal)..];
+        Assert.DoesNotContain("Current.Name", safeResult, StringComparison.Ordinal);
+        Assert.DoesNotContain("visibleLabel", safeResult, StringComparison.Ordinal);
         Assert.DoesNotContain("$row.Current.Name", operation, StringComparison.Ordinal);
         Assert.DoesNotContain("GetRuntimeId()", operation, StringComparison.Ordinal);
         Assert.DoesNotContain("SendWait([string]$req", operation, StringComparison.Ordinal);
