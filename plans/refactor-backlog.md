@@ -21,6 +21,21 @@ ledger (each item tracked there with how it was/would be verified).
 
 ## Deferred
 
+- [ ] **WINBRAT exhaustive stability official-client A/B attribution** -
+  deferred by owner on 2026-08-09 after the product-side matrix completed.
+  VPNRouter passed 57/60 cold GameUdp cycles and all three ten-minute browser
+  cycles; the three controlled UDP liveness failures kept the GUI, owned core
+  and TUN connected. They concentrated on one Latvia/XHTTP row and one
+  Germany/AmneziaWG row, so no VPNRouter defect or country-wide fault is
+  confirmed. Resume only when attribution is worth the operational setup or a
+  stable-release user report reproduces the symptom. The next safe step is the
+  already-designed official AmneziaWG Control-to-Target bracket, gated on two
+  owner-provisioned opaque DPAPI fixtures with Tailscale-safe split defaults;
+  Hysteria remains blocked behind its independent non-CGNAT address, route
+  exclusion and watchdog gates. Evidence/tooling remains in draft PRs
+  #123-#125 and their linked plans; do not merge load tooling merely to finish
+  the deferred goal.
+
 - [ ] **DR-04 hashing follow-ups** — add a repo lint only if legacy
   `SHA*.Create()` or manual hex-lowercase patterns actually recur. Keep the
   persisted Free Config BuildId prefixes uppercase unless a separately planned

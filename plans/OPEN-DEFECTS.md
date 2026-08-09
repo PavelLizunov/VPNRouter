@@ -16,6 +16,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### v2.48.0 stable-cut connectivity gate - 2026-08-09
+
+- [ ] **P1 CONFIRMED ON PUBLISHED v2.48.0-r8 / IN PROGRESS FOR r9** - opening `Servers > Custom Config (JSON)` while an enabled subscription remains persisted leaves both transient mode flags false. Simple Connect then skips subscription Smart Connect, connected urltest-label updates stop, and periodic subscription refresh stops, even though config generation still correctly uses the persisted subscription. The minimal fix makes those runtime consumers fall back to persisted `ConfigMode=subscribe` without adding a new ViewModel member or changing the generated tunnel config. Source: published-r8 WINBRAT reproduction and draft PR #122; implementation target: `MainWindowViewModel.SimpleMode.cs`, `.ConnStats.cs`, `.Subscriptions.cs`, `.RuntimeStatus.cs`, and focused `MainWindowViewModelModeCoherenceTests` - target `v2.48.0-r9` before stable.
+- [ ] **P2 CONFIRMED CI / IN PROGRESS FOR r9** - `Build Free Configs Pool` has timed out at the fixed 20-minute job limit for the last 20 scheduled/manual runs, leaving a red check on `main` and the rolling public pool stale since 2026-07-31. The last successful run processed about 115,000 entries in 19.8 minutes, so source growth exhausted a budget that had no margin. Use the smallest operational fix: raise only this workflow's job limit to 30 minutes, rerun to a real upload PASS, and defer DNS/GeoIP refactoring unless 30 minutes is also exceeded. Source: Actions runs `31315256491`, `31316159862`, historical success `30619182606`; target `.github/workflows/build-free-pool.yml` in `v2.48.0-r9`.
+
 ### Setup/diagnostics wizard Qwen review — 2026-08-07
 
 - [x] **P2 RESOLVED in draft PR #116** — final read-only Qwen review found that footer button labels and two card titles did not opt into wrapping at the supported 360px minimum width. They now follow the wizard's existing wrapping pattern — `VPNRouter.App/Views/SetupWizardWindow.axaml`
