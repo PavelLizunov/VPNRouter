@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs')]
+    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'updateprobe', 'liveupdate')]
     [string]$Action,
 
     [string]$Version,
@@ -22,7 +22,7 @@ param(
     [string]$Name,
     [string]$ControlType,
 
-    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'Select', 'SetValue')]
+    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'CheckUpdate', 'Toggle', 'Expand', 'Select', 'SetValue')]
     [string]$UiaOperation = 'Inspect',
     [string]$Value,
 
@@ -109,7 +109,7 @@ function Invoke-BratInteractive {
         [string]$AutomationId,
         [string]$Name,
         [string]$ControlType,
-        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'Toggle', 'Expand', 'Select', 'SetValue')]
+        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'CheckUpdate', 'Toggle', 'Expand', 'Select', 'SetValue')]
         [string]$UiaOperation = 'Inspect',
         [string]$Value,
         [string]$LocalOutput,
@@ -171,7 +171,14 @@ try {
         while (-not $target -and (Get-Date) -lt $deadline) {
             # Search every top-level window owned by the app process. Avalonia
             # flyouts and modal dialogs are siblings of the main window in UIA.
-            $target = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $processFindCond)
+            $matches = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $processFindCond)
+            for ($i = 0; $i -lt $matches.Count; $i++) {
+                $candidate = $matches.Item($i)
+                if ($candidate.Current.IsEnabled -and -not $candidate.Current.IsOffscreen) {
+                    $target = $candidate
+                    break
+                }
+            }
             if (-not $target) { Start-Sleep -Milliseconds 300 }
         }
         if (-not $target) { throw "No descendant matched AutomationId='$($req.AutomationId)' Name='$($req.Name)' ControlType='$($req.ControlType)' before timeout." }
@@ -183,6 +190,10 @@ try {
                     AutomationId = $target.Current.AutomationId
                     ControlType  = $target.Current.ControlType.ProgrammaticName
                     IsEnabled    = $target.Current.IsEnabled
+                }
+                $toggle = $null
+                if ($target.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$toggle)) {
+                    $result.Element.ToggleState = $toggle.Current.ToggleState.ToString()
                 }
             }
             'Invoke' {
@@ -207,6 +218,24 @@ try {
                 $nextPat = $null
                 if (-not $next.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$nextPat)) { throw "Follow-up element '$($req.Value)' does not support InvokePattern." }
                 $nextPat.Invoke()
+            }
+            'CheckUpdate' {
+                if ($target.Current.Name -notin @('Check for updates', 'Проверить обновления')) { throw "CheckUpdate is restricted to the update button." }
+                $pat = $null
+                if (-not $target.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pat)) { throw "InvokePattern unsupported by update button." }
+                $pat.Invoke()
+                $state = 'Unchanged'
+                for ($i = 0; $i -lt 100 -and $state -eq 'Unchanged'; $i++) {
+                    Start-Sleep -Milliseconds 100
+                    $state = switch ($target.Current.Name) {
+                        { $_ -in @('Update available', 'Обновление доступно') } { 'Found'; break }
+                        { $_ -in @('Up to date', 'Актуальная версия') } { 'UpToDate'; break }
+                        { $_ -in @('Check failed', 'Ошибка проверки') } { 'Failed'; break }
+                        default { 'Unchanged' }
+                    }
+                }
+                $result.Element = [ordered]@{ UpdateCheckState = $state }
+                if ($state -eq 'Unchanged') { throw "Update check state did not change." }
             }
             'Toggle' {
                 $pat = $null
@@ -529,7 +558,7 @@ switch ($Action) {
         $s = New-VerifiedBratSession
         try {
             $res = Invoke-BratInteractive -Session $s -Mode 'uia' -AutomationId $AutomationId -Name $Name -ControlType $ControlType -UiaOperation $UiaOperation -Value $Value -TimeoutSeconds $TimeoutSeconds
-            if ($UiaOperation -eq 'Inspect') {
+            if ($UiaOperation -in @('Inspect', 'CheckUpdate')) {
                 Write-Host "Inspect result on $BratMachineName`:" -ForegroundColor Green
                 Write-Host ($res.Element | ConvertTo-Json -Compress)
             } else {
@@ -616,6 +645,174 @@ switch ($Action) {
                 exit 1
             }
             Write-Host "CLEAN: no [ERR]/Exception/FATAL in the last $LogWindowMinutes minute(s) of remote $($scan.File)." -ForegroundColor Green
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'updateprobe' {
+        if (-not $Version) { throw "updateprobe requires -Version." }
+        $s = New-VerifiedBratSession
+        try {
+            $probe = Invoke-Command -Session $s -ArgumentList $Version -ScriptBlock {
+                param($version)
+                try {
+                    $headers = @{ 'User-Agent' = 'VPNRouter-update-probe' }
+                    $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/PavelLizunov/VPNRouter/releases?per_page=30' -Headers $headers -TimeoutSec 30
+                    $tag = "v$version"
+                    $release = @($releases | Where-Object { $_.tag_name -eq $tag -and -not $_.draft }) | Select-Object -First 1
+                    $asset = @($release.assets | Where-Object { $_.name -eq "VPNRouter-v$version-win.zip" }) | Select-Object -First 1
+                    $latestLog = Get-ChildItem 'C:\ProgramData\VPNRouter\logs' -Filter 'vpnrouter*.log' -File -ErrorAction SilentlyContinue |
+                        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                    $manualFailed = $false
+                    if ($latestLog) {
+                        $manualFailed = [bool](Get-Content $latestLog.FullName -Tail 5000 |
+                            Select-String -SimpleMatch '[UpdateVm] Manual check failed' -Quiet)
+                    }
+                    @{ ApiReachable = $true; ReleaseVisible = ($null -ne $release); WindowsAssetVisible = ($null -ne $asset); ManualCheckFailed = $manualFailed }
+                }
+                catch {
+                    @{ ApiReachable = $false; ReleaseVisible = $false; WindowsAssetVisible = $false; ManualCheckFailed = $false }
+                }
+            }
+            $safe = [ordered]@{
+                ApiReachable = [bool]$probe.ApiReachable
+                ReleaseVisible = [bool]$probe.ReleaseVisible
+                WindowsAssetVisible = [bool]$probe.WindowsAssetVisible
+                ManualCheckFailed = [bool]$probe.ManualCheckFailed
+            }
+            Write-Host ($safe | ConvertTo-Json -Compress)
+            if (-not ($safe.ApiReachable -and $safe.ReleaseVisible -and $safe.WindowsAssetVisible)) { exit 1 }
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'liveupdate' {
+        if (-not $Version -or $Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-r[1-9][0-9]*$') {
+            throw "liveupdate requires a rolling target such as -Version 2.48.0-r9."
+        }
+        $s = New-VerifiedBratSession
+        try {
+            $interactiveUser = (Import-Clixml $CredFile).UserName
+            $result = Invoke-Command -Session $s -ArgumentList $Version, $interactiveUser -ScriptBlock {
+                param($version, $interactiveUser)
+                $appDir = 'C:\Program Files\VPNRouter\app'
+                $cli = Join-Path $appDir 'VPNRouter.CLI.exe'
+                $gui = Join-Path $appDir 'VPNRouter.GUI.exe'
+                $dataDir = 'C:\ProgramData\VPNRouter'
+                $log = Join-Path $dataDir 'logs\update.log'
+                $stderr = Join-Path $dataDir 'logs\helper-stderr.log'
+                $receipt = Join-Path $dataDir '.update-installed-version'
+                if (-not (Test-Path -LiteralPath $cli) -or -not (Test-Path -LiteralPath $gui)) {
+                    return @{ Status = 'BLOCKED'; Lifecycle = 'InstalledCliMissing' }
+                }
+
+                Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI, sing-box -ErrorAction SilentlyContinue |
+                    Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                if (Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI -ErrorAction SilentlyContinue) {
+                    return @{ Status = 'BLOCKED'; Lifecycle = 'AppDidNotStop' }
+                }
+
+                New-Item -ItemType Directory -Path (Split-Path $log -Parent) -Force | Out-Null
+                Remove-Item -LiteralPath $log, $stderr, $receipt -Force -ErrorAction SilentlyContinue
+
+                $psi = [System.Diagnostics.ProcessStartInfo]::new()
+                $psi.FileName = $cli
+                $psi.Arguments = "test-update --target $version"
+                $psi.UseShellExecute = $false
+                $psi.CreateNoWindow = $true
+                $psi.EnvironmentVariables['VPNROUTER_CI'] = '1'
+                $cliProcess = [System.Diagnostics.Process]::Start($psi)
+                if (-not $cliProcess.WaitForExit(300000)) {
+                    try { $cliProcess.Kill() } catch { }
+                    return @{ Status = 'FAIL'; Lifecycle = 'CliTimeout' }
+                }
+                if ($cliProcess.ExitCode -ne 0) {
+                    return @{ Status = 'FAIL'; Lifecycle = 'DownloadOrDispatchFailed' }
+                }
+
+                $deadline = [DateTime]::UtcNow.AddMinutes(5)
+                $helperDone = $false
+                $parserFailure = $false
+                while ([DateTime]::UtcNow -lt $deadline) {
+                    $combined = ''
+                    foreach ($path in @($log, $stderr)) {
+                        if (Test-Path -LiteralPath $path) {
+                            $combined += [Environment]::NewLine + (Get-Content -LiteralPath $path -Raw -ErrorAction SilentlyContinue)
+                        }
+                    }
+                    if ($combined -match 'was unexpected at this time|syntax of the command is incorrect') {
+                        $parserFailure = $true
+                        break
+                    }
+                    if ($combined -match 'helper done') {
+                        $helperDone = $true
+                        break
+                    }
+                    Start-Sleep -Seconds 2
+                }
+
+                $content = if (Test-Path -LiteralPath $log) {
+                    Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue
+                } else { '' }
+                $xcopyExitZero = $content -match 'xcopy exit=0(?:\D|$)'
+                $copiedCountSane = $false
+                if ($content -match '(\d+) File\(s\) copied') {
+                    $copiedCountSane = [int]$Matches[1] -ge 50
+                }
+                $receiptPresent = Test-Path -LiteralPath $receipt
+                $failedMarkerAbsent = -not (Test-Path -LiteralPath (Join-Path $appDir '.update-failed'))
+
+                if ($parserFailure -or -not ($helperDone -and $xcopyExitZero -and $copiedCountSane -and $receiptPresent -and $failedMarkerAbsent)) {
+                    return @{
+                        Status = 'FAIL'; Lifecycle = if ($parserFailure) { 'HelperParserFailure' } else { 'HelperApplyFailed' }
+                        HelperDone = $helperDone; XcopyExitZero = $xcopyExitZero; CopiedCountSane = $copiedCountSane
+                        ReceiptPresent = $receiptPresent; FailedMarkerAbsent = $failedMarkerAbsent; AppStarted = $false
+                    }
+                }
+
+                $taskName = 'VPNRouterLiveUpdateLaunch-' + [Guid]::NewGuid().ToString('N')
+                $action = New-ScheduledTaskAction -Execute $gui
+                $principal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Highest
+                Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force | Out-Null
+                try {
+                    Start-ScheduledTask -TaskName $taskName
+                    $launchDeadline = [DateTime]::UtcNow.AddSeconds(45)
+                    do {
+                        Start-Sleep -Seconds 1
+                        $appStarted = $null -ne (Get-Process -Name VPNRouter.App -ErrorAction SilentlyContinue | Select-Object -First 1)
+                    } while (-not $appStarted -and [DateTime]::UtcNow -lt $launchDeadline)
+                }
+                finally {
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                }
+
+                @{
+                    Status = if ($appStarted) { 'PASS' } else { 'FAIL' }
+                    Lifecycle = if ($appStarted) { 'Completed' } else { 'RelaunchFailed' }
+                    HelperDone = $helperDone; XcopyExitZero = $xcopyExitZero; CopiedCountSane = $copiedCountSane
+                    ReceiptPresent = $receiptPresent; FailedMarkerAbsent = $failedMarkerAbsent; AppStarted = $appStarted
+                }
+            }
+
+            $allowedStatus = @('PASS', 'FAIL', 'BLOCKED')
+            $allowedLifecycle = @('Completed', 'InstalledCliMissing', 'AppDidNotStop', 'CliTimeout',
+                'DownloadOrDispatchFailed', 'HelperParserFailure', 'HelperApplyFailed', 'RelaunchFailed')
+            if ($result.Status -notin $allowedStatus -or $result.Lifecycle -notin $allowedLifecycle) {
+                throw 'WINBRAT live-update returned an invalid status schema.'
+            }
+            $safe = [ordered]@{
+                Status = [string]$result.Status
+                Lifecycle = [string]$result.Lifecycle
+                HelperDone = $result.HelperDone -is [bool] -and $result.HelperDone
+                XcopyExitZero = $result.XcopyExitZero -is [bool] -and $result.XcopyExitZero
+                CopiedCountSane = $result.CopiedCountSane -is [bool] -and $result.CopiedCountSane
+                ReceiptPresent = $result.ReceiptPresent -is [bool] -and $result.ReceiptPresent
+                FailedMarkerAbsent = $result.FailedMarkerAbsent -is [bool] -and $result.FailedMarkerAbsent
+                AppStarted = $result.AppStarted -is [bool] -and $result.AppStarted
+            }
+            Write-Host ($safe | ConvertTo-Json -Compress)
+            if ($safe.Status -ne 'PASS') { exit 1 }
         }
         finally { Remove-PSSession $s }
     }
