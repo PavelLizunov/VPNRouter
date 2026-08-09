@@ -687,8 +687,8 @@ switch ($Action) {
     }
 
     'liveupdate' {
-        if (-not $Version -or $Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-r[1-9][0-9]*$') {
-            throw "liveupdate requires a rolling target such as -Version 2.48.0-r9."
+        if (-not $Version -or $Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?$') {
+            throw "liveupdate requires a stable or rolling target such as -Version 2.48.0 or 2.48.0-r9."
         }
         $s = New-VerifiedBratSession
         try {

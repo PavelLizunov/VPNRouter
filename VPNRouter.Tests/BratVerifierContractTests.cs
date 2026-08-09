@@ -80,6 +80,8 @@ public sealed class BratVerifierContractTests
         Assert.DoesNotContain("$probe | ConvertTo-Json", script);
         Assert.Contains("VPNROUTER_CI", script);
         Assert.Contains("test-update --target $version", script);
+        Assert.Contains("'^[0-9]+\\.[0-9]+\\.[0-9]+(?:-r[1-9][0-9]*)?$'", script);
+        Assert.Contains("stable or rolling target", script);
         Assert.Contains("'C:\\Program Files\\VPNRouter\\app'", script);
         Assert.Contains("helper done", script);
         Assert.Contains("xcopy exit=0", script);
