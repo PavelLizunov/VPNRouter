@@ -98,7 +98,12 @@ function Test-OfficialClientBinary {
 }
 
 function Test-ProtectedAcl {
-    param([Parameter(Mandatory = $true)] [string]$Path)
+    param(
+        [Parameter(Mandatory = $true)] [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Container', 'Fixture', 'Marker')]
+        [string]$Kind
+    )
 
     try {
         $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -106,18 +111,38 @@ function Test-ProtectedAcl {
         $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
         if (-not $acl.AreAccessRulesProtected) { return $false }
 
+        $systemSid = 'S-1-5-18'
+        $administratorsSid = 'S-1-5-32-544'
         $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-        $allowed = @('S-1-5-18', $currentSid)
-        $seen = @{}
+        $secondarySid = if ($Kind -eq 'Fixture') { $administratorsSid } else { $currentSid }
+        $allowed = @($systemSid, $secondarySid)
+        $granted = @{ $systemSid = 0; $secondarySid = 0 }
         foreach ($rule in @($acl.Access)) {
             if ($rule.IsInherited) { return $false }
             $sid = $rule.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
             if ($allowed -notcontains $sid) { return $false }
             if ($rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Deny) { return $false }
-            $fullControl = [System.Security.AccessControl.FileSystemRights]::FullControl
-            if (($rule.FileSystemRights -band $fullControl) -eq $fullControl) { $seen[$sid] = $true }
+            $granted[$sid] = $granted[$sid] -bor [int]$rule.FileSystemRights
         }
-        return $seen.ContainsKey('S-1-5-18') -and $seen.ContainsKey($currentSid)
+
+        $fullControl = [int][System.Security.AccessControl.FileSystemRights]::FullControl
+        if (($granted[$systemSid] -band $fullControl) -ne $fullControl) { return $false }
+        if ($Kind -ne 'Fixture') {
+            return ($granted[$currentSid] -band $fullControl) -eq $fullControl
+        }
+
+        $ownerSid = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+        $groupSid = $acl.GetGroup([System.Security.Principal.SecurityIdentifier]).Value
+        if ($ownerSid -ne $systemSid -or $groupSid -ne $systemSid) { return $false }
+
+        $fixtureAllowed = [int](
+            [System.Security.AccessControl.FileSystemRights]::Delete -bor
+            [System.Security.AccessControl.FileSystemRights]::ReadPermissions -bor
+            [System.Security.AccessControl.FileSystemRights]::Synchronize
+        )
+        $administratorRights = $granted[$administratorsSid]
+        return ($administratorRights -band [int][System.Security.AccessControl.FileSystemRights]::Delete) -ne 0 -and
+            ($administratorRights -band (-bnot $fixtureAllowed)) -eq 0
     }
     catch { return $false }
 }
@@ -127,9 +152,9 @@ function Get-FixtureState {
     $attested = Test-Path -LiteralPath $Selected.Attestation -PathType Leaf
     $safe = $false
     if ($exists -and $attested) {
-        $safe = (Test-ProtectedAcl -Path $FixtureRoot) -and
-            (Test-ProtectedAcl -Path $Selected.Fixture) -and
-            (Test-ProtectedAcl -Path $Selected.Attestation)
+        $safe = (Test-ProtectedAcl -Path $FixtureRoot -Kind Container) -and
+            (Test-ProtectedAcl -Path $Selected.Fixture -Kind Fixture) -and
+            (Test-ProtectedAcl -Path $Selected.Attestation -Kind Marker)
     }
     [ordered]@{ Exists = [bool]$exists; Attested = [bool]$attested; AclSafe = [bool]$safe }
 }

@@ -336,6 +336,19 @@ schemas and data-integrity misclassification. Local parsers and 12/12 focused
 contracts pass. Exact DeepSeek zero-tool review timed out without a verdict and
 its permissions were not relaxed.
 
+The fixture ACL check was also aligned with official AmneziaWG 2.0.2 output:
+the encrypted file remains owned/grouped by `SYSTEM`, grants `SYSTEM`
+FullControl and builtin Administrators Delete only (plus optional ACL-read and
+Synchronize rights for verifier inspection), while the protected directory and
+non-secret marker remain accessible only to `SYSTEM` and the fixed test
+administrator. The verifier still never reads fixture bytes.
+
+The manager must receive each plaintext profile under its final Control or
+Target basename. After manager encryption, stage the resulting `.conf.dpapi`
+by moving it without renaming; grant only `ReadPermissions` (and optional
+`Synchronize`) in addition to the upstream Administrator Delete right so the
+verifier can query ACL metadata without gaining access to ciphertext bytes.
+
 Read-only Control and Target preflights now stop only at `FixtureMissing`.
 Phase B therefore remains `BLOCKED`, not failed: it still needs two separately
 provisioned opaque final-name DPAPI fixtures, a healthy AWG ordinal-0 Control

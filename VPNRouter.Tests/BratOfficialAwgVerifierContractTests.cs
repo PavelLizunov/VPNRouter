@@ -48,6 +48,15 @@ public sealed class BratOfficialAwgVerifierContractTests
         Assert.Contains("AreAccessRulesProtected", helper, StringComparison.Ordinal);
         Assert.Contains("AccessControlType]::Deny", helper, StringComparison.Ordinal);
         Assert.Contains("FileSystemRights]::FullControl", helper, StringComparison.Ordinal);
+        Assert.Contains("S-1-5-32-544", helper, StringComparison.Ordinal);
+        Assert.Contains("FileSystemRights]::Delete", helper, StringComparison.Ordinal);
+        Assert.Contains("FileSystemRights]::ReadPermissions", helper, StringComparison.Ordinal);
+        Assert.Contains("$administratorRights -band (-bnot $fixtureAllowed)", helper, StringComparison.Ordinal);
+        Assert.Contains("Test-ProtectedAcl -Path $Selected.Fixture -Kind Fixture", helper, StringComparison.Ordinal);
+        Assert.Contains("$acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value", helper, StringComparison.Ordinal);
+        Assert.Contains("$acl.GetGroup([System.Security.Principal.SecurityIdentifier]).Value", helper, StringComparison.Ordinal);
+        Assert.Contains("$ownerSid -ne $systemSid -or $groupSid -ne $systemSid", helper, StringComparison.Ordinal);
+        Assert.Contains("if ($Kind -eq 'Fixture') { $administratorsSid } else { $currentSid }", helper, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-Content -LiteralPath $Selected.Fixture", helper, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-FileHash -LiteralPath $Selected.Fixture", helper, StringComparison.Ordinal);
         Assert.DoesNotContain("Copy-Item", helper, StringComparison.Ordinal);

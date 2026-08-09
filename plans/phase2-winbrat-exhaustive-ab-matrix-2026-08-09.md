@@ -211,8 +211,13 @@ state; they never read, hash, copy, print or retain fixture contents.
 | AmneziaWG Target (AWG ordinal 1) | `C:\ProgramData\VPNRouterTestFixtures\AWG\VPNRouter-AB-AWG.conf.dpapi` | service `AmneziaWGTunnel$VPNRouter-AB-AWG`, adapter `VPNRouter-AB-AWG` |
 | Hysteria | `C:\ProgramData\VPNRouterTestFixtures\HY2\VPNRouter-AB-HY2.yaml` | executable hash for `2.12.0`, adapter `VPNRouter-AB-HY2` |
 
-Both fixture directories must deny inherited broad user access and permit only
-`SYSTEM` and the fixed WINBRAT test administrator. The Hysteria fixture must
+Both fixture directories and the non-secret attestation markers must deny
+inherited broad user access and permit only `SYSTEM` and the fixed WINBRAT test
+administrator with FullControl. Each AmneziaWG `.conf.dpapi` keeps the official
+least-privilege ACL instead: owner/group `SYSTEM`, protected DACL, `SYSTEM`
+FullControl and builtin Administrators Delete only. When staged for verifier
+inspection it may additionally grant Administrators only `ReadPermissions`
+and `Synchronize`; no data-read or write right is allowed. The Hysteria fixture must
 explicitly define the fixed TUN name, a non-CGNAT IPv4 address, full IPv4
 routing and `100.64.0.0/10` exclusion. AmneziaWG uses the official DPAPI form;
 the test runner must never create or decrypt it.
@@ -225,6 +230,19 @@ that the corresponding opaque profile uses split defaults
 single `/0` that enables the official client's WFP kill switch. The runner
 never infers this from or reads the DPAPI payload; missing marker is
 `FixtureAttestationMissing`.
+
+Provision each AWG profile with its final basename before encryption. The
+official manager watches `%ProgramFiles%\AmneziaWG\Data\Configurations`, turns
+an exact-name `.conf` into `.conf.dpapi`, applies the SYSTEM-only data ACL and
+deletes the plaintext. Stop the manager after both outputs appear, then move
+each encrypted file without renaming it into the fixture directory. For the
+verifier account to inspect only ACL metadata, add builtin Administrators
+`ReadPermissions` (and optionally `Synchronize`) while retaining Delete and no
+data-read/write rights. Never copy with inherited ACLs; re-provision a stale or
+misnamed output instead of renaming it. Sources: official AmneziaWG 2.0.2
+[`enterprise.md`](https://github.com/amnezia-vpn/amneziawg-windows-client/blob/2.0.2/docs/enterprise.md)
+and pinned `amneziawg-windows` v0.1.9
+[`filewriter_windows.go`](https://github.com/amnezia-vpn/amneziawg-windows/blob/v0.1.9/conf/filewriter_windows.go).
 
 After start, runtime-only proof must show:
 
@@ -270,7 +288,7 @@ The exact official AmneziaWG `2.0.2` MSI was installed successfully through
 this flow. Subsequent privacy-safe preflights for both profiles returned only
 `BLOCKED / FixtureMissing`; management connectivity and clean state remained
 intact, and no official tunnel/workload ran. After the operator provisions both
-final-name DPAPI fixtures and markers with protected ACLs, the only approved
+final-name DPAPI fixtures and markers with the ACLs above, the only approved
 continuation is:
 
 ```powershell
