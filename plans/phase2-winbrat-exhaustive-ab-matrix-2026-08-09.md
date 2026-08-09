@@ -134,6 +134,47 @@ Dota, Roblox or proprietary game wire protocols, and no third-party service is
 loaded. Expected combined Phase A + A2 duration is roughly eleven to twelve
 hours, before targeted official-client A/B.
 
+## Phase A3 — privacy-safe country mapping
+
+### Why
+
+The completed matrix retained protocol classes and ordinals but not the public
+country labels visible in Subscribe. That makes the evidence reproducible but
+does not answer whether Latvia, Germany or another country cohort produced a
+measurement.
+
+### What
+
+Add one test-tooling-only UIA survey to `tools/brat-verify.ps1` and one focused
+contract test. The result is a 20-row array containing only protocol class,
+per-class ordinal, canonical two-letter region code and canonical country name.
+Product/runtime code and subscription data stay unchanged.
+
+### How
+
+Reuse the fixed 20-row keyboard traversal and protocol classifier. While each
+row is materialized, inspect visible Text descendants only inside WINBRAT,
+derive a region from a Unicode flag or an installed-culture country token, and
+discard every raw string before returning. Restore the exact prior selection in
+all paths. Unknown or ambiguous geography returns `Unknown`; it never falls
+back to the endpoint-bearing ListItem name, config, URI or screenshot.
+
+### Verification gate
+
+- [ ] matrix and observer processes are stopped; VPNRouter is disconnected;
+- [ ] exact protocol composition remains 4 Reality / 3 WS / 4 XHTTP / 4 HY2 /
+      4 AWG / 1 Naive;
+- [ ] output schema contains only `ProtocolClass`, `Ordinal`, `RegionCode` and
+      `Country`;
+- [ ] raw UI text, ListItem name, endpoint, port, URL, key and runtime ID are
+      absent by static contract;
+- [ ] original selection is restored exactly, including the empty-selection
+      case;
+- [ ] PowerShell parser, focused tests, Release build and remote survey pass.
+
+**Risk**: MEDIUM — UI selection is temporarily traversed on the dedicated VM,
+but no tunnel is started and fail-closed restoration is mandatory.
+
 ## Phase B — independent-client A/B
 
 - AWG: official AmneziaWG for Windows.
