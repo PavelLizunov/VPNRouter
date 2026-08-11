@@ -64,7 +64,7 @@ report success while the live tunnel still carries the prior routing semantics.
 ## Verification gate
 
 - [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` has 0 errors.
-- [ ] **Gate 2 — Tests green**: affected tests and the full test suite pass; every
+- [x] **Gate 2 — Tests green**: affected tests and the full test suite pass; every
   behavior-changing path has a regression test.
 - [x] **Gate 3 — Docs**: this brief Outcome and `VPNRouter.Tests/CLAUDE.md` inventory
   are updated; README and zone architecture docs remain unchanged unless scope grows.
@@ -76,7 +76,7 @@ report success while the live tunnel still carries the prior routing semantics.
   `post-ship-mcp-verify` after an explicitly requested rolling release.
 - [x] **Gate 6 — Characterization diff**: N/A; this is a behavior fix, not a god-file split.
 - [x] No stale TODOs, commented-out alternatives, new dependency, or version drift.
-- [ ] Commit hooks and remote CI pass without bypass.
+- [x] Commit hooks and remote CI pass without bypass.
 
 ## Risk
 
@@ -90,7 +90,7 @@ post-ship verification checks PID change only when the effective policy changed.
 
 ## Outcome
 
-Implementation candidate complete; remote verification is pending.
+Implementation candidate complete and verified.
 
 - Added one effective app-list resolver shared by generated and custom configs,
   plus an ordinal fingerprint that detects explicit Include/Exclude and
@@ -106,9 +106,10 @@ Implementation candidate complete; remote verification is pending.
 - Local verification: solution build 0 errors; affected suites 87/87; mandatory
   v2.28 regressions 22/22. The full local suite reached 2687 passed and 25
   environment-only failures caused by protected `C:\ProgramData\VPNRouter` and
-  an externally held global TUN semaphore; the clean CI runner is the final
-  full-suite authority for Gate 2.
+  an externally held global TUN semaphore. Clean remote `test`,
+  `go-test-windows`, and `grep` checks passed; `characterization-windows`
+  skipped as expected because no god-file split occurred.
 - Qwen read-only fallback was attempted with filesystem/shell/web/write disabled;
   it timed out without output or changes. Mandatory multi-review bug-hunt supplied
   the independent review instead.
-- Commits: `d00d4274` (brief); implementation commit pending.
+- Commits: `d00d4274` (brief); `28988afa` (implementation and tests).
