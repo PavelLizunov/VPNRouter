@@ -255,7 +255,9 @@ public class MainWindowViewModelCharacterizationTests
         // hardcoded "↓ Update" runtime string. Prior Windows hash: ee6ac11f…70f14322.
         // Setup wizard (2026-08-07): + OpenSetupWizardCommand and two menu
         // localization getters. The private apply bridge reuses SaveSettings.
-        "d44c861459eb262e7f344483e2088fef169594bca8bacf9d731fc2b5831fe9c2";
+        // v2.49 transition latency: + Windows-only TgProxy background recheck
+        // task field and helper; no public command/property signature changed.
+        "f1864eb799975a0a8992aa7c544837c7017ca3f4749474fa240a301940ef00b9";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

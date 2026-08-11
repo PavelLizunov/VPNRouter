@@ -14,6 +14,8 @@
 //      from outside the deep-link path so the VM can pre-flight + show
 //      a non-blocking banner.
 //   D. Secret persistence — TgProxySecret round-trips Save → Load on YAML.
+//   E. Manual start — one foreground watchdog plus a background late-exit
+//      recheck, without a second fixed wait before the UI becomes ready.
 //
 // All tests use [Fact] (no Avalonia). Bind-required port tests are Windows-
 // only via OperatingSystem.IsWindows() guards. Other tests cross-platform.
@@ -236,6 +238,39 @@ public sealed class TgProxyOneButtonMvpTests
 
         // Owner-hint resolution.
         Assert.Contains("TryResolvePortOwner", src);
+    }
+
+    [Fact]
+    public void ManualStart_UsesOneForegroundWatchdog_AndBackgroundRecheck()
+    {
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        if (src == null) return;
+
+        Assert.Contains("manager.Start(port, secret);", src);
+        Assert.DoesNotContain("Task.Run(() => manager.Start", src);
+        Assert.Contains("var manager = _tgProxy!;", src);
+        Assert.Contains("_tgProxyPostStartRecheckTask = VerifyTgProxyAfterStartAsync(manager, port);", src);
+        Assert.Contains("await postStartRecheck;", src);
+        Assert.Contains("TgProxyManager.OpenInTelegram(\"127.0.0.1\", startedPort, startedSecret);", src);
+        Assert.Equal(
+            1,
+            src.Split("await Task.Delay(TgProxySettleDelayMs);", StringSplitOptions.None).Length - 1);
+        Assert.Contains("TgProxyStatus = Strings.TgProxyExitedImmediately;", src);
+
+        var recheckStart = src.IndexOf(
+            "private async Task VerifyTgProxyAfterStartAsync",
+            StringComparison.Ordinal);
+        var recheckEnd = src.IndexOf("#endif", recheckStart, StringComparison.Ordinal);
+        Assert.True(recheckStart >= 0 && recheckEnd > recheckStart);
+        var recheck = src[recheckStart..recheckEnd];
+        Assert.Contains(
+            "if (_disposed || !ReferenceEquals(_tgProxy, manager) || !TgProxyEnabled)",
+            recheck);
+        Assert.Contains(
+            "if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))",
+            recheck);
+        Assert.Contains("TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;", recheck);
+        Assert.Contains("try { SaveSettings(); }", recheck);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
