@@ -19,23 +19,25 @@ public sealed class TunAdapterPnpSettleGateTests
         {
             true, false, false, true, false, false, false, false,
         });
-        var fake = NewTunRunner(request =>
-        {
-            var present = samples.Count > 0 && samples.Dequeue();
-            return Ok(present ? InstanceId + "\r\n" : "No devices were found.\r\n");
-        });
+        var queriedIds = new List<string>();
+        var fake = NewTunRunner();
 
         await WithTunRunnerAsync(fake, async () =>
         {
             var removed = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
                 logger: null, "VPNRouter-TUN", "test.stable-removal");
             Assert.True(removed);
+        }, nativeQuery: id =>
+        {
+            queriedIds.Add(id);
+            var present = samples.Count > 0 && samples.Dequeue();
+            return new NativePnpPresenceResult(
+                present ? NativePnpPresence.Present : NativePnpPresence.Absent,
+                present ? 0u : 0x0Du);
         });
 
-        Assert.Equal(2, fake.RunCalls.Count(IsPnpScan));
-        Assert.Equal(8, fake.RunCalls.Count(IsExactInstanceQuery));
-        Assert.All(fake.RunCalls.Where(IsExactInstanceQuery), request =>
-            Assert.Contains(InstanceId, request.Arguments));
+        Assert.Equal(8, queriedIds.Count);
+        Assert.All(queriedIds, id => Assert.Equal(InstanceId, id));
     }
 
     [Fact]
@@ -43,16 +45,21 @@ public sealed class TunAdapterPnpSettleGateTests
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only PnP behavior.");
 
-        var fake = NewTunRunner(_ => Ok(InstanceId + "\r\n"));
+        var queryCount = 0;
+        var fake = NewTunRunner();
 
         await WithTunRunnerAsync(fake, async () =>
         {
             await Assert.ThrowsAsync<TunAdapterNotReadyException>(() =>
                 TunAdapterDiagnostics.TryRemoveAdapterAsync(
                     logger: null, "VPNRouter-TUN", "test.timeout"));
+        }, nativeQuery: _ =>
+        {
+            queryCount++;
+            return new NativePnpPresenceResult(NativePnpPresence.Present, 0);
         });
 
-        Assert.Equal(40, fake.RunCalls.Count(IsExactInstanceQuery));
+        Assert.Equal(40, queryCount);
     }
 
     [Fact]
@@ -60,16 +67,22 @@ public sealed class TunAdapterPnpSettleGateTests
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only PnP behavior.");
 
-        var fake = NewTunRunner(_ => Ok(InstanceId + "_OTHER\r\n"));
+        var queriedIds = new List<string>();
+        var fake = NewTunRunner();
 
         await WithTunRunnerAsync(fake, async () =>
         {
             var removed = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
                 logger: null, "VPNRouter-TUN", "test.exact-id");
             Assert.True(removed);
+        }, nativeQuery: id =>
+        {
+            queriedIds.Add(id);
+            return new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
         });
 
-        Assert.Equal(4, fake.RunCalls.Count(IsExactInstanceQuery));
+        Assert.Equal(4, queriedIds.Count);
+        Assert.All(queriedIds, id => Assert.Equal(InstanceId, id));
     }
 
     [Fact]
@@ -77,7 +90,7 @@ public sealed class TunAdapterPnpSettleGateTests
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only PnP behavior.");
 
-        var tunRunner = NewTunRunner(_ => Ok("No devices were found.\r\n"), scanExitCode: 1);
+        var tunRunner = NewTunRunner();
         var processRunner = new FakeProcessRunner()
             .OnStart(_ => true, _ => new FakeProcessHandle(pid: 49031));
         SingBoxManager? manager = null;
@@ -90,7 +103,8 @@ public sealed class TunAdapterPnpSettleGateTests
             Assert.IsType<TunAdapterNotReadyException>(ex.InnerException);
             Assert.Empty(processRunner.StartCalls);
             return Task.CompletedTask;
-        }, cleanup: () => DisposeAndDrain(manager));
+        }, cleanup: () => DisposeAndDrain(manager),
+        nativeQuery: _ => new NativePnpPresenceResult(NativePnpPresence.Error, 5));
     }
 
     [Fact]
@@ -198,13 +212,11 @@ public sealed class TunAdapterPnpSettleGateTests
 
         var resolveCall = 0;
         var tunRunner = new FakeProcessRunner()
+            .OnRun(IsNetshDisable, Ok())
             .OnRun(IsResolve, _ => Task.FromResult(Ok(
                 Interlocked.Increment(ref resolveCall) == 1
                     ? InstanceId + "\r\n"
-                    : string.Empty)))
-            .OnRun(IsPnpRemove, Ok())
-            .OnRun(IsPnpScan, new ProcessResult(
-                1, string.Empty, "synthetic scan failure", TimeSpan.Zero, false));
+                    : string.Empty)));
         var manager = NewManager(new FakeProcessRunner());
 
         await WithTunRunnerAsync(tunRunner, async () =>
@@ -218,23 +230,19 @@ public sealed class TunAdapterPnpSettleGateTests
                 wait.Invoke(manager, null)));
             Assert.IsType<TunAdapterNotReadyException>(ex.InnerException);
             Assert.Equal(2, resolveCall);
-        }, cleanup: () => DisposeAndDrain(manager));
+        }, cleanup: () => DisposeAndDrain(manager),
+        nativeQuery: _ => new NativePnpPresenceResult(NativePnpPresence.Error, 5));
     }
 
     [Fact]
-    public async Task QueuedTransientScanFailure_RecoversOnlyAfterExactIdSettles()
+    public async Task QueuedTransientNativeQueryFailure_RecoversOnlyAfterExactIdSettles()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only PnP behavior.");
 
-        var scanCall = 0;
+        var queryCall = 0;
         var tunRunner = new FakeProcessRunner()
-            .OnRun(IsResolve, Ok(InstanceId + "\r\n"))
-            .OnRun(IsPnpRemove, Ok())
-            .OnRun(IsPnpScan, _ => Task.FromResult(
-                Interlocked.Increment(ref scanCall) == 1
-                    ? new ProcessResult(1, string.Empty, "transient scan failure", TimeSpan.Zero, false)
-                    : Ok()))
-            .OnRun(IsExactInstanceQuery, Ok("No devices were found.\r\n"));
+            .OnRun(IsNetshDisable, Ok())
+            .OnRun(IsResolve, Ok(InstanceId + "\r\n"));
         var manager = NewManager(new FakeProcessRunner());
 
         await WithTunRunnerAsync(tunRunner, async () =>
@@ -245,9 +253,11 @@ public sealed class TunAdapterPnpSettleGateTests
                 BindingFlags.Instance | BindingFlags.NonPublic)!;
             await Task.Run(() => wait.Invoke(manager, null));
 
-            Assert.Equal(3, scanCall);
-            Assert.Equal(4, tunRunner.RunCalls.Count(IsExactInstanceQuery));
-        }, cleanup: () => DisposeAndDrain(manager));
+            Assert.Equal(5, queryCall);
+        }, cleanup: () => DisposeAndDrain(manager),
+        nativeQuery: _ => Interlocked.Increment(ref queryCall) == 1
+            ? new NativePnpPresenceResult(NativePnpPresence.Error, 5)
+            : new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D));
     }
 
     private static SingBoxManager NewManager(IProcessRunner processRunner)
@@ -288,30 +298,34 @@ public sealed class TunAdapterPnpSettleGateTests
         }
     }
 
-    private static FakeProcessRunner NewTunRunner(
-        Func<ProcessRequest, ProcessResult> instanceQuery,
-        int scanExitCode = 0) =>
+    private static FakeProcessRunner NewTunRunner() =>
         new FakeProcessRunner()
             .OnRun(IsNetshShow, Ok("VPNRouter-TUN\r\n"))
             .OnRun(IsNetshDisable, Ok())
-            .OnRun(IsResolve, Ok(InstanceId + "\r\n"))
-            .OnRun(IsPnpRemove, Ok())
-            .OnRun(IsPnpScan, new ProcessResult(
-                scanExitCode, string.Empty, "synthetic scan failure", TimeSpan.Zero, false))
-            .OnRun(IsExactInstanceQuery, request => Task.FromResult(instanceQuery(request)));
+            .OnRun(IsResolve, Ok(InstanceId + "\r\n"));
 
     private static async Task WithTunRunnerAsync(
         FakeProcessRunner fake,
         Func<Task> body,
-        Action? cleanup = null)
+        Action? cleanup = null,
+        Func<string, NativePnpRemovalResult>? nativeRemove = null,
+        Func<string, NativePnpPresenceResult>? nativeQuery = null)
     {
         var previousRunner = TunAdapterDiagnostics.Runner;
         var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
+        var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
+        var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
+        var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
         SingBoxManager.ResetTunRemovalQueueForTests();
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(true);
         TunAdapterDiagnostics.Runner = fake;
         TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
+        TunAdapterDiagnostics.RequiresNativePnpApi = static () => true;
+        TunAdapterDiagnostics.RemoveNativePnpDevice = nativeRemove ??
+            (_ => new NativePnpRemovalResult(true, false, 0));
+        TunAdapterDiagnostics.QueryNativePnpPresence = nativeQuery ??
+            (_ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D));
         try
         {
             await body();
@@ -321,6 +335,9 @@ public sealed class TunAdapterPnpSettleGateTests
             cleanup?.Invoke();
             TunAdapterDiagnostics.Runner = previousRunner;
             TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
+            TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
+            TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
+            TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
             SingBoxManager.ResetTunRemovalQueueForTests();
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
@@ -339,12 +356,4 @@ public sealed class TunAdapterPnpSettleGateTests
         request.ExecutablePath == "powershell.exe"
         && request.Arguments.Any(argument => argument.Contains("PnPDeviceID"));
 
-    private static bool IsPnpRemove(ProcessRequest request) =>
-        request.ExecutablePath == "pnputil.exe" && request.Arguments.Contains("/remove-device");
-
-    private static bool IsPnpScan(ProcessRequest request) =>
-        request.ExecutablePath == "pnputil.exe" && request.Arguments.Contains("/scan-devices");
-
-    private static bool IsExactInstanceQuery(ProcessRequest request) =>
-        request.ExecutablePath == "pnputil.exe" && request.Arguments.Contains("/enum-devices");
 }

@@ -112,12 +112,6 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
         var stripped = StripLineComments(src);
         var onExitedRegion = ExtractMethodRegion(stripped, "OnProcessExited");
 
-        // Belt-and-braces: still keep DisableOrphanedAdapter (which
-        // frees the wintun kernel handle) — disable is the prerequisite
-        // for Remove-NetAdapter to succeed. So the test only adds the
-        // removal requirement; it doesn't drop the disable.
-        Assert.Contains("DisableOrphanedAdapter", onExitedRegion);
-
         var hasRemoval =
             onExitedRegion.Contains("QueueTunAdapterRemoval") ||
             onExitedRegion.Contains("TryRemoveAdapterAsync") ||
@@ -130,6 +124,11 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
             "Pre-Wave-38 only called DisableOrphanedAdapter — the orphan device " +
             "record survives, HealthMonitor's restart hits 'Cannot create a file'. " +
             "Agent 1 brief §2: 'Strengthen OnProcessExited cleanup'.");
+
+        // The queued remover must resolve the exact PnP InstanceId before it
+        // disables the interface. Pre-disabling here can hide the adapter from
+        // Get-NetAdapter/CIM while leaving its device record behind.
+        Assert.DoesNotContain("DisableOrphanedAdapter", onExitedRegion);
     }
 
     [Fact]
@@ -163,6 +162,8 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
             "StopInternal.early branch must schedule adapter removal. " +
             "Pre-Wave-38 only called DisableOrphanedAdapter. Agent 1 " +
             "brief §3: 'Strengthen StopInternal.early cleanup'.");
+
+        Assert.DoesNotContain("DisableOrphanedAdapter", stopEarlyRegion);
     }
 
     [Fact]

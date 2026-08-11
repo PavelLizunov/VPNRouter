@@ -144,14 +144,10 @@ public partial class SingBoxManager
                 // settings.Tun.InterfaceName which defaults to
                 // "VPNRouter-TUN". Hard-coding the default here keeps
                 // the SingBoxManager API surface unchanged (it knows
-                // only SingBoxSettings, not AppSettings.Tun); on the
-                // off-chance a user customised it, the netsh disable
-                // simply returns "not found" and we skip the cleanup
-                // — the worst case is the same orphan-adapter problem
-                // the user already sees today.
-                TunAdapterDiagnostics.DisableOrphanedAdapter(
-                    _logger, DefaultTunInterfaceName, "SingBoxManager.OnProcessExited");
-
+                // only SingBoxSettings, not AppSettings.Tun). The queued
+                // remover resolves the exact PnP ID before disabling the
+                // interface, so a disabled adapter cannot disappear from
+                // discovery while leaving its device record behind.
                 QueueTunAdapterRemoval("SingBoxManager.OnProcessExited.async");
             }
             catch (Exception ex)
