@@ -22,10 +22,10 @@ namespace VPNRouter.Tests;
 /// <list type="number">
 /// <item>NetAdapter module available + orphan found → PowerShell
 /// Remove-NetAdapter fires, count == 1.</item>
-/// <item>NetAdapter module unavailable + orphan found → CIM resolves the
+/// <item>NetAdapter module unavailable + orphan found → in-process WMI resolves the
 /// exact PnP ID and pnputil removes it, count == 1.</item>
 /// <item>No orphan in enumeration + module unavailable → the direct-by-name
-/// CIM lookup confirms idempotent absence, count == 1.</item>
+/// native lookup confirms idempotent absence, count == 1.</item>
 /// </list>
 ///
 /// <para>All three are Windows-only (PreStartCleanupAsync early-returns
@@ -68,14 +68,6 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
             && r.Arguments[3].Contains("PnPDeviceID");
     }
 
-    private static bool IsCimResolve(ProcessRequest r)
-    {
-        return r.ExecutablePath == "powershell.exe"
-            && r.Arguments.Count == 4
-            && r.Arguments[3].Contains("Get-CimInstance -ClassName Win32_NetworkAdapter")
-            && r.Arguments[3].Contains("PNPDeviceID");
-    }
-
     /// <summary>Identify a `pnputil /remove-device` call (step 2).</summary>
     private static bool IsPnpUtilRemove(ProcessRequest r)
     {
@@ -95,13 +87,15 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
     private static async Task WithFakeAsync(
         FakeProcessRunner fake,
         bool moduleAvailable,
-        Func<Task> body)
+        Func<Task> body,
+        Func<string, NativePnpLookupResult>? nativeLookup = null)
     {
         var previous = TunAdapterDiagnostics.Runner;
         var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
         var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
         var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
         var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
+        var previousLookup = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         fake.OnRun(IsPnpScan, new ProcessResult(0, "", "", TimeSpan.Zero, false));
         fake.OnRun(IsPnpInstanceQuery, new ProcessResult(
             0, "No devices were found.\r\n", "", TimeSpan.Zero, false));
@@ -112,6 +106,8 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
             _ => new NativePnpRemovalResult(true, false, 0);
         TunAdapterDiagnostics.QueryNativePnpPresence =
             _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds = nativeLookup ??
+            (_ => new NativePnpLookupResult(true, Array.Empty<string>(), null));
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(moduleAvailable);
         try { await body(); }
@@ -122,6 +118,7 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
             TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
             TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
             TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
+            TunAdapterDiagnostics.ResolveNativePnpDeviceIds = previousLookup;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }
@@ -210,13 +207,13 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         Assert.Contains(@"ROOT\NET\0001", pnpCalls[0].Arguments);
     }
 
-    // ─── Test 2: module unavailable + orphan found → CIM exact removal ──
+    // ─── Test 2: module unavailable + orphan found → native exact removal ─
 
     [Fact]
-    public async Task PreStartCleanupAsync_OrphanFound_ModuleUnavailable_CimRemovalFires()
+    public async Task PreStartCleanupAsync_OrphanFound_ModuleUnavailable_NativeRemovalFires()
     {
         // WINBRAT-class path: the optional NetAdapter module is absent, but
-        // Win32_NetworkAdapter CIM discovery is still available. The adapter
+        // in-process Win32_NetworkAdapter discovery is still available. The adapter
         // must be disabled, resolved and removed before sing-box can spawn.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "PreStartCleanupAsync is Windows-only (netsh)");
@@ -238,8 +235,6 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         // netsh releases the kernel handle before exact device removal.
         fake.OnRun(IsNetshDisable,
             new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
-        fake.OnRun(IsCimResolve,
-            new ProcessResult(0, @"ROOT\NET\0049" + "\r\n", "", TimeSpan.FromMilliseconds(5), false));
         fake.OnRun(IsPnpUtilRemove,
             new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
 
@@ -247,15 +242,18 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         await WithFakeAsync(fake, moduleAvailable: false, async () =>
         {
             removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
-                logger: null, context: "test.happy.cim-removal");
-        });
+                logger: null, context: "test.happy.native-removal");
+        }, nativeLookup: _ =>
+            new NativePnpLookupResult(true, new[] { @"ROOT\NET\0049" }, null));
 
-        // Single orphan removed through CIM + pnputil → handled count 1.
+        // Single orphan removed through in-process lookup + pnputil.
         Assert.Equal(1, removed);
 
         // The module-specific resolver is skipped, but exact removal is not.
         Assert.DoesNotContain(fake.RunCalls, IsGetNetAdapterResolve);
-        Assert.Single(fake.RunCalls.Where(IsCimResolve));
+        Assert.DoesNotContain(fake.RunCalls,
+            c => c.ExecutablePath == "powershell.exe" &&
+                 c.Arguments.Any(a => a.Contains("Get-CimInstance")));
         Assert.Single(fake.RunCalls.Where(IsPnpUtilRemove));
 
         // netsh admin=disabled fired for VPNRouter-TUN.
@@ -272,13 +270,13 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         }, primary.Arguments);
     }
 
-    // ─── Test 3: no orphans found → direct CIM confirms absence ─────────
+    // ─── Test 3: no orphans found → direct native lookup confirms absence ─
 
     [Fact]
-    public async Task PreStartCleanupAsync_NoOrphans_ModuleUnavailable_CimConfirmsAbsence()
+    public async Task PreStartCleanupAsync_NoOrphans_ModuleUnavailable_NativeLookupConfirmsAbsence()
     {
         // Enumeration finds no owned row. The defence-in-depth direct-name
-        // pass still asks CIM, which returns no InstanceId and therefore
+        // pass still asks the in-process lookup, which returns no InstanceId and
         // proves idempotent absence without invoking pnputil.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "PreStartCleanupAsync is Windows-only (netsh)");
@@ -304,9 +302,6 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
                 Stderr: "not found",
                 Duration: TimeSpan.FromMilliseconds(5),
                 TimedOut: false));
-        fake.OnRun(IsCimResolve,
-            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
-
         int removed = 0;
         await WithFakeAsync(fake, moduleAvailable: false, async () =>
         {
@@ -321,7 +316,9 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         var enumCalls = fake.RunCalls.Where(IsNetshEnumeration).ToList();
         Assert.Single(enumCalls);
 
-        Assert.Single(fake.RunCalls.Where(IsCimResolve));
+        Assert.DoesNotContain(fake.RunCalls,
+            c => c.ExecutablePath == "powershell.exe" &&
+                 c.Arguments.Any(a => a.Contains("Get-CimInstance")));
         Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemove);
     }
 }

@@ -1,5 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
+#if PLATFORM_WINDOWS
+using System.Management;
+#endif
 
 namespace VPNRouter.Core.Services;
 
@@ -19,16 +24,79 @@ internal readonly record struct NativePnpPresenceResult(
     NativePnpPresence Presence,
     uint ConfigManagerResult);
 
+internal readonly record struct NativePnpLookupResult(
+    bool Success,
+    IReadOnlyList<string> InstanceIds,
+    string? Error);
+
 /// <summary>
 /// Exact local-device removal for Windows builds whose pnputil predates
 /// /remove-device and /enum-devices (notably Windows 10 LTSC 2019).
 /// </summary>
 internal static class WindowsPnpDeviceManager
 {
+    private static readonly TimeSpan LookupTimeout = TimeSpan.FromSeconds(10);
     private static readonly IntPtr InvalidHandleValue = new(-1);
     private const uint CrSuccess = 0;
     private const uint CrNoSuchDevNode = 0x0000000D;
     private const uint CmLocateDevNodePhantom = 0x00000001;
+
+    internal static NativePnpLookupResult FindNetworkAdapterInstanceIds(string adapterName)
+    {
+#if PLATFORM_WINDOWS
+        if (string.IsNullOrWhiteSpace(adapterName) ||
+            adapterName.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_'))
+        {
+            return new(false, Array.Empty<string>(), "Adapter name is outside the owned-name whitelist.");
+        }
+
+        try
+        {
+            var connection = new ConnectionOptions { Timeout = LookupTimeout };
+            var scope = new ManagementScope(@"\\.\root\cimv2", connection);
+            scope.Connect();
+
+            var query = new ObjectQuery(
+                $"SELECT PNPDeviceID FROM Win32_NetworkAdapter WHERE NetConnectionID = '{adapterName}'");
+            var options = new System.Management.EnumerationOptions
+            {
+                Timeout = LookupTimeout,
+                // Semisynchronous enumeration makes the WMI timeout apply to
+                // result retrieval instead of blocking Get() until all rows exist.
+                ReturnImmediately = true,
+                Rewindable = false,
+            };
+
+            using var searcher = new ManagementObjectSearcher(scope, query, options);
+            using var results = searcher.Get();
+            var ids = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ManagementObject adapter in results)
+            {
+                using (adapter)
+                {
+                    var id = adapter["PNPDeviceID"] as string;
+                    if (string.IsNullOrWhiteSpace(id))
+                    {
+                        return new(false, Array.Empty<string>(),
+                            "A matching Win32_NetworkAdapter row has no PNPDeviceID.");
+                    }
+
+                    id = id.Trim();
+                    if (seen.Add(id)) ids.Add(id);
+                }
+            }
+
+            return new(true, ids, null);
+        }
+        catch (Exception ex)
+        {
+            return new(false, Array.Empty<string>(), $"{ex.GetType().Name}: {ex.Message}");
+        }
+#else
+        return new(false, Array.Empty<string>(), "Native network-adapter lookup is Windows-only.");
+#endif
+    }
 
     internal static NativePnpRemovalResult RemoveDevice(string instanceId)
     {

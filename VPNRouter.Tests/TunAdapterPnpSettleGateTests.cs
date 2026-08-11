@@ -119,17 +119,7 @@ public sealed class TunAdapterPnpSettleGateTests
 
         var tunRunner = new FakeProcessRunner()
             .OnRun(IsNetshShow, Ok(string.Empty))
-            .OnRun(IsNetshDisable, Ok())
-            .OnRun(IsResolve, async _ =>
-            {
-                var call = Interlocked.Increment(ref resolveCall);
-                if (call == 2)
-                {
-                    queuedRemovalEntered.TrySetResult(true);
-                    return await releaseQueuedRemoval.Task.ConfigureAwait(false);
-                }
-                return Ok(string.Empty);
-            });
+            .OnRun(IsNetshDisable, Ok());
 
         var nextPid = 49040;
         var processRunner = new FakeProcessRunner()
@@ -150,7 +140,16 @@ public sealed class TunAdapterPnpSettleGateTests
             releaseQueuedRemoval.TrySetResult(Ok(string.Empty));
             await restart.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(2, processRunner.StartCalls.Count);
-        }, cleanup: () => DisposeAndDrain(manager));
+        }, cleanup: () => DisposeAndDrain(manager), nativeLookup: _ =>
+        {
+            var call = Interlocked.Increment(ref resolveCall);
+            if (call == 2)
+            {
+                queuedRemovalEntered.TrySetResult(true);
+                releaseQueuedRemoval.Task.GetAwaiter().GetResult();
+            }
+            return new NativePnpLookupResult(true, Array.Empty<string>(), null);
+        });
     }
 
     [Fact]
@@ -165,17 +164,7 @@ public sealed class TunAdapterPnpSettleGateTests
             TaskCreationOptions.RunContinuationsAsynchronously);
         var tunRunner = new FakeProcessRunner()
             .OnRun(IsNetshShow, Ok(string.Empty))
-            .OnRun(IsNetshDisable, Ok())
-            .OnRun(IsResolve, async _ =>
-            {
-                var call = Interlocked.Increment(ref resolveCall);
-                if (call == 2)
-                {
-                    oldRemovalEntered.TrySetResult(true);
-                    return await releaseOldRemoval.Task.ConfigureAwait(false);
-                }
-                return Ok(string.Empty);
-            });
+            .OnRun(IsNetshDisable, Ok());
 
         var oldProcessRunner = new FakeProcessRunner()
             .OnStart(_ => true, _ => new FakeProcessHandle(pid: 49051));
@@ -202,6 +191,15 @@ public sealed class TunAdapterPnpSettleGateTests
         {
             DisposeAndDrain(oldManager);
             DisposeAndDrain(newManager);
+        }, nativeLookup: _ =>
+        {
+            var call = Interlocked.Increment(ref resolveCall);
+            if (call == 2)
+            {
+                oldRemovalEntered.TrySetResult(true);
+                releaseOldRemoval.Task.GetAwaiter().GetResult();
+            }
+            return new NativePnpLookupResult(true, Array.Empty<string>(), null);
         });
     }
 
@@ -212,11 +210,7 @@ public sealed class TunAdapterPnpSettleGateTests
 
         var resolveCall = 0;
         var tunRunner = new FakeProcessRunner()
-            .OnRun(IsNetshDisable, Ok())
-            .OnRun(IsResolve, _ => Task.FromResult(Ok(
-                Interlocked.Increment(ref resolveCall) == 1
-                    ? InstanceId + "\r\n"
-                    : string.Empty)));
+            .OnRun(IsNetshDisable, Ok());
         var manager = NewManager(new FakeProcessRunner());
 
         await WithTunRunnerAsync(tunRunner, async () =>
@@ -231,7 +225,13 @@ public sealed class TunAdapterPnpSettleGateTests
             Assert.IsType<TunAdapterNotReadyException>(ex.InnerException);
             Assert.Equal(2, resolveCall);
         }, cleanup: () => DisposeAndDrain(manager),
-        nativeQuery: _ => new NativePnpPresenceResult(NativePnpPresence.Error, 5));
+        nativeQuery: _ => new NativePnpPresenceResult(NativePnpPresence.Error, 5),
+        nativeLookup: _ => new NativePnpLookupResult(
+            true,
+            Interlocked.Increment(ref resolveCall) == 1
+                ? new[] { InstanceId }
+                : Array.Empty<string>(),
+            null));
     }
 
     [Fact]
@@ -258,6 +258,30 @@ public sealed class TunAdapterPnpSettleGateTests
         nativeQuery: _ => Interlocked.Increment(ref queryCall) == 1
             ? new NativePnpPresenceResult(NativePnpPresence.Error, 5)
             : new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D));
+    }
+
+    [Fact]
+    public async Task QueuedNativeRemovalFailure_BlocksLaunchWithExactInstanceId()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only PnP behavior.");
+
+        var tunRunner = new FakeProcessRunner()
+            .OnRun(IsNetshDisable, Ok());
+        var processRunner = new FakeProcessRunner()
+            .OnStart(_ => true, _ => new FakeProcessHandle(pid: 49053));
+        var manager = NewManager(processRunner);
+
+        await WithTunRunnerAsync(tunRunner, async () =>
+        {
+            InvokeQueue(manager, "test.queue.remove-failed");
+
+            var invocation = await Task.Run(() =>
+                Assert.Throws<TargetInvocationException>(() => InvokeLaunch(manager)));
+            var failure = Assert.IsType<TunAdapterNotReadyException>(invocation.InnerException);
+            Assert.Equal(InstanceId, failure.InstanceId);
+            Assert.Empty(processRunner.StartCalls);
+        }, cleanup: () => DisposeAndDrain(manager),
+        nativeRemove: _ => new NativePnpRemovalResult(false, false, 5));
     }
 
     private static SingBoxManager NewManager(IProcessRunner processRunner)
@@ -309,13 +333,15 @@ public sealed class TunAdapterPnpSettleGateTests
         Func<Task> body,
         Action? cleanup = null,
         Func<string, NativePnpRemovalResult>? nativeRemove = null,
-        Func<string, NativePnpPresenceResult>? nativeQuery = null)
+        Func<string, NativePnpPresenceResult>? nativeQuery = null,
+        Func<string, NativePnpLookupResult>? nativeLookup = null)
     {
         var previousRunner = TunAdapterDiagnostics.Runner;
         var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
         var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
         var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
         var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
+        var previousLookup = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         SingBoxManager.ResetTunRemovalQueueForTests();
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(true);
@@ -326,6 +352,8 @@ public sealed class TunAdapterPnpSettleGateTests
             (_ => new NativePnpRemovalResult(true, false, 0));
         TunAdapterDiagnostics.QueryNativePnpPresence = nativeQuery ??
             (_ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D));
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds = nativeLookup ??
+            (_ => new NativePnpLookupResult(true, new[] { InstanceId }, null));
         try
         {
             await body();
@@ -338,6 +366,7 @@ public sealed class TunAdapterPnpSettleGateTests
             TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
             TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
             TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
+            TunAdapterDiagnostics.ResolveNativePnpDeviceIds = previousLookup;
             SingBoxManager.ResetTunRemovalQueueForTests();
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }

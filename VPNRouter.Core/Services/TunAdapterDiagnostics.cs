@@ -66,6 +66,8 @@ public static class TunAdapterDiagnostics
         WindowsPnpDeviceManager.RemoveDevice;
     internal static Func<string, NativePnpPresenceResult> QueryNativePnpPresence { get; set; } =
         WindowsPnpDeviceManager.QueryPresence;
+    internal static Func<string, NativePnpLookupResult> ResolveNativePnpDeviceIds { get; set; } =
+        WindowsPnpDeviceManager.FindNetworkAdapterInstanceIds;
 
     /// <summary>
     /// Log current TUN adapter inventory via <c>netsh interface show interface</c>.
@@ -232,8 +234,8 @@ public static class TunAdapterDiagnostics
     /// show interface</c>, filter by a <b>strict</b> whitelist
     /// (<c>VPNRouter-TUN</c> exactly + <c>sing-box-tun-*</c> fallback names),
     /// and for each match: disable via netsh (frees the kernel handle),
-    /// resolve its PnP InstanceId with <c>Get-NetAdapter</c> or the in-box
-    /// <c>Win32_NetworkAdapter</c> CIM class, then delete the exact device
+    /// resolve its PnP InstanceId with <c>Get-NetAdapter</c> or an in-process
+    /// <c>Win32_NetworkAdapter</c> WMI query, then delete the exact device
     /// record with <c>pnputil /remove-device</c> or Windows SetupAPI.</para>
     ///
     /// <para><b>Defensive name whitelist.</b> We deliberately do NOT
@@ -392,7 +394,7 @@ public static class TunAdapterDiagnostics
     /// <summary>
     /// Best-effort device removal via exact PnP discovery and
     /// <c>pnputil /remove-device</c>. Uses <c>Get-NetAdapter</c> when available
-    /// and the in-box <c>Win32_NetworkAdapter</c> CIM class otherwise. Returns
+    /// and an in-process <c>Win32_NetworkAdapter</c> WMI query otherwise. Returns
     /// true when the adapter is already absent or its exact PnP InstanceId has
     /// remained absent through the bounded settle gate.
     ///
@@ -536,7 +538,7 @@ public static class TunAdapterDiagnostics
 
     /// <summary>
     /// Public-internal accessor for the cached resolver selection. A false
-    /// value means exact PnP discovery uses Win32_NetworkAdapter CIM instead
+    /// value means exact PnP discovery uses in-process Win32_NetworkAdapter WMI instead
     /// of the optional NetAdapter module; it no longer bypasses removal.
     /// </summary>
     [SupportedOSPlatform("windows")]
@@ -588,6 +590,12 @@ public static class TunAdapterDiagnostics
         // Force the value so tests observing IsNetAdapterModuleAvailable
         // get a deterministic answer without re-entering the probe.
         _ = s_netAdapterModuleAvailable.Value;
+    }
+
+    internal static void SetNetAdapterModuleProbeForTests(Func<bool> probe)
+    {
+        s_netAdapterModuleAvailable = new Lazy<bool>(
+            probe, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary>
@@ -664,102 +672,81 @@ public static class TunAdapterDiagnostics
         ILogger? logger, string adapterName, string context,
         bool requireInstanceId = false)
     {
-        // Removal-capability gate. The proactive Lazy probe was repointed
-        // 2026-06-08 to check for Get-NetAdapter — a REAL cmdlet we now use to
-        // resolve the orphan's PnP InstanceId — instead of the phantom
-        // Remove-NetAdapter. Some supported Windows SKUs do not expose the
-        // optional NetAdapter module, so those machines resolve the same exact
-        // PnP ID through the in-box Win32_NetworkAdapter CIM class instead.
-        var useNetAdapterModule = s_netAdapterModuleAvailable.Value;
-        if (!useNetAdapterModule)
+        // LTSC builds go straight to the in-process lookup. Do not launch even
+        // the Get-NetAdapter availability probe on a platform where the modern
+        // pnputil verbs are absent and the PowerShell surface is known to vary.
+        var useNativePnpApi = RequiresNativePnpApi();
+        var useNetAdapterModule = !useNativePnpApi && s_netAdapterModuleAvailable.Value;
+        try
         {
-            if (Interlocked.CompareExchange(ref s_actionableModuleMissingLogged, 1, 0) == 0)
+            List<string> instanceIds;
+            if (!useNetAdapterModule)
             {
-                logger?.Information(
-                    "[TunDiag] {Ctx}: Get-NetAdapter cmdlet unavailable in this PowerShell " +
-                    "environment; resolving the TUN PnP InstanceId through CIM instead.",
-                    context);
+                if (Interlocked.CompareExchange(ref s_actionableModuleMissingLogged, 1, 0) == 0)
+                {
+                    logger?.Information(
+                        "[TunDiag] {Ctx}: Get-NetAdapter unavailable; resolving the exact " +
+                        "TUN PnP InstanceId in-process through Win32_NetworkAdapter.",
+                        context);
+                }
+
+                var lookup = ResolveNativePnpDeviceIds(adapterName);
+                if (!lookup.Success)
+                {
+                    logger?.Warning(
+                        "[TunDiag] {Ctx}: native PnP InstanceId lookup for '{Name}' failed: {Error}",
+                        context, adapterName, lookup.Error ?? "unknown error");
+                    return false;
+                }
+
+                instanceIds = lookup.InstanceIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Select(id => id.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
             else
             {
-                logger?.Debug(
-                    "[TunDiag] {Ctx}: resolving PnP InstanceId for '{Name}' through CIM " +
-                    "(Get-NetAdapter unavailable; cached for process lifetime)",
-                    context, adapterName);
-            }
-        }
+                // A previous call proved that the PowerShell resolver is broken.
+                if (Volatile.Read(ref s_removeNetAdapterMissing) == 1)
+                    return false;
 
-        // Reactive latch: a previous call in this process already found the
-        // removal mechanism genuinely broken — skip the round-trip.
-        if (Volatile.Read(ref s_removeNetAdapterMissing) == 1)
-        {
-            logger?.Debug(
-                "[TunDiag] {Ctx}: skipping pnputil removal for '{Name}' " +
-                "(removal mechanism unavailable on first probe; cached for process lifetime)",
-                context, adapterName);
-            return false;
-        }
+                var resolveScript =
+                    $"Get-NetAdapter -Name '{adapterName}' -ErrorAction SilentlyContinue | " +
+                    "Select-Object -ExpandProperty PnPDeviceID";
+                var (rExit, rOut, rErr) = await RunAndCaptureAsync(
+                    "powershell.exe",
+                    new[] { "-NoProfile", "-NonInteractive", "-Command", resolveScript },
+                    timeoutMs: 10000, logger: logger);
 
-        try
-        {
-            // 2026-06-08 root-cause fix (Pavel main-machine crash loop, v2.41.1).
-            // Remove-NetAdapter IS NOT A CMDLET: `Get-Command Remove-NetAdapter`
-            // returns 0; the NetAdapter module exports only Get/Set/Enable/
-            // Disable/Rename/Restart. The old `Get-NetAdapter | Remove-NetAdapter`
-            // therefore ALWAYS threw CommandNotFoundException and fell through to
-            // netsh-disable — which releases the handle but NEVER deletes the
-            // device record. The stale record makes the next WintunCreateAdapter
-            // fail with "The device is not ready for use" / "Cannot create a file
-            // ... already exists", i.e. the chronic crash loop. Real fix: resolve
-            // the orphan's PnP InstanceId via Get-NetAdapter (or CIM where that
-            // optional module is absent), then delete the device record with the
-            // built-in `pnputil /remove-device`.
-            // (Supersedes the a20a047 CommandNotFoundException latch, which only
-            // silenced the symptom of calling a phantom cmdlet.)
-            //
-            // Step 1 — resolve InstanceId. adapterName is whitelist-restricted
-            // (ExtractStaleAdapterNames: [A-Za-z0-9_-]) so single-quote injection
-            // is impossible.
-            var resolveScript = useNetAdapterModule
-                ? $"Get-NetAdapter -Name '{adapterName}' -ErrorAction SilentlyContinue | " +
-                  "Select-Object -ExpandProperty PnPDeviceID"
-                : $"Get-CimInstance -ClassName Win32_NetworkAdapter " +
-                  $"-Filter \"NetConnectionID = '{adapterName}'\" -ErrorAction Stop | " +
-                  "Select-Object -ExpandProperty PNPDeviceID";
-            var (rExit, rOut, rErr) = await RunAndCaptureAsync(
-                "powershell.exe",
-                new[] { "-NoProfile", "-NonInteractive", "-Command", resolveScript },
-                timeoutMs: 10000, logger: logger);
-
-            // A missing resolver means a genuinely broken PowerShell/CIM state.
-            // Latch it so repeated connect attempts fail closed without spawning
-            // another process just to rediscover the same host limitation.
-            var rErrText = rErr ?? string.Empty;
-            if (rErrText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0
-                || rErrText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                if (Interlocked.CompareExchange(ref s_removeNetAdapterMissing, 1, 0) == 0)
-                    logger?.Information(
-                        "[TunDiag] {Ctx}: Windows PnP resolver not available in this " +
-                        "PowerShell environment; cannot resolve InstanceId for '{Name}'.",
+                var rErrText = rErr ?? string.Empty;
+                if (rErrText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0
+                    || rErrText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Interlocked.Exchange(ref s_removeNetAdapterMissing, 1);
+                    logger?.Warning(
+                        "[TunDiag] {Ctx}: Get-NetAdapter cannot resolve the PnP InstanceId " +
+                        "for '{Name}'.",
                         context, adapterName);
-                return false;
-            }
+                    return false;
+                }
 
-            if (rExit != 0)
-            {
-                logger?.Warning(
-                    "[TunDiag] {Ctx}: PnP InstanceId query for '{Name}' failed with exit " +
-                    "{Exit}: '{Err}'",
-                    context, adapterName, rExit, rErrText.Trim());
-                return false;
-            }
+                if (rExit != 0)
+                {
+                    logger?.Warning(
+                        "[TunDiag] {Ctx}: PnP InstanceId query for '{Name}' failed with exit " +
+                        "{Exit}: '{Err}'",
+                        context, adapterName, rExit, rErrText.Trim());
+                    return false;
+                }
 
-            var instanceIds = (rOut ?? string.Empty)
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Where(s => s.Length > 0)
-                .ToList();
+                instanceIds = (rOut ?? string.Empty)
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim())
+                    .Where(s => s.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
 
             if (instanceIds.Count == 0)
             {
@@ -778,14 +765,17 @@ public static class TunAdapterDiagnostics
 
             // LTSC 2019 predates the required pnputil verbs. DiUninstallDevice
             // and CM_Locate_DevNode keep the same exact InstanceId boundary.
-            var useNativePnpApi = RequiresNativePnpApi();
             foreach (var id in instanceIds)
             {
                 var removed = useNativePnpApi
                     ? await RunNativePnpRemoveAsync(logger, id, adapterName, context)
                     : await RunPnpUtilRemoveAsync(logger, id, adapterName, context);
                 if (!removed)
-                    return false;
+                {
+                    throw new TunAdapterNotReadyException(
+                        $"Windows could not remove '{adapterName}' ({id}).",
+                        id);
+                }
             }
             return true;
         }

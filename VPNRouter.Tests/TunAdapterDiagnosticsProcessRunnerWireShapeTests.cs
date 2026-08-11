@@ -33,6 +33,7 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
         var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
         var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
         var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
+        var previousLookup = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         TunAdapterDiagnostics.Runner = fake;
         TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         TunAdapterDiagnostics.RequiresNativePnpApi = static () => false;
@@ -40,6 +41,8 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
             _ => new NativePnpRemovalResult(true, false, 0);
         TunAdapterDiagnostics.QueryNativePnpPresence =
             _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds =
+            _ => new NativePnpLookupResult(true, Array.Empty<string>(), null);
         // BR-2 latch may have been flipped by an earlier test that ran
         // against the real ProcessRunner (e.g.
         // PreStartCleanupAsync_NonWindows_ReturnsZeroNoOp does on
@@ -53,6 +56,7 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
             TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
             TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
             TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
+            TunAdapterDiagnostics.ResolveNativePnpDeviceIds = previousLookup;
         }
     }
 
@@ -63,6 +67,7 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
         var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
         var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
         var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
+        var previousLookup = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         TunAdapterDiagnostics.Runner = fake;
         TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         TunAdapterDiagnostics.RequiresNativePnpApi = static () => false;
@@ -70,6 +75,8 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
             _ => new NativePnpRemovalResult(true, false, 0);
         TunAdapterDiagnostics.QueryNativePnpPresence =
             _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds =
+            _ => new NativePnpLookupResult(true, Array.Empty<string>(), null);
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         try { body(); }
         finally
@@ -79,6 +86,7 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
             TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
             TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
             TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
+            TunAdapterDiagnostics.ResolveNativePnpDeviceIds = previousLookup;
         }
     }
 
@@ -141,7 +149,7 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
     }
 
     [Fact]
-    public async Task PreStartCleanupAsync_NoAdapters_VerifiesDefaultNameThroughCim()
+    public async Task PreStartCleanupAsync_NoAdapters_VerifiesDefaultNameThroughNativeLookup()
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -172,12 +180,6 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
                         r.Arguments.Count == 4 &&
                         r.Arguments[3].Contains("Get-Command Get-NetAdapter"),
             new ProcessResult(0, "0\r\n", "", TimeSpan.FromMilliseconds(5), false));
-        fake.OnRun(r => r.ExecutablePath == "powershell.exe" &&
-                        r.Arguments.Count == 4 &&
-                        r.Arguments[3].Contains("Get-CimInstance") &&
-                        r.Arguments[3].Contains("NetConnectionID = 'VPNRouter-TUN'"),
-            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
-
         await WithFakeRunnerAsync(fake, async () =>
         {
             var removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
@@ -196,11 +198,9 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
         var enumeration = fake.RunCalls[0];
         Assert.Equal("netsh", enumeration.ExecutablePath);
         Assert.Equal(new[] { "interface", "show", "interface" }, enumeration.Arguments);
-        Assert.Contains(fake.RunCalls, c =>
+        Assert.DoesNotContain(fake.RunCalls, c =>
             c.ExecutablePath == "powershell.exe" &&
-            c.Arguments.Count == 4 &&
-            c.Arguments[3].Contains("Get-CimInstance") &&
-            c.Arguments[3].Contains("NetConnectionID = 'VPNRouter-TUN'"));
+            c.Arguments.Any(a => a.Contains("Get-CimInstance")));
         Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
     }
 
