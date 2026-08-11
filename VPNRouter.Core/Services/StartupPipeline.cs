@@ -1,6 +1,5 @@
 #nullable enable
 using System.IO;
-using System.Runtime.Versioning;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -453,8 +452,7 @@ internal sealed class StartupPipeline
             }
         }
 
-        // Phase 6 — Deploy sing-box binary + firewall setup + pre-start TUN
-        // cleanup.
+        // Phase 6 — Deploy sing-box binary + firewall setup.
         await DeployAndSetupFirewallPhaseAsync(
             settings, profile, scanResult, ct);
 
@@ -1065,14 +1063,14 @@ internal sealed class StartupPipeline
             outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead VPN config");
     }
 
-    // ─── Phase 6: Deploy sing-box + Firewall + TUN cleanup ─────────────────
+    // ─── Phase 6: Deploy sing-box + Firewall ───────────────────────────────
 
     /// <summary>
-    /// Ensure the sing-box binary is deployed (bundle → ProgramData), create
-    /// firewall block rules in disabled state, and pre-start sweep for stale
-    /// wintun adapters left by a previous crash.
+    /// Ensure the sing-box binary is deployed (bundle → ProgramData) and create
+    /// firewall block rules in disabled state. TUN cleanup runs once, at the
+    /// SingBoxManager.LaunchProcess chokepoint in Phase 7.
     /// </summary>
-    private async Task DeployAndSetupFirewallPhaseAsync(
+    private Task DeployAndSetupFirewallPhaseAsync(
         AppSettings settings,
         Profile profile,
         ScanResult scanResult,
@@ -1100,8 +1098,7 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
-        // Pre-start wintun sweep (Windows only).
-        await PreStartTunCleanupAsync(ct);
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -1137,35 +1134,6 @@ internal sealed class StartupPipeline
         {
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
-    }
-
-    /// <summary>
-    /// v2.32.x Bug-r9-H pre-start sweep for stale wintun adapters. No-op on
-    /// macOS/Linux. Settles 500ms after a removal so Windows network stack
-    /// finishes tearing down before sing-box re-creates.
-    /// </summary>
-    [SupportedOSPlatform("windows")]
-    private async Task PreStartTunCleanupWindowsAsync(CancellationToken ct)
-    {
-        int removedAdapterCount = 0;
-        try
-        {
-            removedAdapterCount = await TunAdapterDiagnostics
-                .PreStartCleanupAsync(_host.Logger, "StartupPipeline");
-        }
-        catch (Exception ex)
-        {
-            _host.Logger?.Warning(ex,
-                "[StartupPipeline] Pre-start TUN cleanup threw (non-fatal)");
-        }
-        if (removedAdapterCount > 0)
-            await Task.Delay(500, ct);
-    }
-
-    private async Task PreStartTunCleanupAsync(CancellationToken ct)
-    {
-        if (OperatingSystem.IsWindows())
-            await PreStartTunCleanupWindowsAsync(ct);
     }
 
     // ─── Phase 7: StartSingBox + warmup + post-start probe ─────────────────

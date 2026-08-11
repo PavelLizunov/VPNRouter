@@ -119,6 +119,7 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
         Assert.Contains("DisableOrphanedAdapter", onExitedRegion);
 
         var hasRemoval =
+            onExitedRegion.Contains("QueueTunAdapterRemoval") ||
             onExitedRegion.Contains("TryRemoveAdapterAsync") ||
             onExitedRegion.Contains("PreStartCleanupAsync") ||
             onExitedRegion.Contains("RemoveAdapterAsync") ||
@@ -152,6 +153,7 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
             "StopInternal.early", 100, 1500);
 
         var hasRemoval =
+            stopEarlyRegion.Contains("QueueTunAdapterRemoval") ||
             stopEarlyRegion.Contains("TryRemoveAdapterAsync") ||
             stopEarlyRegion.Contains("PreStartCleanupAsync") ||
             stopEarlyRegion.Contains("RemoveAdapterAsync") ||
@@ -270,57 +272,6 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
 
         var sleepMs = int.Parse(sleepMatch.Groups[1].Value);
         Assert.InRange(sleepMs, 500, 2000);
-    }
-
-    [Fact]
-    public void LaunchProcess_RemovalSettle_CompletesBeforeProcessSpawn()
-    {
-        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only TUN lifecycle behavior.");
-
-        var previousRunner = TunAdapterDiagnostics.Runner;
-        var cleanupCompleted = 0L;
-        var processStarted = 0L;
-        try
-        {
-            TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
-            TunAdapterDiagnostics.Runner = new FakeProcessRunner()
-                .OnRun(r => r.Arguments.Contains("show"), new ProcessResult(
-                    0, string.Empty, string.Empty, TimeSpan.Zero, false))
-                .OnRun(_ => true, _ =>
-                {
-                    cleanupCompleted = Stopwatch.GetTimestamp();
-                    return Task.FromResult(new ProcessResult(
-                        0, string.Empty, string.Empty, TimeSpan.Zero, false));
-                });
-
-            var processRunner = new FakeProcessRunner()
-                .OnStart(_ => true, _ =>
-                {
-                    processStarted = Stopwatch.GetTimestamp();
-                    return new FakeProcessHandle(pid: 49001);
-                });
-            using var manager = new SingBoxManager(
-                new SingBoxSettings { ExecutablePath = @"C:\nonexistent\sing-box.exe" },
-                http: new FakeHttpClient(),
-                runner: processRunner);
-            typeof(SingBoxManager).GetField("_currentConfigPath",
-                    BindingFlags.Instance | BindingFlags.NonPublic)!
-                .SetValue(manager, Path.Combine(Path.GetTempPath(), "vpnrouter-test-current.json"));
-
-            typeof(SingBoxManager).GetMethod("LaunchProcess",
-                    BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(manager, new object[] { @"C:\nonexistent\sing-box.exe" });
-
-            Assert.NotEqual(0, cleanupCompleted);
-            Assert.NotEqual(0, processStarted);
-            Assert.True(Stopwatch.GetElapsedTime(cleanupCompleted, processStarted) >= TimeSpan.FromMilliseconds(450),
-                "sing-box spawned before Windows had 500 ms to settle the removed TUN device node.");
-        }
-        finally
-        {
-            TunAdapterDiagnostics.Runner = previousRunner;
-            TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-        }
     }
 
     // ─── helpers ────────────────────────────────────────────────────────

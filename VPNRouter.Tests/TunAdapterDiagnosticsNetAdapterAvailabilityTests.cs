@@ -56,13 +56,18 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         FakeProcessRunner fake, bool removalAvailable, Func<Task> body)
     {
         var previous = TunAdapterDiagnostics.Runner;
+        var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
+        fake.OnRun(IsPnpUtilScan, Ok());
+        fake.OnRun(IsPnpUtilInstanceQuery, Ok("No devices were found.\r\n"));
         TunAdapterDiagnostics.Runner = fake;
+        TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(removalAvailable);
         try { await body(); }
         finally
         {
             TunAdapterDiagnostics.Runner = previous;
+            TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }
@@ -70,12 +75,17 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
     private static async Task WithFakeNoPresetAsync(FakeProcessRunner fake, Func<Task> body)
     {
         var previous = TunAdapterDiagnostics.Runner;
+        var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
+        fake.OnRun(IsPnpUtilScan, Ok());
+        fake.OnRun(IsPnpUtilInstanceQuery, Ok("No devices were found.\r\n"));
         TunAdapterDiagnostics.Runner = fake;
+        TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         try { await body(); }
         finally
         {
             TunAdapterDiagnostics.Runner = previous;
+            TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }
@@ -104,6 +114,12 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         r.ExecutablePath == "pnputil.exe"
         && r.Arguments.Contains("/remove-device")
         && r.Arguments.Contains("/force");
+
+    private static bool IsPnpUtilScan(ProcessRequest r) =>
+        r.ExecutablePath == "pnputil.exe" && r.Arguments.Contains("/scan-devices");
+
+    private static bool IsPnpUtilInstanceQuery(ProcessRequest r) =>
+        r.ExecutablePath == "pnputil.exe" && r.Arguments.Contains("/enum-devices");
 
     private static bool IsNetshDisable(ProcessRequest r) =>
         r.ExecutablePath == "netsh" && r.Arguments.Contains("admin=disabled");
