@@ -6,6 +6,28 @@ namespace VPNRouter.Tests;
 
 public sealed class WindowsPnpDeviceManagerTests
 {
+    [Fact]
+    public void NativeLookup_RejectsNamesOutsideOwnedWhitelist()
+    {
+        var result = WindowsPnpDeviceManager.FindNetworkAdapterInstanceIds(
+            "VPNRouter-TUN' OR 1=1");
+
+        Assert.False(result.Success);
+        Assert.Empty(result.InstanceIds);
+    }
+
+    [Fact]
+    public void NativeLookup_NonexistentExactName_ResolvesWmiWithoutMutation()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var result = WindowsPnpDeviceManager.FindNetworkAdapterInstanceIds(
+            "VPNRouter-TUN-ABI-FFFFFFFF");
+
+        Assert.True(result.Success, result.Error);
+        Assert.Empty(result.InstanceIds);
+    }
+
     [Theory]
     [InlineData(17763, true)]
     [InlineData(19041, false)]

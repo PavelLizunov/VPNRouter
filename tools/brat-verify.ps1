@@ -32,6 +32,7 @@ param(
     # logs: only inspect entries written during the recent verification window.
     [ValidateRange(1, 1440)]
     [int]$LogWindowMinutes = 120,
+    [string]$LogPattern,
 
     [ValidateRange(5, 120)]
     [int]$TimeoutSeconds = 30
@@ -587,8 +588,8 @@ switch ($Action) {
         $s = New-VerifiedBratSession
         try {
             $sinceText = [DateTimeOffset]::Now.AddMinutes(-$LogWindowMinutes).ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
-            $scan = Invoke-Command -Session $s -ArgumentList $sinceText -ScriptBlock {
-                param($sinceText)
+            $scan = Invoke-Command -Session $s -ArgumentList $sinceText, $LogPattern -ScriptBlock {
+                param($sinceText, $logPattern)
                 $since = [DateTimeOffset]::ParseExact(
                     $sinceText,
                     'o',
@@ -603,6 +604,7 @@ switch ($Action) {
                     return @{ Found = $false; File = $allFiles[-1].Name; Hits = @(); Note = "no log entries since $since" }
                 }
                 $hits = @()
+                $context = @()
                 $recentEntryCount = 0
                 $maxLines = 50000
                 foreach ($f in $files) {
@@ -623,6 +625,7 @@ switch ($Action) {
                             if ($include) { $recentEntryCount++ }
                         }
                         if ($include -and $line -match '\[ERR\]|Exception|FATAL') { $hits += "$($f.Name): $line" }
+                        if ($include -and $logPattern -and $line -match $logPattern) { $context += "$($f.Name): $line" }
                     }
                     if ($lines.Count -ge $maxLines -and ($null -eq $oldestParsed -or $oldestParsed -ge $since)) {
                         return @{ Found = $false; File = $f.Name; Hits = @(); Note = "verification window exceeds the $maxLines-line safety cap in $($f.Name)" }
@@ -631,13 +634,17 @@ switch ($Action) {
                 if ($recentEntryCount -eq 0) {
                     return @{ Found = $false; File = ($files.Name -join ', '); Hits = @(); Note = "no log entries since $since" }
                 }
-                @{ Found = ($hits.Count -gt 0); File = ($files.Name -join ', '); Hits = $hits; Note = $null }
+                @{ Found = ($hits.Count -gt 0); File = ($files.Name -join ', '); Hits = $hits; Context = $context; Note = $null }
             }
             if (-not $scan.File) {
                 throw "Cannot verify remote logs on $BratMachineName`: $($scan.Note). Failing closed."
             }
             if ($scan.Note) {
                 throw "Cannot verify recent remote logs on $BratMachineName`: $($scan.Note). Failing closed."
+            }
+            if ($LogPattern -and $scan.Context) {
+                Write-Host "Context matching '$LogPattern' on $BratMachineName`:" -ForegroundColor Cyan
+                $scan.Context | ForEach-Object { Write-Host "    $_" }
             }
             if ($scan.Found) {
                 Write-Host "[!] $($scan.Hits.Count) error pattern(s) in remote $($scan.File):" -ForegroundColor Red

@@ -38,7 +38,7 @@ namespace VPNRouter.Tests;
 /// <para><b>2026-08-12 WINBRAT follow-up:</b> NetAdapter is optional on the
 /// Windows LTSC test image. Module absence used to bypass pnputil entirely and
 /// let sing-box crash with ERROR_FILE_EXISTS. The fallback now resolves the
-/// same PNPDeviceID through Win32_NetworkAdapter CIM and remains fail-closed.</para>
+/// same PNPDeviceID through in-process Win32_NetworkAdapter WMI and remains fail-closed.</para>
 ///
 /// <para>Tests assign a <see cref="FakeProcessRunner"/> to the static
 /// <see cref="TunAdapterDiagnostics.Runner"/> seam and assert the shell-out
@@ -61,13 +61,16 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         FakeProcessRunner fake, bool removalAvailable, Func<Task> body,
         bool useNativePnp = false,
         Func<string, NativePnpRemovalResult>? nativeRemove = null,
-        Func<string, NativePnpPresenceResult>? nativeQuery = null)
+        Func<string, NativePnpPresenceResult>? nativeQuery = null,
+        Func<string, NativePnpLookupResult>? nativeLookup = null,
+        Func<bool>? moduleProbe = null)
     {
         var previous = TunAdapterDiagnostics.Runner;
         var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
         var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
         var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
         var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
+        var previousLookup = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         fake.OnRun(IsNetshDisable, Ok());
         fake.OnRun(IsPnpUtilScan, Ok());
         fake.OnRun(IsPnpUtilInstanceQuery, Ok("No devices were found.\r\n"));
@@ -78,8 +81,13 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             (_ => new NativePnpRemovalResult(true, false, 0));
         TunAdapterDiagnostics.QueryNativePnpPresence = nativeQuery ??
             (_ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D));
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds = nativeLookup ??
+            (_ => new NativePnpLookupResult(true, Array.Empty<string>(), null));
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(removalAvailable);
+        if (moduleProbe != null)
+            TunAdapterDiagnostics.SetNetAdapterModuleProbeForTests(moduleProbe);
+        else
+            TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(removalAvailable);
         try { await body(); }
         finally
         {
@@ -88,6 +96,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
             TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
             TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
+            TunAdapterDiagnostics.ResolveNativePnpDeviceIds = previousLookup;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }
@@ -99,6 +108,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
         var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
         var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
+        var previousLookup = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         fake.OnRun(IsNetshDisable, Ok());
         fake.OnRun(IsPnpUtilScan, Ok());
         fake.OnRun(IsPnpUtilInstanceQuery, Ok("No devices were found.\r\n"));
@@ -109,6 +119,8 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             _ => new NativePnpRemovalResult(true, false, 0);
         TunAdapterDiagnostics.QueryNativePnpPresence =
             _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds =
+            _ => new NativePnpLookupResult(true, Array.Empty<string>(), null);
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         try { await body(); }
         finally
@@ -118,6 +130,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
             TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
             TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
+            TunAdapterDiagnostics.ResolveNativePnpDeviceIds = previousLookup;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }
@@ -127,11 +140,12 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         bool netAdapterAvailable,
         Func<string, NativePnpRemovalResult> remove,
         Func<string, NativePnpPresenceResult> query,
-        Func<Task> body)
+        Func<Task> body,
+        Func<string, NativePnpLookupResult>? lookup = null)
     {
         await WithFakeAsync(
             fake, netAdapterAvailable, body, useNativePnp: true,
-            nativeRemove: remove, nativeQuery: query);
+            nativeRemove: remove, nativeQuery: query, nativeLookup: lookup);
     }
 
     /// <summary>The repointed availability probe: `Get-Command Get-NetAdapter`.</summary>
@@ -146,14 +160,6 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         && r.Arguments.Count == 4
         && r.Arguments[3].Contains("Get-NetAdapter -Name")
         && r.Arguments[3].Contains("PnPDeviceID");
-
-    private static bool IsCimResolve(ProcessRequest r) =>
-        r.ExecutablePath == "powershell.exe"
-        && r.Arguments.Count == 4
-        && r.Arguments[3].Contains("Get-CimInstance -ClassName Win32_NetworkAdapter")
-        && r.Arguments[3].Contains("-Filter")
-        && r.Arguments[3].Contains("NetConnectionID = 'VPNRouter-TUN'")
-        && r.Arguments[3].Contains("PNPDeviceID");
 
     /// <summary>Step 2: pnputil /remove-device (plain, no /force).</summary>
     private static bool IsPnpUtilRemovePlain(ProcessRequest r) =>
@@ -287,10 +293,10 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         Assert.Equal(5, fake.RunCalls.Where(IsGetNetAdapterResolve).Count());
     }
 
-    // ─── Test 5: NetAdapter unavailable → CIM still performs exact removal ─
+    // ─── Test 5: NetAdapter unavailable → in-process WMI exact removal ───
 
     [Fact]
-    public async Task NetAdapterUnavailable_PreStartCleanup_UsesCimAndPnpRemoval()
+    public async Task NetAdapterUnavailable_PreStartCleanup_UsesNativeLookupAndPnpRemoval()
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -305,30 +311,36 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
                 """,
                 Stderr: "", Duration: TimeSpan.FromMilliseconds(10), TimedOut: false));
         fake.OnRun(IsNetshDisable, new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
-        fake.OnRun(IsCimResolve, Ok(@"ROOT\NET\0049" + "\r\n"));
         fake.OnRun(IsPnpUtilRemovePlain, Ok());
+        var lookedUpNames = new List<string>();
 
         await WithFakeAsync(fake, removalAvailable: false, async () =>
         {
             _ = await TunAdapterDiagnostics.PreStartCleanupAsync(logger: null, context: "test.fallback");
+        }, nativeLookup: name =>
+        {
+            lookedUpNames.Add(name);
+            return new NativePnpLookupResult(true, new[] { @"ROOT\NET\0049" }, null);
         });
 
         Assert.Contains(fake.RunCalls.Where(IsNetshDisable),
             c => c.Arguments.Contains("name=VPNRouter-TUN"));
-        Assert.Single(fake.RunCalls.Where(IsCimResolve));
+        Assert.Equal(new[] { "VPNRouter-TUN" }, lookedUpNames);
         Assert.Single(fake.RunCalls.Where(IsPnpUtilRemovePlain));
         Assert.DoesNotContain(fake.RunCalls, IsGetNetAdapterResolve);
+        Assert.DoesNotContain(fake.RunCalls,
+            c => c.ExecutablePath == "powershell.exe" &&
+                 c.Arguments.Any(a => a.Contains("Get-CimInstance")));
     }
 
-    // ─── Test 6: CIM fallback is cached and announced once ──────────────────
+    // ─── Test 6: native fallback is announced once ──────────────────────
 
     [Fact]
-    public async Task NetAdapterUnavailable_FirstCall_LogsCimFallbackOnce()
+    public async Task NetAdapterUnavailable_FirstCall_LogsNativeFallbackOnce()
     {
         if (!OperatingSystem.IsWindows()) return;
 
         var fake = NewRunner();
-        fake.OnRun(IsCimResolve, Ok(""));
         var sink = new InMemorySink();
         var logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
 
@@ -340,14 +352,16 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         });
 
         var infEvents = sink.Events(LogEventLevel.Information)
-            .Where(s => s.Contains("resolving the TUN PnP InstanceId through CIM"))
+            .Where(s => s.Contains("in-process through Win32_NetworkAdapter"))
             .ToList();
         Assert.Single(infEvents);
-        Assert.Equal(3, fake.RunCalls.Count(IsCimResolve));
+        Assert.DoesNotContain(fake.RunCalls,
+            c => c.ExecutablePath == "powershell.exe" &&
+                 c.Arguments.Any(a => a.Contains("Get-CimInstance")));
     }
 
     [Fact]
-    public async Task CimResolveFailure_PreStartCleanup_FailsClosed()
+    public async Task NativeLookupFailure_PreStartCleanup_FailsClosed()
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -355,14 +369,12 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         fake.OnRun(IsNetshEnumeration, Ok(
             "Disabled  Disconnected  Dedicated  VPNRouter-TUN\r\n"));
         fake.OnRun(IsNetshDisable, Ok());
-        fake.OnRun(IsCimResolve,
-            new ProcessResult(5, "", "CIM query failed", TimeSpan.FromMilliseconds(5), false));
-
         await WithFakeAsync(fake, removalAvailable: false, async () =>
         {
             await Assert.ThrowsAsync<TunAdapterNotReadyException>(() =>
-                TunAdapterDiagnostics.PreStartCleanupAsync(null, "test.cim-fail"));
-        });
+                TunAdapterDiagnostics.PreStartCleanupAsync(null, "test.native-lookup-fail"));
+        }, nativeLookup: _ =>
+            new NativePnpLookupResult(false, Array.Empty<string>(), "WMI query failed"));
 
         Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
     }
@@ -374,7 +386,6 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
 
         const string instanceId = @"ROOT\NET\LTSC0049";
         var fake = new FakeProcessRunner();
-        fake.OnRun(IsCimResolve, Ok(instanceId + "\r\n"));
         var removedIds = new List<string>();
         var queriedIds = new List<string>();
 
@@ -392,11 +403,44 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
                 return new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
             },
             async () => Assert.True(await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                null, "VPNRouter-TUN", "test.ltsc-native")));
+                null, "VPNRouter-TUN", "test.ltsc-native")),
+            lookup: _ => new NativePnpLookupResult(true, new[] { instanceId }, null));
 
         Assert.Equal(new[] { instanceId }, removedIds);
         Assert.Equal(4, queriedIds.Count);
         Assert.All(queriedIds, id => Assert.Equal(instanceId, id));
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
+    }
+
+    [Fact]
+    public async Task LtscNativeLookup_BypassesPowerShellProbeAndPnpUtil()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        const string instanceId = @"ROOT\NET\LTSC_BYPASS";
+        var fake = NewRunner();
+        var removedIds = new List<string>();
+
+        await WithFakeAsync(
+            fake,
+            removalAvailable: true,
+            async () => Assert.True(await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                null, "VPNRouter-TUN", "test.ltsc-no-powershell")),
+            useNativePnp: true,
+            nativeRemove: id =>
+            {
+                removedIds.Add(id);
+                return new NativePnpRemovalResult(true, false, 0);
+            },
+            nativeQuery: _ =>
+                new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D),
+            nativeLookup: _ =>
+                new NativePnpLookupResult(true, new[] { instanceId }, null),
+            moduleProbe: () => throw new InvalidOperationException(
+                "LTSC must not evaluate the PowerShell module probe."));
+
+        Assert.Equal(new[] { instanceId }, removedIds);
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "powershell.exe");
         Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
     }
 
@@ -408,7 +452,6 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         const string firstId = @"ROOT\NET\LTSC0050";
         const string secondId = @"ROOT\NET\LTSC0051";
         var fake = new FakeProcessRunner();
-        fake.OnRun(IsCimResolve, Ok(firstId + "\r\n" + secondId + "\r\n"));
         var removedIds = new List<string>();
 
         await WithNativePnpAsync(
@@ -422,22 +465,27 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
                     : new NativePnpRemovalResult(false, false, 5);
             },
             _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D),
-            async () => Assert.False(await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                null, "VPNRouter-TUN", "test.ltsc-multiple")));
+            async () =>
+            {
+                var ex = await Assert.ThrowsAsync<TunAdapterNotReadyException>(() =>
+                    TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                        null, "VPNRouter-TUN", "test.ltsc-multiple"));
+                Assert.Equal(secondId, ex.InstanceId);
+            },
+            lookup: _ => new NativePnpLookupResult(
+                true, new[] { firstId, secondId }, null));
 
         Assert.Equal(new[] { firstId, secondId }, removedIds);
     }
 
     [Fact]
-    public async Task ObservedAdapter_CimReturnsNoId_FailsBeforeDisable()
+    public async Task ObservedAdapter_NativeLookupReturnsNoId_FailsBeforeDisable()
     {
         if (!OperatingSystem.IsWindows()) return;
 
         var fake = new FakeProcessRunner();
         fake.OnRun(IsNetshEnumeration,
             Ok("Disabled  Disconnected  Dedicated  VPNRouter-TUN\r\n"));
-        fake.OnRun(IsCimResolve, Ok());
-
         await WithFakeAsync(fake, removalAvailable: false, async () =>
             await Assert.ThrowsAsync<TunAdapterNotReadyException>(() =>
                 TunAdapterDiagnostics.PreStartCleanupAsync(null, "test.observed-no-id")));
@@ -447,20 +495,15 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
     }
 
     [Fact]
-    public async Task CimFallbackName_UsesExactNameFilterAndResolvedId()
+    public async Task NativeFallback_ReceivesExactOwnedNameAndResolvedId()
     {
         if (!OperatingSystem.IsWindows()) return;
 
         const string adapterName = "sing-box-tun-49";
         const string instanceId = @"ROOT\NET\FALLBACK0049";
         var fake = new FakeProcessRunner();
-        fake.OnRun(r =>
-                r.ExecutablePath == "powershell.exe" &&
-                r.Arguments.Count == 4 &&
-                r.Arguments[3].Contains("Get-CimInstance -ClassName Win32_NetworkAdapter") &&
-                r.Arguments[3].Contains($"NetConnectionID = '{adapterName}'"),
-            Ok(instanceId + "\r\n"));
         var removedIds = new List<string>();
+        var lookedUpNames = new List<string>();
 
         await WithNativePnpAsync(
             fake,
@@ -472,12 +515,14 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             },
             _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D),
             async () => Assert.True(await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                null, adapterName, "test.fallback-name", requireInstanceId: true)));
+                null, adapterName, "test.fallback-name", requireInstanceId: true)),
+            lookup: name =>
+            {
+                lookedUpNames.Add(name);
+                return new NativePnpLookupResult(true, new[] { instanceId }, null);
+            });
 
-        Assert.Single(fake.RunCalls, c =>
-            c.ExecutablePath == "powershell.exe" &&
-            c.Arguments.Count == 4 &&
-            c.Arguments[3].Contains($"NetConnectionID = '{adapterName}'"));
+        Assert.Equal(new[] { adapterName }, lookedUpNames);
         Assert.Equal(new[] { instanceId }, removedIds);
     }
 
