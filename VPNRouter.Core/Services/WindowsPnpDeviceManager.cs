@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 #if PLATFORM_WINDOWS
-using System.Management;
+using Microsoft.Win32;
 #endif
 
 namespace VPNRouter.Core.Services;
@@ -29,13 +29,19 @@ internal readonly record struct NativePnpLookupResult(
     IReadOnlyList<string> InstanceIds,
     string? Error);
 
+internal readonly record struct NativeNetworkConnectionRecord(
+    string? ConnectionId,
+    string? Name,
+    string? PnpInstanceId);
+
 /// <summary>
 /// Exact local-device removal for Windows builds whose pnputil predates
 /// /remove-device and /enum-devices (notably Windows 10 LTSC 2019).
 /// </summary>
 internal static class WindowsPnpDeviceManager
 {
-    private static readonly TimeSpan LookupTimeout = TimeSpan.FromSeconds(10);
+    private const string NetworkConnectionsRegistryPath =
+        @"SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}";
     private static readonly IntPtr InvalidHandleValue = new(-1);
     private const uint CrSuccess = 0;
     private const uint CrNoSuchDevNode = 0x0000000D;
@@ -44,47 +50,43 @@ internal static class WindowsPnpDeviceManager
     internal static NativePnpLookupResult FindNetworkAdapterInstanceIds(string adapterName)
     {
 #if PLATFORM_WINDOWS
-        if (string.IsNullOrWhiteSpace(adapterName) ||
-            adapterName.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_'))
+        return FindNetworkAdapterInstanceIds(adapterName, ReadNetworkConnections);
+#else
+        return new(false, Array.Empty<string>(), "Native network-adapter lookup is Windows-only.");
+#endif
+    }
+
+    internal static NativePnpLookupResult FindNetworkAdapterInstanceIds(
+        string adapterName,
+        Func<IReadOnlyList<NativeNetworkConnectionRecord>> readConnections)
+    {
+        if (!IsOwnedAdapterName(adapterName))
         {
             return new(false, Array.Empty<string>(), "Adapter name is outside the owned-name whitelist.");
         }
 
         try
         {
-            var connection = new ConnectionOptions { Timeout = LookupTimeout };
-            var scope = new ManagementScope(@"\\.\root\cimv2", connection);
-            scope.Connect();
-
-            var query = new ObjectQuery(
-                $"SELECT PNPDeviceID FROM Win32_NetworkAdapter WHERE NetConnectionID = '{adapterName}'");
-            var options = new System.Management.EnumerationOptions
-            {
-                Timeout = LookupTimeout,
-                // Semisynchronous enumeration makes the WMI timeout apply to
-                // result retrieval instead of blocking Get() until all rows exist.
-                ReturnImmediately = true,
-                Rewindable = false,
-            };
-
-            using var searcher = new ManagementObjectSearcher(scope, query, options);
-            using var results = searcher.Get();
             var ids = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (ManagementObject adapter in results)
+            foreach (var connection in readConnections())
             {
-                using (adapter)
-                {
-                    var id = adapter["PNPDeviceID"] as string;
-                    if (string.IsNullOrWhiteSpace(id))
-                    {
-                        return new(false, Array.Empty<string>(),
-                            "A matching Win32_NetworkAdapter row has no PNPDeviceID.");
-                    }
+                if (!string.Equals(connection.Name, adapterName, StringComparison.OrdinalIgnoreCase))
+                    continue;
 
-                    id = id.Trim();
-                    if (seen.Add(id)) ids.Add(id);
+                if (string.IsNullOrWhiteSpace(connection.PnpInstanceId))
+                    return new(false, Array.Empty<string>(),
+                        "A matching Windows network connection has no PnpInstanceID.");
+
+                var id = connection.PnpInstanceId.Trim();
+                if (!TryValidateOwnedWintunMapping(connection.ConnectionId, id))
+                {
+                    return new(false, Array.Empty<string>(),
+                        "A matching Windows network connection is not mapped to its exact " +
+                        @"SWD\Wintun\{GUID} PnpInstanceID.");
                 }
+
+                if (seen.Add(id)) ids.Add(id);
             }
 
             return new(true, ids, null);
@@ -93,10 +95,65 @@ internal static class WindowsPnpDeviceManager
         {
             return new(false, Array.Empty<string>(), $"{ex.GetType().Name}: {ex.Message}");
         }
-#else
-        return new(false, Array.Empty<string>(), "Native network-adapter lookup is Windows-only.");
-#endif
     }
+
+    private static bool IsOwnedAdapterName(string? adapterName)
+    {
+        if (string.Equals(adapterName, "VPNRouter-TUN", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(adapterName, "sing-box-tun", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (adapterName == null ||
+            !adapterName.StartsWith("sing-box-tun-", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var suffix = adapterName["sing-box-tun-".Length..];
+        return suffix.Length > 0 &&
+               suffix.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+    }
+
+    private static bool TryValidateOwnedWintunMapping(
+        string? connectionId,
+        string pnpInstanceId)
+    {
+        const string prefix = @"SWD\Wintun\";
+        if (string.IsNullOrWhiteSpace(connectionId) ||
+            !Guid.TryParseExact(connectionId.Trim(), "B", out var connectionGuid) ||
+            !pnpInstanceId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !Guid.TryParseExact(pnpInstanceId[prefix.Length..], "B", out var pnpGuid))
+        {
+            return false;
+        }
+
+        return connectionGuid == pnpGuid;
+    }
+
+#if PLATFORM_WINDOWS
+    private static IReadOnlyList<NativeNetworkConnectionRecord> ReadNetworkConnections()
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Windows network connections are Windows-only.");
+
+        using var root = Registry.LocalMachine.OpenSubKey(NetworkConnectionsRegistryPath);
+        if (root == null)
+            throw new InvalidOperationException(
+                $"Windows network-connections key is unavailable: HKLM\\{NetworkConnectionsRegistryPath}");
+
+        var connections = new List<NativeNetworkConnectionRecord>();
+        foreach (var connectionId in root.GetSubKeyNames())
+        {
+            using var connection = root.OpenSubKey($@"{connectionId}\Connection");
+            if (connection == null) continue;
+
+            connections.Add(new(
+                connectionId,
+                connection.GetValue("Name") as string,
+                connection.GetValue("PnpInstanceID") as string));
+        }
+
+        return connections;
+    }
+#endif
 
     internal static NativePnpRemovalResult RemoveDevice(string instanceId)
     {

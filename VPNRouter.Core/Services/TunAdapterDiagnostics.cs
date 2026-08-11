@@ -232,10 +232,10 @@ public static class TunAdapterDiagnostics
     ///
     /// <para>Implementation: enumerate adapters via <c>netsh interface
     /// show interface</c>, filter by a <b>strict</b> whitelist
-    /// (<c>VPNRouter-TUN</c> exactly + <c>sing-box-tun-*</c> fallback names),
+    /// (<c>VPNRouter-TUN</c> exactly + <c>sing-box-tun</c> fallback names),
     /// and for each match: disable via netsh (frees the kernel handle),
-    /// resolve its PnP InstanceId with <c>Get-NetAdapter</c> or an in-process
-    /// <c>Win32_NetworkAdapter</c> WMI query, then delete the exact device
+    /// resolve its PnP InstanceId with <c>Get-NetAdapter</c> or the Windows
+    /// Network Connections registry, then delete the exact device
     /// record with <c>pnputil /remove-device</c> or Windows SetupAPI.</para>
     ///
     /// <para><b>Defensive name whitelist.</b> We deliberately do NOT
@@ -244,7 +244,7 @@ public static class TunAdapterDiagnostics
     /// with their own names — touching them would be cross-tool damage,
     /// and Bug-r9-E (separate chip) is the place for "another VPN
     /// detected" UX, not silent destruction here. Only the two names we
-    /// own (<c>VPNRouter-TUN</c> and sing-box's <c>sing-box-tun-*</c>
+    /// own (<c>VPNRouter-TUN</c> and sing-box's <c>sing-box-tun</c>
     /// auto-name fallback) are removable.</para>
     ///
     /// <para>Returns the count of adapters successfully removed.
@@ -368,14 +368,12 @@ public static class TunAdapterDiagnostics
 
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Match VPNRouter-TUN as a whole token, or sing-box-tun with an
-        // optional `-XXXX` suffix (sing-box's auto-name format when
-        // InterfaceName is missing or already taken). \b enforces
-        // whole-token boundaries so we don't false-positive on substrings
-        // embedded in other names.
-        var pattern = new Regex(
-            @"\b(VPNRouter-TUN|sing-box-tun(?:-[A-Za-z0-9_-]+)?)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // netsh renders four columns separated by two or more spaces. Parse
+        // the complete final field before applying the owned-name whitelist;
+        // a suffix matcher would shorten "My VPNRouter-TUN" into our name.
+        var ownedNamePattern = new Regex(
+            @"^(VPNRouter-TUN|sing-box-tun(?:-[A-Za-z0-9_-]+)?)$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         foreach (var rawLine in netshOutput.Split(new[] { '\r', '\n' },
                      StringSplitOptions.RemoveEmptyEntries))
@@ -383,9 +381,12 @@ public static class TunAdapterDiagnostics
             var line = rawLine.Trim();
             if (line.Length == 0) continue;
 
-            var match = pattern.Match(line);
+            var columns = Regex.Split(line, @"\s{2,}");
+            if (columns.Length != 4) continue;
+
+            var match = ownedNamePattern.Match(columns[3].Trim());
             if (match.Success)
-                names.Add(match.Value);
+                names.Add(match.Groups[1].Value);
         }
 
         return names.ToList();
@@ -394,7 +395,7 @@ public static class TunAdapterDiagnostics
     /// <summary>
     /// Best-effort device removal via exact PnP discovery and
     /// <c>pnputil /remove-device</c>. Uses <c>Get-NetAdapter</c> when available
-    /// and an in-process <c>Win32_NetworkAdapter</c> WMI query otherwise. Returns
+    /// and the Windows Network Connections registry otherwise. Returns
     /// true when the adapter is already absent or its exact PnP InstanceId has
     /// remained absent through the bounded settle gate.
     ///
@@ -538,7 +539,7 @@ public static class TunAdapterDiagnostics
 
     /// <summary>
     /// Public-internal accessor for the cached resolver selection. A false
-    /// value means exact PnP discovery uses in-process Win32_NetworkAdapter WMI instead
+    /// value means exact PnP discovery uses the Windows Network Connections registry instead
     /// of the optional NetAdapter module; it no longer bypasses removal.
     /// </summary>
     [SupportedOSPlatform("windows")]
@@ -686,7 +687,7 @@ public static class TunAdapterDiagnostics
                 {
                     logger?.Information(
                         "[TunDiag] {Ctx}: Get-NetAdapter unavailable; resolving the exact " +
-                        "TUN PnP InstanceId in-process through Win32_NetworkAdapter.",
+                        "TUN PnP InstanceId through Windows Network Connections.",
                         context);
                 }
 

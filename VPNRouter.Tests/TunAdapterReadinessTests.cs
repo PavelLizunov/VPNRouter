@@ -378,7 +378,7 @@ public sealed class TunAdapterReadinessTests
     }
 
     [Fact]
-    public void ExtractStaleAdapterNames_VPNRouterTunExactMatch_WordBoundaryEnforced()
+    public void ExtractStaleAdapterNames_VPNRouterTunExactFinalField()
     {
         // Positive: exact "VPNRouter-TUN" surfaces.
         Assert.Single(TunAdapterDiagnostics.ExtractStaleAdapterNames(
@@ -406,23 +406,7 @@ public sealed class TunAdapterReadinessTests
     [Fact]
     public void ExtractStaleAdapterNames_EmbeddedInLongerWordChar_NegativeTest()
     {
-        // CRITICAL negative pin: "VPNRouter-TUN" embedded inside another
-        // adapter name as a continuous word-char substring (e.g.
-        // "MyVPNRouter-TUNExtra" where 'y' and 'V' are both word chars
-        // and 'N' is followed by another word char) must NOT match. The
-        // parser's \b word boundary stops false-positives where the
-        // would-be match has no surrounding non-word transitions.
-        //
-        // Note: The parser DOES match "VPNRouter-TUN" inside
-        // "Pre-VPNRouter-TUN-Suffix" because '-' is a non-word
-        // character so \b boundaries are satisfied. That is documented
-        // current behavior — see the HyphenSurroundedSubstring test
-        // below. Whitelist-only matching by exact name + the dash-
-        // separator pattern is the design intent: adapters created by
-        // VPNRouter / sing-box use these names directly, never as
-        // embedded substrings.
-        //
-        // PASSES against both pre- and post-Wave-38.
+        // An owned name must occupy the complete final interface-name field.
         var embeddedInWordChars = """
             Admin State    State          Type             Interface Name
             Enabled        Connected      Dedicated        MyVPNRouter-TUNExtra
@@ -433,25 +417,19 @@ public sealed class TunAdapterReadinessTests
     }
 
     [Fact]
-    public void ExtractStaleAdapterNames_HyphenSurroundedSubstring_DocumentedCurrentBehavior()
+    public void ExtractStaleAdapterNames_EmbeddedOrNumberedNames_AreIgnored()
     {
-        // Counterpart to the negative test above: "VPNRouter-TUN"
-        // surrounded by '-' (non-word chars) DOES match because \b is
-        // satisfied between a word char and a non-word char. This is
-        // CURRENT BEHAVIOR — if a future hardening pass tightens the
-        // parser to require exact line ownership (anchored ^...$ or
-        // tight pre/post char-class), this test should update to
-        // expect Empty. Until then, pin the current shape so a silent
-        // regression doesn't drift.
-        //
-        // PASSES against both pre- and post-Wave-38.
-        var hyphenWrapped = """
+        var otherNames = """
             Admin State    State          Type             Interface Name
             Enabled        Connected      Dedicated        Pre-VPNRouter-TUN-Suffix
+            Enabled        Connected      Dedicated        My VPNRouter-TUN
+            Enabled        Connected      Dedicated        My sing-box-tun-AB12
+            Enabled        Connected      Dedicated        My  VPNRouter-TUN
+            Disabled       Disconnected   Dedicated        VPNRouter-TUN 46
+            Disabled       Disconnected   Dedicated        sing-box-tun-AB12 old
             """;
-        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(hyphenWrapped);
-        Assert.Single(result);
-        Assert.Equal("VPNRouter-TUN", result[0], ignoreCase: true);
+        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(otherNames);
+        Assert.Empty(result);
     }
 
     [Fact]

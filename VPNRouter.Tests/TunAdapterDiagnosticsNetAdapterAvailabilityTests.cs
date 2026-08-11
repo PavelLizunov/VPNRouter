@@ -38,7 +38,7 @@ namespace VPNRouter.Tests;
 /// <para><b>2026-08-12 WINBRAT follow-up:</b> NetAdapter is optional on the
 /// Windows LTSC test image. Module absence used to bypass pnputil entirely and
 /// let sing-box crash with ERROR_FILE_EXISTS. The fallback now resolves the
-/// same PNPDeviceID through in-process Win32_NetworkAdapter WMI and remains fail-closed.</para>
+/// same PNPDeviceID through Windows Network Connections and remains fail-closed.</para>
 ///
 /// <para>Tests assign a <see cref="FakeProcessRunner"/> to the static
 /// <see cref="TunAdapterDiagnostics.Runner"/> seam and assert the shell-out
@@ -293,7 +293,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         Assert.Equal(5, fake.RunCalls.Where(IsGetNetAdapterResolve).Count());
     }
 
-    // ─── Test 5: NetAdapter unavailable → in-process WMI exact removal ───
+    // ─── Test 5: NetAdapter unavailable → Network Connections exact removal ───
 
     [Fact]
     public async Task NetAdapterUnavailable_PreStartCleanup_UsesNativeLookupAndPnpRemoval()
@@ -352,7 +352,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         });
 
         var infEvents = sink.Events(LogEventLevel.Information)
-            .Where(s => s.Contains("in-process through Win32_NetworkAdapter"))
+            .Where(s => s.Contains("through Windows Network Connections"))
             .ToList();
         Assert.Single(infEvents);
         Assert.DoesNotContain(fake.RunCalls,
@@ -374,7 +374,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             await Assert.ThrowsAsync<TunAdapterNotReadyException>(() =>
                 TunAdapterDiagnostics.PreStartCleanupAsync(null, "test.native-lookup-fail"));
         }, nativeLookup: _ =>
-            new NativePnpLookupResult(false, Array.Empty<string>(), "WMI query failed"));
+            new NativePnpLookupResult(false, Array.Empty<string>(), "registry query failed"));
 
         Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
     }
