@@ -70,12 +70,12 @@ restart sing-box or the VPN in their normal toggle paths.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` has 0 errors.
-- [ ] **Gate 2 — Tests green**: focused tests and the full suite pass; GitHub CI is authoritative for environment-bound cases.
-- [ ] **Gate 3 — Docs**: this Outcome records sanitized before/after evidence and exact platform impact.
-- [ ] **Gate 4 — Self-review**: Ponytail simplification review; bug-hunt for any non-trivial product change; security review fallback if process handling changes materially.
-- [ ] **Gate 5 — Remote WINBRAT verify**: complete user flow, final status, process ownership and recent logs pass on WINBRAT only.
-- [ ] **Gate 6 — Characterization**: MainWindowViewModel hash updated only for the intended diff.
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` has 0 errors.
+- [x] **Gate 2 — Tests green**: focused tests and the full suite pass; GitHub CI is authoritative for environment-bound cases.
+- [x] **Gate 3 — Docs**: this Outcome records sanitized before/after evidence and exact platform impact.
+- [x] **Gate 4 — Self-review**: Ponytail simplification review; bug-hunt for any non-trivial product change; security review fallback if process handling changes materially.
+- [x] **Gate 5 — Remote WINBRAT verify**: complete user flow, final status, process ownership and recent logs pass on WINBRAT only.
+- [x] **Gate 6 — Characterization**: MainWindowViewModel hash updated only for the intended diff.
 
 ## Acceptance
 
@@ -93,7 +93,7 @@ restart sing-box or the VPN in their normal toggle paths.
 
 ## Outcome
 
-**Status**: IMPLEMENTED — local and WINBRAT verification passed; PR CI pending.
+**Status**: VERIFIED — implementation commit `378d3241` passed local, WINBRAT and PR CI gates.
 
 **Baseline evidence**:
 
@@ -141,8 +141,8 @@ restart sing-box or the VPN in their normal toggle paths.
 - Gate 2: focused TgProxy/characterization set passed 20/20. The full local
   suite completed 2692 passing, 2 skipped and 25 environment-bound failures;
   every failure was caused by denied access to protected `C:\ProgramData`
-  test paths on the non-elevated dev machine. GitHub CI is the authoritative
-  full-suite gate and is pending the implementation push.
+  test paths on the non-elevated dev machine. The authoritative GitHub suite
+  passed on implementation commit `378d3241` together with Go and grep checks.
 - Gate 3: this Outcome records only sanitized timings and state; no endpoint,
   secret or raw config data is committed.
 - Gate 4: Ponytail review kept the change to the duplicate wait; Qwen and three
