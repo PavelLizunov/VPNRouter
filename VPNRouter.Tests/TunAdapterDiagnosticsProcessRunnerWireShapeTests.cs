@@ -29,23 +29,35 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
         Func<Task> body)
     {
         var previous = TunAdapterDiagnostics.Runner;
+        var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
         TunAdapterDiagnostics.Runner = fake;
+        TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         // BR-2 latch may have been flipped by an earlier test that ran
         // against the real ProcessRunner (e.g.
         // PreStartCleanupAsync_NonWindows_ReturnsZeroNoOp does on
         // Windows). Reset so our fake gets to observe the PowerShell call.
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         try { await body(); }
-        finally { TunAdapterDiagnostics.Runner = previous; }
+        finally
+        {
+            TunAdapterDiagnostics.Runner = previous;
+            TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
+        }
     }
 
     private static void WithFakeRunner(FakeProcessRunner fake, Action body)
     {
         var previous = TunAdapterDiagnostics.Runner;
+        var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
         TunAdapterDiagnostics.Runner = fake;
+        TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         try { body(); }
-        finally { TunAdapterDiagnostics.Runner = previous; }
+        finally
+        {
+            TunAdapterDiagnostics.Runner = previous;
+            TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
+        }
     }
 
     [Fact]

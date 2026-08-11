@@ -35,6 +35,12 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class TunAdapterDiagnostics
 {
+    private const int PnpRemovalPollIntervalMs = 300;
+    private const int PnpRemovalMaxPolls = 40;
+    private const int PnpRemovalAbsentSamples = 3;
+    private const int PnpRemovalQuietPeriodMs = 2_000;
+    private const int PnpRemovalBudgetMs = 12_000;
+
     /// <summary>
     /// Phase 3+ (2026-05-21) IProcessRunner seam. Tests assign a
     /// <c>FakeProcessRunner</c> before exercising the static helpers and
@@ -45,6 +51,10 @@ public static class TunAdapterDiagnostics
     /// patterns.
     /// </summary>
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+
+    /// <summary>Delay seam for deterministic PnP-settle tests.</summary>
+    internal static Func<TimeSpan, CancellationToken, Task> RemovalDelayAsync { get; set; } =
+        static (delay, ct) => Task.Delay(delay, ct);
 
     /// <summary>
     /// Log current TUN adapter inventory via <c>netsh interface show interface</c>.
@@ -211,11 +221,8 @@ public static class TunAdapterDiagnostics
     /// show interface</c>, filter by a <b>strict</b> whitelist
     /// (<c>VPNRouter-TUN</c> exactly + <c>sing-box-tun-*</c> fallback names),
     /// and for each match: disable via netsh (frees the kernel handle),
-    /// then remove the device via <c>powershell Remove-NetAdapter</c>
-    /// (actually deletes the device record). PowerShell is safe here
-    /// because we're pre-launch — sing-box isn't holding any handles, so
-    /// the "Remove-NetAdapter refuses while open" gotcha cited in
-    /// <see cref="DisableOrphanedAdapter"/>'s docs doesn't apply.</para>
+    /// resolve its PnP InstanceId with <c>Get-NetAdapter</c>, then delete the
+    /// exact device record with <c>pnputil /remove-device</c>.</para>
     ///
     /// <para><b>Defensive name whitelist.</b> We deliberately do NOT
     /// match <c>Wintun*</c> wildcards. WireGuard, AmneziaWG, OpenVPN TAP
@@ -226,11 +233,11 @@ public static class TunAdapterDiagnostics
     /// own (<c>VPNRouter-TUN</c> and sing-box's <c>sing-box-tun-*</c>
     /// auto-name fallback) are removable.</para>
     ///
-    /// <para>Returns the count of adapters successfully removed so the
-    /// caller can decide whether to insert a settle delay before the next
-    /// sing-box launch (Windows network-stack teardown takes a beat).
-    /// Linux/macOS: returns 0 immediately. Errors are swallowed —
-    /// pre-start cleanup is best-effort and must never block start.</para>
+    /// <para>Returns the count of adapters successfully removed.
+    /// Linux/macOS: returns 0 immediately. Inventory and tooling errors remain
+    /// best-effort, but a located VPNRouter adapter that cannot be removed and
+    /// verified throws <see cref="TunAdapterNotReadyException"/> so callers do
+    /// not launch sing-box into a known stale PnP state.</para>
     /// </summary>
     [SupportedOSPlatform("windows")]
     public static async Task<int> PreStartCleanupAsync(
@@ -261,9 +268,8 @@ public static class TunAdapterDiagnostics
                     "[TunDiag] {Ctx}: pre-start cleanup: found {Count} stale TUN adapter(s) via enumeration: {Names}",
                     context, staleAdapters.Count, string.Join(", ", staleAdapters));
 
-                // PinkuDani Fix #4 (2026-05-21): if NetAdapter module is
-                // unavailable, Remove-NetAdapter will silently no-op (and
-                // log the actionable INF on first observation). The kernel
+                // PinkuDani Fix #4 (2026-05-21): if NetAdapter discovery is
+                // unavailable, exact PnP removal cannot run. The kernel
                 // handle would then stay alive across restarts. Pre-check
                 // module availability so we know whether netsh disable is
                 // sufficient on its own (no PS removal will follow) or
@@ -278,13 +284,16 @@ public static class TunAdapterDiagnostics
 
                     if (moduleAvailable)
                     {
-                        // Full path: disable + Remove-NetAdapter. Disable
-                        // first to free the kernel handle so Remove-NetAdapter
-                        // actually succeeds. "not found" is idempotent success.
+                        // Full path: disable + exact PnP removal. Disable first
+                        // to free the kernel handle. "not found" is idempotent
+                        // success.
                         DisableOrphanedAdapter(logger, adapter, context);
 
                         if (await TryRemoveAdapterAsync(logger, adapter, context))
                             removed++;
+                        else
+                            throw new TunAdapterNotReadyException(
+                                $"Could not remove stale VPNRouter TUN adapter '{adapter}'.");
                     }
                     else
                     {
@@ -327,6 +336,9 @@ public static class TunAdapterDiagnostics
                     DisableOrphanedAdapter(logger, DefaultTunInterfaceName, context);
                     if (await TryRemoveAdapterAsync(logger, DefaultTunInterfaceName, context))
                         removed++;
+                    else
+                        throw new TunAdapterNotReadyException(
+                            $"Could not verify removal of '{DefaultTunInterfaceName}'.");
                 }
                 else
                 {
@@ -341,9 +353,13 @@ public static class TunAdapterDiagnostics
 
             return removed;
         }
+        catch (TunAdapterNotReadyException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger?.Warning(ex, "[TunDiag] {Ctx}: pre-start cleanup failed (non-fatal)", context);
+            logger?.Warning(ex, "[TunDiag] {Ctx}: pre-start cleanup diagnostics failed (continuing)", context);
             return removed;
         }
     }
@@ -400,9 +416,10 @@ public static class TunAdapterDiagnostics
     }
 
     /// <summary>
-    /// Best-effort device removal via PowerShell <c>Remove-NetAdapter</c>.
-    /// Returns true on exit 0 (adapter gone) or "adapter not found"
-    /// (already gone — same end state, counts as success).
+    /// Best-effort device removal via <c>Get-NetAdapter</c> discovery and
+    /// <c>pnputil /remove-device</c>. Returns true when the adapter is already
+    /// absent or its exact PnP InstanceId has remained absent through the
+    /// bounded settle gate.
     ///
     /// <para>Uses a single inline command rather than a temp .ps1 so we
     /// don't have to manage a script-on-disk lifecycle. <c>-NoProfile
@@ -783,6 +800,10 @@ public static class TunAdapterDiagnostics
             }
             return removedAny;
         }
+        catch (TunAdapterNotReadyException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger?.Warning(ex,
@@ -814,6 +835,8 @@ public static class TunAdapterDiagnostics
             logger?.Information(
                 "[TunDiag] {Ctx}: removed stale adapter '{Name}' device record via pnputil ({Id})",
                 context, adapterName, instanceId);
+            await WaitForPnpRemovalSettledAsync(logger, instanceId, adapterName, context)
+                .ConfigureAwait(false);
             return true;
         }
 
@@ -828,6 +851,8 @@ public static class TunAdapterDiagnostics
             logger?.Information(
                 "[TunDiag] {Ctx}: removed stale adapter '{Name}' device record via pnputil /force ({Id})",
                 context, adapterName, instanceId);
+            await WaitForPnpRemovalSettledAsync(logger, instanceId, adapterName, context)
+                .ConfigureAwait(false);
             return true;
         }
 
@@ -837,6 +862,118 @@ public static class TunAdapterDiagnostics
             context, adapterName, instanceId, exit, (err ?? string.Empty).Trim(),
             fExit, (fErr ?? string.Empty).Trim());
         return false;
+    }
+
+    /// <summary>
+    /// Wait until Windows has finished retiring a specific PnP device node.
+    /// A successful <c>pnputil /remove-device</c> only acknowledges the removal
+    /// request; Wintun can still observe the old node for a short period. The
+    /// exact InstanceId keeps this gate scoped to VPNRouter's adapter and never
+    /// inspects or blocks on third-party WireGuard/AmneziaWG devices.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    internal static async Task WaitForPnpRemovalSettledAsync(
+        ILogger? logger, string instanceId, string adapterName, string context)
+    {
+        if (!await RunPnpScanAsync(logger, context).ConfigureAwait(false))
+        {
+            throw new TunAdapterNotReadyException(
+                $"Windows PnP rescan failed after removing '{adapterName}' ({instanceId}).",
+                instanceId);
+        }
+
+        var absentSamples = 0;
+        var elapsed = Stopwatch.StartNew();
+        for (var poll = 0; poll < PnpRemovalMaxPolls; poll++)
+        {
+            if (elapsed.ElapsedMilliseconds >= PnpRemovalBudgetMs)
+                break;
+
+            if (!await IsPnpDevicePresentAsync(logger, instanceId, context).ConfigureAwait(false))
+            {
+                absentSamples++;
+                if (absentSamples >= PnpRemovalAbsentSamples)
+                {
+                    // A quiet window catches the half-removed state seen on
+                    // Win10 LTSC where Get-NetAdapter disappeared before
+                    // Wintun released its create/open bookkeeping.
+                    await RemovalDelayAsync(
+                            TimeSpan.FromMilliseconds(PnpRemovalQuietPeriodMs),
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+
+                    if (!await RunPnpScanAsync(logger, context).ConfigureAwait(false))
+                        break;
+
+                    if (!await IsPnpDevicePresentAsync(logger, instanceId, context).ConfigureAwait(false))
+                    {
+                        logger?.Information(
+                            "[TunDiag] {Ctx}: PnP removal settled for '{Name}' ({Id})",
+                            context, adapterName, instanceId);
+                        return;
+                    }
+
+                    // The node reappeared during the quiet window. Restart the
+                    // consecutive-absence proof instead of accepting a flap.
+                    absentSamples = 0;
+                }
+            }
+            else
+            {
+                absentSamples = 0;
+            }
+
+            await RemovalDelayAsync(
+                    TimeSpan.FromMilliseconds(PnpRemovalPollIntervalMs),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+
+        throw new TunAdapterNotReadyException(
+            $"Windows did not finish removing '{adapterName}' ({instanceId}) before the bounded PnP settle gate expired.",
+            instanceId);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static async Task<bool> RunPnpScanAsync(ILogger? logger, string context)
+    {
+        var (exit, _, err) = await RunAndCaptureAsync(
+            "pnputil.exe", new[] { "/scan-devices" }, timeoutMs: 10000, logger: logger)
+            .ConfigureAwait(false);
+        if (exit == 0) return true;
+
+        logger?.Warning(
+            "[TunDiag] {Ctx}: pnputil /scan-devices failed with exit {Exit}: '{Err}'",
+            context, exit, (err ?? string.Empty).Trim());
+        return false;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static async Task<bool> IsPnpDevicePresentAsync(
+        ILogger? logger, string instanceId, string context)
+    {
+        var (exit, stdout, err) = await RunAndCaptureAsync(
+            "pnputil.exe",
+            new[] { "/enum-devices", "/instanceid", instanceId },
+            timeoutMs: 5000,
+            logger: logger).ConfigureAwait(false);
+
+        // Query failure is not proof of absence. Keep the gate closed and let
+        // the bounded poll retry instead of spawning into an unknown PnP state.
+        if (exit != 0)
+        {
+            logger?.Warning(
+                "[TunDiag] {Ctx}: pnputil instance query failed with exit {Exit}: '{Err}'",
+                context, exit, (err ?? string.Empty).Trim());
+            return true;
+        }
+
+        // PnPUtil's labels are localized, but the InstanceId itself is not.
+        // Compare a complete whitespace-delimited token so a similarly prefixed
+        // device cannot satisfy the exact-ID gate.
+        return (stdout ?? string.Empty)
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(token => string.Equals(token, instanceId, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -883,4 +1020,14 @@ public static class TunAdapterDiagnostics
             return (-1, string.Empty, string.Empty);
         }
     }
+}
+
+internal sealed class TunAdapterNotReadyException : Exception
+{
+    public TunAdapterNotReadyException(string message, string? instanceId = null) : base(message)
+    {
+        InstanceId = instanceId;
+    }
+
+    public string? InstanceId { get; }
 }

@@ -76,6 +76,12 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
             && r.Arguments.Contains("/remove-device");
     }
 
+    private static bool IsPnpScan(ProcessRequest r) =>
+        r.ExecutablePath == "pnputil.exe" && r.Arguments.Contains("/scan-devices");
+
+    private static bool IsPnpInstanceQuery(ProcessRequest r) =>
+        r.ExecutablePath == "pnputil.exe" && r.Arguments.Contains("/enum-devices");
+
     /// <summary>Swap in fake Runner, pre-set NetAdapter module availability,
     /// run body, restore. Mirrors the WithFakeAsync pattern from
     /// <c>TunAdapterDiagnosticsNetAdapterAvailabilityTests</c>.</summary>
@@ -85,13 +91,19 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         Func<Task> body)
     {
         var previous = TunAdapterDiagnostics.Runner;
+        var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
+        fake.OnRun(IsPnpScan, new ProcessResult(0, "", "", TimeSpan.Zero, false));
+        fake.OnRun(IsPnpInstanceQuery, new ProcessResult(
+            0, "No devices were found.\r\n", "", TimeSpan.Zero, false));
         TunAdapterDiagnostics.Runner = fake;
+        TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(moduleAvailable);
         try { await body(); }
         finally
         {
             TunAdapterDiagnostics.Runner = previous;
+            TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }

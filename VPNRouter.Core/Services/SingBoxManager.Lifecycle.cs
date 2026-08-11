@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http;
+using System.Runtime.Versioning;
 using System.Text;
 using Serilog;
 using VPNRouter.Core.Localization;
@@ -191,10 +192,9 @@ public partial class SingBoxManager
                 }
                 finally
                 {
-                    _handle?.Dispose();
-                    _handle = null;
-                    State = SingBoxState.Stopped;
-                    if (releaseLock) _tunLock.Release();
+            _handle?.Dispose();
+            _handle = null;
+            State = SingBoxState.Stopped;
                     _logger.Information("[SingBoxManager] sing-box stopped (Linux capability mode, no pkexec)");
                 }
                 return;
@@ -266,18 +266,16 @@ public partial class SingBoxManager
             // killed AND the callback was suppressed
             // (EnableRaisingEvents=false from a prior Stop), we'd skip
             // the disable. Run it again here so the orphan can't slip
-            // through. The hotfix adds an async Remove-NetAdapter
-            // after the sync disable so the device record is gone by
+            // through. The hotfix adds queued exact-PnP removal after the
+            // sync disable so the device record is gone by
             // the time any subsequent Start / Restart fires (otherwise
             // sing-box's WintunCreateAdapter would FATAL with
             // ERROR_FILE_EXISTS — alicemoren1991-2026-05-19).
             //
-            // Fire-and-forget on a background Task: StopInternal is
-            // called from sync paths (Stop, Restart, Dispose) and we
-            // don't want to block UI/CLI returns on the ~150 ms
-            // PowerShell spawn cost. The defence-in-depth
-            // PreStartCleanupAsync in LaunchProcess will catch
-            // whatever this misses anyway.
+            // Restart queues removal and LaunchProcess joins it. A final Stop
+            // waits before releasing the system-wide TUN ownership lock, so a
+            // second VPNRouter process cannot acquire the name while this
+            // process is still deleting its old PnP node.
             if (OperatingSystem.IsWindows())
             {
                 try
@@ -285,26 +283,16 @@ public partial class SingBoxManager
                     TunAdapterDiagnostics.DisableOrphanedAdapter(
                         _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.early");
 
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                                _logger, DefaultTunInterfaceName,
-                                "SingBoxManager.StopInternal.early.async");
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Warning(ex,
-                                "[SingBoxManager] Async orphan adapter remove failed (non-fatal)");
-                        }
-                    });
+                    QueueTunAdapterRemoval("SingBoxManager.StopInternal.early.async");
+                    if (releaseLock)
+                        WaitForQueuedTunAdapterRemoval();
                 }
                 catch (Exception ex)
                 {
                     _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
                 }
             }
+            if (releaseLock) _tunLock.Release();
             return;
         }
 
@@ -345,15 +333,6 @@ public partial class SingBoxManager
             _handle?.Dispose();
             _handle = null;
             State = SingBoxState.Stopped;
-            // Task #53 (2026-05-21): gate on `releaseLock` to match the
-            // 3 sibling paths above (Linux capability mode line 267,
-            // pkexec/macOS line 315, Windows post-crash cleanup line
-            // 331). Pre-Task-#53 this release was unconditional, which
-            // meant Restart()'s `StopInternal(releaseLock: false)` call
-            // STILL dropped the TUN lock — recreating the cross-instance
-            // race the named semaphore was designed to prevent. See
-            // plans/task53-singboxmanager-restart-tunlock-2026-05-21.md.
-            if (releaseLock) _tunLock.Release();
             _logger.Information("[SingBoxManager] sing-box stopped");
 
             // Hotfix 2026-05-19: also clean up the wintun adapter on
@@ -365,11 +344,9 @@ public partial class SingBoxManager
             // device record alive, and the next Start hits ERROR_FILE_EXISTS
             // when WintunCreateAdapter runs. LaunchProcess's
             // PreStartCleanupAsync would catch it, but doing it here
-            // means the device is gone moments after Stop returns —
-            // important for Restart() which goes Stop → Sleep(750) →
-            // LaunchProcess: any slack between disable + remove is
-            // covered by the settle delay. Fire-and-forget because
-            // StopInternal is sync and callers don't await.
+            // starts removal moments after Stop returns. Restart() gives it a
+            // short head start, then LaunchProcess joins the queue and verifies
+            // exact PnP absence before spawning sing-box.
             if (OperatingSystem.IsWindows())
             {
                 try
@@ -377,26 +354,21 @@ public partial class SingBoxManager
                     TunAdapterDiagnostics.DisableOrphanedAdapter(
                         _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.killed");
 
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                                _logger, DefaultTunInterfaceName,
-                                "SingBoxManager.StopInternal.killed.async");
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Warning(ex,
-                                "[SingBoxManager] Async orphan adapter remove failed (non-fatal)");
-                        }
-                    });
+                    QueueTunAdapterRemoval("SingBoxManager.StopInternal.killed.async");
+                    if (releaseLock)
+                        WaitForQueuedTunAdapterRemoval();
                 }
                 catch (Exception ex)
                 {
                     _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
                 }
             }
+
+            // Task #53 (2026-05-21): Restart keeps the ownership lock. A final
+            // Windows Stop releases it only after the PnP removal queue above
+            // has settled, preventing another process from launching into our
+            // outstanding cleanup.
+            if (releaseLock) _tunLock.Release();
         }
         }
         finally
@@ -413,6 +385,81 @@ public partial class SingBoxManager
             // saw 1 above and bailed; this releases the guard for the
             // next legitimate Stop().
             Volatile.Write(ref _stopState, 0);
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private void QueueTunAdapterRemoval(string context)
+    {
+        lock (s_tunRemovalGate)
+        {
+            var previous = s_pendingTunRemoval;
+            s_pendingTunRemoval = Task.Run(async () =>
+            {
+                var previousFailure = await previous.ConfigureAwait(false);
+                try
+                {
+                    await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                        _logger, DefaultTunInterfaceName, context).ConfigureAwait(false);
+                    // A later "already absent" result cannot prove that an
+                    // earlier exact-InstanceId settle timeout recovered.
+                    return previousFailure;
+                }
+                catch (TunAdapterNotReadyException ex)
+                {
+                    _logger.Warning(ex,
+                        "[SingBoxManager] Queued orphan adapter removal did not settle");
+                    return previousFailure ?? ex;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex,
+                        "[SingBoxManager] Queued orphan adapter removal failed");
+                    // Other best-effort failures get one final synchronous
+                    // attempt in LaunchProcess.
+                    return previousFailure;
+                }
+            });
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private void WaitForQueuedTunAdapterRemoval()
+    {
+        while (true)
+        {
+            Task<TunAdapterNotReadyException?> pending;
+            lock (s_tunRemovalGate)
+                pending = s_pendingTunRemoval;
+
+            var failure = pending.GetAwaiter().GetResult();
+
+            // Keep the exact failed InstanceId and retry the strict gate. This
+            // preserves fail-closed behavior without permanently disabling
+            // HealthMonitor recovery after one transient scan/query failure.
+            if (failure != null)
+            {
+                if (string.IsNullOrWhiteSpace(failure.InstanceId))
+                    throw failure;
+
+                TunAdapterDiagnostics.WaitForPnpRemovalSettledAsync(
+                        _logger, failure.InstanceId, DefaultTunInterfaceName,
+                        "SingBoxManager.LaunchProcess.queued")
+                    .GetAwaiter().GetResult();
+            }
+
+            lock (s_tunRemovalGate)
+            {
+                // A cleanup may have been appended while this tail was
+                // awaited. Join the new tail too; otherwise launch could still
+                // race a later pnputil removal.
+                if (!ReferenceEquals(s_pendingTunRemoval, pending))
+                    continue;
+
+                if (failure != null)
+                    s_pendingTunRemoval = Task.FromResult<TunAdapterNotReadyException?>(null);
+                return;
+            }
         }
     }
 
@@ -456,9 +503,9 @@ public partial class SingBoxManager
             // device. The pre-existing
             // <see cref="TunAdapterDiagnostics.DisableOrphanedAdapter"/> r5
             // commentary cites a ~22 s lag between netsh disable and Windows
-            // releasing the handle. We don't wait that long here (would
-            // freeze the UI on every restart) but a small settle delay +
-            // the LaunchProcess pre-enable below cover the common case.
+            // releasing the handle. The short pause lets the queued removal
+            // advance; LaunchProcess then joins it and runs the bounded exact-
+            // InstanceId settle gate before any new sing-box process is created.
             // Linux/macOS: no wintun, no race.
             if (OperatingSystem.IsWindows())
             {
@@ -636,8 +683,9 @@ public partial class SingBoxManager
         // The pre-v2.35 workaround (pre-enable via netsh) only
         // restored the name reservation — the device record stayed
         // and the FATAL still fired. PreStartCleanupAsync does the
-        // right dance: disable + Remove-NetAdapter so the next create
-        // call hits a clean slate. It also has a defence-in-depth
+        // right dance: disable, remove the exact PnP device, then prove
+        // it stayed absent before the next create call. It also has a
+        // defence-in-depth
         // direct-by-name pass on the well-known VPNRouter-TUN name
         // so locale-dependent netsh enumeration quirks can't slip
         // an adapter past us.
@@ -645,29 +693,14 @@ public partial class SingBoxManager
         // Sync-over-async via GetAwaiter().GetResult() is safe here:
         // LaunchProcess is itself a sync void method called from sync
         // sites (Start / Restart / Stop's escalation chain). The async
-        // work inside PreStartCleanupAsync is bounded (5 s netsh +
-        // 10 s PowerShell timeouts) so worst case we block for
-        // ~15-20 s; in practice it's well under 1 s. Linux/macOS
-        // returns 0 immediately — no wintun, no work, no block.
+        // work inside PreStartCleanupAsync uses bounded subprocess calls and
+        // a bounded PnP settle loop. Linux/macOS bypass this Windows-only gate.
         if (OperatingSystem.IsWindows())
         {
-            try
-            {
-                var removedAdapterCount = TunAdapterDiagnostics
-                    .PreStartCleanupAsync(_logger, "SingBoxManager.LaunchProcess")
-                    .GetAwaiter().GetResult();
-                if (removedAdapterCount > 0)
-                {
-                    // pnputil reports success before Windows finishes deleting
-                    // the device node. Let PnP settle before WintunCreateAdapter.
-                    Thread.Sleep(500);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex,
-                    "[SingBoxManager] pre-launch TUN cleanup failed (non-fatal)");
-            }
+            WaitForQueuedTunAdapterRemoval();
+            TunAdapterDiagnostics
+                .PreStartCleanupAsync(_logger, "SingBoxManager.LaunchProcess")
+                .GetAwaiter().GetResult();
         }
 
         // Phase 3+ (2026-05-21): IProcessRunner adoption — build the

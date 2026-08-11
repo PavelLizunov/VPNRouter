@@ -52,6 +52,22 @@ public partial class SingBoxManager : IDisposable
     // 0 = idle, 1 = stopping.
     private int _stopState;
 
+    // Windows TUN removal is requested after an intentional stop/crash and can
+    // outlive both the callback and the manager that started it. Keep one
+    // process-wide ordered queue so a reconnect's fresh manager never races a
+    // prior pnputil removal of the same adapter.
+    private static readonly object s_tunRemovalGate = new();
+    private static Task<TunAdapterNotReadyException?> s_pendingTunRemoval =
+        Task.FromResult<TunAdapterNotReadyException?>(null);
+
+    internal static void ResetTunRemovalQueueForTests()
+    {
+        lock (s_tunRemovalGate)
+        {
+            s_pendingTunRemoval = Task.FromResult<TunAdapterNotReadyException?>(null);
+        }
+    }
+
     /// <summary>Test-only seam: swap in a fake for the long-lived sing-box
     /// spawn. Production paths use the default <see cref="ProcessRunner"/>.
     /// Mirrors TgProxyManager.Runner / VlessDeepVerifier.Runner. Not
@@ -184,8 +200,8 @@ public partial class SingBoxManager : IDisposable
     /// already exists</c> FATAL that fires when wintun's kernel state still
     /// holds a `VPNRouter-TUN` device record from a previous session that
     /// our standard `PreStartCleanupAsync` cleanup didn't remove (typically
-    /// because the netsh enumeration step missed the orphan or
-    /// `Remove-NetAdapter` was unavailable).
+    /// because the netsh enumeration step missed the orphan or exact PnP
+    /// removal was unavailable).
     ///
     /// <para>Reset to <c>false</c> on every successful <see cref="StartWithJson"/>,
     /// <see cref="Stop"/>, and <see cref="Dispose"/> — only the immediately-

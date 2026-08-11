@@ -20,9 +20,9 @@ namespace VPNRouter.Tests;
 /// in admin=disabled state by a prior r5 cleanup remained disabled
 /// when the new sing-box tried to claim it.
 ///
-/// <para>These tests pin the post-r4 contract: the readiness check
-/// lives at the single launch chokepoint and never throws on
-/// non-Windows / missing netsh / weird adapter state.</para>
+/// <para>These tests pin the post-r4 contract: the readiness check lives at
+/// the single launch chokepoint. The real-process no-op check runs only on
+/// non-Windows so tests never mutate the developer machine's live TUN.</para>
 /// </summary>
 public sealed class TunAdapterReadinessTests
 {
@@ -51,16 +51,15 @@ public sealed class TunAdapterReadinessTests
     [Fact]
     public async Task PreStartCleanupAsync_NonWindows_ReturnsZeroNoOp()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(),
+            "Non-Windows no-op contract; never clean the dev machine's live TUN from tests.");
+
         // On Linux/macOS this must be a silent zero-removal no-op,
         // never throw. Pins the OperatingSystem.IsWindows() guard.
-        // On Windows the test environment shouldn't have a stale
-        // VPNRouter-TUN adapter unless the dev machine is mid-reproduce,
-        // so we don't assert on the count there.
         var n = await TunAdapterDiagnostics.PreStartCleanupAsync(
             logger: null, context: "test.non-windows");
 
-        if (!OperatingSystem.IsWindows())
-            Assert.Equal(0, n);
+        Assert.Equal(0, n);
     }
 
     [Fact]
@@ -542,6 +541,7 @@ public sealed class TunAdapterReadinessTests
         // newly-added helper. Match a broad pattern that catches any
         // of them.
         var hasRemoval =
+            onExitedRegion.Contains("QueueTunAdapterRemoval") ||
             onExitedRegion.Contains("TryRemoveAdapterAsync") ||
             onExitedRegion.Contains("PreStartCleanupAsync") ||
             onExitedRegion.Contains("RemoveAdapterAsync") ||
@@ -576,6 +576,7 @@ public sealed class TunAdapterReadinessTests
             "StopInternal.early", 200, 1200);
 
         var hasRemoval =
+            stopEarlyRegion.Contains("QueueTunAdapterRemoval") ||
             stopEarlyRegion.Contains("TryRemoveAdapterAsync") ||
             stopEarlyRegion.Contains("PreStartCleanupAsync") ||
             stopEarlyRegion.Contains("RemoveAdapterAsync") ||

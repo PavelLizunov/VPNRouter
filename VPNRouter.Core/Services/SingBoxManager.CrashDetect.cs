@@ -125,22 +125,17 @@ public partial class SingBoxManager
         //
         // Step 1 (sync): disable via netsh — frees the kernel handle
         // so Windows drops the routes immediately.
-        // Step 2 (fire-and-forget): kick off Remove-NetAdapter on a
-        // background Task so the device record itself goes away. By
-        // the time HealthMonitor.AttemptRestart fires its
-        // SingBoxManager.Restart() call (5-10 s of exponential backoff
-        // later), the device record should be gone — NOT just disabled.
+        // Step 2: queue exact PnP removal on a background Task so the
+        // device record itself goes away. LaunchProcess joins that ordered
+        // queue and verifies stable absence before HealthMonitor can respawn.
         // Pre-hotfix, only the disable ran; the next sing-box
         // WintunCreateAdapter then hit ERROR_FILE_EXISTS and FATAL'd
         // (alicemoren1991 log 2026-05-19, restart-loop reproduction).
         //
-        // OnProcessExited is a sync void called from the Process.Exited
-        // event on a threadpool thread, so we can't await directly.
-        // Task.Run( ... .ContinueWith( ... )) gives us the fire-and-
-        // forget pattern without blocking the event callback, and the
-        // exception-swallowing ContinueWith ensures an async failure
-        // can never crash the host (Process.Exited handler exceptions
-        // would propagate to AppDomain.UnhandledException otherwise).
+        // OnProcessExited is a sync void called from the Process.Exited event
+        // on a threadpool thread, so it queues rather than awaits. The queue
+        // catches its own failures and carries strict settle failure forward to
+        // the next LaunchProcess gate.
         if (OperatingSystem.IsWindows())
         {
             try
@@ -157,20 +152,7 @@ public partial class SingBoxManager
                 TunAdapterDiagnostics.DisableOrphanedAdapter(
                     _logger, DefaultTunInterfaceName, "SingBoxManager.OnProcessExited");
 
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                            _logger, DefaultTunInterfaceName,
-                            "SingBoxManager.OnProcessExited.async");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning(ex,
-                            "[SingBoxManager] Async orphan adapter remove failed (non-fatal)");
-                    }
-                });
+                QueueTunAdapterRemoval("SingBoxManager.OnProcessExited.async");
             }
             catch (Exception ex)
             {
