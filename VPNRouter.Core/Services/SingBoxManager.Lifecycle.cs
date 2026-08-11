@@ -258,7 +258,6 @@ public partial class SingBoxManager
                 "[SingBoxManager] Stop called but sing-box already exited (process={ProcState}) — running cleanup-only path",
                 _handle == null ? "null" : "HasExited");
             State = SingBoxState.Stopped;
-            if (releaseLock) _tunLock.Release();
 
             // v2.30.1-r5 + hotfix 2026-05-19: belt-and-braces orphan
             // cleanup. OnProcessExited (above) already does this when
@@ -280,9 +279,6 @@ public partial class SingBoxManager
             {
                 try
                 {
-                    TunAdapterDiagnostics.DisableOrphanedAdapter(
-                        _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.early");
-
                     QueueTunAdapterRemoval("SingBoxManager.StopInternal.early.async");
                     if (releaseLock)
                         WaitForQueuedTunAdapterRemoval();
@@ -351,9 +347,6 @@ public partial class SingBoxManager
             {
                 try
                 {
-                    TunAdapterDiagnostics.DisableOrphanedAdapter(
-                        _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.killed");
-
                     QueueTunAdapterRemoval("SingBoxManager.StopInternal.killed.async");
                     if (releaseLock)
                         WaitForQueuedTunAdapterRemoval();
@@ -442,7 +435,7 @@ public partial class SingBoxManager
                 if (string.IsNullOrWhiteSpace(failure.InstanceId))
                     throw failure;
 
-                TunAdapterDiagnostics.WaitForPnpRemovalSettledAsync(
+                TunAdapterDiagnostics.WaitForExactPnpRemovalSettledAsync(
                         _logger, failure.InstanceId, DefaultTunInterfaceName,
                         "SingBoxManager.LaunchProcess.queued")
                     .GetAwaiter().GetResult();

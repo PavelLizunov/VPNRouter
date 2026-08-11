@@ -22,11 +22,10 @@ namespace VPNRouter.Tests;
 /// <list type="number">
 /// <item>NetAdapter module available + orphan found → PowerShell
 /// Remove-NetAdapter fires, count == 1.</item>
-/// <item>NetAdapter module unavailable + orphan found → netsh-disable
-/// fallback (Fix #4) fires, no PowerShell, count == 1.</item>
-/// <item>No orphan in enumeration + module unavailable → enumeration
-/// + defence-in-depth direct-by-name netsh-disable fallback fire, no
-/// PowerShell Remove-NetAdapter at all.</item>
+/// <item>NetAdapter module unavailable + orphan found → CIM resolves the
+/// exact PnP ID and pnputil removes it, count == 1.</item>
+/// <item>No orphan in enumeration + module unavailable → the direct-by-name
+/// CIM lookup confirms idempotent absence, count == 1.</item>
 /// </list>
 ///
 /// <para>All three are Windows-only (PreStartCleanupAsync early-returns
@@ -69,6 +68,14 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
             && r.Arguments[3].Contains("PnPDeviceID");
     }
 
+    private static bool IsCimResolve(ProcessRequest r)
+    {
+        return r.ExecutablePath == "powershell.exe"
+            && r.Arguments.Count == 4
+            && r.Arguments[3].Contains("Get-CimInstance -ClassName Win32_NetworkAdapter")
+            && r.Arguments[3].Contains("PNPDeviceID");
+    }
+
     /// <summary>Identify a `pnputil /remove-device` call (step 2).</summary>
     private static bool IsPnpUtilRemove(ProcessRequest r)
     {
@@ -92,11 +99,19 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
     {
         var previous = TunAdapterDiagnostics.Runner;
         var previousDelay = TunAdapterDiagnostics.RemovalDelayAsync;
+        var previousRequirement = TunAdapterDiagnostics.RequiresNativePnpApi;
+        var previousRemove = TunAdapterDiagnostics.RemoveNativePnpDevice;
+        var previousQuery = TunAdapterDiagnostics.QueryNativePnpPresence;
         fake.OnRun(IsPnpScan, new ProcessResult(0, "", "", TimeSpan.Zero, false));
         fake.OnRun(IsPnpInstanceQuery, new ProcessResult(
             0, "No devices were found.\r\n", "", TimeSpan.Zero, false));
         TunAdapterDiagnostics.Runner = fake;
         TunAdapterDiagnostics.RemovalDelayAsync = static (_, _) => Task.CompletedTask;
+        TunAdapterDiagnostics.RequiresNativePnpApi = static () => false;
+        TunAdapterDiagnostics.RemoveNativePnpDevice =
+            _ => new NativePnpRemovalResult(true, false, 0);
+        TunAdapterDiagnostics.QueryNativePnpPresence =
+            _ => new NativePnpPresenceResult(NativePnpPresence.Absent, 0x0D);
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(moduleAvailable);
         try { await body(); }
@@ -104,6 +119,9 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         {
             TunAdapterDiagnostics.Runner = previous;
             TunAdapterDiagnostics.RemovalDelayAsync = previousDelay;
+            TunAdapterDiagnostics.RequiresNativePnpApi = previousRequirement;
+            TunAdapterDiagnostics.RemoveNativePnpDevice = previousRemove;
+            TunAdapterDiagnostics.QueryNativePnpPresence = previousQuery;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
         }
     }
@@ -192,19 +210,14 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         Assert.Contains(@"ROOT\NET\0001", pnpCalls[0].Arguments);
     }
 
-    // ─── Test 2: module unavailable + orphan found → netsh fallback ─────
+    // ─── Test 2: module unavailable + orphan found → CIM exact removal ──
 
     [Fact]
-    public async Task PreStartCleanupAsync_OrphanFound_ModuleUnavailable_NetshFallbackFires()
+    public async Task PreStartCleanupAsync_OrphanFound_ModuleUnavailable_CimRemovalFires()
     {
-        // PinkuDani Fix #4 path: when the NetAdapter PowerShell module is
-        // missing on the host (Win10 LTSC class — no RSAT, no Pro/Ent
-        // module), the orchestrator must skip the PowerShell removal
-        // entirely and use the awaitable netsh-disable fallback to at
-        // least release the wintun kernel handle. The device record
-        // can't be removed without PowerShell, but the next sing-box
-        // WintunCreateAdapter won't hit ERROR_FILE_EXISTS on the orphan
-        // because the handle was freed.
+        // WINBRAT-class path: the optional NetAdapter module is absent, but
+        // Win32_NetworkAdapter CIM discovery is still available. The adapter
+        // must be disabled, resolved and removed before sing-box can spawn.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "PreStartCleanupAsync is Windows-only (netsh)");
 
@@ -222,28 +235,28 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
                 Stderr: "",
                 Duration: TimeSpan.FromMilliseconds(10),
                 TimedOut: false));
-        // netsh admin=disabled — used by both legacy DisableOrphanedAdapter
-        // and Fix #4 TryDisableAdapterViaNetshAsync. With moduleAvailable
-        // = false, only the latter fires.
+        // netsh releases the kernel handle before exact device removal.
         fake.OnRun(IsNetshDisable,
             new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
+        fake.OnRun(IsCimResolve,
+            new ProcessResult(0, @"ROOT\NET\0049" + "\r\n", "", TimeSpan.FromMilliseconds(5), false));
+        fake.OnRun(IsPnpUtilRemove,
+            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
 
         int removed = 0;
         await WithFakeAsync(fake, moduleAvailable: false, async () =>
         {
             removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
-                logger: null, context: "test.happy.netsh-fallback");
+                logger: null, context: "test.happy.cim-removal");
         });
 
-        // Single orphan netsh-disabled → counts as "handled" (1).
-        // TryDisableAdapterViaNetshAsync returns true on exit 0 so the
-        // PreStartCleanupAsync removed counter increments.
+        // Single orphan removed through CIM + pnputil → handled count 1.
         Assert.Equal(1, removed);
 
-        // No removal path must appear — the netsh-disable fallback is the
-        // entire point of this test (no Get-NetAdapter resolve, no pnputil).
+        // The module-specific resolver is skipped, but exact removal is not.
         Assert.DoesNotContain(fake.RunCalls, IsGetNetAdapterResolve);
-        Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemove);
+        Assert.Single(fake.RunCalls.Where(IsCimResolve));
+        Assert.Single(fake.RunCalls.Where(IsPnpUtilRemove));
 
         // netsh admin=disabled fired for VPNRouter-TUN.
         var disableCalls = fake.RunCalls.Where(IsNetshDisable).ToList();
@@ -259,26 +272,14 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         }, primary.Arguments);
     }
 
-    // ─── Test 3: no orphans found → skip per-adapter cleanup, count == 0 ─
+    // ─── Test 3: no orphans found → direct CIM confirms absence ─────────
 
     [Fact]
-    public async Task PreStartCleanupAsync_NoOrphans_ModuleUnavailable_SkipsPowerShellRemoval()
+    public async Task PreStartCleanupAsync_NoOrphans_ModuleUnavailable_CimConfirmsAbsence()
     {
-        // No VPNRouter-TUN or sing-box-tun row in the enumeration output
-        // → the per-adapter cleanup loop is skipped (staleAdapters.Count
-        // == 0). The defence-in-depth direct-by-name fallback still runs
-        // for the default VPNRouter-TUN name, but with moduleAvailable
-        // = false it routes to TryDisableAdapterViaNetshAsync, NOT
-        // PowerShell Remove-NetAdapter.
-        //
-        // Critical pin: no PowerShell call at all. With "adapter not
-        // found" returned from netsh disable, TryDisableAdapterViaNetshAsync
-        // would treat the exit-1 path as idempotent-success (+1 to
-        // removed), so we craft the fake to return a "real failure" exit
-        // code (5, "Access is denied" — purely synthetic) for the
-        // fallback netsh call. That makes removed == 0, which is what
-        // production callers (VpnEngine pre-start gate) consume as the
-        // "no cleanup needed" signal.
+        // Enumeration finds no owned row. The defence-in-depth direct-name
+        // pass still asks CIM, which returns no InstanceId and therefore
+        // proves idempotent absence without invoking pnputil.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "PreStartCleanupAsync is Windows-only (netsh)");
 
@@ -296,17 +297,15 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
                 Stderr: "",
                 Duration: TimeSpan.FromMilliseconds(10),
                 TimedOut: false));
-        // Defence-in-depth fallback call: simulate a "real failure" exit
-        // (not "not found") so TryDisableAdapterViaNetshAsync returns
-        // false → removed stays at 0. This is the canonical "nothing to
-        // clean up" outcome.
         fake.OnRun(IsNetshDisable,
             new ProcessResult(
-                ExitCode: 5,
+                ExitCode: 1,
                 Stdout: "",
-                Stderr: "Access is denied (synthetic — fallback returned failure)",
+                Stderr: "not found",
                 Duration: TimeSpan.FromMilliseconds(5),
                 TimedOut: false));
+        fake.OnRun(IsCimResolve,
+            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
 
         int removed = 0;
         await WithFakeAsync(fake, moduleAvailable: false, async () =>
@@ -315,16 +314,14 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
                 logger: null, context: "test.happy.no-orphan");
         });
 
-        // Nothing handled → 0.
-        Assert.Equal(0, removed);
+        // The direct pass completed and confirmed that no removal was needed.
+        Assert.Equal(1, removed);
 
         // Enumeration call fired exactly once.
         var enumCalls = fake.RunCalls.Where(IsNetshEnumeration).ToList();
         Assert.Single(enumCalls);
 
-        // No PowerShell call at all (no Remove-NetAdapter probe even —
-        // SetNetAdapterModuleAvailableForTests(false) bypassed the Lazy).
-        Assert.DoesNotContain(fake.RunCalls, r =>
-            r.ExecutablePath == "powershell.exe");
+        Assert.Single(fake.RunCalls.Where(IsCimResolve));
+        Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemove);
     }
 }
