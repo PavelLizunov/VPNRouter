@@ -101,6 +101,13 @@ follow the same convention.
 | `FreeConfigsApplyGateTests` | v2.40.0 FC interaction gates: Verified-only Connect/Apply, IsBusy guard, target/maxPing clamps (3 tests) |
 | `LinuxTunSandboxTests` | NixOS/bubblewrap guard: NoNewPrivs + uid_map parsing, trusted pkexec resolution, exact Linux TUNSETIFF EPERM classification |
 
+### v2.49.0 additions
+
+| Class / file | Coverage |
+|---|---|
+| `ConfigGeneratorAppRoutingFingerprintTests` | Effective Include/Exclude process selection and stable connected-Apply fingerprint |
+| `VpnEngineApplyStructuralChangeTests` | Live-baseline capture, failure rollback, and structural-change classification for connected Apply |
+
 ## Запустить
 
 ```bash

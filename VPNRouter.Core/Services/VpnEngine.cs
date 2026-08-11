@@ -128,6 +128,13 @@ public class VpnEngine : IDisposable
     internal string TunFingerprint { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Fingerprint of the effective include/exclude policy accepted by the live
+    /// sing-box instance. Unlike <see cref="MonitoredProcesses"/>, this includes
+    /// explicit RoutingAppsInclude/Exclude overrides.
+    /// </summary>
+    internal string ActiveAppRoutingFingerprint { get; private set; } = string.Empty;
+
+    /// <summary>
     /// Test seam: the conflict-skip remembered by the last <see cref="StartAsync"/>
     /// (reconnect fix 2026-06-15). The AutoFailover restart delegates re-enter
     /// <see cref="StartAsync"/> with this value so an internal failover honours the
@@ -383,6 +390,10 @@ public class VpnEngine : IDisposable
                 "[VpnEngine] StartAsync: F-E re-entry handled by inner call (outer aborting)");
             return;
         }
+
+        ActiveAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint(
+            _scanResult?.ProcessNames ?? [],
+            settings);
 
         // Fix #1 (r3): macOS DNS-leak hardening — pin the system resolver to the
         // TUN gateway so mDNSResponder's queries enter the tunnel instead of
@@ -646,6 +657,29 @@ public class VpnEngine : IDisposable
             return false;
         }
 
+        // StartupPipeline mutates these fields while it builds the candidate
+        // config. Preserve the live baseline so structural comparisons see the
+        // OLD values and a pre-commit Apply failure cannot publish candidate metadata.
+        var oldConfigMode = ActiveConfigMode;
+        var oldRoutingMode = ActiveRoutingMode;
+        var oldTunFingerprint = TunFingerprint;
+        var oldAppRoutingFingerprint = ActiveAppRoutingFingerprint;
+        var oldServerAddress = ActiveServerAddress;
+        var oldProfile = _activeProfile;
+        var oldScanResult = _scanResult;
+        var configCommitted = false;
+
+        void RestoreActiveBaseline()
+        {
+            ActiveConfigMode = oldConfigMode;
+            ActiveRoutingMode = oldRoutingMode;
+            TunFingerprint = oldTunFingerprint;
+            ActiveAppRoutingFingerprint = oldAppRoutingFingerprint;
+            ActiveServerAddress = oldServerAddress;
+            _activeProfile = oldProfile;
+            _scanResult = oldScanResult;
+        }
+
         OnStatus("Applying config changes...");
 
         try
@@ -667,9 +701,6 @@ public class VpnEngine : IDisposable
             // list change) and the ReloadConfigJson call here -- those
             // are intrinsic to the Apply path and don't belong in the
             // pipeline.
-            var oldProcessSet = (_scanResult?.ProcessNames ?? new List<string>())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
             var host = new VpnEngineStartupHost(this);
             // Task #36-A — same as StartAsync: propagate the DNS-hardening
             // seam into the pipeline. HotReload itself doesn't fire phase 7/8,
@@ -683,58 +714,80 @@ public class VpnEngine : IDisposable
             if (!result.Success || result.ConfigJson == null)
             {
                 _logger?.Warning("[VpnEngine] Apply: pipeline returned no config JSON");
+                RestoreActiveBaseline();
                 return false;
             }
 
             var configJson = result.ConfigJson;
 
-            // v2.27.1 -- auto-detect structural changes that hot-reload
-            // CAN'T pick up.
-            var newRoutingMode = (settings.App.RoutingMode ?? "split").ToLowerInvariant();
-            if (!string.Equals(newRoutingMode, ActiveRoutingMode, StringComparison.OrdinalIgnoreCase))
+            // Compare the generated candidate against the captured LIVE baseline.
+            // StartupPipeline has already populated _scanResult with the candidate
+            // scanner output at this point.
+            var newConfigMode = (settings.App.ConfigMode ?? "generated")
+                .Equals("custom", StringComparison.OrdinalIgnoreCase)
+                ? "custom"
+                : "generated";
+            var newRoutingMode = (settings.App.RoutingMode ?? "split")
+                .Equals("full", StringComparison.OrdinalIgnoreCase)
+                ? "full"
+                : "split";
+            var newTunFingerprint = ComputeTunFingerprint(settings.Tun);
+            var newAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint(
+                _scanResult?.ProcessNames ?? [],
+                settings);
+            var (configModeChanged, routingModeChanged, tunChanged, appRoutingChanged) = DetectStructuralChanges(
+                oldConfigMode,
+                newConfigMode,
+                oldRoutingMode,
+                newRoutingMode,
+                oldTunFingerprint,
+                newTunFingerprint,
+                oldAppRoutingFingerprint,
+                newAppRoutingFingerprint);
+
+            if (configModeChanged)
+            {
+                _logger?.Information(
+                    "[VpnEngine] ConfigMode change detected ({Old} -> {New}) -- escalating to full restart",
+                    oldConfigMode, newConfigMode);
+            }
+
+            if (routingModeChanged)
             {
                 _logger?.Information(
                     "[VpnEngine] RoutingMode change detected ({Old} -> {New}) -- escalating to full restart so TUN routes are re-laid",
-                    ActiveRoutingMode, newRoutingMode);
-                forceRestart = true;
+                    oldRoutingMode, newRoutingMode);
             }
 
-            // v2.27.2: TUN-layer structural change detection.
-            var newTunFingerprint = ComputeTunFingerprint(settings.Tun);
-            if (!string.Equals(newTunFingerprint, TunFingerprint, StringComparison.Ordinal))
+            if (tunChanged)
             {
                 _logger?.Information(
                     "[VpnEngine] TUN settings change detected -- escalating to full restart. Old fingerprint {Old}, new {New}",
-                    TunFingerprint, newTunFingerprint);
-                forceRestart = true;
+                    oldTunFingerprint, newTunFingerprint);
             }
 
-            // v2.31.8-r4: detect process list mutations that hot-reload
-            // can't honour for ALREADY-OPEN sockets.
-            var newProcessSet = (_scanResult?.ProcessNames ?? new List<string>())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (!oldProcessSet.SetEquals(newProcessSet))
+            if (appRoutingChanged)
             {
-                var added = newProcessSet.Except(oldProcessSet).ToList();
-                var removed = oldProcessSet.Except(newProcessSet).ToList();
                 _logger?.Information(
-                    "[VpnEngine] Process list change detected (+{AddedCount}: {Added} / -{RemovedCount}: {Removed}) -- escalating to full restart so existing TCP connections rejoin under new rules",
-                    added.Count, string.Join(",", added),
-                    removed.Count, string.Join(",", removed));
-                forceRestart = true;
+                    "[VpnEngine] Effective app routing change detected -- escalating to full restart so existing TCP connections rejoin under the new Include/Exclude policy");
             }
+
+            forceRestart |= configModeChanged || routingModeChanged || tunChanged || appRoutingChanged;
 
             // Try hot-reload first, UNLESS caller explicitly asked for a
             // full restart (v2.20.4 + v2.27.1 auto-detect above).
             if (!forceRestart && _singBox.TryReloadConfigJson(configJson))
             {
+                ActiveConfigMode = newConfigMode;
+                ActiveRoutingMode = newRoutingMode;
+                TunFingerprint = newTunFingerprint;
+                ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
+                configCommitted = true;
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
                 _logger?.Information("[VpnEngine] Applied via hot-reload");
-                // W1.2 hook 2 (bug-hunt P1-3): an excluded-set edit reaches here as a bare hot-reload
-                // (it never enters _scanResult.ProcessNames, so it doesn't force a restart). Re-engage so
-                // the driver's SET_CONFIGURATION tracks it — a de-excluded app stops bypassing the VPN.
-                // Idempotent + cheap-skips when the excluded set is unchanged (see EngageLocked).
-                await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+                // The sing-box commit is irreversible here; finish driver
+                // reconciliation even if the caller cancels afterwards.
+                await TryEngageSplitDriverAsync(settings, CancellationToken.None).ConfigureAwait(false);
                 return true;
             }
 
@@ -746,21 +799,25 @@ public class VpnEngine : IDisposable
             // v2.31.7-r1: pass through forceRestart so the structural-
             // change intent reaches sing-box.
             _singBox.ReloadConfigJson(configJson, forceRestart);
+            ActiveConfigMode = newConfigMode;
             ActiveRoutingMode = newRoutingMode;
             TunFingerprint = newTunFingerprint;
+            ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
+            configCommitted = true;
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
             // W1.2 hook 2 — re-engage the true-split driver after a structural hot-apply. forceRestart
             // restarts the sing-box PROCESS (SingBoxManager.Restart), NOT StartAsyncInternal, so hook 1
             // does not re-fire — this is the ONLY place an excluded-set / TUN-IP / mode change reaches the
             // driver while connected (re-resolves paths + re-engages; disengages if we flipped out of
-            // exclude). Idempotent. (A bare hot-reload above has no split delta — the process-list change
-            // that an excluded-set edit makes always forces this restart branch.)
-            await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+            // exclude). Idempotent.
+            await TryEngageSplitDriverAsync(settings, CancellationToken.None).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
         {
+            if (!configCommitted)
+                RestoreActiveBaseline();
             _logger?.Error(ex, "[VpnEngine] Apply failed");
             OnStatus($"Apply failed: {ex.Message}");
             return false;
@@ -1060,6 +1117,38 @@ public class VpnEngine : IDisposable
             tun.StrictRoute ? "1" : "0",
             excludeKey);
     }
+
+    /// <summary>
+    /// Pure structural-diff policy for connected Apply. Named tuple members keep
+    /// the call site explicit without introducing a one-use result type.
+    /// </summary>
+    internal static (bool ConfigModeChanged, bool RoutingModeChanged, bool TunChanged, bool AppRoutingChanged)
+        DetectStructuralChanges(
+            string activeConfigMode,
+            string candidateConfigMode,
+            string activeRoutingMode,
+            string candidateRoutingMode,
+            string activeTunFingerprint,
+            string candidateTunFingerprint,
+            string activeAppRoutingFingerprint,
+            string candidateAppRoutingFingerprint)
+        => (
+            !string.Equals(
+                activeConfigMode,
+                candidateConfigMode,
+                StringComparison.OrdinalIgnoreCase),
+            !string.Equals(
+                activeRoutingMode,
+                candidateRoutingMode,
+                StringComparison.OrdinalIgnoreCase),
+            !string.Equals(
+                activeTunFingerprint,
+                candidateTunFingerprint,
+                StringComparison.Ordinal),
+            !string.Equals(
+                activeAppRoutingFingerprint,
+                candidateAppRoutingFingerprint,
+                StringComparison.Ordinal));
 
     /// <summary>
     /// v2.31.6-r10 (Phase F) — consolidated user-customization merge step.

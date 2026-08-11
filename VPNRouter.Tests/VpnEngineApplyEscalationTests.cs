@@ -4,9 +4,9 @@ using System.Reflection;
 namespace VPNRouter.Tests;
 
 /// <summary>
-/// v2.31.9-r5 regression pin for the three structural-change triggers
+/// v2.49 regression pin for the four structural-change triggers
 /// that <see cref="VPNRouter.Core.Services.VpnEngine.ApplyAsync"/> MUST
-/// escalate to <c>forceRestart = true</c> on. Each trigger has its own
+/// aggregate into <c>forceRestart</c>. Each trigger has its own
 /// brat-2026-05-04..05 / earlier user-report origin:
 ///
 /// <list type="number">
@@ -41,15 +41,25 @@ namespace VPNRouter.Tests;
 /// </summary>
 public sealed class VpnEngineApplyEscalationTests
 {
+    private const string StructuralAggregation =
+        "forceRestart |= configModeChanged || routingModeChanged || tunChanged || appRoutingChanged;";
+
+    [Fact]
+    public void ApplyAsync_HasConfigModeEscalation()
+    {
+        var src = LoadVpnEngineSource();
+        if (src == null) return;
+        Assert.Contains("ConfigMode change detected", src);
+        Assert.Contains(StructuralAggregation, src);
+    }
+
     [Fact]
     public void ApplyAsync_HasRoutingModeEscalation()
     {
         var src = LoadVpnEngineSource();
         if (src == null) return; // CI without source — skip
         Assert.Contains("RoutingMode change detected", src);
-        // The escalation line must set forceRestart in the same block.
-        // Coarse pin: both literals appear within 400 chars of each other.
-        AssertNearby(src, "RoutingMode change detected", "forceRestart = true", maxGap: 400);
+        Assert.Contains(StructuralAggregation, src);
     }
 
     [Fact]
@@ -58,16 +68,17 @@ public sealed class VpnEngineApplyEscalationTests
         var src = LoadVpnEngineSource();
         if (src == null) return;
         Assert.Contains("TUN settings change detected", src);
-        AssertNearby(src, "TUN settings change detected", "forceRestart = true", maxGap: 400);
+        Assert.Contains(StructuralAggregation, src);
     }
 
     [Fact]
-    public void ApplyAsync_HasProcessListChangeEscalation()
+    public void ApplyAsync_HasEffectiveAppRoutingChangeEscalation()
     {
         var src = LoadVpnEngineSource();
         if (src == null) return;
-        Assert.Contains("Process list change detected", src);
-        AssertNearby(src, "Process list change detected", "forceRestart = true", maxGap: 400);
+        Assert.Contains("Effective app routing change detected", src);
+        Assert.Contains("ComputeAppRoutingFingerprint", src);
+        Assert.Contains(StructuralAggregation, src);
     }
 
     [Fact]
@@ -86,6 +97,12 @@ public sealed class VpnEngineApplyEscalationTests
             src.Contains("ReloadConfigJson(configJson, true)");
         Assert.True(hasForceRestartArg,
             "VpnEngine.ApplyAsync must pass forceRestart through to SingBoxManager.ReloadConfigJson — see v2.31.7-r1 brat fix.");
+        var aggregationIndex = src.IndexOf(StructuralAggregation, StringComparison.Ordinal);
+        var reloadIndex = src.IndexOf(
+            "ReloadConfigJson(configJson, forceRestart)",
+            StringComparison.Ordinal);
+        Assert.True(aggregationIndex >= 0 && reloadIndex > aggregationIndex,
+            "Structural changes must aggregate before ReloadConfigJson consumes forceRestart.");
     }
 
     private static string? LoadVpnEngineSource()
@@ -99,15 +116,4 @@ public sealed class VpnEngineApplyEscalationTests
         return null;
     }
 
-    private static void AssertNearby(string src, string a, string b, int maxGap)
-    {
-        int idxA = src.IndexOf(a);
-        Assert.True(idxA >= 0, $"Source must contain '{a}'");
-        // Search for `b` AFTER `a`.
-        int idxB = src.IndexOf(b, idxA);
-        Assert.True(idxB >= 0, $"Source must contain '{b}' AFTER '{a}'");
-        int gap = idxB - idxA;
-        Assert.True(gap <= maxGap,
-            $"'{a}' and '{b}' should be in the same block (within {maxGap} chars); actual gap = {gap}");
-    }
 }

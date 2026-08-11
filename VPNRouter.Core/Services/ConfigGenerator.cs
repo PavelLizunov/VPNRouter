@@ -55,6 +55,55 @@ public static class ConfigGenerator
     // — see plans/mtu-fragmentation-robustness-2026-07-02.md.
     internal const int AwgEndpointMtu = 1420;
 
+    /// <summary>
+    /// Resolve the process list that per-app routing actually emits. Include mode
+    /// honours an explicit list when present and otherwise falls back to the
+    /// profile scanner; exclude mode always uses its own explicit list.
+    /// </summary>
+    internal static List<string> ResolveEffectiveAppProcesses(
+        IEnumerable<string> resolvedProcessNames,
+        AppSettings settings)
+    {
+        static List<string> Normalize(IEnumerable<string>? names) => (names ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Where(p => !p.Contains('*') && !p.Contains('?'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
+            .ToLowerInvariant();
+        if (routingAppsMode == "exclude")
+            return Normalize(settings.App.RoutingAppsExclude);
+
+        var explicitInclude = Normalize(settings.App.RoutingAppsInclude);
+        return explicitInclude.Count > 0
+            ? explicitInclude
+            : Normalize(resolvedProcessNames);
+    }
+
+    /// <summary>
+    /// Deterministic fingerprint of effective per-app routing. Full-tunnel mode
+    /// deliberately ignores app-list edits because no per-app rule is emitted.
+    /// Process-name casing is preserved because sing-box matching is
+    /// case-sensitive; callers compare fingerprints ordinally.
+    /// </summary>
+    internal static string ComputeAppRoutingFingerprint(
+        IEnumerable<string> resolvedProcessNames,
+        AppSettings settings)
+    {
+        if ((settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase))
+            return "full";
+
+        var mode = (settings.App.RoutingAppsMode ?? "include")
+            .Equals("exclude", StringComparison.OrdinalIgnoreCase)
+            ? "exclude"
+            : "include";
+        var processes = ResolveEffectiveAppProcesses(resolvedProcessNames, settings)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase);
+        return $"{mode}:{string.Join('\n', processes)}";
+    }
+
     public static SingBoxConfig Generate(
         Profile profile,
         IEnumerable<string> resolvedProcessNames,
@@ -62,15 +111,6 @@ public static class ConfigGenerator
         bool? strictDnsOverride = null,
         Func<VlessServerEntry, bool>? isServerAlive = null)
     {
-        // Filter out wildcard patterns — sing-box process_name doesn't support globs
-        // Only pass exact .exe names (no * or ?)
-        // Preserve original case — sing-box process_name matching is case-sensitive
-        // (Go map lookup against filepath.Base from QueryFullProcessImageName)
-        var processes = resolvedProcessNames
-            .Where(p => !p.Contains('*') && !p.Contains('?'))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
         // AM-1 (2026-05-11): per-app routing mode. Two paths:
         //  • "exclude" — user opted into inverted-split-tunnel. Take the
         //    processes from RoutingAppsExclude (NOT from
@@ -91,30 +131,7 @@ public static class ConfigGenerator
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
         var isExcludeMode = routingAppsMode == "exclude";
-
-        List<string> appsProcessList;
-        if (isExcludeMode)
-        {
-            appsProcessList = (settings.App.RoutingAppsExclude ?? new List<string>())
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Where(p => !p.Contains('*') && !p.Contains('?'))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-        else
-        {
-            // Include mode. If the user explicitly populated
-            // RoutingAppsInclude we honour it verbatim (override path);
-            // otherwise we use the legacy resolved list from
-            // Profile/CustomApps. This keeps users that never touched the
-            // new toggle on their previous behaviour byte-for-byte.
-            var explicitInclude = (settings.App.RoutingAppsInclude ?? new List<string>())
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Where(p => !p.Contains('*') && !p.Contains('?'))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            appsProcessList = explicitInclude.Count > 0 ? explicitInclude : processes;
-        }
+        var appsProcessList = ResolveEffectiveAppProcesses(resolvedProcessNames, settings);
 
         // macOS (Fix #2, deep-audit 2026-06-04): Chromium/Electron apps do their
         // network I/O under child "Helper" processes ("Google Chrome Helper
