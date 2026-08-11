@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### v2.49.0-r5 WINBRAT post-ship - 2026-08-12
+
+- [ ] **P1 CONFIRMED / BLOCKS STABLE** - on Windows 10 LTSC 2019, r5's first Connect still hit Wintun `ERROR_FILE_EXISTS` and crashed sing-box once before HealthMonitor recovered on its second attempt. The in-process `Win32_NetworkAdapter` query returned no row for the phantom, while read-only WINBRAT inventory found the exact `VPNRouter-TUN` mapping and PnP ID under Windows Network Connections plus 46 numbered historical Wintun records. Resolve the exact registry-mapped PnP ID through the existing SetupAPI/ConfigMgr fail-closed gate; never wildcard-remove Wintun or touch Tailscale. Source: r5 post-ship log `vpnrouter20260812_002.log`; `VPNRouter.Core/Services/WindowsPnpDeviceManager.cs`; `artifacts/brat-verify/2.49.0-r5/`.
+
 ### Post-release follow-ups - 2026-08-09
 
 - [ ] **P1 CANDIDATE / MEASUREMENT-GATED** - the owner's dev machine recorded Windows `Tcpip` event 4266 at 2026-08-09 09:33:17Z: allocation from the global UDP ephemeral-port space failed because all ports were in use. This can explain simultaneous Discord, browser/QUIC and DNS interruptions while the VPN UI/core remain alive, but the event carries no owning process. A later snapshot was healthy (113 UDP endpoints, 77 unique local ports, `sing-box` owned 2; no app crash or WLAN disconnect), so attribution to VPNRouter is not established. A later GitHub TCP timeout also occurred with only 138-152 UDP endpoints, no new 4266 event and GUI/core continuously alive, proving not every observed request failure is UDP-port exhaustion. A privacy-safe 8-hour sampler now records only counts and process names; do not change socket/MTU settings until recurrence identifies an owner. Source: local Windows System log plus sanitized 2026-08-09 samples.

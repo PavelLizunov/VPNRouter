@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'updateprobe', 'liveupdate')]
+    [ValidateSet('identity', 'deploy', 'uia', 'screenshot', 'logs', 'tuninventory', 'updateprobe', 'liveupdate')]
     [string]$Action,
 
     [string]$Version,
@@ -652,6 +652,49 @@ switch ($Action) {
                 exit 1
             }
             Write-Host "CLEAN: no [ERR]/Exception/FATAL in the last $LogWindowMinutes minute(s) of remote $($scan.File)." -ForegroundColor Green
+        }
+        finally { Remove-PSSession $s }
+    }
+
+    'tuninventory' {
+        $s = New-VerifiedBratSession
+        try {
+            $inventory = Invoke-Command -Session $s -ScriptBlock {
+                $networkClass = '{4D36E972-E325-11CE-BFC1-08002BE10318}'
+                $connectionRoot = "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Network\$networkClass"
+                $allConnections = @(
+                    Get-ChildItem $connectionRoot -ErrorAction SilentlyContinue |
+                        ForEach-Object {
+                            $connectionKey = Join-Path $_.PSPath 'Connection'
+                            $values = Get-ItemProperty $connectionKey -ErrorAction SilentlyContinue
+                            if ($values -and $values.Name) {
+                                [pscustomobject]@{
+                                    Name          = [string]$values.Name
+                                    PnpInstanceId = [string]$values.PnpInstanceID
+                                    ConnectionId  = $_.PSChildName
+                                }
+                            }
+                        })
+
+                $wintunRoot = 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\SWD\WINTUN'
+                $ownedConnections = @($allConnections | Where-Object {
+                    $_.Name -eq 'VPNRouter-TUN' -or
+                    $_.Name -eq 'sing-box-tun' -or
+                    $_.Name -like 'sing-box-tun-*'
+                })
+                $numberedCount = @($allConnections | Where-Object {
+                    $_.Name -match '^VPNRouter-TUN \d+$'
+                }).Count
+                $wintunCount = @(Get-ChildItem $wintunRoot -ErrorAction SilentlyContinue).Count
+
+                [pscustomobject]@{
+                    OwnedConnections      = $ownedConnections
+                    NumberedVpnRouterCount = $numberedCount
+                    TotalWintunDeviceCount = $wintunCount
+                }
+            }
+            Write-Host "Read-only TUN inventory on $BratMachineName`:" -ForegroundColor Cyan
+            Write-Host ($inventory | ConvertTo-Json -Depth 5)
         }
         finally { Remove-PSSession $s }
     }

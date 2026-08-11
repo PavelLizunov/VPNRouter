@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using VPNRouter.Core.Services;
@@ -22,7 +23,7 @@ namespace VPNRouter.Tests;
 /// <list type="number">
 /// <item>NetAdapter module available + orphan found → PowerShell
 /// Remove-NetAdapter fires, count == 1.</item>
-/// <item>NetAdapter module unavailable + orphan found → in-process WMI resolves the
+/// <item>NetAdapter module unavailable + orphan found → Network Connections resolves the
 /// exact PnP ID and pnputil removes it, count == 1.</item>
 /// <item>No orphan in enumeration + module unavailable → the direct-by-name
 /// native lookup confirms idempotent absence, count == 1.</item>
@@ -213,7 +214,7 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
     public async Task PreStartCleanupAsync_OrphanFound_ModuleUnavailable_NativeRemovalFires()
     {
         // WINBRAT-class path: the optional NetAdapter module is absent, but
-        // in-process Win32_NetworkAdapter discovery is still available. The adapter
+        // Windows Network Connections discovery is still available. The adapter
         // must be disabled, resolved and removed before sing-box can spawn.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "PreStartCleanupAsync is Windows-only (netsh)");
@@ -319,6 +320,44 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         Assert.DoesNotContain(fake.RunCalls,
             c => c.ExecutablePath == "powershell.exe" &&
                  c.Arguments.Any(a => a.Contains("Get-CimInstance")));
+        Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemove);
+    }
+
+    [Fact]
+    public async Task PreStartCleanupAsync_NumberedHistoricalRow_IsNeverRemoved()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "PreStartCleanupAsync is Windows-only (netsh)");
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsNetshEnumeration,
+            new ProcessResult(
+                ExitCode: 0,
+                Stdout:
+                """
+                Admin State    State          Type             Interface Name
+                -------------------------------------------------------------------------
+                Disabled       Disconnected   Dedicated        VPNRouter-TUN 46
+                """,
+                Stderr: "",
+                Duration: TimeSpan.FromMilliseconds(10),
+                TimedOut: false));
+
+        var lookedUpNames = new List<string>();
+        await WithFakeAsync(fake, moduleAvailable: false, async () =>
+        {
+            _ = await TunAdapterDiagnostics.PreStartCleanupAsync(
+                logger: null, context: "test.numbered-history");
+        }, nativeLookup: name =>
+        {
+            lookedUpNames.Add(name);
+            return new NativePnpLookupResult(true, Array.Empty<string>(), null);
+        });
+
+        // The normal exact-name fallback still verifies VPNRouter-TUN absence,
+        // but the historical numbered row never reaches lookup or mutation.
+        Assert.Equal(new[] { "VPNRouter-TUN" }, lookedUpNames);
+        Assert.DoesNotContain(fake.RunCalls, IsNetshDisable);
         Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemove);
     }
 }
