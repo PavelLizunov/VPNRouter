@@ -74,6 +74,12 @@ public static partial class Strings
     public static string TgProxyPortBusyWithOwner => Ru
         ? "Порт {0} занят: {1}. Закройте его или поменяйте порт в настройках."
         : "Port {0} is busy (owner: {1}). Close the other app or change the port in settings.";
+    public static string TgProxyExitedImmediately => Ru
+        ? "Ошибка: tg-ws-proxy завершился сразу."
+        : "Error: tg-ws-proxy exited immediately.";
+    public static string TgProxyTelegramNotInstalled => Ru
+        ? "Telegram не установлен — скачай с desktop.telegram.org"
+        : "Telegram not installed — download from desktop.telegram.org";
 
     // v2.36 (MVP one-button task C): non-blocking warning banner shown
     // when the tg:// URI scheme has no registered handler (Telegram

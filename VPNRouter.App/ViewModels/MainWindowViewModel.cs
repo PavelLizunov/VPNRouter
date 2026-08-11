@@ -42,9 +42,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // without it loitering through subsequent actions. Cancelled+reissued
     // when a new toast arrives within the window.
     private const int RulesToastDurationMs = 2000;
-    // TgProxy settle window: matches the AutostartBootstrap path's 2s
-    // (see `MainWindowViewModel.AutostartBootstrap.cs` line ~165). Proxy
-    // needs ≥1.5s on warm-startup to bind the port and serve requests.
+    // TgProxy settle window now runs only as a background late-exit recheck,
+    // after TgProxyManager's own 2s foreground watchdog has completed.
     private const int TgProxySettleDelayMs = 2000;
     // Reconnect retry sleep when TUN lock stolen by Service: enough time
     // for the Service's HealthMonitor to give up and release the lock on
@@ -67,6 +66,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
+    private Task? _tgProxyPostStartRecheckTask;
 #endif
     private readonly ILogger _logger;
     // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore seam for Load / Save /
@@ -6487,7 +6487,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 // rooted the VM; Dispose() now detaches it + disposes the manager.
                 _tgProxy.StatsUpdated += OnTgProxyStats;
             }
-            _tgProxy.Start(TgProxyPort, TgProxySecret);
+            // TgProxyManager.Start owns the single bounded 2s early-exit
+            // watchdog. Publish readiness as soon as it succeeds instead of
+            // adding a second foreground settle delay.
+            var manager = _tgProxy!;
+            var port = TgProxyPort;
+            var secret = TgProxySecret;
+            manager.Start(port, secret);
 
             // v2.36 (MVP one-button task C): pre-flight scheme check
             // after spawn succeeded but BEFORE the user is told to
@@ -6497,22 +6503,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // (defensive — don't show false-positive banner).
             IsTelegramSchemeWarningVisible = !TgProxyManager.IsTelegramSchemeRegistered();
 
-            // Verify it actually started
-            await Task.Delay(TgProxySettleDelayMs);
-            if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
+            if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))
             {
                 TgProxyEnabled = true;
-                TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
+                TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", port, secret);
                 TgProxyStatus = IsRussian
-                    ? $"Работает (PID {_tgProxy.Pid})"
-                    : $"Running (PID {_tgProxy.Pid})";
+                    ? $"Работает (PID {manager.Pid})"
+                    : $"Running (PID {manager.Pid})";
+
+                // Preserve the old 2-4s failure-detection window without
+                // delaying the ready UI. A user Stop or manager replacement
+                // makes this stale recheck a no-op.
+                _tgProxyPostStartRecheckTask = VerifyTgProxyAfterStartAsync(manager, port);
             }
             else
             {
                 TgProxyEnabled = false;
-                TgProxyStatus = IsRussian
-                    ? "Ошибка: tg-ws-proxy завершился сразу."
-                    : "Error: tg-ws-proxy exited immediately.";
+                TgProxyStatus = Strings.TgProxyExitedImmediately;
             }
             // v2.36.0-r7 (task #63): same defensive wrap as the Stop branch
             // above. The outer try/catch at line ~4605 would catch IOException
@@ -6550,6 +6557,28 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
+#if PLATFORM_WINDOWS
+    private async Task VerifyTgProxyAfterStartAsync(TgProxyManager manager, int port)
+    {
+        await Task.Delay(TgProxySettleDelayMs);
+        if (_disposed || !ReferenceEquals(_tgProxy, manager) || !TgProxyEnabled)
+            return;
+        if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))
+            return;
+
+        TgProxyEnabled = false;
+        TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;
+        TgProxyStatus = Strings.TgProxyExitedImmediately;
+
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex,
+                "[VM] TgProxy post-start recheck: SaveSettings failed, keeping in-memory failure state");
+        }
+    }
+#endif
+
     [RelayCommand]
     private void CopyTgProxyLink()
     {
@@ -6572,15 +6601,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (string.IsNullOrEmpty(TgProxySecret)) return;
 
         // v2.31.6-r4 (BUG #1 fix): if no app is registered for the
-        // tg:// URI scheme (Windows shows "We can't open this 'tg' link"
-        // dialog), Telegram desktop is missing. Surface the cause
-        // directly instead of letting the OS dialog do the talking,
-        // and offer the canonical download link.
+        // tg:// URI scheme, surface the cause instead of invoking the OS.
         if (!TgProxyManager.IsTelegramSchemeRegistered())
         {
-            ShowTgProxyToast(IsRussian
-                ? "Telegram не установлен — скачай с desktop.telegram.org"
-                : "Telegram not installed — download from desktop.telegram.org");
+            ShowTgProxyToast(Strings.TgProxyTelegramNotInstalled);
             return;
         }
 
@@ -6615,6 +6639,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             await ToggleTgProxyAsync();
         }
 
+        var startedPort = TgProxyPort;
+        var startedSecret = TgProxySecret;
+        var postStartRecheck = _tgProxyPostStartRecheckTask;
+        if (postStartRecheck != null)
+            await postStartRecheck;
+
         // Step 3: open Telegram with the deep-link. Skip if the
         // start above failed for some reason (no binary, port
         // collision, etc.) — Status text already explains why.
@@ -6627,7 +6657,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // download-link toast.
         if (TgProxyEnabled && !string.IsNullOrEmpty(TgProxySecret))
         {
-            OpenTgProxyInTelegram();
+            if (!TgProxyManager.IsTelegramSchemeRegistered())
+                ShowTgProxyToast(Strings.TgProxyTelegramNotInstalled);
+            else
+                TgProxyManager.OpenInTelegram("127.0.0.1", startedPort, startedSecret);
         }
 #else
         await Task.CompletedTask;

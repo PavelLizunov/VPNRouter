@@ -505,6 +505,8 @@ public static class Strings
     // v2.36 (MVP one-button) — delegate getters for new strings.
     public static string TgProxyPortBusy => global::VPNRouter.Core.Localization.Strings.TgProxyPortBusy;
     public static string TgProxyPortBusyWithOwner => global::VPNRouter.Core.Localization.Strings.TgProxyPortBusyWithOwner;
+    public static string TgProxyExitedImmediately => global::VPNRouter.Core.Localization.Strings.TgProxyExitedImmediately;
+    public static string TgProxyTelegramNotInstalled => global::VPNRouter.Core.Localization.Strings.TgProxyTelegramNotInstalled;
     public static string TgProxySchemeMissingWarning => global::VPNRouter.Core.Localization.Strings.TgProxySchemeMissingWarning;
     public static string TgProxyDownloadStep1Python => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep1Python;
     public static string TgProxyDownloadStep2Wheels => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep2Wheels;
