@@ -21,32 +21,37 @@ namespace VPNRouter.Tests;
 /// </summary>
 public class DeepVerifyProbeCancellationTests
 {
-    private static TcpListener StartSilentListener(out int port)
+    private static TcpListener StartSilentListener(out int port, out Task<TcpClient> acceptedClient)
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        _ = listener.AcceptTcpClientAsync(); // hold the socket open, say nothing
+        acceptedClient = listener.AcceptTcpClientAsync(); // keep the accepted socket rooted
         return listener;
     }
 
     [Fact]
     public async Task ExternalCancellation_Rethrows_NotHttpTimeout()
     {
-        var listener = StartSilentListener(out var port);
+        var listener = StartSilentListener(out var port, out var acceptedClient);
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 DeepVerifyProbe.ProbeViaSocksAsync(port, TimeSpan.FromSeconds(10), cts.Token));
         }
-        finally { listener.Stop(); }
+        finally
+        {
+            listener.Stop();
+            try { (await acceptedClient).Dispose(); }
+            catch (Exception ex) when (ex is SocketException or ObjectDisposedException) { }
+        }
     }
 
     [Fact]
     public async Task ClientTimeout_WithoutExternalCancel_ReportsHttpTimeout()
     {
-        var listener = StartSilentListener(out var port);
+        var listener = StartSilentListener(out var port, out var acceptedClient);
         try
         {
             var (ok, _, err) = await DeepVerifyProbe.ProbeViaSocksAsync(
@@ -73,6 +78,11 @@ public class DeepVerifyProbeCancellationTests
                 err == "http timeout" || err!.StartsWith("http: ", StringComparison.Ordinal),
                 $"expected a client-timeout http failure (\"http timeout\" or \"http: …\"), got: \"{err}\"");
         }
-        finally { listener.Stop(); }
+        finally
+        {
+            listener.Stop();
+            try { (await acceptedClient).Dispose(); }
+            catch (Exception ex) when (ex is SocketException or ObjectDisposedException) { }
+        }
     }
 }
