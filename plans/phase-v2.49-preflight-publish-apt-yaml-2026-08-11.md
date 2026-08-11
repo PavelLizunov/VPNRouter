@@ -29,10 +29,10 @@ six-minute timeout exactly.
 
 ## Verification gate
 
-- [ ] Workflow parses as YAML without errors.
-- [ ] Diff contains indentation changes only.
-- [ ] Commit hooks pass without bypass.
-- [ ] GitHub PR checks are green.
+- [x] Workflow parses as YAML without errors.
+- [x] Diff changes only block indentation and its explanatory comment.
+- [x] Commit hooks pass without bypass.
+- [x] GitHub PR checks are green.
 
 ## Risk
 
@@ -42,4 +42,18 @@ six-minute timeout exactly.
 
 ## Outcome
 
-Pending implementation and verification.
+**Status**: PASS
+**Commits**: `0166fad3` (brief), `e65babc6` (workflow correction)
+**Test deltas**: none
+**Files changed**: 2 · workflow +5/-6 before this Outcome update
+**Verification gate results**:
+- [x] YAML parse: PyYAML `safe_load` accepted the workflow and found the publish job.
+- [x] Diff review: twelve attempts, thirty-second delay, and six-minute failure remain unchanged.
+- [x] Hooks: pre-commit, commit-msg, and pre-push passed without bypass.
+- [x] PR #130 CI: `test`, `go-test-windows`, and `grep` passed; the product-only
+  `characterization-windows` job skipped as expected.
+**Surprises encountered**: the latest `main` workflow was accepted by the stable
+release merge but rejected by Dependabot because five shell-block lines had lost
+their YAML indentation.
+**Follow-ups spawned**: begin v2.49 connection-stability work from this green head.
+**Rollback**: revert `e65babc6` or close PR #130.
