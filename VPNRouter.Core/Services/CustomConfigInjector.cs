@@ -104,13 +104,6 @@ public static class CustomConfigInjector
             }
         }
 
-        // Filter wildcards — sing-box process_name doesn't support globs.
-        // Preserve original case — sing-box matching is case-sensitive.
-        var scannerProcesses = processNames
-            .Where(p => !p.Contains('*') && !p.Contains('?'))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
         // v2.39.0 (apps/public-configs audit P0 #147): custom-JSON mode must
         // honour the SAME Apps Include/Exclude + Full-Tunnel policy as generated
         // mode (ConfigGenerator.BuildRoute). Before this, Inject ALWAYS routed
@@ -121,7 +114,7 @@ public static class CustomConfigInjector
         //       else (which should have been tunnelled) fell to final=direct.
         //   (b) FULL tunnel leaked everything direct whenever the user's JSON
         //       carried final=direct (or omitted final).
-        // The block below mirrors ConfigGenerator exactly.
+        // Effective app selection is shared with ConfigGenerator below.
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
         var isExcludeMode = routingAppsMode == "exclude";
@@ -130,26 +123,8 @@ public static class CustomConfigInjector
 
         // Resolve the effective per-app list the SAME way ConfigGenerator does:
         // exclude → RoutingAppsExclude; include → explicit RoutingAppsInclude
-        // when the user populated it, else the legacy scanner list (keeps users
-        // who never opened the Apps tab byte-for-byte on their old behaviour).
-        List<string> processes;
-        if (isExcludeMode)
-        {
-            processes = (settings.App.RoutingAppsExclude ?? new List<string>())
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Where(p => !p.Contains('*') && !p.Contains('?'))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-        else
-        {
-            var explicitInclude = (settings.App.RoutingAppsInclude ?? new List<string>())
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Where(p => !p.Contains('*') && !p.Contains('?'))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            processes = explicitInclude.Count > 0 ? explicitInclude : scannerProcesses;
-        }
+        // when the user populated it, else the legacy scanner list.
+        var processes = ConfigGenerator.ResolveEffectiveAppProcesses(processNames, settings);
 
         bool isActionBased = DetectActionFormat(config);
 
