@@ -653,9 +653,15 @@ public partial class SingBoxManager
         {
             try
             {
-                TunAdapterDiagnostics.PreStartCleanupAsync(
-                        _logger, "SingBoxManager.LaunchProcess")
+                var removedAdapterCount = TunAdapterDiagnostics
+                    .PreStartCleanupAsync(_logger, "SingBoxManager.LaunchProcess")
                     .GetAwaiter().GetResult();
+                if (removedAdapterCount > 0)
+                {
+                    // pnputil reports success before Windows finishes deleting
+                    // the device node. Let PnP settle before WintunCreateAdapter.
+                    Thread.Sleep(500);
+                }
             }
             catch (Exception ex)
             {

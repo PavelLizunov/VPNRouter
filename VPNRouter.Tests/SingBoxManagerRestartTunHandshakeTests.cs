@@ -1,8 +1,12 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 using Xunit;
 
 namespace VPNRouter.Tests;
@@ -28,15 +32,10 @@ namespace VPNRouter.Tests;
 /// to schedule the full removal too — so the orphan record is gone by
 /// the time HealthMonitor's restart fires.</para>
 ///
-/// <para><strong>Test strategy.</strong> SingBoxManager spawns
-/// sing-box.exe via <see cref="System.Diagnostics.Process.Start"/> — too
-/// heavy to invoke real binaries in a test. There is no
-/// <see cref="IProcessRunner"/> seam inside SingBoxManager (Phase 2G
-/// follow-up). So this suite uses the SOURCE-STRING PIN pattern (see
-/// <see cref="ServiceAppCoexistenceTests"/> for the canonical example):
-/// inspect SingBoxManager source for the call patterns Agent 1's fix
-/// introduces. The pins fail loudly on pre-Wave-38 production code,
-/// turning each into a regression-detector when the fix lands.</para>
+/// <para><strong>Test strategy.</strong> Legacy cases use source-string
+/// pins for the Wave-38 call shape. The removal-settle regression uses
+/// the current <see cref="IProcessRunner"/> seams to exercise launch timing
+/// without spawning sing-box or touching a real adapter.</para>
 ///
 /// <para><strong>Which tests fail pre-Wave-38?</strong> Every test in
 /// this class FAILS against the pre-Agent-1 production code in this
@@ -271,6 +270,57 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
 
         var sleepMs = int.Parse(sleepMatch.Groups[1].Value);
         Assert.InRange(sleepMs, 500, 2000);
+    }
+
+    [Fact]
+    public void LaunchProcess_RemovalSettle_CompletesBeforeProcessSpawn()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only TUN lifecycle behavior.");
+
+        var previousRunner = TunAdapterDiagnostics.Runner;
+        var cleanupCompleted = 0L;
+        var processStarted = 0L;
+        try
+        {
+            TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
+            TunAdapterDiagnostics.Runner = new FakeProcessRunner()
+                .OnRun(r => r.Arguments.Contains("show"), new ProcessResult(
+                    0, string.Empty, string.Empty, TimeSpan.Zero, false))
+                .OnRun(_ => true, _ =>
+                {
+                    cleanupCompleted = Stopwatch.GetTimestamp();
+                    return Task.FromResult(new ProcessResult(
+                        0, string.Empty, string.Empty, TimeSpan.Zero, false));
+                });
+
+            var processRunner = new FakeProcessRunner()
+                .OnStart(_ => true, _ =>
+                {
+                    processStarted = Stopwatch.GetTimestamp();
+                    return new FakeProcessHandle(pid: 49001);
+                });
+            using var manager = new SingBoxManager(
+                new SingBoxSettings { ExecutablePath = @"C:\nonexistent\sing-box.exe" },
+                http: new FakeHttpClient(),
+                runner: processRunner);
+            typeof(SingBoxManager).GetField("_currentConfigPath",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(manager, Path.Combine(Path.GetTempPath(), "vpnrouter-test-current.json"));
+
+            typeof(SingBoxManager).GetMethod("LaunchProcess",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(manager, new object[] { @"C:\nonexistent\sing-box.exe" });
+
+            Assert.NotEqual(0, cleanupCompleted);
+            Assert.NotEqual(0, processStarted);
+            Assert.True(Stopwatch.GetElapsedTime(cleanupCompleted, processStarted) >= TimeSpan.FromMilliseconds(450),
+                "sing-box spawned before Windows had 500 ms to settle the removed TUN device node.");
+        }
+        finally
+        {
+            TunAdapterDiagnostics.Runner = previousRunner;
+            TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+        }
     }
 
     // ─── helpers ────────────────────────────────────────────────────────
