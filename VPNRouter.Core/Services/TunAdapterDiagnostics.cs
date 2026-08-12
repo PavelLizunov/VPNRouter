@@ -734,19 +734,35 @@ public static class TunAdapterDiagnostics
 
                 if (rExit != 0)
                 {
-                    logger?.Warning(
-                        "[TunDiag] {Ctx}: PnP InstanceId query for '{Name}' failed with exit " +
-                        "{Exit}: '{Err}'",
+                    logger?.Debug(
+                        "[TunDiag] {Ctx}: Get-NetAdapter could not resolve '{Name}' (exit {Exit}); " +
+                        "checking Windows Network Connections: '{Err}'",
                         context, adapterName, rExit, rErrText.Trim());
-                    return false;
-                }
 
-                instanceIds = (rOut ?? string.Empty)
-                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => s.Trim())
-                    .Where(s => s.Length > 0)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                    var lookup = ResolveNativePnpDeviceIds(adapterName);
+                    if (!lookup.Success)
+                    {
+                        logger?.Warning(
+                            "[TunDiag] {Ctx}: fallback PnP InstanceId lookup for '{Name}' failed: {Error}",
+                            context, adapterName, lookup.Error ?? "unknown error");
+                        return false;
+                    }
+
+                    instanceIds = lookup.InstanceIds
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Select(id => id.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                }
+                else
+                {
+                    instanceIds = (rOut ?? string.Empty)
+                        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s => s.Trim())
+                        .Where(s => s.Length > 0)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                }
             }
 
             if (instanceIds.Count == 0)

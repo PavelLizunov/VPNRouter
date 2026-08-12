@@ -242,6 +242,33 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
     // ─── Test 3: pnputil plain refused → SetupAPI fallback ────────────────
 
     [Fact]
+    public async Task Available_NoEnumeratedAdapter_ExitOne_AllowsPreStartAfterNativeConfirmation()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsNetshEnumeration, Ok(
+            "Enabled  Connected  Dedicated  Ethernet\r\n"));
+        fake.OnRun(IsGetNetAdapterResolve,
+            new ProcessResult(1, "", "", TimeSpan.FromMilliseconds(5), false));
+        var lookedUpNames = new List<string>();
+
+        await WithFakeAsync(fake, removalAvailable: true, async () =>
+        {
+            var removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
+                logger: null, context: "test.gone-exit-one");
+            Assert.Equal(1, removed);
+        }, nativeLookup: name =>
+        {
+            lookedUpNames.Add(name);
+            return new NativePnpLookupResult(true, Array.Empty<string>(), null);
+        });
+
+        Assert.Equal(new[] { "VPNRouter-TUN" }, lookedUpNames);
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
+    }
+
+    [Fact]
     public async Task Available_PnpUtilPlainRefused_RetriesWithSetupApi()
     {
         if (!OperatingSystem.IsWindows()) return;
