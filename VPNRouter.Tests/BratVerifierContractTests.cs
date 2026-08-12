@@ -38,11 +38,12 @@ public sealed class BratVerifierContractTests
         Assert.DoesNotContain("SendInput", controller);
 
         Assert.Contains("UIAutomationClient", script);
-        Assert.Contains("CopyFromScreen", script);
+        Assert.DoesNotContain("CopyFromScreen", script);
+        Assert.DoesNotContain("'screenshot'", script);
 
         Assert.Contains("-LogonType Interactive", script);
         Assert.Contains("-RunLevel Highest", script);
-        Assert.Contains("-FromSession", script);
+        Assert.DoesNotContain("-FromSession", script);
 
         // Controller wait = UI match budget + 30 s transport/startup slack.
         Assert.Contains("$TimeoutSeconds + 30", script);
@@ -113,10 +114,12 @@ public sealed class BratVerifierContractTests
         Assert.Contains("LogWindowMinutes", logs);
         Assert.Contains("TryParseExact", logs);
         Assert.Contains("$maxLines = 50000", logs);
-        Assert.Contains("verification window exceeds", logs);
+        Assert.Contains("Truncated = $true", logs);
         Assert.DoesNotContain("-Tail 1000", logs);
         Assert.Contains("recentEntryCount -eq 0", logs);
-        Assert.Contains("Cannot verify recent remote logs", logs);
+        Assert.Contains("Cannot verify the bounded remote log window", logs);
+        Assert.DoesNotContain("$scan.Hits", logs);
+        Assert.DoesNotContain("$scan.Context | ForEach-Object", logs);
 
         var skill = Read(".agents", "skills", "post-ship-mcp-verify", "SKILL.md");
         Assert.Contains("100.115.182.0", skill);
@@ -133,6 +136,12 @@ public sealed class BratVerifierContractTests
         var stop = deploy.IndexOf("Stopping running VPNRouter", StringComparison.Ordinal);
         Assert.True(identity >= 0 && stop > identity,
             "The deployment session must verify the expected machine before stopping processes.");
+        Assert.DoesNotContain("Get-Process VPNRouter*", deploy, StringComparison.Ordinal);
+        Assert.Contains("$ownedPaths -icontains", deploy, StringComparison.Ordinal);
+        Assert.Contains("The VPNRouter service name is owned by a non-canonical executable path", deploy, StringComparison.Ordinal);
+        Assert.Contains(".app-stage-$runId", deploy, StringComparison.Ordinal);
+        Assert.Contains("Staged install does not exactly match the release archive", deploy, StringComparison.Ordinal);
+        Assert.Contains("Move-Item -LiteralPath $stage -Destination $canonicalInstall", deploy, StringComparison.Ordinal);
         Assert.Contains("throw \"VPNRouter.App.exe is not running", deploy);
     }
 

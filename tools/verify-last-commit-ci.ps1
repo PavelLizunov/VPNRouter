@@ -6,18 +6,44 @@ param(
     [string]$Repo,
     [string]$IgnoreSkipped,
     [string]$TolerateFailure,
-    [string]$Commit
+    [string]$Commit,
+    [string]$RequiredSuccess,
+    [string]$RequiredWorkflows,
+    [switch]$Strict
 )
 
 if (-not $Repo) { $Repo = $env:REPO; if (-not $Repo) { $Repo = "PavelLizunov/VPNRouter" } }
-if (-not $IgnoreSkipped) { $IgnoreSkipped = $env:IGNORE_SKIPPED; if (-not $IgnoreSkipped) { $IgnoreSkipped = "Build Android APK" } }
-if (-not $TolerateFailure) { $TolerateFailure = $env:TOLERATE_FAILURE }
+if ($Strict) {
+    if (-not $IgnoreSkipped) { $IgnoreSkipped = 'characterization-windows' }
+    if (-not $RequiredSuccess) {
+        $RequiredSuccess = 'publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1'
+    }
+    if (-not $RequiredWorkflows) {
+        $RequiredWorkflows = 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT Repository,Verify Release Integrity,Auto-Update Integration Test (Windows)'
+    }
+    # A release gate must not inherit developer waivers from the caller.
+    $TolerateFailure = $null
+}
+else {
+    if (-not $IgnoreSkipped) { $IgnoreSkipped = $env:IGNORE_SKIPPED; if (-not $IgnoreSkipped) { $IgnoreSkipped = "Build Android APK" } }
+    if (-not $TolerateFailure) { $TolerateFailure = $env:TOLERATE_FAILURE }
+}
 if (-not $Commit) { $Commit = $env:COMMIT; if (-not $Commit) { $Commit = "HEAD" } }
 
 $ErrorActionPreference = "Stop"
 
-$head = (git rev-parse $Commit 2>$null)
-if (-not $head -or $LASTEXITCODE -ne 0) {
+$previousResolveErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    $head = (git rev-parse --verify "$Commit^{commit}" 2>$null)
+    $resolveExitCode = $LASTEXITCODE
+}
+finally { $ErrorActionPreference = $previousResolveErrorActionPreference }
+if (-not $head -or $resolveExitCode -ne 0) {
+    if ($Strict) {
+        Write-Host "ERROR: could not resolve commit reference." -ForegroundColor Red
+        exit 3
+    }
     Write-Host "INFO: could not resolve commit reference. Allowing." -ForegroundColor Yellow
     exit 0
 }
@@ -58,6 +84,36 @@ if ($TolerateFailure) {
     foreach ($n in $TolerateFailure.Split(',')) {
         $t = $n.Trim()
         if ($t) { $failOk[$t] = $true }
+    }
+}
+
+$workflowRuns = @()
+if ($Strict) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $workflowJson = gh api --method GET "repos/$Repo/actions/runs" -f "head_sha=$head" -F 'per_page=100' 2>&1
+        $workflowApiExitCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousErrorActionPreference }
+    if ($workflowApiExitCode -ne 0) {
+        Write-Host 'ERROR: GitHub Actions workflow query failed.' -ForegroundColor Red
+        Write-Host $workflowJson
+        exit 3
+    }
+    $workflowRuns = @(($workflowJson | ConvertFrom-Json).workflow_runs)
+}
+
+$requiredGreen = @{}
+if ($Strict -and $RequiredSuccess) {
+    foreach ($entry in $RequiredSuccess.Split(',')) {
+        $trimmed = $entry.Trim()
+        if (-not $trimmed) { continue }
+        if ($trimmed -notmatch '^(?<name>[^=]+)=(?<count>[1-9][0-9]*)$') {
+            Write-Host "ERROR: invalid RequiredSuccess entry '$trimmed'." -ForegroundColor Red
+            exit 3
+        }
+        $requiredGreen[$Matches.name.Trim()] = [int]$Matches.count
     }
 }
 
@@ -112,6 +168,8 @@ foreach ($c in $checks) {
     elseif ($conclusion -eq "skipped") {
         if ($skipOk.ContainsKey($name)) {
             [void]$tolerated.Add("$name [skipped, expected]")
+        } elseif ($Strict) {
+            [void]$hardRed.Add("$name [skipped, unexpected] $($c.html_url)")
         } else {
             # audit P2-3: an UNEXPECTED skipped (path filter narrowed / `if:`
             # flipped) on a check that should have run must not silently read as
@@ -122,7 +180,9 @@ foreach ($c in $checks) {
         }
     }
     elseif ($conclusion -eq "failure") {
-        if ($failOk.ContainsKey($name)) {
+        if ($Strict) {
+            [void]$hardRed.Add("$name $($c.html_url)")
+        } elseif ($failOk.ContainsKey($name)) {
             [void]$tolerated.Add("$name [failure, tolerated]")
         } elseif ($name -eq "publish") {
             $completedAt = if ($c.completed_at) { [DateTime]$c.completed_at } else { [DateTime]::MinValue }
@@ -143,10 +203,42 @@ foreach ($c in $checks) {
         }
     }
     elseif ($conclusion -eq "cancelled") {
-        [void]$tolerated.Add("$name [cancelled]")
+        if ($Strict) {
+            [void]$hardRed.Add("$name [cancelled] $($c.html_url)")
+        } else {
+            [void]$tolerated.Add("$name [cancelled, superseded by success]")
+        }
     }
     else {
         [void]$hardRed.Add("$name [$conclusion] $($c.html_url)")
+    }
+}
+
+
+if ($Strict) {
+    foreach ($required in $requiredGreen.GetEnumerator()) {
+        $observed = @($checks | Where-Object {
+            $_.name -eq $required.Key -and
+            $_.status -eq 'completed' -and
+            $_.conclusion -eq 'success'
+        }).Count
+        if ($observed -lt $required.Value) {
+            [void]$hardRed.Add("$($required.Key) [required green: $($required.Value), observed: $observed]")
+        }
+    }
+
+    foreach ($workflowName in $RequiredWorkflows.Split(',')) {
+        $requiredWorkflow = $workflowName.Trim()
+        if (-not $requiredWorkflow) { continue }
+        $successfulRun = @($workflowRuns | Where-Object {
+            $_.name -eq $requiredWorkflow -and
+            $_.head_sha -eq $head -and
+            $_.status -eq 'completed' -and
+            $_.conclusion -eq 'success'
+        }).Count
+        if ($successfulRun -lt 1) {
+            [void]$hardRed.Add("workflow '$requiredWorkflow' [required successful run missing]")
+        }
     }
 }
 

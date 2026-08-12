@@ -54,10 +54,8 @@ public class VisualDiffTests
     private static readonly string BaselineDir =
         Path.Combine(ScreenshotHelper.ScreenshotsDir, "baseline");
 
-    // Reuse the same shared-VM trick PageScreenshotTests uses — keeps
-    // MainWindowViewModel construction off the per-test critical path.
-    private static MainWindowViewModel? _sharedVm;
-    private static MainWindowViewModel GetVm() => _sharedVm ??= new MainWindowViewModel(new InMemorySettingsStore());
+    private static MainWindowViewModel GetVm() =>
+        new(new InMemorySettingsStore());
 
     private static void AssertMatchesBaseline(
         UserControl page,
@@ -78,7 +76,8 @@ public class VisualDiffTests
             // someone added a new test class entry without pinning the
             // baseline. Fail with the literal command to fix it so the
             // dev doesn't have to reverse-engineer the harness.
-            page.DataContext = GetVm();
+            using var missingBaselineVm = GetVm();
+            page.DataContext = missingBaselineVm;
             var pinSrc = ScreenshotHelper.CapturePage(page, name, width, height);
             Assert.Fail(
                 $"No baseline for '{name}'. To pin the current render, run:\n" +
@@ -87,7 +86,8 @@ public class VisualDiffTests
             return;
         }
 
-        page.DataContext = GetVm();
+        using var vm = GetVm();
+        page.DataContext = vm;
 
         // Wave 12 Phase 3 (2026-05-18) — Avalonia 12 changed
         // RequestedThemeVariant="Default" semantics: pre-12 the headless

@@ -93,7 +93,7 @@ step when pushing a stable tag to Forgejo.
 | `merge-design-handoff` | User шлёт `claude.ai/design` URL — fetch + extract + map tokens |
 | `update-readme-versions` | После каждого release бампим version examples в README |
 | `phase-task-launcher` | START любой v3.0 refactor task / >30-строчного изменения — 6-gate lifecycle из `plans/v3.0-execution-methodology.md` |
-| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1`: deploy → launch → remote UIA + screenshots (`artifacts/brat-verify`) → log scan на brat → PASS/FAIL report. Без local fallback. |
+| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Fixed VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1`: clean deploy → remote UIA + proxy/HTTPS/UDP + sanitized logs; visual evidence comes from isolated headless page screenshots. Без local fallback. |
 
 ## Memory layer
 
@@ -122,18 +122,18 @@ Open Tasks / Last session log.
    Установлено user'ом 2026-05-04 после iter#7 (2026-07-31 переведено на
    фиксированную remote-цель). Flow: ship -rN → CI green →
    14 desktop assets (16 with Android) → НЕМЕДЛЕННО deploy + launch VPNRouter
-   на тест-VM → remote UIA + screenshots тестят изменение по сценарию который
+   на тест-VM → remote UIA + isolated headless screenshots тестят изменение по сценарию который
    описан в release notes / commit message → PASS/FAIL по каждому пункту →
    доклад user'у. Без user prompt'а — это часть ship cycle. Весь verify идёт
-   через `tools/brat-verify.ps1` (actions identity / deploy / uia /
-   screenshot / logs) против фиксированной VM → нет нужды просить user'а
-   скрин или "проверь сам". Скриншоты — под `artifacts/brat-verify/`
-   (не комитим). Если изменение Core-only без UI surface (parser,
+   через `tools/brat-verify.ps1` (actions identity / deploy / uia / probe /
+   lifecycle / logs) против фиксированной VM → нет нужды просить user'а
+   "проверь сам". Remote desktop capture запрещён: живой конфиг secret-bearing;
+   page screenshots используют isolated in-memory state. Если изменение Core-only без UI surface (parser,
    migration helper, etc.) — explicit "Core-only / not UI-testable"
    label в докладе. Иначе remote brat verify обязателен.
 
    **КРИТИЧНО — цель = windows-brat, НЕ dev box (инцидент 2026-07-06).**
-   Install / launch / connect VPNRouter и любые UIA/screenshot-действия идут
+   Install / launch / connect VPNRouter и любые UIA-действия идут
    ТОЛЬКО на тест-VM **windows-brat (100.115.182.0, MachineName `WINBRAT`)
    через WinRM via `tools/brat-verify.ps1`, невидимо и fail-closed** (каждое
    действие повторно верифицирует identity WINBRAT). НИКОГДА не
@@ -144,8 +144,8 @@ Open Tasks / Last session log.
    спросить user'а, НЕ откатываться на локальную машину. Рецепт (внутри
    `tools/brat-verify.ps1`): identity check WINBRAT → `Copy-Item -ToSession`
    ZIP → scheduled task (Interactive principal, `RunLevel Highest`,
-   tester=admin → без UAC) → `tscon` на console для рендера → UIA +
-   `CopyFromScreen`, PNG назад по WinRM. См. memory
+   tester=admin → без UAC) → `tscon` на console для UIA. Remote desktop
+   capture не выполняется. См. memory
    `dev-box-not-a-test-target` + `no-devbox-input-hijack` + скилл post-ship-mcp-verify.
 2. **Canonical remote = `origin` (GitHub).** Push только текущей task-ветки:
    `git push -u origin HEAD`. `forgejo` — зеркало; синхронизация `main`
@@ -204,9 +204,9 @@ Open Tasks / Last session log.
     (имя директории сохранено для совместимости). Skill автоматически:
     SHA256-check ZIP from GitHub release → deploy + launch на фиксированной
     VM WINBRAT (100.115.182.0) через `tools/brat-verify.ps1` → walk через
-    changed pages via remote UIA (clicks/toggles) + screenshots под
-    `artifacts/brat-verify/` → tail `vpnrouter*.log` на brat for
-    `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL report. Реализация:
+    changed pages via remote UIA (clicks/toggles) + isolated headless page
+    screenshots → sanitized `vpnrouter*.log` classifications on brat →
+    PASS/FAIL report. Реализация:
     `.claude/skills/post-ship-mcp-verify/SKILL.md` +
     `tools/brat-verify.ps1` + per-feature checklists в
     `references/checklist-{zapret,tgproxy,vpn-core,network-settings,
@@ -223,7 +223,7 @@ Open Tasks / Last session log.
     внутри активной вкладки → user видел тот же bug что и до фикса 4 раза.
     Чеклист: (a) invoke целевого элемента (`tools/brat-verify.ps1`
     `-Action uia`), (b) check ВСЕ interactive elements в его scope,
-    (c) screenshot bottom of viewport, (d) confirm exact strings user
+    (c) cover viewport bottom in an isolated headless screenshot, (d) confirm exact strings user
     мог искать.
 
 14. **Git push reminder pattern** (added 2026-05-25 после второго

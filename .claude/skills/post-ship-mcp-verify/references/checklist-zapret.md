@@ -22,10 +22,10 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "Включить обход блокировок" -ControlType Button
 ```
 
-2. Screenshot `rdp-shots/rN-zapret-stopped.png`. Visual assertions:
-   hero title «Обход блокировок», lede text, 3-step chips. (Title/lede
-   TextBlocks have no stable selector — visual assertion; selector
-   hardening = future work.)
+2. Run the isolated `PageScreenshotTests`/`VisualDiffTests` Tools-page case.
+   It must cover the stopped hero, lede, 3-step chips and viewport bottom with
+   in-memory settings. Add a synthetic-state screenshot test when the release
+   changes an uncovered state.
 
 ## Start + running state
 
@@ -42,9 +42,9 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "Остановить обход" -ControlType Button
 ```
 
-5. Screenshot `rdp-shots/rN-zapret-running.png`. Visual: title «Активна
-   стратегия: <name>» (or «Подбираю стратегию...» mid-probe) + air-pill.
-   Dynamic text — visual assertion; selector hardening = future work.
+5. Use the running action Name as the live state proof. Render the running and
+   mid-probe titles plus air-pill through isolated synthetic-state screenshot
+   cases when those visuals changed; never capture the live remote desktop.
 
 ## Cache controls (Дополнительно tab)
 
@@ -56,21 +56,21 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "Очистить кэш стратегий" -ControlType Button
 ```
 
-7. Clear the cache and screenshot `rdp-shots/rN-zapret-cache-empty.png`:
+7. Clear the cache:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "Очистить кэш стратегий" -ControlType Button -UiaOperation Invoke
 ```
 
-   Visual: status line «Кэш пуст — следующая проверка будет полной» and
-   toast «Кэш стратегий очищен». Status TextBlock is dynamic — visual
-   assertion; selector hardening = future work.
+   Require a stable UIA assertion for the resulting action/state when the
+   release depends on it. Cover the status line and toast with an isolated
+   synthetic-state screenshot test.
 
 ## Stop
 
-8. Invoke «Остановить обход» (same command shape as step 3 with the
-   running label), screenshot `rdp-shots/rN-zapret-stopped-again.png`,
-   visual: hero back to stopped title.
+8. Invoke «Остановить обход» (same command shape as step 3 with the running
+   label), then re-inspect the stopped action Name. This proves the live state
+   returned without exposing the desktop.
 
 ## Known benign noise
 
@@ -87,6 +87,6 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 ## Final evidence
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput rdp-shots/rN-zapret-final.png
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~PageScreenshotTests|FullyQualifiedName~VisualDiffTests"
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs
 ```

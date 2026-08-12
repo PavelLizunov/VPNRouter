@@ -2,7 +2,8 @@
 
 Use for autostart, lockdown, custom routes/rules, app include/exclude, and settings changes. Set `$v`.
 
-1. Navigate visually to each release-note page and capture its initial and bottom-of-viewport states. Navigation has no uniform stable selector: `selector hardening: future work`.
+1. Render each changed page at its normal and narrow viewport through isolated
+`PageScreenshotTests`; include the viewport bottom and synthetic control state.
 
 2. For each changed control, read its current RU accessibility Name from the UI, run `Inspect`, then use the matching semantic operation (`Toggle`, `Invoke`, or `SetValue`). Never guess a Name or AutomationId.
 
@@ -11,12 +12,14 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<proven current RU Name>" -ControlType CheckBox -UiaOperation Toggle
 ```
 
-Apps include/exclude controls expose bound accessibility names in current XAML; use their runtime RU values. Where a control has no explicit semantic name, use visual before/after screenshots and record `selector hardening: future work`.
+Apps include/exclude controls expose bound accessibility names in current XAML;
+use their runtime RU values. A changed live control without a semantic selector
+fails the checklist until the product exposes one.
 
 3. Verify persistence by leaving and returning to the page. For routing/lockdown changes, run only the release-note scenario on WINBRAT and confirm the visible final state; never touch dev-box networking.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action screenshot -LocalOutput "artifacts/brat-verify/$v/network-settings-final.png"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~PageScreenshotTests|FullyQualifiedName~VisualDiffTests"
 powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action logs
 ```
 

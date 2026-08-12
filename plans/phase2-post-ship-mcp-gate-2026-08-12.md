@@ -72,30 +72,39 @@ subscription. Evidence is stored only under ignored `artifacts/post-ship/`.
 - [ ] **Gate 2 — Tests green**: full suite passes; new tooling contracts included.
 - [ ] **Gate 3 — Docs**: brief Outcome filled; both post-ship skill copies match.
 - [ ] **Gate 4 — Self-review**: ponytail + Qwen read-only review; bug-hunt/security pass for remote process/file/network tooling.
-- [ ] **Gate 5 — MCP verify**: exact published r7 run on fixed WINBRAT with screenshots/evidence; no local fallback.
+- [ ] **Gate 5 — MCP verify**: exact published r7 run on fixed WINBRAT with headless screenshots and sanitized evidence; no local fallback.
 - [ ] **Gate 6 — Characterization diff**: N/A — tooling only, no god-file split.
 
 ## Outcome (filled after implementation)
 
-**Status**: PENDING  
-**Commits**: pending  
-**Pushed**: pending  
-**Test deltas**: pending  
-**Files changed**: pending
+**Status**: IMPLEMENTED — the gate is ready; the tested r7 candidate remains blocked by UDP dataplane failure
+**Commits**: `116c969b` (brief) + implementation commit containing this outcome
+**Pushed**: `codex/post-ship-mcp-gate`, draft PR #146
+**Test deltas**: 15 focused post-ship contracts; full suite 2758 passed, 3 skipped, 0 failed (2761 total)
+**Files changed**: post-ship/BRAT/CI/deploy scripts, isolated screenshot-test safety, Windows CI contract job, mirrored skill/checklists and documentation
 
 **Gate results:**
-- [ ] Gate 1: pending
-- [ ] Gate 2: pending
-- [ ] Gate 3: pending
-- [ ] Gate 4: pending
-- [ ] Gate 5: pending
+- [x] Gate 1: solution Release build — 0 warnings, 0 errors
+- [x] Gate 2: full suite — 2758 passed, 3 skipped, 0 failed; focused tooling contracts — 15/15
+- [x] Gate 3: both skill trees are byte-identical; parser and forbidden remote-screenshot contracts pass
+- [x] Gate 4: ponytail review complete; three independent correctness/security/test reviews report no P0/P1. Qwen read-only review was attempted but unavailable because its local runtime repeatedly timed out
+- [x] Gate 5: exact published v2.49.0-r7 ran for two cold cycles on fixed WINBRAT. TUN, proxy HTTPS, hold, disconnect, lifecycle and sanitized log checks passed; all UDP sizes timed out, so the new gate correctly returned nonzero FAIL and left WINBRAT disconnected
 - [-] Gate 6: N/A — tooling only
 
 **Surprises encountered**:
 - The current main branch retained the remote deploy/UIA verifier but not the
   later state/probe/lifecycle actions, despite those actions having passed a
   prior two-hour WINBRAT soak on a stacked branch.
+- Existing screenshot tests could initialize background services and touch the
+  host TUN state; the suite now isolates data/process seams and explicitly
+  disables background services only under the test switch.
+- Remote desktop screenshots are not a safe headless proof on WINBRAT. Visual
+  coverage now runs in the isolated screenshot tests, while the live VM path
+  uses semantic UIA state plus route/proxy/lifecycle evidence.
+- A nominal HTTPS request from the WinRM process could leave through `direct`.
+  The gate now requires the Clash proxy delay endpoint and an observed outbound;
+  UDP remains the one failing candidate check.
 
 **Follow-ups spawned**:
-- pending
-
+- Diagnose the r7 UDP proxy path before any next rolling candidate or stable
+  promotion. Do not describe r7 as fully verified while this gate is red.

@@ -72,7 +72,7 @@ public sealed class SingBoxManagerRestartInProgressSuppressionTests
         // OnProcessExited handler races against the flag-write. Setting
         // it first guarantees the guard sees `true` for the lifetime of
         // the Kill + Wait + Launch window.
-        var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
+        var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.Lifecycle.cs");
 
         var restartHeader = src.IndexOf("public void Restart()", StringComparison.Ordinal);
         Assert.True(restartHeader >= 0, "Restart() method not found in SingBoxManager.cs");
@@ -104,10 +104,10 @@ public sealed class SingBoxManagerRestartInProgressSuppressionTests
         // exception from LaunchProcess would leave the flag set TRUE
         // forever and ALL future genuine crashes would be wrongly
         // suppressed.
-        var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
+        var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.Lifecycle.cs");
 
         var restartHeader = src.IndexOf("public void Restart()", StringComparison.Ordinal);
-        var window = src.Substring(restartHeader, Math.Min(3000, src.Length - restartHeader));
+        var window = src.Substring(restartHeader, Math.Min(8000, src.Length - restartHeader));
 
         var finallyIdx = window.IndexOf("finally", StringComparison.Ordinal);
         Assert.True(finallyIdx > 0, "Expected a `finally` block inside Restart() to clear the flag.");

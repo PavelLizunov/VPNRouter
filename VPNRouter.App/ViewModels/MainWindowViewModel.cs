@@ -2805,22 +2805,31 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // after LoadSettingsIntoUI's first ApplyTheme); torn down in Dispose.
         WireOsThemeFollow();
 
+        var startBackgroundServices =
+            !AppContext.TryGetSwitch(
+                "VPNRouter.Tests.DisableBackgroundServices",
+                out var backgroundServicesDisabled) ||
+            !backgroundServicesDisabled;
+
         // Detect VPN already running (e.g. started by Windows Service on boot)
-        DetectServiceManagedVpn();
+        if (startBackgroundServices)
+        {
+            DetectServiceManagedVpn();
 
-        // Background update check (fire-and-forget, silent fail)
-        _ = UpdateVm.CheckOnStartupAsync();
+            // Background update check (fire-and-forget, silent fail)
+            _ = UpdateVm.CheckOnStartupAsync();
 
-        // Status dashboard (v2.15.0): poll VPN/Zapret/TgProxy every 2s
-        StartRuntimeStatusPolling();
+            // Status dashboard (v2.15.0): poll VPN/Zapret/TgProxy every 2s
+            StartRuntimeStatusPolling();
 
-        // v2.31.10 — App-side autostart bootstrap. Closes the gap where
-        // autostart_tgproxy / autostart_zapret in config.yaml were read
-        // into UI state but never spawned the daemons unless the Windows
-        // Service was installed. Defers to the Service when it's running
-        // (Service handles boot-spawn). See
-        // MainWindowViewModel.AutostartBootstrap.cs for the gating logic.
-        _ = BootstrapAutostartAsync();
+            // v2.31.10 — App-side autostart bootstrap. Closes the gap where
+            // autostart_tgproxy / autostart_zapret in config.yaml were read
+            // into UI state but never spawned the daemons unless the Windows
+            // Service was installed. Defers to the Service when it's running
+            // (Service handles boot-spawn). See
+            // MainWindowViewModel.AutostartBootstrap.cs for the gating logic.
+            _ = BootstrapAutostartAsync();
+        }
 
         // v2.32.0 — surface a SettingsValidator recovery banner if the
         // most recent SettingsLoader.Load rewrote defaults over a
