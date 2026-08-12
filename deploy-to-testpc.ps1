@@ -10,7 +10,7 @@
       [dev host] build.ps1 -> VPNRouter-v<ver>-win.zip
            |  WinRM (Copy-Item -ToSession + Invoke-Command)
            v
-      [test machine] stop old -> extract app\ over install dir -> relaunch
+      [test machine] stop owned paths -> extract to staging -> swap -> relaunch
 
     tools/brat-verify.ps1 (-Action deploy) wraps this script for the fixed
     remote post-ship target used by the post-ship-mcp-verify skill
@@ -35,7 +35,8 @@
 .PARAMETER FirstInstall
     Lay down a full fresh install (creates the install dir, copies app\ +
     "Start VPN.cmd"). Use the first time a machine has no VPNRouter installed.
-    Without it, the script does an in-place update (overwrite app binaries).
+    Without it, the script still replaces the app directory from a fresh
+    staging copy; user data under ProgramData is preserved.
 
 .PARAMETER InstallDir
     Target install directory on the test machine.
@@ -187,9 +188,46 @@ try {
     # 5. Stop any running VPNRouter on the target
     # -----------------------------------------------------------------------
     Write-Step "Stopping running VPNRouter on $TestHost (if any)"
-    Invoke-Command -Session $session -ScriptBlock {
-        $p = Get-Process VPNRouter* -ErrorAction SilentlyContinue
-        if ($p) { $p | ForEach-Object { try { $_.Kill() } catch {} }; Start-Sleep -Seconds 2 }
+    Invoke-Command -Session $session -ArgumentList $InstallDir -ScriptBlock {
+        param($InstallDir)
+        $canonicalInstall = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
+        if ((Split-Path $canonicalInstall -Leaf) -ine 'app' -or
+            (Split-Path (Split-Path $canonicalInstall -Parent) -Leaf) -ine 'VPNRouter') {
+            throw "InstallDir must be an exact ...\VPNRouter\app directory."
+        }
+
+        $servicePaths = @(
+            (Join-Path $canonicalInstall 'VPNRouter.Service.exe'),
+            (Join-Path $canonicalInstall 'service\VPNRouter.Service.exe'))
+        $service = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'" -ErrorAction Stop
+        if ($service) {
+            $serviceExe = if ([string]$service.PathName -match '^\s*"(?<exe>[^"]+)"') {
+                $Matches.exe
+            } else {
+                ([string]$service.PathName -split '\s+--service(?:\s|$)', 2)[0].Trim()
+            }
+            if ($servicePaths -notcontains ([IO.Path]::GetFullPath($serviceExe))) {
+                throw 'The VPNRouter service name is owned by a non-canonical executable path.'
+            }
+            if ([string]$service.State -ine 'Stopped') {
+                Stop-Service -Name 'VPNRouter' -Force -ErrorAction Stop
+            }
+        }
+
+        $ownedPaths = @(
+            (Join-Path $canonicalInstall 'VPNRouter.App.exe'),
+            (Join-Path $canonicalInstall 'VPNRouter.GUI.exe'),
+            $servicePaths[0],
+            $servicePaths[1],
+            'C:\ProgramData\VPNRouter\bin\sing-box.exe')
+        $owned = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+            $path = [string]$_.ExecutablePath
+            $path -and $ownedPaths -icontains ([IO.Path]::GetFullPath($path))
+        })
+        foreach ($process in $owned) {
+            Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction Stop
+        }
+        if ($owned.Count -gt 0) { Start-Sleep -Seconds 2 }
     }
 
     # -----------------------------------------------------------------------
@@ -207,32 +245,74 @@ try {
     $installResult = Invoke-Command -Session $session -ArgumentList $remoteZip, $InstallDir, [bool]$FirstInstall -ScriptBlock {
         param($RemoteZip, $InstallDir, $Fresh)
         $ErrorActionPreference = "Stop"
-        $extract = "C:\Windows\Temp\vpnr-extract"
-        if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+        $runId = [guid]::NewGuid().ToString('N')
+        $extract = "C:\Windows\Temp\vpnr-extract-$runId"
         New-Item -ItemType Directory -Path $extract -Force | Out-Null
         Expand-Archive -Path $RemoteZip -DestinationPath $extract -Force
 
         $srcApp = Join-Path $extract "app"
         if (-not (Test-Path $srcApp)) { throw "ZIP has no app\ subdir; contents: $((Get-ChildItem $extract).Name -join ', ')" }
 
+        $canonicalInstall = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
+        $installParent = Split-Path $canonicalInstall -Parent
+        if ((Split-Path $canonicalInstall -Leaf) -ine 'app' -or
+            (Split-Path $installParent -Leaf) -ine 'VPNRouter') {
+            throw "InstallDir must be an exact ...\VPNRouter\app directory."
+        }
         if ($Fresh) {
-            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $installParent -Force | Out-Null
             # Copy the launcher cmd that sits next to app\ in the package, if present.
             Get-ChildItem $extract -Filter "*.cmd" -File -ErrorAction SilentlyContinue |
-                ForEach-Object { Copy-Item $_.FullName (Split-Path $InstallDir -Parent) -Force }
+                ForEach-Object { Copy-Item $_.FullName $installParent -Force }
         }
-        if (-not (Test-Path $InstallDir)) {
+        if (-not (Test-Path $canonicalInstall) -and -not $Fresh) {
             throw "Install dir $InstallDir does not exist. Re-run with -FirstInstall."
         }
-        Copy-Item -Path (Join-Path $srcApp '*') -Destination $InstallDir -Recurse -Force
 
-        $appDll = Join-Path $InstallDir "VPNRouter.App.dll"
+        $stage = Join-Path $installParent ".app-stage-$runId"
+        $backup = Join-Path $installParent ".app-backup-$runId"
+        New-Item -ItemType Directory -Path $stage -Force | Out-Null
+        Copy-Item -Path (Join-Path $srcApp '*') -Destination $stage -Recurse -Force
+
+        $sourceFiles = @(Get-ChildItem $srcApp -Recurse -File | ForEach-Object {
+            $relative = $_.FullName.Substring($srcApp.Length).TrimStart('\')
+            "$relative|$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)"
+        } | Sort-Object)
+        $stageFiles = @(Get-ChildItem $stage -Recurse -File | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length).TrimStart('\')
+            "$relative|$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)"
+        } | Sort-Object)
+        if (($sourceFiles -join "`n") -cne ($stageFiles -join "`n")) {
+            throw 'Staged install does not exactly match the release archive.'
+        }
+
+        $movedOld = $false
+        try {
+            if (Test-Path $canonicalInstall) {
+                Move-Item -LiteralPath $canonicalInstall -Destination $backup
+                $movedOld = $true
+            }
+            Move-Item -LiteralPath $stage -Destination $canonicalInstall
+        }
+        catch {
+            if ($movedOld -and -not (Test-Path $canonicalInstall) -and (Test-Path $backup)) {
+                Move-Item -LiteralPath $backup -Destination $canonicalInstall
+            }
+            throw
+        }
+        if (Test-Path $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
+
+        $appDll = Join-Path $canonicalInstall "VPNRouter.App.dll"
         $stamp = if (Test-Path $appDll) { (Get-Item $appDll).LastWriteTime } else { $null }
         [pscustomobject]@{ InstalledDll = $appDll; LastWrite = $stamp }
     }
     Write-Host "    VPNRouter.App.dll @ $($installResult.LastWrite)" -ForegroundColor Green
 
-    Invoke-Command -Session $session -ScriptBlock { Remove-Item "C:\Windows\Temp\vpnr-extract" -Recurse -Force -ErrorAction SilentlyContinue }
+    Invoke-Command -Session $session -ScriptBlock {
+        Get-ChildItem 'C:\Windows\Temp' -Directory -Filter 'vpnr-extract-*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^vpnr-extract-[0-9a-f]{32}$' } |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
     # -----------------------------------------------------------------------
     # 8. Launch on the interactive desktop (transient scheduled task)

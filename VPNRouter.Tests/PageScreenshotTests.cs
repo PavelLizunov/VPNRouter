@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -31,22 +32,20 @@ namespace VPNRouter.Tests;
 ///   </item>
 /// </list>
 ///
-/// <para>The ViewModel is cached in a static field once per process. We
-/// can't use an xUnit <c>IClassFixture</c> because its constructor runs on
-/// a background thread, and <c>MainWindowViewModel</c> touches Avalonia's
-/// dispatcher in <c>ApplyTheme</c>. Caching inside the first [AvaloniaFact]
-/// call gets us dispatcher-thread construction AND avoids repeated VM
-/// init across all 9 page tests.</para>
+/// <para>Each test creates and disposes a background-disabled ViewModel on
+/// Avalonia's dispatcher thread. The test assembly redirects AppPaths to a
+/// temporary directory, so screenshots cannot read or write the installed
+/// application's settings, logs or runtime state.</para>
 /// </summary>
 public class PageScreenshotTests
 {
-    private static MainWindowViewModel? _sharedVm;
-
-    private static MainWindowViewModel GetVm() => _sharedVm ??= new MainWindowViewModel();
+    private static MainWindowViewModel GetVm() =>
+        new(new InMemorySettingsStore());
 
     private static string Capture(UserControl page, string name)
     {
-        page.DataContext = GetVm();
+        using var vm = GetVm();
+        page.DataContext = vm;
         return ScreenshotHelper.CapturePage(page, name);
     }
 
@@ -75,7 +74,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_AutostartTab()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         vm.SelectedSettingsIndex = 5; // Autostart tab
         try
         {
@@ -99,7 +98,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_Autostart_Narrow720()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         vm.SelectedSettingsIndex = 5;
         try
         {
@@ -111,7 +110,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_Routing_Narrow720()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         vm.SelectedSettingsIndex = 0; // Routing
         ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-routing-narrow", width: 720, height: 800);
     }
@@ -123,7 +122,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_Autostart_Narrow500()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         vm.SelectedSettingsIndex = 5;
         try
         {
@@ -138,7 +137,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_Autostart_Narrow400()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         vm.SelectedSettingsIndex = 5;
         try
         {
@@ -161,7 +160,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_AutostartTab_ServiceNotInstalled()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         var prev = vm.SelectedSettingsIndex;
         var prevInstalled = vm.ServiceVm.IsInstalled;
         try
@@ -191,7 +190,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_AutostartTab_ServiceInstalled()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         var prev = vm.SelectedSettingsIndex;
         var prevInstalled = vm.ServiceVm.IsInstalled;
         var prevRunning = vm.ServiceVm.IsRunning;
@@ -225,7 +224,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void NetworkPage_AutostartTab_ServiceInstalledStopped()
     {
-        var vm = GetVm();
+        using var vm = GetVm();
         var prev = vm.SelectedSettingsIndex;
         var prevInstalled = vm.ServiceVm.IsInstalled;
         var prevRunning = vm.ServiceVm.IsRunning;
@@ -260,7 +259,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void TelegramPage_Narrow520()
     {
-        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        using var vm = GetVm();
         ScreenshotHelper.CapturePage(
             new TelegramPage { DataContext = vm },
             "page-telegram-narrow520",
@@ -277,7 +276,7 @@ public class PageScreenshotTests
     [AvaloniaFact]
     public void TelegramPage_RunningStateBanner()
     {
-        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        using var vm = GetVm();
         vm.TgProxyEnabled = true;
         vm.TgProxyStatus = "Running (PID 18636)";
 

@@ -82,9 +82,18 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     // ─── Fixture: shared seam wiring for the 3 tests ────────────────────
 
     private readonly IProcessRunner? _savedTunDiagRunner;
+    private readonly string _savedDataDir;
+    private readonly string _testDataDir;
 
     public SingBoxManagerRestartTunLockTests()
     {
+        _savedDataDir = VPNRouter.Core.AppPaths.DataDir;
+        _testDataDir = Path.Combine(
+            Path.GetTempPath(),
+            $"vpnrouter-restart-lock-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(_testDataDir);
+        VPNRouter.Core.AppPaths.EnsureDirectories();
+
         // Snapshot the static TunAdapterDiagnostics.Runner so we can
         // restore it on Dispose — other tests in the suite rely on the
         // production ProcessRunner. We swap in a permissive fake for the
@@ -132,6 +141,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         // slate. The named semaphore is process-wide; leaking it
         // would block any other test that tries to acquire it.
         ReleaseSingletonTunLockBestEffort();
+        VPNRouter.Core.AppPaths.OverrideDataDir(_savedDataDir);
+        try { Directory.Delete(_testDataDir, recursive: true); } catch { /* best-effort */ }
     }
 
     // ─── Test 1: behavioural pin — Restart preserves the lock ───────────
@@ -179,12 +190,9 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         // instance SingBoxManager holds in its private `_tunLock`
         // field (set in ctor via TunOwnershipLock.Instance(_logger)).
         var lockInstance = TunOwnershipLock.Instance(null);
-        Assert.True(lockInstance.TryAcquire(),
-            "Test setup: another test left the singleton lock held. " +
-            "Ensure Dispose runs and the named semaphore is released " +
-            "between test classes.");
+        SetLockOwnedForTest(lockInstance);
         Assert.True(IsLockOwned(lockInstance),
-            "Test setup: TryAcquire returned true but _owned is false.");
+            "Test setup could not seed the isolated lock as owned.");
 
         // Act: invoke Restart. The production path is:
         //   Restart() → StopInternal(releaseLock: false)
@@ -254,10 +262,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             // owned state. Other tests in the class may have left it
             // released (Test 1's Restart did not release; Test 3
             // explicitly tests release).
-            if (!IsLockOwned(lockInstance))
-                Assert.True(lockInstance.TryAcquire(),
-                    "Case A setup: cannot acquire singleton lock — another " +
-                    "process or test holds it.");
+            SetLockOwnedForTest(lockInstance);
 
             var handleA = new FakeProcessHandle(pid: NewFakePid());
             SetField(managerA, "_handle", handleA);
@@ -283,9 +288,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             DefaultSettings(), null, new FakeHttpClient(), runnerB))
         {
             var lockInstance = TunOwnershipLock.Instance(null);
-            Assert.True(lockInstance.TryAcquire(),
-                "Case B setup: cannot acquire singleton lock — Case A's " +
-                "teardown should have released it.");
+            SetLockOwnedForTest(lockInstance);
 
             var handleB = new FakeProcessHandle(pid: NewFakePid());
             SetField(managerB, "_handle", handleB);
@@ -325,9 +328,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         // Seed the lock as owned + handle as alive so we land in path 4.
         var lockInstance = TunOwnershipLock.Instance(null);
-        if (!IsLockOwned(lockInstance))
-            Assert.True(lockInstance.TryAcquire(),
-                "Test 3 setup: cannot acquire singleton lock.");
+        SetLockOwnedForTest(lockInstance);
 
         var handle = new FakeProcessHandle(pid: NewFakePid());
         SetField(manager, "_handle", handle);
@@ -368,6 +369,24 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(f);
         return (bool)f!.GetValue(lockInstance)!;
+    }
+
+    private static void SetLockOwnedForTest(TunOwnershipLock lockInstance)
+    {
+        lockInstance.Release();
+
+        var semaphoreField = typeof(TunOwnershipLock).GetField(
+            "_semaphore", BindingFlags.Instance | BindingFlags.NonPublic);
+        var ownedField = typeof(TunOwnershipLock).GetField(
+            "_owned", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(semaphoreField);
+        Assert.NotNull(ownedField);
+
+        (semaphoreField!.GetValue(lockInstance) as IDisposable)?.Dispose();
+        // Count zero models a held semaphore without touching the system-wide
+        // Global\VPNRouter-SingBox-Owner name used by the installed app.
+        semaphoreField.SetValue(lockInstance, new Semaphore(0, 1));
+        ownedField!.SetValue(lockInstance, true);
     }
 
     private static void ReleaseSingletonTunLockBestEffort()

@@ -107,6 +107,7 @@ follow the same convention.
 |---|---|
 | `ConfigGeneratorAppRoutingFingerprintTests` | Effective Include/Exclude process selection and stable connected-Apply fingerprint |
 | `VpnEngineApplyStructuralChangeTests` | Live-baseline capture, failure rollback, and structural-change classification for connected Apply |
+| `PostShipVerifierContractTests` | Fixed-WINBRAT targeting, sanitized state/probe/lifecycle output, visual gate ordering, two-cycle verification and unconditional cleanup |
 
 ## Запустить
 
