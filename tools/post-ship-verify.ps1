@@ -1,6 +1,6 @@
-# One executable post-ship gate. Local work is limited to source/visual tests;
-# every app install, UI action, screenshot and network check is delegated to
-# the fixed-identity WINBRAT verifier.
+# One executable post-ship gate. Visual screenshots run headlessly in the
+# isolated test process; every app install, live UI action and network check is
+# delegated to the fixed-identity WINBRAT verifier.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -48,6 +48,18 @@ function Invoke-CheckedNative {
     )
     & $FilePath @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE." }
+}
+
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)] [string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $algorithm = [System.Security.Cryptography.SHA256]::Create()
+        try { return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() }
+        finally { $algorithm.Dispose() }
+    }
+    finally { $stream.Dispose() }
 }
 
 function Resolve-ProjectDotNet {
@@ -152,7 +164,7 @@ try {
     if ($freshExpected -notmatch '^[0-9a-f]{64}$') {
         throw 'The published SHA256 sidecar is malformed.'
     }
-    $freshActual = (Get-FileHash -Algorithm SHA256 $FreshZipPath).Hash.ToLowerInvariant()
+    $freshActual = Get-Sha256Hex $FreshZipPath
     if ($freshActual -ne $freshExpected) {
         throw 'The freshly downloaded release artifact does not match its SHA256 sidecar.'
     }
@@ -168,7 +180,7 @@ try {
     }
     else {
         $rootExpected = (Get-Content $HashPath -Raw).Trim().ToLowerInvariant()
-        $rootActual = (Get-FileHash -Algorithm SHA256 $ZipPath).Hash.ToLowerInvariant()
+        $rootActual = Get-Sha256Hex $ZipPath
         if ($rootExpected -ne $freshExpected -or $rootActual -ne $freshActual) {
             throw 'The repo-root deploy artifact differs from the freshly downloaded release asset.'
         }

@@ -426,6 +426,9 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("$GateMutex.ReleaseMutex()", source, StringComparison.Ordinal);
         Assert.Contains("'Fresh release artifact download'", source, StringComparison.Ordinal);
         Assert.Contains("'--clobber'", source, StringComparison.Ordinal);
+        Assert.Contains("function Get-Sha256Hex", source, StringComparison.Ordinal);
+        Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Get-FileHash", source, StringComparison.Ordinal);
         Assert.Contains("$rootActual -ne $freshActual", source, StringComparison.Ordinal);
         Assert.Contains("Invoke-CheckedNative -FilePath $PowerShellHost", source, StringComparison.Ordinal);
         Assert.Contains("Resolve-ReleaseCommit", source, StringComparison.Ordinal);
