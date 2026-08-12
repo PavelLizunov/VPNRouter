@@ -16,10 +16,6 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-### v2.49.0-r5 WINBRAT post-ship - 2026-08-12
-
-- [ ] **P1 CONFIRMED / BLOCKS STABLE** - on Windows 10 LTSC 2019, r5's first Connect still hit Wintun `ERROR_FILE_EXISTS` and crashed sing-box once before HealthMonitor recovered on its second attempt. The in-process `Win32_NetworkAdapter` query returned no row for the phantom, while read-only WINBRAT inventory found the exact `VPNRouter-TUN` mapping and PnP ID under Windows Network Connections plus 46 numbered historical Wintun records. Resolve the exact registry-mapped PnP ID through the existing SetupAPI/ConfigMgr fail-closed gate; never wildcard-remove Wintun or touch Tailscale. Source: r5 post-ship log `vpnrouter20260812_002.log`; `VPNRouter.Core/Services/WindowsPnpDeviceManager.cs`; `artifacts/brat-verify/2.49.0-r5/`.
-
 ### Post-release follow-ups - 2026-08-09
 
 - [ ] **P1 CANDIDATE / MEASUREMENT-GATED** - the owner's dev machine recorded Windows `Tcpip` event 4266 at 2026-08-09 09:33:17Z: allocation from the global UDP ephemeral-port space failed because all ports were in use. This can explain simultaneous Discord, browser/QUIC and DNS interruptions while the VPN UI/core remain alive, but the event carries no owning process. A later snapshot was healthy (113 UDP endpoints, 77 unique local ports, `sing-box` owned 2; no app crash or WLAN disconnect), so attribution to VPNRouter is not established. A later GitHub TCP timeout also occurred with only 138-152 UDP endpoints, no new 4266 event and GUI/core continuously alive, proving not every observed request failure is UDP-port exhaustion. A privacy-safe 8-hour sampler now records only counts and process names; do not change socket/MTU settings until recurrence identifies an owner. Source: local Windows System log plus sanitized 2026-08-09 samples.
@@ -197,6 +193,8 @@ Full research: `plans/sdr-research-realtime-games-nat-2026-07-02.md` (Fable, sou
 Both paths: runtime major swapped, app boots + renders (Avalonia 12 on net10), no [ERR]/Exception/FATAL. Without the B2 fix the net10 app DLLs would have run on a frozen net8 coreclr → instant crash of the whole installed base. **B2 CLOSED.** — dep-review P1-1
 
 ## Resolved (history)
+
+- [x] **P1 RESOLVED v2.49.0-r6 (2026-08-12)** - on Windows 10 LTSC 2019, r5's first Connect hit Wintun `ERROR_FILE_EXISTS` because WMI did not expose the phantom `VPNRouter-TUN` record. r6 resolves the exact Windows Network Connections mapping, validates matching ConnectionId and `SWD\Wintun\{GUID}`, and removes only that device through SetupAPI/ConfigMgr. WINBRAT post-ship passed: first Connect had no crash/retry/FATAL; Full to Split stayed connected; final inventory changed from 48 to 47 Wintun devices while all 46 numbered historical records remained and the exact owned record disappeared. TgProxy start/run/stop and final log scan also passed - `VPNRouter.Core/Services/WindowsPnpDeviceManager.cs`, PR #142, `artifacts/brat-verify/2.49.0-r6/`
 
 - [x] **P0 RESOLVED v2.48.0-r4 (2026-08-03)** — Android release CI accepted and published debug-signed APKs because the .NET Android publish command supplied the production keystore properties without the required `AndroidKeyStore=true`; rotating the GitHub secrets alone could not affect signing. Both temporary incompatible R4 APK asset pairs were deleted before handoff. Fixed by enabling the production keystore and pinning the finished APK certificate SHA-256 before upload (PR #111). The final R4 APK matches production cert `6e50af0f…45a221`, passed SHA256 verification, update-installed over `2.48.0-r1`, and launched as `2.48.0-r4` on device. GitHub signing secrets were restored from the verified encrypted backup; plaintext recovery files were removed after use — `.github/workflows/build-android.yml`
 
