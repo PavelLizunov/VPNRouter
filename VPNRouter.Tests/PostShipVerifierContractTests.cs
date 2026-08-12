@@ -208,8 +208,9 @@ public sealed class PostShipVerifierContractTests
             File.WriteAllText(Path.Combine(root, "global.json"), "{\"sdk\":{\"version\":\"10.0.301\"}}");
             File.WriteAllText(Path.Combine(tests, "VPNRouter.Tests.csproj"), "<Project />");
 
-            var payload = "published-release"u8.ToArray();
-            File.WriteAllBytes(Path.Combine(fakes, "source.zip"), payload);
+            var sourceZip = Path.Combine(fakes, "source.zip");
+            CreateTrueSplitZip(sourceZip);
+            var payload = File.ReadAllBytes(sourceZip);
             File.WriteAllText(
                 Path.Combine(fakes, "source.sha256"),
                 Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant());
@@ -454,6 +455,11 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("'Fresh release artifact download'", source, StringComparison.Ordinal);
         Assert.Contains("'--clobber'", source, StringComparison.Ordinal);
         Assert.Contains("function Get-Sha256Hex", source, StringComparison.Ordinal);
+        Assert.Contains("function Assert-TrueSplitBundle", source, StringComparison.Ordinal);
+        Assert.Contains("app/driver/mullvad-split-tunnel.sys", source, StringComparison.Ordinal);
+        Assert.Contains("app/driver/mullvad-split-tunnel.cat", source, StringComparison.Ordinal);
+        Assert.Contains("app/driver/mullvad-split-tunnel.inf", source, StringComparison.Ordinal);
+        Assert.Contains("Assert-TrueSplitBundle -Path $FreshZipPath", source, StringComparison.Ordinal);
         Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-FileHash", source, StringComparison.Ordinal);
         Assert.Contains("$rootActual -ne $freshActual", source, StringComparison.Ordinal);
@@ -604,6 +610,26 @@ public sealed class PostShipVerifierContractTests
         {
             cursor = Array.FindIndex(calls, cursor + 1, call => call.StartsWith(prefix, StringComparison.Ordinal));
             Assert.True(cursor >= 0, $"Call '{prefix}' was not observed in order. Trace: {string.Join(" | ", calls)}");
+        }
+    }
+
+    private static void CreateTrueSplitZip(string path)
+    {
+        using var archive = System.IO.Compression.ZipFile.Open(
+            path,
+            System.IO.Compression.ZipArchiveMode.Create);
+        foreach (var entryName in new[]
+                 {
+                     "app/driver/mullvad-split-tunnel.sys",
+                     "app/driver/mullvad-split-tunnel.cat",
+                     "app/driver/mullvad-split-tunnel.inf",
+                     "app/driver/checksums.sha256",
+                     "app/LICENSE.split-tunnel",
+                 })
+        {
+            var entry = archive.CreateEntry(entryName);
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("fixture");
         }
     }
 

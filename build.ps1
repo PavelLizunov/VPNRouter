@@ -64,15 +64,14 @@ param(
     # PARAMETER AndroidAlso for prereqs. Falls back to a clear warning
     # (not a hard failure) when prereqs are missing.
     [switch]$AndroidAlso,
-    # W1.4 true-split: bundle the Mullvad win-split-tunnel kernel driver (3 files, sha256-pinned)
-    # into dist\driver\. GATED (default off) so -rN candidates don't auto-ship+activate the feature —
-    # the manager engages lazily only when the .sys is present, so its ABSENCE is fail-open (feature
-    # off, post-capture routing stands). Pass -BundleSplitDriver at the ship-the-feature moment.
+    # W1.4 true-split: release uploads always include the pinned Mullvad driver.
+    # Keep the switch for local package tests that need to exercise the bundle.
     [switch]$BundleSplitDriver
 )
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
+$bundleSplitDriver = $BundleSplitDriver -or $Upload
 
 # ── v2.29.0-r7 LAYER 1: AppVersion match check ──
 # Trigger: v2.29.0-r1..r5 dev cycle bug (CLAUDE-AI fake-tag fiasco).
@@ -411,7 +410,7 @@ if ($slipStreamSrc) {
     Write-Host "       slipstream-client: NOT bundled (no -SlipstreamPath, no tools\slipstream-cache) - dns-tunnel unavailable until built+placed" -ForegroundColor Yellow
 }
 
-# ── Bundle split-tunnel driver (W1.4, Windows-only, GATED by -BundleSplitDriver) ──
+# ── Bundle split-tunnel driver (W1.4, Windows-only) ──
 # The Mullvad win-split-tunnel kernel driver (true OS-level exclude-mode). Files pinned to
 # mullvadvpn-app-binaries@cc0affb2 with a HARD sha256 gate (mismatch = build FAIL) so a silent
 # ABI/driver bump can't slip in. Cached under tools\driver-cache\<commit>\ like singbox-cache.
@@ -421,7 +420,7 @@ if ($slipStreamSrc) {
 # without test-signing. Not a separate release asset (rides inside the app ZIP → 14/16-asset invariant
 # unchanged). Mac/Linux never run this script, so their builds are untouched.
 Write-Host "[6c/9] Bundling split-tunnel driver..." -ForegroundColor Yellow
-if ($BundleSplitDriver) {
+if ($bundleSplitDriver) {
     $stCommit = "cc0affb2f06e870fb594e2dd6d61049611991586"
     $stCache  = Join-Path $Root "tools\driver-cache\$stCommit"
     New-Item -ItemType Directory -Force -Path $stCache | Out-Null
@@ -456,7 +455,7 @@ if ($BundleSplitDriver) {
     if (Test-Path $stLicense) { Copy-Item $stLicense (Join-Path $DistDir "LICENSE.split-tunnel") -Force }
     Write-Host "       Bundled split-tunnel driver (3 files, sha256 gate OK) -> dist\driver\" -ForegroundColor Green
 } else {
-    Write-Host "       split-tunnel driver: NOT bundled (pass -BundleSplitDriver to ship true-split; absence = feature off / fail-open)" -ForegroundColor Gray
+    Write-Host "       split-tunnel driver: NOT bundled (local build without -BundleSplitDriver)" -ForegroundColor Gray
 }
 
 # ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──

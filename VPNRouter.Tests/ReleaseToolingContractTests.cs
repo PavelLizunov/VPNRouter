@@ -48,6 +48,15 @@ public sealed class ReleaseToolingContractTests
     }
 
     [Fact]
+    public void ReleaseUpload_AlwaysBundlesTrueSplitDriver()
+    {
+        var build = Read("build.ps1");
+
+        Assert.Contains("$bundleSplitDriver = $BundleSplitDriver -or $Upload", build);
+        Assert.Contains("if ($bundleSplitDriver)", build);
+    }
+
+    [Fact]
     public void LocalLinuxBuild_PublishesAppOnly()
     {
         var script = Read("build-linux.ps1");
