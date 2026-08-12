@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       # Wave 26 (Phase 6, 2026-05-18) — bumped to multi-version setup so
       # both 8.0 + 10.0 SDKs are available. Wave 23 (commit c33e372,
@@ -53,7 +53,7 @@ jobs:
       # was not the cause: publish had no active Android RuntimeIdentifier and
       # fell back to the linux-x64 host RID.
       - name: Setup .NET 8 + 10 SDK
-        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           dotnet-version: |
             8.0.x
@@ -63,7 +63,7 @@ jobs:
       # head restores hundreds of MB of packages on cold runs. Keyed on the
       # union hash of every .csproj so any package version bump invalidates
       # cleanly. Q11 will pin actions/cache to a commit SHA.
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -74,7 +74,7 @@ jobs:
       # android` below takes 3–4 min on a cold runner (large SDK download).
       # Caching ~/.dotnet/workloads keyed on global.json (where SDK + workload
       # versions are pinned) avoids repeating that download on warm runs.
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.dotnet/workloads
           key: dotnet-workloads-${{ runner.os }}-${{ hashFiles('**/global.json') }}
@@ -85,7 +85,7 @@ jobs:
       # tools. Temurin matches the developer-VM toolchain documented in
       # plans/vpnrouter-android-handbook.md §3.5.
       - name: Setup JDK 17 (Temurin)
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961  # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
