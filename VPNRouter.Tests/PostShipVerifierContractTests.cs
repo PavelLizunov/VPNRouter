@@ -5,6 +5,21 @@ namespace VPNRouter.Tests;
 public sealed class PostShipVerifierContractTests
 {
     [Fact]
+    public void BratRoutePlan_BehavioralFixturesPass()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var root = FindRepoRoot();
+        var helper = Path.Combine(root, "tools", "brat-route-plan.ps1");
+        var result = RunPowerShell(root, helper, Path.GetDirectoryName(helper)!, new[] { "-SelfTest" });
+
+        Assert.True(result.ExitCode == 0,
+            $"stdout={result.Stdout}{Environment.NewLine}stderr={result.Stderr}");
+        Assert.Contains("\"Status\":\"PASS\"", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CiGate_StrictRejectsCancelledPlatformAndIgnoresFailureWaiver()
     {
         if (!OperatingSystem.IsWindows())
@@ -308,7 +323,10 @@ public sealed class PostShipVerifierContractTests
     {
         var source = ReadRepoFile("tools", "brat-verify.ps1");
 
-        Assert.Contains("'state', 'probe', 'lifecycle'", source, StringComparison.Ordinal);
+        Assert.Contains("'state'", source, StringComparison.Ordinal);
+        Assert.Contains("'diagnose'", source, StringComparison.Ordinal);
+        Assert.Contains("'probe'", source, StringComparison.Ordinal);
+        Assert.Contains("'lifecycle'", source, StringComparison.Ordinal);
         Assert.Contains("'emergencycleanup'", source, StringComparison.Ordinal);
         Assert.Contains("$BratIp          = '100.115.182.0'", source, StringComparison.Ordinal);
         Assert.Contains("$BratMachineName = 'WINBRAT'", source, StringComparison.Ordinal);
@@ -329,13 +347,21 @@ public sealed class PostShipVerifierContractTests
         Assert.True(routeGate >= 0);
         Assert.True(probe.IndexOf("$proxyHttp = New-Object System.Net.Http.HttpClient", StringComparison.Ordinal) > routeGate);
         Assert.True(probe.IndexOf("$udp = New-Object System.Net.Sockets.UdpClient", StringComparison.Ordinal) > routeGate);
-        Assert.Contains("@(64, 512, 1200, 1392)", probe, StringComparison.Ordinal);
+        Assert.Contains("stun.cloudflare.com", probe, StringComparison.Ordinal);
+        Assert.Contains("function New-StunBindingRequest", probe, StringComparison.Ordinal);
+        Assert.Contains("@(20, 64, 512, 1200, 1392)", probe, StringComparison.Ordinal);
         Assert.Contains("/proxies/proxy/delay", probe, StringComparison.Ordinal);
         Assert.DoesNotContain("$http.GetAsync", probe, StringComparison.Ordinal);
         Assert.Contains("/connections", probe, StringComparison.Ordinal);
         Assert.Contains("[int]$_.metadata.destinationPort -eq $destinationPort", probe, StringComparison.Ordinal);
-        Assert.Contains("@($connection[0].chains) -contains $expectedTag", probe, StringComparison.Ordinal);
         Assert.Contains("$expectedUdpTag", probe, StringComparison.Ordinal);
+        Assert.Contains("Resolve-UdpProbePlan $config", probe, StringComparison.Ordinal);
+        Assert.Contains("Test-ProxyCapableChain 1 @('proxy') 'proxy' @($config.outbounds)", probe, StringComparison.Ordinal);
+        Assert.Contains("Copy-Item -LiteralPath (Join-Path $PSHOME 'powershell.exe')", probe, StringComparison.Ordinal);
+        Assert.Contains("if ($child -and -not $child.HasExited)", probe, StringComparison.Ordinal);
+        Assert.Contains("$row.Success = $valid -and $row.ProxyObserved -and -not $row.DirectObserved", probe, StringComparison.Ordinal);
+        Assert.Contains("[string]$_.metadata.sourceIP -eq $sourceIp", probe, StringComparison.Ordinal);
+        Assert.Contains("Test-ProxyCapableChain $connection.Count $chains $expectedTag $outbounds", probe, StringComparison.Ordinal);
         Assert.Contains("ProxyObserved", probe, StringComparison.Ordinal);
         Assert.Contains("UnverifiedOutbound", probe, StringComparison.Ordinal);
         Assert.Contains("$proxyResult.Success -and $httpResult.Success", probe, StringComparison.Ordinal);
@@ -423,6 +449,7 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("if ($RemoteMutationStarted)", source, StringComparison.Ordinal);
         Assert.Contains("'Local\\VPNRouterBratStability'", source, StringComparison.Ordinal);
         Assert.Contains("$GateMutex.WaitOne(0)", source, StringComparison.Ordinal);
+        Assert.Contains("catch [System.Threading.AbandonedMutexException]", source, StringComparison.Ordinal);
         Assert.Contains("$GateMutex.ReleaseMutex()", source, StringComparison.Ordinal);
         Assert.Contains("'Fresh release artifact download'", source, StringComparison.Ordinal);
         Assert.Contains("'--clobber'", source, StringComparison.Ordinal);

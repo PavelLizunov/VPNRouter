@@ -319,7 +319,8 @@ function Invoke-Soak {
 }
 
 try {
-    $MutexHeld = $Mutex.WaitOne(0)
+    try { $MutexHeld = $Mutex.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $MutexHeld = $true }
     if (-not $MutexHeld) { throw 'Another WINBRAT stability run is active.' }
     Write-Evidence -Kind 'RunStarted' -Data ([ordered]@{
         Cycles = $Cycles; DurationMinutes = $DurationMinutes; SampleSeconds = $SampleSeconds

@@ -187,7 +187,8 @@ try {
     }
 
     $CurrentStep = 'Deploy'
-    $GateMutexHeld = $GateMutex.WaitOne(0)
+    try { $GateMutexHeld = $GateMutex.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $GateMutexHeld = $true }
     if (-not $GateMutexHeld) { throw 'Another WINBRAT verification run is active.' }
     $remoteClock = (& $BratVerify -Action state | Out-String).Trim() | ConvertFrom-Json
     $RemoteVerificationStartedUtc = [DateTimeOffset]::ParseExact(

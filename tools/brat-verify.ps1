@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('identity', 'deploy', 'uia', 'state', 'probe', 'lifecycle', 'logs', 'emergencycleanup', 'tuninventory', 'updateprobe', 'liveupdate')]
+    [ValidateSet('identity', 'deploy', 'uia', 'state', 'diagnose', 'probe', 'lifecycle', 'logs', 'emergencycleanup', 'tuninventory', 'updateprobe', 'liveupdate')]
     [string]$Action,
 
     [string]$Version,
@@ -584,10 +584,10 @@ switch ($Action) {
                 $tunState = if ($tun) { [string]$tun.Status } else { 'Absent' }
 
                 function Get-FixedProbeRouteScope {
-                    $hosts = @('www.gstatic.com', 'stun.l.google.com')
-                    $scopes = foreach ($hostName in $hosts) {
+                    $destinations = @('www.gstatic.com', 'stun.cloudflare.com')
+                    $scopes = foreach ($destination in $destinations) {
                         try {
-                            $address = [System.Net.Dns]::GetHostAddresses($hostName) |
+                            $address = [System.Net.Dns]::GetHostAddresses($destination) |
                                 Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
                                 Select-Object -First 1
                             if (-not $address) { 'Unknown'; continue }
@@ -599,7 +599,7 @@ switch ($Action) {
                         catch { 'Unknown' }
                     }
                     if (@($scopes | Where-Object { $_ -eq 'Direct' }).Count -gt 0) { return 'Direct' }
-                    if (@($scopes | Where-Object { $_ -eq 'Tunnel' }).Count -eq $hosts.Count) { return 'Tunnel' }
+                    if (@($scopes | Where-Object { $_ -eq 'Tunnel' }).Count -eq $destinations.Count) { return 'Tunnel' }
                     return 'Unknown'
                 }
 
@@ -636,16 +636,199 @@ switch ($Action) {
         finally { Remove-PSSession $s }
     }
 
+    'diagnose' {
+        $s = New-VerifiedBratSession
+        try {
+            $diagnosis = Invoke-Command -Session $s -ArgumentList $TimeoutSeconds -ScriptBlock {
+                param($timeoutSeconds)
+
+                function Read-Mode([string]$text, [string]$key) {
+                    $match = [regex]::Match($text, "(?m)^\s*$([regex]::Escape($key)):\s*(?<value>[A-Za-z_-]+)\s*$")
+                    if ($match.Success) {
+                        $value = $match.Groups['value'].Value.ToLowerInvariant()
+                        $allowed = if ([string]::Equals($key, 'config_mode', [StringComparison]::Ordinal)) {
+                            @('generated', 'subscribe', 'custom')
+                        } elseif ([string]::Equals($key, 'routing_mode', [StringComparison]::Ordinal)) {
+                            @('split', 'full')
+                        } else { @() }
+                        foreach ($canonical in $allowed) {
+                            if ([string]::Equals($value, $canonical, [StringComparison]::Ordinal)) { return $canonical }
+                        }
+                        return 'Other'
+                    }
+                    return 'Unknown'
+                }
+
+                function Get-AllowlistedLiteral([string]$value, [string[]]$allowed) {
+                    foreach ($canonical in $allowed) {
+                        if ([string]::Equals($value, $canonical, [StringComparison]::Ordinal)) { return $canonical }
+                    }
+                    return 'other'
+                }
+
+                function Test-Stun([int]$size) {
+                    $hostName = 'stun.cloudflare.com'
+                    $port = 3478
+                    $address = [System.Net.Dns]::GetHostAddresses($hostName) |
+                        Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+                        Select-Object -First 1
+                    if (-not $address) { return [pscustomobject]@{ Size = $size; Success = $false; Error = 'Resolve' } }
+
+                    $bytes = New-Object byte[] $size
+                    $bytes[0] = 0x00; $bytes[1] = 0x01
+                    $bytes[2] = [byte](($size - 20) -shr 8); $bytes[3] = [byte](($size - 20) -band 0xff)
+                    $bytes[4] = 0x21; $bytes[5] = 0x12; $bytes[6] = 0xA4; $bytes[7] = 0x42
+                    $transactionId = New-Object byte[] 12
+                    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+                    try { $rng.GetBytes($transactionId) } finally { $rng.Dispose() }
+                    [Array]::Copy($transactionId, 0, $bytes, 8, 12)
+                    if ($size -gt 20) {
+                        $bytes[20] = 0xC0; $bytes[21] = 0x01
+                        $bytes[22] = [byte](($size - 24) -shr 8); $bytes[23] = [byte](($size - 24) -band 0xff)
+                    }
+
+                    $udp = New-Object System.Net.Sockets.UdpClient([System.Net.Sockets.AddressFamily]::InterNetwork)
+                    $udp.Client.ReceiveTimeout = $timeoutSeconds * 1000
+                    try {
+                        $udp.Connect($address, $port)
+                        [void]$udp.Send($bytes, $bytes.Length)
+                        $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+                        $response = $udp.Receive([ref]$remote)
+                        $valid = $response.Length -ge 20 -and $response[0] -eq 0x01 -and $response[1] -eq 0x01
+                        if ($valid) {
+                            for ($i = 0; $i -lt 12; $i++) {
+                                if ($response[8 + $i] -ne $transactionId[$i]) { $valid = $false; break }
+                            }
+                        }
+                        return [pscustomobject]@{ Size = $size; Success = $valid; Error = $(if ($valid) { 'None' } else { 'InvalidResponse' }) }
+                    }
+                    catch [System.Net.Sockets.SocketException] {
+                        $kind = if ($_.Exception.SocketErrorCode -eq [System.Net.Sockets.SocketError]::TimedOut) { 'Timeout' } else { 'Socket' }
+                        return [pscustomobject]@{ Size = $size; Success = $false; Error = $kind }
+                    }
+                    catch { return [pscustomobject]@{ Size = $size; Success = $false; Error = 'Other' } }
+                    finally { $udp.Dispose() }
+                }
+
+                function Test-UdpDns {
+                    $address = [System.Net.IPAddress]::Parse('1.1.1.1')
+                    $port = 53
+                    $transactionId = New-Object byte[] 2
+                    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+                    try { $rng.GetBytes($transactionId) } finally { $rng.Dispose() }
+                    $query = New-Object System.Collections.Generic.List[byte]
+                    $query.AddRange([byte[]]@($transactionId[0], $transactionId[1], 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00))
+                    foreach ($label in @('example', 'com')) {
+                        $ascii = [System.Text.Encoding]::ASCII.GetBytes($label)
+                        $query.Add([byte]$ascii.Length)
+                        $query.AddRange($ascii)
+                    }
+                    $query.AddRange([byte[]]@(0x00, 0x00, 0x01, 0x00, 0x01))
+
+                    $udp = New-Object System.Net.Sockets.UdpClient([System.Net.Sockets.AddressFamily]::InterNetwork)
+                    $udp.Client.ReceiveTimeout = $timeoutSeconds * 1000
+                    try {
+                        $udp.Connect($address, $port)
+                        [void]$udp.Send($query.ToArray(), $query.Count)
+                        $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+                        $response = $udp.Receive([ref]$remote)
+                        $valid = $response.Length -ge 12 -and
+                            $response[0] -eq $transactionId[0] -and $response[1] -eq $transactionId[1] -and
+                            ($response[2] -band 0x80) -ne 0 -and ($response[3] -band 0x0f) -eq 0 -and
+                            $remote.Address.Equals($address) -and $remote.Port -eq $port
+                        return [pscustomobject]@{ Success = $valid; Error = $(if ($valid) { 'None' } else { 'InvalidResponse' }) }
+                    }
+                    catch [System.Net.Sockets.SocketException] {
+                        $kind = if ($_.Exception.SocketErrorCode -eq [System.Net.Sockets.SocketError]::TimedOut) { 'Timeout' } else { 'Socket' }
+                        return [pscustomobject]@{ Success = $false; Error = $kind }
+                    }
+                    catch { return [pscustomobject]@{ Success = $false; Error = 'Other' } }
+                    finally { $udp.Dispose() }
+                }
+
+                try {
+                    $yaml = Get-Content -LiteralPath 'C:\ProgramData\VPNRouter\config.yaml' -Raw -ErrorAction Stop
+                    $configJson = Get-Content -LiteralPath 'C:\ProgramData\VPNRouter\config\current.json' -Raw -ErrorAction Stop
+                    $config = ConvertFrom-Json -InputObject $configJson -ErrorAction Stop
+                }
+                catch {
+                    throw 'RemoteConfigReadFailed'
+                }
+                $outbounds = @($config.outbounds | ForEach-Object {
+                    $tag = [string]$_.tag
+                    [pscustomobject]@{
+                        Tag = Get-AllowlistedLiteral $tag @('proxy', 'proxy-udp', 'direct', 'dns-direct', 'block')
+                        Type = Get-AllowlistedLiteral ([string]$_.type) @(
+                            'direct', 'block', 'vless', 'hysteria2', 'tuic', 'wireguard',
+                            'selector', 'urltest', 'shadowsocks', 'trojan')
+                        HasFlow = -not [string]::IsNullOrWhiteSpace([string]$_.flow)
+                    }
+                })
+                $udpRoutes = @($config.route.rules | Where-Object {
+                    @($_.network) -contains 'udp'
+                } | ForEach-Object {
+                    [pscustomobject]@{
+                        Target = $(& {
+                            $value = if ($_.outbound) { [string]$_.outbound } elseif ($_.action) { [string]$_.action } else { 'unknown' }
+                            Get-AllowlistedLiteral $value @('proxy', 'proxy-udp', 'direct', 'dns-direct', 'block', 'hijack-dns', 'reject', 'route', 'resolve')
+                        })
+                        ProcessNameCount = @($_.process_name).Count
+                        HasProcessPath = @($_.process_path, $_.process_path_regex | Where-Object { $_ }).Count -gt 0
+                    }
+                })
+                $tun = Get-NetAdapter -Name 'VPNRouter-TUN' -ErrorAction SilentlyContinue | Select-Object -First 1
+                $probeProcessName = @($config.route.rules | Where-Object {
+                    [string]$_.outbound -eq 'proxy-udp' -and @($_.network) -contains 'udp'
+                } | ForEach-Object { @($_.process_name) } | Where-Object {
+                    $name = [string]$_
+                    $name.Length -le 128 -and $name.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase) -and
+                    [IO.Path]::GetFileName($name) -ceq $name -and
+                    $name.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -lt 0 -and
+                    -not ($name.ToCharArray() | Where-Object { [char]::IsControl($_) } | Select-Object -First 1)
+                } | Select-Object -First 1)
+                $aliasRunnable = $false
+                if ($probeProcessName.Count -eq 1) {
+                    $aliasRoot = Join-Path 'C:\r4review\verify' ('alias-' + [Guid]::NewGuid().ToString('N'))
+                    try {
+                        New-Item -ItemType Directory -Path $aliasRoot -Force | Out-Null
+                        $aliasPath = Join-Path $aliasRoot ([string]$probeProcessName[0])
+                        Copy-Item -LiteralPath (Join-Path $PSHOME 'powershell.exe') -Destination $aliasPath
+                        $process = Start-Process -FilePath $aliasPath -ArgumentList '-NoProfile', '-NonInteractive', '-Command', 'exit 0' -Wait -PassThru
+                        $aliasRunnable = $process.ExitCode -eq 0
+                    }
+                    finally { Remove-Item -LiteralPath $aliasRoot -Recurse -Force -ErrorAction SilentlyContinue }
+                }
+
+                [ordered]@{
+                    AtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                    ConfigMode = Read-Mode $yaml 'config_mode'
+                    RoutingMode = Read-Mode $yaml 'routing_mode'
+                    RouteFinal = Get-AllowlistedLiteral ([string]$config.route.final) @('proxy', 'direct')
+                    TunState = $(if ($tun) { [string]$tun.Status } else { 'Absent' })
+                    Outbounds = $outbounds
+                    UdpRoutes = $udpRoutes
+                    SelectedProcessAliasRunnable = $aliasRunnable
+                    DnsUdp = Test-UdpDns
+                    Stun = @(Test-Stun 20; Test-Stun 64; Test-Stun 512; Test-Stun 1200; Test-Stun 1392)
+                }
+            }
+            Write-Output ($diagnosis | ConvertTo-Json -Depth 6 -Compress)
+        }
+        finally { Remove-PSSession $s }
+    }
+
     'probe' {
         $s = New-VerifiedBratSession
         try {
-            $probe = Invoke-Command -Session $s -ArgumentList $ProbeProfile, $TimeoutSeconds -ScriptBlock {
-                param($profile, $timeoutSeconds)
+            $routePlanSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'brat-route-plan.ps1') -Raw -ErrorAction Stop
+            $probe = Invoke-Command -Session $s -ArgumentList $ProbeProfile, $TimeoutSeconds, $routePlanSource -ScriptBlock {
+                param($profile, $timeoutSeconds, $routePlanSource)
+                Invoke-Expression $routePlanSource
 
                 $httpsHost = 'www.gstatic.com'
                 $httpsUrl = 'https://www.gstatic.com/generate_204'
-                $stunHost = 'stun.l.google.com'
-                $stunPort = 19302
+                $udpHost = 'stun.cloudflare.com'
+                $udpPort = 3478
 
                 function Resolve-FixedIpv4([string]$hostName) {
                     [System.Net.Dns]::GetHostAddresses($hostName) |
@@ -682,38 +865,42 @@ switch ($Action) {
                 }
 
                 function New-StunBindingRequest([int]$packetSize) {
-                    if ($packetSize -lt 24 -or ($packetSize % 4) -ne 0) { throw 'Invalid fixed STUN packet size.' }
+                    if ($packetSize -ne 20 -and ($packetSize -lt 24 -or ($packetSize % 4) -ne 0)) {
+                        throw 'Invalid fixed STUN packet size.'
+                    }
                     $request = New-Object byte[] $packetSize
-                    $messageLength = $packetSize - 20
                     $request[0] = 0x00; $request[1] = 0x01
-                    $request[2] = [byte](($messageLength -shr 8) -band 0xff)
-                    $request[3] = [byte]($messageLength -band 0xff)
+                    $request[2] = [byte](($packetSize - 20) -shr 8)
+                    $request[3] = [byte](($packetSize - 20) -band 0xff)
                     $request[4] = 0x21; $request[5] = 0x12; $request[6] = 0xA4; $request[7] = 0x42
                     $transactionId = New-Object byte[] 12
                     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
                     try { $rng.GetBytes($transactionId) } finally { $rng.Dispose() }
                     [Array]::Copy($transactionId, 0, $request, 8, 12)
-
-                    # RFC-compatible unknown optional attribute pads fixed-size
-                    # requests without simulating a proprietary application.
-                    $attributeLength = $packetSize - 24
-                    $request[20] = 0xC0; $request[21] = 0x01
-                    $request[22] = [byte](($attributeLength -shr 8) -band 0xff)
-                    $request[23] = [byte]($attributeLength -band 0xff)
-                    for ($i = 24; $i -lt $packetSize; $i++) { $request[$i] = 0x58 }
-
+                    if ($packetSize -gt 20) {
+                        $request[20] = 0xC0; $request[21] = 0x01
+                        $request[22] = [byte](($packetSize - 24) -shr 8)
+                        $request[23] = [byte](($packetSize - 24) -band 0xff)
+                        for ($i = 24; $i -lt $packetSize; $i++) { $request[$i] = 0x58 }
+                    }
                     [pscustomobject]@{ Bytes = $request; TransactionId = $transactionId }
                 }
 
-                function Test-UdpProxyChain(
+                function Get-UdpProxyObservation(
                     [string]$controller,
                     [string]$secret,
                     [int]$sourcePort,
+                    [string]$sourceIp,
                     [string]$destinationIp,
                     [int]$destinationPort,
                     [string]$expectedTag,
+                    $outbounds,
                     [int]$timeoutSeconds) {
-                    if (-not $controller -or -not $expectedTag) { return $false }
+                    $empty = [pscustomobject]@{
+                        ExactTupleCount = 0; DestinationCount = 0; UdpCount = 0
+                        ExpectedTag = $false; DirectTag = $false; OtherTag = $false
+                    }
+                    if (-not $controller -or -not $expectedTag) { return $empty }
                     $client = New-Object System.Net.Http.HttpClient
                     $client.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
                     $request = New-Object System.Net.Http.HttpRequestMessage(
@@ -725,20 +912,37 @@ switch ($Action) {
                         }
                         $response = $client.SendAsync($request).GetAwaiter().GetResult()
                         try {
-                            if (-not $response.IsSuccessStatusCode) { return $false }
+                            if (-not $response.IsSuccessStatusCode) { return $empty }
                             $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
-                            $connection = @($body.connections | Where-Object {
-                                [string]$_.metadata.network -ieq 'udp' -and
-                                [int]$_.metadata.sourcePort -eq $sourcePort -and
+                            $udpConnections = @($body.connections | Where-Object {
+                                [string]$_.metadata.network -ieq 'udp'
+                            })
+                            $destinationConnections = @($udpConnections | Where-Object {
                                 [string]$_.metadata.destinationIP -eq $destinationIp -and
                                 [int]$_.metadata.destinationPort -eq $destinationPort
-                            } | Select-Object -First 1)
-                            return $connection.Count -eq 1 -and
-                                @($connection[0].chains) -contains $expectedTag
+                            })
+                            $connection = @($destinationConnections | Where-Object {
+                                [string]$_.metadata.network -ieq 'udp' -and
+                                [int]$_.metadata.sourcePort -eq $sourcePort -and
+                                [string]$_.metadata.sourceIP -eq $sourceIp
+                            })
+                            $chains = if ($connection.Count -eq 1) { @($connection[0].chains) } else { @() }
+                            $proxyObserved = Test-ProxyCapableChain $connection.Count $chains $expectedTag $outbounds
+                            return [pscustomobject]@{
+                                ExactTupleCount = $connection.Count
+                                DestinationCount = $destinationConnections.Count
+                                UdpCount = $udpConnections.Count
+                                ExpectedTag = $proxyObserved
+                                DirectTag = Test-ContainsOrdinal $chains 'direct'
+                                OtherTag = @($chains | Where-Object {
+                                    -not [string]::Equals([string]$_, $expectedTag, [StringComparison]::Ordinal) -and
+                                    -not [string]::Equals([string]$_, 'direct', [StringComparison]::Ordinal)
+                                }).Count -gt 0
+                            }
                         }
                         finally { $response.Dispose() }
                     }
-                    catch { return $false }
+                    catch { return $empty }
                     finally {
                         $request.Dispose()
                         $client.Dispose()
@@ -746,8 +950,8 @@ switch ($Action) {
                 }
 
                 $httpsAddress = Resolve-FixedIpv4 $httpsHost
-                $stunAddress = Resolve-FixedIpv4 $stunHost
-                $routeScope = Get-RouteScope @($httpsAddress, $stunAddress)
+                $udpAddress = Resolve-FixedIpv4 $udpHost
+                $routeScope = Get-RouteScope @($httpsAddress, $udpAddress)
                 if ($routeScope -ne 'Tunnel') {
                     throw "Fixed probes are not tunnel-scoped (scope=$routeScope). Dataplane verification is blocked."
                 }
@@ -767,6 +971,7 @@ switch ($Action) {
                 $controller = $null
                 $secret = $null
                 $expectedUdpTag = $null
+                $probeProcessName = $null
                 try {
                     $configPath = 'C:\ProgramData\VPNRouter\config\current.json'
                     $config = Get-Content -LiteralPath $configPath -Raw -ErrorAction Stop | ConvertFrom-Json
@@ -775,10 +980,11 @@ switch ($Action) {
                         throw 'The Clash controller is not fixed to IPv4 loopback.'
                     }
                     $secret = [string]$config.experimental.clash_api.secret
-                    $expectedUdpTag = if (@($config.outbounds | Where-Object { [string]$_.tag -eq 'proxy-udp' }).Count -gt 0) {
-                        'proxy-udp'
-                    } else {
-                        'proxy'
+                    $udpPlan = Resolve-UdpProbePlan $config
+                    $expectedUdpTag = [string]$udpPlan.ExpectedTag
+                    $probeProcessName = [string]$udpPlan.ProcessName
+                    if (-not (Test-ProxyCapableChain 1 @('proxy') 'proxy' @($config.outbounds))) {
+                        throw 'The canonical HTTPS proxy does not resolve directly to a supported proxy protocol.'
                     }
                     $delayUrl = "http://$controller/proxies/proxy/delay?url=$([Uri]::EscapeDataString($httpsUrl))&timeout=$($timeoutSeconds * 1000)"
                     $proxyRequest = New-Object System.Net.Http.HttpRequestMessage(
@@ -823,42 +1029,142 @@ switch ($Action) {
                     Error         = [string]$proxyResult.Error
                 }
 
-                $sizes = if ($profile -eq 'Boundary') { @(64, 512, 1200, 1392) } else { @(64) }
                 $udpResults = @()
+                $sizes = if ($profile -eq 'Boundary') { @(20, 64, 512, 1200, 1392) } else { @(20) }
                 foreach ($size in $sizes) {
-                    $row = [ordered]@{ Size = $size; Success = $false; ProxyObserved = $false; LatencyMs = 0; Error = 'Other' }
+                    $row = [ordered]@{
+                        Size = $size; Success = $false; ProxyObserved = $false
+                        ExactTupleCount = 0; DestinationCount = 0; UdpCount = 0
+                        DirectObserved = $false; OtherObserved = $false
+                        LatencyMs = 0; Error = 'Other'
+                    }
                     $udp = New-Object System.Net.Sockets.UdpClient([System.Net.Sockets.AddressFamily]::InterNetwork)
                     $udp.Client.ReceiveTimeout = $timeoutSeconds * 1000
                     $udpWatch = [System.Diagnostics.Stopwatch]::StartNew()
+                    $child = $null
+                    $probeRoot = $null
+                    $stage = 'BuildRequest'
                     try {
                         $request = New-StunBindingRequest $size
-                        $udp.Connect($stunAddress, $stunPort)
-                        [void]$udp.Send($request.Bytes, $request.Bytes.Length)
-                        $sourcePort = ([System.Net.IPEndPoint]$udp.Client.LocalEndPoint).Port
-                        $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
-                        $responseBytes = $udp.Receive([ref]$remote)
-                        $udpWatch.Stop()
-                        $valid = $responseBytes.Length -ge 20 -and
-                            $responseBytes[0] -eq 0x01 -and $responseBytes[1] -eq 0x01
-                        if ($valid) {
-                            for ($i = 0; $i -lt 12; $i++) {
-                                if ($responseBytes[8 + $i] -ne $request.TransactionId[$i]) { $valid = $false; break }
+                        $valid = $false
+                        $sourcePort = 0
+                        $sourceIp = $null
+                        if (-not [string]::IsNullOrWhiteSpace($probeProcessName)) {
+                            $stage = 'PrepareSelectedProcess'
+                            $probeRoot = Join-Path 'C:\r4review\verify' ('udp-' + [Guid]::NewGuid().ToString('N'))
+                            New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
+                            $aliasPath = Join-Path $probeRoot $probeProcessName
+                            $scriptPath = Join-Path $probeRoot 'probe.ps1'
+                            $resultPath = Join-Path $probeRoot 'result.json'
+                            Copy-Item -LiteralPath (Join-Path $PSHOME 'powershell.exe') -Destination $aliasPath
+                            @'
+param([string]$DestinationIp,[int]$DestinationPort,[string]$RequestBase64,[string]$TransactionBase64,[string]$ResultPath,[int]$TimeoutSeconds)
+$request = [Convert]::FromBase64String($RequestBase64)
+$transactionId = [Convert]::FromBase64String($TransactionBase64)
+$udp = New-Object System.Net.Sockets.UdpClient([System.Net.Sockets.AddressFamily]::InterNetwork)
+$udp.Client.ReceiveTimeout = $TimeoutSeconds * 1000
+$watch = [System.Diagnostics.Stopwatch]::StartNew()
+$result = [ordered]@{ Valid = $false; SourcePort = 0; SourceIp = ''; LatencyMs = 0; Error = 'Other' }
+try {
+    $address = [System.Net.IPAddress]::Parse($DestinationIp)
+    $udp.Connect($address, $DestinationPort)
+    [void]$udp.Send($request, $request.Length)
+    $localEndPoint = [System.Net.IPEndPoint]$udp.Client.LocalEndPoint
+    $result.SourcePort = $localEndPoint.Port
+    $result.SourceIp = $localEndPoint.Address.IPAddressToString
+    $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+    $response = $udp.Receive([ref]$remote)
+    $watch.Stop()
+    $valid = $response.Length -ge 20 -and $response[0] -eq 0x01 -and $response[1] -eq 0x01 -and
+        $remote.Address.Equals($address) -and $remote.Port -eq $DestinationPort
+    if ($valid) {
+        for ($i = 0; $i -lt 12; $i++) {
+            if ($response[8 + $i] -ne $transactionId[$i]) { $valid = $false; break }
+        }
+    }
+    $result.Valid = $valid
+    $result.Error = if ($valid) { 'None' } else { 'InvalidResponse' }
+}
+catch [System.Net.Sockets.SocketException] {
+    $result.Error = if ($_.Exception.SocketErrorCode -eq [System.Net.Sockets.SocketError]::TimedOut) { 'Timeout' } else { 'Socket' }
+}
+finally {
+    $watch.Stop()
+    $result.LatencyMs = [int]$watch.ElapsedMilliseconds
+    $temporaryResultPath = "$ResultPath.tmp"
+    $result | ConvertTo-Json -Compress | Set-Content -LiteralPath $temporaryResultPath -Encoding ASCII
+    Move-Item -LiteralPath $temporaryResultPath -Destination $ResultPath
+}
+Start-Sleep -Seconds ($TimeoutSeconds + 2)
+$udp.Dispose()
+'@ | Set-Content -LiteralPath $scriptPath -Encoding UTF8
+                            $child = Start-Process -FilePath $aliasPath -ArgumentList @(
+                                '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath,
+                                '-DestinationIp', $udpAddress.IPAddressToString,
+                                '-DestinationPort', $udpPort,
+                                '-RequestBase64', [Convert]::ToBase64String($request.Bytes),
+                                '-TransactionBase64', [Convert]::ToBase64String($request.TransactionId),
+                                '-ResultPath', $resultPath,
+                                '-TimeoutSeconds', $timeoutSeconds
+                            ) -PassThru -WindowStyle Hidden
+                            $stage = 'WaitSelectedProcess'
+                            $resultDeadline = [DateTime]::UtcNow.AddSeconds($timeoutSeconds + 2)
+                            while (-not (Test-Path -LiteralPath $resultPath) -and
+                                -not $child.HasExited -and [DateTime]::UtcNow -lt $resultDeadline) {
+                                Start-Sleep -Milliseconds 100
+                            }
+                            if (-not (Test-Path -LiteralPath $resultPath)) { throw 'Selected-process UDP probe produced no result.' }
+                            $stage = 'ReadSelectedProcess'
+                            $childResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+                            $valid = [bool]$childResult.Valid
+                            $sourcePort = [int]$childResult.SourcePort
+                            $sourceIp = [string]$childResult.SourceIp
+                            $row.LatencyMs = [int]$childResult.LatencyMs
+                            if (-not $valid) { $row.Error = [string]$childResult.Error }
+                            $udpWatch.Stop()
+                        }
+                        else {
+                            $stage = 'SendInline'
+                            $udp.Connect($udpAddress, $udpPort)
+                            [void]$udp.Send($request.Bytes, $request.Bytes.Length)
+                            $localEndPoint = [System.Net.IPEndPoint]$udp.Client.LocalEndPoint
+                            $sourcePort = $localEndPoint.Port
+                            $sourceIp = $localEndPoint.Address.IPAddressToString
+                            $remote = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
+                            $responseBytes = $udp.Receive([ref]$remote)
+                            $udpWatch.Stop()
+                            $valid = $responseBytes.Length -ge 20 -and
+                                $responseBytes[0] -eq 0x01 -and $responseBytes[1] -eq 0x01 -and
+                                $remote.Address.Equals($udpAddress) -and $remote.Port -eq $udpPort
+                            if ($valid) {
+                                for ($i = 0; $i -lt 12; $i++) {
+                                    if ($responseBytes[8 + $i] -ne $request.TransactionId[$i]) { $valid = $false; break }
+                                }
                             }
                         }
                         if ($valid) {
-                            $row.ProxyObserved = Test-UdpProxyChain `
+                            $stage = 'ObserveProxy'
+                            $observation = Get-UdpProxyObservation `
                                 $controller `
                                 $secret `
                                 $sourcePort `
-                                $stunAddress.IPAddressToString `
-                                $stunPort `
+                                $sourceIp `
+                                $udpAddress.IPAddressToString `
+                                $udpPort `
                                 $expectedUdpTag `
+                                @($config.outbounds) `
                                 $timeoutSeconds
+                            $row.ExactTupleCount = [int]$observation.ExactTupleCount
+                            $row.DestinationCount = [int]$observation.DestinationCount
+                            $row.UdpCount = [int]$observation.UdpCount
+                            $row.ProxyObserved = [bool]$observation.ExpectedTag
+                            $row.DirectObserved = [bool]$observation.DirectTag
+                            $row.OtherObserved = [bool]$observation.OtherTag
                         }
-                        $row.Success = $valid -and $row.ProxyObserved
+                        $row.Success = $valid -and $row.ProxyObserved -and -not $row.DirectObserved
                         $row.LatencyMs = [int]$udpWatch.ElapsedMilliseconds
                         $row.Error = if (-not $valid) {
-                            'InvalidResponse'
+                            if ($row.Error -eq 'Other') { 'InvalidResponse' } else { $row.Error }
                         } elseif (-not $row.ProxyObserved) {
                             'UnverifiedOutbound'
                         } else {
@@ -868,9 +1174,13 @@ switch ($Action) {
                     catch {
                         $udpWatch.Stop()
                         $row.LatencyMs = [int]$udpWatch.ElapsedMilliseconds
-                        $row.Error = Get-ProbeErrorKind $_.Exception
+                        $row.Error = "Probe$stage$($_.Exception.GetType().Name)"
                     }
-                    finally { $udp.Dispose() }
+                    finally {
+                        if ($child -and -not $child.HasExited) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }
+                        if ($probeRoot) { Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction SilentlyContinue }
+                        $udp.Dispose()
+                    }
                     $udpResults += [pscustomobject]$row
                 }
 
@@ -889,6 +1199,11 @@ switch ($Action) {
                     Size      = [int]$_.Size
                     Success   = [bool]$_.Success
                     ProxyObserved = [bool]$_.ProxyObserved
+                    ExactTupleCount = [int]$_.ExactTupleCount
+                    DestinationCount = [int]$_.DestinationCount
+                    UdpCount = [int]$_.UdpCount
+                    DirectObserved = [bool]$_.DirectObserved
+                    OtherObserved = [bool]$_.OtherObserved
                     LatencyMs = [int]$_.LatencyMs
                     Error     = [string]$_.Error
                 }

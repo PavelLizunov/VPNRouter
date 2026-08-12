@@ -52,6 +52,7 @@ tools/*
 # Fail-closed remote-only verifier for the windows-brat test VM (fixed target
 # 192.168.0.106 / WINBRAT; UIA + screenshots run on brat, never the dev box).
 !tools/brat-verify.ps1
+!tools/brat-route-plan.ps1
 !tools/brat-stability.ps1
 !tools/post-ship-verify.ps1
 # Re-include: pve-guest-exec.ps1 (run commands in a Linux test VM via guest-agent).

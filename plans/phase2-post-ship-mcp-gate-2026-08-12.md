@@ -68,27 +68,27 @@ subscription. Evidence is stored only under ignored `artifacts/post-ship/`.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
-- [ ] **Gate 2 — Tests green**: full suite passes; new tooling contracts included.
-- [ ] **Gate 3 — Docs**: brief Outcome filled; both post-ship skill copies match.
-- [ ] **Gate 4 — Self-review**: ponytail + Qwen read-only review; bug-hunt/security pass for remote process/file/network tooling.
-- [ ] **Gate 5 — MCP verify**: exact published r7 run on fixed WINBRAT with headless screenshots and sanitized evidence; no local fallback.
-- [ ] **Gate 6 — Characterization diff**: N/A — tooling only, no god-file split.
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors.
+- [x] **Gate 2 — Tests green**: full suite passes; new tooling contracts included.
+- [x] **Gate 3 — Docs**: brief Outcome filled; both post-ship skill copies match.
+- [x] **Gate 4 — Self-review**: ponytail + Qwen read-only review; bug-hunt/security pass for remote process/file/network tooling.
+- [x] **Gate 5 — MCP verify**: exact published r7 run on fixed WINBRAT with headless screenshots and sanitized evidence; no local fallback.
+- [-] **Gate 6 — Characterization diff**: N/A — tooling only, no god-file split.
 
 ## Outcome (filled after implementation)
 
-**Status**: IMPLEMENTED — the gate is ready; the tested r7 candidate remains blocked by UDP dataplane failure
+**Status**: IMPLEMENTED AND LIVE-VERIFIED — published r7 connectivity passes; the gate is ready to enforce r8 and later rolling releases
 **Commits**: `116c969b` (brief) + implementation commit containing this outcome
 **Pushed**: `codex/post-ship-mcp-gate`, draft PR #146
-**Test deltas**: 15 focused post-ship contracts; full suite 2758 passed, 3 skipped, 0 failed (2761 total)
+**Test deltas**: 10 focused post-ship contracts plus executable 10-fixture route/chain self-test; full suite 2759 passed, 3 skipped, 0 failed (2762 total)
 **Files changed**: post-ship/BRAT/CI/deploy scripts, isolated screenshot-test safety, Windows CI contract job, mirrored skill/checklists and documentation
 
 **Gate results:**
 - [x] Gate 1: solution Release build — 0 warnings, 0 errors
-- [x] Gate 2: full suite — 2758 passed, 3 skipped, 0 failed; focused tooling contracts — 15/15
+- [x] Gate 2: full suite — 2759 passed, 3 skipped, 0 failed; focused post-ship contracts — 10/10; route/chain behavioral fixtures — 10/10
 - [x] Gate 3: both skill trees are byte-identical; parser and forbidden remote-screenshot contracts pass
 - [x] Gate 4: ponytail review complete; three independent correctness/security/test reviews report no P0/P1. Qwen read-only review was attempted but unavailable because its local runtime repeatedly timed out
-- [x] Gate 5: exact published v2.49.0-r7 ran for two cold cycles on fixed WINBRAT. TUN, proxy HTTPS, hold, disconnect, lifecycle and sanitized log checks passed; all UDP sizes timed out, so the new gate correctly returned nonzero FAIL and left WINBRAT disconnected
+- [x] Gate 5: exact published v2.49.0-r7 ran for two independent cold cycles on fixed WINBRAT. TUN, proxy HTTPS, Cloudflare STUN sizes 20/64/512/1200/1392 through the exact proxy socket, hold, disconnect, lifecycle and sanitized log checks all passed; WINBRAT ended disconnected
 - [-] Gate 6: N/A — tooling only
 
 **Surprises encountered**:
@@ -101,10 +101,17 @@ subscription. Evidence is stored only under ignored `artifacts/post-ship/`.
 - Remote desktop screenshots are not a safe headless proof on WINBRAT. Visual
   coverage now runs in the isolated screenshot tests, while the live VM path
   uses semantic UIA state plus route/proxy/lifecycle evidence.
-- A nominal HTTPS request from the WinRM process could leave through `direct`.
-  The gate now requires the Clash proxy delay endpoint and an observed outbound;
-  UDP remains the one failing candidate check.
+- Google STUN timed out even without VPN on WINBRAT, so it was an invalid
+  availability oracle. The fixed Cloudflare STUN endpoint answered directly
+  and through the tunnel for all protocol-valid boundary sizes.
+- A nominal WinRM HTTPS or UDP request can leave through `direct` in include
+  split mode. HTTPS now uses the Clash proxy delay endpoint; UDP runs under an
+  exact selected-process alias and must match the source/destination socket in
+  the Clash connection table without a `direct` chain.
+- A killed verifier can leave its named mutex abandoned. Both coordinator and
+  stability runner now acquire an abandoned mutex safely while still refusing
+  a genuinely concurrent run.
 
 **Follow-ups spawned**:
-- Diagnose the r7 UDP proxy path before any next rolling candidate or stable
-  promotion. Do not describe r7 as fully verified while this gate is red.
+- Ship v2.49.0-r8 with this gate, then run the coordinator against the freshly
+  downloaded r8 artifact before calling the prerelease ready.

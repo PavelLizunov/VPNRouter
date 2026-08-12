@@ -36,8 +36,9 @@ then performs two complete
 clean → Connect → TUN Up/Tunnel → selected-proxy + fixed HTTPS+UDP
 probe → 30-second hold → Disconnect → TUN absent cycles. Recent lifecycle
 logs from before deployment through final cleanup cross the WinRM boundary only
-as sanitized event enums and counts. UDP is green only when the STUN response
-is valid and the Clash connection table attributes that exact socket to the
+as sanitized event enums and counts. UDP is green only when fixed Cloudflare
+STUN responses for 20/64/512/1200/1392-byte requests are valid and the Clash
+connection table attributes every exact socket to the
 `proxy-udp` (or canonical `proxy`) outbound chain.
 
 Exit 0 plus `"Status":"PASS"` is required before calling the candidate
