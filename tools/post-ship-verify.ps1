@@ -62,6 +62,30 @@ function Get-Sha256Hex {
     finally { $stream.Dispose() }
 }
 
+function Assert-TrueSplitBundle {
+    param([Parameter(Mandatory = $true)] [string]$Path)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $entries = @($archive.Entries | Where-Object { $_.Length -gt 0 } | ForEach-Object {
+            $_.FullName.Replace('\', '/')
+        })
+        $required = @(
+            'app/driver/mullvad-split-tunnel.sys',
+            'app/driver/mullvad-split-tunnel.cat',
+            'app/driver/mullvad-split-tunnel.inf',
+            'app/driver/checksums.sha256',
+            'app/LICENSE.split-tunnel'
+        )
+        $missing = @($required | Where-Object { $entries -notcontains $_ })
+        if ($missing.Count -gt 0) {
+            throw 'The published Windows ZIP is missing the required True Split driver bundle.'
+        }
+    }
+    finally { $archive.Dispose() }
+}
+
 function Resolve-ProjectDotNet {
     $required = ((Get-Content (Join-Path $Root 'global.json') -Raw | ConvertFrom-Json).sdk.version).ToString()
     $pathDotNet = Get-Command dotnet -ErrorAction SilentlyContinue
@@ -168,6 +192,7 @@ try {
     if ($freshActual -ne $freshExpected) {
         throw 'The freshly downloaded release artifact does not match its SHA256 sidecar.'
     }
+    Assert-TrueSplitBundle -Path $FreshZipPath
 
     $zipExists = Test-Path $ZipPath
     $hashExists = Test-Path $HashPath
