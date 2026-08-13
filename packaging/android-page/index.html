@@ -98,7 +98,7 @@
     .then(function (rel) {
       var assets = rel.assets || [];
       var apk = assets.filter(function (a) {
-        return /VPNRouter-v.*-android\.apk$/.test(a.name);
+        return /VPNRouter-v.*-android-arm64\.apk$/.test(a.name);
       })[0];
       if (!apk) {
         fallback("Android-сборка ещё не приложена к последнему релизу — загляните чуть позже.");
@@ -109,7 +109,7 @@
       dl.textContent = "Скачать APK";
       dl.href = apk.browser_download_url;
       dl.setAttribute("download", apk.name);
-      meta.innerHTML = (rel.tag_name || "") + " · " + mb + " МБ · Android 6.0+";
+      meta.innerHTML = (rel.tag_name || "") + " · " + mb + " МБ · Android 6.0+ · ARM64";
     })
     .catch(function () {
       fallback("Не удалось определить версию автоматически — откройте релизы вручную.");

@@ -1,6 +1,6 @@
 ---
 name: post-ship-mcp-verify
-description: MANDATORY after every rolling ship (-rN). Verifies the shipped Windows binary ONLY on the fixed remote test VM windows-brat (100.115.182.0 / WINBRAT) through tools/brat-verify.ps1 over WinRM — remote brat only, fail-closed. SHA256-checks the release ZIP, deploys + launches on brat, walks release-note checklists with semantic UIA, verifies proxy/HTTPS/UDP dataplane and sanitized lifecycle logs, reports PASS/FAIL. Never installs, launches, drives, screenshots, or reads app logs on the local dev box. If VM/WinRM/identity is unavailable — STOP, no fallback.
+description: MANDATORY after every rolling or stable ship. Verifies the shipped Windows binary ONLY on the fixed remote test VM windows-brat (100.115.182.0 / WINBRAT) through tools/brat-verify.ps1 over WinRM — remote brat only, fail-closed. SHA256-checks both Windows ZIPs, requires the exact 16 release assets, deploys + launches on brat, verifies UI state, proxy/HTTPS/UDP dataplane and sanitized lifecycle logs, and reports PASS/FAIL. Never installs, launches, drives, screenshots, or reads app logs on the local dev box. If VM/WinRM/identity is unavailable — STOP, no fallback.
 ---
 
 > **STOP — read before any install / launch / UI / screenshot / log action.**

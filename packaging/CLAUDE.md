@@ -73,7 +73,7 @@ NOPASSWD entry для конкретного `sing-box` binary path. После 
 единственный закоммиченный манифест `2.27.2` (не bump'ался). Блокер по README:
 нет dedicated GitHub-аккаунта под fork microsoft/winget-pkgs + PAT для авто-PR.
 
-## Release-артефакты — 14 desktop / 16 с Android
+## Release-артефакты — ровно 16 файлов
 
 Каждый release должен иметь **14 desktop-файлов** для 3 desktop-платформ
 (каждый artifact + `.sha256` companion):
@@ -86,7 +86,8 @@ VPNRouter-v{V}-linux-amd64.deb         ← + .sha256
 VPNRouter-v{V}-linux-x86_64.AppImage   ← + .sha256
 VPNRouter-v{V}-linux.tar.gz            ← + .sha256
 ```
-= 7 artifacts × 2 = 14. На stable cut добавляется Android APK
-(`VPNRouter-v{V}-android.apk` + .sha256, built unsigned locally + signed in CI
-via `sign-android.yml`) → **16**. Re-trigger недостающего CI через
-`workflow_dispatch`. Если меньше (14 desktop / 16 с Android) — не cut'аем stable.
+= 7 artifacts × 2 = 14 desktop-файлов. `build-android.yml` собирает и
+подписывает ARM64 APK (`VPNRouter-v{V}-android-arm64.apk` + `.sha256`), поэтому
+полный контракт любого текущего release — **16** файлов. Недостающий platform
+workflow можно перезапустить через `workflow_dispatch`, но stable не cut'аем,
+пока post-ship gate не подтвердит точный набор из 16 файлов.

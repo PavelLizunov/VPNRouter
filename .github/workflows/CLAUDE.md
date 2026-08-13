@@ -1,65 +1,66 @@
 # .github/workflows/
 
-CI pipelines. 11 workflow-файлов (плюс GitHub-managed `pages-build-deployment`) —
-каждый делает что-то специфичное и триггерится независимо. 5 build/release
-workflow'ов + 5 gate/test workflow'ов + APT publish.
+Current GitHub Actions map. There are 12 repository workflow files, plus the
+GitHub-managed Pages deployment workflow.
 
 ## Workflows
 
-| File | Триггер | Что делает |
+| File | Trigger | Purpose |
 |---|---|---|
-| `build-mac.yml` | `push` tag `v*` + `workflow_dispatch` | Собирает macOS DMG + ZIP на mac-runner. Уплоадит на release. Дисптачит Homebrew Cask update (только stable, prerelease skip). |
-| `build-linux.yml` | `push` tag `v*` + `workflow_dispatch` | Linux .deb (postinst setcap для passwordless TUN) + AppImage + .tar.gz + 4 sha256. Уплоадит на release. |
-| `build-android.yml` | `workflow_dispatch` only (Wave 32b deferred since r16) | Android APK (arm64). Phase 6 Wave 26 (2026-05-18) бампнул на .NET 10 + Android API 36 + Avalonia 12. libbox.aar теперь provision'ится из internal tooling release `tooling-libbox-singbox-1.13.10` (SHA256-pinned) через `gh release download` (НЕ из retired `LIBBOX_AAR_BASE64`). **r16 (2026-05-20)**: tag-push trigger gated behind `if: github.event_name == 'workflow_dispatch'` because `.NET 10 preview SDK 10.0.300` workload manifest references a Mono runtime pack (`Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8`) that isn't on any public NuGet feed — `NU1102` on every restore. Run manually via `gh workflow run "Build Android APK"` to probe NU1102 status. Remove the `if:` gate when SDK ships GA or pack lands publicly. |
-| `build-free-pool.yml` | cron каждые 6ч + `workflow_dispatch` | Server-side aggregator: фетчит 14 free-config sources, validates TCP+TLS, GeoIP enrich → `pool.json` artifact для in-app Free Configs tab. |
-| `publish-apt.yml` | `release` event + `workflow_dispatch` | Index'ит .deb из последнего stable release в reprepro APT repo на gh-pages. Также копирует `install.sh`, `install.ps1`, `uninstall.ps1`, `index.html` → gh-pages. CNAME `vpn.ninitux.com` deploy via GitHub Pages. |
-| `sign-android.yml` | `workflow_dispatch` only | Подписывает Android APK без .NET (обход NU1102): downloads `VPNRouter-vX.Y.Z-android-UNSIGNED.apk` с release, `zipalign`+`apksigner` против `ANDROID_KEYSTORE_*`, uploads `VPNRouter-vX.Y.Z-android.apk` + .sha256, удаляет UNSIGNED staging asset. |
-| `test.yml` (jobs `test`, `characterization-windows`) | `push`/`PR` к `main`+`v3.0-prep`, tags + `workflow_dispatch` | Ubuntu full regression gate plus Windows characterization and executable post-ship verifier contracts. Без `paths:` фильтра. Job id `test` — branch-protection required-check, не renameить. |
-| `grep-placeholder-fingerprints.yml` (job `grep`) | `push`/`PR` к `main`+`v3.0-prep` + `workflow_dispatch` | Single-source gate: git grep 3 stas-class placeholder-fingerprint констант, fail если появляются вне `PlaceholderDefense.cs` / tests / plans / workflows. |
-| `test-windows-update.yml` | `release: published` + tag `v*` push + `workflow_dispatch` | Auto-update integration test (Windows runner): build → install+update ZIP → CLI `test-update` → реальный helper.cmd через cmd.exe → assert no parser errors. Ловит helper.cmd CMD-parser класс багов (v2.31.7-r10). |
-| `verify-release-integrity.yml` | `release` event + `workflow_dispatch` | Post-publish gate: downloads все `VPNRouter-*` assets, проверяет embedded AppVersion == release tag (Win = hard fail, Mac/Linux/Android = soft warn), recompute sha256 vs sidecar, считает assets (ожидает 14). Hard fail → drafts release + FAILED banner. |
+| `build-mac.yml` | `v*` tag, manual | builds Apple Silicon DMG + ZIP, uploads both with SHA sidecars, updates Homebrew on stable |
+| `build-linux.yml` | `v*` tag, manual | builds `.deb`, AppImage and tarball with SHA sidecars |
+| `build-android.yml` | `v*` tag, manual | builds and production-signs the ARM64 APK, verifies its certificate, uploads APK + SHA |
+| `build-free-pool.yml` | every 6 hours, manual | publishes the rolling public-config `pool.json` |
+| `publish-apt.yml` | release published, manual | rebuilds the signed APT repository and GitHub Pages installer content |
+| `test.yml` | pushes, PRs, tags, manual | Linux regression suite plus Windows characterization and verifier-contract tests |
+| `grep-placeholder-fingerprints.yml` | pushes, PRs, manual | enforces the single source for placeholder fingerprints |
+| `test-windows-update.yml` | release published, `v*` tag, manual | runs the real Windows update helper end to end in a temporary install |
+| `verify-release-integrity.yml` | release published/edited, manual | checks versions and SHA sidecars; missing parallel assets are warnings here and a hard failure in `tools/post-ship-verify.ps1` |
+| `codeql.yml` | weekly, manual | advisory C# static analysis; not a stable-cut gate |
+| `sign-android.yml` | manual | legacy fallback for signing a locally prepared APK; the normal path is `build-android.yml` |
+| `sign-windows.yml` | manual | inert until SignPath enrollment and secrets are configured |
+
+## Release asset contract
+
+A complete release contains exactly 16 files: 4 Windows, 4 macOS, 6 Linux,
+and 2 Android files. Every binary artifact has a `.sha256` sidecar. The Android
+pair is `VPNRouter-v{V}-android-arm64.apk` and its sidecar.
+
+`verify-release-integrity.yml` can run while the three platform builds are still
+uploading, so it does not treat an incomplete set as final. The authoritative
+post-ship gate waits for the release workflows and then requires the exact
+16-file inventory.
 
 ## Secrets
 
-| Secret | Кто использует |
+| Secret | Used by |
 |---|---|
-| `GITHUB_TOKEN` | автоматический, для `gh release upload --clobber` etc. |
-| `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` Trigger Homebrew Cask step (cross-repo dispatch к `PavelLizunov/homebrew-vpnrouter`) |
-| `ANDROID_KEYSTORE_BASE64` | `build-android.yml` Decode signing keystore step — base64-encoded JKS keystore для подписи APK |
-| `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` dotnet publish step — пароль keystore + key |
-| ~~`LIBBOX_AAR_BASE64`~~ | retired Wave 32 — replaced by tooling release fetch (48 KB secret cap × 15.6 MB aar = impossible). См. `.github/SECRETS.md` "Internal tooling releases". |
+| `GITHUB_TOKEN` | release uploads and repository dispatches |
+| `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` stable Homebrew update |
+| `ANDROID_KEYSTORE_BASE64` | Android release signing |
+| `ANDROID_KEYSTORE_PASSWORD` | Android keystore and key password |
 
-Phase 6 Wave 26 (2026-05-18) добавила `LIBBOX_AAR_BASE64` чтобы CI мог собрать Android APK после Wave 23 (commit c33e372) бампа на net10.0-android36.0 + Avalonia 12. **Phase 7 Wave 32 (2026-05-19)** отретайрил этот secret — design не работал из-за 48 KB cap. Заменён на fetch из internal tooling release (`tooling-libbox-singbox-1.13.10` сейчас) через `gh release download` + `GITHUB_TOKEN`. Rotation procedure при bumps sing-box версии — `.github/SECRETS.md` "Internal tooling releases".
+`libbox.aar` is fetched from the SHA-pinned internal tooling release; the old
+`LIBBOX_AAR_BASE64` secret is retired. Rotation details live in
+`.github/SECRETS.md`.
 
-`ANDROID_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PASSWORD` использует и `build-android.yml` (publish-time signing когда keystore present), и `sign-android.yml` (standalone `zipalign`+`apksigner`, no .NET — основной путь после tag-push, т.к. build-android tag-trigger gated). Тот же signing identity → in-place updates у установленных users.
+## Release sequence
 
-`GH_TOKEN` обязателен в env для каждого `gh release ...` step (иначе anonymously fails). См. `plans/session-handoff-2026-04-24.md` — урок от пропущенного `GH_TOKEN` в Trigger Homebrew Cask step.
+1. The exact release commit is tagged `vX.Y.Z[-rN]`.
+2. macOS, Linux and Android builds start from that tag.
+3. `build.ps1 -Upload` creates the release and uploads both Windows ZIPs with
+   their SHA sidecars.
+4. Platform workflows upload the remaining assets. If a workflow reached its
+   upload step before the release existed, rerun it manually for the same tag.
+5. The exact-SHA CI gate and `tools/post-ship-verify.ps1` must pass. The latter
+   requires all 16 canonical assets and verifies both Windows driver bundles.
+6. Stable releases additionally update APT and Homebrew.
 
-## Триггер цепочки на стандартный релиз
+Never force-update a published stable tag. A prerelease tag may be replaced only
+before it is published; otherwise increment `-rN`.
 
-1. Локально: `git push --tags` → push тэга `v2.X.Y-rN`.
-2. **build-mac** + **build-linux** автостартуют параллельно.
-3. Локально: `build.ps1 -Version "2.X.Y-rN" -Upload` создаёт release + кладёт Windows ZIP'ы.
-4. Mac/Linux уплоадят свои артефакты в существующий release (`gh release upload --clobber`).
-5. **publish-apt** триггерится `release` event'ом — индексирует .deb если stable.
+## winget submission
 
-## Race condition на тэг
-
-Если **Mac CI завершилась ДО того как build.ps1 создал release** — Mac upload step выйдет с warning "Release does not exist yet — skipping upload". Решение: re-trigger Mac workflow вручную через `workflow_dispatch` после того как release создан. См. v2.28.1-r1 patch session.
-
-## Force-update tag
-
-Иногда после force-push tag (когда нужно поправить commit) надо отменить старые runs:
-```bash
-gh tag -f vX.Y.Z-rN <new-commit>
-git push -f github vX.Y.Z-rN
-gh run cancel <old-run-id> --repo PavelLizunov/VPNRouter
-```
-
-## Workflow_dispatch params
-
-Все 4 поддерживают `workflow_dispatch` без обязательных inputs (или с optional `version`). Удобно для retry без bumping тэга.
-
-## Не редактировать без причины
-
-`pages-build-deployment` — это **GitHub-managed** workflow для Pages, не наш файл. Не пишется в `.github/workflows/`.
+winget publication is manual. Validate the versioned manifest under
+`packaging/winget/manifests/` and open a PR to `microsoft/winget-pkgs` after a
+stable release. See `packaging/winget/README.md`.

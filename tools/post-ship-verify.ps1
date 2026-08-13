@@ -4,7 +4,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+-r[1-9][0-9]*$')]
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?$')]
     [string]$Version,
 
     [ValidateRange(2, 10)]
@@ -24,10 +24,14 @@ $ReleaseRoot = Join-Path $EvidenceRoot 'release'
 $Repo = 'PavelLizunov/VPNRouter'
 $ZipName = "VPNRouter-v$Version-win.zip"
 $HashName = "$ZipName.sha256"
+$UpdateZipName = "VPNRouter-update-v$Version-win.zip"
+$UpdateHashName = "$UpdateZipName.sha256"
 $ZipPath = Join-Path $Root $ZipName
 $HashPath = Join-Path $Root $HashName
 $FreshZipPath = Join-Path $ReleaseRoot $ZipName
 $FreshHashPath = Join-Path $ReleaseRoot $HashName
+$FreshUpdateZipPath = Join-Path $ReleaseRoot $UpdateZipName
+$FreshUpdateHashPath = Join-Path $ReleaseRoot $UpdateHashName
 $RemoteMutationStarted = $false
 $RunFailure = $null
 $CleanupFailure = $null
@@ -63,7 +67,10 @@ function Get-Sha256Hex {
 }
 
 function Assert-TrueSplitBundle {
-    param([Parameter(Mandatory = $true)] [string]$Path)
+    param(
+        [Parameter(Mandatory = $true)] [string]$Path,
+        [Parameter(Mandatory = $true)] [string]$ArchivePrefix
+    )
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
@@ -71,19 +78,71 @@ function Assert-TrueSplitBundle {
         $entries = @($archive.Entries | Where-Object { $_.Length -gt 0 } | ForEach-Object {
             $_.FullName.Replace('\', '/')
         })
+        $prefix = $ArchivePrefix.TrimEnd('/')
         $required = @(
-            'app/driver/mullvad-split-tunnel.sys',
-            'app/driver/mullvad-split-tunnel.cat',
-            'app/driver/mullvad-split-tunnel.inf',
-            'app/driver/checksums.sha256',
-            'app/LICENSE.split-tunnel'
+            "$prefix/driver/mullvad-split-tunnel.sys",
+            "$prefix/driver/mullvad-split-tunnel.cat",
+            "$prefix/driver/mullvad-split-tunnel.inf",
+            "$prefix/driver/checksums.sha256",
+            "$prefix/LICENSE.split-tunnel"
         )
         $missing = @($required | Where-Object { $entries -notcontains $_ })
         if ($missing.Count -gt 0) {
-            throw 'The published Windows ZIP is missing the required True Split driver bundle.'
+            throw "The published Windows ZIP is missing the required True Split driver bundle under $prefix."
         }
     }
     finally { $archive.Dispose() }
+}
+
+function Get-VerifiedArtifactHash {
+    param(
+        [Parameter(Mandatory = $true)] [string]$ArtifactPath,
+        [Parameter(Mandatory = $true)] [string]$SidecarPath
+    )
+
+    if (-not (Test-Path $ArtifactPath) -or -not (Test-Path $SidecarPath)) {
+        throw 'A published Windows ZIP and its SHA256 sidecar were not both downloaded.'
+    }
+    $expected = (Get-Content $SidecarPath -Raw).Trim().ToLowerInvariant()
+    if ($expected -notmatch '^[0-9a-f]{64}$') {
+        throw "The published SHA256 sidecar is malformed: $SidecarPath"
+    }
+    $actual = Get-Sha256Hex $ArtifactPath
+    if ($actual -ne $expected) {
+        throw "The freshly downloaded release artifact does not match its SHA256 sidecar: $ArtifactPath"
+    }
+    return [ordered]@{ Expected = $expected; Actual = $actual }
+}
+
+function Assert-ExactReleaseAssets {
+    $expected = @(
+        "VPNRouter-v$Version-win.zip",
+        "VPNRouter-v$Version-win.zip.sha256",
+        "VPNRouter-update-v$Version-win.zip",
+        "VPNRouter-update-v$Version-win.zip.sha256",
+        "VPNRouter-v$Version-mac.dmg",
+        "VPNRouter-v$Version-mac.dmg.sha256",
+        "VPNRouter-v$Version-mac.zip",
+        "VPNRouter-v$Version-mac.zip.sha256",
+        "VPNRouter-v$Version-linux.tar.gz",
+        "VPNRouter-v$Version-linux.tar.gz.sha256",
+        "VPNRouter-v$Version-linux-amd64.deb",
+        "VPNRouter-v$Version-linux-amd64.deb.sha256",
+        "VPNRouter-v$Version-linux-x86_64.AppImage",
+        "VPNRouter-v$Version-linux-x86_64.AppImage.sha256",
+        "VPNRouter-v$Version-android-arm64.apk",
+        "VPNRouter-v$Version-android-arm64.apk.sha256"
+    )
+    $releaseJson = (& gh release view "v$Version" --repo $Repo --json assets 2>&1 | Out-String)
+    $releaseViewExitCode = $LASTEXITCODE
+    if ($releaseViewExitCode -ne 0) { throw 'The release asset inventory could not be read.' }
+    $release = $releaseJson | ConvertFrom-Json
+    $actual = @($release.assets | ForEach-Object { [string]$_.name })
+    $missing = @($expected | Where-Object { $actual -notcontains $_ })
+    $unexpected = @($actual | Where-Object { $expected -notcontains $_ })
+    if ($actual.Count -ne $expected.Count -or $missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+        throw 'The published release does not contain the exact expected 16 assets.'
+    }
 }
 
 function Resolve-ProjectDotNet {
@@ -172,27 +231,24 @@ try {
     if (-not (Test-Path $ReleaseRoot)) {
         New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
     }
+    Assert-ExactReleaseAssets
     Invoke-CheckedNative -FilePath 'gh' -Arguments @(
         'release', 'download', "v$Version",
         '--repo', 'PavelLizunov/VPNRouter',
         '--pattern', $ZipName,
         '--pattern', $HashName,
+        '--pattern', $UpdateZipName,
+        '--pattern', $UpdateHashName,
         '--dir', $ReleaseRoot,
         '--clobber'
     ) -Step 'Fresh release artifact download'
 
-    if (-not (Test-Path $FreshZipPath) -or -not (Test-Path $FreshHashPath)) {
-        throw 'The published Windows ZIP and SHA256 sidecar were not both downloaded.'
-    }
-    $freshExpected = (Get-Content $FreshHashPath -Raw).Trim().ToLowerInvariant()
-    if ($freshExpected -notmatch '^[0-9a-f]{64}$') {
-        throw 'The published SHA256 sidecar is malformed.'
-    }
-    $freshActual = Get-Sha256Hex $FreshZipPath
-    if ($freshActual -ne $freshExpected) {
-        throw 'The freshly downloaded release artifact does not match its SHA256 sidecar.'
-    }
-    Assert-TrueSplitBundle -Path $FreshZipPath
+    $installHash = Get-VerifiedArtifactHash -ArtifactPath $FreshZipPath -SidecarPath $FreshHashPath
+    $updateHash = Get-VerifiedArtifactHash -ArtifactPath $FreshUpdateZipPath -SidecarPath $FreshUpdateHashPath
+    $freshExpected = $installHash.Expected
+    $freshActual = $installHash.Actual
+    Assert-TrueSplitBundle -Path $FreshZipPath -ArchivePrefix 'app'
+    Assert-TrueSplitBundle -Path $FreshUpdateZipPath -ArchivePrefix '_bootstrap'
 
     $zipExists = Test-Path $ZipPath
     $hashExists = Test-Path $HashPath

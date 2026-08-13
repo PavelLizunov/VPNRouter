@@ -57,6 +57,17 @@ public sealed class ReleaseToolingContractTests
     }
 
     [Fact]
+    public void ReleaseUpload_FailsClosedWhenGitHubReleaseCreationFails()
+    {
+        var build = Read("build.ps1");
+
+        Assert.Contains("throw \"gh CLI not found.", build);
+        Assert.Contains("$releaseCreateExitCode = $LASTEXITCODE", build);
+        Assert.Contains("if ($releaseCreateExitCode -eq 0)", build);
+        Assert.Contains("throw \"GitHub release creation failed", build);
+    }
+
+    [Fact]
     public void LocalLinuxBuild_PublishesAppOnly()
     {
         var script = Read("build-linux.ps1");
@@ -77,6 +88,20 @@ public sealed class ReleaseToolingContractTests
             @"(?m)^    if: github\.event_name == 'workflow_dispatch'\s*$",
             workflow);
         Assert.Contains("android-arm64.apk", workflow);
+    }
+
+    [Fact]
+    public void AndroidDownloadPageAndReadmes_SelectCanonicalArm64Asset()
+    {
+        var page = Read("packaging", "android-page", "index.html");
+        var readme = Read("README.md");
+        var readmeRu = Read("README.ru.md");
+
+        Assert.Contains("VPNRouter-v.*-android-arm64\\.apk$", page);
+        Assert.Contains("VPNRouter-v{version}-android-arm64.apk", readme);
+        Assert.Contains("VPNRouter-v{version}-android-arm64.apk", readmeRu);
+        Assert.DoesNotContain("arm64/arm/x64/x86 universal", readme);
+        Assert.DoesNotContain("arm64/arm/x64/x86 универсальный", readmeRu);
     }
 
     [Fact]

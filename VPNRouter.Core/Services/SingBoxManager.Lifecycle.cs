@@ -192,9 +192,10 @@ public partial class SingBoxManager
                 }
                 finally
                 {
-            _handle?.Dispose();
-            _handle = null;
-            State = SingBoxState.Stopped;
+                    _handle?.Dispose();
+                    _handle = null;
+                    State = SingBoxState.Stopped;
+                    if (releaseLock) _tunLock.Release();
                     _logger.Information("[SingBoxManager] sing-box stopped (Linux capability mode, no pkexec)");
                 }
                 return;

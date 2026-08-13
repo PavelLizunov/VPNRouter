@@ -201,6 +201,8 @@ public sealed class PostShipVerifierContractTests
             const string version = "9.9.9-r1";
             var zipName = $"VPNRouter-v{version}-win.zip";
             var hashName = $"{zipName}.sha256";
+            var updateZipName = $"VPNRouter-update-v{version}-win.zip";
+            var updateHashName = $"{updateZipName}.sha256";
 
             File.Copy(
                 Path.Combine(sourceRoot, "tools", "post-ship-verify.ps1"),
@@ -208,12 +210,35 @@ public sealed class PostShipVerifierContractTests
             File.WriteAllText(Path.Combine(root, "global.json"), "{\"sdk\":{\"version\":\"10.0.301\"}}");
             File.WriteAllText(Path.Combine(tests, "VPNRouter.Tests.csproj"), "<Project />");
 
-            var sourceZip = Path.Combine(fakes, "source.zip");
-            CreateTrueSplitZip(sourceZip);
+            var sourceZip = Path.Combine(fakes, "source-install.zip");
+            CreateTrueSplitZip(sourceZip, "app");
             var payload = File.ReadAllBytes(sourceZip);
             File.WriteAllText(
-                Path.Combine(fakes, "source.sha256"),
+                Path.Combine(fakes, "source-install.sha256"),
                 Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant());
+            var sourceUpdateZip = Path.Combine(fakes, "source-update.zip");
+            CreateTrueSplitZip(sourceUpdateZip, "_bootstrap");
+            var updatePayload = File.ReadAllBytes(sourceUpdateZip);
+            File.WriteAllText(
+                Path.Combine(fakes, "source-update.sha256"),
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(updatePayload)).ToLowerInvariant());
+
+            var expectedAssets = new[]
+            {
+                zipName, hashName, updateZipName, updateHashName,
+                $"VPNRouter-v{version}-mac.dmg", $"VPNRouter-v{version}-mac.dmg.sha256",
+                $"VPNRouter-v{version}-mac.zip", $"VPNRouter-v{version}-mac.zip.sha256",
+                $"VPNRouter-v{version}-linux.tar.gz", $"VPNRouter-v{version}-linux.tar.gz.sha256",
+                $"VPNRouter-v{version}-linux-amd64.deb", $"VPNRouter-v{version}-linux-amd64.deb.sha256",
+                $"VPNRouter-v{version}-linux-x86_64.AppImage", $"VPNRouter-v{version}-linux-x86_64.AppImage.sha256",
+                $"VPNRouter-v{version}-android-arm64.apk", $"VPNRouter-v{version}-android-arm64.apk.sha256",
+            };
+            File.WriteAllText(
+                Path.Combine(fakes, "release.json"),
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    assets = expectedAssets.Select(name => new { name }).ToArray(),
+                }));
 
             File.WriteAllText(Path.Combine(fakes, "dotnet.ps1"), """
                 if ($args[0] -eq '--version') {
@@ -232,15 +257,21 @@ public sealed class PostShipVerifierContractTests
             File.WriteAllText(Path.Combine(fakes, "gh-fake.ps1"), $$"""
                 Add-Content -LiteralPath $env:POSTSHIP_TRACE -Value "gh:$($args -join ' ')"
                 if ($args[0] -eq 'api') {
-                    Write-Output '1111111111111111111111111111111111111111'
-                    exit 0
+                  Write-Output '1111111111111111111111111111111111111111'
+                  exit 0
+                }
+                if ($args[0] -eq 'release' -and $args[1] -eq 'view') {
+                  Get-Content -LiteralPath (Join-Path $PSScriptRoot 'release.json') -Raw
+                  exit 0
                 }
                 $dirIndex = [Array]::IndexOf($args, '--dir')
                 if ($dirIndex -lt 0) { exit 2 }
                 $destination = $args[$dirIndex + 1]
                 New-Item -ItemType Directory -Path $destination -Force | Out-Null
-                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source.zip') -Destination (Join-Path $destination '{{zipName}}') -Force
-                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source.sha256') -Destination (Join-Path $destination '{{hashName}}') -Force
+                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.zip') -Destination (Join-Path $destination '{{zipName}}') -Force
+                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.sha256') -Destination (Join-Path $destination '{{hashName}}') -Force
+                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-update.zip') -Destination (Join-Path $destination '{{updateZipName}}') -Force
+                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-update.sha256') -Destination (Join-Path $destination '{{updateHashName}}') -Force
                 exit 0
                 """);
             File.WriteAllText(Path.Combine(fakes, "git.cmd"), """
@@ -305,13 +336,17 @@ public sealed class PostShipVerifierContractTests
                 "dotnet:test",
                 "ci:1111111111111111111111111111111111111111:PavelLizunov/VPNRouter:True",
                 "verify:identity",
+                "gh:release view",
                 "gh:release download",
                 "verify:deploy",
                 "stability:ColdCycles",
                 "stability:Cleanup");
             Assert.Equal(
-                File.ReadAllBytes(Path.Combine(fakes, "source.zip")),
+                File.ReadAllBytes(Path.Combine(fakes, "source-install.zip")),
                 File.ReadAllBytes(Path.Combine(root, zipName)));
+            Assert.Equal(
+                File.ReadAllBytes(Path.Combine(fakes, "source-update.zip")),
+                File.ReadAllBytes(Path.Combine(root, "artifacts", "post-ship", version, "release", updateZipName)));
         }
         finally
         {
@@ -429,6 +464,7 @@ public sealed class PostShipVerifierContractTests
     public void PostShipVerifier_RunsVisualAndTwoCycleVpnGatesWithCleanup()
     {
         var source = ReadRepoFile("tools", "post-ship-verify.ps1");
+        Assert.Contains("(?:-r[1-9][0-9]*)?", source, StringComparison.Ordinal);
         var ciGate = ReadRepoFile("tools", "verify-last-commit-ci.ps1");
         var gitignore = ReadRepoFile(".gitignore");
         var pageScreenshots = ReadRepoFile("VPNRouter.Tests", "PageScreenshotTests.cs");
@@ -456,10 +492,12 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("'--clobber'", source, StringComparison.Ordinal);
         Assert.Contains("function Get-Sha256Hex", source, StringComparison.Ordinal);
         Assert.Contains("function Assert-TrueSplitBundle", source, StringComparison.Ordinal);
-        Assert.Contains("app/driver/mullvad-split-tunnel.sys", source, StringComparison.Ordinal);
-        Assert.Contains("app/driver/mullvad-split-tunnel.cat", source, StringComparison.Ordinal);
-        Assert.Contains("app/driver/mullvad-split-tunnel.inf", source, StringComparison.Ordinal);
-        Assert.Contains("Assert-TrueSplitBundle -Path $FreshZipPath", source, StringComparison.Ordinal);
+        Assert.Contains("$prefix/driver/mullvad-split-tunnel.sys", source, StringComparison.Ordinal);
+        Assert.Contains("$prefix/driver/mullvad-split-tunnel.cat", source, StringComparison.Ordinal);
+        Assert.Contains("$prefix/driver/mullvad-split-tunnel.inf", source, StringComparison.Ordinal);
+        Assert.Contains("Assert-TrueSplitBundle -Path $FreshZipPath -ArchivePrefix 'app'", source, StringComparison.Ordinal);
+        Assert.Contains("Assert-TrueSplitBundle -Path $FreshUpdateZipPath -ArchivePrefix '_bootstrap'", source, StringComparison.Ordinal);
+        Assert.Contains("The published release does not contain the exact expected 16 assets", source, StringComparison.Ordinal);
         Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-FileHash", source, StringComparison.Ordinal);
         Assert.Contains("$rootActual -ne $freshActual", source, StringComparison.Ordinal);
@@ -613,18 +651,18 @@ public sealed class PostShipVerifierContractTests
         }
     }
 
-    private static void CreateTrueSplitZip(string path)
+    private static void CreateTrueSplitZip(string path, string prefix)
     {
         using var archive = System.IO.Compression.ZipFile.Open(
             path,
             System.IO.Compression.ZipArchiveMode.Create);
         foreach (var entryName in new[]
                  {
-                     "app/driver/mullvad-split-tunnel.sys",
-                     "app/driver/mullvad-split-tunnel.cat",
-                     "app/driver/mullvad-split-tunnel.inf",
-                     "app/driver/checksums.sha256",
-                     "app/LICENSE.split-tunnel",
+                     $"{prefix}/driver/mullvad-split-tunnel.sys",
+                     $"{prefix}/driver/mullvad-split-tunnel.cat",
+                     $"{prefix}/driver/mullvad-split-tunnel.inf",
+                     $"{prefix}/driver/checksums.sha256",
+                     $"{prefix}/LICENSE.split-tunnel",
                  })
         {
             var entry = archive.CreateEntry(entryName);

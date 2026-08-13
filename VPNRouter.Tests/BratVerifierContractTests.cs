@@ -90,6 +90,11 @@ public sealed class BratVerifierContractTests
         Assert.Contains("FailedMarkerAbsent", script);
         Assert.Contains("VPNRouterLiveUpdateLaunch-", script);
         Assert.Contains("$result.HelperDone -is [bool]", script);
+        Assert.Contains("& $cli --version", script);
+        Assert.Contains("[regex]::Escape($version)", script);
+        Assert.Contains("InstalledVersionMatches", script);
+        Assert.Contains("ReceiptConsumed", script);
+        Assert.Contains("ReceiptNotConsumed", script);
 
         // The deploy action must gate on the exact artifact + sidecar SHA256
         // before it ever contacts the brat box (fail closed on any problem).

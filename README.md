@@ -65,7 +65,7 @@ Windows 10/11 x64. Auto-elevates via UAC. Registers Start Menu + Add/Remove Prog
 <td>
 
 ```
-Download VPNRouter-v{version}-android.apk from Releases
+Download VPNRouter-v{version}-android-arm64.apk from Releases
 ```
 Android 6.0+ (API 23). Side-load via APK (no Play Store yet). Live-preview QR scanner, magic 1-step subscription paste, F-Droid-style permissions (only `CAMERA` + `INTERNET` + `VPN_SERVICE`). Self-update via in-app banner.
 </td>
@@ -147,7 +147,7 @@ For the one-liner install on all three platforms, see the [**Install**](#install
 | `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (desktop entry + `setcap` for passwordless TUN; no systemd service). Install: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
-| `VPNRouter-v{version}-android.apk` | 🤖 Android | Signed APK, API 23+, arm64/arm/x64/x86 universal. Shipped on stable releases + at [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). Built unsigned locally (`build-android.ps1`) and **signed in CI** (`sign-android.yml`) — a clean CI build is blocked by `NU1102` (.NET 10 withdrew the host Mono runtime pack for every runner OS), so build and signing are split. An in-app updater delivers future APKs. |
+| `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
 | `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Verify with `sha256sum -c <file>.sha256` on Linux or `Get-FileHash <file>` on Windows. |
 
 Also served automatically every 6 hours:
@@ -163,7 +163,7 @@ Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + 
 - **Windows 10/11 x64** — Administrator rights (TUN, firewall, ETW)
 - **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run sudoers setup required (guided)
 - **Linux x86_64** — kernel 5.6+ (TUN/wireguard), `glibc` 2.31+. Tested on Ubuntu 22.04 / 24.04 and Debian 12. `iptables` or `nftables` for firewall rules.
-- **Android 6.0+** (API 23+) — arm64/arm/x64/x86 universal APK. Uses Android's `VpnService` API (no root required). Camera permission only requested when scanning a QR code.
+- **Android 6.0+** (API 23+), ARM64. Uses Android's `VpnService` API (no root required). Camera permission is only requested when scanning a QR code.
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — bundled in the desktop installer
 - A VLESS+Reality server, or use the Free Configs tab for a public one
 
@@ -180,12 +180,12 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0-r9"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0-r10"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 10 SDK
-./build-mac.sh 2.49.0-r9
+./build-mac.sh 2.49.0-r10
 ```
 
 ```bash
@@ -193,7 +193,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0-r9"
 # locally: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-**macOS (DMG)** and **Linux** (.deb/.AppImage/.tar.gz) are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). The **Windows** ZIPs are produced locally by `build.ps1 -Upload` and attached to the same release (not built in CI). The **Android** APK is built unsigned locally by `build-android.ps1` and then **signed in CI** by `.github/workflows/sign-android.yml` (a clean CI build is blocked by `NU1102` — .NET 10 withdrew the host Mono runtime pack — so build and signing are split). See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
+**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz), and the signed **Android ARM64 APK** are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). The **Windows** ZIPs are produced locally by `build.ps1 -Upload` and attached to the same release. See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
 
 ## Architecture
 
