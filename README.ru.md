@@ -65,7 +65,7 @@ Windows 10/11 x64. Авто-поднимается через UAC. Регист�
 <td>
 
 ```
-Скачайте VPNRouter-v{version}-android.apk со страницы Releases
+Скачайте VPNRouter-v{version}-android-arm64.apk со страницы Releases
 ```
 Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Live-preview QR сканер, magic 1-step paste подписки, минимум permissions (`CAMERA` + `INTERNET` + `VPN_SERVICE`). Авто-обновление через in-app banner.
 </td>
@@ -147,7 +147,7 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 | `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Пакет для Debian/Ubuntu (desktop entry + `setcap` для passwordless TUN; systemd-сервиса нет). Установка: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Сырой tarball (для ручной установки или упаковки в другие форматы) |
-| `VPNRouter-v{version}-android.apk` | 🤖 Android | Подписанный APK, API 23+, arm64/arm/x64/x86 универсальный. Выходит в stable-релизах + на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). Собирается без подписи локально (`build-android.ps1`) и **подписывается в CI** (`sign-android.yml`) — чистая CI-сборка заблокирована `NU1102` (.NET 10 убрал host Mono runtime pack для всех runner-ОС), поэтому сборка и подпись разделены. In-app апдейтер доставляет будущие APK. |
+| `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Подписанный ARM64 APK, API 23+. Собирается и подписывается в `build-android.yml` для каждого release-тега, затем публикуется в Releases и на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). In-app апдейтер доставляет будущие APK. |
 | `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Ручная проверка: `sha256sum -c <file>.sha256` на Linux или `Get-FileHash <file>` на Windows. |
 
 Также обновляется автоматически каждые 6 часов:
@@ -163,6 +163,7 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 - **Windows 10/11 x64** — права Администратора (TUN, firewall, ETW)
 - **macOS 12+** — Apple Silicon (arm64). Intel пока не собирается. Нужна одноразовая настройка sudoers при первом запуске (с подсказкой)
 - **Linux x86_64** — ядро 5.6+ (TUN/wireguard), `glibc` 2.31+. Протестировано на Ubuntu 22.04 / 24.04 и Debian 12. `iptables` или `nftables` для firewall-правил.
+- **Android 6.0+** (API 23+), ARM64 — использует `VpnService`, root не требуется. Камера запрашивается только для сканирования QR-кода.
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — включён в установщик
 - Сервер VLESS+Reality, или используйте вкладку Free Configs с публичными серверами
 
@@ -179,12 +180,12 @@ Release-сборка + упаковка:
 
 ```powershell
 # Windows (PowerShell) — производит full + update ZIP'ы + их .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0-r9"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0-r10"
 ```
 
 ```bash
 # macOS DMG — запускается на любом Mac с .NET 10 SDK
-./build-mac.sh 2.49.0-r9
+./build-mac.sh 2.49.0-r10
 ```
 
 ```bash
@@ -192,7 +193,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0-r9"
 # локально: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-**macOS (DMG)** и **Linux** (.deb/.AppImage/.tar.gz) собираются автоматически через GitHub Actions на каждый `v*` push тега — см. `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT-репозиторий), `.github/workflows/build-free-pool.yml` (обновляющийся Free Configs пул). **Windows** ZIP'ы собираются локально через `build.ps1 -Upload` и прикладываются к тому же релизу (не в CI). **Android** APK собирается без подписи локально через `build-android.ps1` и **подписывается в CI** через `.github/workflows/sign-android.yml` (чистая CI-сборка заблокирована `NU1102` — .NET 10 убрал host Mono runtime pack — поэтому сборка и подпись разделены). Актуальная матрица сборки/платформ — [`CURRENT_STATE.md`](CURRENT_STATE.md).
+**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz) и подписанный **Android ARM64 APK** собираются автоматически через GitHub Actions на каждый `v*` push тега — см. `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT-репозиторий), `.github/workflows/build-free-pool.yml` (обновляющийся Free Configs пул). **Windows** ZIP'ы собираются локально через `build.ps1 -Upload` и прикладываются к тому же релизу. Актуальная матрица сборки/платформ — [`CURRENT_STATE.md`](CURRENT_STATE.md).
 
 ## Архитектура
 

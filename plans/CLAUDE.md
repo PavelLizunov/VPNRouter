@@ -40,23 +40,21 @@ release-notes-vX.Y.Z[-rN].md             ← черновик release notes (.gi
 <cross-refs>
 ```
 
-## Активные планы (на 2026-06-02)
+## Активные планы (на 2026-08-13)
 
-Stable v2.38.2; in-flight prerelease v2.40.0-r4 (folds v2.39 + v2.40).
+Stable v2.48.0; in-flight prerelease v2.49.0-r10, финальный кандидат для
+stable v2.49.0. Точный список подтверждённых блокеров хранится в
+`OPEN-DEFECTS.md`; stable cut запрещён при любом OPEN P0/P1.
 
 | Файл | Статус |
 |---|---|
 | `interaction-contracts/README.md` | adopted framework (FC + APP page interaction contracts) |
-| `v2.40.0-fc-interaction-gates.md` | Free Configs Verified-only Connect/Apply + busy/bounds gates |
-| `regression-review-v2.40.0-r1-followup-2026-06-02.md` | r2 over-scrub + per-app DNS leak follow-up |
-| `handle-leak-sweep-v2.40.0-r3-2026-06-02.md` | P0 handle-leak sweep (ProcessQuery + Gate 7 guard) |
-| `bug-responsiveness-memory-audit-targets-2026-06-02.md` | measurement-first perf/leak audit map |
-| `public-configs-pipeline-audit-and-hardening-plan-2026-06-02.md` | free-configs pipeline hardening |
-| `firewall-killswitch-linux-macos-2026-06-02.md` | P0 fail-closed firewall backstop (Linux/macOS) |
-| `vpn-connection-user-statistics-product-notes-2026-06-02.md` | STATS Phase 1-4 product notes |
-| `android-ci-distribution-roadmap-2026-05-31.md` | Android CI (NU1102) + distribution |
+| `OPEN-DEFECTS.md` | release-gating ledger for every P0/P1 finding |
+| `v3.0-refactor-roadmap.md` | long-running refactor roadmap and task ownership |
+| `macos-linux-functional-parity-plan-2026-06-15.md` | cross-platform runtime parity follow-ups |
+| `code-signing-signpath-runbook-2026-07-10.md` | Windows code-signing enrollment, still pending |
 | `vpnrouter-release-strategy.md` | rolling-rN policy reference |
-| `cut-stable-checklist.md` | mandatory pre-cut live-update gate checklist |
+| `cut-stable-checklist.md` | fixed-WINBRAT pre-cut live-update gate |
 
 ## Что NOT в plans/
 

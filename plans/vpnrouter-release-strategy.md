@@ -82,38 +82,20 @@ When starting new work on a bug batch:
    current+1 minor if it's a new feature batch).
 3. Ship the first iteration as **`vX.Y.Z-r1`** prerelease.
 4. User tests → reports feedback.
-5. Ship fix as **`vX.Y.Z-r2`**, then:
-   ```bash
-   gh release delete "vX.Y.Z-r1" --yes --repo PavelLizunov/VPNRouter
-   git push origin :refs/tags/vX.Y.Z-r1  # delete remote tag
-   ```
-   (Git tag can stay if we want history — optional.)
+5. Ship the fix as **`vX.Y.Z-r2`**. Remove superseded candidate release pages
+   only after the new candidate has passed post-ship verification; tags remain
+   as build history unless the retention policy explicitly says otherwise.
 6. Repeat steps 4-5 until user says "works".
-7. Cut stable:
-   ```bash
-   # Same artifacts as last rN, re-tagged as vX.Y.Z
-   # Either retag the commit or just copy the zip/tar/deb/AppImage
-   # under the stable tag via build.ps1 -Version "X.Y.Z" -Upload
-   gh release edit "vX.Y.Z" --prerelease=false --latest
-   gh release delete "vX.Y.Z-rN" --yes --repo PavelLizunov/VPNRouter
-   ```
+7. Cut stable through `.agents/skills/cut-stable/SKILL.md`: create a new
+   no-suffix AppVersion commit through branch/PR/CI, rebuild all platform
+   artifacts under a new immutable stable tag, and run the final WINBRAT gate.
 
 ### UpdateChecker compatibility
 
-Our `UpdateChecker` parses tags via `Version.TryParse(tag.TrimStart('v'))`.
-`2.22.0-r1` **does not parse** as `System.Version` (which expects
-1–4 dot-separated integers). That's actually desirable: prerelease
-candidates with `-rN` suffixes are silently ignored by the updater
-unless we intentionally opt in.
-
-For the experimental channel to still pick up -rN, we'd need to
-parse `-rN` as pre-release metadata. **Out of scope for this doc**;
-current behaviour is "experimental sees prereleases, -rN tags are
-de-facto experimental too as long as we mark them prerelease — but
-the internal UpdateChecker skips them because the version string
-doesn't parse". For now that means -rN releases are visible on the
-Releases page but not auto-offered — user downloads manually. This
-is a feature, not a bug: it reduces update spam while we iterate.
+`UpdateChecker` has a rolling-aware parser: `2.49.0-r1 < 2.49.0-r2 <
+2.49.0`. The stable channel ignores GitHub prereleases; the experimental
+channel can discover and update to `-rN`. AppVersion must therefore match the
+tag exactly, including the suffix.
 
 ---
 
@@ -127,23 +109,24 @@ v2.31.2).
 2. Regression test suite green (xUnit + headless Avalonia).
 3. Mac + Linux + Android CI workflows green on the `-rN` tag
    (`build-mac.yml`, `build-linux.yml`, `build-android.yml`).
-4. `gh release view vX.Y.Z-rN` shows 14 assets (Win + Mac + Linux +
-   Android + sha256 sidecars). See "What's in a release" matrix below
-   for the per-platform breakdown.
+4. `gh release view vX.Y.Z-rN` shows exactly 16 canonical assets. The
+   authoritative post-ship gate checks exact names, hashes and both True Split
+   driver bundles.
 5. **`test-windows-update.yml` green on the `-rN` tag** (runs
    automatically via `release: published` + `push: tags: v*-r*`
    triggers; see `plans/v2.31.10-update-integration-test.md`). Catches
    helper.cmd parser bugs of the v2.31.7-r10 class before they reach
    users.
-6. MCP+UIA verification PASS where testable, or explicit
-   `Core-only / not UI-testable` label.
+6. Fixed-WINBRAT post-ship verification and the previous-stable live-update
+   gate both PASS, including two connection cycles and strict logs.
+7. `tools/check-open-p0.ps1` exits 0.
 
 If (5) is RED, **don't** promote to stable. Fix the helper.cmd
 generation or whatever surfaced, ship `-r(N+1)`, re-run.
 
 ---
 
-## What's in a release (14 assets)
+## What's in a release (16 assets)
 
 A complete `vX.Y.Z` (or `-rN`) release carries exactly these files.
 `verify-release-integrity.yml` (post-publish CI) treats this as the
@@ -154,15 +137,15 @@ mismatches inside binaries are version-check failures.
 |---|---|---|---|
 | Windows | `VPNRouter-vX.Y.Z-win.zip` | yes | `build.ps1` (local) |
 | Windows | `VPNRouter-update-vX.Y.Z-win.zip` | yes | `build.ps1` (local) |
-| macOS | `VPNRouter-vX.Y.Z-mac.dmg` | no | `build-mac.yml` (cloud Mac runner) |
-| macOS | `VPNRouter-vX.Y.Z-mac.zip` | no | `build-mac.yml` |
+| macOS | `VPNRouter-vX.Y.Z-mac.dmg` | yes | `build-mac.yml` (cloud Mac runner) |
+| macOS | `VPNRouter-vX.Y.Z-mac.zip` | yes | `build-mac.yml` |
 | Linux | `VPNRouter-vX.Y.Z-linux-amd64.deb` | yes | `build-linux.yml` |
 | Linux | `VPNRouter-vX.Y.Z-linux-x86_64.AppImage` | yes | `build-linux.yml` |
 | Linux | `VPNRouter-vX.Y.Z-linux.tar.gz` | yes | `build-linux.yml` |
 | Android | `VPNRouter-vX.Y.Z-android-arm64.apk` | yes | `build-android.yml` |
 
-Counted: 4 (Win) + 2 (Mac) + 6 (Linux: 3 binaries × 2 with sidecars)
-+ 2 (Android: apk + sidecar) = **14**.
+Counted: 4 (Win) + 4 (Mac) + 6 (Linux: 3 binaries × 2 with sidecars)
++ 2 (Android: APK + sidecar) = **16**.
 
 ### Android keystore (one-time setup, cross-link)
 
@@ -229,12 +212,13 @@ What it checks:
    `<hex>  <filename>\n` (Linux CI + Android `sha256sum`) and bare `<hex>`
    (Windows build.ps1 PowerShell-native).
 
-3. **Asset count** — current release-strategy convention is 14 assets
-   per release (4 Win + 2 Mac + 6 Linux + 2 Android). Missing assets are
+3. **Asset count** — current release-strategy contract is 16 assets
+   per release (4 Win + 4 Mac + 6 Linux + 2 Android). Missing assets are
    a SOFT warning, not a failure: parallel CI (build-mac.yml,
    build-linux.yml, build-android.yml) may still be uploading at the
    time of the `release: published` event. Each subsequent
-   `release: edited` re-runs the workflow until all 14 are present.
+   `release: edited` can re-run the workflow as uploads arrive. The final
+   `tools/post-ship-verify.ps1` check is the hard exact-16 gate.
 
 On failure (version mismatch or sha256 mismatch — these are catastrophic):
 - Marks the release as a **draft** (hides from users — they can't

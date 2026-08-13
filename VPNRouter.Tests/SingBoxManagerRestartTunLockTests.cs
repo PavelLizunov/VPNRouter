@@ -351,6 +351,30 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
+    [Fact]
+    public void Stop_LinuxCapabilityMode_ReleasesLockNormally_RegressionPin()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        using var manager = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance);
+
+        var handle = new FakeProcessHandle(pid: NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        manager.Stop();
+
+        Assert.False(IsLockOwned(lockInstance),
+            "Linux capability-mode Stop must release the TUN ownership lock " +
+            "so the next Connect in the same process can acquire it.");
+
+        SetField(manager, "_handle", null);
+        handle.Dispose();
+    }
+
     private static SingBoxSettings DefaultSettings() => new()
     {
         ExecutablePath = @"C:\nonexistent\sing-box.exe",

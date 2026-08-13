@@ -1687,17 +1687,45 @@ $udp.Dispose()
                     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
                 }
 
+                $installedVersionText = ''
+                $installedVersionMatches = $false
+                if ($appStarted) {
+                    $versionLines = @(& $cli --version 2>&1)
+                    $versionExitCode = $LASTEXITCODE
+                    $installedVersionText = ($versionLines | Out-String).Trim()
+                    $versionPattern = '^\s*v?' + [regex]::Escape($version) + '\s*$'
+                    $installedVersionMatches = $versionExitCode -eq 0 -and
+                        [regex]::IsMatch($installedVersionText, $versionPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                }
+
+                $receiptConsumed = $false
+                if ($appStarted) {
+                    $receiptDeadline = [DateTime]::UtcNow.AddSeconds(45)
+                    do {
+                        $receiptConsumed = -not (Test-Path -LiteralPath $receipt)
+                        if (-not $receiptConsumed) { Start-Sleep -Seconds 1 }
+                    } while (-not $receiptConsumed -and [DateTime]::UtcNow -lt $receiptDeadline)
+                }
+
+                $completed = $appStarted -and $installedVersionMatches -and $receiptConsumed
+                $lifecycle = 'Completed'
+                if (-not $appStarted) { $lifecycle = 'RelaunchFailed' }
+                elseif (-not $installedVersionMatches) { $lifecycle = 'VersionMismatch' }
+                elseif (-not $receiptConsumed) { $lifecycle = 'ReceiptNotConsumed' }
+
                 @{
-                    Status = if ($appStarted) { 'PASS' } else { 'FAIL' }
-                    Lifecycle = if ($appStarted) { 'Completed' } else { 'RelaunchFailed' }
+                    Status = if ($completed) { 'PASS' } else { 'FAIL' }
+                    Lifecycle = $lifecycle
                     HelperDone = $helperDone; XcopyExitZero = $xcopyExitZero; CopiedCountSane = $copiedCountSane
                     ReceiptPresent = $receiptPresent; FailedMarkerAbsent = $failedMarkerAbsent; AppStarted = $appStarted
+                    InstalledVersionMatches = $installedVersionMatches; ReceiptConsumed = $receiptConsumed
                 }
             }
 
             $allowedStatus = @('PASS', 'FAIL', 'BLOCKED')
             $allowedLifecycle = @('Completed', 'InstalledCliMissing', 'AppDidNotStop', 'CliTimeout',
-                'DownloadOrDispatchFailed', 'HelperParserFailure', 'HelperApplyFailed', 'RelaunchFailed')
+                'DownloadOrDispatchFailed', 'HelperParserFailure', 'HelperApplyFailed', 'RelaunchFailed',
+                'VersionMismatch', 'ReceiptNotConsumed')
             if ($result.Status -notin $allowedStatus -or $result.Lifecycle -notin $allowedLifecycle) {
                 throw 'WINBRAT live-update returned an invalid status schema.'
             }
@@ -1710,6 +1738,8 @@ $udp.Dispose()
                 ReceiptPresent = $result.ReceiptPresent -is [bool] -and $result.ReceiptPresent
                 FailedMarkerAbsent = $result.FailedMarkerAbsent -is [bool] -and $result.FailedMarkerAbsent
                 AppStarted = $result.AppStarted -is [bool] -and $result.AppStarted
+                InstalledVersionMatches = $result.InstalledVersionMatches -is [bool] -and $result.InstalledVersionMatches
+                ReceiptConsumed = $result.ReceiptConsumed -is [bool] -and $result.ReceiptConsumed
             }
             Write-Host ($safe | ConvertTo-Json -Compress)
             if ($safe.Status -ne 'PASS') { exit 1 }

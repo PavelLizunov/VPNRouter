@@ -866,7 +866,7 @@ if ($Upload) {
     Write-Host "Uploading to GitHub Releases..." -ForegroundColor Yellow
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        Write-Host "       ERROR: gh CLI not found. Install: winget install GitHub.cli" -ForegroundColor Red
+        throw "gh CLI not found. Install: winget install GitHub.cli"
     } else {
         $tag = "v$Version"
 
@@ -886,10 +886,11 @@ if ($Upload) {
             --notes "VPNRouter v$Version" `
             --latest
 
-        if ($LASTEXITCODE -eq 0) {
+        $releaseCreateExitCode = $LASTEXITCODE
+        if ($releaseCreateExitCode -eq 0) {
             Write-Host "       Uploaded: https://github.com/$GitHubRepo/releases/tag/$tag" -ForegroundColor Green
         } else {
-            Write-Host "       Upload failed (exit $LASTEXITCODE)" -ForegroundColor Red
+            throw "GitHub release creation failed (exit $releaseCreateExitCode)."
         }
     }
 }
