@@ -519,7 +519,15 @@ public static class SettingsLoader
             return;
 
         var configPath = path ?? DefaultConfigPath;
-        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        if ((OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            && Path.GetFullPath(configPath) == Path.GetFullPath(AppPaths.ConfigYamlPath))
+        {
+            AppPaths.EnsurePrivateUnixDirectory(AppPaths.DataDir);
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        }
 
         // Phase 6 Wave 31a (2026-05-18): StaticSerializerBuilder twin of the
         // Parse() swap above — uses the same YamlStaticContext to avoid the
@@ -541,7 +549,7 @@ public static class SettingsLoader
         var tmp = configPath + ".tmp";
         try
         {
-            using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var stream = AppPaths.CreatePrivateFile(tmp))
             using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
             {
                 writer.Write(yaml);

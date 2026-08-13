@@ -22,8 +22,8 @@ other local users.
 - Reuse `File.SetUnixFileMode` and `Directory.SetUnixFileMode`; add no package or
   secret-store abstraction.
 - Make the VPNRouter data/config directories owner-only (`0700`) on Unix.
-- Make secret-bearing configuration files owner read/write (`0600`) after
-  atomic creation/replacement.
+- Create secret-bearing configuration files owner read/write (`0600`) before
+  content is exposed, including atomic temporary files.
 - Cover existing files as well as new saves; permission failure is logged or
   handled consistently without corrupting the configuration.
 - Do not change Windows ACL behavior, YAML schema or serialized values.
@@ -38,7 +38,8 @@ other local users.
 1. Trace every production writer of `config.yaml` and `current.json`.
 2. Add the smallest shared Unix-mode helpers at the existing path/persistence
    boundaries.
-3. Apply directory modes after creation and file modes after atomic rename.
+3. Create directories/files with private modes and verify the mode again on the
+   opened file handle before writing.
 4. Add platform-aware tests using a temporary overridden data directory.
 
 ### Tests written
@@ -55,14 +56,29 @@ visible UI, so WINBRAT UI verification is not applicable.
 
 ## Verification gate
 
-- [ ] **Gate 1 - Build clean**: Release solution build, 0 errors.
-- [ ] **Gate 2 - Tests green**: focused permission tests and full suite.
-- [ ] **Gate 3 - Docs**: security/privacy documentation and Outcome updated.
-- [ ] **Gate 4 - Self-review**: security-focused bug-hunt; no custom crypto or dependency added.
-- [ ] **Gate 5 - Remote brat UI verify**: N/A - Unix Core-only change.
-- [ ] **Gate 6 - Characterization diff**: N/A - not a god-file split.
+- [x] **Gate 1 - Build clean**: Release solution build, 0 errors.
+- [x] **Gate 2 - Tests green**: 30 focused tests and full 2,772-test suite.
+- [x] **Gate 3 - Docs**: security/privacy documentation and Outcome updated.
+- [x] **Gate 4 - Self-review**: security-focused bug-hunt; no custom crypto or dependency added.
+- [x] **Gate 5 - Remote brat UI verify**: N/A - Unix Core-only change.
+- [x] **Gate 6 - Characterization diff**: N/A - not a god-file split.
 
 ## Outcome
 
-Pending implementation and verification.
+**Status**: Complete locally; Linux CI is the final platform proof.
 
+Implemented one shared, dependency-free boundary in `AppPaths`: Unix data
+directories are created and verified as `0700`, while `config.yaml`, its
+atomic temp file and generated `current.json` are created and handle-verified
+as `0600`. Direct and dangling symlink paths fail closed. Windows behavior,
+config contents and schemas are unchanged.
+
+The adversarial review found and fixed an initial create-then-chmod exposure
+window. The corrected implementation creates private paths immediately and
+checks the actual open handle before writing. Two independent re-reviews found
+no P0/P1 survivor.
+
+Verification on Windows: solution build 0 errors; 30 focused tests passed;
+full suite passed 2,768, skipped 4, failed 0. The six new platform-aware tests
+will execute their Unix assertions in Linux CI (they intentionally no-op on
+Windows/macOS-inapplicable hosts).

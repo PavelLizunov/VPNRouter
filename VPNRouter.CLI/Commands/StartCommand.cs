@@ -1,6 +1,7 @@
 using Spectre.Console;
 using Spectre.Console.Cli;
 using System.ComponentModel;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -327,7 +328,7 @@ public class StartCommand : AsyncCommand<StartSettings>
             var configDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
             Directory.CreateDirectory(configDir);
             var configPath = Path.Combine(configDir, "current.json");
-            File.WriteAllText(configPath, configJson);
+            AppPaths.WritePrivateText(configPath, configJson);
 
             AnsiConsole.MarkupLine($"[green]✔[/] Config written to: [grey]{configPath}[/]");
             AnsiConsole.MarkupLine("[cyan]Dry run complete — sing-box not started.[/]");
