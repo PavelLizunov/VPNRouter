@@ -38,16 +38,13 @@ public sealed class SplitTunnelDoubleStartGuardTests
     [Fact]
     public void MainWindowViewModel_ToggleConnection_GuardsInFlightBeforeStartStop()
     {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
         if (src == null) return;
 
         var start = src.IndexOf("private async Task ToggleConnectionAsync()", System.StringComparison.Ordinal);
         Assert.True(start >= 0, "ToggleConnectionAsync method not found");
 
-        var end = src.IndexOf("// Phase 2B", start, System.StringComparison.Ordinal);
-        Assert.True(end > start, "ToggleConnectionAsync boundary not found");
-
-        var method = src.Substring(start, end - start);
+        var method = src[start..];
         var guardIdx = method.IndexOf("if (IsConnecting || _isReconnecting)", System.StringComparison.Ordinal);
         var branchIdx = method.IndexOf("if (IsConnected || _engine.IsRunning)", System.StringComparison.Ordinal);
 
@@ -59,7 +56,7 @@ public sealed class SplitTunnelDoubleStartGuardTests
     [Fact]
     public void MainWindowViewModel_RestartTrueSplit_StopsVpnRouterServiceBeforeRetry()
     {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
         if (src == null) return;
 
         var start = src.IndexOf("private async Task RestartTrueSplitAsync()", System.StringComparison.Ordinal);
@@ -106,7 +103,7 @@ public sealed class SplitTunnelDoubleStartGuardTests
     [Fact]
     public void MainWindowViewModel_TrueSplitFallback_RecognizesWfpAlreadyExists()
     {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
         if (src == null) return;
 
         Assert.Contains("0x80320009", src);

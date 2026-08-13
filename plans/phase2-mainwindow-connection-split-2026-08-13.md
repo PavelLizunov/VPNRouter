@@ -54,13 +54,29 @@ tests and the full suite must stay green. Diff review must show relocation only.
 
 ## Verification gate
 
-- [ ] **Gate 1 - Build clean**: Release solution build, 0 errors.
-- [ ] **Gate 2 - Tests green**: characterization, headless GUI and full suite.
-- [ ] **Gate 3 - Docs**: App zone architecture and Outcome updated.
-- [ ] **Gate 4 - Self-review**: ponytail/simplify confirms a move-only partial, no abstraction.
-- [ ] **Gate 5 - Remote brat UI verify**: N/A if the diff remains move-only; BLOCKED if behavior changes and WINBRAT is unavailable.
-- [ ] **Gate 6 - Characterization diff**: exact pre/post snapshot match.
+- [x] **Gate 1 - Build clean**: Release solution build, 0 errors.
+- [x] **Gate 2 - Tests green**: 33 characterization/headless/visual tests and
+  full suite (2781 passed, 4 platform skips).
+- [x] **Gate 3 - Docs**: App zone architecture and Outcome updated.
+- [x] **Gate 4 - Self-review**: ponytail plus three independent reviews confirm a move-only partial, no abstraction.
+- [x] **Gate 5 - Remote brat UI verify**: N/A - the diff remains source-identical and has no UI-visible behavior change.
+- [x] **Gate 6 - Characterization diff**: exact pre/post snapshot match.
 
 ## Outcome
 
-Pending implementation and verification.
+- Moved the complete engine-event, True Split and connect/disconnect command
+  block into `MainWindowViewModel.Connection.cs`. The main file is 522 lines
+  shorter; no fields, constructor/disposal code or unrelated feature methods
+  moved.
+- Reconstructed the original block from `HEAD` and compared it with the new
+  partial: all 521 member-body lines match after newline normalization. The
+  Windows and Linux conditional-compilation stack remains balanced.
+- The pre/post `MainWindowViewModelCharacterizationTests` hash is unchanged.
+  Build: 0 errors. Focused characterization/headless/visual tests: 33 passed.
+  Full suite: 2781 passed, 4 platform-specific skips.
+- The first full run correctly exposed four source tests that still read only
+  the monolithic filename. Their assertions now follow the connection partial;
+  the focused regression group is 9/9 green.
+- Three independent bug-hunt reviews found no surviving P0/P1 and confirmed
+  that RelayCommand generation, event handlers, implicit usings and runtime
+  lifecycle behavior remain on the same partial type.
