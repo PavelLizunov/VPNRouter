@@ -3,6 +3,15 @@
 xUnit test project. Покрывает Core (regression / unit) **и** App (headless
 Avalonia GUI). Harness активен, см. секцию ниже.
 
+## Быстрая проверка
+
+Выборки по зонам находятся в `docs/agent-contract.md`. Полный локальный gate:
+
+```powershell
+dotnet build VPNRouter.sln -c Release
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build
+```
+
 ## Layout
 
 Один класс — один файл (после Phase 2E extraction, 2026-05-17). `UnitTest1.cs`

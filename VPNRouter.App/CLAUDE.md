@@ -4,6 +4,14 @@ Avalonia **12.0.3** GUI (не 11). Кросс-платформа (Windows / macO
 `net10.0` (App.csproj без `-windows` суффикса — иначе не собирается на других
 платформах). Платформ-специфичные ветки через `#if PLATFORM_WINDOWS`.
 
+## Быстрая проверка
+
+Канонический test oracle — `docs/agent-contract.md`. Для ViewModel/UI-итерации:
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~MainWindowViewModelCharacterizationTests|FullyQualifiedName~MainWindowViewModelAppsModeTests|FullyQualifiedName~MainWindowViewModelTests"
+```
+
 ## Layout
 
 ```

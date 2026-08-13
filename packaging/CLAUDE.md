@@ -3,6 +3,12 @@
 Per-platform install/uninstall scripts + repo manifests. Цель: единый
 one-liner UX на 3 платформах.
 
+## Быстрая проверка
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~HelperCmdParserGuardTests|FullyQualifiedName~PostShipVerifierContractTests"
+```
+
 ## Layout
 
 ```

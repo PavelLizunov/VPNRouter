@@ -21,8 +21,8 @@
   </a>
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4" alt=".NET 10"/>
   <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Платформы"/>
-  <img src="https://img.shields.io/badge/LOC-94k-blue" alt="94k LOC"/>
-  <img src="https://img.shields.io/badge/тестов-765-success" alt="765 тестов"/>
+  <img src="https://img.shields.io/badge/C%23_LOC-159k-blue" alt="159k строк C#"/>
+  <img src="https://img.shields.io/badge/тестов-2.7k%2B-success" alt="2 700+ тестов"/>
 </p>
 
 ---
@@ -129,9 +129,16 @@ Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Li
 
 ## Скриншоты
 
-*Главное окно — вкладки Manual / Subscribe / Network / Applications / Tools / Free.*
+Эти скриншоты генерируются теми же headless UI-тестами, которые используются
+для визуальной регрессии, поэтому в них нет реальных учётных данных.
 
-*(Скриншоты скоро.)*
+<p align="center">
+  <img src="VPNRouter.Tests/screenshots/page-simple.png" width="49%" alt="Простой экран подключения VPNRouter"/>
+  <img src="VPNRouter.Tests/screenshots/page-applications.png" width="49%" alt="Маршрутизация приложений в VPNRouter"/>
+</p>
+<p align="center">
+  <img src="VPNRouter.Tests/screenshots/page-tools.png" width="98%" alt="Инструменты обхода DPI в VPNRouter"/>
+</p>
 
 ## Ручная установка
 
@@ -198,14 +205,14 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0"
 ## Архитектура
 
 ```
-VPNRouter.sln (~94k LOC C# в 233 файлах / 7 проектах)
-├── VPNRouter.Core                  — 32k LOC · 97 файлов — сервисы, модели, интерфейсы (zero UI deps)
-├── VPNRouter.App                   — 17k LOC · 42 файла  — Avalonia desktop UI
-├── VPNRouter.Android               — 21k LOC · 24 файла  — Mono.Android + Avalonia.Android
-├── VPNRouter.CLI                   —  1k LOC · 12 файлов — Spectre.Console TUI
+VPNRouter.sln (~159k LOC C# в 616 файлах / 7 проектах)
+├── VPNRouter.Core                  — 54k LOC · 189 файлов — сервисы, модели, интерфейсы (zero UI deps)
+├── VPNRouter.App                   — 21k LOC · 59 файлов  — Avalonia desktop UI
+├── VPNRouter.Android               — 22k LOC · 37 файлов  — Mono.Android + Avalonia.Android
+├── VPNRouter.CLI                   —  1k LOC · 13 файлов  — Spectre.Console TUI
 ├── VPNRouter.Service               —  1k LOC · 3 файла   — Windows BackgroundService wrapper
-├── VPNRouter.Tools/PoolAggregator  — CI-утилита, собирающая Free Configs pool.json
-└── VPNRouter.Tests                 — 19k LOC · 55 файлов — 765 xUnit тестов + headless Avalonia
+├── VPNRouter.Tools/PoolAggregator  — <1k LOC · 1 файл — CI-утилита, собирающая Free Configs pool.json
+└── VPNRouter.Tests                 — 60k LOC · 314 файлов — 2 700+ xUnit тестов + headless Avalonia
 ```
 
 ### Layering
@@ -225,7 +232,11 @@ VPNRouter.sln (~94k LOC C# в 233 файлах / 7 проектах)
 
 Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box 1.13 JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderGuard` (v2.32.3 — фильтр known-bad credentials), плюс подсистемы для Zapret, Telegram proxy, подписок, free configs.
 
-См. [`CLAUDE.md`](CLAUDE.md) для глубокого тура, [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) для полного feature-flow справочника, и [`plans/v3.0-refactor-roadmap.md`](plans/v3.0-refactor-roadmap.md) для v3.0 modernization плана.
+См. [`CURRENT_STATE.md`](CURRENT_STATE.md) для актуальной матрицы платформ и
+сборок, [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md)
+для feature-flow справочника и
+[`plans/v3.0-refactor-roadmap.md`](plans/v3.0-refactor-roadmap.md) для
+исторического baseline и дальнейших задач v3.0.
 
 ## Как это работает (высокий уровень)
 

@@ -280,8 +280,8 @@ per-platform deep verifiers (subprocess vs JNI).
 
 **Precondition (rule #6):** before removing anything, run `dotnet build` across ALL
 platform configs and harvest warnings. `TreatWarningsAsErrors`/`WarningsAsErrors` is
-**NOT enabled anywhere** (Directory.Build.props comment 9-15 says ~194 warnings would
-break the build), so the compiler does not currently surface unused members. The one
+**NOT enabled anywhere** (Directory.Build.props records a substantial existing warning
+backlog that would break the build), so the compiler does not currently surface unused members. The one
 candidate below was found by grep, not the compiler — re-confirm zero callers at edit
 time.
 

@@ -3,6 +3,12 @@
 Current GitHub Actions map. There are 12 repository workflow files, plus the
 GitHub-managed Pages deployment workflow.
 
+## Быстрая проверка
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests"
+```
+
 ## Workflows
 
 | File | Trigger | Purpose |

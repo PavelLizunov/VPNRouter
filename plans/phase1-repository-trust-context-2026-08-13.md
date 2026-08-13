@@ -63,14 +63,33 @@ required because there is no UI behavior change.
 
 ## Verification gate
 
-- [ ] **Gate 1 - Build clean**: Release solution build, 0 errors.
-- [ ] **Gate 2 - Tests green**: focused context tests and full suite.
-- [ ] **Gate 3 - Docs**: README EN/RU, current-state/roadmap and this Outcome are current.
-- [ ] **Gate 4 - Self-review**: ponytail/simplify review confirms no new policy layer or duplicated rule block.
-- [ ] **Gate 5 - Remote brat UI verify**: N/A - no UI behavior change.
-- [ ] **Gate 6 - Characterization diff**: N/A - not a product split.
+- [x] **Gate 1 - Build clean**: Release solution build, 0 errors.
+- [x] **Gate 2 - Tests green**: 24 focused contract tests and the full
+  suite (2781 passed, 4 platform skips).
+- [x] **Gate 3 - Docs**: README EN/RU, current-state/roadmap and this Outcome are current.
+- [x] **Gate 4 - Self-review**: ponytail and independent adversarial reviews found no surviving P0/P1.
+- [x] **Gate 5 - Remote brat UI verify**: N/A - no UI behavior change.
+- [x] **Gate 6 - Characterization diff**: N/A - not a product split.
 
 ## Outcome
 
-Pending implementation and verification.
+- Replaced the duplicated root policy mirrors with one canonical agent
+  contract and short Codex/Claude bootstraps. Contract tests pin release
+  authority, protected-branch workflow, fixed-WINBRAT verification and both
+  skill copies so the earlier policy drift cannot silently return.
+- Updated the English/Russian READMEs with current project/test facts and three
+  credential-free headless screenshots. GitHub description, homepage and
+  topics were updated and read back from the repository API.
+- Reworked the prepared SignPath workflow so an exact draft-release tag is
+  built, signed and all 18 first-party PE files are verified before the
+  isolated staging job may modify draft assets. Signing remains deliberately
+  inactive until the owner completes SignPath enrollment and supplies the five
+  repository secrets plus the expected signer subject variable.
+- Added current per-zone test oracles and made the phase/release skills agree
+  on task branches, PR CI, 16 release assets and mandatory remote verification.
+- While running the full gate, found and fixed a pre-existing parallel-test
+  race around the static firewall process runner. Its eight tests passed ten
+  consecutive focused runs before the full suite passed.
 
+Build: 0 errors. Tests: 2781 passed, 4 platform-specific skips. Independent
+release, security and policy reviewers reported no surviving P0/P1.

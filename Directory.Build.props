@@ -6,9 +6,10 @@
        / HTTP dependency surface). Warning-level by design - it informs without
        blocking the build; pair with Dependabot alerts (audit item 6).
 
-       DENY-WARNINGS is intentionally NOT enabled here yet. The Release build
-       currently carries ~194 warnings (incl. ~68 CS8602 null-deref). Flipping
-       them to errors at the root would break every build immediately. The
+       DENY-WARNINGS is intentionally NOT enabled here yet. A clean test-project
+       build still reports hundreds of existing warnings; the exact number
+       varies by target and build state. Flipping them to errors at the root
+       would break every build immediately. The
        burndown - fix the warnings, then enable <TreatWarningsAsErrors> (or a
        <WarningsAsErrors> subset) - is tracked as a follow-up in the audit plan
        (P0 item 2). Adding the props file now makes that flip a one-line change
