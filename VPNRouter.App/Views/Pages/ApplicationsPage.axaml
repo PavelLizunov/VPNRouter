@@ -112,7 +112,7 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
 
     <!-- Full-tunnel hint banner — shown only when IsFullTunnel -->
     <Border Grid.Row="0"
@@ -144,6 +144,7 @@
          Only meaningful in Split-tunnel mode; collapsed in Full-tunnel. -->
     <Border Grid.Row="1"
             IsVisible="{Binding IsSplitTunnel}"
+            IsEnabled="{Binding !IsApplying}"
             Padding="14,8,14,4"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource BorderSubtleBrush}">
@@ -155,13 +156,19 @@
           <ToggleButton Grid.Column="0"
                         Classes="apps-mode-seg"
                         IsChecked="{Binding IsRoutingAppsModeInclude, Mode=TwoWay}"
-                        Content="{Binding L_AppsModeInclude}"
-                        AutomationProperties.Name="{Binding L_AppsModeInclude}"/>
+                        AutomationProperties.Name="{Binding L_AppsModeInclude}">
+            <TextBlock Text="{Binding L_AppsModeInclude}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"/>
+          </ToggleButton>
           <ToggleButton Grid.Column="1"
                         Classes="apps-mode-seg"
                         IsChecked="{Binding IsRoutingAppsModeExclude, Mode=TwoWay}"
-                        Content="{Binding L_AppsModeExclude}"
-                        AutomationProperties.Name="{Binding L_AppsModeExclude}"/>
+                        AutomationProperties.Name="{Binding L_AppsModeExclude}">
+            <TextBlock Text="{Binding L_AppsModeExclude}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"/>
+          </ToggleButton>
         </Grid>
         <TextBlock Text="{Binding L_CurrentAppsModeHint}"
                    FontSize="10"
@@ -170,34 +177,8 @@
       </StackPanel>
     </Border>
 
-    <!-- Row 2: choose which persisted app list is being edited.
-         Routing mode above stays policy; this selector chooses data. -->
-    <Border Grid.Row="2"
-            IsVisible="{Binding IsSplitTunnel}"
-            Padding="14,6,14,4"
-            BorderThickness="0,0,0,1"
-            BorderBrush="{DynamicResource BorderSubtleBrush}">
-      <StackPanel Spacing="6">
-        <TextBlock Text="{Binding L_AppsListSectionTitle}"
-                   FontSize="11" FontWeight="SemiBold"
-                   Foreground="{DynamicResource TextSecondaryBrush}"/>
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-          <ToggleButton Grid.Column="0"
-                        Classes="apps-mode-seg"
-                        IsChecked="{Binding IsAppsListEditorInclude, Mode=TwoWay}"
-                        Content="{Binding L_AppsListInclude}"
-                        AutomationProperties.Name="{Binding L_AppsListInclude}"/>
-          <ToggleButton Grid.Column="1"
-                        Classes="apps-mode-seg"
-                        IsChecked="{Binding IsAppsListEditorExclude, Mode=TwoWay}"
-                        Content="{Binding L_AppsListExclude}"
-                        AutomationProperties.Name="{Binding L_AppsListExclude}"/>
-        </Grid>
-      </StackPanel>
-    </Border>
-
     <!-- True Split status: keep retry visible before the app list, not buried in the footer. -->
-    <Border Grid.Row="3"
+    <Border Grid.Row="2"
             IsVisible="{Binding IsTrueSplitStatusVisible}"
             Background="{DynamicResource WarningBgBrush}"
             BorderBrush="{DynamicResource WarningBorderBrush}"
@@ -229,8 +210,9 @@
          Now the disabled state is more pronounced + a not-allowed cursor
          appears on hover so the visual disabled-ness matches the actual
          IsHitTestVisible=false behaviour. -->
-    <Grid Grid.Row="4"
+    <Grid Grid.Row="3"
           ColumnDefinitions="120,*"
+          IsEnabled="{Binding !IsApplying}"
           Opacity="{Binding IsSplitTunnel, Converter={x:Static conv:BoolTo10or05Converter.Instance}}"
           IsHitTestVisible="{Binding IsSplitTunnel}"
           Cursor="{Binding IsFullTunnel, Converter={x:Static conv:FullTunnelCursorConverter.Instance}}">
@@ -302,16 +284,17 @@
                 ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}"/>
       </Grid>
 
-      <!-- Master enable toggle -->
-      <!-- v2.28.3: TextWrapping fix for narrow-window overflow. -->
+      <!-- Explicit bulk actions; unlike the old master checkbox they never
+           pretend to represent a third, separately persisted group state. -->
       <Border Grid.Row="1" Padding="14,4,14,8">
-        <CheckBox IsChecked="{Binding IsChecked}"
-                  AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_EnableWholeGroup}"
-                  FontWeight="SemiBold" FontSize="12"
-                  MinHeight="0" Padding="4,0">
-          <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_EnableWholeGroup}"
-                     TextWrapping="Wrap" FontWeight="SemiBold" FontSize="12"/>
-        </CheckBox>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_SelectAllApps}"
+                  Command="{Binding SelectAllCommand}"
+                  HorizontalContentAlignment="Center" FontSize="11" Padding="6,4"/>
+          <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ClearAllApps}"
+                  Command="{Binding ClearAllCommand}"
+                  HorizontalContentAlignment="Center" FontSize="11" Padding="6,4"/>
+        </StackPanel>
       </Border>
 
       <!-- Empty state -->
@@ -341,7 +324,9 @@
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" Classes="app-name"
-                           Text="{Binding ProcessName}"/>
+                           Text="{Binding ProcessName}"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding ProcessName}"/>
                 <Border Grid.Column="2" Classes="custom-badge"
                         IsVisible="{Binding IsCustom}">
                   <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblCustomBadge}"
@@ -369,10 +354,15 @@
               BorderBrush="{DynamicResource BorderDefaultBrush}"
               Background="{DynamicResource SurfaceSunkenBrush}">
         <StackPanel Spacing="6">
+          <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsPendingApplyHint}"
+                     IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
+                     TextWrapping="Wrap"
+                     FontSize="10"
+                     Foreground="{DynamicResource WarningFgBrush}"/>
           <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
-                  IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsConnected}"
+                  IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).CanApplyAppChanges}"
                   HorizontalAlignment="Stretch"
                   HorizontalContentAlignment="Center"
                   Background="{DynamicResource WarningSolidBrush}" Foreground="White"

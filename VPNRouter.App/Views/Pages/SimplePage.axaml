@@ -226,7 +226,7 @@
                         </StackPanel>
 
                         <!-- Tunnel mode -->
-                        <StackPanel Spacing="4">
+                        <StackPanel Spacing="4" IsEnabled="{Binding !IsApplying}">
                             <TextBlock Text="{Binding L_SmpTunnelModeLabel}"
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"/>

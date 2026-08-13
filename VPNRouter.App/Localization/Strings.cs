@@ -857,14 +857,25 @@ public static class Strings
     // Exclude = inverse: selected apps → direct, rest → VPN.
     // Follow-up: lift to Core once Android exposes the same toggle.
     public static string AppsModeSectionTitle => Ru
-        ? "Как применять списки"
-        : "How lists are applied";
+        ? "Как направлять приложения"
+        : "How to route applications";
     public static string AppsModeInclude => Ru
-        ? "Активен список «Через VPN»"
-        : "Use the Through VPN list";
+        ? "Только выбранные — через VPN"
+        : "Only selected apps use VPN";
     public static string AppsModeExclude => Ru
-        ? "Активен список «Мимо VPN»"
-        : "Use the Bypass VPN list";
+        ? "Все, кроме выбранных — через VPN"
+        : "All except selected apps use VPN";
+    public static string AppsSelectAll => Ru ? "Выбрать все" : "Select all";
+    public static string AppsClearAll => Ru ? "Очистить" : "Clear";
+    public static string SteamGamesNotFound => Ru
+        ? "Steam-игры не найдены"
+        : "No Steam games found";
+    public static string NoNewSteamGamesFound => Ru
+        ? "Новых Steam-игр не найдено"
+        : "No new Steam games found";
+    public static string AppsPendingApplyHint => Ru
+        ? "Изменения сохранены. Примените их к текущему подключению."
+        : "Changes are saved. Apply them to the current connection.";
     public static string AppsModeIncludeHint => Ru
         ? "Отмеченные приложения идут через VPN, остальные — напрямую (обычный split-tunnel)."
         : "Checked apps go through VPN; everything else stays direct (regular split-tunnel).";

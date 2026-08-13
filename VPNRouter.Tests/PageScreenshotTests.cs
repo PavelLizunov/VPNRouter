@@ -37,6 +37,7 @@ namespace VPNRouter.Tests;
 /// temporary directory, so screenshots cannot read or write the installed
 /// application's settings, logs or runtime state.</para>
 /// </summary>
+[Collection(SafeModeStateCollection.Name)]
 public class PageScreenshotTests
 {
     private static MainWindowViewModel GetVm() =>
@@ -58,6 +59,45 @@ public class PageScreenshotTests
     [AvaloniaFact] public void TelegramPage() => Capture(new TelegramPage(), "page-telegram");
     [AvaloniaFact] public void FreeConfigsPage() => Capture(new FreeConfigsPage(), "page-free-configs");
     [AvaloniaFact] public void SimplePage() => Capture(new SimplePage(), "page-simple");
+
+    [AvaloniaFact]
+    public void ApplicationsPage_Narrow529()
+    {
+        using var vm = GetVm();
+        ScreenshotHelper.CapturePage(
+            new ApplicationsPage { DataContext = vm },
+            "page-applications-narrow529",
+            width: 529, height: 800);
+    }
+
+    [AvaloniaFact]
+    public void ApplicationsPage_Narrow529_Russian()
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            using var vm = GetVm();
+            vm.SetLanguageRussianCommand.Execute(null);
+            ScreenshotHelper.CapturePage(
+                new ApplicationsPage { DataContext = vm },
+                "page-applications-narrow529-ru",
+                width: 529, height: 800);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
+    }
+
+    [AvaloniaFact]
+    public void ApplicationsPage_Narrow360()
+    {
+        using var vm = GetVm();
+        ScreenshotHelper.CapturePage(
+            new ApplicationsPage { DataContext = vm },
+            "page-applications-narrow360",
+            width: 360, height: 800);
+    }
 
     /// <summary>
     /// NetworkPage has a left-rail navigator with 6 sections (Routing /

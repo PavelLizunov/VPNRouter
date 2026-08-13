@@ -45,10 +45,10 @@ public sealed class SplitTunnelDoubleStartGuardTests
         Assert.True(start >= 0, "ToggleConnectionAsync method not found");
 
         var method = src[start..];
-        var guardIdx = method.IndexOf("if (IsConnecting || _isReconnecting)", System.StringComparison.Ordinal);
+        var guardIdx = method.IndexOf("if (IsConnecting || IsApplying || _isReconnecting)", System.StringComparison.Ordinal);
         var branchIdx = method.IndexOf("if (IsConnected || _engine.IsRunning)", System.StringComparison.Ordinal);
 
-        Assert.True(guardIdx >= 0, "ToggleConnectionAsync must guard in-flight connect/reconnect.");
+        Assert.True(guardIdx >= 0, "ToggleConnectionAsync must guard in-flight connect/apply/reconnect.");
         Assert.True(branchIdx >= 0, "ToggleConnectionAsync start/stop branch not found.");
         Assert.True(guardIdx < branchIdx, "In-flight guard must run before start/stop branching.");
     }

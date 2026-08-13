@@ -6,7 +6,7 @@ for history see `plans/`. When release or platform facts change, update this fil
 ## Releases
 
 - **Current stable:** v2.49.1.
-- **In-flight candidate:** none.
+- **In-flight candidate:** v2.49.2-r1.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `CLAUDE.local.md`.
 
