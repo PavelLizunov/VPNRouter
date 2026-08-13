@@ -1602,6 +1602,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _tgProxyLink = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
+    [NotifyPropertyChangedFor(nameof(LblUpdateTgProxy))]
     private string _tgProxyVersionText = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]

@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 RESOLVED v2.49.2-r2 (WINBRAT verification 2026-08-14)** - after a successful first TgProxy runtime download/update, `TgProxyVersionText` changed to `v1.10.0` and the proxy restarted cleanly, but the Version-tab action kept the stale `Download TgProxy` label until the page/VM was recreated. The generated version setter now also raises `LblUpdateTgProxy`, so the action immediately becomes `Update TgProxy`; a source contract pins the notification and successful-version assignment - `VPNRouter.App/ViewModels/MainWindowViewModel.cs` / `VPNRouter.Tests/TgProxyOneButtonMvpTests.cs`.
+
 ### Post-release follow-ups - 2026-08-09
 
 - [x] **P1 RESOLVED v2.49.0-r10 / stable gate PASS (bug-hunt 2026-08-13)** - the v2.49 Windows TUN teardown refactor accidentally removed the `releaseLock`-gated `_tunLock.Release()` from Linux capability-mode `StopInternal`. Public `Stop()` could therefore retain the process-wide TUN ownership semaphore and block another VPNRouter process until manager disposal/process exit. The one-line conditional release is restored without changing Restart's lock-preservation path, a Linux-only behavioral regression test pins the public Stop contract, Linux CI passed, and the final r10 pre-stable gate passed exact-SHA CI, post-ship verification, previous-stable live update, and two post-update connection cycles - `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs` / `VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs`.

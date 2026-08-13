@@ -221,6 +221,18 @@ public sealed class TgProxyOneButtonMvpTests
     }
 
     [Fact]
+    public void SuccessfulTgProxyInstall_RefreshesUpdateButtonLabel()
+    {
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        if (src == null) return;
+
+        Assert.Matches(
+            @"\[NotifyPropertyChangedFor\(nameof\(LblUpdateTgProxy\)\)\]\s*private string _tgProxyVersionText",
+            src);
+        Assert.Contains("TgProxyVersionText = TgProxyUpdater.GetLocalVersion()", src);
+    }
+
+    [Fact]
     public void TgProxyManager_Start_HasPortPreflightProbe()
     {
         // Source-pin: ensure the IsPortAvailable probe is called from
