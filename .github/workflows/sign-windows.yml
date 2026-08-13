@@ -1,26 +1,8 @@
-# Sign the Windows release ZIPs with SignPath.io (Foundation / OSS, free).
+# Build Windows release ZIPs from the requested immutable tag, submit that exact
+# GitHub Actions artifact to SignPath, verify every required Authenticode
+# signature on Windows, then upload only to an existing DRAFT release.
 #
-# WHY: the Windows binaries (App/CLI/Service/GUI + sing-box-lx.exe) ship UNSIGNED,
-# which is the root cause of the "disappears after a reboot" reports — an AV can
-# quarantine unsigned binaries that do TUN / process-scan / firewall work. Signing
-# is the real fix (OPEN-DEFECTS P1 "deleted after reboot" / dep-review; research
-# in plans/research-seamless-update-findings-2026-07-09.md §4).
-#
-# STATUS: INERT until enrollment. This workflow is MANUAL-ONLY (workflow_dispatch)
-# and its first step fails fast until the SignPath secrets exist, so it is never a
-# silent no-op nor an accidental auto-run. Turnkey enrollment steps:
-# plans/code-signing-signpath-runbook-2026-07-10.md.
-#
-# REQUIRED repo secrets (Settings -> Secrets and variables -> Actions), all from
-# the SignPath project once approved:
-#   SIGNPATH_API_TOKEN                  - CI user API token
-#   SIGNPATH_ORGANIZATION_ID            - org GUID
-#   SIGNPATH_PROJECT_SLUG               - e.g. "vpnrouter"
-#   SIGNPATH_SIGNING_POLICY_SLUG        - e.g. "release-signing"
-#   SIGNPATH_ARTIFACT_CONFIG_SLUG       - artifact config that signs the PEs inside the ZIP set
-#
-# Run AFTER build.ps1 has published the -rN / stable release (the same manual
-# spot in the ship flow where sign-android runs), then re-run the live-update gate.
+# Enrollment: plans/code-signing-signpath-runbook-2026-07-10.md
 
 name: Sign Windows (SignPath)
 
@@ -28,51 +10,120 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version WITHOUT leading v (e.g. 2.47.0 or 2.47.0-r6). The release vX.Y.Z must already hold the unsigned VPNRouter-vX.Y.Z-win.zip.'
+        description: 'Version without leading v (for example 2.49.1-r1). A draft release and tag vX.Y.Z must already exist.'
         required: true
 
 permissions:
-  contents: write   # re-upload the signed assets to the release
+  actions: read
+  contents: read
 
 jobs:
-  sign:
+  guard:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Guard - secrets present
+      - name: Validate enrollment, version and draft release
         env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
           TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          ARTIFACT_CONFIG_SLUG: ${{ secrets.SIGNPATH_ARTIFACT_CONFIG_SLUG }}
+          EXPECTED_SUBJECT: ${{ vars.SIGNPATH_EXPECTED_SUBJECT }}
+        shell: bash
         run: |
-          if [ -z "$TOKEN" ]; then
-            echo "::error::SignPath secrets are not configured yet. Complete enrollment first — see plans/code-signing-signpath-runbook-2026-07-10.md."
+          set -euo pipefail
+          if [ -z "$TOKEN" ] || [ -z "$ORGANIZATION_ID" ] || \
+             [ -z "$PROJECT_SLUG" ] || [ -z "$POLICY_SLUG" ] || \
+             [ -z "$ARTIFACT_CONFIG_SLUG" ]; then
+            echo "::error::All five SignPath secrets are required. Complete enrollment first."
+            exit 1
+          fi
+          if [ -z "$EXPECTED_SUBJECT" ]; then
+            echo "::error::Repository variable SIGNPATH_EXPECTED_SUBJECT is required."
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-r[0-9]+)?$ ]]; then
+            echo "::error::Invalid release version: $VERSION"
+            exit 1
+          fi
+          is_draft=$(gh release view "v${VERSION}" --repo "${{ github.repository }}" --json isDraft --jq .isDraft)
+          if [ "$is_draft" != "true" ]; then
+            echo "::error::v${VERSION} must remain a draft until signed assets and all sidecars are complete."
             exit 1
           fi
 
-      - name: Download the unsigned Windows ZIPs from the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ github.event.inputs.version }}
-        run: |
-          set -euo pipefail
-          mkdir -p unsigned
-          gh release download "v${VERSION}" --repo "${{ github.repository }}" \
-            --pattern "VPNRouter-v${VERSION}-win.zip" \
-            --pattern "VPNRouter-update-v${VERSION}-win.zip" \
-            --dir unsigned
-          ls -la unsigned
-
-      # SignPath signs the artifact that was uploaded as a GitHub workflow artifact
-      # (identified by github-artifact-id) per the artifact configuration, and
-      # returns the signed result into output-artifact-directory. Upload both ZIPs
-      # as one artifact so a single request signs the whole set.
-      - name: Upload unsigned ZIPs as a workflow artifact
-        id: upload-unsigned
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+  build-sign-and-verify:
+    needs: guard
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout the exact release tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
-          name: vpnrouter-windows-unsigned
-          path: unsigned/*.zip
+          ref: refs/tags/v${{ inputs.version }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Submit to SignPath (waits for your approval in the SignPath UI)
-        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e  # v1
+      - name: Validate tag and AppVersion identity
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          $tagCommit = (git rev-list -n 1 "v$env:VERSION").Trim()
+          if ($head -ne $tagCommit) { throw "Tag identity mismatch: HEAD=$head tag=$tagCommit" }
+          $source = Get-Content VPNRouter.Core/AppVersion.cs -Raw
+          if ($source -notmatch 'string\s+Version\s*=\s*"([^"]+)"') {
+            throw 'Could not resolve AppVersion.Version.'
+          }
+          if ($Matches[1] -ne $env:VERSION) {
+            throw "AppVersion/tag mismatch: source=$($Matches[1]) input=$env:VERSION"
+          }
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
+        with:
+          dotnet-version: 10.0.301
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
+        with:
+          go-version: 1.26.1
+
+      - name: Build Windows ZIPs from source
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          ./tools/build-singbox-lx.ps1
+          ./build.ps1 -Version $env:VERSION `
+            -SingBoxPath publish/sing-box-lx.exe -BundleSplitDriver
+          $expected = @(
+            "VPNRouter-v$env:VERSION-win.zip",
+            "VPNRouter-update-v$env:VERSION-win.zip"
+          )
+          foreach ($path in $expected) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Build output missing: $path" }
+          }
+
+      - name: Upload source-built unsigned ZIPs
+        id: upload-unsigned
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vpnrouter-windows-source-built
+          path: |
+            VPNRouter-v${{ inputs.version }}-win.zip
+            VPNRouter-update-v${{ inputs.version }}-win.zip
+          if-no-files-found: error
+
+      - name: Submit that source-built artifact to SignPath
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd  # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
@@ -83,20 +134,106 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: signed
 
-      - name: Recompute sha256 sidecars + re-upload signed ZIPs
+      - name: Verify every required Authenticode signature
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+          EXPECTED_SUBJECT: ${{ vars.SIGNPATH_EXPECTED_SUBJECT }}
+        run: |
+          $full = Join-Path $PWD "signed/VPNRouter-v$env:VERSION-win.zip"
+          $update = Join-Path $PWD "signed/VPNRouter-update-v$env:VERSION-win.zip"
+          if (-not (Test-Path $full) -or -not (Test-Path $update)) {
+            throw 'SignPath output is missing one or both canonical ZIPs.'
+          }
+          Expand-Archive $full extracted/full -Force
+          Expand-Archive $update extracted/update -Force
+          $required = @(
+            'extracted/full/app/VPNRouter.App.exe',
+            'extracted/full/app/VPNRouter.App.dll',
+            'extracted/full/app/VPNRouter.GUI.exe',
+            'extracted/full/app/VPNRouter.CLI.exe',
+            'extracted/full/app/VPNRouter.CLI.dll',
+            'extracted/full/app/VPNRouter.Service.exe',
+            'extracted/full/app/VPNRouter.Service.dll',
+            'extracted/full/app/VPNRouter.Core.dll',
+            'extracted/full/app/sing-box.exe',
+            'extracted/update/_bootstrap/VPNRouter.App.exe',
+            'extracted/update/_bootstrap/VPNRouter.App.dll',
+            'extracted/update/VPNRouter.GUI.exe',
+            'extracted/update/_bootstrap/VPNRouter.CLI.exe',
+            'extracted/update/_bootstrap/VPNRouter.CLI.dll',
+            'extracted/update/_bootstrap/VPNRouter.Service.exe',
+            'extracted/update/_bootstrap/VPNRouter.Service.dll',
+            'extracted/update/_bootstrap/VPNRouter.Core.dll',
+            'extracted/update/_bootstrap/sing-box.exe'
+          )
+          $thumbprint = $null
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Required signed file missing: $path" }
+            $signature = Get-AuthenticodeSignature -FilePath $path
+            if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+              throw "Invalid Authenticode signature: $path status=$($signature.Status)"
+            }
+            if ($null -eq $signature.SignerCertificate -or
+                $signature.SignerCertificate.Subject -notlike "*$env:EXPECTED_SUBJECT*") {
+              throw "Unexpected signer: $path subject=$($signature.SignerCertificate.Subject)"
+            }
+            if ($null -eq $thumbprint) { $thumbprint = $signature.SignerCertificate.Thumbprint }
+            elseif ($thumbprint -ne $signature.SignerCertificate.Thumbprint) {
+              throw "Signer certificate mismatch: $path"
+            }
+          }
+
+      - name: Upload verified signed ZIPs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vpnrouter-windows-verified-signed
+          path: signed/*.zip
+          if-no-files-found: error
+
+  stage-draft-assets:
+    needs: build-sign-and-verify
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download verified signed ZIPs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: vpnrouter-windows-verified-signed
+          path: signed
+
+      - name: Recheck draft, create sidecars and stage signed assets
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ github.event.inputs.version }}
+          VERSION: ${{ inputs.version }}
         run: |
-          set -euo pipefail
-          cd signed
-          for z in VPNRouter-v${VERSION}-win.zip VPNRouter-update-v${VERSION}-win.zip; do
-            test -f "$z" || { echo "::error::signed $z missing — check the SignPath artifact configuration includes both ZIPs"; exit 1; }
-            sha256sum "$z" | awk '{print $1}' > "${z}.sha256"
-          done
-          # --clobber replaces the unsigned assets in place (same tagged URLs).
-          gh release upload "v${VERSION}" \
-            "VPNRouter-v${VERSION}-win.zip" "VPNRouter-v${VERSION}-win.zip.sha256" \
-            "VPNRouter-update-v${VERSION}-win.zip" "VPNRouter-update-v${VERSION}-win.zip.sha256" \
-            --repo "${{ github.repository }}" --clobber
-          echo "Signed Windows ZIPs re-uploaded. Verify Authenticode on the EXEs inside, then re-run the live-update gate."
+          $isDraft = gh release view "v$env:VERSION" --repo "${{ github.repository }}" --json isDraft --jq .isDraft
+          if ($LASTEXITCODE -ne 0 -or $isDraft -ne 'true') {
+            throw "Release v$env:VERSION is no longer a draft; refusing any mutation."
+          }
+          Push-Location signed
+          try {
+            $zips = @(
+              "VPNRouter-v$env:VERSION-win.zip",
+              "VPNRouter-update-v$env:VERSION-win.zip"
+            )
+            foreach ($zip in $zips) {
+              (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant() |
+                Set-Content -Encoding ascii -NoNewline "$zip.sha256"
+            }
+            $assets = @(
+              $zips[0], "$($zips[0]).sha256",
+              $zips[1], "$($zips[1]).sha256"
+            )
+            & gh release upload "v$env:VERSION" @assets --repo "${{ github.repository }}" --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed.' }
+          }
+          finally { Pop-Location }
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          "Signed Windows assets are verified and staged on draft v${{ inputs.version }}. The release remains draft until the full 16-asset and post-ship gates pass." | Write-Host

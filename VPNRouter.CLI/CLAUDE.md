@@ -2,6 +2,12 @@
 
 CLI обёртка через Spectre.Console. Тонкий wrapper вокруг `VPNRouter.Core`.
 
+## Быстрая проверка
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~CliVersionSourceTests|FullyQualifiedName~P07CliStopSourceGuardTests|FullyQualifiedName~ServiceAppCoexistenceTests"
+```
+
 ## Команды
 
 ```

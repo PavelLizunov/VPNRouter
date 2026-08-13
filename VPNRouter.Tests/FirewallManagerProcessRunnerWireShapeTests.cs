@@ -23,6 +23,7 @@ namespace VPNRouter.Tests;
 /// NOT spawn real netsh — fast (sub-100ms) + deterministic across CI
 /// environments without elevated firewall access.</para>
 /// </summary>
+[Collection(SafeModeStateCollection.Name)]
 public class FirewallManagerProcessRunnerWireShapeTests
 {
     /// <summary>

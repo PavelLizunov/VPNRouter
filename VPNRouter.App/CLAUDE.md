@@ -4,6 +4,14 @@ Avalonia **12.0.3** GUI (не 11). Кросс-платформа (Windows / macO
 `net10.0` (App.csproj без `-windows` суффикса — иначе не собирается на других
 платформах). Платформ-специфичные ветки через `#if PLATFORM_WINDOWS`.
 
+## Быстрая проверка
+
+Канонический test oracle — `docs/agent-contract.md`. Для ViewModel/UI-итерации:
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~MainWindowViewModelCharacterizationTests|FullyQualifiedName~MainWindowViewModelAppsModeTests|FullyQualifiedName~MainWindowViewModelTests"
+```
+
 ## Layout
 
 ```
@@ -11,8 +19,9 @@ App.axaml                          ← глобальные ресурсы + The
 Styles/Tokens.axaml                ← дизайн-токены: цвета, отступы, радиусы. Использовать СЕМАНТИЧЕСКИЕ имена
 Localization/Strings.cs            ← вся локализация. Bilingual (Ru/En). Static getters L_FieldName.
 ViewModels/
-  MainWindowViewModel.cs                  ← основная VM (~7250 строк god-file, partial — 10 sibling-файлов выделено; дальнейший split — открытый Phase 2B hygiene)
+  MainWindowViewModel.cs                  ← основная VM (~7220 строк god-file, partial — 11 sibling-файлов выделено)
   MainWindowViewModel.AutostartBootstrap.cs
+  MainWindowViewModel.Connection.cs       ← engine events + True Split + connect/disconnect transition
   MainWindowViewModel.FreeConfigs.cs      ← Phase 2B Wave 8: ApplyFreeConfigAsync + ShowFreeConfigSecurityWarningAsync
   MainWindowViewModel.Localization.cs
   MainWindowViewModel.Profiles.cs         ← Phase 2B Wave 8: LoadApps + app/category commands + DeployBundledProfiles + StripExe
@@ -70,17 +79,15 @@ private async Task ConnectAsync() { ... }
 ```
 
 ### Partial classes
-`MainWindowViewModel` разбит на 10 partial файлов (после Phase 2B Wave 8,
-2026-05-18) чтоб не плодить 6750-строчный god-object. Каждый partial — одна
+`MainWindowViewModel` разбит на 11 partial файлов, чтобы не плодить god-object.
+Каждый partial — одна
 тематика (Localization / RuntimeStatus / ServerTesting / SimpleMode / Wgturn /
 AutostartBootstrap + Phase 2B: Profiles / Subscriptions / FreeConfigs /
-Settings). Главный `MainWindowViewModel.cs` — **~7250 строк** (вырос обратно
-в v2.37.0 cycle из-за большой ZapretOneClick-оркестрации; дальнейший split
-Connection/CustomRules/Recovery — открытый Phase 2B hygiene, безопасен т.к.
-public-surface запинен characterization-хэшем)
+Settings / Connection). Главный `MainWindowViewModel.cs` — **~7220 строк**;
+дальнейший split CustomRules/Recovery остаётся Phase 2B hygiene и безопасен,
+пока public-surface запинен characterization-хэшем
 (constructor + cross-concern orchestration: LoadSettingsIntoUI / SaveSettings /
-ToggleConnectionAsync / Reconnect / Zapret + TgProxy commands / OnEngineStatus
-event handler / Quit / Dispose остаются в нём).
+Reconnect / Zapret + TgProxy commands / Quit / Dispose остаются в нём).
 
 **Characterization snapshot**: `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs`
 pin'ит public-surface SHA-256 hash. Любая будущая extraction из MVM

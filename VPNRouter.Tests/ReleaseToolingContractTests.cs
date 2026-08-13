@@ -105,6 +105,62 @@ public sealed class ReleaseToolingContractTests
     }
 
     [Fact]
+    public void WindowsSigner_FailsFastUnlessAllSignPathSecretsExist()
+    {
+        var workflow = Read(".github", "workflows", "sign-windows.yml");
+
+        Assert.Contains("[ -z \"$TOKEN\" ]", workflow);
+        Assert.Contains("[ -z \"$ORGANIZATION_ID\" ]", workflow);
+        Assert.Contains("[ -z \"$PROJECT_SLUG\" ]", workflow);
+        Assert.Contains("[ -z \"$POLICY_SLUG\" ]", workflow);
+        Assert.Contains("[ -z \"$ARTIFACT_CONFIG_SLUG\" ]", workflow);
+        Assert.Contains("All five SignPath secrets are required", workflow);
+        Assert.Contains("SIGNPATH_EXPECTED_SUBJECT", workflow);
+        Assert.Contains("refs/tags/v${{ inputs.version }}", workflow);
+        Assert.Contains("AppVersion/tag mismatch", workflow);
+        Assert.Contains("steps.upload-unsigned.outputs.artifact-id", workflow);
+        Assert.DoesNotContain("gh release download", workflow);
+        Assert.Contains("actions: read", workflow);
+        Assert.Contains("contents: read", workflow);
+        Assert.Contains("contents: write", workflow);
+        Assert.Contains("persist-credentials: false", workflow);
+        Assert.Contains("stage-draft-assets:", workflow);
+        Assert.Contains("needs: build-sign-and-verify", workflow);
+        Assert.Contains("vpnrouter-windows-verified-signed", workflow);
+        Assert.DoesNotContain("needs.build.outputs.artifact-id", workflow);
+        Assert.Contains("Get-AuthenticodeSignature", workflow);
+        Assert.Contains("SignatureStatus]::Valid", workflow);
+        Assert.Contains("Unexpected signer", workflow);
+        Assert.Contains("is no longer a draft; refusing any mutation", workflow);
+        foreach (var assembly in new[]
+        {
+            "VPNRouter.App.dll",
+            "VPNRouter.CLI.dll",
+            "VPNRouter.Service.dll"
+        })
+        {
+            Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(workflow, assembly).Count);
+        }
+        Assert.True(
+            workflow.IndexOf("Get-AuthenticodeSignature", StringComparison.Ordinal) <
+            workflow.IndexOf("stage-draft-assets:", StringComparison.Ordinal) &&
+            workflow.IndexOf("stage-draft-assets:", StringComparison.Ordinal) <
+            workflow.IndexOf("gh release upload", StringComparison.Ordinal),
+            "Authenticode verification must complete before the draft release is mutated.");
+    }
+
+    [Fact]
+    public void WindowsSigner_IsValidYaml()
+    {
+        var yaml = new YamlDotNet.RepresentationModel.YamlStream();
+        using var reader = new StringReader(Read(".github", "workflows", "sign-windows.yml"));
+
+        yaml.Load(reader);
+
+        Assert.Single(yaml.Documents);
+    }
+
+    [Fact]
     public void PrePushHook_AllowsTaskBranchesButStillGatesMain()
     {
         var hook = Read(".githooks", "pre-push");

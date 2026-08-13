@@ -7,7 +7,8 @@ data exists and where it goes.
 ## Stored locally (never uploaded by VPNRouter)
 
 Under `%ProgramData%\VPNRouter\` on Windows (or the platform equivalent —
-`~/.config/VPNRouter` / the app sandbox elsewhere):
+`~/.config/vpnrouter` on Linux, `~/Library/Application Support/VPNRouter` on
+macOS, and the app sandbox on Android):
 
 - `config.yaml` — your settings, including connection **credentials**
   (subscription URLs/tokens, VLESS UUIDs, Reality public keys / short IDs,
@@ -47,5 +48,12 @@ VPNRouter never transmits any of these to the author or any third party.
 ## Your responsibility
 
 Credentials live in `config.yaml` in plaintext — treat that file as sensitive.
+VPNRouter restricts its Windows data directory to the current user,
+Administrators and SYSTEM. On Linux and macOS, the data/config directories use
+owner-only permissions (`0700`) and secret-bearing generated configuration
+files use owner read/write permissions (`0600`) when the filesystem supports
+POSIX modes. These permissions protect against other local users; they do not
+protect against malware or an administrator running as your account.
+
 If you share logs or a diagnostics bundle for support, redact tokens / UUIDs /
 keys first.

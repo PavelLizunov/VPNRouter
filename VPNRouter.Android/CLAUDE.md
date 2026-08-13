@@ -4,6 +4,17 @@ Android port. Same Avalonia 12.0.3 UI engine as desktop App, different
 SingBox runtime path (libbox.aar via gomobile-bound JNI, not the
 desktop's spawned `sing-box.exe`).
 
+## Быстрая проверка
+
+Канонический test oracle — `docs/agent-contract.md`. Для shared Android-логики:
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidAppCharacterizationTests|FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
+```
+
+Перед handoff Android-изменения дополнительно требуют Release APK build из
+секции сборки ниже.
+
 ## Target framework
 
 `net10.0-android36.0` (`<PLATFORM_ANDROID>` define). Source-links

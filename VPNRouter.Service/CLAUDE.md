@@ -3,6 +3,12 @@
 Windows Service wrapper. Запускается при boot до user logon. Использует тот же
 `VpnEngine` что GUI/CLI, плюс `TunOwnershipLock` для координации.
 
+## Быстрая проверка
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ServiceAppCoexistenceTests|FullyQualifiedName~AutostartContractTests|FullyQualifiedName~RuntimeStatusAdoptionTests"
+```
+
 ## Layout
 
 ```

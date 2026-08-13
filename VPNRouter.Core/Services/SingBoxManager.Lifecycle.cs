@@ -830,10 +830,16 @@ public partial class SingBoxManager
 
     private static string WriteJsonToDisk(string json)
     {
-        Directory.CreateDirectory(AppPaths.ConfigDir);
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            AppPaths.EnsurePrivateUnixDirectory(AppPaths.DataDir);
+            AppPaths.EnsurePrivateUnixDirectory(AppPaths.ConfigDir);
+        }
+        else
+            Directory.CreateDirectory(AppPaths.ConfigDir);
 
         var path = AppPaths.CurrentConfigPath;
-        File.WriteAllText(path, json);
+        AppPaths.WritePrivateText(path, json);
         return path;
     }
 

@@ -7,7 +7,7 @@ Foundation is free for OSS). VPNRouter qualifies: public repo + GPL-3.0 + verifi
 builds.
 
 The CI half is **already landed** and inert: `.github/workflows/sign-windows.yml`
-(manual `workflow_dispatch`, no-op until the four secrets exist). What remains is
+(manual `workflow_dispatch`, fails fast until all five secrets exist). What remains is
 the **enrollment**, which only the repo owner can do (account + OSS application —
 not automatable). These are the exact steps.
 
@@ -27,14 +27,15 @@ not automatable). These are the exact steps.
    approved in the SignPath UI — fits our rolling-rN + user-gated cut flow).
 3. **Artifact configuration** slug e.g. `windows-zip`: a ZIP configuration that
    signs the PE files inside and repackages. Include (Authenticode):
-   `VPNRouter.App.exe`, `VPNRouter.GUI.exe`, `VPNRouter.CLI.exe`,
-   `VPNRouter.Service.exe`, `VPNRouter.Core.dll`, and `sing-box.exe` (the bundled
+   `VPNRouter.App.exe`, `VPNRouter.App.dll`, `VPNRouter.GUI.exe`,
+   `VPNRouter.CLI.exe`, `VPNRouter.CLI.dll`, `VPNRouter.Service.exe`,
+   `VPNRouter.Service.dll`, `VPNRouter.Core.dll`, and `sing-box.exe` (the bundled
    lx core — it is built from source in our repo, so it is eligible).
    - `mullvad-split-tunnel.sys` is already WHQL/Mullvad-signed — do NOT re-sign.
    - Upstream-downloaded binaries (none in the bundle today) would be ineligible.
 4. Create a **CI user** + its **API token**.
 
-## Step 3 — Add the four repo secrets (owner)
+## Step 3 — Add five secrets and the signer subject (owner)
 
 GitHub → repo Settings → Secrets and variables → Actions → New repository secret:
 
@@ -46,29 +47,45 @@ GitHub → repo Settings → Secrets and variables → Actions → New repositor
 | `SIGNPATH_SIGNING_POLICY_SLUG` | `release-signing` |
 | `SIGNPATH_ARTIFACT_CONFIG_SLUG` | `windows-zip` |
 
-(Adding `SIGNPATH_API_TOKEN` is what flips `sign-windows.yml` from its
-"secrets not configured" guard to active.)
+The workflow guard checks all five values before building or modifying a
+release. Also add the non-secret Actions variable
+`SIGNPATH_EXPECTED_SUBJECT` with the stable identifying part of the certificate
+subject issued to VPNRouter. The Windows verification job requires every signed
+PE in both ZIPs to have `Status=Valid`, that expected subject and one consistent
+certificate thumbprint (18 checks total). Repository secret names can be audited with
+`gh secret list --repo PavelLizunov/VPNRouter`; their values remain unreadable.
 
-## Step 4 — Sign a release (per ship, right after build.ps1 upload)
+## Step 4 — Sign a draft release from its immutable tag
 
-The Windows ZIPs are built locally by `build.ps1` and uploaded to the release.
-After that upload, run the signer exactly like `sign-android`:
+Do not upload locally built unsigned ZIPs for signing and do not run the signer
+against a public release. After the accepted release commit is on `main`:
+
+1. Create and push immutable tag `vX.Y.Z[-rN]` at that exact commit.
+2. Create the GitHub release as **draft** with that tag. Keep it draft while all
+   platform assets are assembled.
+3. Run the signer:
 
 ```
-gh workflow run "Sign Windows (SignPath)" -f version=2.47.0-r6
+gh workflow run "Sign Windows (SignPath)" -f version=X.Y.Z-rN
 gh run watch <run-id> --exit-status
 ```
 
-It downloads the unsigned `VPNRouter-vX.Y.Z-win.zip` + `-update-` ZIP, submits
-each to SignPath (→ **approve the request in the SignPath UI**), downloads the
-signed ZIPs, recomputes the `.sha256` sidecars, and re-uploads with `--clobber`
-(same tagged URLs). Then re-run the live-update gate (`cut-stable` §6.5) on the
-signed artifacts.
+The workflow checks out the exact tag on a GitHub-hosted Windows runner, proves
+`HEAD == tag commit == AppVersion`, builds sing-box-lx and both Windows ZIPs
+from source, and passes that immutable Actions artifact ID directly to SignPath.
+Approve the request in the SignPath UI. Before any release mutation, a separate
+Windows job extracts both results and checks all 18 required App/GUI/CLI/
+Service/Core/sing-box signatures, certificate subject and thumbprint.
+
+Only verified ZIPs and newly computed sidecars are uploaded, and only while the
+release is still draft. If a signature, signer, build identity or draft check
+fails, no public release is modified. Publish only after all 16 canonical assets,
+sidecars and release gates are complete.
 
 ## Step 5 — Verify
 
-```
-# after download of the signed ZIP + extract:
+```powershell
+# optional manual spot-check after downloading the still-draft signed ZIP:
 powershell -c "Get-AuthenticodeSignature .\VPNRouter.App.exe | fl Status,SignerCertificate"
 # Status must be 'Valid', signer = your SignPath cert (was 'NotSigned' before).
 ```
@@ -80,10 +97,11 @@ powershell -c "Get-AuthenticodeSignature .\VPNRouter.App.exe | fl Status,SignerC
   (1) stops the AV false-quarantine that causes the "disappears after reboot"
   reports, (2) is the prerequisite for reputation, (3) makes the updater/service
   trusted.
-- Wire signing into the ship SKILLs once live: add Step 4 to
-  `ship-rolling-candidate` (after the build.ps1 upload) and `cut-stable`
-  (before the live-update gate). Left out of the skills until enrollment so they
-  don't reference a non-working step.
+- Once enrollment is live, `ship-rolling-candidate` must take the draft-release
+  path above instead of local `build.ps1 -Upload`; `cut-stable` must complete
+  signing before the live-update and post-ship gates.
+- Current status (2026-08-13): none of the five `SIGNPATH_*` repository secrets
+  is configured. Windows releases remain unsigned until the owner enrollment is
+  approved and this runbook's verification returns `Valid`.
 - Azure Trusted Signing was rejected: geo-blocked to US/Canada individuals
   (research §4). SignPath Foundation is the path.
-```

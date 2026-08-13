@@ -3,6 +3,14 @@
 Бизнес-логика. Чистая C#-библиотека без UI. Используется и `VPNRouter.App`, и
 `VPNRouter.CLI`, и `VPNRouter.Service`.
 
+## Быстрая проверка
+
+Канонический test oracle — `docs/agent-contract.md`. Для Core-итерации:
+
+```powershell
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ConfigGeneratorTests|FullyQualifiedName~VpnEngineStartAsyncSeamTests|FullyQualifiedName~SingBoxManagerProcessRunnerTests"
+```
+
 ## Что внутри
 
 ```
