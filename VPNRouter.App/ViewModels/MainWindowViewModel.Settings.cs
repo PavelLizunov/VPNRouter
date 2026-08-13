@@ -160,8 +160,8 @@ public partial class MainWindowViewModel
             else
                 SaveSettings();
 
-            if (previousMtu != mtu && IsConnected)
-                HasPendingAppChanges = true;
+            if (previousMtu != mtu)
+                MarkRoutingSettingsChanged();
         }
         catch
         {

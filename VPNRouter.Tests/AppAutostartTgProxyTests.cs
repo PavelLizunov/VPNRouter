@@ -75,7 +75,7 @@ public sealed class AppAutostartTgProxyTests
         // regress the fix. Match flexibly on .Start( so the pin survives
         // a ConfigureAwait/await reshuffle.
         Assert.Matches(
-            @"_tgProxy\.Start\s*\(\s*TgProxyPort\s*,\s*TgProxySecret\s*\)",
+            @"manager\.Start\s*\(\s*TgProxyPort\s*,\s*TgProxySecret\s*\)",
             stripped);
     }
 

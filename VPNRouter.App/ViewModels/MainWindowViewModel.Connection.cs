@@ -144,11 +144,12 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task ToggleConnectionAsync()
     {
-        if (IsConnecting || _isReconnecting)
+        if (IsConnecting || IsApplying || _isReconnecting)
         {
             _logger.Debug(
-                "[VM] ToggleConnectionAsync ignored - connection transition already in progress (IsConnecting={IsConnecting}, IsReconnecting={IsReconnecting})",
+                "[VM] ToggleConnectionAsync ignored - transition already in progress (IsConnecting={IsConnecting}, IsApplying={IsApplying}, IsReconnecting={IsReconnecting})",
                 IsConnecting,
+                IsApplying,
                 _isReconnecting);
             return;
         }

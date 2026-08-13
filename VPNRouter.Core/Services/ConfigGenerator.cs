@@ -76,9 +76,9 @@ public static class ConfigGenerator
             return Normalize(settings.App.RoutingAppsExclude);
 
         var explicitInclude = Normalize(settings.App.RoutingAppsInclude);
-        return explicitInclude.Count > 0
-            ? explicitInclude
-            : Normalize(resolvedProcessNames);
+        if (explicitInclude.Count > 0 || settings.App.RoutingAppsIncludeInitialized)
+            return explicitInclude;
+        return Normalize(resolvedProcessNames);
     }
 
     /// <summary>

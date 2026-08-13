@@ -81,6 +81,18 @@ public sealed class ConfigGeneratorAppRoutingFingerprintTests
         Assert.Equal(["chrome.exe", "telegram.exe"], processes);
     }
 
+    [Fact]
+    public void ResolveEffectiveAppProcesses_ExplicitEmptyInclude_StaysEmpty()
+    {
+        var settings = MakeSettings("include");
+        settings.App.RoutingAppsIncludeInitialized = true;
+
+        var processes = ConfigGenerator.ResolveEffectiveAppProcesses(
+            ["legacy.exe"], settings);
+
+        Assert.Empty(processes);
+    }
+
     private static AppSettings MakeSettings(
         string appsMode,
         string routingMode = "split",

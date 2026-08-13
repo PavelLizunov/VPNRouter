@@ -257,7 +257,8 @@ public class MainWindowViewModelCharacterizationTests
         // localization getters. The private apply bridge reuses SaveSettings.
         // v2.49 transition latency: + Windows-only TgProxy background recheck
         // task field and helper; no public command/property signature changed.
-        "f1864eb799975a0a8992aa7c544837c7017ca3f4749474fa240a301940ef00b9";
+        // v2.49.2 app apply/connection serialization: + CanToggleConnection.
+        "2e2bb662ea621d8796834971ad518cfb6620e9bbce2edf3dd1d38abba3291931";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

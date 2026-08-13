@@ -414,6 +414,109 @@ public class MainWindowViewModelAppsModeTests
     }
 
     [AvaloniaFact]
+    public void RoutingModeChange_ShowsMatchingListEditor()
+    {
+        var vm = MakeVm();
+
+        vm.RoutingAppsMode = "exclude";
+        Assert.Equal("exclude", vm.AppsListEditorMode);
+        Assert.Same(vm.BypassAppGroups, vm.ActiveAppGroups);
+
+        vm.RoutingAppsMode = "include";
+        Assert.Equal("include", vm.AppsListEditorMode);
+        Assert.Same(vm.AppGroups, vm.ActiveAppGroups);
+    }
+
+    [AvaloniaFact]
+    public void ApplyAppChanges_IsDisabledDuringConnectionTransition()
+    {
+        var vm = MakeVm();
+        vm.IsConnected = true;
+        vm.IsConnecting = true;
+
+        Assert.False(vm.CanApplyAppChanges);
+    }
+
+    [AvaloniaFact]
+    public void ConnectionToggle_IsDisabledWhileAppChangesAreApplying()
+    {
+        var vm = MakeVm();
+        vm.IsApplying = true;
+
+        Assert.False(vm.CanToggleConnection);
+    }
+
+    [AvaloniaFact]
+    public void ApplyCompletion_DoesNotClearNewerPendingRoutingEdit()
+    {
+        var vm = MakeVm();
+        vm.IsConnected = true;
+        var type = typeof(MainWindowViewModel);
+        var mark = type.GetMethod(
+            "MarkRoutingSettingsChanged",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var clear = type.GetMethod(
+            "ClearPendingIfRevisionUnchanged",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var revision = type.GetField(
+            "_routingSettingsRevision",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+        mark.Invoke(vm, null);
+        var applyStartedAt = (int)revision.GetValue(vm)!;
+        mark.Invoke(vm, null);
+        clear.Invoke(vm, new object[] { applyStartedAt });
+
+        Assert.True(vm.HasPendingAppChanges);
+    }
+
+    [Fact]
+    public void RoutingEditors_AreDisabledDuringApplyInBothModes()
+    {
+        var applications = File.ReadAllText(FindRepoFile(
+            "VPNRouter.App", "Views", "Pages", "ApplicationsPage.axaml"));
+        var simple = File.ReadAllText(FindRepoFile(
+            "VPNRouter.App", "Views", "Pages", "SimplePage.axaml"));
+
+        Assert.True(applications.Split("IsEnabled=\"{Binding !IsApplying}\"").Length - 1 >= 2);
+        Assert.Contains("<!-- Tunnel mode -->", simple);
+        Assert.Contains("<StackPanel Spacing=\"4\" IsEnabled=\"{Binding !IsApplying}\">", simple);
+    }
+
+    [AvaloniaFact]
+    public void AddCustomApp_WithBuiltInCategorySelected_LandsInPersistedCustomGroup()
+    {
+        var vm = MakeVm();
+        vm.RoutingAppsMode = "exclude";
+        vm.SelectedBypassAppGroup = vm.BypassAppGroups.First(g => g.Name != "Custom Apps");
+        var expected = OperatingSystem.IsWindows() ? "PinnedGame.exe" : "PinnedGame";
+
+        vm.AddCustomAppCommand.Execute("C:\\Games\\PinnedGame.exe");
+
+        Assert.Contains(
+            vm.BypassAppGroups.First(g => g.Name == "Custom Apps").Apps,
+            a => a.ProcessName == expected);
+        Assert.DoesNotContain(
+            vm.SelectedBypassAppGroup.Apps,
+            a => a.ProcessName == expected);
+    }
+
+    [AvaloniaFact]
+    public void AddCustomApp_WithUserCategorySelected_StaysInThatCategory()
+    {
+        var vm = MakeVm();
+        vm.NewCategoryName = "My games";
+        vm.AddCategoryCommand.Execute(null);
+        var category = vm.SelectedActiveAppGroup!;
+        var expected = OperatingSystem.IsWindows() ? "MyGame.exe" : "MyGame";
+
+        vm.AddCustomAppCommand.Execute("C:\\Games\\MyGame.exe");
+
+        Assert.True(category.IsCustomCategory);
+        Assert.Contains(category.Apps, a => a.ProcessName == expected);
+    }
+
+    [AvaloniaFact]
     public void BypassCatalogue_UsesWindowsBypassProfiles_NotIncludeProfiles()
     {
         if (!OperatingSystem.IsWindows())
@@ -485,6 +588,58 @@ public class MainWindowViewModelAppsModeTests
         Assert.DoesNotContain(expected, settings.App.RoutingAppsExclude);
         Assert.DoesNotContain(vm.AppGroups.SelectMany(g => g.Apps), a => a.ProcessName == expected);
         Assert.DoesNotContain(vm.BypassAppGroups.SelectMany(g => g.Apps), a => a.ProcessName == expected);
+    }
+
+    [AvaloniaFact]
+    public void RemoveCustomApp_KeepsExcludeRuleWhenBuiltInBypassRowSurvives()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        vm.RoutingAppsMode = "exclude";
+
+        var builtIn = vm.BypassAppGroups
+            .Where(g => g.Name != "Custom Apps")
+            .SelectMany(g => g.Apps)
+            .First();
+        vm.AddCustomAppCommand.Execute(builtIn.ProcessName);
+        var custom = vm.BypassAppGroups
+            .First(g => g.Name == "Custom Apps")
+            .Apps
+            .First(a => a.ProcessName.Equals(
+                builtIn.ProcessName, System.StringComparison.OrdinalIgnoreCase));
+
+        vm.RemoveCustomAppCommand.Execute(custom);
+
+        Assert.Contains(settings.App.RoutingAppsExclude, p => p.Equals(
+            builtIn.ProcessName, System.StringComparison.OrdinalIgnoreCase));
+        Assert.True(builtIn.IsChecked);
+    }
+
+    [AvaloniaFact]
+    public void RemoveCustomApp_ScrubsIncludeAndExcludeListsIndependently()
+    {
+        var vm = MakeVm();
+        var settings = GetSettings(vm);
+        vm.RoutingAppsMode = "exclude";
+
+        var builtIn = vm.BypassAppGroups
+            .Where(g => g.Name != "Custom Apps")
+            .SelectMany(g => g.Apps)
+            .First();
+        vm.AddCustomAppCommand.Execute(builtIn.ProcessName);
+        settings.App.RoutingAppsInclude = new List<string> { builtIn.ProcessName };
+        vm.AppGroups.Clear();
+        var custom = vm.BypassAppGroups
+            .First(g => g.Name == "Custom Apps")
+            .Apps
+            .First(a => a.ProcessName.Equals(
+                builtIn.ProcessName, System.StringComparison.OrdinalIgnoreCase));
+
+        vm.RemoveCustomAppCommand.Execute(custom);
+
+        Assert.Empty(settings.App.RoutingAppsInclude);
+        Assert.Contains(settings.App.RoutingAppsExclude, p => p.Equals(
+            builtIn.ProcessName, System.StringComparison.OrdinalIgnoreCase));
     }
 
     [AvaloniaFact]
@@ -604,6 +759,19 @@ public class MainWindowViewModelAppsModeTests
         Assert.False(item.IsChecked);
     }
 
+    private static string FindRepoFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir != null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException(string.Join(Path.DirectorySeparatorChar, parts));
+    }
+
     private sealed class ThrowingSaveSettingsStore : ISettingsStore
     {
         private readonly InMemorySettingsStore _inner = new();
@@ -698,4 +866,5 @@ public class AppItemViewModelBridgeTests
         item.IsChecked = false; // change
         Assert.Equal(1, fired);
     }
+
 }

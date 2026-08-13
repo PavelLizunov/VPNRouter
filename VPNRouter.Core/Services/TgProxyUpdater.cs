@@ -12,6 +12,9 @@ namespace VPNRouter.Core.Services;
 public class TgProxyUpdater
 {
     private const string ProxyRepo = "Flowseal/tg-ws-proxy";
+    public const string SupportedProxyVersion = "v1.10.0";
+    internal const string SupportedProxySourceSha256 =
+        "62193af82c97d494264a0c6b744b37a7670c458cd1492e5e9ef0235298156327";
 
     /// <summary>
     /// r37 — exposed for the start-flow auto-update check. The MVM's
@@ -43,6 +46,7 @@ public class TgProxyUpdater
     // proxy source zipball) routes through the shared client so retry
     // policy + connection pool are uniform.
     private readonly IHttpClient _http;
+    private readonly IProcessRunner _processRunner;
 
     // Wheels can be 10+ MB and python.org can be slow — extend the
     // per-request timeout for download paths via the envelope.
@@ -71,7 +75,7 @@ public class TgProxyUpdater
     /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
     /// </summary>
     public TgProxyUpdater(ILogger logger)
-        : this(logger, PolicyHttpClient.Shared)
+        : this(logger, PolicyHttpClient.Shared, new ProcessRunner())
     {
     }
 
@@ -79,10 +83,11 @@ public class TgProxyUpdater
     /// Test / DI ctor — caller supplies a custom <see cref="IHttpClient"/>
     /// (typically <c>FakeHttpClient</c> in tests).
     /// </summary>
-    public TgProxyUpdater(ILogger logger, IHttpClient http)
+    public TgProxyUpdater(ILogger logger, IHttpClient http, IProcessRunner? processRunner = null)
     {
         _logger = logger;
         _http = http ?? throw new ArgumentNullException(nameof(http));
+        _processRunner = processRunner ?? new ProcessRunner();
     }
 
     /// <summary>Check if both Python and proxy source are installed.</summary>
@@ -111,11 +116,13 @@ public class TgProxyUpdater
         var proxyDir = Path.Combine(baseDir, "proxy");
         var pythonExeExists = File.Exists(pythonExe);
         var proxySourceExists = Directory.Exists(proxyDir);
-        var overall = pythonExeExists && proxySourceExists;
+        var certifiExists = File.Exists(Path.Combine(
+            baseDir, "python", "Lib", "certifi", "__init__.py"));
+        var overall = pythonExeExists && proxySourceExists && certifiExists;
 
         logger?.Information(
-            "[TgProxy] IsInstalled: PythonExe at {PythonExePath} -> {PythonExeExists}, ProxySourceDir at {ProxySourceDir} -> {ProxySourceExists}, overall = {Overall}",
-            pythonExe, pythonExeExists, proxyDir, proxySourceExists, overall);
+            "[TgProxy] IsInstalled: PythonExe at {PythonExePath} -> {PythonExeExists}, ProxySourceDir at {ProxySourceDir} -> {ProxySourceExists}, certifi -> {CertifiExists}, overall = {Overall}",
+            pythonExe, pythonExeExists, proxyDir, proxySourceExists, certifiExists, overall);
 
         return overall;
     }
@@ -146,7 +153,8 @@ public class TgProxyUpdater
         // Step 2: Python dependencies — cryptography + cffi + pycparser (one-time)
         var cryptoMarker = Path.Combine(PythonDir, "Lib", "cryptography", "__init__.py");
         var cffiMarker = Path.Combine(PythonDir, "Lib", "cffi", "__init__.py");
-        if (!File.Exists(cryptoMarker) || !File.Exists(cffiMarker))
+        var certifiMarker = Path.Combine(PythonDir, "Lib", "certifi", "__init__.py");
+        if (!File.Exists(cryptoMarker) || !File.Exists(cffiMarker) || !File.Exists(certifiMarker))
         {
             await DownloadDependenciesAsync(ct);
         }
@@ -242,18 +250,36 @@ public class TgProxyUpdater
         // public CDN; no special headers (the GitHub Accept header is
         // harmless on pypi.org and lets us share one envelope).
         var libDir = Path.Combine(PythonDir, "Lib");
-        Directory.CreateDirectory(libDir);
+        var stageRoot = Path.Combine(TgProxyDir, $".lib-stage-{Guid.NewGuid():N}");
+        var stageLib = Path.Combine(stageRoot, "Lib");
+        var backupDir = Path.Combine(TgProxyDir, $".lib-backup-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stageLib);
+        if (Directory.Exists(libDir))
+            CopyDirectory(libDir, stageLib);
 
         // cryptography needs cffi, cffi needs pycparser — install all three
         var packages = new[]
         {
-            ("pycparser", "py3-none-any"),       // pure Python, any platform
-            ("cffi", "cp312-cp312-win_amd64"),   // compiled C extension
-            ("cryptography", "cp39-abi3-win_amd64"), // Rust-based, ABI3 compatible
+            (Name: "pycparser", Version: "3.0", Pattern: "py3-none-any", Marker: Path.Combine("pycparser", "__init__.py"), Sha256: "b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992"),
+            (Name: "cffi", Version: "2.1.1", Pattern: "cp312-cp312-win_amd64", Marker: Path.Combine("cffi", "__init__.py"), Sha256: "f53e442b08449d42821fa4a4fba000095af9f62742a500f978a9f557ec44339a"),
+            (Name: "cryptography", Version: "46.0.5", Pattern: "cp311-abi3-win_amd64", Marker: Path.Combine("cryptography", "__init__.py"), Sha256: "38946c54b16c885c72c4f59846be9743d699eee2b69b6988e0a00a01f46a61a4"),
+            (Name: "certifi", Version: "2026.7.22", Pattern: "py3-none-any", Marker: Path.Combine("certifi", "__init__.py"), Sha256: "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"),
         };
 
-        foreach (var (pkgName, wheelPattern) in packages)
+        var installedAny = false;
+        try
         {
+        foreach (var package in packages)
+        {
+            var pkgName = package.Name;
+            var wheelPattern = package.Pattern;
+            if (File.Exists(Path.Combine(libDir, package.Marker)))
+            {
+                _logger.Information("[TgProxy] {Package} already installed; keeping existing package", pkgName);
+                continue;
+            }
+
+            installedAny = true;
             // v2.36 (MVP one-button): unified "Step 2/3:" prefix for
             // the wheels group — three sub-packages (pycparser/cffi/
             // cryptography) collapse into one user-visible step so
@@ -261,7 +287,7 @@ public class TgProxyUpdater
             StatusChanged?.Invoke($"Step 2/3: Installing {pkgName}...");
             _logger.Information("[TgProxy] Downloading {Package}...", pkgName);
 
-            var pypiUrl = $"https://pypi.org/pypi/{pkgName}/json";
+            var pypiUrl = $"https://pypi.org/pypi/{pkgName}/{package.Version}/json";
             var pypiResp = await _http.SendAsync(
                 new HttpRequest(HttpMethod.Get, new Uri(pypiUrl)),
                 ct).ConfigureAwait(false);
@@ -287,24 +313,11 @@ public class TgProxyUpdater
                 }
             }
 
-            // Fallback: try any win_amd64 wheel
-            if (wheelUrl == null)
-            {
-                foreach (var urlEntry in doc.RootElement.GetProperty("urls").EnumerateArray())
-                {
-                    var filename = urlEntry.GetProperty("filename").GetString() ?? "";
-                    if ((filename.Contains("win_amd64") || filename.Contains("py3-none-any"))
-                        && filename.EndsWith(".whl"))
-                    {
-                        wheelUrl = urlEntry.GetProperty("url").GetString();
-                        wheelSha256 = ReadPypiSha256(urlEntry);
-                        break;
-                    }
-                }
-            }
-
             if (wheelUrl == null)
                 throw new Exception($"Could not find wheel for {pkgName}");
+            if (!string.Equals(wheelSha256, package.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"PyPI metadata digest changed for pinned {pkgName} {package.Version}. Refusing install.");
 
             // Download and extract (wheel = ZIP). v3.0 Phase 4: streaming
             // download so a 10+ MB wheel doesn't sit in a managed buffer
@@ -333,16 +346,89 @@ public class TgProxyUpdater
                 // rather than unpacking untrusted code. If PyPI didn't publish a
                 // digest (shouldn't happen — every file carries one), log and
                 // proceed so a metadata quirk doesn't brick TgProxy setup.
-                VerifyWheelDigest(tempWhl, wheelSha256, pkgName);
+                VerifyPinnedSha256(tempWhl, package.Sha256, $"{pkgName} {package.Version} wheel");
 
-                ZipFile.ExtractToDirectory(tempWhl, libDir, overwriteFiles: true);
-                _logger.Information("[TgProxy] {Package} installed", pkgName);
+                ZipFile.ExtractToDirectory(tempWhl, stageLib, overwriteFiles: true);
+                _logger.Information("[TgProxy] {Package} {Version} staged", pkgName, package.Version);
             }
             finally
             {
                 try { File.Delete(tempWhl); } catch { }
             }
         }
+
+        if (!installedAny) return;
+
+        await SmokeTestDependenciesAsync(stageLib, ct).ConfigureAwait(false);
+        ActivateDependencyDirectoryAt(libDir, stageLib, backupDir, _logger);
+        }
+        finally
+        {
+            try { if (Directory.Exists(stageRoot)) Directory.Delete(stageRoot, recursive: true); } catch { }
+        }
+    }
+
+    private async Task SmokeTestDependenciesAsync(string stageLib, CancellationToken ct)
+    {
+        var python = "import sys; sys.path.insert(0, " +
+                     JsonSerializer.Serialize(stageLib) +
+                     "); import pycparser, cffi, cryptography, certifi";
+        var probe = await _processRunner.RunAsync(new ProcessRequest(
+            PythonExePath,
+            ["-c", python],
+            WorkingDirectory: TgProxyDir,
+            CaptureStdout: true,
+            CaptureStderr: true,
+            Timeout: TimeSpan.FromSeconds(15)), ct).ConfigureAwait(false);
+
+        if (probe.TimedOut || probe.ExitCode != 0)
+            throw new InvalidOperationException(
+                $"TgProxy dependency smoke test failed (exit {probe.ExitCode}).");
+    }
+
+    internal static void ActivateDependencyDirectoryAt(
+        string currentLibDir,
+        string stagedLibDir,
+        string backupDir,
+        ILogger? logger = null)
+    {
+        var movedOld = false;
+        var installedNew = false;
+        try
+        {
+            if (Directory.Exists(currentLibDir))
+            {
+                Directory.Move(currentLibDir, backupDir);
+                movedOld = true;
+            }
+
+            Directory.Move(stagedLibDir, currentLibDir);
+            installedNew = true;
+        }
+        catch (Exception activationError)
+        {
+            try
+            {
+                if (installedNew && Directory.Exists(currentLibDir))
+                    Directory.Delete(currentLibDir, recursive: true);
+                if (movedOld && Directory.Exists(backupDir))
+                    Directory.Move(backupDir, currentLibDir);
+            }
+            catch (Exception rollbackError)
+            {
+                logger?.Error(
+                    rollbackError,
+                    "[TgProxy] Dependency rollback failed; recovery backup remains at {BackupDir}",
+                    backupDir);
+                throw new InvalidOperationException(
+                    "TgProxy dependency activation and rollback failed. The previous runtime was preserved for recovery.",
+                    new AggregateException(activationError, rollbackError));
+            }
+
+            throw;
+        }
+
+        try { if (Directory.Exists(backupDir)) Directory.Delete(backupDir, recursive: true); } catch { }
     }
 
     /// <summary>Read <c>digests.sha256</c> from a PyPI <c>urls[]</c> entry; null if absent.</summary>
@@ -352,21 +438,6 @@ public class TgProxyUpdater
            && sha.ValueKind == JsonValueKind.String
             ? sha.GetString()
             : null;
-
-    /// <summary>
-    /// P1-2: fail-closed sha256 check of a downloaded wheel against PyPI's
-    /// published digest. A null/empty expected digest is logged + skipped
-    /// (metadata quirk, not a downgrade — PyPI always publishes one).
-    /// </summary>
-    private void VerifyWheelDigest(string wheelPath, string? expectedSha256, string pkgName)
-    {
-        if (string.IsNullOrWhiteSpace(expectedSha256))
-        {
-            _logger.Warning("[TgProxy] PyPI published no sha256 for {Package} wheel — installing unverified", pkgName);
-            return;
-        }
-        VerifyPinnedSha256(wheelPath, expectedSha256, $"{pkgName} wheel");
-    }
 
     /// <summary>Compute the file's sha256 and throw <see cref="InvalidOperationException"/>
     /// unless it equals <paramref name="expectedSha256"/> (hex, case-insensitive).
@@ -387,15 +458,14 @@ public class TgProxyUpdater
     private void VerifyPinnedSha256(string filePath, string expectedSha256, string label)
         => VerifyPinnedSha256Static(filePath, expectedSha256, label, _logger);
 
-    /// <summary>Download proxy source from GitHub (latest release tag).</summary>
+    /// <summary>Download the VPNRouter-tested proxy source tag.</summary>
     private async Task DownloadProxySourceAsync(CancellationToken ct)
     {
         // v2.36 (MVP one-button): final "Step 3/3:" group covers the
         // GitHub release fetch + zipball download + extract.
         StatusChanged?.Invoke("Step 3/3: Fetching proxy source from GitHub...");
 
-        // Get latest release tag
-        var url = $"{GitHubApiBase}/{ProxyRepo}/releases/latest";
+        var url = $"{GitHubApiBase}/{ProxyRepo}/releases/tags/{SupportedProxyVersion}";
         var apiResp = await _http.SendAsync(
             new HttpRequest(HttpMethod.Get, new Uri(url), Headers: GitHubApiHeaders),
             ct).ConfigureAwait(false);
@@ -404,6 +474,9 @@ public class TgProxyUpdater
                 $"HTTP {apiResp.StatusCode} fetching GitHub release info for {ProxyRepo}");
         using var doc = JsonDocument.Parse(apiResp.AsString());
         var tagName = doc.RootElement.GetProperty("tag_name").GetString() ?? "unknown";
+        if (!string.Equals(tagName, SupportedProxyVersion, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"GitHub returned '{tagName}' for supported TgProxy '{SupportedProxyVersion}'.");
 
         _logger.Information("[TgProxy] Latest release: {Tag}", tagName);
         StatusChanged?.Invoke($"Step 3/3: Downloading proxy source {tagName}...");
@@ -432,6 +505,11 @@ public class TgProxyUpdater
                 await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
             }
 
+            VerifyPinnedSha256(
+                tempZip,
+                SupportedProxySourceSha256,
+                $"tg-ws-proxy {tagName} source");
+
             StatusChanged?.Invoke("Step 3/3: Extracting proxy source...");
 
             // Extract to temp dir
@@ -451,14 +529,21 @@ public class TgProxyUpdater
                 if (!Directory.Exists(sourceProxyDir))
                     throw new Exception("proxy/ directory not found in source");
 
-                // Replace existing proxy source
-                if (Directory.Exists(ProxySourceDir))
-                    Directory.Delete(ProxySourceDir, recursive: true);
+                var stageRoot = Path.Combine(TgProxyDir, $".source-stage-{Guid.NewGuid():N}");
+                var stagedProxyDir = Path.Combine(stageRoot, "proxy");
+                var backupDir = Path.Combine(TgProxyDir, $".source-backup-{Guid.NewGuid():N}");
+                Directory.CreateDirectory(stageRoot);
+                try
+                {
+                    CopyDirectory(sourceProxyDir, stagedProxyDir);
+                    await SmokeTestAsync(stageRoot, ct).ConfigureAwait(false);
+                    ActivateSource(stagedProxyDir, backupDir, tagName);
+                }
+                finally
+                {
+                    try { if (Directory.Exists(stageRoot)) Directory.Delete(stageRoot, recursive: true); } catch { }
+                }
 
-                CopyDirectory(sourceProxyDir, ProxySourceDir);
-
-                // Write version
-                File.WriteAllText(VersionFilePath, tagName);
                 _logger.Information("[TgProxy] Proxy source {Version} installed", tagName);
                 StatusChanged?.Invoke($"Installed {tagName}");
             }
@@ -471,6 +556,77 @@ public class TgProxyUpdater
         {
             try { File.Delete(tempZip); } catch { }
         }
+    }
+
+    private async Task SmokeTestAsync(string stageRoot, CancellationToken ct)
+    {
+        var python = "import sys; sys.path.insert(0, " +
+                     JsonSerializer.Serialize(stageRoot) +
+                     "); import certifi; import proxy.tg_ws_proxy";
+        var probe = await _processRunner.RunAsync(new ProcessRequest(
+            PythonExePath,
+            ["-c", python],
+            WorkingDirectory: TgProxyDir,
+            CaptureStdout: true,
+            CaptureStderr: true,
+            Timeout: TimeSpan.FromSeconds(15)), ct).ConfigureAwait(false);
+
+        if (probe.TimedOut || probe.ExitCode != 0)
+            throw new InvalidOperationException(
+                $"TgProxy {SupportedProxyVersion} smoke test failed (exit {probe.ExitCode}).");
+    }
+
+    internal void ActivateSource(string stagedProxyDir, string backupDir, string tagName)
+        => ActivateSourceAt(ProxySourceDir, VersionFilePath, stagedProxyDir, backupDir, tagName, _logger);
+
+    internal static void ActivateSourceAt(
+        string currentProxyDir,
+        string versionFilePath,
+        string stagedProxyDir,
+        string backupDir,
+        string tagName,
+        ILogger? logger = null)
+    {
+        var movedOld = false;
+        var installedNew = false;
+        var versionTemp = versionFilePath + ".tmp";
+        try
+        {
+            if (Directory.Exists(currentProxyDir))
+            {
+                Directory.Move(currentProxyDir, backupDir);
+                movedOld = true;
+            }
+
+            Directory.Move(stagedProxyDir, currentProxyDir);
+            installedNew = true;
+            File.WriteAllText(versionTemp, tagName);
+            File.Move(versionTemp, versionFilePath, overwrite: true);
+        }
+        catch (Exception activationError)
+        {
+            try
+            {
+                try { if (File.Exists(versionTemp)) File.Delete(versionTemp); } catch { }
+                if (installedNew && Directory.Exists(currentProxyDir))
+                    Directory.Delete(currentProxyDir, recursive: true);
+                if (movedOld && Directory.Exists(backupDir))
+                    Directory.Move(backupDir, currentProxyDir);
+            }
+            catch (Exception rollbackError)
+            {
+                logger?.Error(
+                    rollbackError,
+                    "[TgProxy] Source rollback failed; recovery backup remains at {BackupDir}",
+                    backupDir);
+                throw new InvalidOperationException(
+                    "TgProxy source activation and rollback failed. The previous runtime was preserved for recovery.",
+                    new AggregateException(activationError, rollbackError));
+            }
+            throw;
+        }
+
+        try { if (Directory.Exists(backupDir)) Directory.Delete(backupDir, recursive: true); } catch { }
     }
 
     private static void CopyDirectory(string source, string dest)

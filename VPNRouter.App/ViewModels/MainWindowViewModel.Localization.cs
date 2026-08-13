@@ -45,6 +45,7 @@ public partial class MainWindowViewModel
     public string L_AppsModeSectionTitle => Strings.AppsModeSectionTitle;
     public string L_AppsModeInclude => Strings.AppsModeInclude;
     public string L_AppsModeExclude => Strings.AppsModeExclude;
+    public string L_AppsPendingApplyHint => Strings.AppsPendingApplyHint;
     public string L_AppsModeIncludeHint => Strings.AppsModeIncludeHint;
     public string L_AppsModeExcludeHint => Strings.AppsModeExcludeHint;
     public string L_AppsListSectionTitle => Strings.AppsListSectionTitle;
@@ -145,6 +146,8 @@ public partial class MainWindowViewModel
     public string L_ColPort => Strings.ColPort;
     public string L_ColServer => Strings.ColServer;
     public string L_EnableWholeGroup => Strings.EnableWholeGroup;
+    public string L_SelectAllApps => Strings.AppsSelectAll;
+    public string L_ClearAllApps => Strings.AppsClearAll;
     public string L_FcAdvancedSettings => Strings.FcAdvancedSettings;
     public string L_FcApplySelected => Strings.FcApplySelected;
     public string L_FcColBandwidth => Strings.FcColBandwidth;

@@ -66,6 +66,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
+    private readonly object _tgProxyStateGate = new();
+    private readonly SemaphoreSlim _tgProxyTransitionGate = new(1, 1);
+    private readonly CancellationTokenSource _tgProxyLifetimeCts = new();
     private Task? _tgProxyPostStartRecheckTask;
 #endif
     private readonly ILogger _logger;
@@ -135,6 +138,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundSuspectVisible))]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
+    [NotifyPropertyChangedFor(nameof(CanApplyAppChanges))]
     private bool _isConnected;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
@@ -150,6 +154,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundIsSuspect))]
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundNormalVisible))]
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundSuspectVisible))]
+    [NotifyPropertyChangedFor(nameof(CanApplyAppChanges))]
+    [NotifyPropertyChangedFor(nameof(CanToggleConnection))]
     private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty] private bool _isRussian;
@@ -665,6 +671,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var canon = (value ?? "include").Trim().ToLowerInvariant();
         if (canon != "include" && canon != "exclude") canon = "include";
         _settings.App.RoutingAppsMode = canon;
+        AppsListEditorMode = canon;
 
         // AM-3 (2026-05-12): mode toggle keeps two independent selection
         // states (RoutingAppsInclude vs RoutingAppsExclude). When the
@@ -678,7 +685,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             _logger?.Warning(ex, "[VM] SaveSettings on apps mode change failed");
         }
-        if (IsConnected) HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
     }
 
     /// <summary>
@@ -709,6 +716,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     internal void SetAppCheckedInCurrentMode(string processName, bool isChecked)
     {
         if (string.IsNullOrEmpty(processName)) return;
+        if (!string.Equals(_settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
+            _settings.App.RoutingAppsIncludeInitialized = true;
         var list = GetActiveAppList();
         if (list == null) return;
 
@@ -733,7 +742,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             _logger?.Warning(ex, "[VM] SaveSettings on per-app mode-aware toggle failed");
         }
-        if (IsConnected) HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
     }
 
     internal bool IsAppCheckedInIncludeList(string processName) =>
@@ -743,10 +752,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IsAppCheckedInList(_settings.App.RoutingAppsExclude, processName);
 
     internal void SetAppCheckedInIncludeList(string processName, bool isChecked) =>
-        SetAppCheckedInList(_settings.App.RoutingAppsInclude ??= new List<string>(), processName, isChecked);
+        SetAppCheckedInList(_settings.App.RoutingAppsInclude ??= new List<string>(), processName, isChecked, isIncludeList: true);
 
     internal void SetAppCheckedInExcludeList(string processName, bool isChecked) =>
-        SetAppCheckedInList(_settings.App.RoutingAppsExclude ??= new List<string>(), processName, isChecked);
+        SetAppCheckedInList(_settings.App.RoutingAppsExclude ??= new List<string>(), processName, isChecked, isIncludeList: false);
 
     private static bool IsAppCheckedInList(List<string>? list, string processName)
     {
@@ -754,9 +763,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return list.Any(p => string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private void SetAppCheckedInList(List<string> list, string processName, bool isChecked)
+    private void SetAppCheckedInList(List<string> list, string processName, bool isChecked, bool isIncludeList)
     {
         if (string.IsNullOrEmpty(processName)) return;
+        if (isIncludeList) _settings.App.RoutingAppsIncludeInitialized = true;
         var existing = list.FirstOrDefault(p =>
             string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
 
@@ -778,7 +788,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             _logger?.Warning(ex, "[VM] SaveSettings on per-app list toggle failed");
         }
-        if (IsConnected) HasPendingAppChanges = true;
+        var editsActiveList = isIncludeList == !string.Equals(
+            _settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
+        if (editsActiveList) MarkRoutingSettingsChanged();
     }
 
     /// <summary>
@@ -835,7 +847,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_isLoadingUI) return;
         _settings.App.CustomRulesPriority = value ? "custom_first" : "toggles_first";
         SaveSettings();
-        if (IsConnected) HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
     }
 
     /// <summary>
@@ -1275,7 +1287,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     // Apply changes (hot-reload) UX state
     [ObservableProperty] private bool _hasPendingAppChanges;
-    [ObservableProperty] private bool _isApplying;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApplyAppChanges))]
+    [NotifyPropertyChangedFor(nameof(CanToggleConnection))]
+    private bool _isApplying;
+    private int _routingSettingsRevision;
+    public bool CanApplyAppChanges => IsConnected && !IsConnecting && !IsApplying;
+    public bool CanToggleConnection => !IsConnecting && !IsApplying;
+
+    private void MarkRoutingSettingsChanged()
+    {
+        Interlocked.Increment(ref _routingSettingsRevision);
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
+    private void ClearPendingIfRevisionUnchanged(int appliedRevision)
+    {
+        if (Volatile.Read(ref _routingSettingsRevision) == appliedRevision)
+            HasPendingAppChanges = false;
+    }
 
     // Autostart
     [ObservableProperty] private bool _autostartVpn = false;
@@ -1719,7 +1749,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         // v2.30.0-r17: rules-change-while-running surface (same as
         // FlushCustomRulesListToSettings). Edit-mode Apply lands here.
-        if (IsConnected) HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -2259,7 +2289,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // тут не очень понятно». While the VPN is running, mark the
         // change as pending so the Apply button + indicator surface
         // (existing pattern from other settings).
-        if (IsConnected) HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
     }
 
     /// <summary>v2.30.0-r3 — import rules from a CSV / JSON / sing-box-
@@ -2537,7 +2567,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_isLoadingUI) return;
         try { SaveSettings(); }
         catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on IsDnsLeakLockdownEnabled change failed"); }
-        if (IsConnected) HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
     }
 
     // Zapret section navigator (master-detail).
@@ -3319,7 +3349,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (IsSplitTunnel) return; // no-op if already split
         IsSplitTunnel = true;
-        HasPendingAppChanges = true;
+        MarkRoutingSettingsChanged();
         SaveSettings();
     }
 
@@ -3331,8 +3361,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     private async Task ApplyPendingChangesInternalAsync(bool forceRestart)
     {
-        if (IsApplying || !IsConnected) return;
+        if (!CanApplyAppChanges) return;
         IsApplying = true;
+        var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
         try
         {
             SaveSettings();
@@ -3362,7 +3393,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         ? "Перезапускаю службу с новыми настройками..."
                         : "Restarting service with new settings...";
                     await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
-                    HasPendingAppChanges = false;
+                    ClearPendingIfRevisionUnchanged(appliedRevision);
                     // The 2-second SyncConnectedWithVpnRuntime poll in
                     // RuntimeStatus will pick up the new service state and
                     // refresh StatusText to the "connected via service
@@ -3370,7 +3401,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     return;
                 }
 
-                HasPendingAppChanges = false;
+                ClearPendingIfRevisionUnchanged(appliedRevision);
                 StatusText = IsRussian
                     ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
                     : "Settings saved. Stop and Start VPN to apply — the service re-reads config.yaml on start.";
@@ -3380,7 +3411,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
             if (ok)
             {
-                HasPendingAppChanges = false;
+                ClearPendingIfRevisionUnchanged(appliedRevision);
                 RestoreConnectedStatus();
             }
             else
@@ -5814,18 +5845,44 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task UpdateTgProxyAsync()
     {
 #if PLATFORM_WINDOWS
+        if (_disposed) return;
+        if (!await _tgProxyTransitionGate.WaitAsync(0)) return;
+        try
+        {
+            if (!_disposed) await UpdateTgProxyCoreAsync();
+        }
+        finally { _tgProxyTransitionGate.Release(); }
+#endif
+    }
+
+    private async Task UpdateTgProxyCoreAsync()
+    {
+#if PLATFORM_WINDOWS
         if (IsTgProxyDownloading) return;
         IsTgProxyDownloading = true;
         TgProxyStatus = IsRussian ? "Загрузка tg-ws-proxy..." : "Downloading tg-ws-proxy...";
         TgProxyDownloadStep = string.Empty;
 
+        var port = TgProxyPort;
+        var secret = TgProxySecret;
+        var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(port);
+        TgProxyManager? manager;
+        lock (_tgProxyStateGate) manager = _tgProxy;
+
         try
         {
-            // Stop if running
-            if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
+            // Updating files underneath a live Python process can mix old and
+            // new modules or make the atomic directory move fail. Stop first;
+            // a previously running proxy is restarted only after validation
+            // and activation have completed successfully.
+            if (wasRunning)
             {
-                _tgProxy?.Stop();
-                TgProxyManager.KillAll(TgProxyPort);
+                manager?.Stop();
+                TgProxyManager.KillAll(port);
+                await Task.Delay(300, _tgProxyLifetimeCts.Token);
+                if (TgProxyManager.IsAnyRunning(port))
+                    throw new InvalidOperationException(
+                        $"Could not stop tg-ws-proxy on port {port} before update.");
                 TgProxyEnabled = false;
             }
 
@@ -5833,6 +5890,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             updater.StatusChanged += s =>
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (_disposed) return;
                     // v2.36 (MVP one-button task A): per-step messages
                     // from TgProxyUpdater carry "Step N/3:" prefix.
                     // Mirror them into both the persistent status banner
@@ -5845,12 +5903,57 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     TgProxyDownloadStep = s.StartsWith("Step ") ? s : string.Empty;
                 });
 
-            await updater.DownloadAsync(CancellationToken.None);
+            await updater.DownloadAsync(_tgProxyLifetimeCts.Token);
+
+            if (_disposed) return;
 
             TgProxyVersionText = TgProxyUpdater.GetLocalVersion() ?? "?";
-            TgProxyStatus = IsRussian
-                ? $"tg-ws-proxy {TgProxyVersionText} установлен"
-                : $"tg-ws-proxy {TgProxyVersionText} installed";
+            if (wasRunning)
+            {
+                if (string.IsNullOrWhiteSpace(secret))
+                    throw new InvalidOperationException("TgProxy secret is empty after update.");
+
+                lock (_tgProxyStateGate)
+                {
+                    if (_disposed) return;
+                    if (_tgProxy == null)
+                    {
+                        _tgProxy = new TgProxyManager(_logger);
+                        _tgProxy.StatsUpdated += OnTgProxyStats;
+                    }
+                    manager = _tgProxy;
+                }
+
+                manager.Start(port, secret);
+                if (_disposed || !ReferenceEquals(_tgProxy, manager))
+                {
+                    manager.Stop();
+                    return;
+                }
+
+                TgProxyEnabled = true;
+                TgProxyRuntimeStatus = ComponentRuntimeStatus.Running;
+                TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", port, secret);
+                TgProxyStatus = IsRussian
+                    ? $"Обновлено до {TgProxyVersionText}, работает (PID {manager.Pid})"
+                    : $"Updated to {TgProxyVersionText}, running (PID {manager.Pid})";
+                _tgProxyPostStartRecheckTask = VerifyTgProxyAfterStartAsync(manager, port);
+                try { SaveSettings(); }
+                catch (System.IO.IOException ex)
+                {
+                    _logger.Warning(ex, "[VM] TgProxy Update: SaveSettings failed, keeping runtime state");
+                }
+            }
+            else
+            {
+                TgProxyStatus = IsRussian
+                    ? $"tg-ws-proxy {TgProxyVersionText} установлен"
+                    : $"tg-ws-proxy {TgProxyVersionText} installed";
+            }
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            _logger.Debug("[VM] TgProxy download cancelled during shutdown");
         }
         catch (Exception ex)
         {
@@ -5869,10 +5972,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task ToggleTgProxyAsync()
     {
 #if PLATFORM_WINDOWS
+        if (_disposed) return;
+        if (!await _tgProxyTransitionGate.WaitAsync(0)) return;
+        try
+        {
+            if (!_disposed) await ToggleTgProxyCoreAsync();
+        }
+        finally { _tgProxyTransitionGate.Release(); }
+#endif
+    }
+
+    private async Task ToggleTgProxyCoreAsync()
+    {
+#if PLATFORM_WINDOWS
         // If running → stop
         if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
         {
-            _tgProxy?.Stop();
+            TgProxyManager? currentManager;
+            lock (_tgProxyStateGate) currentManager = _tgProxy;
+            currentManager?.Stop();
             // v2.20.0: pass the port so KillByPort hits the actual
             // python.exe running the proxy (process-name match never
             // worked — see TgProxyManager.KillAll).
@@ -5917,39 +6035,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // entry/decision logs in VPNRouterService.cs:331+ exactly.
         _logger.Information("[VM] ToggleTgProxyAsync: start path entered");
 
-        // Auto-download if not installed.
-        // r37: auto-update on every start if installed but upstream newer.
-        // 6-hour TTL cache via RemoteVersionChecker keeps GitHub-API quiet.
+        // Install or repair the VPNRouter-tested runtime. Do not adopt an
+        // arbitrary newer upstream source during a user click: its dependency
+        // contract may have changed and must first ship with VPNRouter tests.
         if (!TgProxyUpdater.IsInstalled(_logger))
         {
-            await UpdateTgProxyAsync();
+            await UpdateTgProxyCoreAsync();
             if (!TgProxyUpdater.IsInstalled(_logger)) return;
-        }
-        else
-        {
-            try
-            {
-                var remoteTag = await VPNRouter.Core.Services.RemoteVersionChecker.GetLatestTagAsync(
-                    TgProxyUpdater.ProxyRepoPublic,
-                    userAgent: $"VPNRouter/{VPNRouter.Core.AppVersion.Version}",
-                    _logger,
-                    System.Threading.CancellationToken.None);
-                var localTag = TgProxyUpdater.GetLocalVersion();
-                if (VPNRouter.Core.Services.RemoteVersionChecker.IsNewer(remoteTag, localTag))
-                {
-                    _logger.Information(
-                        "[VM] TgProxy: update available {Local} → {Remote}, auto-applying",
-                        localTag, remoteTag);
-                    TgProxyStatus = IsRussian
-                        ? $"Обновление TgProxy до {remoteTag}…"
-                        : $"Updating TgProxy to {remoteTag}…";
-                    await UpdateTgProxyAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Debug(ex, "[VM] TgProxy: remote version check failed (non-fatal)");
-            }
         }
 
         try
@@ -5965,22 +6057,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 "[VM] ToggleTgProxyAsync: secret configured (len {SecretLen}), port {Port}, calling TgProxyManager.Start",
                 TgProxySecret.Length, TgProxyPort);
 
-            if (_tgProxy == null)
+            TgProxyManager manager;
+            lock (_tgProxyStateGate)
             {
-                _tgProxy = new TgProxyManager(_logger);
-                // M1 (v2.45.0): subscribe ONCE per manager lifetime via a named
-                // handler. The old `+= lambda` ran on EVERY toggle start with no
-                // matching `-=`, so handlers accumulated (duplicate UI updates) and
-                // rooted the VM; Dispose() now detaches it + disposes the manager.
-                _tgProxy.StatsUpdated += OnTgProxyStats;
+                if (_disposed) return;
+                if (_tgProxy == null)
+                {
+                    _tgProxy = new TgProxyManager(_logger);
+                    // M1 (v2.45.0): subscribe ONCE per manager lifetime via a named
+                    // handler. The old `+= lambda` ran on EVERY toggle start with no
+                    // matching `-=`, so handlers accumulated (duplicate UI updates) and
+                    // rooted the VM; Dispose() now detaches it + disposes the manager.
+                    _tgProxy.StatsUpdated += OnTgProxyStats;
+                }
+                manager = _tgProxy;
             }
             // TgProxyManager.Start owns the single bounded 2s early-exit
             // watchdog. Publish readiness as soon as it succeeds instead of
             // adding a second foreground settle delay.
-            var manager = _tgProxy!;
             var port = TgProxyPort;
             var secret = TgProxySecret;
             manager.Start(port, secret);
+
+            if (_disposed || !ReferenceEquals(_tgProxy, manager))
+            {
+                manager.Stop();
+                return;
+            }
 
             // v2.36 (MVP one-button task C): pre-flight scheme check
             // after spawn succeeded but BEFORE the user is told to
@@ -6947,6 +7050,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
 
+#if PLATFORM_WINDOWS
+        try { _tgProxyLifetimeCts.Cancel(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: TgProxy cancellation failed"); }
+#endif
+
         // 0. Drop the OS-appearance follow subscription (Fix #7) so the VM
         // isn't held alive by PlatformSettings after disposal.
         try { UnwireOsThemeFollow(); }
@@ -7016,11 +7124,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // (_tgProxy / _zapret are Windows-only fields — guard the whole block.)
         try
         {
-            if (_tgProxy != null)
+            TgProxyManager? manager;
+            lock (_tgProxyStateGate)
             {
-                _tgProxy.StatsUpdated -= OnTgProxyStats;
-                _tgProxy.Dispose();
+                manager = _tgProxy;
                 _tgProxy = null;
+            }
+            if (manager != null)
+            {
+                manager.StatsUpdated -= OnTgProxyStats;
+                manager.Dispose();
             }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _tgProxy cleanup failed"); }

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
 
 namespace VPNRouter.App.ViewModels;
@@ -56,6 +57,18 @@ public partial class AppGroupViewModel : ViewModelBase
         // behaviour that Bug-r9-I's auto-save piggybacks on.
         foreach (var app in Apps)
             app.IsChecked = value;
+    }
+
+    [RelayCommand]
+    private void SelectAll()
+    {
+        foreach (var app in Apps) app.IsChecked = true;
+    }
+
+    [RelayCommand]
+    private void ClearAll()
+    {
+        foreach (var app in Apps) app.IsChecked = false;
     }
 
     /// <summary>Force DisplayName to re-evaluate (call after Strings.Lang changes).</summary>

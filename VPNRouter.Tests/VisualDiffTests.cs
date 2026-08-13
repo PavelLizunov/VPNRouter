@@ -87,6 +87,15 @@ public class VisualDiffTests
         }
 
         using var vm = GetVm();
+        // The developer may be using Zapret while headless tests run. Keep the
+        // baseline independent of live processes and the locally installed
+        // Zapret payload; these are layout tests, not runtime probes.
+        if (name is "page-dpi-bypass" or "page-tools")
+        {
+            vm.ZapretEnabled = false;
+            vm.ZapretStatus = VPNRouter.App.Localization.Strings.Stopped;
+            vm.ZapretVersionText = "1.9.8c";
+        }
         page.DataContext = vm;
 
         // Wave 12 Phase 3 (2026-05-18) — Avalonia 12 changed
