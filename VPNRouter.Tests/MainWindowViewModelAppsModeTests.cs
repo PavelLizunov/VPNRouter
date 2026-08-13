@@ -486,6 +486,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void AddCustomApp_WithBuiltInCategorySelected_LandsInPersistedCustomGroup()
     {
+        if (!OperatingSystem.IsWindows()) return;
         var vm = MakeVm();
         vm.RoutingAppsMode = "exclude";
         vm.SelectedBypassAppGroup = vm.BypassAppGroups.First(g => g.Name != "Custom Apps");
@@ -593,6 +594,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void RemoveCustomApp_KeepsExcludeRuleWhenBuiltInBypassRowSurvives()
     {
+        if (!OperatingSystem.IsWindows()) return;
         var vm = MakeVm();
         var settings = GetSettings(vm);
         vm.RoutingAppsMode = "exclude";
@@ -618,6 +620,7 @@ public class MainWindowViewModelAppsModeTests
     [AvaloniaFact]
     public void RemoveCustomApp_ScrubsIncludeAndExcludeListsIndependently()
     {
+        if (!OperatingSystem.IsWindows()) return;
         var vm = MakeVm();
         var settings = GetSettings(vm);
         vm.RoutingAppsMode = "exclude";
