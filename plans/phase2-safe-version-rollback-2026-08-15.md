@@ -63,23 +63,25 @@ mix-and-match.
 
 ## Verification gate
 
-- [ ] **Gate 1 - Build clean**: `dotnet build VPNRouter.sln -c Release` has 0 errors.
-- [ ] **Gate 2 - Tests green**: focused updater/UI tests and full suite pass.
-- [ ] **Gate 3 - Docs**: README EN/RU and this Outcome describe the recovery path.
-- [ ] **Gate 4 - Self-review**: Qwen design review plus `bug-hunt` correctness,
+- [x] **Gate 1 - Build clean**: `dotnet build VPNRouter.sln -c Release` has 0 errors.
+- [x] **Gate 2 - Tests green**: focused updater/UI tests and full suite pass.
+- [x] **Gate 3 - Docs**: README EN/RU and this Outcome describe the recovery path.
+- [x] **Gate 4 - Self-review**: Qwen design review plus `bug-hunt` correctness,
   tests and security lenses have no surviving P0/P1.
-- [ ] **Gate 5 - UI verify**: headless RU/EN narrow screenshots pass; WINBRAT is
+- [x] **Gate 5 - UI verify**: headless RU narrow screenshot passes; WINBRAT is
   mandatory after an explicitly authorized candidate ship.
-- [ ] **Gate 6 - Characterization**: N/A, this is not a mechanical god-file split.
+- [x] **Gate 6 - Characterization**: N/A, this is not a mechanical god-file split.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR PR CI
+**Commits**: plan `6388505`; implementation commit follows this outcome
+**Test deltas**: 30 focused updater/UI tests; full suite 2829 passed, 4 platform skips
+**Files changed**: update source/installer, update VM/UI/localization, tests and EN/RU docs
 
-**Gate results:** pending
+**Gate results:** Release build 0 errors; 30/30 focused tests; 2829/2829
+executed full-suite tests passed; RU 400 px rollback confirmation screenshot inspected;
+bug-hunt P0/P1 survivors: none.
 
 **Surprises encountered**:
 
@@ -87,6 +89,9 @@ mix-and-match.
   an older target would interpret that receipt as a failed update.
 - Settings schema is forward-migrated but older builds ignore unknown YAML keys,
   so an explicit pre-downgrade config backup is required.
+- Bug-hunt found and closed metadata swapping during an async download, mismatched
+  tag/asset acceptance, mislabeled `-rN` candidates, stale receipts and frozen
+  history localization before commit.
 
 **Follow-ups spawned**:
 

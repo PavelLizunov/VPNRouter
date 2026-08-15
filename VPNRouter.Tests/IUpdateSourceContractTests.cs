@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -249,6 +250,118 @@ public sealed class IUpdateSourceContractTests
         Assert.Contains("checksum mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GitHubReleaseSource_ListStableAsync_ReturnsRecentOlderVerifiedOnly()
+    {
+        var eligibleVersions = new[] { "2.31.9", "2.31.8", "2.31.7" };
+        var releases = new List<ReleaseStub>();
+        var fake = new FakeHttpClient();
+        foreach (var version in eligibleVersions)
+        {
+            var assetName = AssetNameForCurrentPlatform(version);
+            var assetUrl = $"https://example.com/{assetName}";
+            releases.Add(new ReleaseStub(
+                $"v{version}", false, $"Release {version}",
+                new[]
+                {
+                    new AssetStub(assetName, assetUrl, 10_000),
+                    new AssetStub($"{assetName}.sha256", $"{assetUrl}.sha256", 64),
+                }));
+            fake.Setup($"{assetUrl}.sha256", new string(version[^1], 64));
+        }
+
+        var missingShaName = AssetNameForCurrentPlatform("2.31.95");
+        releases.Add(new ReleaseStub(
+            "v2.31.95", false, "Missing checksum",
+            new[] { new AssetStub(missingShaName, $"https://example.com/{missingShaName}", 10_000) }));
+        var mislabeledCandidateName = AssetNameForCurrentPlatform("2.31.99-r1");
+        var mislabeledCandidateUrl = $"https://example.com/{mislabeledCandidateName}";
+        releases.Add(new ReleaseStub(
+            "v2.31.99-r1", false, "Candidate mislabeled as stable",
+            new[]
+            {
+                new AssetStub(mislabeledCandidateName, mislabeledCandidateUrl, 10_000),
+                new AssetStub($"{mislabeledCandidateName}.sha256", $"{mislabeledCandidateUrl}.sha256", 64),
+            }));
+        fake.Setup($"{mislabeledCandidateUrl}.sha256", new string('f', 64));
+        releases.Add(new ReleaseStub(
+            "v2.31.98", false, "Draft",
+            Array.Empty<AssetStub>(), Draft: true));
+
+        fake.Setup(ReleasesApi, BuildReleasesJson(releases));
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo, Channel = "experimental" },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var result = await source.ListStableAsync(2, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { "2.31.9", "2.31.8" }, result.Select(x => x.Version));
+        Assert.All(result, x => Assert.Matches("^[0-9a-f]{64}$", x.AssetSha256));
+        Assert.All(result, x => Assert.False(x.IsPrerelease));
+    }
+
+    [Fact]
+    public async Task GitHubReleaseSource_ListStableAsync_InvalidChecksum_HidesRelease()
+    {
+        const string version = "2.31.9";
+        var assetName = AssetNameForCurrentPlatform(version);
+        var assetUrl = $"https://example.com/{assetName}";
+        var releasesJson = BuildReleasesJson(new[]
+        {
+            new ReleaseStub(
+                $"v{version}", false, "Bad checksum",
+                new[]
+                {
+                    new AssetStub(assetName, assetUrl, 10_000),
+                    new AssetStub($"{assetName}.sha256", $"{assetUrl}.sha256", 64),
+                }),
+        });
+        var fake = new FakeHttpClient()
+            .Setup(ReleasesApi, releasesJson)
+            .Setup($"{assetUrl}.sha256", "not-a-sha");
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var result = await source.ListStableAsync(3, TestContext.Current.CancellationToken);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GitHubReleaseSource_ListStableAsync_WrongVersionAsset_HidesRelease()
+    {
+        const string releaseVersion = "2.31.9";
+        var wrongAssetName = AssetNameForCurrentPlatform("2.31.8");
+        var wrongAssetUrl = $"https://example.com/{wrongAssetName}";
+        var releasesJson = BuildReleasesJson(new[]
+        {
+            new ReleaseStub(
+                $"v{releaseVersion}", false, "Mismatched asset",
+                new[]
+                {
+                    new AssetStub(wrongAssetName, wrongAssetUrl, 10_000),
+                    new AssetStub($"{wrongAssetName}.sha256", $"{wrongAssetUrl}.sha256", 64),
+                }),
+        });
+        var fake = new FakeHttpClient()
+            .Setup(ReleasesApi, releasesJson)
+            .Setup($"{wrongAssetUrl}.sha256", new string('a', 64));
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var result = await source.ListStableAsync(3, TestContext.Current.CancellationToken);
+
+        Assert.Empty(result);
+    }
+
     // ─── SideloadSource ─────────────────────────────────────────────────
 
     [Fact]
@@ -447,7 +560,7 @@ public sealed class IUpdateSourceContractTests
               .Append($"\"tag_name\":{JsonStr(r.Tag)},")
               .Append($"\"body\":{JsonStr(r.Body)},")
               .Append($"\"html_url\":{JsonStr($"https://github.com/foo/bar/releases/tag/{r.Tag}")},")
-              .Append($"\"draft\":false,")
+              .Append($"\"draft\":{(r.Draft ? "true" : "false")},")
               .Append($"\"prerelease\":{(r.Prerelease ? "true" : "false")},")
               .Append("\"assets\":[");
             var firstA = true;
@@ -469,7 +582,12 @@ public sealed class IUpdateSourceContractTests
         static string JsonStr(string s) => "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 
-    private sealed record ReleaseStub(string Tag, bool Prerelease, string Body, AssetStub[] Assets);
+    private sealed record ReleaseStub(
+        string Tag,
+        bool Prerelease,
+        string Body,
+        AssetStub[] Assets,
+        bool Draft = false);
     private sealed record AssetStub(string Name, string Url, long Size);
 
     /// <summary>

@@ -789,6 +789,33 @@ public static partial class Strings
     public static string UpdateApplying => Ru ? "Применение обновления..." : "Applying update...";
     public static string UpdateRestarting => Ru ? "Перезапуск..." : "Restarting...";
     public static string UpdateFailed => Ru ? "Ошибка обновления: {0}" : "Update failed: {0}";
+    public static string OtherVersions => Ru ? "Другие версии" : "Other versions";
+    public static string HideOlderVersions => Ru ? "Скрыть версии" : "Hide versions";
+    public static string LoadingVersions => Ru ? "Загружаю список версий..." : "Loading versions...";
+    public static string NoOlderVersions => Ru ? "Подходящих старых версий нет." : "No eligible older versions.";
+    public static string VersionHistoryFailed => Ru ? "Не удалось загрузить список версий." : "Could not load version history.";
+    public static string InstalledVersion => Ru ? "Установлена" : "Installed";
+    public static string RollbackAction => Ru ? "Установить" : "Install";
+    public static string RollbackSafetyHint => Ru
+        ? "Доступны только недавние стабильные версии с проверкой SHA-256."
+        : "Only recent stable releases with verified SHA-256 are available.";
+    public static string RollbackConfirmation => Ru
+        ? "Установить v{0}? VPN остановится, приложение перезапустится. Перед откатом будет сохранена резервная копия настроек."
+        : "Install v{0}? VPN will stop and the app will restart. A settings backup will be saved before rollback.";
+    public static string ConfirmRollback => Ru ? "Установить старую версию" : "Install older version";
+    public static string Cancel => Ru ? "Отмена" : "Cancel";
+    public static string DowngradeNoConfigBackup => Ru
+        ? "Файл настроек отсутствует — резервная копия не требуется."
+        : "No settings file needed a downgrade backup.";
+    public static string DowngradeConfigBackupCreated => Ru
+        ? "Резервная копия настроек создана: {0}"
+        : "Settings backup created: {0}";
+    public static string DowngradeReceiptCleanupFailed => Ru
+        ? "Не удалось очистить состояние предыдущего обновления перед откатом."
+        : "Could not clear the previous update state before downgrade.";
+    public static string DowngradeInvalidVersion => Ru
+        ? "Откат отменён: версия имеет неверный формат."
+        : "Downgrade was refused because the target version is invalid.";
 
     // ── Channel ──
     // v2.30.3-r1 (BUG-7 fix): footer text shortened so it fits next to

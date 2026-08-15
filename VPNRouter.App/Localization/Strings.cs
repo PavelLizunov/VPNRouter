@@ -442,6 +442,17 @@ public static class Strings
     public static string UpdateApplying => global::VPNRouter.Core.Localization.Strings.UpdateApplying;
     public static string UpdateRestarting => global::VPNRouter.Core.Localization.Strings.UpdateRestarting;
     public static string UpdateFailed => global::VPNRouter.Core.Localization.Strings.UpdateFailed;
+    public static string OtherVersions => global::VPNRouter.Core.Localization.Strings.OtherVersions;
+    public static string HideOlderVersions => global::VPNRouter.Core.Localization.Strings.HideOlderVersions;
+    public static string LoadingVersions => global::VPNRouter.Core.Localization.Strings.LoadingVersions;
+    public static string NoOlderVersions => global::VPNRouter.Core.Localization.Strings.NoOlderVersions;
+    public static string VersionHistoryFailed => global::VPNRouter.Core.Localization.Strings.VersionHistoryFailed;
+    public static string InstalledVersion => global::VPNRouter.Core.Localization.Strings.InstalledVersion;
+    public static string RollbackAction => global::VPNRouter.Core.Localization.Strings.RollbackAction;
+    public static string RollbackSafetyHint => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHint;
+    public static string RollbackConfirmation => global::VPNRouter.Core.Localization.Strings.RollbackConfirmation;
+    public static string ConfirmRollback => global::VPNRouter.Core.Localization.Strings.ConfirmRollback;
+    public static string Cancel => global::VPNRouter.Core.Localization.Strings.Cancel;
 
     // ── Channel ──
     // v2.30.3-r1 (BUG-7 fix): footer text shortened so it fits next to
