@@ -1,0 +1,21 @@
+Origin: VPNRouter
+Label: VPNRouter APT Repository
+Suite: stable
+Codename: stable
+Version: 2.22
+Date: Sat, 15 Aug 2026 18:34:39 UTC
+Architectures: amd64
+Components: main
+Description: VPNRouter Debian repository for Debian / Ubuntu / Linux Mint
+MD5Sum:
+ fc8f6318d9d87658ba8ac93c2ca89a2e 892 main/binary-amd64/Packages
+ 91c066b38d8c365cd0c06eadbfce0031 617 main/binary-amd64/Packages.gz
+ 69db19a0e5aad1ff1cd7483f2cc7e929 190 main/binary-amd64/Release
+SHA1:
+ 6f02241b34a0687798ee6c8f76b5c693e272d01a 892 main/binary-amd64/Packages
+ a4947222abd2c81368da3c2371c701ab7bba9640 617 main/binary-amd64/Packages.gz
+ 58963d84f9069bd2189d6b526b787909a4a84307 190 main/binary-amd64/Release
+SHA256:
+ fa75c900b30709ca968879a6b344b929767c85429e04b326143ebe2e1a226a36 892 main/binary-amd64/Packages
+ a3dfe1a52bd0eaaf277c54e776fe6c6108792d1ae76f692af1540eb73eb6fc63 617 main/binary-amd64/Packages.gz
+ a0ff43de890df04e98e2c77081c8c8deaaee4700ac38b004488a4b792033a67a 190 main/binary-amd64/Release
