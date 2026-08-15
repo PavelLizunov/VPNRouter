@@ -92,10 +92,8 @@ public sealed class WindowsPnpDeviceManagerTests
         Assert.Contains("PnpInstanceID", result.Error);
     }
 
-    [Theory]
-    [InlineData(@"ROOT\NET\TAILSCALE")]
-    [InlineData(@"SWD\Wintun\{66666666-6666-6666-6666-666666666666}")]
-    public void NativeLookup_ForeignOrMismatchedPnpMappingFailsClosed(string pnpInstanceId)
+    [Fact]
+    public void NativeLookup_ForeignPnpMappingFailsClosed()
     {
         var result = WindowsPnpDeviceManager.FindNetworkAdapterInstanceIds(
             "VPNRouter-TUN",
@@ -104,12 +102,30 @@ public sealed class WindowsPnpDeviceManagerTests
                 new NativeNetworkConnectionRecord(
                     "{77777777-7777-7777-7777-777777777777}",
                     "VPNRouter-TUN",
-                    pnpInstanceId),
+                    @"ROOT\NET\TAILSCALE"),
             });
 
         Assert.False(result.Success);
         Assert.Empty(result.InstanceIds);
         Assert.Contains(@"SWD\Wintun\{GUID}", result.Error);
+    }
+
+    [Fact]
+    public void NativeLookup_AcceptsDistinctConnectionAndWintunDeviceGuids()
+    {
+        const string pnpId = @"SWD\Wintun\{66666666-6666-6666-6666-666666666666}";
+        var result = WindowsPnpDeviceManager.FindNetworkAdapterInstanceIds(
+            "VPNRouter-TUN",
+            () => new[]
+            {
+                new NativeNetworkConnectionRecord(
+                    "{77777777-7777-7777-7777-777777777777}",
+                    "VPNRouter-TUN",
+                    pnpId),
+            });
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(new[] { pnpId }, result.InstanceIds);
     }
 
     [Fact]

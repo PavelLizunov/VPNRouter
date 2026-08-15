@@ -118,14 +118,20 @@ internal static class WindowsPnpDeviceManager
     {
         const string prefix = @"SWD\Wintun\";
         if (string.IsNullOrWhiteSpace(connectionId) ||
-            !Guid.TryParseExact(connectionId.Trim(), "B", out var connectionGuid) ||
+            !Guid.TryParseExact(connectionId.Trim(), "B", out _) ||
             !pnpInstanceId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-            !Guid.TryParseExact(pnpInstanceId[prefix.Length..], "B", out var pnpGuid))
+            !Guid.TryParseExact(pnpInstanceId[prefix.Length..], "B", out _))
         {
             return false;
         }
 
-        return connectionGuid == pnpGuid;
+        // The Network Connections key is the interface ConnectionId, while
+        // SWD\Wintun\{GUID} identifies the PnP devnode. Windows may assign
+        // different GUIDs to these two objects (observed on Windows 11 build
+        // 26200). Exact adapter-name matching plus a well-formed Wintun PnP ID
+        // is the ownership boundary; requiring GUID equality blocks a valid
+        // VPNRouter adapter and prevents every subsequent VPN start.
+        return true;
     }
 
 #if PLATFORM_WINDOWS
