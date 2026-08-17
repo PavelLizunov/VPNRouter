@@ -511,31 +511,39 @@ public partial class MainWindowViewModel
         }
     }
 
+    /// <summary>Builds the ProcessStartInfo for opening the OS file manager with safe argument separation.</summary>
+    internal static ProcessStartInfo BuildRevealStartInfo(string filePath)
+    {
+        var psi = new ProcessStartInfo();
+        if (OperatingSystem.IsWindows())
+        {
+            psi.FileName = "explorer.exe";
+            psi.UseShellExecute = true;
+            psi.ArgumentList.Add($"/select,{filePath}");
+        }
+        else
+        {
+            var dir = Path.GetDirectoryName(filePath);
+            psi.FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open";
+            psi.UseShellExecute = false;
+            if (!string.IsNullOrEmpty(dir))
+            {
+                psi.ArgumentList.Add(dir);
+            }
+        }
+        return psi;
+    }
+
     /// <summary>Open the OS file manager with the given file selected/revealed.</summary>
     private static void RevealInFileManager(string filePath)
     {
         try
         {
-            if (OperatingSystem.IsWindows())
-            {
-                System.Diagnostics.Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"/select,\"{filePath}\"",
-                    UseShellExecute = true,
-                });
-            }
-            else
-            {
-                var dir = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(dir))
-                    System.Diagnostics.Process.Start(new ProcessStartInfo
-                    {
-                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
-                        Arguments = $"\"{dir}\"",
-                        UseShellExecute = false,
-                    });
-            }
+            if (!OperatingSystem.IsWindows() && string.IsNullOrEmpty(Path.GetDirectoryName(filePath)))
+                return;
+
+            var psi = BuildRevealStartInfo(filePath);
+            System.Diagnostics.Process.Start(psi);
         }
         catch { /* best-effort reveal */ }
     }
