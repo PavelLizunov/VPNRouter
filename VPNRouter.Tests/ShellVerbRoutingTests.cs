@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Avalonia.Headless.XUnit;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Models;
 using VPNRouter.Tests.Fakes;
@@ -18,13 +19,13 @@ public class RevealInFileManagerTests
     public void BuildRevealStartInfo_SafeArgumentList_DoesNotUseUnescapedStringInArguments()
     {
         var malPath = Path.Combine(Path.GetTempPath(), "test_path_with spaces_\" & calc.exe & \"file.txt");
-        var psi = MainWindowViewModel.BuildRevealStartInfo(malPath);
+        var psi = FileManagerHelper.BuildRevealStartInfo(malPath);
 
         Assert.Empty(psi.Arguments);
+        Assert.False(psi.UseShellExecute);
         if (OperatingSystem.IsWindows())
         {
             Assert.Equal("explorer.exe", psi.FileName);
-            Assert.True(psi.UseShellExecute);
             Assert.Single(psi.ArgumentList);
             Assert.Equal($"/select,{malPath}", psi.ArgumentList[0]);
         }
