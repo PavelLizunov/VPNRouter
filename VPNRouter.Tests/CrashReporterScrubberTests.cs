@@ -30,8 +30,15 @@ public sealed class CrashReporterScrubberTests
     [InlineData("vmess://eyJhZGQiOiAiMS4xLjEuMSJ9")]
     [InlineData("trojan://password@example.com:443")]
     [InlineData("ss://YWVzLTI1Ni1nY206cGFzc0BleGFtcGxlLmNvbToxMjM0")]
+    [InlineData("shadowsocks://YWVzLTI1Ni1nY206cGFzc0BleGFtcGxlLmNvbToxMjM0")]
     [InlineData("hysteria2://user:pass@server.example:443")]
+    [InlineData("hy2://user:pass@server.example:443")]
     [InlineData("tuic://uuid:pass@server.example:443")]
+    [InlineData("wireguard://privatekey@server.example:51820")]
+    [InlineData("socks://user:pass@127.0.0.1:1080")]
+    [InlineData("socks5://user:pass@127.0.0.1:1080")]
+    [InlineData("socks5h://user:pass@127.0.0.1:1080")]
+    [InlineData("naive+https://user:pass@example.com:443")]
     public void ScrubSecrets_RedactsAllProxyProtocols(string uri)
     {
         var s = CrashReporter.ScrubSecrets($"connection error: {uri}");
