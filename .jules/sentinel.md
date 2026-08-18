@@ -1,0 +1,4 @@
+## 2026-08-15 - Unloadable/Invalid Config Backup Omission in Diagnostics
+**Vulnerability:** When `SettingsLoader` recovers from a malformed or invalid `config.yaml`, it moves the file to `config.yaml.unloadable-*` or `config.yaml.invalid-*` and resets `config.yaml` to defaults. `DiagnosticsExporter` previously only exported `config.yaml`, omitting the backup files from diagnostics bundles.
+**Learning:** Unloadable or invalid configuration files were omitted from diagnostic exports, hiding post-recovery config state and preventing root-cause analysis while leaving backup files containing sensitive data unredacted if collected manually.
+**Prevention:** Include `config.yaml.unloadable-*` and `config.yaml.invalid-*` in `DiagnosticsExporter` and run them through `DiagnosticsRedactor.RedactConfigYaml` before bundling.
