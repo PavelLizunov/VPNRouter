@@ -30,8 +30,11 @@ public sealed class CrashReporterScrubberTests
     [InlineData("vmess://eyJhZGQiOiAiMS4xLjEuMSJ9")]
     [InlineData("trojan://password@example.com:443")]
     [InlineData("ss://YWVzLTI1Ni1nY206cGFzc0BleGFtcGxlLmNvbToxMjM0")]
+    [InlineData("shadowsocks://YWVzLTI1Ni1nY206cGFzc0BleGFtcGxlLmNvbToxMjM0")]
     [InlineData("hysteria2://user:pass@server.example:443")]
+    [InlineData("hy2://user:pass@server.example:443")]
     [InlineData("tuic://uuid:pass@server.example:443")]
+    [InlineData("dns-tunnel://eyJzZXJ2ZXIiOiIxLjIuMy40Iiwic2VjcmV0IjoiYWJjMTIzIn0=")]
     public void ScrubSecrets_RedactsAllProxyProtocols(string uri)
     {
         var s = CrashReporter.ScrubSecrets($"connection error: {uri}");
