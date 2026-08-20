@@ -509,4 +509,68 @@ public sealed class LeakProtectionScopeAwareTests
         Assert.DoesNotContain(result.Errors, e =>
             e.Contains("scope") || e.Contains("not in the active subscription"));
     }
+
+    // ─── AWG Endpoint scope validation ───
+
+    [Fact]
+    public void GeneratedMode_WithSubscription_AwgEndpointOutOfScope_FailsValidation()
+    {
+        var settings = BuildStasLikeSettings();
+        var config = CreateValidConfig(
+            proxyServer: "104.194.156.93",
+            proxyPort: 443,
+            proxyUuid: "9029d44f-232f-4283-b055-d39f8448f43b");
+
+        // Add AWG endpoint pointing to out-of-scope server
+        config.Endpoints = new List<SingBoxEndpoint>
+        {
+            new()
+            {
+                Type = "wireguard",
+                Tag = "proxy-awg",
+                Address = new List<string> { "10.66.0.2/32" },
+                PrivateKey = "aPrivateKeyBase64==",
+                Peers = new List<WireGuardPeer>
+                {
+                    new() { Address = "203.0.113.99", Port = 51820, PublicKey = "peerPubKey==" }
+                }
+            }
+        };
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Contains("203.0.113.99") && e.Contains("AWG endpoint") && e.Contains("active subscription"));
+    }
+
+    [Fact]
+    public void GeneratedMode_WithSubscription_AwgEndpointInScope_PassesValidation()
+    {
+        var settings = BuildStasLikeSettings();
+        var config = CreateValidConfig(
+            proxyServer: "104.194.156.93",
+            proxyPort: 443,
+            proxyUuid: "9029d44f-232f-4283-b055-d39f8448f43b");
+
+        // Add AWG endpoint pointing to in-scope server from BuildStasLikeSettings (104.194.156.93:443)
+        config.Endpoints = new List<SingBoxEndpoint>
+        {
+            new()
+            {
+                Type = "wireguard",
+                Tag = "proxy-awg",
+                Address = new List<string> { "10.66.0.2/32" },
+                PrivateKey = "aPrivateKeyBase64==",
+                Peers = new List<WireGuardPeer>
+                {
+                    new() { Address = "104.194.156.93", Port = 443, PublicKey = "peerPubKey==" }
+                }
+            }
+        };
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+    }
 }

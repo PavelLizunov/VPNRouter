@@ -564,7 +564,7 @@ public static class LeakProtection
         SingBoxConfig config, AppSettings settings,
         List<string> errors, List<string> warnings)
     {
-        if (config?.Outbounds == null || config.Outbounds.Count == 0)
+        if (config == null)
             return;
 
         var configMode = (settings.App?.ConfigMode ?? "generated").Trim();
@@ -578,59 +578,107 @@ public static class LeakProtection
 
         var allowed = BuildScopedAllowedServers(settings, out var hasEnabledSubsWithServers);
 
-        foreach (var ob in config.Outbounds)
+        if (config.Outbounds != null)
         {
-            if (!IsProxyLikeOutbound(ob))
-                continue;
-
-            var server = ob.Server?.Trim();
-            if (string.IsNullOrEmpty(server))
-                continue;
-
-            // DNS-tunnel (slipstream) + any local-front transport: the proxy
-            // outbound deliberately targets a loopback address (the local
-            // slipstream-client listening on 127.0.0.1:<port>), and the real
-            // egress server is reached THROUGH that local client — validated by
-            // SlipstreamManager from the dns-tunnel profile, not here. A
-            // loopback target can never be a remote leak: traffic can't leave
-            // the box via 127.0.0.1, so it fails closed (connection refused;
-            // VpnEngine already refuses to start sing-box over a dead local
-            // port) rather than leaking to a dead/hostile IP — which is the
-            // only thing this subscription-scope check defends against. So it's
-            // out of scope for the allow-list. (Fixes the v2.42.0 dns-tunnel
-            // "127.0.0.1:7001 not in active subscription scope" false-positive.)
-            if (IsLoopbackServer(server))
-                continue;
-
-            var port = ob.ServerPort ?? 0;
-            var uuid = ob.Uuid?.Trim() ?? string.Empty;
-
-            if (!IsAllowed(allowed, server, port, uuid))
+            foreach (var ob in config.Outbounds)
             {
-                if (hasEnabledSubsWithServers)
+                if (!IsProxyLikeOutbound(ob))
+                    continue;
+
+                var server = ob.Server?.Trim();
+                if (string.IsNullOrEmpty(server))
+                    continue;
+
+                // DNS-tunnel (slipstream) + any local-front transport: the proxy
+                // outbound deliberately targets a loopback address (the local
+                // slipstream-client listening on 127.0.0.1:<port>), and the real
+                // egress server is reached THROUGH that local client — validated by
+                // SlipstreamManager from the dns-tunnel profile, not here. A
+                // loopback target can never be a remote leak: traffic can't leave
+                // the box via 127.0.0.1, so it fails closed (connection refused;
+                // VpnEngine already refuses to start sing-box over a dead local
+                // port) rather than leaking to a dead/hostile IP — which is the
+                // only thing this subscription-scope check defends against. So it's
+                // out of scope for the allow-list. (Fixes the v2.42.0 dns-tunnel
+                // "127.0.0.1:7001 not in active subscription scope" false-positive.)
+                if (IsLoopbackServer(server))
+                    continue;
+
+                var port = ob.ServerPort ?? 0;
+                var uuid = ob.Uuid?.Trim() ?? string.Empty;
+
+                if (!IsAllowed(allowed, server, port, uuid))
                 {
-                    // Generated/Subscribe + enabled subs scope — outbound
-                    // MUST be from a subscription. Anything else is a
-                    // probable leak (legacy vless.servers shadow override
-                    // → silent traffic-routing into a dead/hostile IP).
-                    errors.Add(
-                        $"[LeakProtection] Outbound '{ob.Tag}' points to " +
-                        $"{server}:{port} which is not in the active subscription " +
-                        $"scope (subscription={true}). Possible legacy vless.servers " +
-                        $"leak — placeholder entries are shadowing live subscription " +
-                        $"servers. Review config.yaml app.subscriptions[*].servers " +
-                        $"and remove stale vless.servers entries.");
+                    if (hasEnabledSubsWithServers)
+                    {
+                        // Generated/Subscribe + enabled subs scope — outbound
+                        // MUST be from a subscription. Anything else is a
+                        // probable leak (legacy vless.servers shadow override
+                        // → silent traffic-routing into a dead/hostile IP).
+                        errors.Add(
+                            $"[LeakProtection] Outbound '{ob.Tag}' points to " +
+                            $"{server}:{port} which is not in the active subscription " +
+                            $"scope (subscription={true}). Possible legacy vless.servers " +
+                            $"leak — placeholder entries are shadowing live subscription " +
+                            $"servers. Review config.yaml app.subscriptions[*].servers " +
+                            $"and remove stale vless.servers entries.");
+                    }
+                    else
+                    {
+                        // Legacy direct-VLESS scope — outbound must match
+                        // vless.servers. Keep this as a warning (existing
+                        // behaviour) so we don't break the legacy direct-mode
+                        // setup, but flag it loudly.
+                        warnings.Add(
+                            $"[LeakProtection] Outbound '{ob.Tag}' points to " +
+                            $"{server}:{port} which is not in your VLESS server list. " +
+                            $"Possible leak from stale configuration or placeholder.");
+                    }
                 }
-                else
+            }
+        }
+
+        if (config.Endpoints != null)
+        {
+            foreach (var ep in config.Endpoints)
+            {
+                if (ep?.Peers == null)
+                    continue;
+
+                foreach (var p in ep.Peers)
                 {
-                    // Legacy direct-VLESS scope — outbound must match
-                    // vless.servers. Keep this as a warning (existing
-                    // behaviour) so we don't break the legacy direct-mode
-                    // setup, but flag it loudly.
-                    warnings.Add(
-                        $"[LeakProtection] Outbound '{ob.Tag}' points to " +
-                        $"{server}:{port} which is not in your VLESS server list. " +
-                        $"Possible leak from stale configuration or placeholder.");
+                    if (p == null)
+                        continue;
+
+                    var server = p.Address?.Trim();
+                    if (string.IsNullOrEmpty(server))
+                        continue;
+
+                    if (IsLoopbackServer(server))
+                        continue;
+
+                    var port = p.Port;
+
+                    if (!IsAllowed(allowed, server, port, string.Empty))
+                    {
+                        if (hasEnabledSubsWithServers)
+                        {
+                            errors.Add(
+                                $"[LeakProtection] AWG endpoint '{ep.Tag}' peer points to " +
+                                $"{server}:{port} which is not in the active subscription " +
+                                $"scope (subscription={true}). Possible legacy vless.servers " +
+                                $"leak — placeholder entries are shadowing live subscription " +
+                                $"servers. Review config.yaml app.subscriptions[*].servers " +
+                                $"and remove stale vless.servers entries.");
+                        }
+                        else
+                        {
+                            warnings.Add(
+                                $"[LeakProtection] AWG endpoint '{ep.Tag}' peer points to " +
+                                $"{server}:{port} which is not in your VLESS server list. " +
+                                $"Possible leak from stale configuration or placeholder.");
+                        }
+                    }
                 }
             }
         }
