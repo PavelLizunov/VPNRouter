@@ -151,6 +151,19 @@ app:
     }
 
     [Fact]
+    public void Json_NonAllowlistedKeyWithNumericString_IsRedacted()
+    {
+        // Unlisted string keys containing all-digit string values (e.g. auth_token: "12345678", pin: "9999")
+        // must be redacted as *** and not passed through as "numbers".
+        var outp = DiagnosticsRedactor.RedactSingboxJson(
+            @"{ ""auth_token"": ""12345678"", ""pin"": ""9999"", ""server_port"": 443 }");
+        Assert.DoesNotContain("12345678", outp);
+        Assert.DoesNotContain("9999", outp);
+        Assert.Contains("443", outp); // allowlisted key server_port kept
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
+
+    [Fact]
     public void Json_UrlKey_KeepsHostDropsToken()
     {
         var outp = DiagnosticsRedactor.RedactSingboxJson(
