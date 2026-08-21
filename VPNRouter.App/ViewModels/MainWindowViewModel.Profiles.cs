@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using VPNRouter.App.Localization;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -90,6 +91,10 @@ public partial class MainWindowViewModel
         // layer. We complete the seeding here below.
         _settings.App.RoutingAppsInclude ??= new List<string>();
         _settings.App.RoutingAppsExclude ??= new List<string>();
+        AppsListEditorMode = string.Equals(
+            _settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase)
+            ? "exclude"
+            : "include";
 
         // AM-3 — compute the legacy effective include list (Profile-driven
         // process names of active groups minus ExcludedApps plus
@@ -102,16 +107,12 @@ public partial class MainWindowViewModel
         var legacyIncludeNames = ComputeLegacyEffectiveIncludeNames(
             activeProfiles, excludedSet, isFirstLaunch);
 
-        var isIncludeMode = !string.Equals(
-            _settings.App.RoutingAppsMode, "exclude",
-            StringComparison.OrdinalIgnoreCase);
-
         // Seed RoutingAppsInclude from legacy state on first load after
         // upgrade — only when the user hasn't explicitly populated it
         // AND we're in include mode (legacy semantics map directly to
         // include). Exclude mode starts empty by design; the user adds
         // bypass apps explicitly.
-        if (isIncludeMode
+        if (!_settings.App.RoutingAppsIncludeInitialized
             && _settings.App.RoutingAppsInclude.Count == 0
             && legacyIncludeNames.Count > 0)
         {
@@ -127,6 +128,8 @@ public partial class MainWindowViewModel
                 "from legacy profile/custom state on first load",
                 _settings.App.RoutingAppsInclude.Count);
         }
+        if (!_settings.App.RoutingAppsIncludeInitialized)
+            _settings.App.RoutingAppsIncludeInitialized = true;
 
         // Load from profiles. Per-platform variants:
         //   macOS → default-macos.json
@@ -446,7 +449,7 @@ public partial class MainWindowViewModel
                     a.PropertyChanged += OnAppItemPropertyChanged;
                 }
             }
-        HasPendingAppChanges = IsConnected;
+        MarkRoutingSettingsChanged();
     }
 
     private void OnAppGroupPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -454,7 +457,7 @@ public partial class MainWindowViewModel
         if (_isLoadingUI) return;
         if (e.PropertyName == nameof(AppGroupViewModel.IsChecked))
         {
-            HasPendingAppChanges = IsConnected;
+            MarkRoutingSettingsChanged();
             // Bug-r9-I (2026-05-11): persist immediately so the toggle
             // survives a Windows restart even if the user never clicks
             // Apply (Apply is gated on IsConnected — invisible while VPN
@@ -490,7 +493,7 @@ public partial class MainWindowViewModel
                 a.PropertyChanged -= OnAppItemPropertyChanged;
                 a.PropertyChanged += OnAppItemPropertyChanged;
             }
-        HasPendingAppChanges = IsConnected;
+        MarkRoutingSettingsChanged();
     }
 
     private void OnAppItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -498,7 +501,7 @@ public partial class MainWindowViewModel
         if (_isLoadingUI) return;
         if (e.PropertyName == nameof(AppItemViewModel.IsChecked))
         {
-            HasPendingAppChanges = IsConnected;
+            MarkRoutingSettingsChanged();
             // Bug-r9-I (2026-05-11): same rationale as OnAppGroupPropertyChanged
             // — toggle must persist even when disconnected. A group-level
             // toggle cascades to N apps which means N saves in a row, but
@@ -567,13 +570,14 @@ public partial class MainWindowViewModel
         // category's apps from RoutingAppsInclude/Exclude before dropping the
         // group, or invisible rules survive (leak-from-intent in Exclude mode,
         // an unwanted route in Include mode).
-        foreach (var item in group.Apps.ToList())
-            ScrubRoutingForApp(item);
+        var removedNames = group.Apps.Select(a => a.ProcessName).ToList();
         var peerGroups = AllAppGroups()
             .Where(g => g.IsCustomCategory && g.Name.Equals(group.Name, StringComparison.OrdinalIgnoreCase))
             .ToList();
         foreach (var peer in peerGroups)
             (AppGroups.Contains(peer) ? AppGroups : BypassAppGroups).Remove(peer);
+        foreach (var name in removedNames)
+            ScrubRoutingForProcess(name);
         if (SelectedAppGroup == group)
             SelectedAppGroup = AppGroups.FirstOrDefault();
         if (SelectedBypassAppGroup == group)
@@ -581,68 +585,23 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    /// <summary>
-    /// Remove a process from the active routing lists when its AppItem is
-    /// removed from the UI. Mirrors the Explorer shell-verb removal path:
-    /// uncheck (fires WriteMode -> drops from RoutingAppsInclude/Exclude) plus a
-    /// defensive direct scrub (covers an entry that was routed but never surfaced
-    /// as an AppItem). Idempotent + safe on an already-unrouted item.
-    /// </summary>
-    private void ScrubRoutingForApp(AppItemViewModel item)
+    private void ScrubRoutingForProcess(string? name)
     {
-        if (item == null) return;
-        var name = item.ProcessName;
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var bare = StripExe(name);
+        bool Match(string p) =>
+            string.Equals(p, name, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(StripExe(p), bare, StringComparison.OrdinalIgnoreCase);
 
-        // v2.40.0-r8 (#5 bug-scout regression fix): compute the survivor decision
-        // BEFORE any uncheck. AppItemViewModel.IsChecked is a READ-THROUGH to the
-        // single shared routing-list entry (one entry per process name, shared by
-        // every AppItem with that name across groups). So `item.IsChecked = false`
-        // empties that entry IMMEDIATELY — and a survivor snapshot taken AFTER it
-        // would see the OTHER checked duplicate as unchecked too, collapse it, and
-        // un-route the app from EVERY group (split-tunnel leak-from-intent that
-        // defeats the r2 survivor-guard). Snapshot the checked OTHER duplicates
-        // here, while the shared entry is still intact.
-        bool stillRoutedByAnother = false;
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            var survivors = AppGroups
-                .SelectMany(g => g.Apps)
-                .Where(a => !ReferenceEquals(a, item) && a.IsChecked)
-                .Select(a => a.ProcessName)
-                .ToList(); // materialise BEFORE the uncheck mutates the shared list
-            stillRoutedByAnother =
-                VPNRouter.Core.Services.RoutingAppListEditor.IsStillRoutedByAnother(name, survivors);
-        }
+        var includeSurvives = AppGroups.SelectMany(g => g.Apps)
+            .Any(a => a.IsChecked && Match(a.ProcessName));
+        var excludeSurvives = BypassAppGroups.SelectMany(g => g.Apps)
+            .Any(a => a.IsChecked && Match(a.ProcessName));
 
-        // Another checked AppItem still routes this name → leave the shared routing
-        // entry AND the other checkbox's state untouched; the caller just drops this
-        // row from its group. Unchecking here would remove the single shared entry
-        // and silently un-route the app the user keeps checked elsewhere.
-        if (stillRoutedByAnother) return;
-
-        try { item.IsChecked = false; } catch { }
-        try { VPNRouter.Core.Services.RoutingAppListEditor.TryRemoveProcessName(_settings, item.ProcessName); }
-        catch { }
-        // v2.40.0 (review M5): TryRemoveProcessName only scrubs RoutingAppsInclude
-        // (and no-ops off-Windows), and the active-list uncheck above can't touch
-        // the INACTIVE list. So a row removed while in the other mode left a stale
-        // entry in the unscrubbed list that reappeared + bypassed the VPN on a
-        // mode flip (leak-from-intent). Removing a UI row must drop the app from
-        // EVERY routing list regardless of current mode. Match both the stored
-        // name and its .exe-stripped form for cross-platform safety.
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                var bare = StripExe(name);
-                bool Match(string p) =>
-                    string.Equals(p, name, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(p, bare, StringComparison.OrdinalIgnoreCase);
-                _settings.App.RoutingAppsInclude?.RemoveAll(Match);
-                _settings.App.RoutingAppsExclude?.RemoveAll(Match);
-            }
-        }
-        catch { }
+        if (!includeSurvives)
+            _settings.App.RoutingAppsInclude?.RemoveAll(Match);
+        if (!excludeSurvives)
+            _settings.App.RoutingAppsExclude?.RemoveAll(Match);
     }
 
     [RelayCommand]
@@ -650,18 +609,21 @@ public partial class MainWindowViewModel
     {
         if (string.IsNullOrWhiteSpace(processName)) return;
 
-        var name = StripExe(processName.Trim());
-        var target = SelectedActiveAppGroup;
+        var name = VPNRouter.Core.Services.RoutingAppListEditor.NormalizeManualProcessName(
+            processName, OperatingSystem.IsWindows());
+        if (name == null) return;
 
-        // Fallback: if no group selected, use "Custom Apps"
+        // Preserve a user-created category, but never write manual entries
+        // into a built-in catalogue group whose contents are regenerated.
+        var selected = SelectedActiveAppGroup;
+        var target = selected != null &&
+                     (selected.IsCustomCategory || selected.Name == "Custom Apps")
+            ? selected
+            : ActiveAppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
         if (target == null)
         {
-            target = ActiveAppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
-            if (target == null)
-            {
-                target = new AppGroupViewModel("Custom Apps", "Your custom applications", !IsAppsListEditorExclude) { IsCustomGroup = true };
-                ActiveAppGroups.Add(target);
-            }
+            target = new AppGroupViewModel("Custom Apps", "Your custom applications", !IsAppsListEditorExclude) { IsCustomGroup = true };
+            ActiveAppGroups.Add(target);
         }
 
         var existing = target.Apps.FirstOrDefault(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -712,8 +674,9 @@ public partial class MainWindowViewModel
         if (!IsAppsListEditorExclude)
             AppsListEditorMode = "exclude";
 
+        var games = Services.SteamLibraryScanner.FindInstalledGames().ToList();
         var added = 0;
-        foreach (var game in Services.SteamLibraryScanner.FindInstalledGames())
+        foreach (var game in games)
         {
             if (AddCustomAppCandidate(game.ProcessName))
                 added++;
@@ -726,11 +689,13 @@ public partial class MainWindowViewModel
                 ? $"Steam: найдено {added} .exe"
                 : $"Steam: found {added} .exe files");
         }
+        else if (games.Count == 0)
+        {
+            ShowRulesToast(Strings.SteamGamesNotFound);
+        }
         else
         {
-            ShowRulesToast(IsRussian
-                ? "Steam-игры не найдены"
-                : "No Steam games found");
+            ShowRulesToast(Strings.NoNewSteamGamesFound);
         }
     }
 
@@ -959,11 +924,11 @@ public partial class MainWindowViewModel
 
         if (matches.Count == 0) return;
 
-        ScrubRoutingForApp(app);
         foreach (var match in matches)
         {
             match.Group.Apps.Remove(match.App);
         }
+        ScrubRoutingForProcess(app.ProcessName);
         SaveSettings();
     }
 

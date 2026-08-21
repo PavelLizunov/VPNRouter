@@ -152,6 +152,7 @@ public sealed class FakeProcessHandle : IProcessHandle
     /// for already-exited processes, so multiple-call observability here
     /// is behaviourally inert.</summary>
     public int KillCallCount { get; private set; }
+    public int DisposeCallCount { get; private set; }
 
     public event EventHandler<string>? OutputLine;
     public event EventHandler<string>? ErrorLine;
@@ -243,6 +244,7 @@ public sealed class FakeProcessHandle : IProcessHandle
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        DisposeCallCount++;
         // Mimic ProcessHandle: dispose implies kill if still running.
         if (!HasExited) SignalExit(exitCode: -1);
     }

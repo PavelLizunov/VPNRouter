@@ -198,9 +198,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             Assert.True(call.CaptureStdout);
             Assert.True(call.CaptureStderr);
 
-            // Let the probe finish before disposing the SUT.
-            handle.SignalExit(0);
+            // Let the manager's readiness watchdog succeed before cleanup.
             startTask.Wait(TimeSpan.FromSeconds(3), testCt);
+            handle.SignalExit(0);
         }
         finally
         {
@@ -238,8 +238,8 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             Assert.Equal("--verbose", call.Arguments[^1]);
             Assert.Equal(9, call.Arguments.Count); // 8 base + 1 verbose
 
-            handle.SignalExit(0);
             startTask.Wait(TimeSpan.FromSeconds(3), testCt);
+            handle.SignalExit(0);
         }
         finally { sut.Dispose(); }
     }
@@ -326,9 +326,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             // Final stats line — winner for LastStats.
             handle.EmitOutput("stats: total=30 active=7 ws=3");
 
-            // Let the probe complete + cleanup.
-            handle.SignalExit(0);
+            // Let the readiness probe complete before cleanup.
             startTask.Wait(TimeSpan.FromSeconds(5), testCt);
+            handle.SignalExit(0);
 
             Assert.Equal(3, statsCaptured.Count);
             Assert.Equal("stats: total=30 active=7 ws=3", sut.LastStats);
@@ -448,5 +448,69 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         Assert.DoesNotContain(realSecret, redacted);
         Assert.Contains("--secret REDACTED", redacted);
         Assert.Contains("--verbose", redacted);
+    }
+
+    [Fact]
+    public void Start_EarlyExit_ThrowsAndClearsRunningState()
+    {
+        if (!_seededFiles) return;
+        var fake = new FakeProcessRunner();
+        var handle = new FakeProcessHandle(pid: 99007);
+        fake.OnStart(_ => true, _ => handle);
+        using var sut = new TgProxyManager(logger: null, runner: fake);
+
+        var start = Task.Run(() => sut.Start(PickFreePort(), "secret-early-exit"));
+        while (fake.StartCalls.Count == 0) Thread.Sleep(10);
+        handle.SignalExit(1);
+
+        Assert.Throws<InvalidOperationException>(() => start.GetAwaiter().GetResult());
+        Assert.False(sut.IsRunning);
+        Assert.Null(sut.Pid);
+    }
+
+    [Fact]
+    public void RedactSensitiveOutput_RemovesPlainAndUrlSecrets()
+    {
+        const string secret = "0123456789abcdef0123456789abcdef";
+        var output = $"Secret: {secret} tg://proxy?server=127.0.0.1&secret=dd{secret}";
+
+        var redacted = TgProxyManager.RedactSensitiveOutput(output, secret);
+
+        Assert.DoesNotContain(secret, redacted);
+        Assert.Contains("REDACTED", redacted);
+    }
+
+    [Fact]
+    public void Start_AfterDispose_ThrowsBeforeSpawn()
+    {
+        if (!_seededFiles) return;
+        var fake = new FakeProcessRunner();
+        var sut = new TgProxyManager(logger: null, runner: fake);
+        sut.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => sut.Start(PickFreePort(), "secret"));
+        Assert.Empty(fake.StartCalls);
+    }
+
+    [Fact]
+    public void Start_AfterPreviousProcessExited_DisposesStaleHandleBeforeRespawn()
+    {
+        if (!_seededFiles) return;
+        var fake = new FakeProcessRunner();
+        var first = new FakeProcessHandle(pid: 99008);
+        var second = new FakeProcessHandle(pid: 99009);
+        var spawn = 0;
+        fake.OnStart(_ => true, _ => Interlocked.Increment(ref spawn) == 1 ? first : second);
+        using var sut = new TgProxyManager(logger: null, runner: fake);
+
+        sut.Start(PickFreePort(), "first-secret");
+        first.SignalExit(1);
+
+        sut.Start(PickFreePort(), "second-secret");
+
+        Assert.Equal(1, first.DisposeCallCount);
+        Assert.Equal(2, fake.StartCalls.Count);
+        Assert.Equal(99009, sut.Pid);
+        second.SignalExit(0);
     }
 }

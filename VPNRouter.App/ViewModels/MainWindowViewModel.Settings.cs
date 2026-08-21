@@ -160,8 +160,8 @@ public partial class MainWindowViewModel
             else
                 SaveSettings();
 
-            if (previousMtu != mtu && IsConnected)
-                HasPendingAppChanges = true;
+            if (previousMtu != mtu)
+                MarkRoutingSettingsChanged();
         }
         catch
         {
@@ -516,26 +516,11 @@ public partial class MainWindowViewModel
     {
         try
         {
-            if (OperatingSystem.IsWindows())
-            {
-                System.Diagnostics.Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"/select,\"{filePath}\"",
-                    UseShellExecute = true,
-                });
-            }
-            else
-            {
-                var dir = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(dir))
-                    System.Diagnostics.Process.Start(new ProcessStartInfo
-                    {
-                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
-                        Arguments = $"\"{dir}\"",
-                        UseShellExecute = false,
-                    });
-            }
+            if (!OperatingSystem.IsWindows() && string.IsNullOrEmpty(Path.GetDirectoryName(filePath)))
+                return;
+
+            var psi = VPNRouter.App.Services.FileManagerHelper.BuildRevealStartInfo(filePath);
+            System.Diagnostics.Process.Start(psi);
         }
         catch { /* best-effort reveal */ }
     }

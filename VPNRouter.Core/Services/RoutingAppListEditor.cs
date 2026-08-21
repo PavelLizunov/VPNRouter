@@ -22,6 +22,27 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class RoutingAppListEditor
 {
+    public static string? NormalizeManualProcessName(string? value, bool windows)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var name = value.Trim().Trim('"').Trim();
+        var lastSeparator = name.LastIndexOfAny(['\\', '/']);
+        if (lastSeparator >= 0)
+            name = lastSeparator < name.Length - 1 ? name[(lastSeparator + 1)..] : string.Empty;
+        if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['*', '?', '"']) >= 0)
+            return null;
+
+        if (windows)
+        {
+            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return name;
+            return Path.HasExtension(name) ? null : name + ".exe";
+        }
+
+        return name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? name[..^4]
+            : name;
+    }
+
     /// <summary>
     /// Add an executable's process-name to the split-tunnel include list.
     /// Idempotent and case-insensitive for dedup, but preserves the on-disk

@@ -87,7 +87,7 @@ Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](h
 - **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool.
 - **Server testing** — one-click TCP+TLS probe on any server. Deep verification (real HTTP round-trip + 5 MB bandwidth) for your own servers and subscription pools.
 - **Setup and diagnostics wizard (desktop)** — checks configuration, TUN, DNS and reachability, can reset MTU to the safe default `1420`, preserves the chosen routing mode, and offers undo plus redacted diagnostics export. Safe Mode remains a separate temporary start.
-- **Safe auto-update** — each release ships with a `.sha256` companion file; the in-app updater verifies hash before extracting, so a truncated download never installs silently.
+- **Safe rollback** — the desktop app shows up to three previous stable versions only when their `.sha256` companion is available, verifies the selected archive before installing, and asks for explicit confirmation. Before a downgrade it saves a copy of `config.yaml`.
 - **Status dashboard + Arctic dark theme + RU/EN UI** — live VPN / Zapret / TgProxy badges in the header, custom Avalonia theme, fully translated interface.
 
 ### Platform specifics
@@ -187,12 +187,12 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.0"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.3"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 10 SDK
-./build-mac.sh 2.49.0
+./build-mac.sh 2.49.3
 ```
 
 ```bash

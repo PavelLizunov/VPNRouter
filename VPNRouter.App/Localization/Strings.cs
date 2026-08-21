@@ -442,6 +442,17 @@ public static class Strings
     public static string UpdateApplying => global::VPNRouter.Core.Localization.Strings.UpdateApplying;
     public static string UpdateRestarting => global::VPNRouter.Core.Localization.Strings.UpdateRestarting;
     public static string UpdateFailed => global::VPNRouter.Core.Localization.Strings.UpdateFailed;
+    public static string OtherVersions => global::VPNRouter.Core.Localization.Strings.OtherVersions;
+    public static string HideOlderVersions => global::VPNRouter.Core.Localization.Strings.HideOlderVersions;
+    public static string LoadingVersions => global::VPNRouter.Core.Localization.Strings.LoadingVersions;
+    public static string NoOlderVersions => global::VPNRouter.Core.Localization.Strings.NoOlderVersions;
+    public static string VersionHistoryFailed => global::VPNRouter.Core.Localization.Strings.VersionHistoryFailed;
+    public static string InstalledVersion => global::VPNRouter.Core.Localization.Strings.InstalledVersion;
+    public static string RollbackAction => global::VPNRouter.Core.Localization.Strings.RollbackAction;
+    public static string RollbackSafetyHint => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHint;
+    public static string RollbackConfirmation => global::VPNRouter.Core.Localization.Strings.RollbackConfirmation;
+    public static string ConfirmRollback => global::VPNRouter.Core.Localization.Strings.ConfirmRollback;
+    public static string Cancel => global::VPNRouter.Core.Localization.Strings.Cancel;
 
     // ── Channel ──
     // v2.30.3-r1 (BUG-7 fix): footer text shortened so it fits next to
@@ -857,14 +868,25 @@ public static class Strings
     // Exclude = inverse: selected apps → direct, rest → VPN.
     // Follow-up: lift to Core once Android exposes the same toggle.
     public static string AppsModeSectionTitle => Ru
-        ? "Как применять списки"
-        : "How lists are applied";
+        ? "Как направлять приложения"
+        : "How to route applications";
     public static string AppsModeInclude => Ru
-        ? "Активен список «Через VPN»"
-        : "Use the Through VPN list";
+        ? "Только выбранные — через VPN"
+        : "Only selected apps use VPN";
     public static string AppsModeExclude => Ru
-        ? "Активен список «Мимо VPN»"
-        : "Use the Bypass VPN list";
+        ? "Все, кроме выбранных — через VPN"
+        : "All except selected apps use VPN";
+    public static string AppsSelectAll => Ru ? "Выбрать все" : "Select all";
+    public static string AppsClearAll => Ru ? "Очистить" : "Clear";
+    public static string SteamGamesNotFound => Ru
+        ? "Steam-игры не найдены"
+        : "No Steam games found";
+    public static string NoNewSteamGamesFound => Ru
+        ? "Новых Steam-игр не найдено"
+        : "No new Steam games found";
+    public static string AppsPendingApplyHint => Ru
+        ? "Изменения сохранены. Примените их к текущему подключению."
+        : "Changes are saved. Apply them to the current connection.";
     public static string AppsModeIncludeHint => Ru
         ? "Отмеченные приложения идут через VPN, остальные — напрямую (обычный split-tunnel)."
         : "Checked apps go through VPN; everything else stays direct (regular split-tunnel).";

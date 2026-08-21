@@ -250,6 +250,7 @@ public sealed class TgProxyAutostartLoggingTests
         Assert.Contains(lines, l => l.Contains("[TgProxy] IsInstalled:"));
         Assert.Contains(lines, l => l.Contains("PythonExe at"));
         Assert.Contains(lines, l => l.Contains("ProxySourceDir at"));
+        Assert.Contains(lines, l => l.Contains("certifi"));
         Assert.Contains(lines, l => l.Contains("overall = "));
 
         // Defensive secret-redaction scan — none of the rendered lines

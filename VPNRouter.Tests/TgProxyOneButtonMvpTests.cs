@@ -221,6 +221,18 @@ public sealed class TgProxyOneButtonMvpTests
     }
 
     [Fact]
+    public void SuccessfulTgProxyInstall_RefreshesUpdateButtonLabel()
+    {
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        if (src == null) return;
+
+        Assert.Matches(
+            @"\[NotifyPropertyChangedFor\(nameof\(LblUpdateTgProxy\)\)\]\s*private string _tgProxyVersionText",
+            src);
+        Assert.Contains("TgProxyVersionText = TgProxyUpdater.GetLocalVersion()", src);
+    }
+
+    [Fact]
     public void TgProxyManager_Start_HasPortPreflightProbe()
     {
         // Source-pin: ensure the IsPortAvailable probe is called from
@@ -248,7 +260,8 @@ public sealed class TgProxyOneButtonMvpTests
 
         Assert.Contains("manager.Start(port, secret);", src);
         Assert.DoesNotContain("Task.Run(() => manager.Start", src);
-        Assert.Contains("var manager = _tgProxy!;", src);
+        Assert.Contains("TgProxyManager manager;", src);
+        Assert.Contains("lock (_tgProxyStateGate)", src);
         Assert.Contains("_tgProxyPostStartRecheckTask = VerifyTgProxyAfterStartAsync(manager, port);", src);
         Assert.Contains("await postStartRecheck;", src);
         Assert.Contains("TgProxyManager.OpenInTelegram(\"127.0.0.1\", startedPort, startedSecret);", src);
@@ -271,6 +284,24 @@ public sealed class TgProxyOneButtonMvpTests
             recheck);
         Assert.Contains("TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;", recheck);
         Assert.Contains("try { SaveSettings(); }", recheck);
+    }
+
+    [Fact]
+    public void Update_StopsLiveProxyBeforeReplacingFiles_AndRestartsAfterSuccess()
+    {
+        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
+        if (src == null) return;
+
+        var start = src.IndexOf("private async Task UpdateTgProxyCoreAsync()", StringComparison.Ordinal);
+        var end = src.IndexOf("private async Task ToggleTgProxyAsync()", start, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start);
+        var method = src[start..end];
+        var stop = method.IndexOf("manager?.Stop();", StringComparison.Ordinal);
+        var download = method.IndexOf("await updater.DownloadAsync", StringComparison.Ordinal);
+        var restart = method.IndexOf("manager.Start(port, secret);", StringComparison.Ordinal);
+
+        Assert.True(stop >= 0 && stop < download, "Live TgProxy must stop before updater replaces files.");
+        Assert.True(restart > download, "TgProxy may restart only after updater completes successfully.");
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

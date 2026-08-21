@@ -158,4 +158,122 @@ public sealed class UpdateNotificationViewModelTests
         Assert.Equal(UpdateNotificationViewModel.UpdateCheckState.UpToDate, vm.CheckState);
         Assert.False(vm.IsVisible);
     }
+
+    [AvaloniaFact]
+    public async Task ToggleVersionHistoryCommand_StableResults_ShowsInstalledAndOlderRows()
+    {
+        var olderA = SampleInfo("2.49.2");
+        var olderB = SampleInfo("2.49.1");
+        var fake = new FakeUpdateSource
+        {
+            StableReleases = new[] { olderA, olderB },
+        };
+        var vm = new UpdateNotificationViewModel(DefaultSettings(), DefaultLogger(), fake);
+
+        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsVersionHistoryVisible);
+        Assert.Equal(1, fake.ListStableCallCount);
+        Assert.Equal(3, vm.StableVersions.Count);
+        Assert.True(vm.StableVersions[0].IsInstalled);
+        Assert.Equal("2.49.2", vm.StableVersions[1].Version);
+        Assert.False(vm.StableVersions[1].IsInstalled);
+    }
+
+    [AvaloniaFact]
+    public async Task VersionHistory_OlderSelection_RequiresExplicitConfirmation()
+    {
+        var older = SampleInfo("2.49.2");
+        var fake = new FakeUpdateSource { StableReleases = new[] { older } };
+        var vm = new UpdateNotificationViewModel(DefaultSettings(), DefaultLogger(), fake);
+        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+
+        vm.StableVersions[1].SelectCommand.Execute(null);
+
+        Assert.True(vm.IsRollbackConfirmationVisible);
+        Assert.Same(older, vm.SelectedRollback);
+        Assert.Contains("2.49.2", vm.RollbackConfirmationText);
+        Assert.Equal(0, fake.DownloadCallCount);
+        Assert.Equal(0, fake.ApplyCallCount);
+
+        vm.CancelRollbackCommand.Execute(null);
+        Assert.False(vm.IsRollbackConfirmationVisible);
+        Assert.Null(vm.SelectedRollback);
+    }
+
+    [AvaloniaFact]
+    public async Task ConfirmRollback_UsesSelectedReleaseForDownloadAndApply_ThenExits()
+    {
+        var older = SampleInfo("2.49.2");
+        var fake = new FakeUpdateSource { StableReleases = new[] { older } };
+        int? exitCode = null;
+        var vm = new UpdateNotificationViewModel(
+            DefaultSettings(), DefaultLogger(), fake, code => exitCode = code);
+        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+        vm.StableVersions[1].SelectCommand.Execute(null);
+
+        await vm.ConfirmRollbackCommand.ExecuteAsync(null);
+
+        Assert.Same(older, fake.LastDownloadInfo);
+        Assert.Same(older, fake.LastApplyInfo);
+        Assert.Equal(fake.DownloadReturnPath, fake.LastApplyStagedPath);
+        Assert.Equal(0, exitCode);
+    }
+
+    [AvaloniaFact]
+    public async Task ConfirmRollback_ConcurrentStartupCheck_DoesNotSwapApplyMetadata()
+    {
+        var older = SampleInfo("2.49.2");
+        var newer = SampleInfo("2.50.0");
+        var downloadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDownload = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fake = new FakeUpdateSource
+        {
+            StableReleases = new[] { older },
+            CheckResult = newer,
+            DownloadHandler = async _ =>
+            {
+                downloadStarted.SetResult();
+                await releaseDownload.Task;
+                return "staged-old";
+            },
+        };
+        var vm = new UpdateNotificationViewModel(
+            DefaultSettings(), DefaultLogger(), fake, _ => { });
+        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+        vm.StableVersions[1].SelectCommand.Execute(null);
+
+        var confirm = vm.ConfirmRollbackCommand.ExecuteAsync(null);
+        await downloadStarted.Task;
+        await vm.CheckOnStartupAsync();
+        releaseDownload.SetResult();
+        await confirm;
+
+        Assert.Same(older, fake.LastDownloadInfo);
+        Assert.Same(older, fake.LastApplyInfo);
+    }
+
+    [AvaloniaFact]
+    public async Task VersionHistory_OpenDuringLanguageSwitch_RecomputesMessage()
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            VPNRouter.App.Localization.Strings.Lang = "en";
+            var fake = new FakeUpdateSource { StableReleases = new[] { SampleInfo("2.49.2") } };
+            var vm = new UpdateNotificationViewModel(DefaultSettings(), DefaultLogger(), fake);
+            await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+            var english = vm.VersionHistoryMessage;
+
+            VPNRouter.App.Localization.Strings.Lang = "ru";
+            vm.NotifyLangChanged();
+
+            Assert.NotEqual(english, vm.VersionHistoryMessage);
+            Assert.Equal(VPNRouter.App.Localization.Strings.RollbackSafetyHint, vm.VersionHistoryMessage);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
+    }
 }

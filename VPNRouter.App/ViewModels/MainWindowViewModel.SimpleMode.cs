@@ -689,7 +689,7 @@ public partial class MainWindowViewModel
             _settings.ActiveProfile = SimpleSplitProfile;
         SaveSettings();
 
-        HasPendingAppChanges = IsConnected;
+        MarkRoutingSettingsChanged();
 
         if (IsSimpleMode && IsConnected && !IsConnecting)
         {

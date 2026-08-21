@@ -315,8 +315,8 @@ public sealed class AutostartContractTests
 
     /// <summary>
     /// Behavioural: <see cref="TgProxyUpdater.IsInstalledAt"/> returns
-    /// <c>true</c> only when both python.exe (file) AND proxy/
-    /// (directory) are present. Positive case.
+    /// <c>true</c> only when python.exe, proxy/ and the supported runtime
+    /// dependency marker are present. Positive case.
     /// </summary>
     [Fact]
     public void IsInstalled_TrueWhenBothPresent()
@@ -326,11 +326,26 @@ public sealed class AutostartContractTests
         var pythonDir = Path.Combine(sandbox.Root, "python");
         Directory.CreateDirectory(pythonDir);
         File.WriteAllText(Path.Combine(pythonDir, "python.exe"), "stub");
+        var certifiDir = Path.Combine(pythonDir, "Lib", "certifi");
+        Directory.CreateDirectory(certifiDir);
+        File.WriteAllText(Path.Combine(certifiDir, "__init__.py"), "stub");
         Directory.CreateDirectory(Path.Combine(sandbox.Root, "proxy"));
 
         Assert.True(
             TgProxyUpdater.IsInstalledAt(sandbox.Root),
             "IsInstalled should be true when both python.exe and proxy/ are present.");
+    }
+
+    [Fact]
+    public void IsInstalled_FalseWhenCertifiMissing()
+    {
+        using var sandbox = new TempSandbox();
+        var pythonDir = Path.Combine(sandbox.Root, "python");
+        Directory.CreateDirectory(pythonDir);
+        File.WriteAllText(Path.Combine(pythonDir, "python.exe"), "stub");
+        Directory.CreateDirectory(Path.Combine(sandbox.Root, "proxy"));
+
+        Assert.False(TgProxyUpdater.IsInstalledAt(sandbox.Root));
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────

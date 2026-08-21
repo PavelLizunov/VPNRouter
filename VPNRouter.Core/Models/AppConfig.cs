@@ -72,6 +72,11 @@ public class AppConfig
     [YamlMember(Alias = "routing_apps_include")]
     public List<string> RoutingAppsInclude { get; set; } = new();
 
+    /// <summary>Distinguishes a deliberate empty Include list from an old
+    /// installation that has not yet been migrated from profile routing.</summary>
+    [YamlMember(Alias = "routing_apps_include_initialized")]
+    public bool RoutingAppsIncludeInitialized { get; set; }
+
     /// <summary>
     /// v2.32.x (AM-1): apps kept on the direct route (NOT routed via
     /// VPN) when <see cref="RoutingAppsMode"/> is "exclude". Same

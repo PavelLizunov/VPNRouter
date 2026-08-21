@@ -27,7 +27,9 @@ public class TgProxyManager : IDisposable
     private IProcessHandle? _handle;
     private readonly StringBuilder _capturedStderr = new();
     private readonly object _stderrGate = new();
+    private readonly object _lifecycleGate = new();
     private bool _disposed;
+    private string _activeSecret = string.Empty;
 
     /// <summary>Test-only seam: swap in a fake for the long-lived
     /// python.exe spawn. Production paths use the default
@@ -36,8 +38,29 @@ public class TgProxyManager : IDisposable
     /// (or use the per-instance ctor injection below).</summary>
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
-    public bool IsRunning => _handle != null && !_handle.HasExited;
-    public int? Pid => IsRunning ? _handle?.Pid : null;
+    public bool IsRunning
+    {
+        get
+        {
+            lock (_lifecycleGate)
+            {
+                var handle = _handle;
+                return handle != null && !handle.HasExited;
+            }
+        }
+    }
+
+    public int? Pid
+    {
+        get
+        {
+            lock (_lifecycleGate)
+            {
+                var handle = _handle;
+                return handle != null && !handle.HasExited ? handle.Pid : null;
+            }
+        }
+    }
 
     /// <summary>Last parsed stats line from stdout.</summary>
     public string? LastStats { get; private set; }
@@ -56,9 +79,13 @@ public class TgProxyManager : IDisposable
     /// </summary>
     public void Start(int port, string secret, bool verbose = false)
     {
-        if (IsRunning)
+        lock (_lifecycleGate)
         {
-            _logger.Warning("[TgProxy] Already running (PID {Pid}), stopping first", Pid);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_handle != null)
+        {
+            if (!_handle.HasExited)
+                _logger.Warning("[TgProxy] Already running (PID {Pid}), stopping first", _handle.Pid);
             Stop();
         }
 
@@ -121,6 +148,7 @@ public class TgProxyManager : IDisposable
         // failure pulls from this ring buffer instead of StandardError.ReadToEnd
         // (which is unreachable via IProcessHandle).
         lock (_stderrGate) _capturedStderr.Clear();
+        _activeSecret = secret;
 
         try
         {
@@ -161,16 +189,11 @@ public class TgProxyManager : IDisposable
         // the trail. WaitForExitAsync returns naturally when the process is
         // gone; the linked 2s CTS fires OperationCanceledException if it
         // doesn't — same semantics as the legacy `WaitForExit(2000)` bool.
+        using var probeCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(2000));
         try
         {
-            using var probeCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(2000));
-            try
-            {
-                // .GetAwaiter().GetResult() preserves the legacy sync Start
-                // signature so callers don't need refactoring. The async
-                // WaitForExitAsync is the natural shape for the new seam.
-                var exitCode = startedHandle.WaitForExitAsync(probeCts.Token)
-                    .GetAwaiter().GetResult();
+            var exitCode = startedHandle.WaitForExitAsync(probeCts.Token)
+                .GetAwaiter().GetResult();
 
                 _logger.Error(
                     "[TgProxy] Process exited within 2s of spawn (PID {Pid}, ExitCode {ExitCode}) — likely startup failure",
@@ -184,25 +207,25 @@ public class TgProxyManager : IDisposable
                 string stderrTail;
                 lock (_stderrGate) stderrTail = _capturedStderr.ToString();
 
-                if (!string.IsNullOrWhiteSpace(stderrTail))
-                {
-                    _logger.Error(
-                        "[TgProxy] StandardError tail (PID {Pid}): {Stderr}",
-                        startedHandle.Pid, stderrTail.Trim());
-                }
-            }
-            catch (OperationCanceledException)
+            if (!string.IsNullOrWhiteSpace(stderrTail))
             {
-                // 2s elapsed without natural exit — process still alive.
-                // Same path as legacy `WaitForExit(2000) == false`.
-                _logger.Information(
-                    "[TgProxy] Process still alive after 2s probe (PID {Pid})",
-                    startedHandle.Pid);
+                _logger.Error(
+                    "[TgProxy] StandardError tail (PID {Pid}): {Stderr}",
+                    startedHandle.Pid, stderrTail.Trim());
             }
+
+            startedHandle.Dispose();
+            _handle = null;
+            _activeSecret = string.Empty;
+            throw new InvalidOperationException(
+                $"tg-ws-proxy exited immediately (exit code {exitCode}). Use Update TgProxy to repair it.");
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
         {
-            _logger.Debug(ex, "[TgProxy] Post-spawn WaitForExit probe raised");
+            _logger.Information(
+                "[TgProxy] Process still alive after 2s probe (PID {Pid})",
+                startedHandle.Pid);
+        }
         }
     }
 
@@ -254,7 +277,7 @@ public class TgProxyManager : IDisposable
         {
             if (_capturedStderr.Length < MaxStderrBuffer)
             {
-                _capturedStderr.AppendLine(line);
+                _capturedStderr.AppendLine(RedactSensitiveOutput(line, _activeSecret));
             }
         }
 
@@ -267,6 +290,16 @@ public class TgProxyManager : IDisposable
             LastStats = line;
             StatsUpdated?.Invoke(line);
         }
+    }
+
+    internal static string RedactSensitiveOutput(string text, string? secret)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var redacted = string.IsNullOrEmpty(secret)
+            ? text
+            : text.Replace(secret, "REDACTED", StringComparison.Ordinal);
+        return System.Text.RegularExpressions.Regex.Replace(
+            redacted, @"(?i)(secret(?:=|:\s*))[^\s&]+", "$1REDACTED");
     }
 
     /// <summary>
@@ -441,10 +474,13 @@ public class TgProxyManager : IDisposable
 
     public void Stop()
     {
+        lock (_lifecycleGate)
+        {
         if (_handle == null || _handle.HasExited)
         {
             _handle?.Dispose();
             _handle = null;
+            _activeSecret = string.Empty;
             return;
         }
 
@@ -485,7 +521,9 @@ public class TgProxyManager : IDisposable
         {
             try { handle.Dispose(); } catch { /* defensive */ }
             _handle = null;
+            _activeSecret = string.Empty;
             _logger.Information("[TgProxy] Stopped");
+        }
         }
     }
 
@@ -657,8 +695,11 @@ public class TgProxyManager : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        Stop();
+        lock (_lifecycleGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Stop();
+        }
     }
 }

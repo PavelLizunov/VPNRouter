@@ -117,8 +117,11 @@ public partial class MainWindowViewModel
     /// </summary>
     private async Task TryAutostartTgProxyAsync()
     {
+        if (_disposed) return;
+        if (!await _tgProxyTransitionGate.WaitAsync(0).ConfigureAwait(false)) return;
         try
         {
+            if (_disposed) return;
             if (!AutostartTgProxy)
             {
                 _logger.Debug("[App-Autostart] TgProxy: AutostartTgProxy=false, skipping");
@@ -138,7 +141,10 @@ public partial class MainWindowViewModel
                 _logger.Information(
                     "[App-Autostart] TgProxy: already running on port {Port}, " +
                     "skipping spawn (idempotent)", TgProxyPort);
-                await Dispatcher.UIThread.InvokeAsync(() => TgProxyEnabled = true);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (!_disposed) TgProxyEnabled = true;
+                });
                 return;
             }
 
@@ -150,9 +156,11 @@ public partial class MainWindowViewModel
                     System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
+                    if (_disposed) return;
                     TgProxySecret = generatedSecret;
                     SaveSettings();
                 });
+                if (_disposed) return;
                 _logger.Information(
                     "[App-Autostart] TgProxy: generated new secret " +
                     "(was empty in config.yaml)");
@@ -161,30 +169,52 @@ public partial class MainWindowViewModel
             _logger.Information(
                 "[App-Autostart] TgProxy: starting on port {Port}", TgProxyPort);
 
-            _tgProxy ??= new TgProxyManager(_logger);
-            _tgProxy.StatsUpdated += stats =>
-                Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
-            _tgProxy.Start(TgProxyPort, TgProxySecret);
+            TgProxyManager manager;
+            lock (_tgProxyStateGate)
+            {
+                if (_disposed) return;
+                if (_tgProxy == null)
+                {
+                    _tgProxy = new TgProxyManager(_logger);
+                    _tgProxy.StatsUpdated += OnTgProxyStats;
+                }
+                manager = _tgProxy;
+            }
+            manager.Start(TgProxyPort, TgProxySecret);
+
+            if (_disposed || !ReferenceEquals(_tgProxy, manager))
+            {
+                manager.Stop();
+                return;
+            }
 
             // v2.37.0-r8 — extracted to named constant. Same 2s settle
             // window as the manual Toggle path (sibling
             // `MainWindowViewModel.cs` `TgProxySettleDelayMs` const).
             // Proxy needs ~1.5s to bind the port and serve requests.
-            await Task.Delay(BootstrapSettleDelayMs).ConfigureAwait(false);
+            await Task.Delay(BootstrapSettleDelayMs, _tgProxyLifetimeCts.Token)
+                .ConfigureAwait(false);
+
+            if (_disposed || !ReferenceEquals(_tgProxy, manager))
+            {
+                manager.Stop();
+                return;
+            }
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
+                if (_disposed || !ReferenceEquals(_tgProxy, manager)) return;
+                if (manager.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
                 {
                     TgProxyEnabled = true;
                     TgProxyLink = TgProxyManager.BuildProxyLink(
                         "127.0.0.1", TgProxyPort, TgProxySecret);
                     TgProxyStatus = IsRussian
-                        ? $"Работает (PID {_tgProxy.Pid})"
-                        : $"Running (PID {_tgProxy.Pid})";
+                        ? $"Работает (PID {manager.Pid})"
+                        : $"Running (PID {manager.Pid})";
                     _logger.Information(
                         "[App-Autostart] TgProxy: started successfully (PID {Pid})",
-                        _tgProxy.Pid);
+                        manager.Pid);
                 }
                 else
                 {
@@ -199,9 +229,17 @@ public partial class MainWindowViewModel
                 }
             });
         }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            _logger.Debug("[App-Autostart] TgProxy bootstrap cancelled during shutdown");
+        }
         catch (Exception ex)
         {
             _logger.Error(ex, "[App-Autostart] TgProxy bootstrap failed");
+        }
+        finally
+        {
+            _tgProxyTransitionGate.Release();
         }
     }
 
