@@ -23,15 +23,15 @@ jobs:
     steps:
       # Actions pinned to full commit SHAs; Dependabot (github-actions) bumps them.
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2  # v5.3.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3  # v3
         with:
           languages: csharp
 
@@ -44,6 +44,6 @@ jobs:
           dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357  # v3
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3  # v3
         with:
           category: "/language:csharp"

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Http;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Core.Services;
@@ -164,8 +165,58 @@ public class UpdateChecker : IDesktopInstaller
         ArgumentNullException.ThrowIfNull(info);
         if (string.IsNullOrWhiteSpace(stagedPath))
             throw new ArgumentException("Staged path must be non-empty.", nameof(stagedPath));
-        ApplyUpdate(stagedPath);
+        var isDowngrade = IsVersionDowngrade(_currentVersion, info.Version);
+        if (isDowngrade)
+        {
+            var backup = BackupConfigForDowngrade(info.Version);
+            DeleteInstallReceiptForDowngrade();
+            StatusChanged?.Invoke(backup == null
+                ? Strings.DowngradeNoConfigBackup
+                : string.Format(Strings.DowngradeConfigBackupCreated, backup));
+        }
+        ApplyUpdate(
+            stagedPath,
+            writeInstallReceipt: ShouldWriteInstallReceipt(_currentVersion, info.Version));
         return Task.FromResult(true);
+    }
+
+    internal static bool IsVersionDowngrade(string currentVersion, string targetVersion) =>
+        TryParseSemVer(currentVersion, out var current) &&
+        TryParseSemVer(targetVersion, out var target) &&
+        target.CompareTo(current) < 0;
+
+    internal static bool ShouldWriteInstallReceipt(string currentVersion, string targetVersion) =>
+        !IsVersionDowngrade(currentVersion, targetVersion);
+
+    internal static void DeleteInstallReceiptForDowngrade(string? dataDir = null)
+    {
+        var receiptPath = Path.Combine(dataDir ?? AppPaths.DataDir, ".update-installed-version");
+        if (!File.Exists(receiptPath))
+            return;
+        File.Delete(receiptPath);
+        if (File.Exists(receiptPath))
+            throw new IOException(Strings.DowngradeReceiptCleanupFailed);
+    }
+
+    internal static string? BackupConfigForDowngrade(
+        string targetVersion,
+        string? configPath = null)
+    {
+        if (!TryParseSemVer(targetVersion, out _))
+            throw new InvalidOperationException(Strings.DowngradeInvalidVersion);
+
+        configPath ??= AppPaths.ConfigYamlPath;
+        if (!File.Exists(configPath))
+            return null;
+
+        var backupPath =
+            $"{configPath}.before-downgrade-to-{targetVersion}-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}";
+        using var source = new FileStream(
+            configPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var destination = AppPaths.CreatePrivateFile(backupPath);
+        source.CopyTo(destination);
+        destination.Flush(flushToDisk: true);
+        return backupPath;
     }
 
     public async Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default)
@@ -402,19 +453,22 @@ public class UpdateChecker : IDesktopInstaller
     ///            message because replacing a FUSE-mounted AppImage while it
     ///            runs is a separate (and risky) flow.
     /// </summary>
-    public void ApplyUpdate(string extractedDir)
+    public void ApplyUpdate(string extractedDir) =>
+        ApplyUpdate(extractedDir, writeInstallReceipt: true);
+
+    private void ApplyUpdate(string extractedDir, bool writeInstallReceipt)
     {
         if (OperatingSystem.IsMacOS())
             ApplyUpdateMac(extractedDir);
         else if (OperatingSystem.IsLinux())
-            ApplyUpdateLinux(extractedDir);
+            ApplyUpdateLinux(extractedDir, writeInstallReceipt);
         else
-            ApplyUpdateWindows(extractedDir);
+            ApplyUpdateWindows(extractedDir, writeInstallReceipt);
     }
 
     // ─── Windows ─────────────────────────────────────────────────────────────
 
-    private void ApplyUpdateWindows(string extractedDir)
+    private void ApplyUpdateWindows(string extractedDir, bool writeInstallReceipt)
     {
         // v2.29.0-r7: changed from static → instance so we can call
         // TryWriteInstallReceipt (which uses _currentVersion). The Mac
@@ -492,7 +546,8 @@ public class UpdateChecker : IDesktopInstaller
         // pre-update version → surface "Last update didn't take effect"
         // warning to the user. Catches partial updates that the cmd
         // helper xcopy can't recover from.
-        TryWriteInstallReceipt();
+        if (writeInstallReceipt)
+            TryWriteInstallReceipt();
 
         // v2.31.10-r2 Task E LAYER 8: pre-update snapshot for local
         // rollback. Copies the current `app/` to a sibling `app.bak/`
@@ -894,7 +949,7 @@ public class UpdateChecker : IDesktopInstaller
     /// do <c>Environment.Exit(0)</c>.
     /// </para>
     /// </summary>
-    private void ApplyUpdateLinux(string extractedDir)
+    private void ApplyUpdateLinux(string extractedDir, bool writeInstallReceipt)
     {
         // v2.22.0-r1: top-to-bottom overhaul — everything gets written to
         // ~/.config/vpnrouter/logs/update.log with exit codes + stderr,
@@ -996,7 +1051,8 @@ public class UpdateChecker : IDesktopInstaller
         // ReadInstallReceipt() returns a version newer than AppVersion,
         // we know the update tried but the new binary didn't come up, and
         // we can surface that in the UI / app log.
-        TryWriteInstallReceipt(logPath, Log);
+        if (writeInstallReceipt)
+            TryWriteInstallReceipt(logPath, Log);
 
         // v2.29.0-r5: switched from in-process `setsid --fork` to a
         // detached shell helper. User report 2026-04-29: «приложение на

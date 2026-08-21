@@ -31,6 +31,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -80,6 +81,16 @@ public interface IUpdateSource
     /// silently retry on the next poll interval. Configuration errors
     /// (e.g. missing repo) ARE allowed to throw.</returns>
     Task<UpdateSourceInfo?> CheckAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Return a bounded list of recent stable releases older than the running
+    /// version. Sources that cannot safely install older builds return an empty
+    /// list. Every returned item must carry a verified SHA-256 digest.
+    /// </summary>
+    Task<IReadOnlyList<UpdateSourceInfo>> ListStableAsync(
+        int maxCount,
+        CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<UpdateSourceInfo>>(Array.Empty<UpdateSourceInfo>());
 
     /// <summary>
     /// Stream the asset described in <paramref name="info"/> into a

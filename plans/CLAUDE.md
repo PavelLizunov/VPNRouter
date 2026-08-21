@@ -42,7 +42,7 @@ release-notes-vX.Y.Z[-rN].md             ← черновик release notes (.gi
 
 ## Активные планы (на 2026-08-14)
 
-Stable v2.49.2; in-flight prerelease-кандидатов нет. Точный список
+Stable v2.49.3; in-flight prerelease-кандидатов нет. Точный список
 подтверждённых блокеров хранится в
 `OPEN-DEFECTS.md`; stable cut запрещён при любом OPEN P0/P1.
 
