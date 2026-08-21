@@ -84,6 +84,9 @@ public static class DiagnosticsExporter
             AddRedactedFile(staging, AppPaths.ConfigYamlPath, "config.redacted.yaml",
                 DiagnosticsRedactor.RedactConfigYaml, entries, warnings);
 
+            // Backup config files (unloadable or invalid)
+            AddConfigBackups(staging, entries, warnings);
+
             // current.json — what sing-box actually loaded (redacted)
             AddRedactedFile(staging, AppPaths.CurrentConfigPath, "current.redacted.json",
                 DiagnosticsRedactor.RedactSingboxJson, entries, warnings);
@@ -434,6 +437,35 @@ public static class DiagnosticsExporter
     {
         File.WriteAllText(Path.Combine(staging, name), content);
         entries.Add(name);
+    }
+
+    private static void AddConfigBackups(string staging, List<string> entries, List<string> warnings)
+    {
+        try
+        {
+            if (!Directory.Exists(AppPaths.DataDir)) return;
+            var backups = Directory.GetFiles(AppPaths.DataDir, "config.yaml.*")
+                .Where(f => Path.GetFileName(f).StartsWith("config.yaml.unloadable-", StringComparison.OrdinalIgnoreCase) ||
+                            Path.GetFileName(f).StartsWith("config.yaml.invalid-", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .Take(5) // SettingsLoader does not prune backups; keep diagnostics bundles bounded.
+                .ToList();
+
+            foreach (var backup in backups)
+            {
+                var fileName = Path.GetFileName(backup);
+                var outName = fileName.Replace("config.yaml.", "config.");
+                if (!outName.EndsWith(".redacted.yaml", StringComparison.OrdinalIgnoreCase))
+                {
+                    outName += ".redacted.yaml";
+                }
+                AddRedactedFile(staging, backup, outName, DiagnosticsRedactor.RedactConfigYaml, entries, warnings);
+            }
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"failed to search config backups ({ex.GetType().Name}) — skipped");
+        }
     }
 
     private static void AddRedactedFile(string staging, string sourcePath, string outName,
