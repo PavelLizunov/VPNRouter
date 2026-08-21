@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
+using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
@@ -153,6 +154,44 @@ public class PageScreenshotTests
         using var vm = GetVm();
         vm.SelectedSettingsIndex = 0; // Routing
         ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-routing-narrow", width: 720, height: 800);
+    }
+
+    [AvaloniaFact]
+    public void NetworkPage_UpdatesRollbackConfirmation_Narrow400_Russian()
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            using var vm = GetVm();
+            vm.SetLanguageRussianCommand.Execute(null);
+            vm.SelectedSettingsIndex = 4; // Updates
+            vm.UpdateVm.IsVersionHistoryVisible = true;
+            vm.UpdateVm.StableVersions.Add(new RollbackReleaseItemViewModel(
+                "2.49.3", isInstalled: true, info: null, onSelect: null));
+            var older = new UpdateSourceInfo(
+                Version: "2.49.2",
+                ReleaseUrl: string.Empty,
+                AssetName: "VPNRouter-v2.49.2-win.zip",
+                DownloadUrl: "https://example.invalid/VPNRouter-v2.49.2-win.zip",
+                AssetSize: 1,
+                AssetSha256: new string('a', 64),
+                IsPrerelease: false,
+                ReleaseNotes: string.Empty);
+            var olderItem = new RollbackReleaseItemViewModel(
+                older.Version, isInstalled: false, older, _ => { });
+            vm.UpdateVm.StableVersions.Add(olderItem);
+            vm.UpdateVm.SelectedRollback = older;
+            vm.UpdateVm.IsRollbackConfirmationVisible = true;
+
+            ScreenshotHelper.CapturePage(
+                new NetworkPage { DataContext = vm },
+                "page-network-updates-rollback-narrow400-ru",
+                width: 400, height: 900);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
     }
 
     /// <summary>Extra-narrow 500px variant — pushes past the point where

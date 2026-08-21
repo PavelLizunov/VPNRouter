@@ -92,30 +92,8 @@ public sealed class GitHubReleaseSource : IUpdateSource
         if (!UpdateChecker.TryParseSemVer(_currentVersion, out var current))
             return null;
 
-        var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
-        var listResponse = await _http.SendAsync(
-            new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(url)),
-            ct).ConfigureAwait(false);
-        if (!listResponse.IsSuccess())
-            return null;
+        var releases = await FetchReleasesAsync(ct).ConfigureAwait(false);
 
-        // Phase 4 (2026-05-18) — explicit DTOs replace Newtonsoft's
-        // DeserializeAnonymousType. snake_case wire keys pinned via
-        // [JsonPropertyName] match the GitHub Releases API contract
-        // (tag_name / browser_download_url / etc.) exactly — round-trip
-        // tests in Phase3StjJsonRoundTripTests.GitHubRelease_* pin this.
-        // PropertyNameCaseInsensitive=true on GitHubReleaseJsonOptions
-        // tolerates any GitHub variant casing without breaking parse.
-        GitHubRelease[]? releases;
-        try
-        {
-            releases = JsonSerializer.Deserialize(
-                listResponse.AsString(), VPNRouter.Core.Json.AppJsonContext.Default.GitHubReleaseArray);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
         if (releases == null || releases.Length == 0)
             return null;
 
@@ -135,29 +113,14 @@ public sealed class GitHubReleaseSource : IUpdateSource
             return null;
 
         var latest = newer[0];
-        var asset = FindFullAsset(latest.Release.Assets);
+        var asset = FindFullAsset(latest.Release.Assets, latest.Tag);
         if (asset == null)
             return null;
 
         // Companion .sha256 fetch — best-effort. Asset name is
         // "{asset}.sha256" by build.ps1 convention.
-        string? sha = null;
-        var shaAsset = FindChecksumAsset(latest.Release.Assets, asset);
-        if (shaAsset != null)
-        {
-            var shaResp = await _http.SendAsync(
-                new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(shaAsset.BrowserDownloadUrl)),
-                ct).ConfigureAwait(false);
-            if (shaResp.IsSuccess())
-            {
-                var raw = shaResp.AsString().Trim().ToLowerInvariant();
-                // ".sha256" file format: either "HASH" or "HASH  filename"
-                if (raw.Contains(' '))
-                    raw = raw.Split(' ', 2)[0].Trim();
-                if (raw.Length == 64)
-                    sha = raw;
-            }
-        }
+        var sha = await FetchChecksumAsync(latest.Release.Assets, asset, ct)
+            .ConfigureAwait(false);
 
         var notes = newer
             .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
@@ -172,6 +135,62 @@ public sealed class GitHubReleaseSource : IUpdateSource
             AssetSha256: sha,
             IsPrerelease: latest.Release.Prerelease,
             ReleaseNotes: string.Join("\n\n", notes));
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<UpdateSourceInfo>> ListStableAsync(
+        int maxCount,
+        CancellationToken ct = default)
+    {
+        if (maxCount <= 0 || string.IsNullOrWhiteSpace(_settings.GitHubRepo) ||
+            !UpdateChecker.TryParseSemVer(_currentVersion, out var current))
+            return Array.Empty<UpdateSourceInfo>();
+
+        var releases = await FetchReleasesAsync(ct).ConfigureAwait(false);
+        if (releases == null)
+            return Array.Empty<UpdateSourceInfo>();
+
+        var candidates = releases
+            .Where(r => !r.Draft && !r.Prerelease)
+            .Select(r => new
+            {
+                Release = r,
+                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
+                Parsed = UpdateChecker.TryParseSemVer(
+                    (r.TagName ?? string.Empty).TrimStart('v'), out var parsed)
+                    ? parsed
+                    : (UpdateChecker.SemVer?)null,
+            })
+            .Where(r => r.Parsed is { Rc: null } && r.Parsed.Value.CompareTo(current) < 0)
+            .OrderByDescending(r => r.Parsed!.Value);
+
+        var result = new List<UpdateSourceInfo>(Math.Min(maxCount, 8));
+        foreach (var candidate in candidates)
+        {
+            var asset = FindFullAsset(candidate.Release.Assets, candidate.Tag);
+            if (asset == null)
+                continue;
+
+            var sha = await FetchChecksumAsync(candidate.Release.Assets, asset, ct)
+                .ConfigureAwait(false);
+            if (!IsValidSha256(sha))
+                continue;
+
+            result.Add(new UpdateSourceInfo(
+                Version: candidate.Tag,
+                ReleaseUrl: candidate.Release.HtmlUrl ?? string.Empty,
+                AssetName: asset.Name,
+                DownloadUrl: asset.BrowserDownloadUrl,
+                AssetSize: asset.Size,
+                AssetSha256: sha,
+                IsPrerelease: false,
+                ReleaseNotes: candidate.Release.Body?.Trim() ?? string.Empty));
+
+            if (result.Count == maxCount)
+                break;
+        }
+
+        return result;
     }
 
     /// <inheritdoc />
@@ -196,6 +215,50 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return _installer.ApplyStagedAsync(info, stagedPath, ct);
     }
 
+    private async Task<GitHubRelease[]?> FetchReleasesAsync(CancellationToken ct)
+    {
+        var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
+        var response = await _http.SendAsync(
+            new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(url)), ct)
+            .ConfigureAwait(false);
+        if (!response.IsSuccess())
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize(
+                response.AsString(), AppJsonContext.Default.GitHubReleaseArray);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<string?> FetchChecksumAsync(
+        GitHubAsset[]? assets,
+        GitHubAsset asset,
+        CancellationToken ct)
+    {
+        var shaAsset = FindChecksumAsset(assets, asset);
+        if (shaAsset == null)
+            return null;
+
+        var response = await _http.SendAsync(
+            new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(shaAsset.BrowserDownloadUrl)),
+            ct).ConfigureAwait(false);
+        if (!response.IsSuccess())
+            return null;
+
+        var raw = response.AsString().Trim().ToLowerInvariant();
+        if (raw.Contains(' '))
+            raw = raw.Split(' ', 2)[0].Trim();
+        return IsValidSha256(raw) ? raw : null;
+    }
+
+    private static bool IsValidSha256(string? value) =>
+        value is { Length: 64 } && value.All(Uri.IsHexDigit);
+
     // ─── Asset matching ──────────────────────────────────────────────────
 
     /// <summary>
@@ -203,29 +266,21 @@ public sealed class GitHubReleaseSource : IUpdateSource
     /// Mirrors <see cref="UpdateChecker"/>'s legacy private
     /// <c>FindFullAsset</c> — single source of truth lives here now.
     /// </summary>
-    private static GitHubAsset? FindFullAsset(GitHubAsset[]? assets)
+    private static GitHubAsset? FindFullAsset(GitHubAsset[]? assets, string expectedVersion)
     {
         if (assets == null) return null;
 
-        // New naming: VPNRouter-v*-{platform}{ext} (not containing "update")
+        var expectedName = $"VPNRouter-v{expectedVersion}{PlatformSuffix}{AssetExtension}";
         var newFormat = assets.FirstOrDefault(a =>
-        {
-            var name = a.Name ?? string.Empty;
-            return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith($"{PlatformSuffix}{AssetExtension}", StringComparison.OrdinalIgnoreCase) &&
-                   !name.Contains("update", StringComparison.OrdinalIgnoreCase);
-        });
+            string.Equals(a.Name, expectedName, StringComparison.OrdinalIgnoreCase));
         if (newFormat != null) return newFormat;
 
         // Legacy (Windows only): VPNRouter-install-v*.zip
         if (OperatingSystem.IsWindows())
         {
+            var legacyName = $"VPNRouter-install-v{expectedVersion}.zip";
             return assets.FirstOrDefault(a =>
-            {
-                var name = a.Name ?? string.Empty;
-                return name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
-                       name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
-            });
+                string.Equals(a.Name, legacyName, StringComparison.OrdinalIgnoreCase));
         }
         return null;
     }
