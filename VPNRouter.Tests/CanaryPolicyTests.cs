@@ -19,6 +19,7 @@ public class CanaryPolicyTests
     [InlineData("https://www.youtube.com/generate_204?foo=bar", "https://www.youtube.com")]
     [InlineData("https://www.gstatic.com/generate_204", "https://www.gstatic.com")]
     [InlineData("http://example.org/a/b/c#frag", "http://example.org")]
+    [InlineData("https://user:password@www.youtube.com/generate_204?foo=bar", "https://www.youtube.com")]
     public void RedactUrl_StripsPathAndQuery(string url, string expected)
         => Assert.Equal(expected, CanaryPolicy.RedactUrl(url));
 
@@ -28,6 +29,10 @@ public class CanaryPolicyTests
     [Fact]
     public void RedactUrl_Malformed_DoesNotThrow_AndDropsPath()
         => Assert.Equal("not a url", CanaryPolicy.RedactUrl("not a url/secret?token=abc"));
+
+    [Fact]
+    public void RedactUrl_MalformedWithCredentials_StripsUserInfo()
+        => Assert.Equal("https://invalid_host:port_bad", CanaryPolicy.RedactUrl("https://user:secretpassword@invalid_host:port_bad/secret_path?token=123"));
 
     // ── Staleness ───────────────────────────────────────────────────────────
 
