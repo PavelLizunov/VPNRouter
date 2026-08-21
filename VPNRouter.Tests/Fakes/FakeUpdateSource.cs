@@ -15,6 +15,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,6 +67,11 @@ public sealed class FakeUpdateSource : IUpdateSource
     /// no throw.</summary>
     public Exception? CheckException { get; init; }
 
+    public IReadOnlyList<UpdateSourceInfo> StableReleases { get; init; } =
+        Array.Empty<UpdateSourceInfo>();
+
+    public Exception? ListStableException { get; init; }
+
     /// <summary>String returned from <see cref="DownloadAsync"/>. Set to
     /// the staged-payload path the SUT expects.</summary>
     public string DownloadReturnPath { get; init; } = Path.Combine(Path.GetTempPath(), "fake-update-staging");
@@ -73,6 +79,8 @@ public sealed class FakeUpdateSource : IUpdateSource
     /// <summary>Override to throw from <see cref="DownloadAsync"/>; null
     /// = no throw.</summary>
     public Exception? DownloadException { get; init; }
+
+    public Func<UpdateSourceInfo, Task<string>>? DownloadHandler { get; init; }
 
     /// <summary>Progress samples emitted (in order) to the caller's
     /// <see cref="IProgress{T}"/> sink during
@@ -92,6 +100,8 @@ public sealed class FakeUpdateSource : IUpdateSource
 
     /// <summary>Number of times <see cref="CheckAsync"/> was called.</summary>
     public int CheckCallCount { get; private set; }
+
+    public int ListStableCallCount { get; private set; }
 
     /// <summary>Number of times <see cref="DownloadAsync"/> was called.</summary>
     public int DownloadCallCount { get; private set; }
@@ -123,6 +133,17 @@ public sealed class FakeUpdateSource : IUpdateSource
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<UpdateSourceInfo>> ListStableAsync(
+        int maxCount,
+        CancellationToken ct = default)
+    {
+        ListStableCallCount++;
+        if (ListStableException is not null)
+            return Task.FromException<IReadOnlyList<UpdateSourceInfo>>(ListStableException);
+        return Task.FromResult(StableReleases);
+    }
+
+    /// <inheritdoc />
     public Task<string> DownloadAsync(
         UpdateSourceInfo info,
         IProgress<DownloadProgress>? progress = null,
@@ -130,6 +151,8 @@ public sealed class FakeUpdateSource : IUpdateSource
     {
         DownloadCallCount++;
         LastDownloadInfo = info;
+        if (DownloadHandler is not null)
+            return DownloadHandler(info);
         if (DownloadException is not null)
             return Task.FromException<string>(DownloadException);
 
