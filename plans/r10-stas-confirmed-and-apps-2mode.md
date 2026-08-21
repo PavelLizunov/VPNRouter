@@ -15,7 +15,7 @@ app:
   active_subscription_server: de-01 443 Khunrath  # <-- работающий сервер, но игнорируется
   subscriptions:
     - name: simple
-      url: https://ninitux.com/api/v1/app/config/4e5a007b2ab25cb800d9a96d2f36bf37
+      url: https://example.invalid/redacted-test-subscription
       servers: [de-01 443 / de-01 2083 / is-01 443 / is-01 8443 / is-01 8444 / nk-01 8443 / nk-01 2083]  # 7 рабочих
 vless:
   server: 195.135.255.216         # <-- LEGACY single-server fields
@@ -50,7 +50,7 @@ vless:
    **тот же test-URI который мы используем в `MainActivity.cs`**
    (DEFCT-005). Скорее всего, stas взял его из public docs / repo /
    обмена.
-3. Stas позже добавил subscription `simple` (`ninitux.com/.../4e5a...`).
+3. Stas позже добавил subscription `simple` (адрес удалён из репозитория).
 4. **`VlessServersResolver` НЕ очистил `vless.servers` от legacy
    entries** — они продолжают сосуществовать с subscription'ом.
 5. `vless.active_server = "khunrath_ln"` (старый, никем не сменённый

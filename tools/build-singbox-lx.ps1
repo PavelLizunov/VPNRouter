@@ -32,6 +32,13 @@ $LX_COMMIT = 'c7a2592e750406ade9ebaae1d0fdb7482fc0773e'
 $WG_REPO   = 'https://github.com/Leadaxe/wireguard-go-awg2-lx'
 $WG_BRANCH = 'lx'
 $WG_COMMIT = '0c0c10b5d3236796bd3832a6813223d6dc7d0bb1'
+# ── Targeted upstream backports (applied build-time on the pinned fork tree) ──
+# The working tree is a Leadaxe/sing-box-lx clone, so its `origin` points at Leadaxe
+# and is NOT the proven source of these two SagerNet commits. Fetch the EXACT SHAs
+# from the immutable upstream URL -- never origin, never a branch/tag (both mutable).
+$UPSTREAM_REPO = 'https://github.com/SagerNet/sing-box.git'
+$TUN_BACKPORT  = '0b7ffbaafa5f060dd8c762dfbc751d592cba1fea'  # F1: sing-tun v0.8.11 (TUN system-stack TCP NAT collision)
+$DNS_BACKPORT  = '72a8723e13b9574664f4c78e588069fa4aca6fc9'  # F2: DNS nested single-flight self-deadlock
 # Canonical lx tag set (see Makefile.lx / SPECS/004) -- feature tags + our two downstream.
 $TAGS = 'with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_xhttp,with_awg'
 $VER  = '1.13.13-lx-awg'
@@ -66,6 +73,31 @@ New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 Invoke-Git @('clone', '--quiet', $LX_REPO, $src)
 Invoke-Git @('-C', $src, 'checkout', '--quiet', $LX_COMMIT)
 Assert-GitHead -RepoDir $src -Expected $LX_COMMIT -Label 'sing-box-lx'
+
+# ── Targeted upstream backports on the pinned fork tree (no pin rotation) ──
+# --no-commit cherry-picks (no Git identity needed); assertions below fail CLOSED.
+Write-Host "[1.5/4] Backport upstream fixes (sing-tun NAT + DNS single-flight)" -ForegroundColor Yellow
+Invoke-Git @('-C', $src, 'fetch', '--quiet', $UPSTREAM_REPO, $TUN_BACKPORT, $DNS_BACKPORT)
+Invoke-Git @('-C', $src, 'cherry-pick', '--no-commit', $TUN_BACKPORT, $DNS_BACKPORT)
+
+$goMod = Get-Content -Raw (Join-Path $src 'go.mod')
+if (-not $goMod.Contains('github.com/sagernet/sing-tun v0.8.11')) {
+    throw "FATAL: go.mod missing 'github.com/sagernet/sing-tun v0.8.11' after TUN backport ($TUN_BACKPORT). The sing-tun bump did not apply; refusing to build an unpatched core."
+}
+if ($goMod.Contains('github.com/sagernet/sing-tun v0.8.10')) {
+    throw "FATAL: go.mod still pins 'github.com/sagernet/sing-tun v0.8.10' after TUN backport ($TUN_BACKPORT). The TUN TCP NAT collision fix is NOT in this tree; refusing to build."
+}
+$dnsClient = Get-Content -Raw (Join-Path $src 'dns\client.go')
+if (-not $dnsClient.Contains('compatible.Map[transportCacheKey, chan struct{}]')) {
+    throw "FATAL: dns/client.go missing 'compatible.Map[transportCacheKey, chan struct{}]' after DNS backport ($DNS_BACKPORT). The single-flight deadlock fix did not apply; refusing to build."
+}
+if (-not $dnsClient.Contains('cacheKey := transportCacheKey{Question: question, transportTag: transport.Tag()}')) {
+    throw "FATAL: dns/client.go missing the transportCacheKey cache-key construction after DNS backport ($DNS_BACKPORT). The single-flight deadlock fix did not apply; refusing to build."
+}
+if ($dnsClient.Contains('compatible.Map[dns.Question, chan struct{}]')) {
+    throw "FATAL: dns/client.go still uses 'compatible.Map[dns.Question, chan struct{}]' after DNS backport ($DNS_BACKPORT). The pre-fix single-flight map is still present; refusing to build."
+}
+Write-Host "Backported: sing-tun v0.8.11 (TUN NAT) + DNS single-flight deadlock fix; fail-closed assertions passed." -ForegroundColor Green
 
 Write-Host "[2/4] Clone wireguard-go-awg2-lx @ $WG_COMMIT (submodule path)" -ForegroundColor Yellow
 # The fork's `git submodule update` trips over its apple/android client submodules, so

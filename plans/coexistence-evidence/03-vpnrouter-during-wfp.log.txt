@@ -1,6 +1,6 @@
-﻿2026-05-06 17:08:07.907 +03:00 [INF] [Subscription] Fetching https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
-2026-05-06 17:08:19.964 +03:00 [ERR] [Subscription] Fetch failed for https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
-2026-05-06 17:08:19.968 +03:00 [WRN] [Subscription] Refresh returned 0 servers for https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee, keeping 0 cached server(s)
+﻿2026-05-06 17:08:07.907 +03:00 [INF] [Subscription] Fetching https://example.invalid/redacted-test-subscription
+2026-05-06 17:08:19.964 +03:00 [ERR] [Subscription] Fetch failed for https://example.invalid/redacted-test-subscription
+2026-05-06 17:08:19.968 +03:00 [WRN] [Subscription] Refresh returned 0 servers for https://example.invalid/redacted-test-subscription, keeping 0 cached server(s)
 2026-05-06 17:08:20.140 +03:00 [INF] [DnsFlusher] Windows DNS cache flushed
 2026-05-06 17:08:20.141 +03:00 [WRN] [VlessServersResolver] config_mode=subscribe but no enabled subscription has servers. Falling back to manually-configured Vless.Servers / Vless.Server.
 2026-05-06 17:08:20.141 +03:00 [INF] [VpnEngine] Loading profiles...

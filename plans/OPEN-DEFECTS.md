@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1 SECURITY FOLLOW-UP (Ox Alpha review 2026-08-21)** - test subscription URLs exposed by older commits were removed from the current tree, but ordinary PR edits cannot revoke credentials already present in Git history. Confirm the subscriptions are disabled or rotate them at the provider before the next stable cut; do not rewrite shared history unless the owner explicitly chooses that disruptive remediation - provider-side action / PR #170.
+
 - [x] **P1 RESOLVED (Qwen review, Codex-verified 2026-08-15)** - desktop downgrade suppresses the incompatible forward-update receipt and clears any stale failed-update marker before installer dispatch, while preserving the existing binary snapshot rollback - `VPNRouter.Core/Services/UpdateChecker.cs` / `plans/phase2-safe-version-rollback-2026-08-15.md`.
 - [x] **P1 RESOLVED (Qwen review, Codex-verified 2026-08-15)** - every UI-triggered downgrade creates a private timestamped `config.yaml` backup before installer dispatch and fails closed if the backup cannot be created - `VPNRouter.Core/Services/UpdateChecker.cs` / `VPNRouter.Tests/UpdateCheckerDowngradeTests.cs`.
 - [x] **P2 REFUTED / DEFERRED (Qwen review 2026-08-15)** - a separate remote unsafe-version blocklist and a trust root independent from GitHub were proposed as prerequisites. The first implementation instead exposes only the three most recent stable releases and preserves the project's existing GitHub release + mandatory SHA-256 trust model; add revocation metadata only when a release is actually withdrawn or independent signing becomes operational - `plans/phase2-safe-version-rollback-2026-08-15.md`.

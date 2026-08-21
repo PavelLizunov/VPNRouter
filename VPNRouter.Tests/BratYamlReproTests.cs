@@ -60,7 +60,7 @@ app:
   subscriptions:
   - id: ninitux-id
     name: ninitux
-    url: https://ninitux.com/api/v1/app/config/abc
+    url: https://example.invalid/redacted-test-subscription
     enabled: true
     last_refreshed_at: '2026-05-19T20:42:23+03:00'
     last_server_count: 7
@@ -447,7 +447,7 @@ app:
   subscriptions:
   - id: ninitux-id
     name: ninitux
-    url: https://ninitux.com/api/v1/app/config/abc
+    url: https://example.invalid/redacted-test-subscription
     enabled: true
     last_refreshed_at: '2026-05-19T20:42:23+03:00'
     last_server_count: 7

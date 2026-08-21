@@ -6,7 +6,7 @@
 
 **Phone**: KYOCERA A101BM (`A101BM`, serial `54499112209`), Android 12, 1080×1920 px / 450 dpi, USB-connected to Mac mini `slovn@192.168.0.246` (adb via SSH).
 
-**Test asset**: `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee` — **successfully exercised** this run.
+**Test asset**: `https://example.invalid/redacted-test-subscription` — **successfully exercised** this run.
 
 ---
 
@@ -41,7 +41,7 @@
 ## DEFCT-005 — P0 VLESS upstream connection fails (EOF) → no internet through VPN
 
 **Severity**: P0 (real-functionality ship-blocker — VPN connects per UI but doesn't actually route traffic).
-**Surface**: any VPN connect using the test subscription URL `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee` on this phone.
+**Surface**: any VPN connect using the redacted test subscription URL `https://example.invalid/redacted-test-subscription` on this phone.
 **Reproducer**: 1 step.
 
 ### Steps to reproduce
