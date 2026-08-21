@@ -69,9 +69,22 @@ public static class CanaryPolicy
         if (string.IsNullOrWhiteSpace(url)) return "(none)";
         if (Uri.TryCreate(url, UriKind.Absolute, out var u))
             return $"{u.Scheme}://{u.Host}";
-        // Malformed: keep only up to the first '/', '?' or '#'.
-        var end = url.IndexOfAny(new[] { '/', '?', '#' });
-        return end >= 0 ? url[..end] : url;
+
+        // Malformed: strip path/query/fragment starting after scheme (if present)
+        var schemeEnd = url.IndexOf("://", StringComparison.Ordinal);
+        var searchStart = schemeEnd >= 0 ? schemeEnd + 3 : 0;
+        var relativeEnd = url.IndexOfAny(new[] { '/', '?', '#' }, searchStart);
+        var candidate = relativeEnd >= 0 ? url[..relativeEnd] : url;
+
+        // Strip authority credentials (userInfo@) if present in malformed URLs
+        var atIndex = candidate.LastIndexOf('@');
+        if (atIndex >= 0 && atIndex >= searchStart)
+        {
+            return schemeEnd >= 0
+                ? candidate[..(schemeEnd + 3)] + candidate[(atIndex + 1)..]
+                : candidate[(atIndex + 1)..];
+        }
+        return candidate;
     }
 
     /// <summary>
