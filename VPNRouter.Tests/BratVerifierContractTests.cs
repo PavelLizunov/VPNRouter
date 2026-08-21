@@ -64,8 +64,13 @@ public sealed class BratVerifierContractTests
         Assert.Contains("'Select'", script);
         Assert.Contains("SelectionItemPattern", script);
         Assert.Contains("if (-not $pat.Current.IsSelected)", script);
+        Assert.Contains("'ScrollIntoView'", script);
+        Assert.Contains("ScrollItemPattern", script);
+        Assert.Contains("$pat.ScrollIntoView()", script);
         Assert.Contains("$result.Element.ToggleState", script);
-        Assert.Contains("$candidate.Current.IsEnabled -and -not $candidate.Current.IsOffscreen", script);
+        Assert.Contains("$allowOffscreen = [string]$req.Operation -eq 'ScrollIntoView'", script);
+        Assert.Contains("$candidate.Current.IsEnabled -and ($allowOffscreen -or -not $candidate.Current.IsOffscreen)", script);
+        Assert.Contains("if ($target.Current.IsOffscreen) { throw", script);
         Assert.Contains("CheckUpdate is restricted to the update button", script);
         Assert.Contains("UpdateCheckState = $state", script);
         Assert.Contains("'updateprobe'", script);

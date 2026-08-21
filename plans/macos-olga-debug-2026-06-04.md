@@ -11,7 +11,7 @@ vpnrouter20260603.log, vpnrouter20260604.log). 4 жалобы:
 ## Окружение (из логов)
 - macOS, `/Applications/VPNRouter.app`, config `~/Library/Application Support/VPNRouter/`,
   sing-box `.../bin/sing-box`, TUN `utun99`, Clash API `127.0.0.1:9090`.
-- `config_mode=subscribe`, подписка `ninitux.com/.../97747b68…`, 5 серверов,
+- `config_mode=subscribe`, адрес подписки удалён из репозитория, 5 серверов,
   active `Germany VLESS ~yc.hrustalny` (тоже Iceland тогглила). schema=5.
 - Routing: тогглила **split** (98-процессный merged mega-profile
   `Discord_Privacy+Messengers+AI_Tools+Browsers+Streaming+Gaming+Work_Suite+

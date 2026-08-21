@@ -50,6 +50,8 @@
          (SKGraphics statics) is unchanged across the 2 -> 3 jump. -->
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>

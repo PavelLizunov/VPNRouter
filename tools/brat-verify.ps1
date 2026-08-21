@@ -22,7 +22,7 @@ param(
     [string]$Name,
     [string]$ControlType,
 
-    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'CheckUpdate', 'Toggle', 'Expand', 'Select', 'SetValue')]
+    [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'CheckUpdate', 'Toggle', 'Expand', 'Select', 'ScrollIntoView', 'SetValue')]
     [string]$UiaOperation = 'Inspect',
     [string]$Value,
 
@@ -113,7 +113,7 @@ function Invoke-BratInteractive {
         [string]$AutomationId,
         [string]$Name,
         [string]$ControlType,
-        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'CheckUpdate', 'Toggle', 'Expand', 'Select', 'SetValue')]
+        [ValidateSet('Inspect', 'Invoke', 'InvokeThen', 'CheckUpdate', 'Toggle', 'Expand', 'Select', 'ScrollIntoView', 'SetValue')]
         [string]$UiaOperation = 'Inspect',
         [string]$Value,
         [int]$TimeoutSeconds = 30
@@ -185,13 +185,14 @@ try {
         $processFindCond = New-Object System.Windows.Automation.AndCondition $pidCond, $findCond
 
         $target = $null
+        $allowOffscreen = [string]$req.Operation -eq 'ScrollIntoView'
         while (-not $target -and (Get-Date) -lt $deadline) {
             # Search every top-level window owned by the app process. Avalonia
             # flyouts and modal dialogs are siblings of the main window in UIA.
             $matches = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $processFindCond)
             for ($i = 0; $i -lt $matches.Count; $i++) {
                 $candidate = $matches.Item($i)
-                if ($candidate.Current.IsEnabled -and -not $candidate.Current.IsOffscreen) {
+                if ($candidate.Current.IsEnabled -and ($allowOffscreen -or -not $candidate.Current.IsOffscreen)) {
                     $target = $candidate
                     break
                 }
@@ -279,6 +280,13 @@ try {
                 $pat.Select()
                 for ($i = 0; $i -lt 20 -and -not $pat.Current.IsSelected; $i++) { Start-Sleep -Milliseconds 100 }
                 if (-not $pat.Current.IsSelected) { throw "SelectionItemPattern returned without selecting the matched element." }
+            }
+            'ScrollIntoView' {
+                $pat = $null
+                if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$pat)) { throw "ScrollItemPattern unsupported by matched element." }
+                $pat.ScrollIntoView()
+                for ($i = 0; $i -lt 20 -and $target.Current.IsOffscreen; $i++) { Start-Sleep -Milliseconds 100 }
+                if ($target.Current.IsOffscreen) { throw "ScrollItemPattern returned without bringing the matched element into view." }
             }
             'SetValue' {
                 $pat = $null

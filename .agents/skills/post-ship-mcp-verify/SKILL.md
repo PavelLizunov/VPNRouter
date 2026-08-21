@@ -130,7 +130,7 @@ secret-bearing. Add or run a `PageScreenshotTests` case with isolated in-memory
 state for every changed page/viewport, and use this command for live behavior:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<exact RU name>" -ControlType <Button|CheckBox|ListItem> [-UiaOperation <Inspect|Invoke|Toggle|Expand|SetValue>] [-Value <text>]
+powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name "<exact RU name>" -ControlType <Button|CheckBox|ListItem> [-UiaOperation <Inspect|Invoke|InvokeThen|CheckUpdate|Toggle|Expand|Select|ScrollIntoView|SetValue>] [-Value <text>]
 ```
 
 - Semantic selectors only (Name/AutomationId/ControlType). Use exact Name
@@ -140,6 +140,9 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
   IsEnabled — assert before mutating. "Pattern unsupported" → the Inspect
   assertion still passed; record the actuation gap and fail any checklist item
   that requires the unsupported mutation.
+- `Select` uses the native `SelectionItemPattern` for list navigation;
+  `ScrollIntoView` uses `ScrollItemPattern` on an already-materialized semantic
+  descendant. Both fail closed when the provider exposes no usable pattern.
 - No stable selector → FAIL that checklist item; do not replace live behavior
   proof with a screenshot.
 - UIA requires a logged-on interactive session on brat; the

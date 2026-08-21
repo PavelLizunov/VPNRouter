@@ -72,7 +72,7 @@ public class VlessServersResolverScopeGuardTests
                     new()
                     {
                         Name = "simple",
-                        Url = "https://ninitux.com/api/v1/app/config/4e5a007b2ab25cb800d9a96d2f36bf37",
+                        Url = "https://example.invalid/redacted-test-subscription",
                         Enabled = true,
                         Servers = new List<VlessServerEntry>
                         {
