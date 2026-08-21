@@ -27,4 +27,15 @@ configuration churn.
 
 ## Outcome
 
-Pending implementation and verification.
+Implemented the reviewed union of PRs 162, 164, 165, 167, and 168. The
+consolidation excludes the unrelated `global.json` downgrade and `.jules`
+journals, bounds backup export to the five newest files, and adds fail-closed
+coverage for null outbound collections.
+
+- `dotnet build VPNRouter.sln -c Release`: PASS, 0 errors.
+- Full `VPNRouter.Tests`: PASS, 2833 passed, 4 skipped.
+- Scoped pre-commit suite: PASS, 191 passed.
+- Ox Alpha bug-hunt: four minor findings found and fixed (bounded backups,
+  null-outbound guard, current defect anchor, and missing branch coverage).
+- GitHub checks on the current-main merge result: PASS (`test`, `grep`,
+  `go-test-windows`, `characterization-windows`).
