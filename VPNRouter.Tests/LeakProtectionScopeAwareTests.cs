@@ -274,6 +274,21 @@ public sealed class LeakProtectionScopeAwareTests
             e.Contains("config_mode=custom") && e.Contains("proxy"));
     }
 
+    [Fact]
+    public void CustomMode_NullOutbounds_FailsClosed()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "custom";
+        var config = CreateValidConfig();
+        config.Outbounds = null!;
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Contains("config_mode=custom") && e.Contains("proxy"));
+    }
+
     // ───────── 6) custom mode — empty server in proxy → FAIL ──────────────
 
     [Fact]
@@ -508,5 +523,115 @@ public sealed class LeakProtectionScopeAwareTests
 
         Assert.DoesNotContain(result.Errors, e =>
             e.Contains("scope") || e.Contains("not in the active subscription"));
+    }
+
+    // ─── AWG Endpoint scope validation ───
+
+    [Fact]
+    public void GeneratedMode_WithSubscription_AwgEndpointOutOfScope_FailsValidation()
+    {
+        var settings = BuildStasLikeSettings();
+        var config = CreateValidConfig(
+            proxyServer: "104.194.156.93",
+            proxyPort: 443,
+            proxyUuid: "9029d44f-232f-4283-b055-d39f8448f43b");
+
+        // Add AWG endpoint pointing to out-of-scope server
+        config.Endpoints = new List<SingBoxEndpoint>
+        {
+            new()
+            {
+                Type = "wireguard",
+                Tag = "proxy-awg",
+                Address = new List<string> { "10.66.0.2/32" },
+                PrivateKey = "aPrivateKeyBase64==",
+                Peers = new List<WireGuardPeer>
+                {
+                    new() { Address = "203.0.113.99", Port = 51820, PublicKey = "peerPubKey==" }
+                }
+            }
+        };
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Contains("203.0.113.99") && e.Contains("AWG endpoint") && e.Contains("active subscription"));
+    }
+
+    [Fact]
+    public void GeneratedMode_WithSubscription_AwgEndpointInScope_PassesValidation()
+    {
+        var settings = BuildStasLikeSettings();
+        var config = CreateValidConfig(
+            proxyServer: "104.194.156.93",
+            proxyPort: 443,
+            proxyUuid: "9029d44f-232f-4283-b055-d39f8448f43b");
+
+        // Add AWG endpoint pointing to in-scope server from BuildStasLikeSettings (104.194.156.93:443)
+        config.Endpoints = new List<SingBoxEndpoint>
+        {
+            new()
+            {
+                Type = "wireguard",
+                Tag = "proxy-awg",
+                Address = new List<string> { "10.66.0.2/32" },
+                PrivateKey = "aPrivateKeyBase64==",
+                Peers = new List<WireGuardPeer>
+                {
+                    new() { Address = "104.194.156.93", Port = 443, PublicKey = "peerPubKey==" }
+                }
+            }
+        };
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void GeneratedMode_NoSubscriptions_AwgEndpointOutOfScope_Warns()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            new() { Server = "104.194.156.93", Port = 443, Uuid = "test-uuid" },
+        };
+        var config = CreateValidConfig("104.194.156.93", 443, "test-uuid");
+        config.Endpoints =
+        [
+            new SingBoxEndpoint
+            {
+                Type = "wireguard",
+                Tag = "proxy-awg",
+                Peers = [new WireGuardPeer { Address = "203.0.113.99", Port = 51820 }],
+            },
+        ];
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+        Assert.Contains(result.Warnings, w => w.Contains("AWG endpoint") && w.Contains("203.0.113.99"));
+    }
+
+    [Fact]
+    public void GeneratedMode_WithSubscription_AwgLoopbackPeer_IsExempt()
+    {
+        var settings = BuildStasLikeSettings();
+        var config = CreateValidConfig("104.194.156.93", 443, "9029d44f-232f-4283-b055-d39f8448f43b");
+        config.Endpoints =
+        [
+            new SingBoxEndpoint
+            {
+                Type = "wireguard",
+                Tag = "proxy-awg",
+                Peers = [new WireGuardPeer { Address = "127.0.0.1", Port = 51820 }],
+            },
+        ];
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.DoesNotContain(result.Errors, e => e.Contains("AWG endpoint"));
     }
 }

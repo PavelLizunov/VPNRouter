@@ -62,6 +62,28 @@ vless:
             File.WriteAllText(Path.Combine(AppPaths.LogsDir, "vpnrouter20260602.log"),
                 $"2026-06-02 00:00:00 [INF] connecting {LogSecret} ok\n");
 
+            // unloadable backup file with secret
+            var newestBackup = Path.Combine(AppPaths.DataDir, "config.yaml.unloadable-20260815-120000");
+            File.WriteAllText(newestBackup, $@"
+app:
+  config_mode: subscribe
+  subscriptions:
+    - name: backup_sub
+      url: https://ninitux.com/api/v1/app/config/{SubToken}
+      enabled: true
+vless:
+  servers:
+    - name: backup_srv
+      uuid: {Uuid}
+");
+            File.SetLastWriteTimeUtc(newestBackup, new DateTime(2026, 8, 15, 12, 0, 0, DateTimeKind.Utc));
+            for (var i = 1; i <= 5; i++)
+            {
+                var olderBackup = Path.Combine(AppPaths.DataDir, $"config.yaml.invalid-2026080{i}-120000");
+                File.WriteAllText(olderBackup, "app:\n  config_mode: generated\n");
+                File.SetLastWriteTimeUtc(olderBackup, new DateTime(2026, 8, i, 12, 0, 0, DateTimeKind.Utc));
+            }
+
             var result = DiagnosticsExporter.Export(
                 new DateTime(2026, 6, 2, 1, 2, 3), connected: false, destinationDir: outDir);
 
@@ -100,6 +122,11 @@ vless:
             // v2.41.0: app logs are kept under their real daily filenames (last
             // few days), not a single "vpnrouter-tail.log".
             Assert.Contains("vpnrouter20260602.log", entryNames);
+            Assert.Contains("config.unloadable-20260815-120000.redacted.yaml", entryNames);
+            Assert.Equal(5, entryNames.Count(n =>
+                n.StartsWith("config.unloadable-", StringComparison.Ordinal) ||
+                n.StartsWith("config.invalid-", StringComparison.Ordinal)));
+            Assert.DoesNotContain("config.invalid-20260801-120000.redacted.yaml", entryNames);
 
             // ── diagnostic value preserved ──
             Assert.Contains("1.2.3.4", bundle);            // server host kept

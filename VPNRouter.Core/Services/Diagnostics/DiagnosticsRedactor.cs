@@ -96,35 +96,11 @@ public static class DiagnosticsRedactor
         "wgturn_url", "endpoint", "source", "remote",
     };
 
-    // Credential-bearing keys whose value must NEVER survive as "just a number".
-    // A Reality short_id is hex (can be entirely digits, e.g. "01234567") and a
-    // Trojan/Shadowsocks/Hysteria/TUIC password can be an all-digit PIN — without
-    // this set the _numberLike fast-path in RedactScalar would pass such values
-    // through verbatim, leaking a credential into the exported bundle. These keys
-    // are absent from SafeKeys, so skipping the numeric/bool short-circuit makes
-    // them fall through to the *** redaction. NOTE: public_key / pbk are PUBLIC
-    // (Reality public key is public-by-design) and intentionally NOT here.
-    private static readonly HashSet<string> SecretKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "uuid", "password", "passwd", "pass", "secret", "token",
-        "short_id", "shortid", "private_key", "privatekey", "api_key", "apikey",
-        "psk", "pre_shared_key", "preshared_key", "auth", "credential", "key",
-        // v2.40.0 (review M1): flat config.yaml secret aliases the original set
-        // missed. obfs_password is the Hysteria2 Salamander passphrase (flat YAML
-        // alias, not nested under `password`); plugin_opts can carry a ShadowTLS
-        // password. Both can be all-digit user-chosen values → must skip the
-        // numeric fast-path.
-        "obfs_password", "obfs-password", "plugin_opts",
-    };
-
     // v2.40.0 (review M2): authority class excludes `@` and an optional
     // `userinfo@` is dropped, so `https://user:pass@host/path` keeps only
     // `https://host` (basic-auth credentials never survive).
     private static readonly Regex _urlKeepHost = new(
         @"^(\w+://)(?:[^@/?#\s]+@)?([^/?#\s]+).*$", RegexOptions.Compiled);
-
-    private static readonly Regex _numberLike = new(
-        @"^-?\d+(\.\d+)?$", RegexOptions.Compiled);
 
     // Log lines have no key structure, so the allowlist can't apply. The base
     // CrashReporter.ScrubSecrets catches secret-SHAPED values (proxy URIs,
@@ -271,23 +247,11 @@ public static class DiagnosticsRedactor
     {
         if (string.IsNullOrEmpty(value)) return value;
 
-        // Credential keys must NEVER take the numeric/bool fast-path below — a
-        // Reality short_id or a numeric password is all-digits yet still secret.
-        // They fall straight through to the allowlist, which redacts them (these
-        // keys are deliberately not in SafeKeys).
-        bool isSecretKey = key != null && SecretKeys.Contains(key);
-        if (!isSecretKey)
-        {
-            // Numbers / booleans are never credentials — keep regardless of key.
-            if (_numberLike.IsMatch(value)) return value;
-            if (value is "true" or "false" or "True" or "False") return value;
-        }
+        if (key != null && SafeKeys.Contains(key))
+            return value; // allowlisted scalar — safe to keep verbatim
 
         if (key != null && UrlKeys.Contains(key))
             return RedactUrlKeepHost(value);
-
-        if (key != null && SafeKeys.Contains(key))
-            return value; // allowlisted scalar — safe to keep verbatim
 
         // Unknown / non-allowlisted key → fail safe.
         return Redacted;
