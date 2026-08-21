@@ -3,8 +3,13 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -302,6 +307,54 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             cancellationToken: cts.Token);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task EnsureLocalAsync_LogsRedactSensitiveUrl()
+    {
+        var filename = "test-redact.srs";
+        var sink = new CapturingSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.Sink(sink)
+            .CreateLogger();
+
+        var body = Encoding.UTF8.GetBytes("REDACTED-TEST");
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, body);
+        var client = new HttpClient(handler);
+
+        const string sensitiveUrl = "https://raw.githubusercontent.com/secret/path/rules.srs?token=secret123";
+
+        var path = await RuleSetCacheManager.EnsureLocalAsync(
+            sensitiveUrl,
+            filename,
+            logger: logger,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(path);
+        var renderedLogs = string.Join("\n", sink.Events.Select(e => e.RenderMessage()));
+
+        Assert.DoesNotContain("secret123", renderedLogs);
+        Assert.DoesNotContain("/secret/path", renderedLogs);
+        Assert.Contains("https://raw.githubusercontent.com", renderedLogs);
+    }
+
+    private sealed class CapturingSink : ILogEventSink
+    {
+        private readonly List<LogEvent> _events = new();
+        private readonly object _gate = new();
+
+        public void Emit(LogEvent logEvent)
+        {
+            lock (_gate) _events.Add(logEvent);
+        }
+
+        public IReadOnlyList<LogEvent> Events
+        {
+            get { lock (_gate) return _events.ToList(); }
+        }
     }
 
     // ── HttpMessageHandler test doubles ────────────────────────────────
