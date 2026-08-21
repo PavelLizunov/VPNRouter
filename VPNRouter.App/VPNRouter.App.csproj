@@ -36,11 +36,11 @@
          on real launches; we add Avalonia.HarfBuzz explicitly so the
          transitive graph is deterministic and TestAppBuilder's explicit
          UseSkia chain composes the same way. -->
-    <PackageReference Include="Avalonia" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.4" />
-    <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.4" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="12.1.1" />
     <!-- v2.20.5: direct SkiaSharp reference so we can call
          SKGraphics.SetFontCacheLimit/SetFontCacheCountLimit from
          App.axaml.cs. Bumped 2.88.9 -> 3.119.4-preview.1.1 to match Avalonia

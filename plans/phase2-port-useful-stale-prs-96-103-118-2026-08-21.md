@@ -47,3 +47,7 @@ Implemented on the consolidation branch for PR #170.
 - Three Ox Alpha review lenses found no P0 blockers. Reported P2 robustness
   issues were fixed; the provider-side credential action was recorded in
   `plans/OPEN-DEFECTS.md`.
+- After merging dependency PR #159, the full solution gate caught that its
+  Spectre.Console 0.57.2 / Spectre.Console.Cli 0.55.0 pair breaks all existing
+  CLI command overrides. Only that incompatible pair was restored to 0.49.1;
+  the remaining green dependency updates were retained.
