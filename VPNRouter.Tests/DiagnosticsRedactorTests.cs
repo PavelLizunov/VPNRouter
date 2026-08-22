@@ -245,6 +245,18 @@ app:
         Assert.DoesNotContain("dXNlcjpwYXNzd29yZA==", outp);
     }
 
+    [Fact]
+    public void Logs_RedactTgProxySecret()
+    {
+        // Telegram proxy secret in log lines (e.g., tg_proxy_secret is empty in config.yaml / tg_proxy_secret: deadbeef)
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[INF] tg_proxy_secret=deadbeef00112233445566778899aabb\n" +
+            "[INF] tg-proxy-secret: deadbeef00112233445566778899aabb");
+        Assert.DoesNotContain("deadbeef00112233445566778899aabb", outp);
+        Assert.Contains("tg_proxy_secret=", outp);
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
+
     // AmneziaWG keys are credentials. The allowlist redacts them by default (not in
     // SafeKeys); these lock that in so a future SafeKeys change can't leak them.
     [Fact]
