@@ -1,10 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -304,7 +309,57 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task EnsureLocal_SensitiveUrl_RedactsUrlInLogger()
+    {
+        var filename = "test-sensitive.srs";
+        var body = Encoding.UTF8.GetBytes("SENSITIVE-BYTES");
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, body);
+        var client = new HttpClient(handler);
+
+        var sink = new RuleSetCapturingSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.Sink(sink)
+            .CreateLogger();
+
+        var sensitiveUrl = "https://provider.example/api/ruleset?token=secret123&user=admin";
+        var ct = TestContext.Current.CancellationToken;
+
+        var result = await RuleSetCacheManager.EnsureLocalAsync(
+            sensitiveUrl,
+            filename,
+            logger: logger,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
+
+        Assert.NotNull(result);
+        var logs = string.Join("\n", sink.Events.Select(e => e.RenderMessage()));
+
+        Assert.DoesNotContain("secret123", logs);
+        Assert.DoesNotContain("/api/ruleset", logs);
+        Assert.DoesNotContain(sensitiveUrl, logs);
+        Assert.Contains("https://provider.example", logs);
+    }
+
     // ── HttpMessageHandler test doubles ────────────────────────────────
+
+    private sealed class RuleSetCapturingSink : ILogEventSink
+    {
+        private readonly List<LogEvent> _events = new();
+        private readonly object _gate = new();
+
+        public void Emit(LogEvent logEvent)
+        {
+            lock (_gate) _events.Add(logEvent);
+        }
+
+        public IReadOnlyList<LogEvent> Events
+        {
+            get { lock (_gate) return _events.ToList(); }
+        }
+    }
 
     private sealed class CountingHandler : HttpMessageHandler
     {
