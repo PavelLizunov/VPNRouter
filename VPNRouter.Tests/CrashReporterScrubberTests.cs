@@ -74,6 +74,17 @@ public sealed class CrashReporterScrubberTests
     }
 
     [Fact]
+    public void ScrubSecrets_RedactsHttpBasicAuthUserInfo()
+    {
+        const string input = "fetch failed: https://user:secretpass123@sub.example.com/users/abc/sub.json";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("user", s);
+        Assert.DoesNotContain("secretpass123", s);
+        Assert.Contains("https://sub.example.com", s);
+        Assert.Contains("/[redacted]", s);
+    }
+
+    [Fact]
     public void ScrubSecrets_RedactsBareUuid()
     {
         const string input = "user UUID 12345678-1234-1234-1234-123456789abc not found";
