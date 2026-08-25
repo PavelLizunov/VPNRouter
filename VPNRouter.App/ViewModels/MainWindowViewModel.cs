@@ -6501,7 +6501,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Failed to parse server URI: {Line}", line);
+                _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
             }
         }
 
