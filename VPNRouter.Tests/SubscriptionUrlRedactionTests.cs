@@ -59,6 +59,53 @@ public sealed class SubscriptionUrlRedactionTests
     }
 
     [Fact]
+    public async Task RuleSetCacheManager_LogsDoNotContainToken()
+    {
+        var (logger, sink) = BuildCapturingLogger();
+        var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnr-redact-test-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmp);
+        try
+        {
+            var handler = new StaticResponseHandler(System.Net.HttpStatusCode.OK, System.Text.Encoding.UTF8.GetBytes("data"));
+            var client = new System.Net.Http.HttpClient(handler);
+            const string sensitiveUrl = "https://rules.example/list.srs?token=secret123";
+
+            await RuleSetCacheManager.EnsureLocalAsync(
+                sensitiveUrl,
+                "list.srs",
+                logger: logger,
+                httpClient: client,
+                cacheDir: tmp,
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            var all = AllRenderedText(sink);
+            Assert.DoesNotContain("secret123", all);
+            Assert.DoesNotContain("/list.srs", all);
+            Assert.Contains("https://rules.example", all);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(tmp, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task RemoteVersionChecker_LogsDoNotContainToken()
+    {
+        var (logger, sink) = BuildCapturingLogger();
+        const string ownerRepo = "testowner/testrepo?token=secret123";
+
+        await RemoteVersionChecker.GetLatestTagAsync(
+            ownerRepo,
+            "VPNRouterTest/1.0",
+            logger,
+            TestContext.Current.CancellationToken);
+
+        var all = AllRenderedText(sink);
+        Assert.DoesNotContain("secret123", all);
+    }
+
+    [Fact]
     public async Task RefreshEntryAsync_LogsDoNotContainToken()
     {
         var (logger, sink) = BuildCapturingLogger();
