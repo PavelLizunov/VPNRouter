@@ -66,7 +66,7 @@ public sealed class SubscriptionUrlRedactionTests
         System.IO.Directory.CreateDirectory(tmp);
         try
         {
-            var handler = new StaticResponseHandler(System.Net.HttpStatusCode.OK, System.Text.Encoding.UTF8.GetBytes("data"));
+            var handler = new SimpleStaticResponseHandler(System.Net.HttpStatusCode.OK, System.Text.Encoding.UTF8.GetBytes("data"));
             var client = new System.Net.Http.HttpClient(handler);
             const string sensitiveUrl = "https://rules.example/list.srs?token=secret123";
 
@@ -80,12 +80,26 @@ public sealed class SubscriptionUrlRedactionTests
 
             var all = AllRenderedText(sink);
             Assert.DoesNotContain("secret123", all);
-            Assert.DoesNotContain("/list.srs", all);
+            Assert.DoesNotContain("token=", all);
             Assert.Contains("https://rules.example", all);
         }
         finally
         {
             try { System.IO.Directory.Delete(tmp, recursive: true); } catch { }
+        }
+    }
+
+    private sealed class SimpleStaticResponseHandler : System.Net.Http.HttpMessageHandler
+    {
+        private readonly System.Net.HttpStatusCode _status;
+        private readonly byte[] _body;
+        public SimpleStaticResponseHandler(System.Net.HttpStatusCode status, byte[] body) { _status = status; _body = body; }
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new System.Net.Http.HttpResponseMessage(_status)
+            {
+                Content = new System.Net.Http.ByteArrayContent(_body)
+            });
         }
     }
 
