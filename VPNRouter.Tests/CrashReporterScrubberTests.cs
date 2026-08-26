@@ -139,6 +139,25 @@ public sealed class CrashReporterScrubberTests
         Assert.Contains("&level=info", s);
     }
 
+    [Theory]
+    [InlineData("ws://example.com/api?secret=supersecret123", "secret=[REDACTED]")]
+    [InlineData("wss://example.com/api?api_key=mykey999", "api_key=[REDACTED]")]
+    [InlineData("ws://example.com/api?apikey=mykey999", "apikey=[REDACTED]")]
+    [InlineData("wss://example.com/api?access_token=tok12345", "access_token=[REDACTED]")]
+    [InlineData("ws://example.com/api?auth=credential_data", "auth=[REDACTED]")]
+    [InlineData("wss://example.com/api?password=mypassword", "password=[REDACTED]")]
+    [InlineData("ws://example.com/api?passwd=mypassword", "passwd=[REDACTED]")]
+    public void ScrubSecrets_RedactsSensitiveQueryParams(string input, string expectedSubstring)
+    {
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.Contains(expectedSubstring, s);
+        Assert.DoesNotContain("supersecret123", s);
+        Assert.DoesNotContain("mykey999", s);
+        Assert.DoesNotContain("tok12345", s);
+        Assert.DoesNotContain("credential_data", s);
+        Assert.DoesNotContain("mypassword", s);
+    }
+
     [Fact]
     public void OverrideDataDir_RoundTripsThroughCrashesPath()
     {
