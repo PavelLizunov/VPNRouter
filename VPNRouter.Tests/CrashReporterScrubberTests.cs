@@ -44,6 +44,7 @@ public sealed class CrashReporterScrubberTests
     [InlineData("naive://user:pass@example.com:443")]
     [InlineData("naive+quic://user:pass@example.com:443")]
     [InlineData("naive+https://user:pass@example.com:443")]
+    [InlineData("tg://proxy?server=127.0.0.1&port=1080&secret=dd1234567890abcdef1234567890abcdef")]
     public void ScrubSecrets_RedactsAllProxyProtocols(string uri)
     {
         var s = CrashReporter.ScrubSecrets($"connection error: {uri}");
