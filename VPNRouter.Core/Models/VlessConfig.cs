@@ -106,7 +106,7 @@ public class VlessConfig
     public List<VlessServerEntry> GetActiveServers()
     {
         var all = GetEffectiveServers();
-        if (all.Count <= 1) return all;
+        if (all.Count == 0) return all;
 
         // Find active by name
         VlessServerEntry? active = null;
@@ -116,6 +116,21 @@ public class VlessConfig
 
         // Fallback: first server
         active ??= all[0];
+
+        if (!string.IsNullOrEmpty(active.DetourVia))
+        {
+            var upstreams = all.Where(s =>
+                string.IsNullOrEmpty(s.DetourVia) &&
+                !string.IsNullOrEmpty(s.OutboundId) &&
+                string.Equals(s.OutboundId, active.DetourVia, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (upstreams.Count == 1)
+                return new List<VlessServerEntry> { active, upstreams[0] };
+
+            return new List<VlessServerEntry> { active };
+        }
+
+        if (all.Count <= 1) return all;
 
         // Opt-in auto-select: route through a same-protocol pool so the generator
         // wraps it in a urltest group (fastest reachable node wins).
@@ -128,8 +143,9 @@ public class VlessConfig
     }
 
     /// <summary>
-    /// Same-protocol bundle for opt-in auto-select. Includes every server sharing the
-    /// active server's protocol; for VLESS-vision (flow set) it keeps only flow entries
+    /// Same-protocol bundle for opt-in auto-select. Includes direct servers sharing the
+    /// active server's protocol; chained targets require exact entry pairing and are excluded.
+    /// For VLESS-vision (flow set) it keeps only flow entries
     /// so the urltest group is a clean set of TCP/vision nodes (UDP rides the vision
     /// flow) — preventing a cross-node TCP/UDP split when the subscription also carries
     /// no-flow siblings. Never empty (falls back to the active server).
@@ -138,6 +154,7 @@ public class VlessConfig
     {
         var proto = active.Protocol ?? "vless";
         var pool = all.Where(s =>
+            string.IsNullOrEmpty(s.DetourVia) &&
             string.Equals(s.Protocol ?? "vless", proto, StringComparison.OrdinalIgnoreCase)).ToList();
 
         if (!string.IsNullOrEmpty(active.Flow))
