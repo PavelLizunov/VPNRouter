@@ -171,8 +171,10 @@ public static class CrashReporter
         @"\b(vless|vmess|trojan|ss|shadowsocks|hysteria2?|hy2|tuic|naive(\+(https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Match http(s) URLs with path, query string, or fragment (starts with /, ?, or #)
+    // so parameters directly following the host (e.g. https://domain.com?token=secret) get redacted.
     private static readonly Regex _httpUrlPattern = new(
-        @"(https?://[^\s/?#]+)(/\S*)?",
+        @"(https?://[^\s/?#]+)([/?:#]\S*)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _uuidPattern = new(

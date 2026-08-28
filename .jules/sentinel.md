@@ -1,0 +1,4 @@
+## 2026-07-09 - HTTP URL Query/Fragment Redaction Leak
+**Vulnerability:** HTTP/HTTPS URLs without a path slash (e.g., `https://domain.com?token=secret` or `https://domain.com#secret`) bypassed path/query redaction in `CrashReporter.ScrubSecrets`, leaking sensitive credentials and tokens in crash reports and logs.
+**Learning:** The URL scrubbing regex `@"(https?://[^\s/?#]+)(/\S*)?"` strictly required a leading `/` after the host before matching trailing characters. URLs with query parameters or fragments attached directly to the host domain did not match Group 2, causing the query string to be preserved unredacted.
+**Prevention:** Use regex `@"(https?://[^\s/?#]+)([/?:#]\S*)?"` when stripping URL components after the host/port authority, ensuring `/`, `?`, and `#` separators are all matched and redacted.

@@ -73,6 +73,17 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain("/users/abc/sub.json", s);
     }
 
+    [Theory]
+    [InlineData("fetch failed: https://sub.example.com?auth_key=secret123456", "https://sub.example.com/[redacted]", "auth_key=secret123456")]
+    [InlineData("fetch failed: http://sub.example.com:8080?key=abcdef", "http://sub.example.com:8080/[redacted]", "key=abcdef")]
+    [InlineData("fetch failed: https://sub.example.com#secrettoken", "https://sub.example.com/[redacted]", "secrettoken")]
+    public void ScrubSecrets_RedactsHttpUrlQueryOrFragmentWithoutPath(string input, string expectedRedactedHost, string secretPart)
+    {
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.Contains(expectedRedactedHost, s);
+        Assert.DoesNotContain(secretPart, s);
+    }
+
     [Fact]
     public void ScrubSecrets_RedactsBareUuid()
     {
