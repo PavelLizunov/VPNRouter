@@ -172,7 +172,7 @@ public static class CrashReporter
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _httpUrlPattern = new(
-        @"(https?://[^\s/?#]+)(/\S*)?",
+        @"(https?://)(?:[^\s/@]+@)?([^\s/?#]+)(/\S*)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _uuidPattern = new(
@@ -201,7 +201,7 @@ public static class CrashReporter
 
         var s = _proxyUriPattern.Replace(input, m => $"{m.Groups[1].Value}://[redacted]");
         s = _httpUrlPattern.Replace(s, m =>
-            m.Groups[2].Success ? $"{m.Groups[1].Value}/[redacted]" : m.Groups[1].Value);
+            m.Groups[3].Success ? $"{m.Groups[1].Value}{m.Groups[2].Value}/[redacted]" : $"{m.Groups[1].Value}{m.Groups[2].Value}");
         s = _uuidPattern.Replace(s, "<uuid>");
         s = _longBase64Pattern.Replace(s, "<key>");
         s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}token=[REDACTED]");
