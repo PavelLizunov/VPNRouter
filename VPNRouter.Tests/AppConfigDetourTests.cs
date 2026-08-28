@@ -95,7 +95,8 @@ public class AppConfigDetourTests
         try
         {
             // Act
-            var servers = await SubscriptionFetcher.FetchAsync(subUrl);
+            var servers = await SubscriptionFetcher.FetchAsync(
+                subUrl, ct: TestContext.Current.CancellationToken);
 
             // Assert
             Assert.NotEmpty(servers);
@@ -232,7 +233,7 @@ public class AppConfigDetourTests
         var config = ConfigGenerator.Generate(profile, processes, settings);
 
         // Assert
-        var proxy = Assert.Single(config.Outbounds.Where(o => o.Tag == "proxy"));
+        var proxy = Assert.Single(config.Outbounds, outbound => outbound.Tag == "proxy");
         Assert.Equal("proxy", config.Outbounds[0].Tag);
         Assert.Equal("chain-entry", proxy.Detour);
 
@@ -241,7 +242,7 @@ public class AppConfigDetourTests
             .Single(outbound => outbound.GetProperty("tag").GetString() == "proxy");
         Assert.Equal("chain-entry", proxyJson.GetProperty("detour").GetString());
 
-        var upstreamOutbound = Assert.Single(config.Outbounds.Where(o => o.Tag == "chain-entry"));
+        var upstreamOutbound = Assert.Single(config.Outbounds, outbound => outbound.Tag == "chain-entry");
         Assert.Equal("vless", upstreamOutbound.Type);
         Assert.Equal("100.64.0.1", upstreamOutbound.Server);
     }
@@ -330,6 +331,9 @@ public class AppConfigDetourTests
         var proxy = config.Outbounds.First(o => o.Tag == "proxy");
         Assert.Equal("vless", proxy.Type);
         Assert.True(string.IsNullOrEmpty(proxy.Detour), "Ordinary no-detour generated outbound proxy must not have detour set");
-        Assert.DoesNotContain("\"detour\"", ConfigGenerator.Serialize(config));
+        using var document = System.Text.Json.JsonDocument.Parse(ConfigGenerator.Serialize(config));
+        var proxyJson = document.RootElement.GetProperty("outbounds").EnumerateArray()
+            .Single(outbound => outbound.GetProperty("tag").GetString() == "proxy");
+        Assert.False(proxyJson.TryGetProperty("detour", out _));
     }
 }
