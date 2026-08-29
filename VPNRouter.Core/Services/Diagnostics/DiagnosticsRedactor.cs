@@ -115,7 +115,7 @@ public static class DiagnosticsRedactor
     // `(?:Bearer|Basic|...)\s+` is consumed BEFORE the value group so the actual
     // token after the scheme word — not just the word "Bearer" — is redacted.
     private static readonly Regex _logKeyValueSecret = new(
-        @"(?i)\b(password|passwd|pass|secret|token|uuid|short[_-]?id|private[_-]?key|api[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)\b(\s*[=:]\s*)(""?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
+        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|private[_-]?key|api[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password))\b(\s*[=:]\s*)(""?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
         RegexOptions.Compiled);
 
     /// <summary>
