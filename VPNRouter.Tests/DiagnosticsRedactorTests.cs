@@ -208,6 +208,17 @@ app:
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
 
+    [Fact]
+    public void Logs_RedactPrefixedKeyValueSecrets_LikeAccessTokenAndClientSecret()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] access_token=myAccessToken123 set\n[INF] client_secret: myClientSecret456 ok");
+        Assert.DoesNotContain("myAccessToken123", outp);
+        Assert.DoesNotContain("myClientSecret456", outp);
+        Assert.Contains("access_token=", outp);
+        Assert.Contains("client_secret:", outp);
+    }
+
     // ── v2.40.0 review fixes (M1/M2/M3) ──
 
     [Fact]
