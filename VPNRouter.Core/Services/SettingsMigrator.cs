@@ -453,7 +453,7 @@ public static class SettingsMigrator
         {
             // De-dupe with OrdinalIgnoreCase but preserve casing for the
             // surviving entries — sing-box `process_name` matching is
-            // case-sensitive (see VPNRouter.Core/CLAUDE.md), so we never
+            // case-sensitive (see VPNRouter.Core/AGENTS.md), so we never
             // mutate the user's casing here.
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var seeded = new List<string>(s.CustomApps!.Count);

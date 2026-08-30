@@ -10,7 +10,7 @@
 // ZapretManager is the most constrained migration target so far. Two
 // observable behaviours had to be re-mapped onto the IProcessHandle event
 // shape, and one design constraint had to be satisfied to preserve the
-// Cygwin-winws.exe contract from CLAUDE.md:
+// Cygwin-winws.exe launch contract:
 //
 //   1. **Spawn**: legacy `Process.Start(ProcessStartInfo { FileName = batPath,
 //      UseShellExecute = true })` cannot route through the IProcessRunner
@@ -20,8 +20,8 @@
 //      with `cmd.exe /c <batPath>` so the runner spawns cmd.exe (a real PE)
 //      which then interprets the .bat unchanged.
 //
-//   2. **Cygwin "real console" requirement** — per CLAUDE.md "Zapret (DPI
-//      Bypass)" and ZapretManager.Start comments lines 153-156: winws.exe is
+//   2. **Cygwin "real console" requirement** — per ZapretManager.Start
+//      comments lines 153-156: winws.exe is
 //      built against Cygwin and its POSIX path resolver fails ("cannot
 //      access file" + silent exit) when stdout is pipe-redirected. Solution:
 //      route `CaptureStdout=false, CaptureStderr=false` in the ProcessRequest

@@ -1,14 +1,16 @@
 # Current state
 
-Canonical live-facts summary. For the deep architecture tour see `CLAUDE.md`;
-for history see `plans/`. When release or platform facts change, update this file.
+Canonical live-facts summary. For contract and architecture rules see `docs/agent-contract.md`
+and `AGENTS.md`; for worker details see `docs/test-workers.md`; for history see `plans/`.
+When release or platform facts change, update this file.
 
 ## Releases
 
 - **Current stable:** v2.49.3.
 - **In-flight candidate:** none.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
-  command after verification and a live-update gate. See `CLAUDE.local.md`.
+  command after verification and a live-update gate. See `docs/agent-contract.md`
+  and the native release skills under `.dsh/skills/`.
 
 ## Platforms and how each is built
 

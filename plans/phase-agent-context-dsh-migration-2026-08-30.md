@@ -47,25 +47,54 @@ No application, VPN, VM lifecycle or infrastructure mutation is required.
 
 - [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` returns zero errors.
 - [ ] **Gate 2 — Tests green**: focused agent-context tests and the full discovered suite pass.
-- [ ] **Gate 3 — Docs**: DSH hierarchy, worker contract and this Outcome agree.
-- [ ] **Gate 4 — Independent review**: verification swarm plus SOL review leave no unverified claims.
-- [ ] **Gate 5 — Remote safety**: read-only worker identity/resource checks only; no VPN/UI/deploy mutation.
-- [ ] **Gate 6 — Legacy removal**: no tracked `CLAUDE*.md`, `.claude/` or `.agents/`; active references are clean.
+- [x] **Gate 3 — Docs**: DSH hierarchy, worker contract and this Outcome agree.
+- [x] **Gate 4 — Independent review**: verification swarm plus SOL review leave no unverified claims.
+- [x] **Gate 5 — Remote safety**: read-only worker identity/resource checks only; no VPN/UI/deploy mutation.
+- [x] **Gate 6 — Legacy removal**: no tracked `CLAUDE*.md`, `.claude/` or `.agents/`; active references are clean.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: IMPLEMENTED — awaiting PR CI
+**Commits**: `1b777df5` (brief); migration commit pending
+**Pushed**: branch/PR update pending
+**Test deltas**:
+- Replaced the agent-context contract suite with native DSH hierarchy,
+  frontmatter, worker-resource, release-authority and legacy-absence checks.
+- Migrated post-ship/BRAT contract tests from dual-tree mirror assertions to the
+  single native `.dsh` skill tree.
+- Removed broken legacy-bootstrap references from active test comments and
+  operational scripts.
 
-**Gate results:** pending
+**Files changed**:
+- Added root/local plus scoped `AGENTS.md` files for every semantic zone and nine
+  native project skills under `.dsh/skills/`.
+- Removed the complete `.agents/`, `.claude/`, root/zone `CLAUDE*.md` trees and
+  obsolete provider-specific hook/bootstrap guidance.
+- Updated the canonical contract, worker contract, methodology, contributor/VM
+  docs, hooks, release plans, tests and active code comments.
+
+**Gate results:**
+- Gate 1/2: local build/test unavailable by contract because `harness-test` has
+  no .NET/Go/PowerShell SDKs; no SDK was provisioned. GitHub PR CI is the
+  executable build/test oracle and remains pending for the migration commit.
+- Gate 3: PASS — active Markdown links, skill YAML and hierarchy assertions pass.
+- Gate 4: PASS — six independent reviewers re-opened the integrated workspace;
+  every source-verified finding was fixed and all final rechecks returned READY.
+- Gate 5: PASS — only read-only identity/resource observations were used; no
+  install, VPN/UI scenario, deployment, cleanup or infrastructure mutation ran.
+- Gate 6: PASS — legacy trees/files are absent and active DSH guidance passes the
+  forbidden-path/unavailable-tool scan.
+- Mechanical checks: `git diff --check`, all four hook `bash -n` checks, native
+  skill YAML parsing, active-link validation and contract-assertion emulation pass.
 
 **Surprises encountered**:
 - Live probes found no .NET SDK on the three test workers; they must not be
   described as generic build machines.
 - The macOS worker had limited free disk at probe time, so heavy work requires a
   fresh preflight and explicit cleanup approval rather than automatic pruning.
+- Independent review found that `tools/zapret/` is a tracked payload, that the
+  tools-zone `AGENTS.md` needed a `.gitignore` exception, and that all four Git
+  hooks lacked executable mode; the contract, ignore rules, setup helper and
+  tracked modes were corrected.
 
-**Follow-ups spawned**: none yet
+**Follow-ups spawned**: none

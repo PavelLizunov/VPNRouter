@@ -1,8 +1,8 @@
 # VPNRouter agent contract
 
-This is the single canonical repository contract for Codex, Claude and other
-coding agents. Root bootstraps contain tool-specific paths only. If a bootstrap
-duplicates or conflicts with this file, fix the bootstrap and follow this file.
+This is the single canonical repository contract for DeepSeek Harness (DSH) and other
+coding agents. Root `AGENTS.md` contains entry points and skill routing. If a local
+file duplicates or conflicts with this file, fix the local file and follow this file.
 
 ## Project and ownership
 
@@ -10,22 +10,29 @@ VPNRouter is a process-based split-tunnel VPN router for Windows, macOS, Linux
 and Android. Desktop code uses .NET 10 / SDK 10.0.301, Avalonia and sing-box.
 
 All repository zones are owned by Pavel Lizunov (`PavelLizunov`) and may be
-edited. `tools/zapret/` and `tools/singbox-cache/` contain downloaded upstream
-binaries and must not be committed.
+edited. `tools/zapret/` is a tracked bundled runtime payload and must be
+preserved. Generated upstream source/build caches such as `tools/singbox-cache/`
+remain untracked.
 
 Read the relevant zone document before changing that area:
 
 | Area | Zone document |
 |---|---|
-| Core, sing-box, subscriptions, public configs | `VPNRouter.Core/CLAUDE.md` |
-| Avalonia desktop UI and ViewModels | `VPNRouter.App/CLAUDE.md` |
-| Android | `VPNRouter.Android/CLAUDE.md` |
-| CLI | `VPNRouter.CLI/CLAUDE.md` |
-| Windows service | `VPNRouter.Service/CLAUDE.md` |
-| Tests | `VPNRouter.Tests/CLAUDE.md` |
-| GitHub Actions | `.github/workflows/CLAUDE.md` |
-| Installers and packages | `packaging/CLAUDE.md` |
-| Plans and outcomes | `plans/CLAUDE.md` |
+| Core, sing-box, subscriptions, public configs | `VPNRouter.Core/AGENTS.md` |
+| Avalonia desktop UI and ViewModels | `VPNRouter.App/AGENTS.md` |
+| Android | `VPNRouter.Android/AGENTS.md` |
+| CLI | `VPNRouter.CLI/AGENTS.md` |
+| Windows service | `VPNRouter.Service/AGENTS.md` |
+| Tests | `VPNRouter.Tests/AGENTS.md` |
+| Go launcher/trampoline | `VPNRouter.GUI/AGENTS.md` |
+| Developer utilities | `VPNRouter.Tools/AGENTS.md` |
+| Repository scripts | `tools/AGENTS.md` |
+| GitHub Actions | `.github/workflows/AGENTS.md` |
+| Git hooks | `.githooks/AGENTS.md` |
+| Installers and packages | `packaging/AGENTS.md` |
+| Plans and outcomes | `plans/AGENTS.md` |
+| Design references | `design/AGENTS.md` |
+| Project DSH skills | `.dsh/AGENTS.md` |
 
 ## Working model
 
@@ -48,15 +55,16 @@ Read the relevant zone document before changing that area:
 1. `main` is protected. Never push directly or force-push it. Stable tags are
    immutable after publication; prefer a new `-rN` candidate over rewriting a
    published prerelease.
-2. Canonical remote is `origin`. Forgejo is a mirror synchronized only after an
-   accepted merge/release. Avoid broad `git fetch` against corrupt
-   `refs/codex/turn-diffs/*`; prefer `gh api` or targeted refs.
+2. Canonical remote is `origin` (GitHub). Forgejo is a mirror synchronized only
+   after an accepted merge or release. Avoid broad fetches when remote auxiliary
+   refs are unhealthy; prefer `gh api` or targeted refs.
 3. Never use `--no-verify` or `--no-gpg-sign` without an explicit owner request.
    Fix failing hooks instead of bypassing them.
 4. Preserve user changes in a dirty worktree. Do not use destructive reset,
    checkout or broad recursive deletion to make the tree clean.
 5. Never put credentials, subscription URLs, tokens, UUIDs or raw live logs in
-   commits, screenshots, PR text or chat. External binaries remain untracked.
+   commits, screenshots, PR text or chat. Generated external binaries remain
+   untracked unless the repository explicitly owns them as a bundled payload.
 6. Do not add emoji to code, config or documentation. Existing public README
    platform icons may remain until a dedicated presentation edit replaces them.
 7. `process_name` matching in sing-box is case-sensitive. Deduplicate with
@@ -66,7 +74,10 @@ Read the relevant zone document before changing that area:
 ## Test oracle
 
 Use the smallest relevant slice while iterating, then the full gate before
-handoff. Commands assume the SDK pinned by `global.json`.
+handoff. Commands assume the SDK pinned by `global.json`. On `harness-test`,
+coordinate these commands on an authorized exact-SHA worker only after the
+read-only identity/job/CPU/RAM/disk/SDK preflight; do not provision the control
+plane.
 
 ```powershell
 # Core config and connection lifecycle
@@ -84,14 +95,14 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 # Release, remote verification and packaging contracts
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests"
 
-# Full local gate
+# Full gate on an authorized preflighted build worker
 dotnet build VPNRouter.sln -c Release
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build
 ```
 
 UI changes additionally require headless screenshots and the exact end-to-end
 user scenario on WINBRAT after a candidate is shipped. Android changes require
-the Release APK build command from `VPNRouter.Android/CLAUDE.md`.
+the Release APK build command from `VPNRouter.Android/AGENTS.md`.
 
 ## Commit and CI discipline
 
@@ -145,17 +156,10 @@ isolated headless page screenshots.
 |---|---|
 | GitHub | `PavelLizunov/VPNRouter` |
 | Forgejo mirror | `ssh://git@10.9.1.1:18222/slovn/vpnrouter.git` |
-| WINBRAT | `100.115.182.0`, MachineName `WINBRAT`, Proxmox VM 100 |
-| macOS manual host | `slovn@192.168.0.246` |
+| Worker inventory and aliases | `docs/test-workers.md` |
+| WINBRAT fixed verification identity | `100.115.182.0`, MachineName `WINBRAT`, Proxmox VM 100 |
 | Install domain | `vpn.ninitux.com` |
 | Homebrew tap | `PavelLizunov/homebrew-vpnrouter` |
 | APT repository | `vpn.ninitux.com/apt/` |
 
-Private credentials and expanded host details live only in the gitignored
-`.claude_handoff.md`/owner-private notes. Harness runtime, settings, hooks and
-auto-managed memory are not project content unless the owner explicitly asks to
-change them.
-
-At session start, read `.claude_handoff.md` when it exists and use it to resume
-current state without repeating completed work. At session end, update its last
-session entry without moving secrets into tracked files.
+Private credentials and expanded host details stay outside tracked repository content. Use DSH session goals and `plans/` task outcomes for durable state; never copy secrets into either. Harness runtime, settings, hooks, caches, and auto-managed memory are not project content unless the owner explicitly asks to change them.

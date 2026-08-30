@@ -48,7 +48,7 @@ if (-not (Test-Path $hookDir)) {
     exit 1
 }
 
-$expectedHooks = @('pre-commit', 'commit-msg')
+$expectedHooks = @('pre-commit', 'commit-msg', 'pre-push', 'post-push')
 foreach ($h in $expectedHooks) {
     $hookPath = Join-Path $hookDir $h
     if (Test-Path $hookPath) {
@@ -80,9 +80,10 @@ if ($IsLinux -or $IsMacOS -or (Test-Path '/bin/bash')) {
             Write-Status "Would chmod +x .githooks/$h" 'Yellow'
         } else {
             try {
-                # Use git update-index to set executable bit in git's tree
-                # (not just filesystem) — survives `git checkout` cleanly.
+                & chmod '+x' $hookPath
+                if ($LASTEXITCODE -ne 0) { throw "chmod failed for $hookPath" }
                 git update-index --add --chmod=+x ".githooks/$h" 2>$null
+                if ($LASTEXITCODE -ne 0) { throw "git mode update failed for $h" }
                 Write-Status "chmod +x .githooks/$h" 'Green'
             } catch {
                 Write-Status "Couldn't chmod .githooks/$h (likely on Windows — bash handles via #!)" 'Gray'
@@ -94,7 +95,7 @@ if ($IsLinux -or $IsMacOS -or (Test-Path '/bin/bash')) {
 # Step 5 — smoke test: stage a doc-only change, dry-run commit message check
 Write-Host ""
 Write-Host "Smoke test:" -ForegroundColor Cyan
-$tempBranch = "claude/setup-hooks-smoke-$(Get-Random)"
+$tempBranch = "dsh/setup-hooks-smoke-$(Get-Random)"
 $cleanupNeeded = $false
 try {
     # Verify hook scripts have valid bash syntax

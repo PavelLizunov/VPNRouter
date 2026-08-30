@@ -11,7 +11,7 @@
 //     IsAnyServiceMatching, RunSc, RunNetsh. Migrated in this commit.
 //   * Cygwin .bat regression: ZapretManager.BuildCygwinLaunchBat
 //     (extracted helper) pins the SET BIN= / SET LISTS= contract from
-//     the v2.9.x lesson documented in CLAUDE.md "Zapret (DPI Bypass)".
+//     the v2.9.x Cygwin launch lesson.
 //   * Strategy parser: ZapretUpdater.ExtractWinwsArgsFromLines (pure
 //     helper extracted in this commit).
 // ============================================================================
@@ -293,10 +293,9 @@ public sealed class ZapretActionsTests : IDisposable
     [Fact]
     public void BuildCygwinLaunchBat_UsesSetBinAndSetLists_NotLiteralPaths()
     {
-        // CLAUDE.md "Zapret (DPI Bypass)" §critical:
-        //   "Cygwin winws.exe needs SET %VARS% in .bat, NOT literal Windows
-        //    paths. hostfakesplit + SNI spoofing (sni=www.google.com) is what
-        //    makes Discord work (ALT3)."
+        // Critical Cygwin contract: winws.exe needs SET %VARS% in .bat,
+        // not literal Windows paths. hostfakesplit + SNI spoofing
+        // (sni=www.google.com) is what makes Discord work (ALT3).
         //
         // This test pins the contract. The .bat content MUST contain:
         //   1. `set "BIN=<path>\"`   (Cygwin's POSIX resolver needs CMD var

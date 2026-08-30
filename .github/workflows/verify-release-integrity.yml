@@ -56,8 +56,7 @@ name: Verify Release Integrity
 # `release: published`, so the Win AppVersion check is race-free.
 #
 # See plans/vpnrouter-release-strategy.md "Release integrity gate" for
-# rationale + escalation path. CLAUDE.local.md "Урок v2.25.0-r1→r2" has
-# adjacent context (AppVersion suffix mismatch).
+# rationale, escalation, and the AppVersion suffix-mismatch lesson.
 
 on:
   release:

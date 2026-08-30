@@ -1,5 +1,5 @@
 # verify-last-commit-ci.ps1 - hard precondition for ship-rolling-candidate.
-# See .githooks/pre-push + .claude/skills/ship-rolling-candidate/SKILL.md
+# See .githooks/pre-push + .dsh/skills/ship-rolling-candidate/SKILL.md
 # for context. Bails (exit 1/2/3) if previous commit CI is not green.
 
 param(

@@ -2,7 +2,7 @@
 
 **Status:** enforcement reference.
 
-**Canonical workflow:** `.agents/skills/cut-stable/SKILL.md`.
+**Canonical workflow:** native DSH skill `.dsh/skills/cut-stable/SKILL.md`.
 
 **Safety boundary:** all application install, launch, update, connection and
 cleanup actions run only on the fixed WINBRAT test VM. Never use the developer

@@ -65,7 +65,7 @@ public class SettingsMigratorAppsModeTests
         Assert.Equal(2, migrated.App.RoutingAppsInclude.Count);
         // Preserve original casing of the first entry — sing-box
         // process_name matching is case-sensitive on Windows
-        // (see VPNRouter.Core/CLAUDE.md).
+        // (see VPNRouter.Core/AGENTS.md).
         Assert.Equal("Discord.exe", migrated.App.RoutingAppsInclude[0]);
         Assert.Equal("firefox.exe", migrated.App.RoutingAppsInclude[1]);
     }

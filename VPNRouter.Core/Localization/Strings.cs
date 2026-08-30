@@ -163,7 +163,7 @@ public static partial class Strings
     // Distinct from Stopping («Остановка...») which is an active transition.
     // Pre-r7 multiple sites used inline `IsRussian ? "Остановлен" : "Stopped"`
     // ternaries + string-literal field defaults that hardcoded the English
-    // word, violating CLAUDE.md rule D1 (no English in RU UI).
+    // word, violating the bilingual-UI invariant (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
     // v2.37.0-r18 — RuntimeStatus tooltips + Subscriptions status text.
@@ -405,8 +405,8 @@ public static partial class Strings
 
     // v2.37.0-r9 — Custom Rules import/export localization. Pre-r9 every
     // toast / validation message in `ImportCustomRulesAsync` +
-    // `ExportCustomRulesAsync` was hardcoded English, violating CLAUDE.md
-    // rule D1 (no English in RU UI). The feature has been live since
+    // `ExportCustomRulesAsync` was hardcoded English, violating the
+    // bilingual-UI invariant (no English in RU UI). The feature has been live since
     // v2.30.0-r3 (2026-04-30) but the validation-error slot stayed unilingual
     // for ~25 days — RU users saw "Import failed: ..." in an otherwise-
     // Russian sub-section. r9 closes the gap.

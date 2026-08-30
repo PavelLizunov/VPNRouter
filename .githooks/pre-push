@@ -14,8 +14,8 @@
 #
 # Bypass (emergency only — document the reason in commit message):
 #   git push --no-verify
-#   BUT: project CLAUDE.md rule says NEVER --no-verify without explicit user
-#   approval. If Claude needs to bypass, surface the reason first.
+#   BUT: project contract says NEVER --no-verify without explicit user
+#   approval. If an agent session needs to bypass, surface the reason first.
 #
 # Activation (one-time per clone):
 #   git config core.hooksPath .githooks
