@@ -45,8 +45,10 @@ No application, VPN, VM lifecycle or infrastructure mutation is required.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` returns zero errors.
-- [ ] **Gate 2 — Tests green**: focused agent-context tests and the full discovered suite pass.
+- [-] **Gate 1 — Build clean**: the green PR `test` job built
+  `VPNRouter.Tests.csproj` in Release; the exact solution command was unavailable
+  on the SDK-free control plane/workers and no SDK was provisioned.
+- [x] **Gate 2 — Tests green**: PR `test`, `characterization-windows`, `go-test-windows`, and `grep` checks pass.
 - [x] **Gate 3 — Docs**: DSH hierarchy, worker contract and this Outcome agree.
 - [x] **Gate 4 — Independent review**: verification swarm plus SOL review leave no unverified claims.
 - [x] **Gate 5 — Remote safety**: read-only worker identity/resource checks only; no VPN/UI/deploy mutation.
@@ -54,9 +56,9 @@ No application, VPN, VM lifecycle or infrastructure mutation is required.
 
 ## Outcome
 
-**Status**: IMPLEMENTED — awaiting PR CI
-**Commits**: `1b777df5` (brief); migration commit pending
-**Pushed**: branch/PR update pending
+**Status**: COMPLETE
+**Commits**: `1b777df5` (brief); `76cd981f` (native DSH migration); final Outcome commit
+**Pushed**: `dsh/agent-context-migration`; draft PR <https://github.com/PavelLizunov/VPNRouter/pull/195>
 **Test deltas**:
 - Replaced the agent-context contract suite with native DSH hierarchy,
   frontmatter, worker-resource, release-authority and legacy-absence checks.
@@ -74,9 +76,12 @@ No application, VPN, VM lifecycle or infrastructure mutation is required.
   docs, hooks, release plans, tests and active code comments.
 
 **Gate results:**
-- Gate 1/2: local build/test unavailable by contract because `harness-test` has
-  no .NET/Go/PowerShell SDKs; no SDK was provisioned. GitHub PR CI is the
-  executable build/test oracle and remains pending for the migration commit.
+- Gate 1: PARTIAL/CI — the GitHub `test` job restored and built
+  `VPNRouter.Tests.csproj` in Release. The exact solution build was unavailable
+  on the SDK-free control plane/workers; no SDK was provisioned.
+- Gate 2: PASS — PR checks `test` (full non-headless suite),
+  `characterization-windows`, `go-test-windows`, and `grep` all passed for
+  `76cd981f`.
 - Gate 3: PASS — active Markdown links, skill YAML and hierarchy assertions pass.
 - Gate 4: PASS — six independent reviewers re-opened the integrated workspace;
   every source-verified finding was fixed and all final rechecks returned READY.
