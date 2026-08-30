@@ -122,6 +122,16 @@ public sealed class UpdateCheckerTests
         Assert.False(UpdateChecker.TryParseSemVer("v2.35.0-r-1", out _));
     }
 
+    // ─── Shell argument escaping ──────────────────────────────────────────
+
+    [Fact]
+    public void EscapeShellArgument_SingleQuotesEscapedCorrectly()
+    {
+        Assert.Equal("plainPath", UpdateChecker.EscapeShellArgument("plainPath"));
+        Assert.Equal("path'\\''sWithQuote", UpdateChecker.EscapeShellArgument("path'sWithQuote"));
+        Assert.Equal("path'\\''with'\\''multiple'\\''quotes", UpdateChecker.EscapeShellArgument("path'with'multiple'quotes"));
+    }
+
     // ─── Version comparison ──────────────────────────────────────────────
 
     [Fact]
