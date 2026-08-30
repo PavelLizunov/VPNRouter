@@ -69,7 +69,7 @@ public static class SubscriptionFetcher
                 ct);
             if (!httpResp.IsSuccess())
             {
-                logger?.Warning("[Subscription] HTTP {Status} from {Url}", httpResp.StatusCode, CanaryPolicy.RedactUrl(url));
+                logger?.Warning("[Subscription] HTTP {Status} from {Url}", httpResp.StatusCode, RedactUrlForLogging(url));
                 return (result, 0, userInfo);
             }
             // P2: capture Subscription-Userinfo (case-insensitive — header key-folding
@@ -85,7 +85,7 @@ public static class SubscriptionFetcher
             var response = httpResp.AsString();
             if (string.IsNullOrWhiteSpace(response))
             {
-                logger?.Warning("[Subscription] Empty response from {Url}", CanaryPolicy.RedactUrl(url));
+                logger?.Warning("[Subscription] Empty response from {Url}", RedactUrlForLogging(url));
                 return (result, 0, userInfo);
             }
 
@@ -100,14 +100,14 @@ public static class SubscriptionFetcher
                 logger?.Warning(
                     "[Subscription] Dropped {DroppedCount} entries with placeholder credentials from {Url} " +
                     "(likely test/sample URLs scraped by provider). User's other servers preserved.",
-                    droppedPlaceholders, CanaryPolicy.RedactUrl(url));
+                    droppedPlaceholders, RedactUrlForLogging(url));
             }
 
-            logger?.Information("[Subscription] Fetched {Count} servers from {Url}", result.Count, CanaryPolicy.RedactUrl(url));
+            logger?.Information("[Subscription] Fetched {Count} servers from {Url}", result.Count, RedactUrlForLogging(url));
         }
         catch (Exception ex)
         {
-            logger?.Error(ex, "[Subscription] Fetch failed for {Url}", CanaryPolicy.RedactUrl(url));
+            logger?.Error(ex, "[Subscription] Fetch failed for {Url}", RedactUrlForLogging(url));
         }
 
         return (result, droppedPlaceholders, userInfo);
@@ -297,6 +297,20 @@ public static class SubscriptionFetcher
     }
 
     /// <summary>
+    /// Redacts URL scheme, host, and path sensitive parameters for safe logging.
+    /// Subscription URLs frequently carry private auth tokens in query parameters.
+    /// </summary>
+    internal static string RedactUrlForLogging(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return "[redacted]";
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return $"{uri.Scheme}://{uri.Host}{(uri.Port is not 80 and not 443 ? $":{uri.Port}" : "")}/[redacted]";
+        }
+        return "[redacted]";
+    }
+
+    /// <summary>
     /// Refresh a single SubscriptionEntry: fetch servers, update timestamps.
     /// Returns the number of servers fetched (0 on failure).
     /// </summary>
@@ -323,7 +337,7 @@ public static class SubscriptionFetcher
             logger.Warning(
                 "[Subscription] Refresh for {Url} dropped {DroppedCount} placeholder entries " +
                 "(likely test/sample URLs scraped by provider). User's other servers preserved.",
-                CanaryPolicy.RedactUrl(entry.Url), droppedPlaceholders);
+                RedactUrlForLogging(entry.Url), droppedPlaceholders);
         }
 
         // Only overwrite the cached server list on a successful fetch. If
@@ -341,7 +355,7 @@ public static class SubscriptionFetcher
         else
         {
             logger?.Warning("[Subscription] Refresh returned 0 servers for {Url}, keeping {Cached} cached server(s)",
-                CanaryPolicy.RedactUrl(entry.Url), entry.Servers?.Count ?? 0);
+                RedactUrlForLogging(entry.Url), entry.Servers?.Count ?? 0);
         }
 
         return servers.Count;
