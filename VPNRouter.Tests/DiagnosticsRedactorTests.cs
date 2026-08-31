@@ -271,4 +271,22 @@ app:
         Assert.DoesNotContain("SECRETAWGPRIV", outp);
         Assert.Contains("1.2.3.4", outp);  // peer address (host) kept
     }
+
+    [Fact]
+    public void Logs_RedactPrefixedKeyValueSecrets()
+    {
+        // Prefixed secret keys like access_token, refresh_token, client_secret
+        // must be redacted while preserving key names.
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[INF] access_token=secret123 value\n" +
+            "[DBG] refresh_token: \"secret456\"\n" +
+            "[DBG] client_secret = secret789");
+        Assert.DoesNotContain("secret123", outp);
+        Assert.DoesNotContain("secret456", outp);
+        Assert.DoesNotContain("secret789", outp);
+        Assert.Contains("access_token=", outp);
+        Assert.Contains("refresh_token:", outp);
+        Assert.Contains("client_secret =", outp);
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
 }
