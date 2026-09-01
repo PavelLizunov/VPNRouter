@@ -9,8 +9,8 @@
 # sets +x on the two binaries. Keeping all privileged work in one
 # helper means polkit has to authorize only ONE action per update
 # instead of three (cp + chmod + pkill) — and the annotated exec.path
-# lets the policy grant allow_active=yes (no password for logged-in
-# user) without opening up cp/chmod/pkill globally.
+# keeps privileged cp/chmod/pkill behind one administrator-authenticated
+# polkit action instead of authorizing those tools globally.
 set -e
 
 SRC="$1"

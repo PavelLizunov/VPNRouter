@@ -387,6 +387,16 @@ public sealed class ReleaseToolingContractTests
         }
     }
 
+    [Fact]
+    public void LinuxUpdatePolicy_RequiresAdminAuthentication()
+    {
+        var policy = Read("packaging", "linux", "com.vpnrouter.update.policy");
+
+        Assert.Contains("<allow_active>auth_admin</allow_active>", policy);
+        Assert.DoesNotContain("<allow_active>yes</allow_active>", policy);
+        Assert.Contains("<annotate key=\"org.freedesktop.policykit.exec.path\">/usr/libexec/vpnrouter-update-helper</annotate>", policy);
+    }
+
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
 

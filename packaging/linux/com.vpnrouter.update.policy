@@ -7,13 +7,10 @@
 
   Installed to /usr/share/polkit-1/actions/com.vpnrouter.update.policy
   by the .deb post-install step. The annotated exec.path locks this
-  action to the VPNRouter update helper specifically — granting
-  allow_active=yes here doesn't let arbitrary scripts run as root, it
-  only lets the logged-in user run /usr/libexec/vpnrouter-update-helper.
+  action to the VPNRouter update helper specifically.
 
-  allow_active=yes: user in an active local session (i.e. physically
-  at the machine) can run the helper without re-typing their password.
-  SSH / inactive sessions still need admin auth.
+  allow_active=auth_admin: active local sessions require administrator
+  authentication to run the helper.
 -->
 <policyconfig>
     <vendor>VPNRouter</vendor>
@@ -27,7 +24,7 @@
         <defaults>
             <allow_any>auth_admin</allow_any>
             <allow_inactive>auth_admin</allow_inactive>
-            <allow_active>yes</allow_active>
+            <allow_active>auth_admin</allow_active>
         </defaults>
         <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/vpnrouter-update-helper</annotate>
         <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
