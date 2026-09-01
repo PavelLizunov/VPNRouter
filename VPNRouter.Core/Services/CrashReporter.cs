@@ -168,7 +168,7 @@ public static class CrashReporter
     //     with "<key>" — covers Reality pbk, sid, and similar.
 
     private static readonly Regex _proxyUriPattern = new(
-        @"\b(vless|vmess|trojan|ss|shadowsocks|hysteria2?|hy2|tuic|naive(\+(https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
+        @"\b(vless|vmess|trojan|(ss|shadowsocks)(\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(\+(https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _httpUrlPattern = new(
