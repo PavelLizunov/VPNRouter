@@ -26,12 +26,12 @@ VPNRouter has 1,443 tracked files across desktop, Android, Core, platform networ
 
 | ID | Category | Subcategory | Primary scope | Iteration A | Iteration B | Lead verdict |
 |---|---|---|---|---|---|---|
-| CR-1 | Core runtime | Config, routing, DNS | `ConfigGenerator`, `CustomConfigInjector`, `LeakProtection`, sing-box config models | pending | pending | pending |
-| CR-2 | Core runtime | Lifecycle, health, failover | `VpnEngine*`, `SingBoxManager*`, `HealthMonitor`, `AutoFailover*`, startup pipeline | pending | pending | pending |
-| CR-3 | Core runtime | Subscriptions and protocols | subscription/VLESS resolvers, URI parsers, transport schema and selection | pending | pending | pending |
-| CR-4 | Core runtime | Free configs and emergency paths | `Services/FreeConfigs/`, emergency channel, related orchestration | pending | pending | pending |
-| PN-1 | Platform/network | Windows | TUN/split driver, firewall, process monitoring, service/launcher boundaries | pending | pending | pending |
-| PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | pending | pending | pending |
+| CR-1 | Core runtime | Config, routing, DNS | `ConfigGenerator`, `CustomConfigInjector`, `LeakProtection`, sing-box config models | 3/3 complete | pending | pending |
+| CR-2 | Core runtime | Lifecycle, health, failover | `VpnEngine*`, `SingBoxManager*`, `HealthMonitor`, `AutoFailover*`, startup pipeline | 3/3 complete | pending | pending |
+| CR-3 | Core runtime | Subscriptions and protocols | subscription/VLESS resolvers, URI parsers, transport schema and selection | 3/3 complete | pending | pending |
+| CR-4 | Core runtime | Free configs and emergency paths | `Services/FreeConfigs/`, emergency channel, related orchestration | 3/3 complete | pending | pending |
+| PN-1 | Platform/network | Windows | TUN/split driver, firewall, process monitoring, service/launcher boundaries | 3/3 complete | pending | pending |
+| PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | 3/3 complete | pending | PN-2-4 confirmed P0; others pending |
 | PN-3 | Platform/network | macOS | macOS adapters, DNS/firewall/process behavior, app packaging/update paths | pending | pending | pending |
 | PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | pending | pending | pending |
 | CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | pending | pending | pending |
