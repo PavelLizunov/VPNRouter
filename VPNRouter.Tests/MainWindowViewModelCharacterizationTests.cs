@@ -369,7 +369,7 @@ public class MainWindowViewModelCharacterizationTests
         // git-suggested-hash-bump.txt sentinel file so we know it drifted,
         // but doesn't fail CI. This is the same pattern used by
         // tools/watch-after-push.ps1 + post-push hook for cross-commit
-        // drift capture (already documented in CLAUDE.md Rule #15).
+        // drift capture.
         if (!OperatingSystem.IsWindows() && hash != expected)
         {
             var sentinel = Path.Combine(

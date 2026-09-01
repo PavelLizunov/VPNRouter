@@ -7,8 +7,7 @@
 //    SettingsLoaderRobustnessTests (the existing SR-4 suite).
 // 2. InMemorySettingsStore (test double) — full contract + the parallelism
 //    pin that's the real reason we built this fake (the rename-to-
-//    `.unloadable-{ts}` race documented in VPNRouter.Tests/CLAUDE.md
-//    "Headless tests — known issues").
+//    `.unloadable-{ts}` race in the former filesystem-backed tests).
 //
 // Brief: plans/phase3-3G-service-polish-2026-05-18.md §3G-1.
 

@@ -1,7 +1,7 @@
 # Phase 1: update-shell and CLI publish repair
 
-Date: 2026-09-01  
-Branch: `dsh/update-shell-cli-repair`  
+Date: 2026-09-01
+Branch: `dsh/update-shell-cli-repair`
 Accepted base: `origin/main` at `f797601540762ba42bc4e49b18de1f60f7140265`
 
 ## Why

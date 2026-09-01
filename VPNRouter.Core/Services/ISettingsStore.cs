@@ -5,7 +5,7 @@
 // process-wide singleton anyway), but it makes unit testing painful — the
 // SettingsLoaderRobustnessTests suite writes real files to `%TEMP%\VPNRouter.SR4.*`
 // per case, and parallel xUnit runs have raced on the rename-to-`.unloadable-*`
-// step (see VPNRouter.Tests/CLAUDE.md "Headless tests — known issues").
+// step in parallel headless tests.
 //
 // Solution: thin `ISettingsStore` interface + `RealSettingsStore` (delegates
 // to the existing static `SettingsLoader.Load/Save/ResetToDefaults`) +

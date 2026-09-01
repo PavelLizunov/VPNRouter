@@ -256,7 +256,7 @@ public class ZapretManager : IDisposable
     /// <summary>
     /// Build the Cygwin-compatible launch .bat content for <c>winws.exe</c>.
     /// Extracted from <see cref="Start"/> in v3.0 Phase 2G (2026-05-18) so the
-    /// regression test for the v2.9.x Cygwin lesson (CLAUDE.md) can pin the
+    /// regression test for the v2.9.x Cygwin launch lesson can pin the
     /// contract:
     ///
     /// <list type="bullet">

@@ -203,7 +203,7 @@ public class AutostartStatusComputationTests
     public void ComputeAutostartStatus_BilingualParity()
     {
         // RU and EN must both deliver a non-empty string for each of the
-        // three states (D1 rule from VPNRouter.App/CLAUDE.md). Catches a
+        // three states (localization invariant). Catches a
         // future copy edit that removes one branch by accident.
         var en = Strings.Lang;
         try

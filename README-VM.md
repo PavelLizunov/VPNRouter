@@ -56,9 +56,9 @@ VBoxManage modifyvm "win11" --draganddrop bidirectional
 | GitHub CLI token | output of `gh auth token` | paste into `gh auth login --with-token` | For release uploads |
 | VLESS subscription URL | from running app | paste in GUI at first start | For smoke tests |
 
-Claude Code project memory (`~\.claude\projects\…\memory\`) is optional —
-the repo already contains `CLAUDE.md` and `CLAUDE.local.md` with everything
-needed for onboarding.
+Agent session memory is optional — the repo already contains `AGENTS.md`,
+`AGENTS.local.md`, and `docs/agent-contract.md` with everything needed for
+onboarding.
 
 ## Setup inside the guest
 
@@ -87,10 +87,8 @@ The script:
 - verifies GitHub + Forgejo TCP reachability
 - runs `dotnet restore` and `dotnet build`
 
-Claude Code is not installed automatically — Anthropic doesn't ship a
-Chocolatey package, and the Claude Code CLI is used from the host. If
-you need it inside the VM as well, install it manually per Anthropic's
-current instructions.
+Agent harnesses are not installed automatically inside the VM — the harness is
+used from the host or configured per environment instructions.
 
 Useful parameters:
 
@@ -135,7 +133,7 @@ dotnet build VPNRouter.sln --configuration Release
 ```powershell
 gh auth login
 # or, non-interactive:
-gh auth login --with-token < token.txt
+Get-Content token.txt | gh auth login --with-token
 ```
 
 ### Forgejo push over AmneziaWG
@@ -158,36 +156,32 @@ ssh -T git@10.9.1.1 -p 18222
 # Expected: "Hi there, slovn!"
 ```
 
-Two remotes are already configured in the repo (see `git remote -v`):
-
-| Name | URL | Purpose |
-|---|---|---|
-| `origin` | `ssh://git@10.9.1.1:18222/slovn/vpnrouter.git` | Forgejo (private, VPN) |
-| `github` | `https://github.com/PavelLizunov/VPNRouter.git` | Public mirror |
-
-The `main` branch should be pushed to both after each change
-(see `CLAUDE.local.md`).
+The canonical development remote is `origin` at GitHub. Do not change remotes or push directly to protected `main`; push a task branch and use a pull request. If the owner explicitly requests post-acceptance mirroring, add or use a separate Forgejo remote without replacing `origin`. Current repository policy is in `docs/agent-contract.md`.
 
 ### First build
 
+`build.ps1` requires `-Version` to equal `VPNRouter.Core/AppVersion.cs` exactly:
+
 ```powershell
 cd C:\Project\VPNRouter
-.\build.ps1 -Version "test"
-# -> 3 zip artifacts in .\publish\
+$version = [regex]::Match((Get-Content .\VPNRouter.Core\AppVersion.cs -Raw), 'Version = "([^"]+)"').Groups[1].Value
+if (-not $version) { throw 'Cannot resolve AppVersion.Version' }
+.\build.ps1 -Version $version
+# -> full-install and update ZIPs, each with a SHA256 sidecar, in .\publish\
 ```
 
-Full release upload (requires `gh auth login` first):
+A release upload additionally requires explicit owner authorization and `gh auth login`:
 
 ```powershell
-.\build.ps1 -Version "1.24.6" -Upload
+$version = [regex]::Match((Get-Content .\VPNRouter.Core\AppVersion.cs -Raw), 'Version = "([^"]+)"').Groups[1].Value
+if (-not $version) { throw 'Cannot resolve AppVersion.Version' }
+.\build.ps1 -Version $version -Upload
 ```
 
-The pre-built `tools\sing-box.exe` (~24 MB, custom build with
-`with_utls,with_clash_api,with_quic` tags) ships with the repo. Rebuild it
-only if you need a different sing-box version:
+Release builds use the pinned sing-box-lx build helper for the required feature tags. Rebuild only when the task explicitly changes or verifies that core:
 
 ```powershell
-.\build-singbox.ps1 -Version "1.13.3" -Install
+powershell -ExecutionPolicy Bypass -File tools\build-singbox-lx.ps1
 ```
 
 ## Gotchas
@@ -196,9 +190,10 @@ only if you need a different sing-box version:
   firewall rules. Right-click -> Properties -> Compatibility ->
   "Run as administrator" to stop the UAC prompt from interrupting each
   test run.
-- **WinTUN driver.** sing-box installs it on first use. If that fails,
-  download from <https://www.wintun.net/> and register manually:
-  `rundll32 wintun.dll,RunDll32 install`.
+- **WinTUN driver.** VPNRouter/sing-box loads the bundled Wintun DLL; there is no
+  supported `rundll32` registration step. If initialization fails, keep the app
+  stopped, reinstall the verified VPNRouter package, and inspect the redacted
+  diagnostics before retrying.
 - **Defender real-time scan.** Significantly slows `dotnet build`. The
   setup script adds exclusions; if you skipped that step, add them by
   hand.
@@ -223,13 +218,15 @@ only if you need a different sing-box version:
   manually — but for this project everything required ships through
   Chocolatey.
 - **sing-box process_name matching is case-sensitive.** Covered in
-  `CLAUDE.md`. Not something you'll hit during setup, but worth knowing
+  `docs/agent-contract.md`. Not something you'll hit during setup, but worth knowing
   if you edit `ConfigGenerator.cs` / `ProcessScanner.cs`.
 
 ## See also
 
-- `CLAUDE.md` — codebase architecture and design decisions
-- `CLAUDE.local.md` — private notes (VPN access, release workflow)
+- `AGENTS.md` — agent entry point and skill routing
+- `AGENTS.local.md` — repository-local branch and authority overlay
+- `docs/agent-contract.md` — canonical project contract
+- `docs/test-workers.md` — test worker node architecture and facts
 - `README.md` — end-user documentation
 - `build.ps1` — release build pipeline
-- `build-singbox.ps1` — custom sing-box rebuild
+- `tools/build-singbox-lx.ps1` — pinned custom sing-box rebuild

@@ -1,12 +1,12 @@
 # Review-agent prompt — VPNRouter
 
-Adapted from `methodology-toolkit/METHODOLOGY.md` §7.1 (audit P0 item 3). Spawn
-an INDEPENDENT reviewer BEFORE every commit/ship that touches code — skip ONLY
-if the hotfix short-circuit applies (≤5 lines + ONE surface + no contract/
-behaviour drift, §5). Brief it like a new colleague: paste the FULL diff +
-invariants verbatim, never "as discussed above". The agent sees only what you paste.
+Spawn an INDEPENDENT reviewer using the DSH `subagent` tool before every
+non-trivial commit/ship that touches code. Skip only for a true hotfix
+short-circuit (≤5 lines, one surface, and no contract/behaviour drift). Brief it
+like a new colleague: paste the full diff and invariants verbatim, never "as
+discussed above". The agent sees only what you paste.
 
-    Agent(subagent_type: "general-purpose", prompt: <the block below + the diff>)
+    subagent(description: "Code review", prompt: <the block below + the diff>)
 
 ---
 
@@ -82,10 +82,10 @@ I treat critical + important as blocking; minor is opt-in.
 ---
 
 ## When to invoke
-- BEFORE every commit/ship that touches code (ship-rolling-candidate HARD
-  PRECONDITION 2; cut-stable inherits via the candidate's review).
+- BEFORE every commit/ship that touches code (`ship-rolling-candidate` HARD
+  PRECONDITION 2; `cut-stable` inherits via the candidate's review — see `.dsh/skills/`).
 - Skip ONLY for a true hotfix short-circuit (<=5 lines + one surface + no
-  contract drift, METHODOLOGY §5) — and say so in the ship report.
+  contract drift) — and say so in the ship report.
 
 ## What to do with findings
 - `critical` — fix before commit, no exceptions.

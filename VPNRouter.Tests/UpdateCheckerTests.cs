@@ -163,8 +163,8 @@ public sealed class UpdateCheckerTests
     [Fact]
     public void CompareTo_StableBeatsAnyRollingCandidateOfSameCore()
     {
-        // The v2.25.0-r1→r2 lesson (see CLAUDE.local.md Release Process
-        // section). semver-major rule: prerelease < same-core stable.
+        // The v2.25.0-r1→r2 release lesson: semver-major rule says
+        // prerelease < same-core stable.
         // Pre-r2 we shipped v2.25.0-r1 with `AppVersion.Version = "2.25.0"`
         // — once we fixed AppVersion to "2.25.0-r1", clients on r1 saw
         // stable 2.25.0 as "newer" and the auto-update fired. Pin THIS

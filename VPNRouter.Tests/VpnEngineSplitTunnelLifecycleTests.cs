@@ -42,7 +42,7 @@
 //
 // ── Why a new file (vs. extending VpnEngineLifecycleTests.cs) ────────────
 //
-// Per VPNRouter.Tests/CLAUDE.md "Layout" rule: one class — one file.
+// Per VPNRouter.Tests/AGENTS.md: one test class per file.
 // Phase 2E (2026-05-17) extracted 42 classes out of the old UnitTest1.cs
 // bag into per-file classes. Adding to VpnEngineLifecycleTests.cs (Task
 // #36-C's 9-test file) would re-grow that file and violate the convention.

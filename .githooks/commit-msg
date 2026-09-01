@@ -10,10 +10,6 @@
 #   M2. Subject in conventional <scope>: <subject> form (scope in
 #       core/app/cli/service/android/tests/ci/docs/build OR free-form
 #       project verb like "fix:", "feat:")
-#   M3. Body has Co-Authored-By trailer for Claude-generated commits
-#       (Detection: if any commit author or recent file change mentions
-#       "Claude" / contains "v3.0" / current git config user.name = Claude.
-#       Skipped if commit has --no-verify intent in message.)
 #
 # Bypass: git commit --no-verify
 
@@ -37,11 +33,6 @@ fi
 # ─── M2 — conventional commit prefix ────────────────────────────────────
 if ! echo "$subject" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|ci|build|style)(\([a-z]+\))?: '; then
   WARNINGS+=("M2: subject not in 'type(scope): subject' form. Recommended: feat/fix/docs/refactor/test/chore/ci/build.")
-fi
-
-# ─── M3 — Co-Authored-By trailer ────────────────────────────────────────
-if ! grep -qE '^Co-Authored-By: Claude' "$COMMIT_MSG_FILE"; then
-  WARNINGS+=("M3: missing 'Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>' trailer. Required for Claude commits per CLAUDE.md.")
 fi
 
 # ─── Verdict ─────────────────────────────────────────────────────────────

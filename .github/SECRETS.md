@@ -197,5 +197,4 @@ When introducing a new workflow secret:
    how CI consumes it, rotation policy.
 3. Reference this file from the workflow comment block where the
    secret is first read.
-4. Update `.github/workflows/CLAUDE.md` "Secrets" table to mirror
-   the index here.
+4. Update `.github/workflows/AGENTS.md` when the workflow-zone secret contract or inventory changes.

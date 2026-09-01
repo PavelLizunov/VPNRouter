@@ -2,8 +2,7 @@
 //
 // Replaces the real SettingsLoader.Load/Save which previously hit
 // %TEMP%\VPNRouter.SR4.* (or worse, %ProgramData%\VPNRouter\config.yaml) for
-// every unit test. The previous flake — documented in
-// VPNRouter.Tests/CLAUDE.md "Headless tests — known issues" — was caused by:
+// every unit test. The previous headless-test flake was caused by:
 //   1. Parallel xUnit cases racing on the rename-to-`.unloadable-{ts}` step
 //      when two malformed-yaml cases happened to land in the same millisecond
 //      (timestamp collision → File.Move(overwrite:false) threw).

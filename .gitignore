@@ -40,17 +40,18 @@ Desktop.ini
 # Windows reserved device files
 nul
 
-# sing-box source & Go build cache (built via build-singbox.ps1).
+# sing-box source & Go build cache (built via tools/build-singbox-lx.ps1).
 # Use tools/* (not tools/) so we can re-include specific developer
 # scripts via exceptions below. With a trailing-slash ignore the dir
 # itself gets pruned and git never even looks inside for !-patterns.
 tools/*
+!tools/AGENTS.md
 # Re-include: live-test scripts (reusable per-release regression harness).
 !tools/live-test-*.ps1
 # Autonomous Proxmox test-VM control (scoped API token; live-verify env access).
 !tools/testvm-control.ps1
 # Fail-closed remote-only verifier for the windows-brat test VM (fixed target
-# 192.168.0.106 / WINBRAT; UIA + screenshots run on brat, never the dev box).
+# 100.115.182.0 / WINBRAT; semantic UIA runs on brat, never the dev box).
 !tools/brat-verify.ps1
 !tools/brat-route-plan.ps1
 !tools/brat-stability.ps1
@@ -63,12 +64,12 @@ tools/*
 !tools/build-singbox-lx.ps1
 # Re-include: build-singbox-lx.sh (darwin/linux port — Mac/Linux AWG+XHTTP core).
 !tools/build-singbox-lx.sh
-# Re-include: VpnRouterTestMcp (in-tree MCP server — Claude GUI testing).
+# Re-include: VpnRouterTestMcp (in-tree MCP server — agent GUI testing).
 !tools/VpnRouterTestMcp/
 !tools/VpnRouterTestMcp/**
 # v2.32.2: methodology self-checker — runs 10 meta-tests.
 !tools/check-methodology.sh
-# v2.37.0-r19: CI gate verifier (pre-push hook). Re-add per CLAUDE.md rule #11.
+# v2.37.0-r19: CI gate verifier (pre-push hook). Re-add per contract rule #11.
 !tools/verify-last-commit-ci.ps1
 # audit item 7 (2026-06-25): open-defect ledger gate for cut-stable (pre-flight 6.5).
 !tools/check-open-p0.ps1
@@ -127,19 +128,6 @@ VPNRouter.Tests/screenshots/*
 !VPNRouter.Tests/screenshots/page-simple.png
 !VPNRouter.Tests/screenshots/page-applications.png
 !VPNRouter.Tests/screenshots/page-tools.png
-
-# Claude session handoff (memory layer for CSM context system).
-# Contains current state + persons + infrastructure pointers. May contain
-# secrets in future iterations (Forgejo creds, GitHub PATs, etc.) — keep
-# private. See /CLAUDE.md "Memory layer" section for workflow.
-.claude_handoff.md
-
-# Claude Code per-user permission allowlist (autonomous-mode bypass for
-# ship-rolling-candidate workflow). Personal overrides — convention says
-# settings.local.json is gitignored. settings.json (committed) is for
-# team-wide config; settings.local.json is for "I trust these commands
-# on my machine".
-.claude/settings.local.json
 
 # v3.0 Android Phase 1.B — libbox.aar built locally (92 MB Go cross-compile)
 VPNRouter.Android/Lib/libbox*.aar

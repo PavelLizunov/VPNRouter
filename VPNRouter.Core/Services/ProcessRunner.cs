@@ -319,8 +319,8 @@ internal sealed class ProcessHandle : IProcessHandle
 
         // Mirror SingBoxManager.Stop pattern: disable Exited callback BEFORE
         // killing so we don't fire a spurious Exited event on intentional
-        // disposal. (See VPNRouter.Core/CLAUDE.md "SingBoxManager intentional
-        // stop" section.) — Also explicit via SuppressExitedEvent above for
+        // disposal. This mirrors the SingBoxManager lifecycle invariant in
+        // VPNRouter.Core/AGENTS.md. Also explicit via SuppressExitedEvent above for
         // callers that want to disable without disposing the handle.
         try { _process.EnableRaisingEvents = false; } catch { /* defensive */ }
 

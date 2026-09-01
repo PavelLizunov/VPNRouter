@@ -1589,7 +1589,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
     private bool _tgProxyEnabled = false;
-    // v2.37.0-r7 — uses Strings.Stopped. Same CLAUDE.md D1 fix as
+    // v2.37.0-r7 — uses Strings.Stopped. Same bilingual-UI fix as
     // ZapretStatus above. Window rebuild on language change re-instantiates
     // the VM so this picks up the new Lang.
     [ObservableProperty] private string _tgProxyStatus = Strings.Stopped;
@@ -2586,7 +2586,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     //     management, keeping all update-related controls together.
     // Design handoff cell 7 specifies 7 sections, so this is a
     // documented deviation per v2.31.6-r1/r3 lesson (Rule B4): walking
-    // each section with mcp__vpnrouter-test__mouse_click revealed
+    // each section through the live semantic UI verifier revealed
     // 6 of 7 had ≤3 elements — the 7-section spread was over-architected
     // for the actual content. Surface area per section now averages
     // ~5 controls — denser without crowding.
@@ -6450,7 +6450,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Parse stats line into short summary for UI display.
     /// v2.37.0-r16 \u2014 localized "Active:" and "Total:" prefixes (were
     /// hardcoded English pre-r16; mixed inside an otherwise-Russian
-    /// air-pill, violating CLAUDE.md D1).</summary>
+    /// air-pill, violating the bilingual-UI invariant).</summary>
     private static string ParseStatsShort(string statsLine)
     {
         // Input: "stats: total=10 active=2 ws=8 tcp_fb=1 cf=0 bad=1 ..."

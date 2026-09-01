@@ -259,7 +259,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
     /// <summary>How many Verified configs to hunt for in a deep-verify session.
     /// v2.30.7-r2 (VM-6 audit fix): switched from int to int? to be NumericUpDown-safe
-    /// per CLAUDE.md "NumericUpDown bind to int" gotcha. The field isn't currently
+    /// per the NumericUpDown nullable-value rule in VPNRouter.App/AGENTS.md. The field isn't currently
     /// bound in XAML but the planned design (free-configs-v2.14-roadmap.md) shows
     /// a NumericUpDown — defensive rewrite ahead of that.</summary>
     [ObservableProperty] private int? _deepVerifyTargetCount = 5;

@@ -8,8 +8,7 @@
 // SettingsLoaderRobustnessTests / SettingsValidatorTests / the new
 // ISettingsStoreContractTests, those readers saw the flipped flag and
 // Load() short-circuited to defaults — masking real fixture values and
-// flaking ~14 cases. This was the documented flake in
-// VPNRouter.Tests/CLAUDE.md "Headless tests — known issues".
+// flaking ~14 cases.
 //
 // 3G-1 migrated AutoFailoverEngineTests to InMemorySettingsStore so it no
 // longer flips SafeMode. StartupPipelineTests still needs SafeMode for its

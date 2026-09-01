@@ -73,7 +73,7 @@ risk, because the current stable is worse.
 
 ---
 
-## Implementation checklist for Claude
+## Implementation checklist for DSH
 
 When starting new work on a bug batch:
 
@@ -86,7 +86,7 @@ When starting new work on a bug batch:
    only after the new candidate has passed post-ship verification; tags remain
    as build history unless the retention policy explicitly says otherwise.
 6. Repeat steps 4-5 until user says "works".
-7. Cut stable through `.agents/skills/cut-stable/SKILL.md`: create a new
+7. Cut stable through the native `cut-stable` skill: create a new
    no-suffix AppVersion commit through branch/PR/CI, rebuild all platform
    artifacts under a new immutable stable tag, and run the final WINBRAT gate.
 
@@ -102,8 +102,7 @@ tag exactly, including the suffix.
 ## Verification gate (before promoting -rN to stable)
 
 A `-rN` candidate is **READY for stable cut** only when ALL of these
-are green. Cut itself is not autonomous (see `CLAUDE.local.md` lesson
-v2.31.2).
+are green. Cut itself is not autonomous; `docs/agent-contract.md` requires an explicit owner command.
 
 1. `dotnet build VPNRouter.sln -c Release` — 0 errors.
 2. Regression test suite green (xUnit + headless Avalonia).
@@ -167,8 +166,7 @@ archive + password manager).
 
 ## Enforcement
 
-Documented in `CLAUDE.local.md` so every new Claude session picks
-this up without needing to re-read this file first.
+The entry point is `docs/agent-contract.md`; executable release procedures live in `.dsh/skills/ship-rolling-candidate/` and `.dsh/skills/cut-stable/`.
 
 ---
 

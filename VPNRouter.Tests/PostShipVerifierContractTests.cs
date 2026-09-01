@@ -598,23 +598,18 @@ public sealed class PostShipVerifierContractTests
     }
 
     [Fact]
-    public void PostShipSkill_MirrorsStayHeadlessAndWindowsContractsStayInCi()
+    public void NativeDshPostShipSkill_StaysHeadlessAndWindowsContractsStayInCi()
     {
         var root = FindRepoRoot();
-        var agentRoot = Path.Combine(root, ".agents", "skills", "post-ship-mcp-verify");
-        var claudeRoot = Path.Combine(root, ".claude", "skills", "post-ship-mcp-verify");
+        var skillRoot = Path.Combine(root, ".dsh", "skills", "post-ship-mcp-verify");
         var forbidden = new[] { "-Action screenshot", "CopyFromScreen", "rdp-shots" };
 
-        foreach (var agentFile in Directory.EnumerateFiles(agentRoot, "*", SearchOption.AllDirectories))
+        Assert.True(Directory.Exists(skillRoot), "Native DSH post-ship skill is missing.");
+        foreach (var skillFile in Directory.EnumerateFiles(skillRoot, "*", SearchOption.AllDirectories))
         {
-            var relative = Path.GetRelativePath(agentRoot, agentFile);
-            var claudeFile = Path.Combine(claudeRoot, relative);
-            Assert.True(File.Exists(claudeFile), $"Missing mirrored skill file: {relative}");
-
-            var agentSource = File.ReadAllText(agentFile);
-            Assert.Equal(agentSource, File.ReadAllText(claudeFile));
+            var source = File.ReadAllText(skillFile);
             foreach (var token in forbidden)
-                Assert.DoesNotContain(token, agentSource, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(token, source, StringComparison.OrdinalIgnoreCase);
         }
 
         var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "test.yml"));

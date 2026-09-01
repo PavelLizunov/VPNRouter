@@ -1,7 +1,6 @@
 # Simple Mode — Variant A · Calm
 
-Handoff package for Claude Code. Implement Simple mode in the VPNRouter Avalonia
-app using this reference.
+Handoff package for DSH agents. Implement Simple mode in the VPNRouter Avalonia app using this reference and the `merge-design-handoff` skill.
 
 ## Files
 

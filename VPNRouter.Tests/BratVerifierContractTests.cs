@@ -131,7 +131,7 @@ public sealed class BratVerifierContractTests
         Assert.DoesNotContain("$scan.Hits", logs);
         Assert.DoesNotContain("$scan.Context | ForEach-Object", logs);
 
-        var skill = Read(".agents", "skills", "post-ship-mcp-verify", "SKILL.md");
+        var skill = Read(".dsh", "skills", "post-ship-mcp-verify", "SKILL.md");
         Assert.Contains("100.115.182.0", skill);
         Assert.Contains("NO local fallback", skill);
     }
@@ -231,17 +231,13 @@ public sealed class BratVerifierContractTests
     }
 
     [Fact]
-    public void ClaudeMirror_IsByteIdenticalToAgentsSkill_AndObsoleteLocalScriptsAreGone()
+    public void NativeDshPostShipSkill_HasAllChecklists_AndNoLocalDriverScripts()
     {
-        // The tracked .claude mirror must not drift from the .agents source of
-        // truth (QF-9): CLAUDE.md rule #12 points Claude agents at the .claude
-        // copy, so it must carry the exact remote-only windows-brat contract.
-        // QF-10: compare raw bytes so BOM/encoding differences cannot escape.
-        Assert.Equal(
-            ReadBytes(".agents", "skills", "post-ship-mcp-verify", "SKILL.md"),
-            ReadBytes(".claude", "skills", "post-ship-mcp-verify", "SKILL.md"));
+        var root = FindRoot();
+        var skillRoot = Path.Combine(root, ".dsh", "skills", "post-ship-mcp-verify");
+        Assert.True(File.Exists(Path.Combine(skillRoot, "SKILL.md")));
 
-        var checklists = new[]
+        foreach (var name in new[]
         {
             "checklist-free-configs.md",
             "checklist-localization.md",
@@ -249,27 +245,18 @@ public sealed class BratVerifierContractTests
             "checklist-tgproxy.md",
             "checklist-vpn-core.md",
             "checklist-zapret.md",
-        };
-
-        foreach (var name in checklists)
+        })
         {
-            Assert.Equal(
-                ReadBytes(".agents", "skills", "post-ship-mcp-verify", "references", name),
-                ReadBytes(".claude", "skills", "post-ship-mcp-verify", "references", name));
+            Assert.True(File.Exists(Path.Combine(skillRoot, "references", name)),
+                $"Missing native DSH post-ship checklist: {name}");
         }
 
-        // The retired local-MCP scripts are gone; tools/brat-verify.ps1 is the
-        // single driver and no replacement may reappear under the mirror.
-        var root = FindRoot();
-        Assert.False(File.Exists(Path.Combine(root, ".claude", "skills", "post-ship-mcp-verify", "scripts", "post-ship-install-launch.ps1")));
-        Assert.False(File.Exists(Path.Combine(root, ".claude", "skills", "post-ship-mcp-verify", "scripts", "post-ship-collect-logs.ps1")));
+        Assert.False(Directory.Exists(Path.Combine(skillRoot, "scripts")));
+        Assert.True(File.Exists(Path.Combine(root, "tools", "brat-verify.ps1")));
     }
 
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
-
-    private static byte[] ReadBytes(params string[] parts) =>
-        File.ReadAllBytes(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
 
     private static string FindRoot()
     {

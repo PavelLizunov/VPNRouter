@@ -29,8 +29,7 @@ Most VPN features need Administrator/root (TUN adapter, firewall, ETW).
 - `VPNRouter.Service` — Windows Service wrapper.
 - `VPNRouter.Tests` — xUnit tests.
 
-See `CLAUDE.md` for a deeper architecture tour and `CURRENT_STATE.md` for live
-release/platform facts.
+See `AGENTS.md` and `docs/agent-contract.md` for contract and architecture rules, and `CURRENT_STATE.md` for live release/platform facts.
 
 ## Code style
 

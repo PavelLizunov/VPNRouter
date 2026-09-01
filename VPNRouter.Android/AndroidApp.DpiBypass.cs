@@ -15,8 +15,8 @@ namespace VPNRouter.Android;
 /// layout (sidebar + Status / Strategy / Hosts / Filters / Advanced
 /// sections) with a footer Apply bar (status indicator + toggle button).
 ///
-/// <para>Mobile adaptation per CLAUDE.md guidance: «Android may collapse
-/// sidebar to top tabs given narrow viewport — keep functional parity.»
+/// <para>Mobile adaptation keeps functional parity while collapsing the
+/// sidebar to top tabs for the narrow Android viewport.
 /// The 140-px sidebar moves to a horizontal sub-tab strip at the top.
 /// Hosts and Filters sections are skipped (they manage Windows hosts file
 /// + ipset filter — both winws.exe-only). Status / Strategy / Advanced
