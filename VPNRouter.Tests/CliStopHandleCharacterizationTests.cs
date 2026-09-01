@@ -38,6 +38,7 @@ public sealed class CliStopHandleCharacterizationTests
 
             fresh.Kill(entireProcessTree: true);
             Assert.True(fresh.WaitForExit(5000));
+            Assert.False(pinnedHandle.IsClosed);
             GC.KeepAlive(pinnedHandle);
         }
         finally
