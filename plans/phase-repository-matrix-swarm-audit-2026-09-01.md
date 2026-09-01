@@ -33,19 +33,19 @@ VPNRouter has 1,443 tracked files across desktop, Android, Core, platform networ
 | PN-1 | Platform/network | Windows | TUN/split driver, firewall, process monitoring, service/launcher boundaries | 3/3 complete | 3/3 complete | pending |
 | PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | 3/3 complete | 3/3 complete | PN-2-4 fixed in green PR #204; others pending |
 | PN-3 | Platform/network | macOS | macOS adapters, DNS/firewall/process behavior, app packaging/update paths | 3/3 complete | 3/3 complete | pending |
-| PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | 3/3 complete | 3/3 complete | pending |
-| CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | 3/3 complete | 3/3 complete | pending |
-| CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | 3/3 complete | 3/3 complete | pending |
+| PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | 3/3 complete | 3/3 complete | PN-4-2 refuted; others pending |
+| CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | 3/3 complete | 3/3 complete | four source-false candidates refuted; others pending |
+| CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | 3/3 complete | 3/3 complete | five refuted; three measurement-gated; others pending |
 | CL-3 | Clients | CLI and Windows service | `VPNRouter.CLI/`, `VPNRouter.Service/`, IPC/coexistence and lifecycle | 3/3 complete | 3/3 complete | pending |
 | CL-4 | Clients | Localization, settings, migrations | Core/App/Android strings, settings loading/saving/migration and config examples | 3/3 complete | 3/3 complete | pending |
-| SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | 3/3 complete | 3/3 complete | pending |
-| SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | 3/3 complete | 3/3 complete | pending |
-| SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | 3/3 complete | 3/3 complete | pending |
+| SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | 3/3 complete | 3/3 complete | SU-1-1/-2 confirmed P1; others pending |
+| SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | 3/3 complete | 3/3 complete | SU-2-1 refuted; SU-2-2/-3 confirmed P1 |
+| SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | 3/3 complete | 3/3 complete | -1/-2/-3/-6 confirmed P1; -4 P2; -5 gated |
 | BR-1 | Build/release | CI workflows and hooks | `.github/`, `.githooks/`, repository policy gates | 3/3 complete | 3/3 complete | pending |
 | BR-2 | Build/release | Packaging and native dependencies | `packaging/`, build scripts, native payload pins/checksums/licenses | 3/3 complete | 3/3 complete | pending |
 | BR-3 | Build/release | Release feeds and verifiers | release/update-feed tools, BRAT/post-ship verification and asset contracts | 3/3 complete | 3/3 complete | pending |
 | QA-1 | Quality/architecture | Tests and characterization | `VPNRouter.Tests/`, test discovery, determinism, boundary coverage | 3/3 complete | 3/3 complete | pending |
-| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | 3/3 complete | pending |
+| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | 3/3 complete | generic split claims refuted/gated; no split accepted yet |
 | QA-3 | Quality/architecture | Dependencies, dead code, duplication | project graphs, one-use abstractions, wrappers, obsolete flags and repeated logic | 3/3 complete | 3/3 complete | pending |
 | QA-4 | Quality/architecture | Docs, contracts, plans | active docs, AGENTS contracts, samples/profiles, stale/current-state divergence | 3/3 complete | 3/3 complete | pending |
 
