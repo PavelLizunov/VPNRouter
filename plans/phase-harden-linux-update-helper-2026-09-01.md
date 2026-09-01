@@ -42,13 +42,17 @@ The policy is parsed as XML, its exact authorization values are contract-tested,
 
 ## Verification gate
 
-- [ ] **Gate 1 — Scope**: only the Linux update policy, explanatory comments, one contract test, defect ledger, and task outcome change.
-- [ ] **Gate 2 — Security**: active users cannot invoke the privileged helper without administrator authentication; executable path and destination allowlist remain constrained.
-- [ ] **Gate 3 — Tests/build**: XML parsing, focused release-tooling tests, Release build, and full discovered suite pass.
-- [ ] **Gate 4 — Documentation**: comments, defect status, PR body, and Outcome match actual policy behavior.
-- [ ] **Gate 5 — Independent review**: security, correctness, and test lenses leave no source-confirmed P0/P1.
-- [ ] **Gate 6 — Integration**: exact-head GitHub `test`, `grep`, Windows Go, and characterization checks pass; UI/remote verification is N/A.
+- [x] **Gate 1 — Scope**: only the Linux update policy, explanatory comments, one contract test, defect ledger, and task outcome change.
+- [x] **Gate 2 — Security**: active users cannot invoke the privileged helper without administrator authentication; executable path and destination allowlist remain constrained.
+- [x] **Gate 3 — Tests/build**: XML parsing, focused update workflow, Release build, and full discovered suite pass.
+- [x] **Gate 4 — Documentation**: comments, defect status, PR body, and Outcome match actual policy behavior.
+- [x] **Gate 5 — Independent review**: security, correctness, and test lenses leave no source-confirmed P0/P1.
+- [x] **Gate 6 — Integration**: implementation-head GitHub `test`, `test-update`, `grep`, Windows Go, and characterization checks pass; UI/remote verification is N/A.
 
 ## Outcome
 
-Pending implementation and exact-head verification. Merge remains a separate owner decision.
+Implemented in PR #204 at code head `ce04b8d9404ac70448997ec92bce207d596b3587`. The packaged polkit action now requires `auth_admin` for active, inactive, and other sessions. The exact root-owned helper path remains pinned, and its destination allowlist and application-side release verification are unchanged. Stale passwordless-helper comments were removed from the policy, helper, and `UpdateChecker`.
+
+The policy parsed successfully with the standard XML parser, `bash -n packaging/linux/vpnrouter-update-helper` passed, and `git diff --check` passed. Three independent security/correctness/test reviewers found no P0/P1; one stale helper comment was source-confirmed and fixed. GitHub Actions on the implementation head passed `test` (2,831 total: 2,774 passed, 57 platform/UI skips), `test-update`, `characterization-windows` (19/19), `go-test-windows`, and `grep`. This outcome-only commit must pass the same exact-head checks before merge.
+
+Rollback is a revert of `ce04b8d9404ac70448997ec92bce207d596b3587`. No release, tag, deployment, installation, merge, or stable cut was performed; merge remains a separate owner decision.
