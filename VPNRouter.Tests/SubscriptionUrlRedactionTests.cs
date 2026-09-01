@@ -17,6 +17,7 @@ namespace VPNRouter.Tests;
 /// log argument in SubscriptionFetcher must go through CanaryPolicy.RedactUrl.
 /// Pure redaction shape is pinned by CanaryPolicyTests — not duplicated here.
 /// </summary>
+[Collection(SubscriptionFetcherCollection.Name)]
 public sealed class SubscriptionUrlRedactionTests
 {
     private const string SubUrl = "https://provider.example/api/sub?token=secret123";
