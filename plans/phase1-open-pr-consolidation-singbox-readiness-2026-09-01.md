@@ -40,11 +40,17 @@ Risk is medium: redaction and DNS defaults are security-sensitive, while incorre
 
 1. **Scope gate:** only reviewed salvage, DNS bootstrap, active DSH context, tests, and task-owned documentation change; `.claude`, `.agents`, `CLAUDE*.md`, and `.jules` remain absent.
 2. **Secret gate:** CrashReporter and Diagnostics tests cover basic-auth, pathless query/fragment, Shadowsocks plugins, `tg://`, prefixed secrets, and `tg_proxy_secret` without exposing values.
-3. **DNS gate:** generated defaults and synthesized custom bootstrap contain no direct public UDP/53 resolver; proxy DNS remains tunnel-detoured and LAN/system resolver exceptions remain explicit.
+3. **DNS gate:** VPNRouter-owned generated, injected, and deep-verifier DNS contains no direct public UDP/53 resolver; proxy DNS remains tunnel-detoured and LAN/system or explicit custom resolver exceptions remain explicit.
 4. **Build gate:** focused tests, full discovered suite, `grep`, Windows Go tests, characterization contracts, and applicable updater packaging checks are green on the exact reviewed head.
 5. **Documentation gate:** English/Russian README behavior matches code; native pins/tags/checksums are source-backed; LX `.29` is rejected until final `v1.14.0` ancestry is proved and Android Clash API compatibility is gated.
 6. **Review gate:** independent correctness, security, DNS/leak, compatibility, and documentation reviewers leave no surviving P0/P1; no release action is performed.
 
 ## Outcome
 
-Pending implementation and exact-head CI.
+Implemented in PR #201 at code head `801f1d04f8f86041b8d5ef226416e872f5a8a85a`. The consolidation preserves merged redaction behavior while adding HTTP userinfo, pathless query/fragment, and `tg://` coverage; pins `tg_proxy_secret`; ports the `getcap` argv boundary; and removes VPNRouter-owned direct public UDP DNS from generated, custom-injected, geo-bypass, and transient deep-verifier configs. The obsolete RU-bypass/DNS-lockdown warning is retired without removing its public compatibility surfaces.
+
+Active DSH guidance now owns the app-config detour contract and rejects `.jules`; bilingual public DNS behavior and the native runtime inventory match source. The separate readiness plan rejects beta-based LX `.29`, keeps AWG 3.1 and Android Clash API compatibility externally gated, and makes no runtime pin change.
+
+Local `git diff --check`, workflow YAML parsing, adversarial redaction cases, source/pin checks, and provider-artifact scans passed. Five initial and three final independent reviewers found no surviving P0/P1. GitHub Actions on the implementation head passed `test` (2,826 total: 2,769 passed, 57 platform/UI skips), `characterization-windows` (19/19), `go-test-windows`, and `grep`; updater packaging was not applicable to this path set. The control plane has no .NET SDK or PowerShell, so GitHub Actions is the build/test oracle. This outcome-only commit must pass the same exact-head checks before merge.
+
+Rollback is a revert of `801f1d04f8f86041b8d5ef226416e872f5a8a85a`. No binary bump, release, tag, deployment, stable cut, or installation was performed.
