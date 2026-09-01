@@ -107,6 +107,35 @@ public sealed class UpdateBackupTests
     }
 
     [Fact]
+    public void DeleteSnapshot_StaleGenerationCannotDeleteReplacement()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var first = UpdateBackup.CreateSnapshot(root);
+            Assert.True(first.Success, first.Diagnostic);
+            var firstGeneration = UpdateBackup.GetSnapshotGeneration(root);
+            Assert.NotNull(firstGeneration);
+
+            File.WriteAllText(Path.Combine(root, "app", "new-generation.dll"), "new");
+            var second = UpdateBackup.CreateSnapshot(root);
+            Assert.True(second.Success, second.Diagnostic);
+            var secondGeneration = UpdateBackup.GetSnapshotGeneration(root);
+            Assert.NotNull(secondGeneration);
+            Assert.NotEqual(firstGeneration, secondGeneration);
+
+            Assert.False(UpdateBackup.DeleteSnapshot(root, firstGeneration!));
+            Assert.True(File.Exists(Path.Combine(root, "app.bak", "new-generation.dll")));
+            Assert.Equal(secondGeneration, UpdateBackup.GetSnapshotGeneration(root));
+
+            Assert.True(UpdateBackup.DeleteSnapshot(root, secondGeneration!));
+            Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.Null(UpdateBackup.GetSnapshotGeneration(root));
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
     public void RestoreSnapshot_NoOpWhenNoSnapshot()
     {
         var root = CreateFakeInstall();
@@ -115,6 +144,67 @@ public sealed class UpdateBackupTests
             var r = UpdateBackup.RestoreSnapshot(root);
             Assert.False(r.Restored);
             Assert.Contains("no snapshot", r.Reason, StringComparison.OrdinalIgnoreCase);
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void SnapshotOperations_RefuseWhileInstallLockIsHeld()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var snapshot = UpdateBackup.CreateSnapshot(root);
+            Assert.True(snapshot.Success, snapshot.Diagnostic);
+
+            using var heldLock = new FileStream(
+                Path.Combine(root, UpdateBackup.OperationLockName),
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.None);
+
+            var create = UpdateBackup.CreateSnapshot(root);
+            var restore = UpdateBackup.RestoreSnapshot(root);
+            var delete = UpdateBackup.DeleteSnapshot(root);
+
+            Assert.False(create.Success);
+            Assert.Contains("in progress", create.Diagnostic);
+            Assert.False(restore.Restored);
+            Assert.True(restore.OperationInProgress);
+            Assert.Contains("in progress", restore.Reason);
+            Assert.False(delete);
+            Assert.True(Directory.Exists(Path.Combine(root, "app")));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void RestoreSnapshot_LockPathFailure_IsNotReportedAsContention()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var snapshot = UpdateBackup.CreateSnapshot(root);
+            Assert.True(snapshot.Success, snapshot.Diagnostic);
+
+            var lockPath = Path.Combine(root, UpdateBackup.OperationLockName);
+            File.Delete(lockPath);
+            Directory.CreateDirectory(lockPath);
+
+            var create = UpdateBackup.CreateSnapshot(root);
+            var restore = UpdateBackup.RestoreSnapshot(root);
+
+            Assert.False(create.Success);
+            Assert.Contains("lock unavailable", create.Diagnostic);
+            Assert.DoesNotContain("in progress", create.Diagnostic);
+            Assert.False(restore.Restored);
+            Assert.False(restore.OperationInProgress);
+            Assert.Contains("lock unavailable", restore.Reason);
+            Assert.True(Directory.Exists(Path.Combine(root, "app")));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
         }
         finally { CleanUp(root); }
     }
@@ -147,6 +237,88 @@ public sealed class UpdateBackupTests
             Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
             var second = UpdateBackup.RestoreSnapshot(root);
             Assert.False(second.Restored);
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void RestoreSnapshot_SecondMoveFailure_RestoresPreviousApp()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            UpdateBackup.CreateSnapshot(root);
+            var marker = Path.Combine(root, "app", "current-tree.txt");
+            File.WriteAllText(marker, "keep-current");
+            var moveAttempt = 0;
+
+            var result = UpdateBackup.RestoreSnapshot(root, (source, destination) =>
+            {
+                moveAttempt++;
+                if (moveAttempt == 2)
+                    throw new IOException("injected snapshot move failure");
+                Directory.Move(source, destination);
+            });
+
+            Assert.False(result.Restored);
+            Assert.Contains("previous app tree was restored", result.Reason);
+            Assert.Equal("keep-current", File.ReadAllText(marker));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
+            Assert.Equal(3, moveAttempt);
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void RestoreSnapshot_CompensationFailure_PreservesStagedApp()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            UpdateBackup.CreateSnapshot(root);
+            File.WriteAllText(Path.Combine(root, "app", "current-tree.txt"), "recoverable");
+            var moveAttempt = 0;
+
+            var result = UpdateBackup.RestoreSnapshot(root, (source, destination) =>
+            {
+                moveAttempt++;
+                if (moveAttempt >= 2)
+                    throw new IOException($"injected move failure {moveAttempt}");
+                Directory.Move(source, destination);
+            });
+
+            var stage = Path.Combine(root, "app.bak.tmp");
+            Assert.False(result.Restored);
+            Assert.Contains("restore failed", result.Reason);
+            Assert.Contains("compensation failed", result.Reason);
+            Assert.Contains(stage, result.Reason);
+            Assert.False(Directory.Exists(Path.Combine(root, "app")));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.Equal("recoverable", File.ReadAllText(Path.Combine(stage, "current-tree.txt")));
+            Assert.Equal(3, moveAttempt);
+            Assert.False(UpdateBackup.DeleteSnapshot(root));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.True(Directory.Exists(stage));
+
+            // A retry must treat the preserved stage as the current-tree
+            // fallback. If snapshot placement fails again, compensation can
+            // still restore it instead of deleting the last usable app tree.
+            var retryMove = 0;
+            var retry = UpdateBackup.RestoreSnapshot(root, (source, destination) =>
+            {
+                retryMove++;
+                if (retryMove == 1)
+                    throw new IOException("injected retry snapshot move failure");
+                Directory.Move(source, destination);
+            });
+
+            Assert.False(retry.Restored);
+            Assert.Contains("previous app tree was restored", retry.Reason);
+            Assert.Equal("recoverable", File.ReadAllText(Path.Combine(root, "app", "current-tree.txt")));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.False(Directory.Exists(stage));
+            Assert.Equal(2, retryMove);
         }
         finally { CleanUp(root); }
     }
@@ -190,6 +362,7 @@ public sealed class UpdateBackupTests
             Assert.True(ok);
             Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
             Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
+            Assert.Null(UpdateBackup.GetSnapshotGeneration(root));
 
             // Idempotency: calling delete again returns ok with no work
             // to do.
@@ -219,6 +392,38 @@ public sealed class UpdateBackupTests
             Assert.False(UpdateBackup.HasFailureMarker(root));
         }
         finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void Program_DeletesOnlyCapturedSnapshotGeneration()
+    {
+        var sourcePath = FindProgramSource();
+        if (sourcePath == null) return;
+
+        var src = StripLineComments(File.ReadAllText(sourcePath));
+        var captureIdx = src.IndexOf("GetSnapshotGeneration(installDir)", StringComparison.Ordinal);
+        Assert.True(captureIdx > 0,
+            "healthy startup must capture a snapshot generation before delayed cleanup");
+        var deleteIdx = src.IndexOf("DeleteSnapshot(", captureIdx, StringComparison.Ordinal);
+        Assert.True(deleteIdx > captureIdx,
+            "delayed cleanup must call generation-bound DeleteSnapshot");
+        Assert.Contains("cleanupGeneration", src[deleteIdx..(deleteIdx + 220)]);
+    }
+
+    [Fact]
+    public void Program_DefersSelfRepairWhileSnapshotOperationIsBusy()
+    {
+        var sourcePath = FindProgramSource();
+        if (sourcePath == null) return;
+
+        var src = StripLineComments(File.ReadAllText(sourcePath));
+        var busyIdx = src.IndexOf("if (rollback.OperationInProgress)", StringComparison.Ordinal);
+        Assert.True(busyIdx > 0, "startup must distinguish snapshot lock contention");
+
+        var returnIdx = src.IndexOf("return;", busyIdx, StringComparison.Ordinal);
+        var fallbackIdx = src.IndexOf("SelfRepair.Plan()", busyIdx, StringComparison.Ordinal);
+        Assert.True(returnIdx > busyIdx && returnIdx < fallbackIdx,
+            "busy rollback must return before SelfRepair fallback can mutate the install");
     }
 
     /// <summary>
@@ -302,13 +507,18 @@ public sealed class UpdateBackupTests
                 l.Contains("//") ? l[..l.IndexOf("//")] : l));
     }
 
-    private static string? FindUpdateCheckerSource()
+    private static string? FindProgramSource() =>
+        FindSource("VPNRouter.App", "Program.cs");
+
+    private static string? FindUpdateCheckerSource() =>
+        FindSource("VPNRouter.Core", "Services", "UpdateChecker.cs");
+
+    private static string? FindSource(params string[] relativePath)
     {
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
         for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
         {
-            var candidate = Path.Combine(
-                dir.FullName, "VPNRouter.Core", "Services", "UpdateChecker.cs");
+            var candidate = Path.Combine(dir.FullName, Path.Combine(relativePath));
             if (File.Exists(candidate)) return candidate;
         }
         return null;

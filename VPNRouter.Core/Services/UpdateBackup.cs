@@ -59,7 +59,8 @@ namespace VPNRouter.Core.Services;
 /// cleaned on the next snapshot attempt. <see cref="RestoreSnapshot"/>
 /// is similarly idempotent — calling it when no snapshot exists is a
 /// no-op, and calling it after a successful restore returns the same
-/// "no rollback needed" answer.</para>
+/// "no rollback needed" answer. Create, restore, and cleanup share an
+/// install-scoped file lock; delayed cleanup is generation-bound.</para>
 /// </summary>
 public static class UpdateBackup
 {
@@ -68,6 +69,44 @@ public static class UpdateBackup
 
     /// <summary>Atomic-rename staging directory name.</summary>
     private const string SnapshotStagingName = "app.bak.tmp";
+
+    /// <summary>Generation sidecar for stale-cleanup rejection.</summary>
+    private const string SnapshotGenerationName = "app.bak.id";
+
+    /// <summary>Install-scoped cross-process operation lock.</summary>
+    internal const string OperationLockName = ".update-backup.lock";
+
+    private static FileStream? TryAcquireOperationLock(
+        string installDir,
+        out bool contention,
+        out string? error)
+    {
+        contention = false;
+        error = null;
+        try
+        {
+            return File.Open(
+                Path.Combine(installDir, OperationLockName),
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.None);
+        }
+        catch (IOException ex)
+        {
+            var nativeCode = ex.HResult & 0xffff;
+            // POSIX EAGAIN/EACCES; Win32 sharing/lock violation.
+            contention = nativeCode is 11 or 13 or 32 or 33;
+            error = $"{ex.GetType().Name}: {ex.Message}";
+            return null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException)
+        {
+            error = $"{ex.GetType().Name}: {ex.Message}";
+            return null;
+        }
+    }
 
     /// <summary>
     /// Marker file written into <c>app/</c> by helper.cmd if the file
@@ -81,7 +120,60 @@ public static class UpdateBackup
     public sealed record SnapshotResult(bool Success, string SnapshotPath, string Diagnostic);
 
     /// <summary>Outcome of <see cref="RestoreSnapshot"/>.</summary>
-    public sealed record RestoreResult(bool Restored, string Reason);
+    public sealed record RestoreResult(bool Restored, string Reason)
+    {
+        public bool OperationInProgress { get; init; }
+    }
+
+    /// <summary>Capture the immutable identity of the current snapshot.</summary>
+    public static string? GetSnapshotGeneration(string installDir)
+    {
+        if (string.IsNullOrWhiteSpace(installDir))
+            return null;
+
+        using var operationLock = TryAcquireOperationLock(installDir, out _, out _);
+        if (operationLock is null)
+            return null;
+
+        var existing = ReadSnapshotGeneration(installDir);
+        if (existing is not null)
+            return existing;
+
+        var snapshot = Path.Combine(installDir, SnapshotName);
+        if (!Directory.Exists(snapshot))
+            return null;
+
+        var generation = Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(installDir, SnapshotGenerationName),
+                generation);
+            return generation;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadSnapshotGeneration(string installDir)
+    {
+        var snapshot = Path.Combine(installDir, SnapshotName);
+        var generationPath = Path.Combine(installDir, SnapshotGenerationName);
+        if (!Directory.Exists(snapshot) || !File.Exists(generationPath))
+            return null;
+
+        try
+        {
+            var text = File.ReadAllText(generationPath).Trim();
+            return Guid.TryParseExact(text, "N", out _) ? text : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Copy <c>{installDir}/app/</c> to <c>{installDir}/app.bak/</c>.
@@ -102,6 +194,19 @@ public static class UpdateBackup
         var src = Path.Combine(installDir, "app");
         var dst = Path.Combine(installDir, SnapshotName);
         var stage = Path.Combine(installDir, SnapshotStagingName);
+        var generationPath = Path.Combine(installDir, SnapshotGenerationName);
+
+        using var operationLock = TryAcquireOperationLock(
+            installDir,
+            out var lockContention,
+            out var lockError);
+        if (operationLock is null)
+        {
+            var diagnostic = lockContention
+                ? "another snapshot operation is in progress"
+                : $"snapshot operation lock unavailable: {lockError ?? "unknown error"}";
+            return new SnapshotResult(false, dst, diagnostic);
+        }
 
         if (!Directory.Exists(src))
             return new SnapshotResult(false, dst, $"source app/ does not exist at '{src}'");
@@ -122,6 +227,16 @@ public static class UpdateBackup
 
             CopyDirectoryRecursive(src, stage);
 
+            // Clear the old generation before replacing its snapshot. If
+            // this fails, retain both the old backup and the new stage.
+            try { File.Delete(generationPath); }
+            catch (Exception ex)
+            {
+                return new SnapshotResult(false, dst,
+                    $"failed to clear stale snapshot generation: {ex.Message} " +
+                    $"(staging copy preserved at '{stage}' for manual recovery)");
+            }
+
             // Atomic-ish rename: delete old .bak, then move .bak.tmp →
             // .bak. Directory.Move is atomic on the same volume, which
             // is always the case here (sibling under installDir).
@@ -137,6 +252,16 @@ public static class UpdateBackup
             }
 
             Directory.Move(stage, dst);
+            try
+            {
+                File.WriteAllText(generationPath, Guid.NewGuid().ToString("N"));
+            }
+            catch (Exception ex)
+            {
+                return new SnapshotResult(false, dst,
+                    $"snapshot created but generation marker failed: {ex.Message}");
+            }
+
             return new SnapshotResult(true, dst,
                 $"snapshot created at '{dst}'");
         }
@@ -158,14 +283,39 @@ public static class UpdateBackup
     /// the caller should relaunch the App so the freshly-restored
     /// binaries replace the in-memory mismatched ones.
     /// </remarks>
-    public static RestoreResult RestoreSnapshot(string installDir)
+    public static RestoreResult RestoreSnapshot(string installDir) =>
+        RestoreSnapshot(installDir, Directory.Move);
+
+    /// <summary>Fault-injection seam for deterministic restore compensation tests.</summary>
+    internal static RestoreResult RestoreSnapshot(
+        string installDir,
+        Action<string, string> moveDirectory)
     {
+        ArgumentNullException.ThrowIfNull(moveDirectory);
+
         if (string.IsNullOrWhiteSpace(installDir))
             return new RestoreResult(false, "installDir was null or empty");
 
         var app = Path.Combine(installDir, "app");
         var bak = Path.Combine(installDir, SnapshotName);
         var stage = Path.Combine(installDir, SnapshotStagingName);
+        var generationPath = Path.Combine(installDir, SnapshotGenerationName);
+
+        using var operationLock = TryAcquireOperationLock(
+            installDir,
+            out var lockContention,
+            out var lockError);
+        if (operationLock is null)
+        {
+            return new RestoreResult(
+                false,
+                lockContention
+                    ? "another snapshot operation is in progress"
+                    : $"snapshot operation lock unavailable: {lockError ?? "unknown error"}")
+            {
+                OperationInProgress = lockContention,
+            };
+        }
 
         if (!Directory.Exists(bak))
             return new RestoreResult(false, $"no snapshot at '{bak}' — nothing to restore");
@@ -189,6 +339,7 @@ public static class UpdateBackup
                 $"snapshot integrity check failed: {ex.Message}");
         }
 
+        var appMovedToStage = false;
         try
         {
             // Stage-rename pattern so the restore is atomic from the
@@ -197,21 +348,34 @@ public static class UpdateBackup
             // (At most 1 "outdated" snapshot tree leaks into stage if
             // we crash mid-rename — cleaned next attempt.)
 
-            if (Directory.Exists(stage))
+            if (Directory.Exists(stage) && !Directory.Exists(app))
             {
-                try { Directory.Delete(stage, recursive: true); } catch { /* best-effort */ }
+                // A prior failed compensation already left the previous app
+                // safely staged. Reuse it instead of deleting the only
+                // recoverable current tree before another restore attempt.
+                appMovedToStage = true;
             }
-
-            // Move app/ aside. If app/ doesn't exist (highly unusual
-            // but possible if user manually nuked it), skip.
-            if (Directory.Exists(app))
+            else
             {
-                Directory.Move(app, stage);
+                if (Directory.Exists(stage))
+                {
+                    try { Directory.Delete(stage, recursive: true); } catch { /* best-effort */ }
+                }
+
+                // Move app/ aside. If app/ doesn't exist (highly unusual
+                // but possible if user manually nuked it), skip.
+                if (Directory.Exists(app))
+                {
+                    moveDirectory(app, stage);
+                    appMovedToStage = true;
+                }
             }
 
             // Move bak/ → app/. After this point, app/ contains the
             // pre-update DLL set.
-            Directory.Move(bak, app);
+            moveDirectory(bak, app);
+            try { File.Delete(generationPath); }
+            catch { /* stale sidecar is harmless without app.bak/ */ }
 
             // Clean up the old (broken) tree we moved to stage. Best-
             // effort — if delete fails, it just lingers as "app.bak.tmp"
@@ -226,6 +390,24 @@ public static class UpdateBackup
         }
         catch (Exception ex)
         {
+            if (appMovedToStage && !Directory.Exists(app) && Directory.Exists(stage))
+            {
+                try
+                {
+                    moveDirectory(stage, app);
+                    return new RestoreResult(false,
+                        $"restore failed: {ex.GetType().Name}: {ex.Message}; " +
+                        "the previous app tree was restored");
+                }
+                catch (Exception compensationEx)
+                {
+                    return new RestoreResult(false,
+                        $"restore failed: {ex.GetType().Name}: {ex.Message}; " +
+                        $"compensation failed: {compensationEx.GetType().Name}: {compensationEx.Message} " +
+                        $"(previous app tree preserved at '{stage}')");
+                }
+            }
+
             return new RestoreResult(false,
                 $"restore failed: {ex.GetType().Name}: {ex.Message}");
         }
@@ -238,16 +420,46 @@ public static class UpdateBackup
     /// </summary>
     /// <returns><c>true</c> if a snapshot was deleted (or didn't exist
     /// to begin with), <c>false</c> if delete failed.</returns>
-    public static bool DeleteSnapshot(string installDir)
+    public static bool DeleteSnapshot(string installDir) =>
+        DeleteSnapshotCore(installDir, expectedGeneration: null);
+
+    /// <summary>Delete only the snapshot generation captured by the caller.</summary>
+    public static bool DeleteSnapshot(string installDir, string expectedGeneration)
+    {
+        if (string.IsNullOrWhiteSpace(expectedGeneration))
+            return false;
+
+        return DeleteSnapshotCore(installDir, expectedGeneration);
+    }
+
+    private static bool DeleteSnapshotCore(string installDir, string? expectedGeneration)
     {
         if (string.IsNullOrWhiteSpace(installDir))
             return false;
 
+        var app = Path.Combine(installDir, "app");
         var bak = Path.Combine(installDir, SnapshotName);
         var stage = Path.Combine(installDir, SnapshotStagingName);
+        var generationPath = Path.Combine(installDir, SnapshotGenerationName);
 
-        // Clean staging too — it would otherwise linger forever if a
-        // prior CreateSnapshot crashed mid-Move.
+        using var operationLock = TryAcquireOperationLock(installDir, out _, out _);
+        if (operationLock is null)
+            return false;
+
+        if (expectedGeneration is not null &&
+            ReadSnapshotGeneration(installDir) != expectedGeneration)
+        {
+            return false;
+        }
+
+        // Never delete the only recoverable tree left by an interrupted
+        // restore, even for an otherwise matching cleanup generation.
+        if (!Directory.Exists(app) &&
+            (Directory.Exists(bak) || Directory.Exists(stage)))
+        {
+            return false;
+        }
+
         var ok = true;
         foreach (var path in new[] { bak, stage })
         {
@@ -255,6 +467,10 @@ public static class UpdateBackup
             try { Directory.Delete(path, recursive: true); }
             catch { ok = false; }
         }
+
+        try { File.Delete(generationPath); }
+        catch { ok = false; }
+
         return ok;
     }
 

@@ -313,6 +313,12 @@ sealed class Program
                     return;
                 }
 
+                if (rollback.OperationInProgress)
+                {
+                    Console.Error.WriteLine($"[health] rollback deferred: {rollback.Reason} — not starting concurrent SelfRepair");
+                    return;
+                }
+
                 Console.Error.WriteLine($"[health] rollback declined: {rollback.Reason} — falling back to SelfRepair");
                 var plan = VPNRouter.App.Services.SelfRepair.Plan();
                 if (plan.ShouldRun)
@@ -337,18 +343,24 @@ sealed class Program
                 if (!string.IsNullOrEmpty(installDir))
                 {
                     VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
-                    System.Threading.Tasks.Task.Run(() =>
+                    var cleanupGeneration =
+                        VPNRouter.Core.Services.UpdateBackup.GetSnapshotGeneration(installDir);
+                    if (cleanupGeneration is not null)
                     {
-                        try
+                        System.Threading.Tasks.Task.Run(() =>
                         {
-                            // 30 s grace period — if the user crashes in
-                            // that window we still have a usable snapshot
-                            // for the next launch's rollback path.
-                            System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
-                            VPNRouter.Core.Services.UpdateBackup.DeleteSnapshot(installDir);
-                        }
-                        catch { /* best-effort cleanup */ }
-                    });
+                            try
+                            {
+                                // 30 s grace period — delete only the exact
+                                // snapshot observed by this healthy launch.
+                                System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
+                                VPNRouter.Core.Services.UpdateBackup.DeleteSnapshot(
+                                    installDir,
+                                    cleanupGeneration);
+                            }
+                            catch { /* best-effort cleanup */ }
+                        });
+                    }
                 }
             }
         }
