@@ -35,13 +35,17 @@ PR #201 encrypted the RU-bypass resolver but chose Yandex DoH. Encryption protec
 
 ## Verification gate
 
-- [ ] **Gate 1 — Scope/trust**: active Core and public docs contain no Yandex DNS endpoint or VPNRouter-owned country-specific resolver.
-- [ ] **Gate 2 — DNS behavior**: generated and custom geo rules resolve through a real proxy outbound; explicit custom DNS and LAN exceptions remain intact.
-- [ ] **Gate 3 — Build/tests**: focused DNS tests, Release build, and full discovered suite pass on the exact head.
-- [ ] **Gate 4 — Documentation**: `README.md`, `README.ru.md`, readiness plan, prior consolidation plan, and this Outcome match runtime behavior.
-- [ ] **Gate 5 — Independent review**: correctness, DNS/privacy, and test lenses leave no source-confirmed P0/P1.
-- [ ] **Gate 6 — Integration**: exact-head GitHub `test`, `grep`, Windows Go, and characterization checks pass; UI verification is N/A because no UI changes.
+- [x] **Gate 1 — Scope/trust**: active Core and public docs contain no Yandex DNS endpoint or VPNRouter-owned country-specific resolver.
+- [x] **Gate 2 — DNS behavior**: generated and custom geo rules resolve through a real proxy outbound; explicit custom DNS and LAN exceptions remain intact.
+- [x] **Gate 3 — Build/tests**: focused DNS regressions, Release build, and full discovered suite pass on the implementation head.
+- [x] **Gate 4 — Documentation**: `README.md`, `README.ru.md`, readiness plan, prior consolidation plan, and this Outcome match runtime behavior.
+- [x] **Gate 5 — Independent review**: correctness, DNS/privacy, and test lenses leave no source-confirmed P0/P1.
+- [x] **Gate 6 — Integration**: implementation-head GitHub `test`, `grep`, Windows Go, and characterization checks pass; UI verification is N/A because the ViewModel change is comment-only.
 
 ## Outcome
 
-Pending approved implementation and exact-head verification. Merge remains a separate owner decision.
+Implemented in PR #202 at code head `00aa0ca87d1170ea5215e33e438a2bbe394e423e`. Generated geo/censorship DNS now reuses proxy-detoured `vpn-dns`. Custom injection removes the legacy server, rules, and stale `dns.final` before per-app selection; reuses a real proxy-detour resolver or synthesizes Cloudflare DoH through the selected proxy; creates safe DNS state when the source omitted `dns`; and gives geo policy priority over process-specific direct DNS. Explicit custom resolvers, LAN/system exceptions, bootstrap loop avoidance, direct/smart behavior, and RU traffic routing remain in place. Historical evidence snapshots were not changed.
+
+`git diff --check` and active Core/App/public-doc endpoint scans passed. Four independent bug-hunt lanes found two P1 custom-config edge cases (missing initial `dns` and stale legacy `dns.final`); both were fixed and two focused rechecks were clean. GitHub Actions on the implementation head passed `test` (2,830 total: 2,773 passed, 57 platform/UI skips), `characterization-windows` (19/19), `go-test-windows`, and `grep`. The control plane has no .NET SDK or PowerShell, so GitHub Actions is the build/test oracle. This outcome-only commit must pass the same exact-head checks before merge.
+
+Rollback is a revert of `00aa0ca87d1170ea5215e33e438a2bbe394e423e`. No binary bump, release, tag, deployment, installation, merge, or stable cut was performed; merge remains a separate owner decision.
