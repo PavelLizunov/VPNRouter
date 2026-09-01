@@ -107,7 +107,7 @@ public static class RemoteVersionChecker
                 tag = tagProp.GetString();
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
