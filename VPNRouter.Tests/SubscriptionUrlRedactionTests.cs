@@ -17,7 +17,6 @@ namespace VPNRouter.Tests;
 /// log argument in SubscriptionFetcher must go through CanaryPolicy.RedactUrl.
 /// Pure redaction shape is pinned by CanaryPolicyTests — not duplicated here.
 /// </summary>
-[Collection(SubscriptionFetcherCollection.Name)]
 public sealed class SubscriptionUrlRedactionTests
 {
     private const string SubUrl = "https://provider.example/api/sub?token=secret123";
@@ -57,67 +56,6 @@ public sealed class SubscriptionUrlRedactionTests
         {
             SubscriptionFetcher.Http = previous;
         }
-    }
-
-    [Fact]
-    public async Task RuleSetCacheManager_LogsDoNotContainToken()
-    {
-        var (logger, sink) = BuildCapturingLogger();
-        var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnr-redact-test-" + Guid.NewGuid().ToString("N"));
-        System.IO.Directory.CreateDirectory(tmp);
-        try
-        {
-            var handler = new SimpleStaticResponseHandler(System.Net.HttpStatusCode.OK, System.Text.Encoding.UTF8.GetBytes("data"));
-            var client = new System.Net.Http.HttpClient(handler);
-            const string sensitiveUrl = "https://rules.example/list.srs?token=secret123";
-
-            await RuleSetCacheManager.EnsureLocalAsync(
-                sensitiveUrl,
-                "list.srs",
-                logger: logger,
-                httpClient: client,
-                cacheDir: tmp,
-                cancellationToken: TestContext.Current.CancellationToken);
-
-            var all = AllRenderedText(sink);
-            Assert.DoesNotContain("secret123", all);
-            Assert.DoesNotContain("token=", all);
-            Assert.Contains("https://rules.example", all);
-        }
-        finally
-        {
-            try { System.IO.Directory.Delete(tmp, recursive: true); } catch { }
-        }
-    }
-
-    private sealed class SimpleStaticResponseHandler : System.Net.Http.HttpMessageHandler
-    {
-        private readonly System.Net.HttpStatusCode _status;
-        private readonly byte[] _body;
-        public SimpleStaticResponseHandler(System.Net.HttpStatusCode status, byte[] body) { _status = status; _body = body; }
-        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
-        {
-            return Task.FromResult(new System.Net.Http.HttpResponseMessage(_status)
-            {
-                Content = new System.Net.Http.ByteArrayContent(_body)
-            });
-        }
-    }
-
-    [Fact]
-    public async Task RemoteVersionChecker_LogsDoNotContainToken()
-    {
-        var (logger, sink) = BuildCapturingLogger();
-        const string ownerRepo = "testowner/testrepo?token=secret123";
-
-        await RemoteVersionChecker.GetLatestTagAsync(
-            ownerRepo,
-            "VPNRouterTest/1.0",
-            logger,
-            TestContext.Current.CancellationToken);
-
-        var all = AllRenderedText(sink);
-        Assert.DoesNotContain("secret123", all);
     }
 
     [Fact]

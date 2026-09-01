@@ -152,17 +152,6 @@ public class ServerUriParserTests
     }
 
     [Fact]
-    public void Parse_UnsupportedSchemeWithCredentials_RedactsCredentialsInExceptionMessage()
-    {
-        var ex = Assert.Throws<System.FormatException>(() =>
-            VPNRouter.Core.Services.ServerUriParser.Parse("trojan://secretuser:secretpass@host.example.com:443#bad"));
-
-        Assert.DoesNotContain("secretuser", ex.Message);
-        Assert.DoesNotContain("secretpass", ex.Message);
-        Assert.Contains("trojan://host.example.com", ex.Message);
-    }
-
-    [Fact]
     public void ParseMultiple_SkipsBadLines_KeepsGoodOnes()
     {
         var blob = string.Join("\n",

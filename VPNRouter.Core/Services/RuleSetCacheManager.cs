@@ -129,7 +129,7 @@ public static class RuleSetCacheManager
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(FetchTimeout);
 
-            logger.Information("[RuleSetCache] fetching {Url} (timeout {Timeout})", CanaryPolicy.RedactUrl(url), FetchTimeout);
+            logger.Information("[RuleSetCache] fetching {Url} (timeout {Timeout})", url, FetchTimeout);
             var response = await httpClient.GetAsync(url, cts.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);

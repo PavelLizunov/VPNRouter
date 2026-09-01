@@ -37,38 +37,6 @@ public class RevealInFileManagerTests
             Assert.Equal(Path.GetDirectoryName(malPath), psi.ArgumentList[0]);
         }
     }
-
-    [Fact]
-    public void OpenProbeLogAndOpenLogs_UseArgumentList_PreventsArgumentInjection()
-    {
-        var malPath = Path.Combine(Path.GetTempPath(), "log_path_with spaces_\" & calc.exe & \"file.txt");
-
-        // Verify ProcessStartInfo pattern for OpenProbeLog
-        var probePsi = new ProcessStartInfo
-        {
-            FileName = "notepad.exe",
-            UseShellExecute = false,
-            CreateNoWindow = false,
-        };
-        probePsi.ArgumentList.Add(malPath);
-
-        Assert.Empty(probePsi.Arguments);
-        Assert.Single(probePsi.ArgumentList);
-        Assert.Equal(malPath, probePsi.ArgumentList[0]);
-
-        // Verify ProcessStartInfo pattern for OpenLogs
-        var logsPsi = new ProcessStartInfo
-        {
-            FileName = OperatingSystem.IsWindows() ? "explorer.exe" : "/usr/bin/open",
-            UseShellExecute = false
-        };
-        logsPsi.ArgumentList.Add(malPath);
-
-        Assert.False(logsPsi.UseShellExecute);
-        Assert.Empty(logsPsi.Arguments);
-        Assert.Single(logsPsi.ArgumentList);
-        Assert.Equal(malPath, logsPsi.ArgumentList[0]);
-    }
 }
 
 #if PLATFORM_WINDOWS

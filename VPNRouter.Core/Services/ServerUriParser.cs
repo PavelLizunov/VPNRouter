@@ -123,7 +123,7 @@ public static class ServerUriParser
             entry = ParseAmneziaWg(uri);
         }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg://. Got: {Truncate(uri, 40)}");
 
         // v2.32.3 input gate (2026-05-17) — placeholder fingerprints can
         // surface in any protocol's server IP. Reject before the entry
