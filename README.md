@@ -84,7 +84,7 @@ Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](h
 
 - **Split-tunnel routing** — pick the apps from a live process list; they go through your proxy, everything else stays direct.
 - **VLESS+Reality + custom configs** — use the built-in VLESS setup or bring your own sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing is injected either way.
-- **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool.
+- **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool. Capability-aware providers can publish a VLESS target that must dial through a paired entry server; missing chain metadata or entry availability fails closed with no direct target fallback.
 - **Server testing** — one-click TCP+TLS probe on any server. Deep verification (real HTTP round-trip + 5 MB bandwidth) for your own servers and subscription pools.
 - **Setup and diagnostics wizard (desktop)** — checks configuration, TUN, DNS and reachability, can reset MTU to the safe default `1420`, preserves the chosen routing mode, and offers undo plus redacted diagnostics export. Safe Mode remains a separate temporary start.
 - **Safe rollback** — the desktop app shows up to three previous stable versions only when their `.sha256` companion is available, verifies the selected archive before installing, and asks for explicit confirmation. Before a downgrade it saves a copy of `config.yaml`.
