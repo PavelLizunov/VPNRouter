@@ -452,21 +452,23 @@ public partial class MainWindowViewModel
             ProcessStartInfo psi;
             if (OperatingSystem.IsWindows())
             {
+                // Security: Use ArgumentList instead of string concatenation with UseShellExecute=false to prevent argument injection
                 psi = new ProcessStartInfo
                 {
                     FileName = "explorer.exe",
-                    Arguments = $"\"{logsDir}\"",
-                    UseShellExecute = true
+                    UseShellExecute = false
                 };
+                psi.ArgumentList.Add(logsDir);
             }
             else
             {
+                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
                 psi = new ProcessStartInfo
                 {
                     FileName = "/usr/bin/open",
-                    Arguments = $"\"{logsDir}\"",
                     UseShellExecute = false
                 };
+                psi.ArgumentList.Add(logsDir);
             }
             System.Diagnostics.Process.Start(psi);
         }
