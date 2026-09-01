@@ -7,7 +7,7 @@ Audit ID: `SU-3-6`
 ## 1. Intent & Invariants
 
 - **What:** Persist the VPNRouter LocalSystem service `ImagePath` with literal quotes around only the executable path, and pass every `sc.exe` token through .NET's structured argument list.
-- **Invariants:** the SCM value is exactly `"<absolute VPNRouter.Service.exe>" --service`; quoted current paths are idempotent; legacy unquoted paths self-heal; service name, account, dependencies, startup mode, description, failure recovery, and start/stop behavior remain unchanged; only inbox System32 `sc.exe` is launched; no merge/release/tag/deploy/install occurs.
+- **Invariants:** the SCM value is exactly `"<absolute VPNRouter.Service.exe>" --service`; quoted current paths are idempotent; only recognizable legacy/moved VPNRouter service paths self-heal and foreign same-name services fail closed; service name, account, dependencies, startup mode, description, failure recovery, and start/stop behavior remain unchanged; registration helpers launch only inbox System32 `sc.exe`; no merge/release/tag/deploy/install occurs.
 
 ## 2. Interface / Data Contract
 
@@ -23,15 +23,16 @@ ProcessStartInfo.ArgumentList = { "create", "VPNRouter", "binPath=", imagePath, 
 
 ## 3. Verification Checklist (Definition of Done)
 
-- [ ] Empty/whitespace/embedded-quote paths fail before command construction.
-- [ ] Relative and absolute paths normalize to one fully-qualified quoted executable plus `--service`.
-- [ ] CLI service install and desktop install both use the shared formatter.
-- [ ] Desktop self-heal preserves a correctly quoted path and repairs a legacy unquoted path.
-- [ ] Every changed `sc.exe` invocation uses `ArgumentList`, never a concatenated `Arguments` command line.
-- [ ] Both helpers resolve `sc.exe` from the Windows system directory rather than PATH/current directory.
-- [ ] Dependencies, LocalSystem account, auto-start, display name, description, and failure recovery tokens remain pinned.
-- [ ] Focused source/pure contracts and full exact-head CI pass.
-- [ ] Independent correctness/security/test reviews have no surviving P0/P1.
+- [x] Empty/whitespace/embedded-quote paths fail before command construction.
+- [x] Relative and absolute paths normalize to one fully-qualified quoted executable plus `--service`.
+- [x] CLI service install and desktop install both use the shared formatter.
+- [x] Desktop self-heal preserves a correctly quoted path, repairs recognizable legacy/moved VPNRouter paths, and refuses foreign or extra-argument ImagePaths.
+- [x] Exact ordered create/failure token arrays are pinned by pure tests; source lookup fails closed.
+- [x] Every changed `sc.exe` invocation uses `ArgumentList`, never a concatenated `Arguments` command line.
+- [x] Both helpers resolve `sc.exe` from the Windows system directory rather than PATH/current directory.
+- [x] Dependencies, LocalSystem account, auto-start, display name, description, and failure recovery tokens remain pinned.
+- [x] Focused source/pure contracts and full exact-head CI pass.
+- [x] Independent correctness/security/test reviews have no surviving P0/P1.
 
 ## Risk / rollback
 
@@ -41,7 +42,7 @@ ProcessStartInfo.ArgumentList = { "create", "VPNRouter", "binPath=", imagePath, 
 
 ## Six gates
 
-1. **Scope:** shared pure formatter, two Windows service helpers, deterministic contracts, ledger, and this brief only.
+1. **Scope:** shared pure formatter/builders/recognizer, two Windows service helpers, startup collision reporting, deterministic contracts, ledger, and this brief only.
 2. **Privilege boundary:** only System32 `sc.exe`; no concatenated executable/user path command line.
 3. **SCM contract:** literal quotes surround only the executable and arguments stay outside.
 4. **Compatibility:** service options and lifecycle commands are unchanged.
@@ -55,4 +56,16 @@ ProcessStartInfo.ArgumentList = { "create", "VPNRouter", "binPath=", imagePath, 
 
 ## Outcome
 
-Pending implementation and verification.
+- Brief commit: `cb663594`.
+- Implementation/test commit: `1ab2292f` (`+406/-49` across five code/test files).
+- Pull request: [#210](https://github.com/PavelLizunov/VPNRouter/pull/210), merge pending owner authorization.
+- Exact implementation-head GitHub Actions passed:
+  - `dotnet test` run `33566331842`: 2,843 total, 2,786 passed, 57 skipped;
+  - `characterization-windows`: passed;
+  - `go-test-windows`: passed;
+  - placeholder grep run `33566331827`: passed.
+- Three independent final reviewers returned CLEAN after two initial important findings were repaired: source contracts now fail when source is unavailable and compare complete ordered token arrays; self-heal now refuses foreign same-name services before `sc config` and surfaces the failure.
+- A separate, pre-existing bare-`sc` sibling cluster was source-confirmed and retained in `plans/OPEN-DEFECTS.md` for its own PR rather than being overstated as closed here.
+- Ouroboros QA session `qa-c3c1dce6` passed iteration 2 at `0.90`; iteration 1's missing exact-head mechanical evidence was supplied after CI completed.
+- Primary-source contract remained Microsoft `CreateService` executable quoting plus .NET 10 `ProcessStartInfo.ArgumentList`; no dependency was added.
+- No service installation, merge, release, tag, deployment, or workstation mutation occurred.
