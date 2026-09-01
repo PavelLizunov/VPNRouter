@@ -166,8 +166,14 @@ public static class UpdateBackup
 
         try
         {
-            var text = File.ReadAllText(generationPath).Trim();
-            return Guid.TryParseExact(text, "N", out _) ? text : null;
+            var length = new FileInfo(generationPath).Length;
+            if (length is <= 0 or > 64)
+                return null;
+
+            var text = File.ReadAllText(generationPath);
+            return text.Length == 32 && Guid.TryParseExact(text, "N", out _)
+                ? text
+                : null;
         }
         catch
         {

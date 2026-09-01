@@ -37,6 +37,7 @@ public static bool DeleteSnapshot(string installDir, string expectedGeneration);
 - [ ] A held install lock makes create/restore/delete fail without mutating any tree or launching startup SelfRepair.
 - [ ] A non-contention lock acquisition error is not mislabeled busy, so fallback remains available.
 - [ ] Stale delayed cleanup cannot delete a replacement snapshot generation.
+- [ ] Missing, empty, malformed, whitespace-padded, truncated, or oversized generation sidecars fail closed and repair under lock.
 - [ ] Cleanup refuses to delete the only recovery stage when `app/` is absent.
 - [ ] Focused `UpdateBackupTests` pass in designated CI.
 - [ ] Full discovered suite and exact-head CI pass.

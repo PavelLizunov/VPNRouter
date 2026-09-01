@@ -136,6 +136,46 @@ public sealed class UpdateBackupTests
     }
 
     [Fact]
+    public void SnapshotGeneration_MalformedSidecarsFailClosedAndRepair()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var snapshot = UpdateBackup.CreateSnapshot(root);
+            Assert.True(snapshot.Success, snapshot.Diagnostic);
+            var generationPath = Path.Combine(root, "app.bak.id");
+            var currentGeneration = UpdateBackup.GetSnapshotGeneration(root)!;
+
+            foreach (var malformed in new[]
+            {
+                string.Empty,
+                "not-a-guid",
+                currentGeneration + "0",
+                $" {currentGeneration} ",
+                new string('a', 4096),
+            })
+            {
+                File.WriteAllText(generationPath, malformed);
+                Assert.False(UpdateBackup.DeleteSnapshot(root, currentGeneration));
+                Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+
+                var repaired = UpdateBackup.GetSnapshotGeneration(root);
+                Assert.NotNull(repaired);
+                Assert.NotEqual(currentGeneration, repaired);
+                currentGeneration = repaired!;
+            }
+
+            File.Delete(generationPath);
+            Assert.False(UpdateBackup.DeleteSnapshot(root, currentGeneration));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            var repairedMissing = UpdateBackup.GetSnapshotGeneration(root);
+            Assert.NotNull(repairedMissing);
+            Assert.NotEqual(currentGeneration, repairedMissing);
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
     public void RestoreSnapshot_NoOpWhenNoSnapshot()
     {
         var root = CreateFakeInstall();
