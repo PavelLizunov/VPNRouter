@@ -168,11 +168,11 @@ public static class CrashReporter
     //     with "<key>" — covers Reality pbk, sid, and similar.
 
     private static readonly Regex _proxyUriPattern = new(
-        @"\b(vless|vmess|trojan|(ss|shadowsocks)(\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(\+(https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
+        @"\b(vless|vmess|trojan|tg|(?:ss|shadowsocks)(?:\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(?:\+(?:https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _httpUrlPattern = new(
-        @"(https?://[^\s/?#]+)(/\S*)?",
+        @"(https?://)(?:[^@\s/?#]+@)?([^\s/?#]+)([/?#]\S*)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _uuidPattern = new(
@@ -201,7 +201,9 @@ public static class CrashReporter
 
         var s = _proxyUriPattern.Replace(input, m => $"{m.Groups[1].Value}://[redacted]");
         s = _httpUrlPattern.Replace(s, m =>
-            m.Groups[2].Success ? $"{m.Groups[1].Value}/[redacted]" : m.Groups[1].Value);
+            m.Groups[3].Success && m.Groups[3].Length > 0
+                ? $"{m.Groups[1].Value}{m.Groups[2].Value}/[redacted]"
+                : $"{m.Groups[1].Value}{m.Groups[2].Value}");
         s = _uuidPattern.Replace(s, "<uuid>");
         s = _longBase64Pattern.Replace(s, "<key>");
         s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}{m.Groups[2].Value}=[REDACTED]");

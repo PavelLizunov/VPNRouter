@@ -756,14 +756,16 @@ public static class ConfigGenerator
             Path = geoSitePath
         });
 
-        // 2. Add Russian DNS server (Yandex 77.88.8.8) routed via dns-direct
-        // outbound (real NIC, no proxy, no routing loop)
+        // 2. Add encrypted Yandex DoH routed via dns-direct (real NIC, no proxy).
+        // Bootstrap its hostname through the literal-IP local Cloudflare DoH server.
         config.Dns.Servers.Add(new DnsServer
         {
             Tag = DirectDnsRuTag,
-            Type = "udp",
-            Server = "77.88.8.8",
-            Detour = "dns-direct"
+            Type = "https",
+            Server = "common.dot.dns.yandex.net",
+            Path = "/dns-query",
+            Detour = "dns-direct",
+            DomainResolver = "local-dns"
         });
 
         // 3. Add DNS rule: RU domains use Russian DNS resolver

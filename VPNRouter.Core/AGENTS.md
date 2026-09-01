@@ -73,6 +73,11 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - In subscription mode, `app.subscriptions[0].servers` stores subscription endpoint sources while `vless.servers` is empty in settings storage.
 - Callers of `ConfigGenerator.Generate` MUST call `VlessServersResolver.Resolve` prior to generation to hydrate `Vless.Servers` in memory (handled automatically by `VpnEngine`).
 
+### Capability-gated App-config Detours
+- Subscription requests advertise `X-VPNRouter-Capabilities: detour-v1`; `outbound` and `detour` URI fields are opaque identifiers and must not be derived from labels or endpoint addresses.
+- A selected chained VLESS target must resolve exactly one direct, usable VLESS upstream. `GetActiveServers` includes that upstream and `ConfigGenerator` emits exactly `chain-entry` plus `proxy` with `proxy.detour = "chain-entry"`.
+- Missing, duplicate, nested, unsupported, or platform-filtered upstreams fail closed. Ordinary selection and auto-select pools must exclude chained targets unless that exact target is active; never fall back to a direct target connection.
+
 ### Fail-Closed Routing & DNS
 - `CustomConfigInjector` enforces fail-closed rules: `route.final` is set to proxy in full-tunnel or exclude mode, Cloudflare DoH is synthesized when proxy detour DNS is missing, and `dns-direct` is excluded from remote DNS tags.
 - `LeakProtection.ValidateAppSettings` and `ValidateConfig` verify settings/generated JSON for missing proxy outbounds, DNS strategy integrity, and strict routing. Validation runs in both `StartAsync` and `ApplyAsync` flows of `VpnEngine`.

@@ -133,47 +133,19 @@ public static class LeakProtection
             }
         }
 
-        // v2.37.0-r36: detect known incompatible setting combinations.
-        // These don't cause silent leaks (so they aren't errors) but they
-        // routinely break user-visible functionality. We surface them as
-        // warnings so the caller can emit a UI toast / log entry.
-        CollectIncompatibleSettings(settings, warnings);
-
+        // RU bypass now uses Yandex DoH on port 443, so it is compatible with
+        // the non-TUN UDP/TCP 53 and TCP 853 firewall lockdown.
         return new ValidationResult { Errors = errors, Warnings = warnings };
     }
 
     /// <summary>
-    /// v2.37.0-r36 — flag known-bad setting combinations.
-    ///
-    /// <para><b>DnsLeakLockdown + BypassRussianTraffic</b>: lockdown blocks
-    /// outbound port 53 on all non-TUN interfaces via Windows Firewall.
-    /// BypassRussianTraffic routes DNS queries for *.ru / *.рф domains to
-    /// Yandex (77.88.8.8) via the <c>dns-direct</c> outbound, which uses the
-    /// physical NIC — exactly what lockdown blocks. Net effect: Russian
-    /// domains fail to resolve, user perceives "no internet". BR-7..BR-9
-    /// firewall narrowings (r11..r17) shrank the blast radius but the root
-    /// architectural conflict remains: split-tunnel DNS via direct can't
-    /// coexist with whole-NIC DNS lockdown.</para>
-    ///
-    /// <para>Surfaced as a warning rather than auto-disable because both
-    /// settings are user-explicit choices; we don't want to silently flip
-    /// either one. The UI layer surfaces this warning as a banner/toast on
-    /// the main page before the user hits Connect.</para>
+    /// Legacy compatibility surface. The former RU-bypass/DNS-lockdown warning
+    /// is retired because RU DNS now uses DoH on port 443.
     /// </summary>
     public static void CollectIncompatibleSettings(AppSettings settings, List<string> warnings)
     {
-        if (settings?.App == null) return;
-
-        if (settings.App.DnsLeakLockdown && settings.App.BypassRussianTraffic)
-        {
-            warnings.Add(
-                "Несовместимые настройки: «Блокировать DNS вне VPN» + " +
-                "«Российский трафик через реальный IP». Lockdown блокирует " +
-                "DNS на физическом интерфейсе; RU-bypass нуждается в DNS " +
-                "через физический интерфейс (Yandex 77.88.8.8). Результат: " +
-                "RU-домены не резолвятся, интернет «не работает». " +
-                "Отключите одну из настроек.");
-        }
+        _ = settings;
+        _ = warnings;
     }
 
     public static ValidationResult ValidateConfig(SingBoxConfig config, AppSettings? settings = null)

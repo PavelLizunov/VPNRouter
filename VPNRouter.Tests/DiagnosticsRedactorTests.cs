@@ -249,18 +249,20 @@ app:
     public void Logs_RedactPrefixedSecretKeys()
     {
         // Prefixed secret keys like access_token, refresh_token, client_secret, auth_token,
-        // and secret_key must be redacted when appearing in key=value or key: value format.
+        // secret_key, and tg_proxy_secret must be redacted in key=value or key: value form.
         var outp = DiagnosticsRedactor.RedactLogText(
             "[DBG] access_token=mySecretAccess123\n" +
             "[DBG] refresh_token: mySecretRefresh456\n" +
             "[DBG] client_secret=mySecretClient789\n" +
             "[DBG] auth_token=mySecretAuthABC\n" +
-            "[DBG] secret_key=mySecretKeyDEF");
+            "[DBG] secret_key=mySecretKeyDEF\n" +
+            "[DBG] tg_proxy_secret=myTelegramProxySecret987");
         Assert.DoesNotContain("mySecretAccess123", outp);
         Assert.DoesNotContain("mySecretRefresh456", outp);
         Assert.DoesNotContain("mySecretClient789", outp);
         Assert.DoesNotContain("mySecretAuthABC", outp);
         Assert.DoesNotContain("mySecretKeyDEF", outp);
+        Assert.DoesNotContain("myTelegramProxySecret987", outp);
         Assert.Contains("access_token=", outp);
         Assert.Contains("refresh_token:", outp);
     }

@@ -1025,7 +1025,7 @@ public static class CustomConfigInjector
     ///
     /// Architecture:
     ///   1. rule_set blocks pointing to local .srs files (downloaded at runtime)
-    ///   2. DNS server "vpnrouter-dns-ru" → Yandex 77.88.8.8 via dns-direct
+    ///   2. DNS server "vpnrouter-dns-ru" → Yandex DoH via dns-direct
     ///   3. DNS rule: geosite-ru → vpnrouter-dns-ru (RU domains use RU DNS)
     ///   4. Route rule: geosite-ru OR geoip-ru → outbound:direct
     ///
@@ -1105,13 +1105,20 @@ public static class CustomConfigInjector
                 servers.RemoveAt(i);
         }
 
-        // Yandex DNS via dns-direct outbound (real NIC, no proxy, no loop).
+        // Yandex DoH via dns-direct. The literal IP avoids bootstrap while the
+        // official TLS name keeps certificate validation and SNI intact.
         // Phase 6 — Wave 31b: cast to (JsonNode?) for AOT-clean Add (IL3050).
         servers.Add((JsonNode?)new JsonObject
         {
-            ["type"] = "udp",
+            ["type"] = "https",
             ["tag"] = DirectDnsRuTag,
             ["server"] = "77.88.8.8",
+            ["path"] = "/dns-query",
+            ["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = "common.dot.dns.yandex.net"
+            },
             ["detour"] = "dns-direct"
         });
     }
@@ -1290,7 +1297,7 @@ public static class CustomConfigInjector
         // resolving the proxy outbound's OWN domain through the not-yet-connected
         // proxy is a circular bootstrap → dial failure for DOMAIN proxy servers.
         // Mirror ConfigGenerator: ensure a real-NIC dns-direct bootstrap resolver
-        // exists (1.1.1.1 over UDP, IP literal → no nested resolution dependency).
+        // exists (1.1.1.1 over HTTPS, IP literal → no nested resolution dependency).
         if (string.IsNullOrEmpty(localTag))
             localTag = EnsureLocalBootstrapDns(config, servers);
 
@@ -1303,8 +1310,8 @@ public static class CustomConfigInjector
     /// <summary>Guarantees a real-NIC (dns-direct) DNS server exists so
     /// route.default_domain_resolver can bootstrap a DOMAIN proxy server's address
     /// off-tunnel. Reuses an existing one; otherwise appends "vpnrouter-dns-direct"
-    /// (udp 1.1.1.1, detour=dns-direct) + ensures the dns-direct outbound. Returns
-    /// the tag. v2.40.0-r8 (#2).</summary>
+    /// (HTTPS 1.1.1.1/dns-query, detour=dns-direct) and ensures the dns-direct
+    /// outbound. Returns the tag. v2.40.0-r8 (#2).</summary>
     private static string EnsureLocalBootstrapDns(JsonObject config, JsonArray servers)
     {
         const string tag = "vpnrouter-dns-direct";
@@ -1314,8 +1321,9 @@ public static class CustomConfigInjector
         servers.Add((JsonNode?)new JsonObject
         {
             ["tag"] = tag,
-            ["type"] = "udp",
+            ["type"] = "https",
             ["server"] = "1.1.1.1",
+            ["path"] = "/dns-query",
             ["detour"] = "dns-direct",
         });
         EnsureDnsDirectOutbound(config);

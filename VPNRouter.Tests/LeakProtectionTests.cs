@@ -1,4 +1,4 @@
-﻿using VPNRouter.Core.Models;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
 
@@ -74,6 +74,23 @@ public class LeakProtectionTests
         var result = LeakProtection.ValidateConfig(config);
 
         Assert.True(result.IsValid, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void RuBypassAndDnsLockdown_DoNotWarnAfterYandexDoh()
+    {
+        var settings = new AppSettings();
+        settings.App.BypassRussianTraffic = true;
+        settings.App.DnsLeakLockdown = true;
+
+        var result = LeakProtection.ValidateAppSettings(settings);
+        var compatibilityWarnings = new List<string>();
+        LeakProtection.CollectIncompatibleSettings(settings, compatibilityWarnings);
+
+        Assert.Empty(compatibilityWarnings);
+        Assert.DoesNotContain(result.Warnings, warning =>
+            warning.Contains("Yandex", StringComparison.OrdinalIgnoreCase) ||
+            warning.Contains("несовмест", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
