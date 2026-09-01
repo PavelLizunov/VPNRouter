@@ -376,6 +376,10 @@ public class SingBoxOutbound
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Flow { get; set; }
 
+    [JsonPropertyName("detour")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Detour { get; set; }
+
     [JsonPropertyName("tls")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TlsConfig? Tls { get; set; }
