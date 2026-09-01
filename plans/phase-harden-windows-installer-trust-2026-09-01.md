@@ -21,12 +21,12 @@ Audit IDs: `SU-1-2`, `BR-2-6`
 
 ## 3. Verification Checklist (Definition of Done)
 
-- [ ] Happy path: stable/rolling versions and every flag combination survive the named bootstrap binding.
-- [ ] Edge: metacharacters/whitespace cannot enter elevated syntax; exact asset names match the resolved tag.
-- [ ] Failure: missing/duplicate/malformed/mismatched assets fail closed; medium-integrity processes cannot replace the verified ZIP.
-- [ ] Focused `ReleaseToolingContractTests` pass on the designated Windows CI runner.
-- [ ] Full discovered suite and exact-head CI pass.
-- [ ] Independent correctness/test/security bug-hunt has no surviving P0/P1.
+- [x] Happy path: stable/rolling versions and every flag combination survive the named bootstrap binding.
+- [x] Edge: metacharacters/whitespace cannot enter elevated syntax; exact asset names match the resolved tag.
+- [x] Failure: missing/duplicate/malformed/mismatched assets fail closed; medium-integrity processes cannot replace the verified ZIP.
+- [x] Focused installer contracts passed inside the designated Windows CI suite.
+- [x] Full discovered suite and implementation-head CI passed.
+- [x] Independent correctness/test/security bug-hunt has no surviving P0/P1.
 
 ## Risk / rollback
 
@@ -45,4 +45,10 @@ Audit IDs: `SU-1-2`, `BR-2-6`
 
 ## Outcome
 
-Pending implementation and verification.
+- Implementation commit: `7d4e2ad24205f8ccb38043b8f013c309be85bd46`; PR: #205.
+- Files: installer trust flow, four release-tooling contracts plus shared assertions, defect ledger, and this brief (`+297/-77` at implementation head).
+- The repair rounds additionally closed six source-verified attack paths: pre-UAC temp-script replacement, post-hash ZIP replacement, stale asset selection, environment-spoofed privileged paths, positional rather than named splatting, and path-searchable elevation executable. Staging leaks were closed with `finally`.
+- Exact implementation-head CI: `test` green — 2,835 total, 2,778 passed, 57 skipped; `characterization-windows`, `go-test-windows`, and `grep` green.
+- Three independent final reviewers returned CLEAN. Ouroboros QA session `qa-95ac0d4b` passed the six approved ACs at `0.95`; its mechanical evaluator could not run locally because this control plane has no `dotnet`, so GitHub Actions remained the build/test oracle.
+- Surprises/follow-ups: generic download-timeout, stress-campaign, and fully transactional power-interruption behavior were deliberately not folded into this trust-boundary PR; they remain later availability/recovery triage topics.
+- Rollback is a plain PR revert. No migration, release, tag, merge, deploy, or install occurred.
