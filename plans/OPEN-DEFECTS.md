@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1 CONFIRMED (user report 2026-09-01)** - RU bypass assigns Yandex DoH to censorship-sensitive domains; DoH encrypts transport but the resolver remains subject to Russian filtering and logging. Remove VPNRouter-owned country-specific DNS, route geo/censorship rules through proxy-detour DNS, and clean legacy injected artifacts - `VPNRouter.Core/Services/ConfigGenerator.cs` / `VPNRouter.Core/Services/CustomConfigInjector.cs` / `plans/phase-neutral-censorship-dns-2026-09-01.md`.
+
 - [x] **P0 BLOCKED BEFORE MERGE (Ox Alpha review 2026-08-21)** - PR #121 resolved managed SkiaSharp 4.151.1 beside Avalonia.Skia's Linux native 3.119.4, producing an ABI-mismatched Linux test and release graph; the required Ubuntu job timed out twice at 15 minutes while the exact Windows suite passed. PR #121 was closed without merge; wait for an Avalonia/Skia graph with matching Linux native assets before retrying the major bump - `VPNRouter.App/VPNRouter.App.csproj` / PR #121.
 
 - [ ] **P1 SECURITY FOLLOW-UP (Ox Alpha review 2026-08-21)** - test subscription URLs exposed by older commits were removed from the current tree, but ordinary PR edits cannot revoke credentials already present in Git history. Confirm the subscriptions are disabled or rotate them at the provider before the next stable cut; do not rewrite shared history unless the owner explicitly chooses that disruptive remediation - provider-side action / PR #170.
