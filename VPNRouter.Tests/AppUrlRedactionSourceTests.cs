@@ -23,6 +23,9 @@ public sealed class AppUrlRedactionSourceTests
     [InlineData("MainWindowViewModel.Wgturn.cs",
         "_logger.Warning(\"[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}\", CanaryPolicy.RedactUrl(rawUrl));",
         "\"[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}\", rawUrl);")]
+    [InlineData("MainWindowViewModel.cs",
+        "_logger.Warning(ex, \"Failed to parse server URI: {Line}\", CrashReporter.ScrubSecrets(line));",
+        "\"Failed to parse server URI: {Line}\", line);")]
     public void LogSink_RedactsUrlArgument(string file, string wrapped, string raw)
     {
         var src = File.ReadAllText(FindRepoFile("VPNRouter.App", "ViewModels", file));

@@ -175,7 +175,7 @@ public class TgProxyUpdater
         StatusChanged?.Invoke($"Step 1/3: Downloading Python {PythonVersion} (~11 MB)...");
         _logger.Information("[TgProxy] Downloading Python embeddable: {Url}", PythonZipUrl);
 
-        var tempZip = Path.GetTempFileName() + ".zip";
+        var tempZip = Path.Combine(Path.GetTempPath(), $"vpnr-tgproxy-python-{Guid.NewGuid():N}.zip");
         try
         {
             // v3.0 Phase 4: SendStreamingAsync replaces GetStreamAsync.
@@ -322,7 +322,7 @@ public class TgProxyUpdater
             // Download and extract (wheel = ZIP). v3.0 Phase 4: streaming
             // download so a 10+ MB wheel doesn't sit in a managed buffer
             // before File.Create accepts it.
-            var tempWhl = Path.GetTempFileName() + ".whl";
+            var tempWhl = Path.Combine(Path.GetTempPath(), $"vpnr-tgproxy-wheel-{Guid.NewGuid():N}.whl");
             try
             {
                 await using (var response = await _http.SendStreamingAsync(
@@ -485,7 +485,7 @@ public class TgProxyUpdater
         var zipballUrl = doc.RootElement.GetProperty("zipball_url").GetString()
             ?? throw new Exception("No zipball_url in release");
 
-        var tempZip = Path.GetTempFileName() + ".zip";
+        var tempZip = Path.Combine(Path.GetTempPath(), $"vpnr-tgproxy-source-{Guid.NewGuid():N}.zip");
         try
         {
             // v3.0 Phase 4: streaming download — zipball can be several MB.
