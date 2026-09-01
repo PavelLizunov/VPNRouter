@@ -15,7 +15,7 @@ Consolidate only the surviving changes once, update the active documentation, an
 - Prove `tg_proxy_secret` coverage on top of the merged prefixed-secret redactor from #193.
 - Port #179's safe `getcap` `ArgumentList` call without its `global.json` downgrade.
 - Combine the unique CrashReporter protections from #184, #187, and #190 with merged #185/#188 behavior.
-- Replace VPNRouter's synthesized custom-config UDP bootstrap at `1.1.1.1:53` with direct Cloudflare DoH while preserving proxy DNS, split routing, LAN/system exceptions, and bootstrap loop avoidance.
+- Replace VPNRouter-owned direct public UDP DNS in custom bootstrap, geo-bypass, and deep-verifier configs with Cloudflare/Yandex DoH while preserving proxy DNS, split routing, LAN/system exceptions, and bootstrap loop avoidance.
 - Port app-config detour guidance from removed Claude files into active scoped `AGENTS.md` files and extend the provider-artifact contract to `.jules`.
 - Correct action-version comments and `tools/native-deps.md`; update bilingual public DNS documentation.
 - Add a durable sing-box LX 1.14/AWG 3.1/Android readiness plan based on current upstream evidence.

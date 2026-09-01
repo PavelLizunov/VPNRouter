@@ -171,6 +171,7 @@ public sealed class AgentContextContractTests
         {
             ".agents",
             ".claude",
+            ".jules",
             "CLAUDE.md",
             "CLAUDE.local.md",
             "VPNRouter.Core/CLAUDE.md",
@@ -227,7 +228,7 @@ public sealed class AgentContextContractTests
         activeFiles.AddRange(Directory.EnumerateFiles(Path.Combine(root, ".dsh", "skills"), "*.md", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/')));
 
-        var forbidden = new[] { "CLAUDE.md", "CLAUDE.local.md", ".claude/", ".agents/", "mcp__" };
+        var forbidden = new[] { "CLAUDE.md", "CLAUDE.local.md", ".claude/", ".agents/", ".jules/", "mcp__" };
         foreach (var activeFile in activeFiles)
         {
             var text = Read(activeFile.Split('/'));

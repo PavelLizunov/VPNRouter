@@ -31,7 +31,7 @@ jobs:
           global-json-file: global.json
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v3
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
         with:
           languages: csharp
 
@@ -44,6 +44,6 @@ jobs:
           dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v3
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4
         with:
           category: "/language:csharp"

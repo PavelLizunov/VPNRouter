@@ -1251,13 +1251,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool _isDnsLeakLockdownEnabled = true;
 
     /// <summary>
-    /// v2.37.0-r36 — surface known-incompatible setting combos as a UI banner.
-    /// Currently a single combo: DnsLeakLockdown ∩ BypassRussianTraffic.
-    /// LeakProtection.CollectIncompatibleSettings has the canonical text +
-    /// rationale; the banner shows a short label + Disable buttons.
+    /// Legacy characterization/binding surface. RU bypass now uses Yandex DoH
+    /// on port 443, so DNS lockdown no longer conflicts and the banner stays hidden.
     /// </summary>
-    public bool IsBadComboWarningVisible =>
-        BypassRussianTraffic && IsDnsLeakLockdownEnabled;
+    public bool IsBadComboWarningVisible => false;
 
     public string LblBadComboWarningTitle =>
         IsRussian

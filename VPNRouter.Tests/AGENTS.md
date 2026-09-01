@@ -15,6 +15,8 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build
 - `TestAppBuilder.cs`: Assembly-level Avalonia AppBuilder (`[assembly: AvaloniaTestApplication(...)]`).
 - `HeadlessGuiTests.cs` & `PageScreenshotTests.cs`: Headless UI smoke, navigation, and PNG rendering (`screenshots/`).
 - `VisualDiffHelper.cs` & `VisualDiffTests.cs`: SkiaSharp pixel regression testing against pinned baselines (`screenshots/baseline/`).
+- `AppConfigDetourTests.cs`: Pins the `detour-v1` request header, opaque URI metadata, active-chain selection, exact `chain-entry`/`proxy.detour` output, and fail-closed invalid-chain behavior.
+- `DeepVerifierDnsPrivacyTests.cs`: Pins encrypted direct bootstrap DNS in transient VLESS and free-config verification configs.
 - `Fakes/`: Reusable in-memory stores and process/network/state seams for deterministic tests.
 
 ## Critical Patterns & Execution Invariants

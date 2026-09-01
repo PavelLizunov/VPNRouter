@@ -562,13 +562,14 @@ public partial class SingBoxManager
 
         try
         {
-            var psi = new ProcessStartInfo("getcap", $"\"{exePath}\"")
+            var psi = new ProcessStartInfo("getcap")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add(exePath);
             using var p = Process.Start(psi);
             if (p == null) return false;
             var output = p.StandardOutput.ReadToEnd();

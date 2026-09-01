@@ -162,6 +162,13 @@ public class ConfigGeneratorTests
             && r.RuleSet.Contains("vpnrouter-adblock")
             && r.Action == "reject");
         Assert.Equal("proxy", config.Route.Final);
+
+        var directRuDns = config.Dns.Servers.Single(s => s.Tag == "vpnrouter-dns-ru");
+        Assert.Equal("https", directRuDns.Type);
+        Assert.Equal("common.dot.dns.yandex.net", directRuDns.Server);
+        Assert.Equal("/dns-query", directRuDns.Path);
+        Assert.Equal("dns-direct", directRuDns.Detour);
+        Assert.Equal("local-dns", directRuDns.DomainResolver?.Server);
     }
 
     // v2.44.3: rewritten from the pre-subscription multi-server urltest tests.
@@ -239,6 +246,24 @@ public class ConfigGeneratorTests
         var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
 
         Assert.Equal("local-dns", config.Dns.Final);
+    }
+
+    [Fact]
+    public void DnsServers_DefaultsEncryptDirectDnsAndTunnelVpnDns()
+    {
+        var settings = CreateSettings();
+        var config = ConfigGenerator.Generate(CreateProfile(), new[] { "Discord.exe" }, settings);
+
+        var local = config.Dns.Servers.Single(s => s.Tag == "local-dns");
+        Assert.Equal("https", local.Type);
+        Assert.Equal("1.1.1.1", local.Server);
+        Assert.Equal("/dns-query", local.Path);
+        Assert.Equal("dns-direct", local.Detour);
+
+        var vpn = config.Dns.Servers.Single(s => s.Tag == "vpn-dns");
+        Assert.Equal("https", vpn.Type);
+        Assert.Equal("proxy", vpn.Detour);
+        Assert.DoesNotContain(config.Dns.Servers, s => s.Type == "udp" && s.Detour == "dns-direct");
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Nodes;
+using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
@@ -569,11 +569,18 @@ public class CustomConfigInjectorTests
         settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
         var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
 
-        // Verify our injected pieces are present
+        // Verify our injected pieces and encrypted Yandex resolver are present.
         Assert.Contains("vpnrouter-geoip-ru", result);
         Assert.Contains("vpnrouter-geosite-ru", result);
-        Assert.Contains("vpnrouter-dns-ru", result);
-        Assert.Contains("77.88.8.8", result);
+        var parsed = (JsonNode.Parse(result) as JsonObject)!;
+        var dnsServers = StjNodeHelpers.SelectToken(parsed, "dns.servers") as JsonArray;
+        var ruDns = dnsServers!.OfType<JsonObject>().Single(s =>
+            s["tag"]?.ToString() == "vpnrouter-dns-ru");
+        Assert.Equal("https", ruDns["type"]?.ToString());
+        Assert.Equal("77.88.8.8", ruDns["server"]?.ToString());
+        Assert.Equal("/dns-query", ruDns["path"]?.ToString());
+        Assert.Equal("common.dot.dns.yandex.net", ruDns["tls"]?["server_name"]?.ToString());
+        Assert.Equal("dns-direct", ruDns["detour"]?.ToString());
 
         File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-bypass.json", result);
 
@@ -1124,16 +1131,18 @@ public class CustomConfigInjectorTests
 
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // default_domain_resolver must point at a LOCAL (real-NIC) server so the
-        // proxy's OWN domain bootstraps off-tunnel — never the proxy-detour synth.
+        // default_domain_resolver must point at encrypted Cloudflare DNS on the
+        // real NIC so the proxy's own domain bootstraps without public UDP/53.
         var ddr = StjNodeHelpers.SelectToken(json, "route.default_domain_resolver")?.ToString();
-        Assert.False(string.IsNullOrEmpty(ddr));
+        Assert.Equal("vpnrouter-dns-direct", ddr);
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
-        var ddrServer = servers!.OfType<JsonObject>().FirstOrDefault(s => s["tag"]?.ToString() == ddr);
-        Assert.NotNull(ddrServer);
-        var ddrDetour = ddrServer!["detour"]?.ToString();
-        Assert.True(ddrDetour == "dns-direct" || ddrDetour == "direct" || string.IsNullOrEmpty(ddrDetour),
-            $"default_domain_resolver '{ddr}' must resolve on the real NIC, but detour was '{ddrDetour}'");
+        var ddrServer = servers!.OfType<JsonObject>().Single(s => s["tag"]?.ToString() == ddr);
+        Assert.Equal("https", ddrServer["type"]?.ToString());
+        Assert.Equal("1.1.1.1", ddrServer["server"]?.ToString());
+        Assert.Equal("/dns-query", ddrServer["path"]?.ToString());
+        Assert.Equal("dns-direct", ddrServer["detour"]?.ToString());
+        Assert.DoesNotContain(servers.OfType<JsonObject>(), s =>
+            s["type"]?.ToString() == "udp" && s["server"]?.ToString() == "1.1.1.1");
 
         AssertSingBoxCheckPasses(result, "domainproxy-nodns-full");
     }

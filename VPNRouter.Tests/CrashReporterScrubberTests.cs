@@ -46,12 +46,63 @@ public sealed class CrashReporterScrubberTests
     [InlineData("naive://user:pass@example.com:443")]
     [InlineData("naive+quic://user:pass@example.com:443")]
     [InlineData("naive+https://user:pass@example.com:443")]
+    [InlineData("tg://proxy?server=1.2.3.4&port=1080&secret=abc")]
     public void ScrubSecrets_RedactsAllProxyProtocols(string uri)
     {
         var s = CrashReporter.ScrubSecrets($"connection error: {uri}");
         Assert.Contains("[redacted]", s);
         // The URI body proper must not survive the scrub.
         Assert.DoesNotContain(uri, s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsTgUri()
+    {
+        const string input = "telegram proxy tg://proxy?server=194.87.222.111&port=1080&secret=ee123";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("194.87.222.111", s);
+        Assert.DoesNotContain("1080", s);
+        Assert.DoesNotContain("ee123", s);
+        Assert.Contains("tg://[redacted]", s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_StripsHttpBasicAuthCredentials()
+    {
+        const string input = "auth request https://user:secretpass@sub.example.com:8443/api/v1";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("user:secretpass@", s);
+        Assert.DoesNotContain("secretpass", s);
+        Assert.DoesNotContain("/api/v1", s);
+        Assert.Contains("https://sub.example.com:8443/[redacted]", s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsUrlWithPath()
+    {
+        const string input = "fetch failed: https://sub.example.com/users/abc/sub.json";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("/users/abc/sub.json", s);
+        Assert.Contains("https://sub.example.com/[redacted]", s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsQueryWithoutPath()
+    {
+        const string input = "request error: https://sub.example.com?token=secret123&foo=bar";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("token=secret123", s);
+        Assert.DoesNotContain("foo=bar", s);
+        Assert.Contains("https://sub.example.com/[redacted]", s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsFragmentWithoutPath()
+    {
+        const string input = "navigation error: https://sub.example.com#secret-anchor";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("secret-anchor", s);
+        Assert.Contains("https://sub.example.com/[redacted]", s);
     }
 
     // R13-B: wgturn:// carries wireguard key material. WriteReport (crash tail)
