@@ -87,14 +87,14 @@ public static class RemoteVersionChecker
             http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
             var url = $"https://api.github.com/repos/{ownerRepo}/releases/latest";
-            logger?.Debug("[RemoteVersionChecker] Fetching {Url}", url);
+            logger?.Debug("[RemoteVersionChecker] Fetching {Url}", CanaryPolicy.RedactUrl(url));
 
             using var resp = await http.GetAsync(url, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
                 logger?.Information(
                     "[RemoteVersionChecker] HTTP {Code} from {Url} — keeping last-known cache value",
-                    (int)resp.StatusCode, url);
+                    (int)resp.StatusCode, CanaryPolicy.RedactUrl(url));
                 // Return cached value (even if stale) if we have one.
                 return cached?.LatestTag;
             }

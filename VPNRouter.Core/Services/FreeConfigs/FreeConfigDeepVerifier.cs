@@ -123,17 +123,21 @@ public sealed class FreeConfigDeepVerifier
             await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
 
             // 2. Launch sing-box with stdout/stderr capture for diagnostics.
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = _singBoxPath,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            startInfo.ArgumentList.Add("run");
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add(tmpConfigPath);
+
             process = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = _singBoxPath,
-                    Arguments = $"run -c \"{tmpConfigPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                },
+                StartInfo = startInfo,
                 EnableRaisingEvents = false,
             };
             process.OutputDataReceived += (_, e) =>
