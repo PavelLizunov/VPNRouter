@@ -43,4 +43,9 @@ Risk is medium: update installation and rollback paths are release-critical and 
 
 ## Outcome
 
-Pending implementation and exact-head CI.
+- Implementation head `0e45dbc740e2383699f7ae46f3ce0b49ac0b57fd` changed four product/CI files: 80 insertions and 24 deletions; this brief is the fifth PR file.
+- GitHub CI passed `test` (2,818 tests), `grep`, `go-test-windows`, `characterization-windows` (19 tests), and `test-update`. The update job successfully published the CLI, built both ZIP layouts, ran the staged update, and verified replacement files plus install receipt.
+- Manual checks passed `git diff --check`, workflow YAML parsing, and an adversarial POSIX single-quote round-trip without command expansion. The control-plane checkout has neither `dotnet` nor `pwsh`; no SDK was installed and GitHub Actions remained the build oracle.
+- Three independent correctness/security/compatibility reviews found a partial-target rollback defect, the missing CLI publish gate, and weak adversarial coverage. All blocking findings were source-verified and fixed; follow-up reviews returned no surviving critical/important issue.
+- Surprise: the original bot PR #196 changed head during checks and reverted accepted `main` changes. Exact-head validation prevented merge; #196 was closed for this DSH-owned replacement and candidate incident `INC-1321` was recorded.
+- Rollback: revert implementation commit `0e45dbc7`; no release, tag, deployment, or installation was performed.
