@@ -1228,7 +1228,7 @@ public static class ConfigGenerator
             if (targetProto != "vless" || "xhttp".Equals(target.Transport?.Type, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"ConfigGenerator: chained target '{target.Name}' uses unsupported protocol/transport — only VLESS is supported.");
+                    "ConfigGenerator: chained target uses unsupported protocol/transport — only VLESS is supported.");
             }
 
             var upstreams = servers.Where(s =>
@@ -1239,7 +1239,7 @@ public static class ConfigGenerator
             if (upstreams.Count != 1)
             {
                 throw new InvalidOperationException(
-                    $"ConfigGenerator: chained target '{target.Name}' references upstream '{target.DetourVia}' which is absent or not uniquely matching in active servers.");
+                    "ConfigGenerator: chained target references an absent or non-unique upstream in active servers.");
             }
 
             var upstream = upstreams[0];
@@ -1247,7 +1247,7 @@ public static class ConfigGenerator
             if (upstreamProto != "vless" || "xhttp".Equals(upstream.Transport?.Type, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"ConfigGenerator: chained upstream '{upstream.Name}' uses unsupported protocol/transport — only VLESS is supported.");
+                    "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS is supported.");
             }
 
             var upstreamOutbound = BuildVlessOutbound(upstream, "chain-entry");

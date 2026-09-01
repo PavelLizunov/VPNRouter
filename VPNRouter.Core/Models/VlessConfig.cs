@@ -137,9 +137,10 @@ public class VlessConfig
         if (AutoSelectBestServer)
             return BuildAutoSelectPool(all, active);
 
-        // Default: only the active server + its same-IP TCP/UDP pair.
+        // Default: only the active direct server + its same-IP TCP/UDP pair.
+        // Chained targets are selectable endpoints, never ordinary siblings.
         var activeIp = active.Server;
-        return all.Where(s => s.Server == activeIp).ToList();
+        return all.Where(s => s.Server == activeIp && string.IsNullOrEmpty(s.DetourVia)).ToList();
     }
 
     /// <summary>

@@ -197,6 +197,30 @@ public class AppConfigDetourTests
     }
 
     [Fact]
+    public void GetActiveServers_DirectActive_ExcludesSameIpChainedTarget()
+    {
+        var direct = new VlessServerEntry
+        {
+            Name = "Direct",
+            Server = "1.1.1.1"
+        };
+        var chained = new VlessServerEntry
+        {
+            Name = "Chained",
+            Server = direct.Server,
+            OutboundId = "target-node-1",
+            DetourVia = "entry-node-1"
+        };
+        var config = new VlessConfig
+        {
+            ActiveServer = direct.Name,
+            Servers = new List<VlessServerEntry> { direct, chained }
+        };
+
+        Assert.Same(direct, Assert.Single(config.GetActiveServers()));
+    }
+
+    [Fact]
     public void Generate_ChainedTarget_EmitsUpstreamAndTargetProxyWithExactDetour()
     {
         // Arrange
@@ -295,6 +319,31 @@ public class AppConfigDetourTests
             OutboundId = "target-node-1",
             DetourVia = "upstream-node-1",
             Transport = new VlessTransportConfig { Type = "xhttp" }
+        };
+        var settings = CreateSettingsWithServers(upstream, target);
+        settings.Vless.ActiveServer = target.Name;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            ConfigGenerator.Generate(CreateTestProfile(), new[] { "Discord.exe" }, settings));
+    }
+
+    [Fact]
+    public void Generate_NonVlessUpstream_FailsClosed()
+    {
+        var upstream = new VlessServerEntry
+        {
+            Name = "Unsupported-Upstream",
+            Server = "100.64.0.1",
+            Protocol = "hysteria2",
+            OutboundId = "entry-node-1"
+        };
+        var target = new VlessServerEntry
+        {
+            Name = "Chained-Target",
+            Server = "194.87.222.111",
+            Protocol = "vless",
+            OutboundId = "target-node-1",
+            DetourVia = upstream.OutboundId
         };
         var settings = CreateSettingsWithServers(upstream, target);
         settings.Vless.ActiveServer = target.Name;
