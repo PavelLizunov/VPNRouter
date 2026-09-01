@@ -38,16 +38,16 @@ VPNRouter has 1,443 tracked files across desktop, Android, Core, platform networ
 | CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | 3/3 complete | pending | pending |
 | CL-3 | Clients | CLI and Windows service | `VPNRouter.CLI/`, `VPNRouter.Service/`, IPC/coexistence and lifecycle | 3/3 complete | pending | pending |
 | CL-4 | Clients | Localization, settings, migrations | Core/App/Android strings, settings loading/saving/migration and config examples | 3/3 complete | pending | pending |
-| SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | pending | pending | pending |
-| SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | pending | pending | pending |
-| SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | pending | pending | pending |
-| BR-1 | Build/release | CI workflows and hooks | `.github/`, `.githooks/`, repository policy gates | pending | pending | pending |
-| BR-2 | Build/release | Packaging and native dependencies | `packaging/`, build scripts, native payload pins/checksums/licenses | pending | pending | pending |
-| BR-3 | Build/release | Release feeds and verifiers | release/update-feed tools, BRAT/post-ship verification and asset contracts | pending | pending | pending |
-| QA-1 | Quality/architecture | Tests and characterization | `VPNRouter.Tests/`, test discovery, determinism, boundary coverage | pending | pending | pending |
-| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | pending | pending | pending |
-| QA-3 | Quality/architecture | Dependencies, dead code, duplication | project graphs, one-use abstractions, wrappers, obsolete flags and repeated logic | pending | pending | pending |
-| QA-4 | Quality/architecture | Docs, contracts, plans | active docs, AGENTS contracts, samples/profiles, stale/current-state divergence | pending | pending | pending |
+| SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | 3/3 complete | pending | pending |
+| SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | 3/3 complete | pending | pending |
+| SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | 3/3 complete | pending | pending |
+| BR-1 | Build/release | CI workflows and hooks | `.github/`, `.githooks/`, repository policy gates | 3/3 complete | pending | pending |
+| BR-2 | Build/release | Packaging and native dependencies | `packaging/`, build scripts, native payload pins/checksums/licenses | 3/3 complete | pending | pending |
+| BR-3 | Build/release | Release feeds and verifiers | release/update-feed tools, BRAT/post-ship verification and asset contracts | 3/3 complete | pending | pending |
+| QA-1 | Quality/architecture | Tests and characterization | `VPNRouter.Tests/`, test discovery, determinism, boundary coverage | 3/3 complete | pending | pending |
+| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | pending | pending |
+| QA-3 | Quality/architecture | Dependencies, dead code, duplication | project graphs, one-use abstractions, wrappers, obsolete flags and repeated logic | 3/3 complete | pending | pending |
+| QA-4 | Quality/architecture | Docs, contracts, plans | active docs, AGENTS contracts, samples/profiles, stale/current-state divergence | 3/3 complete | pending | pending |
 
 ## How
 
@@ -103,4 +103,4 @@ The audit uses tracked-path accounting, two independent swarm iterations, primar
 
 ## Outcome
 
-Pending matrix execution, two complete swarm iterations, source verification, triage, and scoped implementation handoffs.
+Iteration A is complete for all 22 leaves (minimum 3 independent reports per leaf; retries were recorded where provider output was null). Candidate indexes are durable under `plans/repository-audit-2026-09-01/`. PN-2-4 was lead-confirmed and fixed in exact-head-green PR #204; merge remains an owner decision. Pending: complete Iteration B, lead source verification/classification, remaining scoped implementation handoffs, and final exact-head evidence.
