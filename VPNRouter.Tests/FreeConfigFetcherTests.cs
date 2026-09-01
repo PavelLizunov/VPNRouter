@@ -62,6 +62,20 @@ public sealed class FreeConfigFetcherTests
         Assert.Empty(result);
     }
 
+    [Fact]
+    public async Task FetchAsync_BodyAtExactDedicatedCapIsAccepted()
+    {
+        using var logger = new LoggerConfiguration().CreateLogger();
+        var prefix = Vless + "\n";
+        var atLimit = prefix + new string(' ',
+            FreeConfigFetcher.MaxSourceBytes - Encoding.UTF8.GetByteCount(prefix));
+        Assert.Equal(FreeConfigFetcher.MaxSourceBytes, Encoding.UTF8.GetByteCount(atLimit));
+        var http = new FakeHttpClient().Setup(SourceUrl, atLimit);
+        var fetcher = new FreeConfigFetcher(logger, http);
+
+        Assert.Equal(new[] { Vless }, await fetcher.FetchAsync(Source()));
+    }
+
     [Theory]
     [InlineData(404)]
     [InlineData(503)]
@@ -115,6 +129,13 @@ public sealed class FreeConfigFetcherTests
 
         Assert.Equal(new[] { Vless }, plain);
         Assert.Equal(new[] { Vless }, fromBase64);
+    }
+
+    [Fact]
+    public void ExtractVlessLines_EmptyInputReturnsEmpty()
+    {
+        Assert.Empty(FreeConfigFetcher.ExtractVlessLines(string.Empty));
+        Assert.Empty(FreeConfigFetcher.ExtractVlessLines(" \r\n\t"));
     }
 
     private sealed class BlockingHttpClient : IHttpClient

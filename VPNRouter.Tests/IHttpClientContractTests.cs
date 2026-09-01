@@ -202,6 +202,29 @@ public sealed class IHttpClientContractTests
     }
 
     [Fact]
+    public async Task Send_PerRequestBodyLimit_AllowsExactLimit()
+    {
+        const long perRequestLimit = 1024;
+        var handler = StubHandler.Sync((_, _) =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new ExpandingStream(perRequestLimit)),
+            });
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+        var request = new HttpRequest(HttpMethod.Get, new Uri(TestUrl))
+        {
+            MaxResponseBytes = perRequestLimit,
+        };
+
+        var response = await http.SendAsync(
+            request,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(perRequestLimit, response.Body.LongLength);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
     public async Task Send_PerRequestBodyLimit_CannotRaiseGlobalCap()
     {
         var handler = StubHandler.Sync((_, _) =>
