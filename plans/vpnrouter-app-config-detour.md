@@ -36,14 +36,14 @@ The compatibility endpoint intentionally omits chained targets from URI-only out
 ## Verification gate
 
 - [ ] Release solution build: `dotnet build VPNRouter.sln -c Release` — unavailable on the control-plane and provisioned workers; the changed Core plus tests built in Release CI with zero errors.
-- [ ] Focused parser/config tests pass as part of the full suite — awaiting CI for the pre-merge review fix.
-- [ ] Full discovered test suite passes — awaiting CI for the pre-merge review fix.
+- [x] Focused parser/config tests pass as part of the full suite.
+- [x] Full discovered test suite passes.
 - [x] No capability/no detour output remains unchanged.
 - [x] Missing upstream fails closed; no direct S5 fallback.
 - [ ] Generated chain JSON passes bundled sing-box check — reserved for the authorized candidate/WINBRAT gate because CI has no bundled binary.
 - [x] README/zone docs and this Outcome are current.
 - [x] Independent correctness, compatibility, simplicity, and security reviews have no unresolved important findings.
-- [ ] PR CI is green for the final head; merge/release/WINBRAT installation waits for an explicit owner command.
+- [x] PR CI is green for the reviewed code head; merge/release/WINBRAT installation waits for an explicit owner command.
 
 ## Outcome
 
@@ -53,6 +53,6 @@ Delta: six Core files, focused regression tests, one xUnit serialization collect
 
 Independent reviews found and fixed ordinary-auto-select target leakage, nested-entry ambiguity, outbound ordering, static HTTP seam races, and platform-filtered target fallback. The first CI pass exposed one test-only false positive: a global JSON substring matched the existing DNS `detour`; the assertion now inspects only the `proxy` outbound and the rerun is green.
 
-A final pre-merge DSH bug-hunt found that a direct server could still inherit an inactive chained target sharing the same host IP through the legacy TCP/UDP pairing path. The direct same-IP pool now excludes `DetourVia` entries, with a regression test; unsupported upstream protocols also have explicit fail-closed coverage, and chain errors no longer expose endpoint labels or identifiers.
+A final pre-merge DSH bug-hunt found that a direct server could still inherit an inactive chained target sharing the same host IP through the legacy TCP/UDP pairing path. The direct same-IP pool now excludes `DetourVia` entries, with a regression test; unsupported upstream protocols also have explicit fail-closed coverage, and chain errors no longer expose endpoint labels or identifiers. The reviewed code head then passed all four required GitHub checks.
 
 Remaining gates require explicit owner release authority: full release-solution packaging, bundled sing-box binary check, candidate installation, subscription refresh, and live S5-through-Iceland egress verification on WINBRAT. Rollback is `git revert` of the feature commits; an old client remains protected by vpnctl's capability gate.
