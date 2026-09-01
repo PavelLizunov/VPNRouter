@@ -60,7 +60,9 @@ public static class VlessUriParser
             Port = port,
             Uuid = uuid,
             Flow = query["flow"] ?? string.Empty,
-            Security = query["security"] ?? "tls"
+            Security = query["security"] ?? "tls",
+            OutboundId = query["outbound"] ?? string.Empty,
+            DetourVia = query["detour"] ?? string.Empty
         };
 
         // Transport

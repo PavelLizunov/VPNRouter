@@ -57,6 +57,7 @@ offscreen-render → `window.CaptureRenderedFrame()` для PNG snapshots.
 | `LeakProtectionAppSettingsTests` | F-12 / parity audit P0: `ValidateAppSettings` defence-in-depth backstop for silent ConfigMode flips |
 | `LeakProtectionTests` | `ValidateConfig` invariants + protocol-aware dispatch (VLESS/Hy2/TUIC, v2.30.1-r4) + smart-mode local-dns + proxy-udp branch |
 | `VlessUriParserTests` | `VlessUriParser.Parse` URI shapes + invalid-input rejection |
+| `AppConfigDetourTests` | Capability header, `outbound`/`detour` parsing, exact chain selection/generation, JSON serialization, auto-select isolation, and fail-closed missing/unsupported entry cases |
 | `CustomConfigInjectorTests` | Custom-config inject pipeline: split-tunnel routing inject, action-vs-legacy dispatch, sing-box check integration. v2.40 additions: fail-CLOSED `dns.final` + `EnsureSynthesizedRemoteDns` (synth Cloudflare DoH via proxy when no proxy-detour DNS), `InjectDnsRules(proxyTag)` per-app DNS synth for include-split, `FindRemoteDnsTag` excludes `dns-direct` (32 tests) |
 | `VlessServersResolverTests` | v2.28.2: subscription→VLESS aggregation в 8 case'ах |
 | `ConfigGeneratorEmptyServersGuardTests` | v2.28.2: hard guard + e2e subscribe→resolve→generate + sing-box check integration |
