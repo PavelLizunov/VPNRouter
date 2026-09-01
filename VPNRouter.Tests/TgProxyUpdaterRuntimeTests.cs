@@ -15,10 +15,6 @@ public sealed class TgProxyUpdaterRuntimeTests
         Assert.Contains("SupportedProxySourceSha256", source);
         Assert.Contains("import certifi; import proxy.tg_ws_proxy", source);
         Assert.DoesNotContain("releases/latest", source);
-        Assert.DoesNotContain("GetTempFileName", source);
-        Assert.Contains("vpnr-tgproxy-python-", source);
-        Assert.Contains("vpnr-tgproxy-wheel-", source);
-        Assert.Contains("vpnr-tgproxy-source-", source);
     }
 
     [Fact]

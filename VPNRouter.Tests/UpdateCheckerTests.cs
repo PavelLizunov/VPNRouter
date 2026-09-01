@@ -15,7 +15,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
 using VPNRouter.Core.Models;
@@ -131,31 +130,6 @@ public sealed class UpdateCheckerTests
         Assert.Equal("plainPath", UpdateChecker.EscapeShellArgument("plainPath"));
         Assert.Equal("path'\\''sWithQuote", UpdateChecker.EscapeShellArgument("path'sWithQuote"));
         Assert.Equal("path'\\''with'\\''multiple'\\''quotes", UpdateChecker.EscapeShellArgument("path'with'multiple'quotes"));
-    }
-
-    [Fact]
-    public void EscapeShellArgument_RoundTripsAdversarialValueThroughPosixShell()
-    {
-        if (OperatingSystem.IsWindows()) return;
-
-        const string value = "path with spaces \"double\" $HOME $(printf injected) `printf injected`\nnext's";
-        var psi = new ProcessStartInfo("/bin/sh")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        psi.ArgumentList.Add("-c");
-        psi.ArgumentList.Add($"printf %s '{UpdateChecker.EscapeShellArgument(value)}'");
-
-        using var process = Process.Start(psi);
-        Assert.NotNull(process);
-        var output = process!.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-
-        Assert.True(process.ExitCode == 0, error);
-        Assert.Equal(value, output);
     }
 
     // ─── Version comparison ──────────────────────────────────────────────

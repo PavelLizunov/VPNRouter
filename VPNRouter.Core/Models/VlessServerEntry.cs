@@ -187,18 +187,6 @@ public class VlessServerEntry
     public string PairGroup { get; set; } = string.Empty;
 
     /// <summary>
-    /// Opaque outbound identifier supplied by subscription query param (<c>outbound=</c>).
-    /// </summary>
-    [YamlMember(Alias = "outbound")]
-    public string OutboundId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Upstream outbound reference supplied by subscription query param (<c>detour=</c>).
-    /// </summary>
-    [YamlMember(Alias = "detour")]
-    public string DetourVia { get; set; } = string.Empty;
-
-    /// <summary>
     /// r7 #1: NaiveProxy HTTP/3-over-QUIC transport. Set from a
     /// <c>naive+quic://</c> share-link; emitted as the naive outbound's
     /// <c>quic</c> boolean. False (default) = HTTP/2. Naive-only.

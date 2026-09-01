@@ -211,9 +211,7 @@ app:
                                 Port = 443,
                                 Uuid = "11111111-1111-1111-1111-111111111111",
                                 Protocol = "vless",
-                                Flow = "xtls-rprx-vision",
-                                OutboundId = "target-node-1",
-                                DetourVia = "entry-node-1"
+                                Flow = "xtls-rprx-vision"
                             }
                         }
                     }
@@ -309,8 +307,6 @@ app:
         var path = TempYamlPath();
         SettingsLoader.Save(original, path);
         var yaml = File.ReadAllText(path);
-        Assert.Contains("outbound: target-node-1", yaml);
-        Assert.Contains("detour: entry-node-1", yaml);
         var roundTripped = SettingsLoader.Parse(yaml);
 
         // ── App (scalar everything) ──
@@ -366,8 +362,6 @@ app:
         Assert.Equal("main-tcp", sub.Servers[0].Name);
         Assert.Equal("1.2.3.4", sub.Servers[0].Server);
         Assert.Equal(443, sub.Servers[0].Port);
-        Assert.Equal("target-node-1", sub.Servers[0].OutboundId);
-        Assert.Equal("entry-node-1", sub.Servers[0].DetourVia);
 
         // ── CustomRules / multi-rule list ──
         Assert.Equal(2, roundTripped.App.CustomRules.Count);

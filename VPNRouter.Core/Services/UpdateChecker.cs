@@ -896,7 +896,7 @@ public class UpdateChecker : IDesktopInstaller
             $"if [ -d '{safeTargetApp}' ]; then\n" +
             $"  mv '{safeTargetApp}' \"$BACKUP\" && log 'Backed up old bundle to '\"$BACKUP\" || {{ log 'FAIL: mv old bundle aside'; exit 10; }}\n" +
             "fi\n" +
-            $"ditto --rsrc '{safeStagedApp}' '{safeTargetApp}' || {{ log 'FAIL: ditto copy'; if [ -d \"$BACKUP\" ]; then rm -rf '{safeTargetApp}' && mv \"$BACKUP\" '{safeTargetApp}'; fi; exit 11; }}\n" +
+            $"ditto --rsrc '{safeStagedApp}' '{safeTargetApp}' || {{ log 'FAIL: ditto copy'; [ -d \"$BACKUP\" ] && mv \"$BACKUP\" '{safeTargetApp}'; exit 11; }}\n" +
             "log 'Installed new bundle via ditto'\n" +
             $"xattr -dr com.apple.quarantine '{safeTargetApp}' 2>/dev/null\n" +
             "log 'Stripped quarantine from target'\n" +
@@ -1096,13 +1096,13 @@ public class UpdateChecker : IDesktopInstaller
                 $"exec >>'{safeHelperLog}' 2>&1\n" +
                 $"echo \"[$(date -u +%H:%M:%S)] vpnrouter-relaunch helper started, parent={parentPid}\"\n" +
                 // Wait for parent process to die (max 30 s; bail out earlier if it goes).
-                "for i in $(seq 1 150); do\n" +
+                $"for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do\n" +
                 $"  if ! kill -0 {parentPid} 2>/dev/null; then\n" +
                 $"    break\n" +
                 $"  fi\n" +
                 $"  sleep 0.2\n" +
                 $"done\n" +
-                "echo \"[$(date -u +%H:%M:%S)] parent gone, launching update\"\n" +
+                $"echo \"[$(date -u +%H:%M:%S)] parent gone, launching {safeNewAppPath}\"\n" +
                 // setsid + nohup + detached stdio = fully independent child.
                 $"setsid --fork nohup '{safeNewAppPath}' </dev/null >/dev/null 2>&1\n" +
                 $"echo \"[$(date -u +%H:%M:%S)] setsid returned $?\"\n" +

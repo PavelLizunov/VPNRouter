@@ -29,12 +29,6 @@ public static class SubscriptionFetcher
     /// </summary>
     public static IHttpClient Http { get; set; } = PolicyHttpClient.Shared;
 
-    private static readonly IReadOnlyDictionary<string, string> SubscriptionHeaders =
-        new Dictionary<string, string>
-        {
-            ["X-VPNRouter-Capabilities"] = "detour-v1"
-        };
-
     /// <summary>
     /// Fetch and parse subscription URL into a list of VLESS server entries.
     /// Returns empty list on error (never throws).
@@ -71,7 +65,6 @@ public static class SubscriptionFetcher
             // policy; per-request 15s timeout preserved for back-compat.
             var httpResp = await Http.SendAsync(
                 new HttpRequest(HttpMethod.Get, new Uri(url),
-                    Headers: SubscriptionHeaders,
                     Timeout: TimeSpan.FromSeconds(15)),
                 ct);
             if (!httpResp.IsSuccess())
