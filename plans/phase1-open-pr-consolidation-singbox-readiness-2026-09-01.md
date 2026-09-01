@@ -15,7 +15,7 @@ Consolidate only the surviving changes once, update the active documentation, an
 - Prove `tg_proxy_secret` coverage on top of the merged prefixed-secret redactor from #193.
 - Port #179's safe `getcap` `ArgumentList` call without its `global.json` downgrade.
 - Combine the unique CrashReporter protections from #184, #187, and #190 with merged #185/#188 behavior.
-- Replace VPNRouter-owned direct public UDP DNS in custom bootstrap, geo-bypass, and deep-verifier configs with Cloudflare/Yandex DoH while preserving proxy DNS, split routing, LAN/system exceptions, and bootstrap loop avoidance.
+- Replace VPNRouter-owned direct public UDP DNS in custom bootstrap and deep-verifier configs with Cloudflare DoH, and route geo/censorship DNS through the proxy while preserving split routing, LAN/system exceptions, and bootstrap loop avoidance.
 - Port app-config detour guidance from removed Claude files into active scoped `AGENTS.md` files and extend the provider-artifact contract to `.jules`.
 - Correct action-version comments and `tools/native-deps.md`; update bilingual public DNS documentation.
 - Add a durable sing-box LX 1.14/AWG 3.1/Android readiness plan based on current upstream evidence.
@@ -47,7 +47,7 @@ Risk is medium: redaction and DNS defaults are security-sensitive, while incorre
 
 ## Outcome
 
-Implemented in PR #201 at code head `801f1d04f8f86041b8d5ef226416e872f5a8a85a`. The consolidation preserves merged redaction behavior while adding HTTP userinfo, pathless query/fragment, and `tg://` coverage; pins `tg_proxy_secret`; ports the `getcap` argv boundary; and removes VPNRouter-owned direct public UDP DNS from generated, custom-injected, geo-bypass, and transient deep-verifier configs. The obsolete RU-bypass/DNS-lockdown warning is retired without removing its public compatibility surfaces.
+Implemented in PR #201 at code head `801f1d04f8f86041b8d5ef226416e872f5a8a85a`. The consolidation preserves merged redaction behavior while adding HTTP userinfo, pathless query/fragment, and `tg://` coverage; pins `tg_proxy_secret`; ports the `getcap` argv boundary; and removes VPNRouter-owned direct public UDP DNS from generated, custom-injected, geo-bypass, and transient deep-verifier configs. The obsolete RU-bypass/DNS-lockdown warning is retired without removing its public compatibility surfaces. Follow-up review found that its geo-bypass DoH choice encrypted transport but still trusted a country-specific resolver; `phase-neutral-censorship-dns-2026-09-01.md` replaces that policy with tunnel-routed DNS.
 
 Active DSH guidance now owns the app-config detour contract and rejects `.jules`; bilingual public DNS behavior and the native runtime inventory match source. The separate readiness plan rejects beta-based LX `.29`, keeps AWG 3.1 and Android Clash API compatibility externally gated, and makes no runtime pin change.
 

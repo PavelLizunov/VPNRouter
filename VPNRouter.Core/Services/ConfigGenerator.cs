@@ -732,7 +732,6 @@ public static class ConfigGenerator
 
     private const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";
     private const string GeoSiteRuleSetTag = "vpnrouter-geosite-ru";
-    private const string DirectDnsRuTag = "vpnrouter-dns-ru";
 
     private static void ApplyGeoBypass(SingBoxConfig config)
     {
@@ -756,27 +755,17 @@ public static class ConfigGenerator
             Path = geoSitePath
         });
 
-        // 2. Add encrypted Yandex DoH routed via dns-direct (real NIC, no proxy).
-        // Bootstrap its hostname through the literal-IP local Cloudflare DoH server.
-        config.Dns.Servers.Add(new DnsServer
-        {
-            Tag = DirectDnsRuTag,
-            Type = "https",
-            Server = "common.dot.dns.yandex.net",
-            Path = "/dns-query",
-            Detour = "dns-direct",
-            DomainResolver = "local-dns"
-        });
-
-        // 3. Add DNS rule: RU domains use Russian DNS resolver
+        // 2. Censorship-sensitive domains always resolve through the existing
+        // proxy-detoured DNS. The traffic route can still be direct, but neither
+        // the ISP nor a country-specific resolver controls the DNS answer.
         config.Dns.Rules.Insert(0, new DnsRule
         {
             RuleSet = new List<string> { GeoSiteRuleSetTag },
             Action = "route",
-            Server = DirectDnsRuTag
+            Server = "vpn-dns"
         });
 
-        // 4. Add route rule: RU sites/IPs go direct (BEFORE process_name rules)
+        // 3. Add route rule: RU sites/IPs go direct (BEFORE process_name rules)
         // Find insertion point: after sniff/hijack-dns/private-ip rules
         int insertAt = 0;
         for (int i = 0; i < config.Route.Rules.Count; i++)
@@ -810,13 +799,13 @@ public static class ConfigGenerator
         //
         // geosite-ru (domain-based) is the right matcher for "Russian
         // service" — it keys on .ru TLD + curated Russian-service domains,
-        // and the DNS rule above already routes those lookups to a
-        // Russian resolver so the returned IPs are whatever the local
-        // authority says. Adding geoip-ru on top was over-matching.
+        // and the DNS rule above resolves those names through the encrypted
+        // proxy instead of a resolver controlled by the local authority.
+        // Adding geoip-ru on top was over-matching.
         //
-        // Pure-IP Russian traffic (someone dialling 77.88.8.8 directly with
-        // no DNS) is rare and acceptable to leave going through VPN — the
-        // trade-off beats breaking YouTube for everyone.
+        // Pure-IP Russian traffic (a direct IP connection with no DNS) is rare
+        // and acceptable to leave going through VPN — the trade-off beats
+        // breaking YouTube for everyone.
         config.Route.Rules.Insert(insertAt, new RouteRule
         {
             RuleSet = new List<string> { GeoSiteRuleSetTag },

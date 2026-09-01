@@ -1,4 +1,5 @@
-﻿using VPNRouter.Core.Models;
+using VPNRouter.Core;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
 
@@ -163,12 +164,41 @@ public class ConfigGeneratorTests
             && r.Action == "reject");
         Assert.Equal("proxy", config.Route.Final);
 
-        var directRuDns = config.Dns.Servers.Single(s => s.Tag == "vpnrouter-dns-ru");
-        Assert.Equal("https", directRuDns.Type);
-        Assert.Equal("common.dot.dns.yandex.net", directRuDns.Server);
-        Assert.Equal("/dns-query", directRuDns.Path);
-        Assert.Equal("dns-direct", directRuDns.Detour);
-        Assert.Equal("local-dns", directRuDns.DomainResolver?.Server);
+        var geoDnsRule = config.Dns.Rules.Single(r =>
+            r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
+        Assert.Equal("vpn-dns", geoDnsRule.Server);
+        Assert.Equal("proxy", config.Dns.Servers.Single(s => s.Tag == "vpn-dns").Detour);
+        Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
+    }
+
+    [Fact]
+    public void GeoBypass_DnsUsesTunnelResolverWithoutCountrySpecificServer()
+    {
+        var previousDataDir = AppPaths.DataDir;
+        var tempDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-generated-geo-dns-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(tempDataDir);
+            Directory.CreateDirectory(AppPaths.GeoDir);
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, new byte[10 * 1024]);
+            File.WriteAllBytes(AppPaths.GeoSiteRuPath, new byte[100]);
+
+            var settings = CreateSettings();
+            settings.App.BypassRussianTraffic = true;
+            var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
+
+            var geoRule = config.Dns.Rules.Single(r =>
+                r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
+            Assert.Equal("vpn-dns", geoRule.Server);
+            Assert.Equal("proxy", config.Dns.Servers.Single(s => s.Tag == "vpn-dns").Detour);
+            Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previousDataDir);
+            if (Directory.Exists(tempDataDir))
+                Directory.Delete(tempDataDir, recursive: true);
+        }
     }
 
     // v2.44.3: rewritten from the pre-subscription multi-server urltest tests.

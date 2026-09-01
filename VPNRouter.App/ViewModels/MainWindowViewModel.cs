@@ -1251,8 +1251,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool _isDnsLeakLockdownEnabled = true;
 
     /// <summary>
-    /// Legacy characterization/binding surface. RU bypass now uses Yandex DoH
-    /// on port 443, so DNS lockdown no longer conflicts and the banner stays hidden.
+    /// Legacy characterization/binding surface. RU bypass DNS now stays inside
+    /// the proxy, so DNS lockdown no longer conflicts and the banner stays hidden.
     /// </summary>
     public bool IsBadComboWarningVisible => false;
 

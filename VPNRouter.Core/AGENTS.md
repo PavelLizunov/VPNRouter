@@ -80,6 +80,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 
 ### Fail-Closed Routing & DNS
 - `CustomConfigInjector` enforces fail-closed rules: `route.final` is set to proxy in full-tunnel or exclude mode, Cloudflare DoH is synthesized when proxy detour DNS is missing, and `dns-direct` is excluded from remote DNS tags.
+- VPNRouter-owned geo/censorship DNS rules always use a real proxy-detour resolver; never assign a country-specific direct resolver. Direct DoH is limited to bootstrap and explicit direct/smart/failover behavior.
 - `LeakProtection.ValidateAppSettings` and `ValidateConfig` verify settings/generated JSON for missing proxy outbounds, DNS strategy integrity, and strict routing. Validation runs in both `StartAsync` and `ApplyAsync` flows of `VpnEngine`.
 
 ### Safe Process Query Handles
