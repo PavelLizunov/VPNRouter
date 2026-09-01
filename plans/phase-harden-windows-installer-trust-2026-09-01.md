@@ -6,23 +6,24 @@ Audit IDs: `SU-1-2`, `BR-2-6`
 
 ## 1. Intent & Invariants
 
-- **What:** Prevent caller-controlled `-Version` text from becoming elevated PowerShell source, and refuse an administrative install when the matching SHA256 sidecar is absent.
-- **Invariants:** UAC elevation preserves all supported flags and literal version data; only release versions matching the repository's stable/rolling grammar are accepted; every downloaded install ZIP is verified against a present, well-formed sidecar before extraction; no release/tag/merge/deploy/install is performed by this task.
+- **What:** Prevent caller-controlled `-Version` text from becoming elevated PowerShell source, bind the archive to the resolved tag, and refuse any unverified or replaceable administrative install payload.
+- **Invariants:** UAC elevation preserves supported flags as data; only stable/rolling versions are accepted; exactly one version-matching ZIP and sidecar are required; download/hash/extraction uses an administrator-only staging directory; no release/tag/merge/deploy/install is performed.
 
 ## 2. Interface / Data Contract
 
 ```powershell
 -Version <X.Y.Z | X.Y.Z-rN>
 # invalid input => terminating validation error before elevation/network/install
-# elevation => script path and every argument passed as distinct native arguments
-# missing/malformed/unreadable .sha256 => terminating failure before extraction
+# elevation => fixed encoded bootstrap; Base64 version + switch bit mask decoded to a named hashtable splat
+# missing/duplicate/mismatched asset or sidecar => terminating failure before extraction
+# verified ZIP => administrator/System-only staging until extraction
 ```
 
 ## 3. Verification Checklist (Definition of Done)
 
-- [ ] Happy path: source contract proves stable/rolling versions and all flags survive elevation as separate arguments.
-- [ ] Edge: metacharacters/whitespace cannot enter an elevated command string.
-- [ ] Failure: missing or malformed sidecar fails closed before extraction.
+- [ ] Happy path: stable/rolling versions and every flag combination survive the named bootstrap binding.
+- [ ] Edge: metacharacters/whitespace cannot enter elevated syntax; exact asset names match the resolved tag.
+- [ ] Failure: missing/duplicate/malformed/mismatched assets fail closed; medium-integrity processes cannot replace the verified ZIP.
 - [ ] Focused `ReleaseToolingContractTests` pass on the designated Windows CI runner.
 - [ ] Full discovered suite and exact-head CI pass.
 - [ ] Independent correctness/test/security bug-hunt has no surviving P0/P1.
@@ -30,7 +31,7 @@ Audit IDs: `SU-1-2`, `BR-2-6`
 ## Risk / rollback
 
 - Risk: quoting changes can break Windows PowerShell 5.1 self-elevation; overly strict version grammar can reject legitimate rolling versions.
-- Control: use `Start-Process -ArgumentList` with a downloaded script file, fixed parameter tokens, and the existing version grammar; pin source shape in tests.
+- Control: use a fixed `-EncodedCommand`, Base64 version + numeric switch mask reconstructed as a named splat, exact assets, known-folder APIs, and ACL-restricted staging; pin behavior/order in tests.
 - Rollback: revert this task PR; no migration or persisted-data change exists.
 
 ## Six gates

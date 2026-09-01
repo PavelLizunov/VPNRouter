@@ -26,6 +26,7 @@
 [CmdletBinding()]
 param(
     # Explicit version to install (e.g. "2.27.2"). Empty = resolve latest.
+    [ValidatePattern('^(?:|[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?)$')]
     [string]$Version = "",
 
     # Include prereleases (rolling -rN candidates) when resolving latest.
@@ -60,13 +61,17 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = 'SilentlyContinue'
 
 # == Config ==============================================================
-$GitHubRepo    = "PavelLizunov/VPNRouter"
-$GitHubApi     = "https://api.github.com/repos/$GitHubRepo"
-$InstallRoot   = Join-Path $env:ProgramFiles "VPNRouter"
-$AppDir        = Join-Path $InstallRoot "app"
-$DataRoot      = Join-Path $env:ProgramData "VPNRouter"
-$StartMenuDir  = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
-$UninstallKey  = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\VPNRouter"
+$GitHubRepo      = "PavelLizunov/VPNRouter"
+$GitHubApi       = "https://api.github.com/repos/$GitHubRepo"
+$ProgramFilesRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+$ProgramDataRoot  = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+$SystemDirectory  = [Environment]::SystemDirectory
+$WindowsPowerShell = Join-Path $SystemDirectory "WindowsPowerShell\v1.0\powershell.exe"
+$InstallRoot     = Join-Path $ProgramFilesRoot "VPNRouter"
+$AppDir          = Join-Path $InstallRoot "app"
+$DataRoot        = Join-Path $ProgramDataRoot "VPNRouter"
+$StartMenuDir    = Join-Path $ProgramDataRoot "Microsoft\Windows\Start Menu\Programs"
+$UninstallKey    = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\VPNRouter"
 $RemoteUninstall = "https://vpn.ninitux.com/uninstall.ps1"
 
 # == Colored logging =====================================================
@@ -89,47 +94,38 @@ if (-not $isAdmin) {
 
     Say "Installation requires admin rights - triggering UAC prompt..."
 
-    # Re-run ourselves via PowerShell -Verb RunAs. Need to re-download
-    # the script in the elevated context because `iwr | iex` has no file
-    # on disk - the elevated shell needs to fetch it freshly.
-    #
-    # Pass our flags through so `-Service` etc. survive the elevation.
-    $passThrough = @("-Elevated")
-    if ($Version)    { $passThrough += "-Version"; $passThrough += $Version }
-    if ($Prerelease) { $passThrough += "-Prerelease" }
-    if ($Service)    { $passThrough += "-Service" }
-    if ($NoLaunch)   { $passThrough += "-NoLaunch" }
-    $flagsString = ($passThrough -join ' ')
-
-    # IMPORTANT: download via -OutFile, NOT via .Content / WriteAllText.
-    #
-    # On Windows PowerShell 5.1, Invoke-WebRequest returns .Content as
-    # Byte[] (not string) when the response Content-Type isn't recognized
-    # as text. github.io / Pages occasionally serves install.ps1 with
-    # application/octet-stream depending on edge cache state, which
-    # triggers this. WriteAllText(path, byte[]) implicitly stringifies
-    # the array via [string]::Join(' ', $bytes), so the saved file
-    # literally contains "35 32 86 80 78 82..." (each byte as decimal),
-    # then the elevated shell tries to parse those numbers as PowerShell
-    # tokens and emits a wall of "Unexpected token '32'" errors.
-    #
-    # -OutFile writes raw response bytes to disk regardless of the
-    # detected MIME type, so the saved file is byte-identical to what
-    # the server sent. Same fix applied to the .sha256 sidecar earlier.
-    $bootstrap = @"
-`$ErrorActionPreference='Stop'
+    # Keep caller values out of PowerShell syntax. Encode the only string as
+    # Base64 and the switches as a numeric bit mask, then reconstruct a named
+    # splat inside a fixed bootstrap. The elevated process downloads and runs
+    # in memory, avoiding a user-writable temp-script race.
+    $encodedVersion = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Version))
+    $forwardFlags = 0
+    if ($Prerelease) { $forwardFlags = $forwardFlags -bor 1 }
+    if ($Service)    { $forwardFlags = $forwardFlags -bor 2 }
+    if ($NoLaunch)   { $forwardFlags = $forwardFlags -bor 4 }
+    $bootstrapTemplate = @'
+$ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-`$tmp = Join-Path `$env:TEMP 'vpnrouter-install.ps1'
-Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -OutFile `$tmp -UseBasicParsing -ErrorAction Stop
-& `$tmp $flagsString
+$version = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__FORWARDED_VERSION__'))
+$flags = __FORWARDED_FLAGS__
+$installParams = @{ Elevated = $true }
+if ($version) { $installParams.Version = $version }
+if ($flags -band 1) { $installParams.Prerelease = $true }
+if ($flags -band 2) { $installParams.Service = $true }
+if ($flags -band 4) { $installParams.NoLaunch = $true }
+$response = Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -UseBasicParsing -ErrorAction Stop
+$content = $response.Content
+if ($content -is [byte[]]) { $content = [Text.Encoding]::UTF8.GetString($content) }
+& ([ScriptBlock]::Create([string]$content)) @installParams
 pause
-"@
-
-    Start-Process powershell.exe -Verb RunAs -ArgumentList @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-Command", $bootstrap
-    )
+'@
+    $bootstrap = $bootstrapTemplate.Replace('__FORWARDED_VERSION__', $encodedVersion).Replace('__FORWARDED_FLAGS__', [string]$forwardFlags)
+    $encodedBootstrap = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
+    if (-not [IO.File]::Exists($WindowsPowerShell)) {
+        Err "Trusted Windows PowerShell executable not found: $WindowsPowerShell"
+        exit 1
+    }
+    Start-Process -FilePath $WindowsPowerShell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedBootstrap"
     exit 0
 }
 
@@ -169,17 +165,38 @@ if ($currentVersion -eq $resolvedVersion) {
     Say "Upgrading VPNRouter from $currentVersion -> $resolvedVersion"
 }
 
-# == Pick install ZIP + sha256 sidecar ===================================
-$zipAsset = $release.assets | Where-Object {
-    $_.name -like "VPNRouter-v*-win.zip" -and $_.name -notlike "*update*"
-} | Select-Object -First 1
+# == Pick exact install ZIP + sha256 sidecar =============================
+$expectedZipName = "VPNRouter-v$resolvedVersion-win.zip"
+$zipAssets = @($release.assets | Where-Object { $_.name -eq $expectedZipName })
+if ($zipAssets.Count -ne 1) {
+    Err "Release must contain exactly one $expectedZipName (found $($zipAssets.Count))"
+    exit 1
+}
+$zipAsset = $zipAssets[0]
 
-if (-not $zipAsset) { Err "Full install ZIP not found on release $($release.tag_name)"; exit 1 }
+$expectedShaName = "$expectedZipName.sha256"
+$shaAssets = @($release.assets | Where-Object { $_.name -eq $expectedShaName })
+if ($shaAssets.Count -ne 1) {
+    Err "Release must contain exactly one $expectedShaName (found $($shaAssets.Count))"
+    exit 1
+}
+$shaAsset = $shaAssets[0]
 
-$shaAsset = $release.assets | Where-Object { $_.name -eq "$($zipAsset.name).sha256" } | Select-Object -First 1
+# Stage under Program Files so medium-integrity processes cannot replace a
+# verified archive while the elevated installer stops processes and extracts.
+$stagingDir = Join-Path $ProgramFilesRoot ("VPNRouter-Installer-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $stagingDir -ErrorAction Stop | Out-Null
+try {
+& (Join-Path $SystemDirectory "icacls.exe") $stagingDir /inheritance:r /grant:r `
+    '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Err "Could not secure installer staging directory"
+    exit 1
+}
+$zipPath = Join-Path $stagingDir $expectedZipName
+$shaTmp = Join-Path $stagingDir $expectedShaName
 
 # == Download =============================================================
-$zipPath = Join-Path $env:TEMP $zipAsset.name
 Say "Downloading $($zipAsset.name) ($([math]::Round($zipAsset.size / 1MB, 1)) MB)..."
 Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $zipPath -UseBasicParsing
 
@@ -189,23 +206,21 @@ Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $zipPath -UseBasi
 # Byte[] for non-text responses (and GitHub serves .sha256 as
 # application/octet-stream), so calling .Trim() on .Content fails with
 # "Method 'Trim' does not exist on [System.Byte]". Workaround: download
-# to a temp file and read as text. Works on both PS 5.1 and PS 7+.
-if ($shaAsset) {
-    Say "Verifying SHA256..."
-    $shaTmp = Join-Path $env:TEMP "vpnr-install-sha.txt"
-    Invoke-WebRequest -Uri $shaAsset.browser_download_url -OutFile $shaTmp -UseBasicParsing
-    $expectedSha = (Get-Content -Raw $shaTmp).Trim().Split()[0].ToLower()
-    Remove-Item $shaTmp -Force -ErrorAction SilentlyContinue
-    $actualSha   = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLower()
-    if ($actualSha -ne $expectedSha) {
-        Err "SHA256 mismatch! Expected $expectedSha, got $actualSha"
-        Remove-Item $zipPath -Force
-        exit 1
-    }
-    Ok "SHA256 verified: $actualSha"
-} else {
-    Warn "No .sha256 sidecar for this release - skipping hash verification"
+# to the secured staging file and read it as text. Works on PS 5.1 and 7+.
+Say "Verifying SHA256..."
+Invoke-WebRequest -Uri $shaAsset.browser_download_url -OutFile $shaTmp -UseBasicParsing
+$expectedSha = ((Get-Content -Raw $shaTmp).Trim() -split '\s+')[0].ToLowerInvariant()
+Remove-Item $shaTmp -Force -ErrorAction SilentlyContinue
+if ($expectedSha -notmatch '^[0-9a-f]{64}$') {
+    Err "Malformed SHA256 sidecar - refusing an unverified install"
+    exit 1
 }
+$actualSha = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant()
+if ($actualSha -ne $expectedSha) {
+    Err "SHA256 mismatch! Expected $expectedSha, got $actualSha"
+    exit 1
+}
+Ok "SHA256 verified: $actualSha"
 
 # == Snapshot Service state BEFORE killing processes =====================
 # v2.31.8 — bug fix: previously the Stop-Process loop below killed the
@@ -275,6 +290,9 @@ try {
 if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
     Err "Expected VPNRouter.App.exe not found after extraction. ZIP layout may have changed."
     exit 1
+}
+} finally {
+    Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Ok "Installed $resolvedVersion to $InstallRoot"
