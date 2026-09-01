@@ -168,7 +168,7 @@ public static class CrashReporter
     //     with "<key>" — covers Reality pbk, sid, and similar.
 
     private static readonly Regex _proxyUriPattern = new(
-        @"\b(vless|vmess|trojan|ss|shadowsocks|hysteria2?|hy2|tuic|naive(\+(https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
+        @"\b(vless|vmess|trojan|(ss|shadowsocks)(\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(\+(https|quic))?|amneziawg|awg|wireguard|wgturn|socks5?h?|dns-tunnel)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _httpUrlPattern = new(
@@ -184,9 +184,9 @@ public static class CrashReporter
         RegexOptions.Compiled);
 
     // clash_api secret (32 hex) is too short for _longBase64Pattern (>=40)
-    // and ws/wss is not in _proxyUriPattern; match the token param directly.
+    // and ws/wss is not in _proxyUriPattern; match sensitive query parameters directly.
     private static readonly Regex _tokenParamPattern = new(
-        @"([?&])token=[^&\s]+",
+        @"([?&])(token|secret|api[_-]?key|access[_-]?token|auth|pass(?:word|wd)?)=[^&\s]+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
@@ -204,7 +204,7 @@ public static class CrashReporter
             m.Groups[2].Success ? $"{m.Groups[1].Value}/[redacted]" : m.Groups[1].Value);
         s = _uuidPattern.Replace(s, "<uuid>");
         s = _longBase64Pattern.Replace(s, "<key>");
-        s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}token=[REDACTED]");
+        s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}{m.Groups[2].Value}=[REDACTED]");
         return s;
     }
 }

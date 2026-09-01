@@ -171,19 +171,19 @@ if ($staleRootZips.Count -gt 0) {
 Write-Host "[2/9] Publishing VPNRouter.App (Avalonia, self-contained)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r win-x64 --self-contained `
-    -o $DistDir -v q
+    -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "App publish failed" }
 
 Write-Host "[3/9] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
     -c Release -r win-x64 --self-contained `
-    -o $DistDir -v q
+    -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "CLI publish failed" }
 
 Write-Host "[4/9] Publishing VPNRouter.Service (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained `
-    -o $DistDir -v q
+    -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
 # ── Build backwards-compat launcher stub (VPNRouter.GUI.exe) ──
@@ -215,13 +215,13 @@ Write-Host "       Stub channel: $stubChannel" -ForegroundColor Gray
 Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
-    -o $FdDir -v q
+    -o $FdDir 2>&1 | Out-Null
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
-    -o $FdDir -v q
+    -o $FdDir 2>&1 | Out-Null
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
-    -o $FdDir -v q
+    -o $FdDir 2>&1 | Out-Null
 # Also copy stub to FdDir so update zip includes it
 Copy-Item $stubExe $FdDir -Force
 Write-Host "       App files identified: $((Get-ChildItem $FdDir -File).Count) files" -ForegroundColor Gray
