@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
@@ -51,6 +52,7 @@ public sealed class CliStopHandleCharacterizationTests
         }
     }
 
+    [SupportedOSPlatform("windows")]
     private static OwnedProcessIdentity Snapshot(Process process) => new(
         process.Id,
         process.StartTime.ToUniversalTime().Ticks,
