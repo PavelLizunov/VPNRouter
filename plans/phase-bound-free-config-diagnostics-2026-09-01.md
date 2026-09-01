@@ -16,6 +16,12 @@ public FreeConfigFetcher(ILogger logger); // PolicyHttpClient.Shared
 internal FreeConfigFetcher(ILogger logger, IHttpClient http); // deterministic tests
 internal const int MaxSourceBytes = 4 * 1024 * 1024;
 
+// Non-positional: preserves HttpRequest constructor/deconstruction shape.
+public sealed record HttpRequest(/* existing positional members */)
+{
+    public long? MaxResponseBytes { get; init; }
+}
+
 DeepVerifyProbe.AppendSanitizedLine(
     StringBuilder destination,
     string? line,
@@ -29,7 +35,7 @@ DeepVerifyProbe.AppendSanitizedLine(
 ## 3. Verification Checklist (Definition of Done)
 
 - [ ] Valid plain/base64 source bodies still extract and deduplicate VLESS URIs.
-- [ ] Production fetch uses `PolicyHttpClient.Shared`, 10-second timeout, and one transient retry.
+- [ ] Production fetch uses `PolicyHttpClient.Shared`, a per-request 4 MiB read ceiling, a 10-second timeout, and one transient/timeout retry.
 - [ ] A source body above 4 MiB is rejected before text decoding/parsing.
 - [ ] Caller cancellation propagates while transport/status/timeout failures remain non-throwing.
 - [ ] UUIDs, proxy URIs, query tokens, and long keys never survive verifier buffering/log snippets.
@@ -46,7 +52,7 @@ DeepVerifyProbe.AppendSanitizedLine(
 
 ## Six gates
 
-1. **Scope:** fetcher, shared verifier probe plumbing, two verifier call sites, focused tests, ledger, and this brief.
+1. **Scope:** fetcher, existing HTTP request/policy and diagnostics/probe primitives, two verifier call sites, focused tests, ledger, and this brief.
 2. **Trust boundary:** bytes and process lines are bounded and scrubbed before parsing/logging.
 3. **Compatibility:** source extraction and caller cancellation remain unchanged.
 4. **Tests:** no real network or sing-box process; all seams are deterministic.

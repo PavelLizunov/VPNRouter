@@ -17,7 +17,7 @@
 //
 // Retry policy: opt-in via <see cref="HttpRequest.RetryCount"/> > 0.
 // Exponential backoff (base * 2^n) with ±25 % jitter to avoid thundering
-// herd. Only retries on 5xx / 429 / network-level <see cref="HttpRequestException"/>.
+// herd. Retries 5xx / 429, per-request timeouts, and transient network/I/O failures.
 // 4xx is treated as success-of-transport — caller decides what to do.
 
 #nullable enable
@@ -96,6 +96,11 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
     public async Task<HttpResponse> SendAsync(HttpRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.MaxResponseBytes is <= 0 or > MaxResponseBytes)
+            throw new ArgumentOutOfRangeException(
+                nameof(HttpRequest.MaxResponseBytes),
+                $"MaxResponseBytes must be between 1 and {MaxResponseBytes}.");
+        var maxResponseBytes = request.MaxResponseBytes ?? MaxResponseBytes;
 
         var attempt = 0;
         var baseDelay = request.RetryBaseDelay ?? DefaultRetryBaseDelay;
@@ -119,7 +124,7 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
                     perRequestCts.Token).ConfigureAwait(false);
 
                 var body = await ReadBoundedAsync(
-                    httpResponse.Content, MaxResponseBytes, perRequestCts.Token)
+                    httpResponse.Content, maxResponseBytes, perRequestCts.Token)
                     .ConfigureAwait(false);
 
                 var duration = TimeSpan.FromMilliseconds(Environment.TickCount64 - startedAt);
@@ -140,10 +145,15 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
                 // Caller-driven cancel — propagate as-is.
                 throw;
             }
+            catch (OperationCanceledException) when (
+                request.Timeout is not null && attempt < request.RetryCount)
+            {
+                await DelayBeforeRetryAsync(baseDelay, attempt, ct).ConfigureAwait(false);
+                attempt++;
+            }
             catch (OperationCanceledException) when (request.Timeout is not null)
             {
-                // Per-request timeout fired. Surface as TimeoutException so
-                // callers can disambiguate from generic OperationCanceled.
+                // Per-request timeout fired on the final allowed attempt.
                 throw new TimeoutException(
                     $"HTTP request to {request.Uri} timed out after {request.Timeout.Value.TotalMilliseconds:F0} ms.");
             }

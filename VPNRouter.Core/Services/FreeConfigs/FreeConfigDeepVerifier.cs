@@ -105,8 +105,8 @@ public sealed class FreeConfigDeepVerifier
         var clashPort = NetPortUtil.FindFreePort();
         string? tmpConfigPath = null;
         Process? process = null;
-        var stderrBuffer = new System.Text.StringBuilder(capacity: 2048);
-        var stdoutBuffer = new System.Text.StringBuilder(capacity: 512);
+        var stderrBuffer = new System.Text.StringBuilder(
+            DeepVerifyProbe.MaxDiagnosticBufferChars);
 
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         overallCts.CancelAfter(OverallTimeout);
@@ -140,14 +140,11 @@ public sealed class FreeConfigDeepVerifier
                 StartInfo = startInfo,
                 EnableRaisingEvents = false,
             };
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data != null) stdoutBuffer.Append(e.Data).Append('\n');
-            };
             process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data != null) stderrBuffer.Append(e.Data).Append('\n');
-            };
+                DeepVerifyProbe.AppendSanitizedLine(
+                    stderrBuffer,
+                    e.Data,
+                    DeepVerifyProbe.MaxDiagnosticBufferChars);
 
             if (!process.Start())
             {
@@ -161,7 +158,7 @@ public sealed class FreeConfigDeepVerifier
             // 3. Wait for sing-box to bind. Poll the SOCKS port.
             if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
             {
-                var stderrSnip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 300);
+                var stderrSnip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 300);
                 cfg.LastError = $"sing-box didn't bind: {DeepVerifyProbe.TrimSnippet(stderrSnip, 80)}";
                 _logger.Warning("[DV] {host}:{port} [{cc}] → didn't bind. stderr: {err}",
                     cfg.Host, cfg.Port, cc, stderrSnip);
@@ -240,7 +237,7 @@ public sealed class FreeConfigDeepVerifier
                     cfg.Status = FreeConfigStatus.TlsFailed;
                 cfg.LastError = httpErr ?? "http failed";
 
-                var stderrSnip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 200);
+                var stderrSnip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 200);
                 _logger.Information("[DV] {host}:{port} [{cc}] ✗ {err} (total {total}ms){sbErr}",
                     cfg.Host, cfg.Port, cc, httpErr, sw.ElapsedMilliseconds,
                     string.IsNullOrWhiteSpace(stderrSnip) ? "" : $" | sb-err: {stderrSnip}");

@@ -2,6 +2,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -37,6 +39,32 @@ public class DeepVerifyProbeScopeTests
 
         b.Dispose();
         Assert.True(DeepVerifyProbe.ProbesInFlightForTests >= baseline);
+    }
+
+    [Fact]
+    public void DiagnosticBuffer_RedactsAndCapsConcurrentProcessOutput()
+    {
+        const string uuid = "11111111-2222-3333-4444-555555555555";
+        const string token = "never-log-this-token";
+        const string shortId = "0123456789abcdef";
+        const string plainToken = "deadbeef00112233445566778899aabbcc";
+        var key = new string('A', 48);
+        var line = $"vless://{uuid}@secret.example:443?token={token} uuid={uuid} " +
+                   $"key={key} short_id={shortId} token={plainToken}";
+        var buffer = new StringBuilder();
+
+        Parallel.For(0, 100, _ =>
+            DeepVerifyProbe.AppendSanitizedLine(buffer, line, maxChars: 512));
+
+        var snippet = DeepVerifyProbe.ReadSanitizedSnippet(buffer, 512);
+        Assert.True(buffer.Length <= 512);
+        Assert.DoesNotContain(uuid, snippet);
+        Assert.DoesNotContain(token, snippet);
+        Assert.DoesNotContain(shortId, snippet);
+        Assert.DoesNotContain(plainToken, snippet);
+        Assert.DoesNotContain(key, snippet);
+        Assert.DoesNotContain("secret.example", snippet);
+        Assert.Contains("[redacted]", snippet);
     }
 
     // ── source pins (behaviour needs live processes + a named semaphore) ──
@@ -108,6 +136,20 @@ public class DeepVerifyProbeScopeTests
         var src = LoadSource(parts);
         if (src == null) return;
         Assert.Contains("DeepVerifyProbe.BeginProbeScope()", StripLineComments(src));
+    }
+
+    [Theory]
+    [InlineData("VPNRouter.Core", "Services", "VlessDeepVerifier.cs")]
+    [InlineData("VPNRouter.Core", "Services", "FreeConfigs", "FreeConfigDeepVerifier.cs")]
+    public void VerifierStderr_UsesSanitizedBoundedBuffer(params string[] parts)
+    {
+        var src = LoadSource(parts);
+        if (src == null) return;
+        var stripped = StripLineComments(src);
+        Assert.Contains("DeepVerifyProbe.AppendSanitizedLine", stripped);
+        Assert.Contains("DeepVerifyProbe.ReadSanitizedSnippet", stripped);
+        Assert.DoesNotContain("stderrBuffer.Append", stripped);
+        Assert.DoesNotContain("stderrBuffer.ToString", stripped);
     }
 
     private static string? LoadSource(params string[] relativeParts)

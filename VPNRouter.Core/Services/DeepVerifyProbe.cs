@@ -5,8 +5,10 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
@@ -28,6 +30,8 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 internal static class DeepVerifyProbe
 {
+    public const int MaxDiagnosticBufferChars = 2048;
+
     // ── r9 P2: probe-in-flight signal for RuntimeStatusDetector ─────────────
     // Deep verify spawns REAL sing-box processes from our own bin dir, so the
     // ownership-filtered process detector counts them as "VPN running" and the
@@ -233,6 +237,34 @@ internal static class DeepVerifyProbe
         // 100.64.0.0/10 — CGNAT
         if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
         return false;
+    }
+
+    /// <summary>Redact one process-output line before appending it to a bounded buffer.</summary>
+    public static void AppendSanitizedLine(StringBuilder destination, string? line, int maxChars)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        if (line is null || maxChars <= 0) return;
+
+        var sanitized = DiagnosticsRedactor.RedactLogText(line);
+        lock (destination)
+        {
+            var remaining = maxChars - destination.Length;
+            if (remaining <= 0) return;
+
+            var take = Math.Min(sanitized.Length, remaining);
+            destination.Append(sanitized.AsSpan(0, take));
+            if (take < remaining) destination.Append('\n');
+        }
+    }
+
+    /// <summary>Read and flatten a bounded process-output buffer safely.</summary>
+    public static string ReadSanitizedSnippet(StringBuilder source, int max)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        lock (source)
+        {
+            return TrimSnippet(source.ToString(), max);
+        }
     }
 
     /// <summary>Flatten newlines and cap a (usually stderr) snippet to <paramref name="max"/> chars.</summary>

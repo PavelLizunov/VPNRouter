@@ -1,5 +1,9 @@
 using System.Net;
+using System.Net.Http;
+using System.Text;
 using Serilog;
+using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
@@ -9,84 +13,71 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 /// </summary>
 public sealed class FreeConfigFetcher
 {
-    private readonly HttpClient _http;
+    private readonly IHttpClient _http;
     private readonly ILogger _logger;
 
-    private const int MaxAttempts = 2;
+    internal const int MaxSourceBytes = 4 * 1024 * 1024;
     private static readonly TimeSpan PerAttemptTimeout = TimeSpan.FromSeconds(10);
 
     public FreeConfigFetcher(ILogger logger)
+        : this(logger, PolicyHttpClient.Shared) { }
+
+    internal FreeConfigFetcher(ILogger logger, IHttpClient http)
     {
-        _logger = logger;
-        _http = new HttpClient
-        {
-            // No global timeout — we use per-request linked CTS below (so retries are real).
-            Timeout = Timeout.InfiniteTimeSpan,
-            DefaultRequestHeaders =
-            {
-                { "User-Agent", "VPNRouter/2.13 (+github.com/PavelLizunov/VPNRouter)" },
-            },
-        };
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _http = http ?? throw new ArgumentNullException(nameof(http));
     }
 
     /// <summary>
     /// Fetches one source and returns list of raw vless:// URIs (deduped, trimmed).
-    /// Returns empty list on any network error — never throws.
-    /// Retries once on network failure (total 2 attempts × 10s = max ~20s per source).
+    /// Returns empty on transport, timeout, HTTP, or size failure; caller cancellation propagates.
     /// </summary>
     public async Task<List<string>> FetchAsync(FreeConfigSource source, CancellationToken ct = default)
     {
         if (!source.Enabled) return new List<string>();
 
-        string? lastError = null;
-
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            using var perAttemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            perAttemptCts.CancelAfter(PerAttemptTimeout);
-
-            try
+            var request = new HttpRequest(
+                HttpMethod.Get,
+                new Uri(source.Url, UriKind.Absolute),
+                Timeout: PerAttemptTimeout,
+                RetryCount: 1)
             {
-                _logger.Debug("FreeConfigFetcher: {src} attempt {n}/{max}", source.Name, attempt, MaxAttempts);
+                MaxResponseBytes = MaxSourceBytes,
+            };
+            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
 
-                using var resp = await _http.GetAsync(source.Url, HttpCompletionOption.ResponseContentRead, perAttemptCts.Token);
-                if (resp.StatusCode != HttpStatusCode.OK)
-                {
-                    _logger.Warning("FreeConfigFetcher: {src} HTTP {code} (attempt {n})", source.Name, (int)resp.StatusCode, attempt);
-                    lastError = $"HTTP {(int)resp.StatusCode}";
-                    if (attempt < MaxAttempts) continue;
-                    return new List<string>();
-                }
+            if (response.StatusCode != (int)HttpStatusCode.OK)
+            {
+                _logger.Warning("FreeConfigFetcher: {src} HTTP {code}",
+                    source.Name, response.StatusCode);
+                return new List<string>();
+            }
 
-                var body = await resp.Content.ReadAsStringAsync(perAttemptCts.Token);
-                var lines = ExtractVlessLines(body);
+            if (response.Body.Length > MaxSourceBytes)
+            {
+                _logger.Warning("FreeConfigFetcher: {src} body exceeds {max} bytes",
+                    source.Name, MaxSourceBytes);
+                return new List<string>();
+            }
 
-                _logger.Information("FreeConfigFetcher: {src} → {count} vless URIs (attempt {n})", source.Name, lines.Count, attempt);
-                return lines;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                // User cancellation — propagate.
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                // Per-attempt timeout — retry.
-                lastError = $"timeout after {PerAttemptTimeout.TotalSeconds}s";
-                _logger.Warning("FreeConfigFetcher: {src} {err} (attempt {n}/{max})", source.Name, lastError, attempt, MaxAttempts);
-            }
-            catch (Exception ex)
-            {
-                lastError = $"{ex.GetType().Name}: {ShortMsg(ex.Message)}";
-                _logger.Warning("FreeConfigFetcher: {src} {err} (attempt {n}/{max})", source.Name, lastError, attempt, MaxAttempts);
-            }
+            var lines = ExtractVlessLines(Encoding.UTF8.GetString(response.Body));
+            _logger.Information("FreeConfigFetcher: {src} → {count} vless URIs",
+                source.Name, lines.Count);
+            return lines;
         }
-
-        _logger.Warning("FreeConfigFetcher: {src} GAVE UP after {n} attempts — last: {err}",
-            source.Name, MaxAttempts, lastError);
-        return new List<string>();
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var detail = ShortMsg(DiagnosticsRedactor.RedactLogText(ex.Message));
+            _logger.Warning("FreeConfigFetcher: {src} {type}: {detail}",
+                source.Name, ex.GetType().Name, detail);
+            return new List<string>();
+        }
     }
 
     private static string ShortMsg(string s) => s.Length > 120 ? s[..120] + "…" : s;
