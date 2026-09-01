@@ -134,6 +134,15 @@ public static class CustomConfigInjector
         // outbounds itself) does.
         var proxyTag = FindProxyOutboundTag(config);
 
+        // Remove artifacts emitted by the retired country-specific DNS policy
+        // before any per-app rule can select the obsolete server.
+        RemoveLegacyGeoDns(config);
+
+        var hasGeoBypass = settings.App.BypassRussianTraffic
+            && GeoDataDownloader.AreGeoFilesAvailable();
+        if (hasGeoBypass)
+            _ = EnsureGeoProxyDns(config, proxyTag);
+
         // Per-app routing applies ONLY in split tunnel. Full tunnel sends every
         // process through route.final = proxy below, so no per-app rules needed.
         if (!isFullTunnel && processes.Count > 0)
@@ -156,12 +165,12 @@ public static class CustomConfigInjector
             }
         }
 
-        // Inject Russian geo bypass — RU sites/IPs go direct (real IP),
-        // protects VPN server from being blacklisted by RU services.
-        // Only injected if both .srs files are present locally.
-        if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+        // Inject Russian geo bypass — RU sites/IPs go direct (real IP), while
+        // their DNS resolves through the proxy. Only injected if both .srs files
+        // are present locally.
+        if (hasGeoBypass)
         {
-            InjectGeoBypassRules(config, isActionBased);
+            InjectGeoBypassRules(config, isActionBased, proxyTag);
         }
 
         // Migrate legacy features to sing-box 1.13+ format. Use the EFFECTIVE
@@ -1015,27 +1024,18 @@ public static class CustomConfigInjector
 
     private const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";
     private const string GeoSiteRuleSetTag = "vpnrouter-geosite-ru";
-    private const string DirectDnsRuTag = "vpnrouter-dns-ru";
+    private const string LegacyDirectDnsRuTag = "vpnrouter-dns-ru";
 
     /// <summary>
     /// Injects sing-box rule_set definitions and route/dns rules so that
-    /// Russian sites and IPs go through "direct" outbound (real IP).
-    /// This protects the VPN server from being detected and blacklisted
-    /// by Russian services.
-    ///
-    /// Architecture:
-    ///   1. rule_set blocks pointing to local .srs files (downloaded at runtime)
-    ///   2. DNS server "vpnrouter-dns-ru" → Yandex DoH via dns-direct
-    ///   3. DNS rule: geosite-ru → vpnrouter-dns-ru (RU domains use RU DNS)
-    ///   4. Route rule: geosite-ru OR geoip-ru → outbound:direct
-    ///
+    /// Russian sites and IPs go through "direct" outbound (real IP), while
+    /// their DNS queries use an existing or synthesized proxy-detour resolver.
     /// Idempotent: removes previously injected rules before adding new ones.
     /// </summary>
-    private static void InjectGeoBypassRules(JsonObject config, bool isActionBased)
+    private static void InjectGeoBypassRules(JsonObject config, bool isActionBased, string proxyTag)
     {
         InjectGeoRuleSets(config);
-        InjectGeoDnsServer(config);
-        InjectGeoDnsRule(config, isActionBased);
+        InjectGeoDnsRule(config, isActionBased, proxyTag);
         InjectGeoRouteRules(config, isActionBased);
     }
 
@@ -1086,10 +1086,41 @@ public static class CustomConfigInjector
         });
     }
 
-    private static void InjectGeoDnsServer(JsonObject config)
+    private static void RemoveLegacyGeoDns(JsonObject config)
     {
         var dns = config["dns"] as JsonObject;
         if (dns == null) return;
+
+        if (dns["servers"] is JsonArray servers)
+        {
+            for (int i = servers.Count - 1; i >= 0; i--)
+            {
+                if (StjNodeHelpers.AsString((servers[i] as JsonObject)?["tag"]) == LegacyDirectDnsRuTag)
+                    servers.RemoveAt(i);
+            }
+        }
+
+        if (dns["rules"] is JsonArray rules)
+        {
+            for (int i = rules.Count - 1; i >= 0; i--)
+            {
+                if (StjNodeHelpers.AsString((rules[i] as JsonObject)?["server"]) == LegacyDirectDnsRuTag)
+                    rules.RemoveAt(i);
+            }
+        }
+
+        if (StjNodeHelpers.AsString(dns["final"]) == LegacyDirectDnsRuTag)
+            dns.Remove("final");
+    }
+
+    private static string EnsureGeoProxyDns(JsonObject config, string proxyTag)
+    {
+        var dns = config["dns"] as JsonObject;
+        if (dns == null)
+        {
+            dns = new JsonObject();
+            config["dns"] = dns;
+        }
 
         var servers = dns["servers"] as JsonArray;
         if (servers == null)
@@ -1098,36 +1129,14 @@ public static class CustomConfigInjector
             dns["servers"] = servers;
         }
 
-        // Remove previously injected RU DNS server (idempotent)
-        for (int i = servers.Count - 1; i >= 0; i--)
-        {
-            if (StjNodeHelpers.AsString((servers[i] as JsonObject)?["tag"]) == DirectDnsRuTag)
-                servers.RemoveAt(i);
-        }
-
-        // Yandex DoH via dns-direct. The literal IP avoids bootstrap while the
-        // official TLS name keeps certificate validation and SNI intact.
-        // Phase 6 — Wave 31b: cast to (JsonNode?) for AOT-clean Add (IL3050).
-        servers.Add((JsonNode?)new JsonObject
-        {
-            ["type"] = "https",
-            ["tag"] = DirectDnsRuTag,
-            ["server"] = "77.88.8.8",
-            ["path"] = "/dns-query",
-            ["tls"] = new JsonObject
-            {
-                ["enabled"] = true,
-                ["server_name"] = "common.dot.dns.yandex.net"
-            },
-            ["detour"] = "dns-direct"
-        });
+        return FindRemoteDnsTag(servers, config["outbounds"] as JsonArray)
+               ?? EnsureSynthesizedRemoteDns(servers, proxyTag);
     }
 
-    private static void InjectGeoDnsRule(JsonObject config, bool isActionBased)
+    private static void InjectGeoDnsRule(JsonObject config, bool isActionBased, string proxyTag)
     {
-        var dns = config["dns"] as JsonObject;
-        if (dns == null) return;
-
+        var targetTag = EnsureGeoProxyDns(config, proxyTag);
+        var dns = (JsonObject)config["dns"]!;
         var rules = dns["rules"] as JsonArray;
         if (rules == null)
         {
@@ -1135,39 +1144,28 @@ public static class CustomConfigInjector
             dns["rules"] = rules;
         }
 
-        // Remove previously injected geo DNS rule (idempotent)
+        // The rule-set tag is VPNRouter-owned, so it is also our idempotency key.
         for (int i = rules.Count - 1; i >= 0; i--)
         {
-            var rule = rules[i] as JsonObject;
-            if (rule == null) continue;
-            var server = StjNodeHelpers.AsString(rule["server"]);
-            if (server == DirectDnsRuTag)
+            var ruleSet = (rules[i] as JsonObject)?["rule_set"] as JsonArray;
+            if (ruleSet?.Any(rs => StjNodeHelpers.AsString(rs) == GeoSiteRuleSetTag) == true)
                 rules.RemoveAt(i);
         }
 
-        // RU domains → Russian DNS resolver (direct, not via VPN)
-        // Insert after process_name rules but before any catch-all
+        // Geo/censorship policy outranks process-specific direct DNS. The website
+        // route may be direct, but DNS remains inside the encrypted proxy.
         var dnsRule = new JsonObject
         {
             // Phase 6 — Wave 31b: cast literal to (JsonNode?) inside the
             // collection initializer so the desugared .Add call picks the
             // non-generic Add(JsonNode?) overload (IL3050).
             ["rule_set"] = new JsonArray { (JsonNode?)JsonValue.Create(GeoSiteRuleSetTag) },
-            ["server"] = DirectDnsRuTag
+            ["server"] = targetTag
         };
         if (isActionBased)
             dnsRule["action"] = "route";
 
-        // Find insertion point: after process_name rules
-        int insertAt = 0;
-        for (int i = 0; i < rules.Count; i++)
-        {
-            if (rules[i] is JsonObject rj && rj["process_name"] != null)
-                insertAt = i + 1;
-            else
-                break;
-        }
-        rules.Insert(insertAt, dnsRule);
+        rules.Insert(0, dnsRule);
     }
 
     private static void InjectGeoRouteRules(JsonObject config, bool isActionBased)

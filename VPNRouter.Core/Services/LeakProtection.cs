@@ -133,14 +133,14 @@ public static class LeakProtection
             }
         }
 
-        // RU bypass now uses Yandex DoH on port 443, so it is compatible with
-        // the non-TUN UDP/TCP 53 and TCP 853 firewall lockdown.
+        // RU bypass DNS now stays inside the proxy, so the non-TUN UDP/TCP 53
+        // and TCP 853 firewall lockdown does not block those resolver queries.
         return new ValidationResult { Errors = errors, Warnings = warnings };
     }
 
     /// <summary>
     /// Legacy compatibility surface. The former RU-bypass/DNS-lockdown warning
-    /// is retired because RU DNS now uses DoH on port 443.
+    /// is retired because RU DNS now stays inside the proxy.
     /// </summary>
     public static void CollectIncompatibleSettings(AppSettings settings, List<string> warnings)
     {

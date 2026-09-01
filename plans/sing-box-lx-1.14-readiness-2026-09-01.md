@@ -36,9 +36,9 @@ AWG 3.1 therefore requires a separate gated phase after runtime support exists: 
 
 ## DNS posture
 
-VPNRouter routes `protocol=dns` through `hijack-dns`. `vpn-dns` is detoured through `proxy`; UDP DNS for AWG/WireGuard is permitted only inside that encrypted tunnel. Direct and smart public DNS use Cloudflare DoH, RU bypass uses Yandex DoH, and only configured LAN suffixes may use the OS resolver.
+VPNRouter routes `protocol=dns` through `hijack-dns`. `vpn-dns` is detoured through `proxy`; UDP DNS for AWG/WireGuard is permitted only inside that encrypted tunnel. Direct and smart public DNS use Cloudflare DoH, while VPNRouter-owned geo/censorship rules reuse tunnel-routed DNS instead of assigning a country-specific resolver. Only configured LAN suffixes may use the OS resolver.
 
-This consolidation also replaces VPNRouter-owned direct public UDP DNS in custom bootstrap, geo-bypass, and deep-verifier configs with Cloudflare/Yandex DoH, preserving `dns-direct` loop avoidance and user-authored DNS servers. Evaluate sing-box 1.14 TUN DNS-interface hijacking separately because enabling it globally could alter process-based split-tunnel semantics.
+VPNRouter-owned direct public UDP DNS in custom bootstrap and deep-verifier configs uses Cloudflare DoH. Custom geo rules select an existing proxy-detour resolver or synthesize Cloudflare DoH through the proxy, preserving `dns-direct` bootstrap loop avoidance and explicitly authored DNS servers. Evaluate sing-box 1.14 TUN DNS-interface hijacking separately because enabling it globally could alter process-based split-tunnel semantics.
 
 ## References
 
@@ -50,4 +50,3 @@ This consolidation also replaces VPNRouter-owned direct public UDP DNS in custom
 - [Leadaxe issue #15: AmneziaWG 3 support](https://github.com/Leadaxe/sing-box-lx/issues/15)
 - [Official AmneziaWG documentation](https://docs.amnezia.org/documentation/amnezia-wg/)
 - [Official Amnezia FAQ](https://docs.amnezia.org/faq/)
-- [Yandex encrypted DNS endpoints](https://dns.yandex.com/)

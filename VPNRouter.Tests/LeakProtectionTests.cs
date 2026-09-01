@@ -77,7 +77,7 @@ public class LeakProtectionTests
     }
 
     [Fact]
-    public void RuBypassAndDnsLockdown_DoNotWarnAfterYandexDoh()
+    public void RuBypassAndDnsLockdown_DoNotWarnWhenDnsUsesTunnel()
     {
         var settings = new AppSettings();
         settings.App.BypassRussianTraffic = true;
@@ -88,9 +88,7 @@ public class LeakProtectionTests
         LeakProtection.CollectIncompatibleSettings(settings, compatibilityWarnings);
 
         Assert.Empty(compatibilityWarnings);
-        Assert.DoesNotContain(result.Warnings, warning =>
-            warning.Contains("Yandex", StringComparison.OrdinalIgnoreCase) ||
-            warning.Contains("несовмест", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(result.Warnings);
     }
 
     [Fact]

@@ -29,9 +29,9 @@ PR #201 encrypted the RU-bypass resolver but chose Yandex DoH. Encryption protec
 
 ### Tests written
 
-- `ConfigGeneratorTests.FullTunnel_BypassRuAndBlockAds_PreservesSniffPrefix` — geo DNS uses `vpn-dns` and no country-specific server is emitted.
-- `CustomConfigInjectorTests.Inject_WithBypassRussianTraffic_PassesSingBoxCheck` — geo DNS targets a proxy-detour server and legacy Yandex artifacts are absent.
-- Add a deterministic custom-config regression that starts with the legacy injected server/rule and proves cleanup.
+- `ConfigGeneratorTests.GeoBypass_DnsUsesTunnelResolverWithoutCountrySpecificServer` — generated geo DNS uses `vpn-dns` and emits no country-specific server.
+- `CustomConfigInjectorTests.Inject_GeoBypass_RemovesLegacyCountryDnsAndUsesProxyDns` — existing proxy DNS is reused, missing proxy DNS is synthesized, and legacy injected artifacts are removed.
+- `CustomConfigInjectorTests.Inject_WithBypassRussianTraffic_PassesSingBoxCheck` — optional local sing-box integration keeps the geo rule on a proxy-detour resolver.
 
 ## Verification gate
 

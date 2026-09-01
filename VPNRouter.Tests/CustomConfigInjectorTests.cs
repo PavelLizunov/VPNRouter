@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
@@ -569,18 +570,24 @@ public class CustomConfigInjectorTests
         settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
         var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
 
-        // Verify our injected pieces and encrypted Yandex resolver are present.
+        // Verify geo rules use a proxy-detour resolver, never the retired
+        // country-specific direct resolver.
         Assert.Contains("vpnrouter-geoip-ru", result);
         Assert.Contains("vpnrouter-geosite-ru", result);
         var parsed = (JsonNode.Parse(result) as JsonObject)!;
-        var dnsServers = StjNodeHelpers.SelectToken(parsed, "dns.servers") as JsonArray;
-        var ruDns = dnsServers!.OfType<JsonObject>().Single(s =>
+        var dnsServers = (StjNodeHelpers.SelectToken(parsed, "dns.servers") as JsonArray)!;
+        Assert.DoesNotContain(dnsServers.OfType<JsonObject>(), s =>
             s["tag"]?.ToString() == "vpnrouter-dns-ru");
-        Assert.Equal("https", ruDns["type"]?.ToString());
-        Assert.Equal("77.88.8.8", ruDns["server"]?.ToString());
-        Assert.Equal("/dns-query", ruDns["path"]?.ToString());
-        Assert.Equal("common.dot.dns.yandex.net", ruDns["tls"]?["server_name"]?.ToString());
-        Assert.Equal("dns-direct", ruDns["detour"]?.ToString());
+        var dnsRules = (StjNodeHelpers.SelectToken(parsed, "dns.rules") as JsonArray)!;
+        var geoRule = dnsRules.OfType<JsonObject>().Single(r =>
+            (r["rule_set"] as JsonArray)?.Any(rs =>
+                rs?.ToString() == "vpnrouter-geosite-ru") == true);
+        var targetTag = geoRule["server"]?.ToString();
+        var targetDns = dnsServers.OfType<JsonObject>().Single(s =>
+            s["tag"]?.ToString() == targetTag);
+        Assert.False(string.IsNullOrWhiteSpace(targetDns["detour"]?.ToString()));
+        Assert.NotEqual("direct", targetDns["detour"]?.ToString());
+        Assert.NotEqual("dns-direct", targetDns["detour"]?.ToString());
 
         File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-bypass.json", result);
 
@@ -613,6 +620,97 @@ public class CustomConfigInjectorTests
         {
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("existing-remote", "vpn-dns")]
+    [InlineData("missing-remote", "vpnrouter-vpn-dns")]
+    [InlineData("no-dns", "vpnrouter-vpn-dns")]
+    public void Inject_GeoBypass_RemovesLegacyCountryDnsAndUsesProxyDns(
+        string sourceMode,
+        string expectedDnsTag)
+    {
+        var previousDataDir = AppPaths.DataDir;
+        var tempDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-geo-dns-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(tempDataDir);
+            Directory.CreateDirectory(AppPaths.GeoDir);
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, new byte[10 * 1024]);
+            File.WriteAllBytes(AppPaths.GeoSiteRuPath, new byte[100]);
+
+            var source = (JsonNode.Parse(ActionConfig) as JsonObject)!;
+            if (sourceMode == "no-dns")
+            {
+                source.Remove("dns");
+            }
+            else
+            {
+                var servers = (source["dns"]?["servers"] as JsonArray)!;
+                if (sourceMode == "missing-remote")
+                {
+                    for (int i = servers.Count - 1; i >= 0; i--)
+                        if ((servers[i] as JsonObject)?["tag"]?.ToString() == "vpn-dns")
+                            servers.RemoveAt(i);
+                }
+                servers.Add((JsonNode?)new JsonObject
+                {
+                    ["tag"] = "vpnrouter-dns-ru",
+                    ["type"] = "https",
+                    ["server"] = "77.88.8.8",
+                    ["path"] = "/dns-query",
+                    ["tls"] = new JsonObject { ["server_name"] = "common.dot.dns.yandex.net" },
+                    ["detour"] = "dns-direct"
+                });
+                ((source["dns"]?["rules"] as JsonArray)!).Add((JsonNode?)new JsonObject
+                {
+                    ["rule_set"] = new JsonArray { (JsonNode?)JsonValue.Create("vpnrouter-geosite-ru") },
+                    ["action"] = "route",
+                    ["server"] = "vpnrouter-dns-ru"
+                });
+                ((JsonObject)source["dns"]!)["final"] = "vpnrouter-dns-ru";
+            }
+
+            var settings = CreateSettings();
+            settings.App.BypassRussianTraffic = true;
+            settings.App.RoutingAppsMode = "exclude";
+            settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
+            var result = CustomConfigInjector.Inject(source.ToJsonString(), Array.Empty<string>(), settings);
+            var parsed = (JsonNode.Parse(result) as JsonObject)!;
+            var resultServers = (parsed["dns"]?["servers"] as JsonArray)!;
+            var resultRules = (parsed["dns"]?["rules"] as JsonArray)!;
+
+            Assert.DoesNotContain("77.88.8.8", result, StringComparison.Ordinal);
+            Assert.DoesNotContain("common.dot.dns.yandex.net", result, StringComparison.Ordinal);
+            Assert.DoesNotContain(resultServers.OfType<JsonObject>(), s =>
+                s["tag"]?.ToString() == "vpnrouter-dns-ru");
+            Assert.Equal(expectedDnsTag, parsed["dns"]?["final"]?.ToString());
+            if (sourceMode != "no-dns")
+            {
+                Assert.Contains(resultServers.OfType<JsonObject>(), s =>
+                    s["tag"]?.ToString() == "local-dns");
+            }
+
+            var geoRule = resultRules.OfType<JsonObject>().Single(r =>
+                (r["rule_set"] as JsonArray)?.Any(rs =>
+                    rs?.ToString() == "vpnrouter-geosite-ru") == true);
+            Assert.Same(geoRule, resultRules[0]);
+            Assert.Equal(expectedDnsTag, geoRule["server"]?.ToString());
+            var targetDns = resultServers.OfType<JsonObject>().Single(s =>
+                s["tag"]?.ToString() == expectedDnsTag);
+            Assert.Equal("proxy", targetDns["detour"]?.ToString());
+
+            var processRule = resultRules.OfType<JsonObject>().Single(r =>
+                r["process_name"] is JsonArray);
+            Assert.Equal(sourceMode == "no-dns" ? expectedDnsTag : "local-dns",
+                processRule["server"]?.ToString());
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previousDataDir);
+            if (Directory.Exists(tempDataDir))
+                Directory.Delete(tempDataDir, recursive: true);
         }
     }
 
