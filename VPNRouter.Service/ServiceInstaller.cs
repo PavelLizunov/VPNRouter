@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.ServiceProcess;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.Service;
 
@@ -45,21 +46,17 @@ public static class ServiceInstaller
         // depend= ensures we start AFTER network stack is ready, preventing race
         // conditions where sing-box fails to create TUN adapter on cold boot.
         var (code, output) = RunSc(
-            $"create {ServiceName} " +
-            $"binPath= \"{exePath} --service\" " +
-            $"start= auto " +
-            $"obj= LocalSystem " +
-            $"depend= {ServiceDependencies} " +
-            $"DisplayName= \"{DisplayName}\"");
+            WindowsServiceCommand.BuildCreateArguments(
+                ServiceName, exePath, DisplayName, ServiceDependencies));
 
         if (code != 0)
             return InstallResult.Fail($"sc create failed (exit {code}): {output}");
 
         // Set description
-        RunSc($"description {ServiceName} \"{Description}\"");
+        RunSc("description", ServiceName, Description);
 
         // Configure failure recovery: restart after 60s, 3 times, reset counter after 24h
-        RunSc($"failure {ServiceName} reset= 86400 actions= restart/60000/restart/60000/restart/60000");
+        RunSc(WindowsServiceCommand.BuildFailureRecoveryArguments(ServiceName));
 
         // Use regular auto-start (not delayed) — VPN should be up ASAP after boot.
         // delayed-auto adds ~2 min delay which leaves traffic unprotected.
@@ -78,7 +75,8 @@ public static class ServiceInstaller
         if (!IsInstalled())
             return InstallResult.Fail($"Service '{ServiceName}' is not installed.");
 
-        var (code, output) = RunSc($"config {ServiceName} depend= {ServiceDependencies}");
+        var (code, output) = RunSc(
+            "config", ServiceName, "depend=", ServiceDependencies);
 
         return code == 0
             ? InstallResult.Ok($"Dependencies updated: {ServiceDependencies.Replace('/', ',')}")
@@ -117,7 +115,7 @@ public static class ServiceInstaller
                 return InstallResult.Fail($"Cannot stop service before uninstall: {stopResult.Message}");
         }
 
-        var (code, output) = RunSc($"delete {ServiceName}");
+        var (code, output) = RunSc("delete", ServiceName);
 
         return code == 0
             ? InstallResult.Ok($"Service '{ServiceName}' uninstalled.")
@@ -134,7 +132,7 @@ public static class ServiceInstaller
         if (IsRunning())
             return InstallResult.Ok($"Service '{ServiceName}' is already running.");
 
-        var (code, output) = RunSc($"start {ServiceName}");
+        var (code, output) = RunSc("start", ServiceName);
 
         if (code != 0)
             return InstallResult.Fail($"sc start failed (exit {code}): {output}");
@@ -153,7 +151,7 @@ public static class ServiceInstaller
         if (!IsRunning())
             return InstallResult.Ok($"Service '{ServiceName}' is already stopped.");
 
-        var (code, output) = RunSc($"stop {ServiceName}");
+        var (code, output) = RunSc("stop", ServiceName);
 
         if (code != 0)
             return InstallResult.Fail($"sc stop failed (exit {code}): {output}");
@@ -208,18 +206,19 @@ public static class ServiceInstaller
 
     // ─── Private helpers ──────────────────────────────────────────────────────
 
-    private static (int ExitCode, string Output) RunSc(string arguments)
+    private static (int ExitCode, string Output) RunSc(params string[] arguments)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "sc.exe",
-            Arguments = arguments,
+            FileName = WindowsServiceCommand.GetSystemScPath(),
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true
             // Note: caller must already be elevated (AdminHelper.IsAdmin() check in CLI)
         };
+        foreach (var argument in arguments)
+            psi.ArgumentList.Add(argument);
 
         using var proc = Process.Start(psi)
             ?? throw new Exception("Failed to start sc.exe");
