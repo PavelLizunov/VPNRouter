@@ -34,15 +34,15 @@ DeepVerifyProbe.AppendSanitizedLine(
 
 ## 3. Verification Checklist (Definition of Done)
 
-- [ ] Valid plain/base64 source bodies still extract and deduplicate VLESS URIs.
-- [ ] Production fetch uses `PolicyHttpClient.Shared`, a per-request 4 MiB read ceiling, a 10-second timeout, and one transient/timeout retry.
-- [ ] A source body above 4 MiB is rejected before text decoding/parsing.
-- [ ] Caller cancellation propagates while transport/status/timeout failures remain non-throwing.
-- [ ] UUIDs, proxy URIs, query tokens, and long keys never survive verifier buffering/log snippets.
-- [ ] Diagnostic buffers remain bounded under repeated/concurrent callback input.
-- [ ] Both VLESS and free-config verifiers use the shared sanitized append path.
-- [ ] Focused contracts and full exact-head CI pass.
-- [ ] Independent correctness/security/test review has no surviving P0/P1.
+- [x] Valid plain/base64 source bodies still extract and deduplicate VLESS URIs.
+- [x] Production fetch uses `PolicyHttpClient.Shared`, a per-request 4 MiB read ceiling, a 10-second timeout, and one transient/timeout retry.
+- [x] A source body above 4 MiB is rejected before text decoding/parsing.
+- [x] Caller cancellation propagates while transport/status/timeout failures remain non-throwing.
+- [x] UUIDs, proxy URIs, query tokens, and long keys never survive verifier buffering/log snippets.
+- [x] Diagnostic buffers remain bounded under repeated/concurrent callback input.
+- [x] Both VLESS and free-config verifiers use the shared sanitized append path.
+- [x] Focused contracts and full exact-head CI pass.
+- [x] Independent correctness/security/test review has no surviving P0/P1.
 
 ## Risk / rollback
 
@@ -61,4 +61,11 @@ DeepVerifyProbe.AppendSanitizedLine(
 
 ## Outcome
 
-Pending implementation and verification.
+- Implementation commits: `13c80227e58bb17ddf06f675ac294591e260fdfa` and boundary-test head `cad86133`; PR: #209.
+- Scope: 13 files, `+512/-82` over the fixed audit base. The fetcher now uses the shared policy with a transport-time 4 MiB ceiling; a non-positional `HttpRequest.MaxResponseBytes` can only narrow the process-wide 32 MiB cap; per-request timeout retry and caller cancellation are deterministic.
+- Verifier stderr is passed through the existing `DiagnosticsRedactor.RedactLogText` before a locked 2,048-character append. VLESS and free-config desktop call sites use the same bounded path, including quoted JSON, short-id, token, UUID, URI, and long-key redaction.
+- Adversarial repair rounds closed post-buffer cap enforcement, lost timeout retry, a false-positive cancellation test, short/JSON secret gaps, and an override that could widen the global hard cap. A claim that `InvalidDataException` inherited `IOException` was refuted against the [.NET 10 API contract](https://learn.microsoft.com/en-us/dotnet/api/system.io.invaliddataexception?view=net-10.0); RetryCount=1 plus one-dispatch overflow coverage mechanically confirms no retry.
+- Primary platform guidance: [.NET `ResponseHeadersRead`](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpcompletionoption?view=net-9.0) requires callers to bound and time content reads separately; [.NET HTTP client guidelines](https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/http/httpclient-guidelines) recommend long-lived pooled clients. The implementation reuses both existing repository mechanisms instead of adding a dependency.
+- Exact product-head workflow passed twice with 2,845 total / 2,788 passed / 57 skipped. The expanded boundary-test head passed 2,848 total / 2,791 passed / 57 skipped; `characterization-windows`, `go-test-windows`, and `grep` passed. The local control plane has no `dotnet`, so GitHub Actions was the mechanical oracle.
+- Three independent final network/security/test reviews returned CLEAN, and the final boundary-test review was CLEAN. Ouroboros QA session `qa-251224d3` passed the approved trust-boundary ACs at `0.92`.
+- Rollback is a plain PR revert; no persisted schema, migration, dependency, README contract, release, tag, merge, deploy, or install is involved.
