@@ -118,9 +118,13 @@ public static class DiagnosticsRedactor
         @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|private[_-]?key|secret[_-]?key|api[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password))\b(\s*[=:]\s*)(""?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
         RegexOptions.Compiled);
 
+    private static readonly Regex _yamlKeyValuePair = new(
+        @"^(\s*(?:-\s*)?([a-zA-Z0-9_-]+)\s*:\s*)(.*)$",
+        RegexOptions.Compiled);
+
     /// <summary>
-    /// Redact the main settings YAML. Returns redacted YAML, or an omission
-    /// placeholder if it cannot be parsed (never the raw input).
+    /// Redact the main settings YAML. Returns redacted YAML, or falls back to
+    /// line-by-line secret redaction if it cannot be parsed into a node tree.
     /// </summary>
     public static string RedactConfigYaml(string yaml)
     {
@@ -135,8 +139,45 @@ public static class DiagnosticsRedactor
         }
         catch
         {
-            return OmittedOnParseFailure;
+            return RedactMalformedYaml(yaml);
         }
+    }
+
+    /// <summary>
+    /// Fallback redaction for malformed YAML that cannot be parsed into a node tree.
+    /// Redacts values of non-allowlisted keys to '***' and scrubs remaining text for secrets.
+    /// </summary>
+    internal static string RedactMalformedYaml(string yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return yaml ?? string.Empty;
+        var lines = yaml.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var m = _yamlKeyValuePair.Match(line);
+            if (m.Success)
+            {
+                var key = m.Groups[2].Value.Trim();
+                var val = m.Groups[3].Value;
+                if (SafeKeys.Contains(key))
+                {
+                    lines[i] = RedactLogText(line);
+                }
+                else if (UrlKeys.Contains(key))
+                {
+                    lines[i] = $"{m.Groups[1].Value}{RedactUrlKeepHost(val)}";
+                }
+                else
+                {
+                    lines[i] = $"{m.Groups[1].Value}{Redacted}";
+                }
+            }
+            else
+            {
+                lines[i] = RedactLogText(line);
+            }
+        }
+        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>
