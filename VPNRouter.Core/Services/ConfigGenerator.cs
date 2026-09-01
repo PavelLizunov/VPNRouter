@@ -1104,6 +1104,7 @@ public static class ConfigGenerator
         // rides QUIC fine).
         proxyIsUdpNativeOutbound = false;
         var servers = settings.Vless.GetActiveServers();
+        var hasRequestedChain = servers.Any(s => !string.IsNullOrEmpty(s.DetourVia));
 
         // macOS / Android naive backstop. The parser refuses naive at intake on
         // platforms without Cronet, so a naive entry can only reach generation
@@ -1144,7 +1145,7 @@ public static class ConfigGenerator
         //  - fail-open: never drop below one member (all-blocked => keep the full
         //    pool and let urltest try — a wrong verdict must not brick connectivity);
         //  - freshness TTL lives in ServerHealthStore (a stale verdict never excludes).
-        if (settings.Vless.AutoSelectBestServer && servers.Count > 1)
+        if (settings.Vless.AutoSelectBestServer && servers.Count > 1 && !hasRequestedChain)
         {
             var records = servers
                 .Select(s => (Server: s, Rec: ServerHealthStore.GetFreshRecord(s)))
@@ -1205,6 +1206,67 @@ public static class ConfigGenerator
                 "Caller must populate settings.Vless.Servers (via VlessServersResolver.Resolve) " +
                 "before calling Generate(). " +
                 "See plans/vpnrouter-v2.28-flow-mismatch.md for context.");
+        }
+
+        var chainedTargets = servers.Where(s => !string.IsNullOrEmpty(s.DetourVia)).ToList();
+        if (hasRequestedChain && chainedTargets.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ConfigGenerator: the selected chained target is unavailable on this build — refusing a direct fallback.");
+        }
+
+        if (chainedTargets.Count > 0)
+        {
+            if (chainedTargets.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "ConfigGenerator: expected exactly one chained target in active servers.");
+            }
+
+            var target = chainedTargets[0];
+            var targetProto = (target.Protocol ?? "vless").ToLowerInvariant();
+            if (targetProto != "vless" || "xhttp".Equals(target.Transport?.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "ConfigGenerator: chained target uses unsupported protocol/transport — only VLESS is supported.");
+            }
+
+            var upstreams = servers.Where(s =>
+                string.IsNullOrEmpty(s.DetourVia) &&
+                !string.IsNullOrEmpty(s.OutboundId) &&
+                string.Equals(s.OutboundId, target.DetourVia, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (upstreams.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "ConfigGenerator: chained target references an absent or non-unique upstream in active servers.");
+            }
+
+            var upstream = upstreams[0];
+            var upstreamProto = (upstream.Protocol ?? "vless").ToLowerInvariant();
+            if (upstreamProto != "vless" || "xhttp".Equals(upstream.Transport?.Type, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS is supported.");
+            }
+
+            var upstreamOutbound = BuildVlessOutbound(upstream, "chain-entry");
+            var targetOutbound = BuildVlessOutbound(target, "proxy");
+            targetOutbound.Detour = "chain-entry";
+
+            hasUdpProxy = false;
+            isDnsTunnel = false;
+            dnsTunnelResolverIps = new List<string>();
+            endpoints = null;
+            proxyIsUdpNativeOutbound = false;
+
+            return new List<SingBoxOutbound>
+            {
+                targetOutbound,
+                upstreamOutbound,
+                new SingBoxOutbound { Type = "direct", Tag = "direct" },
+                new SingBoxOutbound { Type = "direct", Tag = "dns-direct", UdpFragment = true },
+            };
         }
 
         // AmneziaWG: a single AWG active server is a full WireGuard tunnel that carries ALL
