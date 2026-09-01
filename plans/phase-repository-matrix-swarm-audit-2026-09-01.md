@@ -26,28 +26,28 @@ VPNRouter has 1,443 tracked files across desktop, Android, Core, platform networ
 
 | ID | Category | Subcategory | Primary scope | Iteration A | Iteration B | Lead verdict |
 |---|---|---|---|---|---|---|
-| CR-1 | Core runtime | Config, routing, DNS | `ConfigGenerator`, `CustomConfigInjector`, `LeakProtection`, sing-box config models | 3/3 complete | pending | pending |
-| CR-2 | Core runtime | Lifecycle, health, failover | `VpnEngine*`, `SingBoxManager*`, `HealthMonitor`, `AutoFailover*`, startup pipeline | 3/3 complete | pending | pending |
-| CR-3 | Core runtime | Subscriptions and protocols | subscription/VLESS resolvers, URI parsers, transport schema and selection | 3/3 complete | pending | pending |
-| CR-4 | Core runtime | Free configs and emergency paths | `Services/FreeConfigs/`, emergency channel, related orchestration | 3/3 complete | pending | pending |
-| PN-1 | Platform/network | Windows | TUN/split driver, firewall, process monitoring, service/launcher boundaries | 3/3 complete | pending | pending |
-| PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | 3/3 complete | pending | PN-2-4 fixed in green PR #204; others pending |
-| PN-3 | Platform/network | macOS | macOS adapters, DNS/firewall/process behavior, app packaging/update paths | 3/3 complete | pending | pending |
-| PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | 3/3 complete | pending | pending |
-| CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | 3/3 complete | pending | pending |
-| CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | 3/3 complete | pending | pending |
-| CL-3 | Clients | CLI and Windows service | `VPNRouter.CLI/`, `VPNRouter.Service/`, IPC/coexistence and lifecycle | 3/3 complete | pending | pending |
-| CL-4 | Clients | Localization, settings, migrations | Core/App/Android strings, settings loading/saving/migration and config examples | 3/3 complete | pending | pending |
-| SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | 3/3 complete | pending | pending |
-| SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | 3/3 complete | pending | pending |
-| SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | 3/3 complete | pending | pending |
-| BR-1 | Build/release | CI workflows and hooks | `.github/`, `.githooks/`, repository policy gates | 3/3 complete | pending | pending |
-| BR-2 | Build/release | Packaging and native dependencies | `packaging/`, build scripts, native payload pins/checksums/licenses | 3/3 complete | pending | pending |
-| BR-3 | Build/release | Release feeds and verifiers | release/update-feed tools, BRAT/post-ship verification and asset contracts | 3/3 complete | pending | pending |
-| QA-1 | Quality/architecture | Tests and characterization | `VPNRouter.Tests/`, test discovery, determinism, boundary coverage | 3/3 complete | pending | pending |
-| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | pending | pending |
-| QA-3 | Quality/architecture | Dependencies, dead code, duplication | project graphs, one-use abstractions, wrappers, obsolete flags and repeated logic | 3/3 complete | pending | pending |
-| QA-4 | Quality/architecture | Docs, contracts, plans | active docs, AGENTS contracts, samples/profiles, stale/current-state divergence | 3/3 complete | pending | pending |
+| CR-1 | Core runtime | Config, routing, DNS | `ConfigGenerator`, `CustomConfigInjector`, `LeakProtection`, sing-box config models | 3/3 complete | 3/3 complete | pending |
+| CR-2 | Core runtime | Lifecycle, health, failover | `VpnEngine*`, `SingBoxManager*`, `HealthMonitor`, `AutoFailover*`, startup pipeline | 3/3 complete | 3/3 complete | pending |
+| CR-3 | Core runtime | Subscriptions and protocols | subscription/VLESS resolvers, URI parsers, transport schema and selection | 3/3 complete | 3/3 complete | pending |
+| CR-4 | Core runtime | Free configs and emergency paths | `Services/FreeConfigs/`, emergency channel, related orchestration | 3/3 complete | 3/3 complete | pending |
+| PN-1 | Platform/network | Windows | TUN/split driver, firewall, process monitoring, service/launcher boundaries | 3/3 complete | 3/3 complete | pending |
+| PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | 3/3 complete | 3/3 complete | PN-2-4 fixed in green PR #204; others pending |
+| PN-3 | Platform/network | macOS | macOS adapters, DNS/firewall/process behavior, app packaging/update paths | 3/3 complete | 3/3 complete | pending |
+| PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | 3/3 complete | 3/3 complete | pending |
+| CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | 3/3 complete | 3/3 complete | pending |
+| CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | 3/3 complete | 3/3 complete | pending |
+| CL-3 | Clients | CLI and Windows service | `VPNRouter.CLI/`, `VPNRouter.Service/`, IPC/coexistence and lifecycle | 3/3 complete | 3/3 complete | pending |
+| CL-4 | Clients | Localization, settings, migrations | Core/App/Android strings, settings loading/saving/migration and config examples | 3/3 complete | 3/3 complete | pending |
+| SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | 3/3 complete | 3/3 complete | pending |
+| SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | 3/3 complete | 3/3 complete | pending |
+| SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | 3/3 complete | 3/3 complete | pending |
+| BR-1 | Build/release | CI workflows and hooks | `.github/`, `.githooks/`, repository policy gates | 3/3 complete | 3/3 complete | pending |
+| BR-2 | Build/release | Packaging and native dependencies | `packaging/`, build scripts, native payload pins/checksums/licenses | 3/3 complete | 3/3 complete | pending |
+| BR-3 | Build/release | Release feeds and verifiers | release/update-feed tools, BRAT/post-ship verification and asset contracts | 3/3 complete | 3/3 complete | pending |
+| QA-1 | Quality/architecture | Tests and characterization | `VPNRouter.Tests/`, test discovery, determinism, boundary coverage | 3/3 complete | 3/3 complete | pending |
+| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | 3/3 complete | pending |
+| QA-3 | Quality/architecture | Dependencies, dead code, duplication | project graphs, one-use abstractions, wrappers, obsolete flags and repeated logic | 3/3 complete | 3/3 complete | pending |
+| QA-4 | Quality/architecture | Docs, contracts, plans | active docs, AGENTS contracts, samples/profiles, stale/current-state divergence | 3/3 complete | 3/3 complete | pending |
 
 ## How
 
@@ -103,4 +103,4 @@ The audit uses tracked-path accounting, two independent swarm iterations, primar
 
 ## Outcome
 
-Iteration A is complete for all 22 leaves (minimum 3 independent reports per leaf; retries were recorded where provider output was null). Candidate indexes are durable under `plans/repository-audit-2026-09-01/`. PN-2-4 was lead-confirmed and fixed in exact-head-green PR #204; merge remains an owner decision. Pending: complete Iteration B, lead source verification/classification, remaining scoped implementation handoffs, and final exact-head evidence.
+Iterations A and B are complete for all 22 leaves (minimum 3 independent successful reports per leaf per iteration; null provider outputs and replacement lenses are recorded). Candidate and counter-audit indexes are durable under `plans/repository-audit-2026-09-01/`. PN-2-4 was lead-confirmed and fixed in exact-head-green PR #204; merge remains an owner decision. Pending: lead source verification/classification, remaining scoped implementation handoffs, and final exact-head evidence.
