@@ -374,8 +374,8 @@ public class UpdateChecker : IDesktopInstaller
             // on some distros), blocks on write, and we block on exit.
             // Classic deadlock. Fix: use RunWithCapture which reads both
             // streams async, plus a 120 s timeout.
-            var tarCmd = $"-xzf \"{zipPath}\" -C \"{extractDir}\"";
-            var (tarExit, tarOut, tarErr) = RunWithCapture("tar", tarCmd, 120_000);
+            var tarArgs = new[] { "-xzf", zipPath, "-C", extractDir };
+            var (tarExit, tarOut, tarErr) = RunWithCapture("tar", tarArgs, 120_000);
             if (tarExit != 0)
             {
                 if (tarExit == -1)
@@ -1025,9 +1025,10 @@ public class UpdateChecker : IDesktopInstaller
             else
             {
                 Log($"Invoking update helper via pkexec: {helper}");
+                var helperArgs = new[] { helper, sourceDir, installDir };
                 var (hExit, hOut, hErr) = RunWithCapture(
                     pkexec!,
-                    $"{helper} \"{sourceDir}\" \"{installDir}\"",
+                    helperArgs,
                     timeoutMs: 120_000);
                 Log($"helper exit={hExit} stdout={Truncate(hOut)} stderr={Truncate(hErr)}");
                 if (hExit != 0)
@@ -1208,19 +1209,21 @@ public class UpdateChecker : IDesktopInstaller
         // 1. Stop sing-box (ignore failure if not running)
         try
         {
-            var (_, _, kserr) = needsRoot
-                ? RunWithCapture(pkexec!, "pkill -f sing-box", 5000)
-                : RunWithCapture("/usr/bin/pkill",  "-f sing-box",       5000);
+            var pkillArgs = needsRoot
+                ? new[] { "pkill", "-f", "sing-box" }
+                : new[] { "-f", "sing-box" };
+            var pkillCmd = needsRoot ? pkexec! : "/usr/bin/pkill";
+            var (_, _, kserr) = RunWithCapture(pkillCmd, pkillArgs, 5000);
             log($"pkill sing-box: stderr={Truncate(kserr)}");
         }
         catch (Exception ex) { log($"pkill sing-box threw: {ex.Message}"); }
 
         // 2. cp -rfT
         {
-            var cpCmd  = needsRoot ? pkexec! : "/bin/cp";
+            var cpCmd = needsRoot ? pkexec! : "/bin/cp";
             var cpArgs = needsRoot
-                ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
-                : $"-rfT \"{sourceDir}\" \"{installDir}\"";
+                ? new[] { "cp", "-rfT", sourceDir, installDir }
+                : new[] { "-rfT", sourceDir, installDir };
             var (cpExit, _, cpErr) = RunWithCapture(cpCmd, cpArgs, 120_000);
             log($"cp exit={cpExit} stderr={Truncate(cpErr)}");
             if (cpExit != 0)
@@ -1239,10 +1242,10 @@ public class UpdateChecker : IDesktopInstaller
         // 3. chmod +x (best effort)
         try
         {
-            var chmodCmd  = needsRoot ? pkexec! : "/bin/chmod";
+            var chmodCmd = needsRoot ? pkexec! : "/bin/chmod";
             var chmodArgs = needsRoot
-                ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
-                : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";
+                ? new[] { "chmod", "+x", $"{installDir}/VPNRouter.App", $"{installDir}/sing-box" }
+                : new[] { "+x", $"{installDir}/VPNRouter.App", $"{installDir}/sing-box" };
             var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
             log($"chmod exit={chExit} stderr={Truncate(chErr)}");
         }
@@ -1306,15 +1309,19 @@ public class UpdateChecker : IDesktopInstaller
     /// returns exitCode = -1.
     /// </summary>
     private static (int exit, string stdout, string stderr) RunWithCapture(
-        string fileName, string args, int timeoutMs)
+        string fileName, IEnumerable<string> args, int timeoutMs)
     {
-        var psi = new ProcessStartInfo(fileName, args)
+        var psi = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start {fileName}");
         var outTask = proc.StandardOutput.ReadToEndAsync();
