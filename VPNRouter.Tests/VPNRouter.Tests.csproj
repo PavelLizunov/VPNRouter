@@ -42,7 +42,7 @@
          xunit.v3 (a metapackage) rather than xunit; assertion + attribute
          shape stays mostly the same ([Fact]/[Theory]/Assert.* etc.) but
          the project becomes an Exe (see OutputType above). -->
-    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.v3" Version="4.0.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
 
     <!-- Avalonia headless testing: lets us instantiate Window/ViewModel and
