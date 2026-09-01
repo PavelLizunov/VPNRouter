@@ -1487,13 +1487,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // Open in default text editor (notepad) — `explorer "<path>"`
             // would open the folder; `start "" "<path>"` via cmd uses the
             // default text handler.
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            // Security: Use ArgumentList instead of string concatenation to prevent argument injection/formatting issues
+            var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "notepad.exe",
-                Arguments = $"\"{path}\"",
                 UseShellExecute = false,
                 CreateNoWindow = false,
-            });
+            };
+            psi.ArgumentList.Add(path);
+            System.Diagnostics.Process.Start(psi);
         }
         catch (Exception ex)
         {
@@ -6501,7 +6503,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Failed to parse server URI: {Line}", line);
+                _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
             }
         }
 

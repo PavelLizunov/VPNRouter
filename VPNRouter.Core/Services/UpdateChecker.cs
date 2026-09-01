@@ -374,8 +374,8 @@ public class UpdateChecker : IDesktopInstaller
             // on some distros), blocks on write, and we block on exit.
             // Classic deadlock. Fix: use RunWithCapture which reads both
             // streams async, plus a 120 s timeout.
-            var tarCmd = $"-xzf \"{zipPath}\" -C \"{extractDir}\"";
-            var (tarExit, tarOut, tarErr) = RunWithCapture("tar", tarCmd, 120_000);
+            var tarArgs = new[] { "-xzf", zipPath, "-C", extractDir };
+            var (tarExit, tarOut, tarErr) = RunWithCapture("tar", tarArgs, 120_000);
             if (tarExit != 0)
             {
                 if (tarExit == -1)
@@ -866,16 +866,20 @@ public class UpdateChecker : IDesktopInstaller
         //     the freshly-installed bundle is clean for Gatekeeper.
         //   • `open <app>` (no -n) launches the new version without
         //     forcing a duplicate; the old PID is gone by this point.
+        var safeLogPath = EscapeShellArgument(logPath);
+        var safeStagedApp = EscapeShellArgument(stagedApp);
+        var safeTargetApp = EscapeShellArgument(targetApp);
+
         var script =
             "#!/bin/bash\n" +
-            $"exec >\"{logPath}\" 2>&1\n" +
+            $"exec >'{safeLogPath}' 2>&1\n" +
             "set +e\n" +
             "ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }\n" +
             "log() { echo \"[$(ts)] $*\"; }\n" +
             "log '── VPNRouter macOS updater ──'\n" +
             $"log 'Old PID: {pid}'\n" +
-            $"log 'Staged:  {stagedApp}'\n" +
-            $"log 'Target:  {targetApp}'\n" +
+            $"log 'Staged:  {safeStagedApp}'\n" +
+            $"log 'Target:  {safeTargetApp}'\n" +
             $"for i in $(seq 1 75); do\n" +
             $"  if ! kill -0 {pid} 2>/dev/null; then break; fi\n" +
             "  sleep 0.2\n" +
@@ -886,20 +890,20 @@ public class UpdateChecker : IDesktopInstaller
             "  sleep 1\n" +
             "fi\n" +
             "sleep 0.5\n" +
-            $"xattr -dr com.apple.quarantine \"{stagedApp}\" 2>/dev/null\n" +
+            $"xattr -dr com.apple.quarantine '{safeStagedApp}' 2>/dev/null\n" +
             "log 'Stripped quarantine from staging'\n" +
-            $"BACKUP=\"{targetApp}.old-{pid}\"\n" +
-            $"if [ -d \"{targetApp}\" ]; then\n" +
-            $"  mv \"{targetApp}\" \"$BACKUP\" && log 'Backed up old bundle to '\"$BACKUP\" || {{ log 'FAIL: mv old bundle aside'; exit 10; }}\n" +
+            $"BACKUP='{safeTargetApp}.old-{pid}'\n" +
+            $"if [ -d '{safeTargetApp}' ]; then\n" +
+            $"  mv '{safeTargetApp}' \"$BACKUP\" && log 'Backed up old bundle to '\"$BACKUP\" || {{ log 'FAIL: mv old bundle aside'; exit 10; }}\n" +
             "fi\n" +
-            $"ditto --rsrc \"{stagedApp}\" \"{targetApp}\" || {{ log 'FAIL: ditto copy'; [ -d \"$BACKUP\" ] && mv \"$BACKUP\" \"{targetApp}\"; exit 11; }}\n" +
+            $"ditto --rsrc '{safeStagedApp}' '{safeTargetApp}' || {{ log 'FAIL: ditto copy'; if [ -d \"$BACKUP\" ]; then rm -rf '{safeTargetApp}' && mv \"$BACKUP\" '{safeTargetApp}'; fi; exit 11; }}\n" +
             "log 'Installed new bundle via ditto'\n" +
-            $"xattr -dr com.apple.quarantine \"{targetApp}\" 2>/dev/null\n" +
+            $"xattr -dr com.apple.quarantine '{safeTargetApp}' 2>/dev/null\n" +
             "log 'Stripped quarantine from target'\n" +
-            $"chmod -R +x \"{targetApp}/Contents/MacOS\" 2>/dev/null\n" +
+            $"chmod -R +x '{safeTargetApp}/Contents/MacOS' 2>/dev/null\n" +
             "log 'chmod +x on MacOS/'\n" +
             "rm -rf \"$BACKUP\" 2>/dev/null\n" +
-            $"open \"{targetApp}\" && log 'Launched new bundle' || log 'WARN: open exited non-zero'\n" +
+            $"open '{safeTargetApp}' && log 'Launched new bundle' || log 'WARN: open exited non-zero'\n" +
             "log 'Done.'\n";
 
         File.WriteAllText(scriptPath, script);
@@ -908,21 +912,24 @@ public class UpdateChecker : IDesktopInstaller
         // Block briefly — if this fails the whole flow is dead anyway.
         try
         {
-            Process.Start(new ProcessStartInfo("/bin/chmod", $"+x \"{scriptPath}\"")
-                { UseShellExecute = false })?.WaitForExit(5000);
+            var chmodPsi = new ProcessStartInfo("/bin/chmod") { UseShellExecute = false };
+            chmodPsi.ArgumentList.Add("+x");
+            chmodPsi.ArgumentList.Add(scriptPath);
+            Process.Start(chmodPsi)?.WaitForExit(5000);
         }
         catch { /* proceeding; bash may still run the script via /bin/bash scriptPath */ }
 
         // Fire and forget. We intentionally do NOT WaitForExit — the
         // script's whole job is to wait for us to exit. Use /bin/bash so
         // it runs even if chmod above failed.
-        Process.Start(new ProcessStartInfo
+        var bashPsi = new ProcessStartInfo
         {
             FileName = "/bin/bash",
-            Arguments = $"\"{scriptPath}\"",
             UseShellExecute = false,
             CreateNoWindow = true,
-        });
+        };
+        bashPsi.ArgumentList.Add(scriptPath);
+        Process.Start(bashPsi);
     }
 
     // ─── Linux ───────────────────────────────────────────────────────────────
@@ -1018,9 +1025,10 @@ public class UpdateChecker : IDesktopInstaller
             else
             {
                 Log($"Invoking update helper via pkexec: {helper}");
+                var helperArgs = new[] { helper, sourceDir, installDir };
                 var (hExit, hOut, hErr) = RunWithCapture(
                     pkexec!,
-                    $"{helper} \"{sourceDir}\" \"{installDir}\"",
+                    helperArgs,
                     timeoutMs: 120_000);
                 Log($"helper exit={hExit} stdout={Truncate(hOut)} stderr={Truncate(hErr)}");
                 if (hExit != 0)
@@ -1080,23 +1088,26 @@ public class UpdateChecker : IDesktopInstaller
             var parentPid = Environment.ProcessId;
             var helperPath = Path.Combine("/tmp", $"vpnrouter-relaunch-{parentPid}.sh");
             var helperLog  = Path.Combine("/tmp", $"vpnrouter-relaunch-{parentPid}.log");
+            var safeHelperLog = EscapeShellArgument(helperLog);
+            var safeNewAppPath = EscapeShellArgument(newAppPath);
+            var safeHelperPath = EscapeShellArgument(helperPath);
             var helperScript =
                 "#!/bin/sh\n" +
                 "set +e\n" +
-                $"exec >>'{helperLog}' 2>&1\n" +
+                $"exec >>'{safeHelperLog}' 2>&1\n" +
                 $"echo \"[$(date -u +%H:%M:%S)] vpnrouter-relaunch helper started, parent={parentPid}\"\n" +
                 // Wait for parent process to die (max 30 s; bail out earlier if it goes).
-                $"for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do\n" +
+                "for i in $(seq 1 150); do\n" +
                 $"  if ! kill -0 {parentPid} 2>/dev/null; then\n" +
                 $"    break\n" +
                 $"  fi\n" +
                 $"  sleep 0.2\n" +
                 $"done\n" +
-                $"echo \"[$(date -u +%H:%M:%S)] parent gone, launching {newAppPath}\"\n" +
+                "echo \"[$(date -u +%H:%M:%S)] parent gone, launching update\"\n" +
                 // setsid + nohup + detached stdio = fully independent child.
-                $"setsid --fork nohup '{newAppPath}' </dev/null >/dev/null 2>&1\n" +
+                $"setsid --fork nohup '{safeNewAppPath}' </dev/null >/dev/null 2>&1\n" +
                 $"echo \"[$(date -u +%H:%M:%S)] setsid returned $?\"\n" +
-                $"rm -f '{helperPath}'\n";
+                $"rm -f '{safeHelperPath}'\n";
             File.WriteAllText(helperPath, helperScript);
             try { File.SetUnixFileMode(helperPath,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
@@ -1106,12 +1117,13 @@ public class UpdateChecker : IDesktopInstaller
             // see its output (the helper logs to /tmp/vpnrouter-relaunch-*.log
             // itself), and any pipe creation here would re-introduce the
             // SIGPIPE-on-parent-exit hazard we're fixing.
-            var psi = new ProcessStartInfo("/bin/sh", $"'{helperPath}'")
+            var psi = new ProcessStartInfo("/bin/sh")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = installDir,
             };
+            psi.ArgumentList.Add(helperPath);
             using var helperProc = Process.Start(psi);
             if (helperProc == null)
             {
@@ -1197,19 +1209,21 @@ public class UpdateChecker : IDesktopInstaller
         // 1. Stop sing-box (ignore failure if not running)
         try
         {
-            var (_, _, kserr) = needsRoot
-                ? RunWithCapture(pkexec!, "pkill -f sing-box", 5000)
-                : RunWithCapture("/usr/bin/pkill",  "-f sing-box",       5000);
+            var pkillArgs = needsRoot
+                ? new[] { "pkill", "-f", "sing-box" }
+                : new[] { "-f", "sing-box" };
+            var pkillCmd = needsRoot ? pkexec! : "/usr/bin/pkill";
+            var (_, _, kserr) = RunWithCapture(pkillCmd, pkillArgs, 5000);
             log($"pkill sing-box: stderr={Truncate(kserr)}");
         }
         catch (Exception ex) { log($"pkill sing-box threw: {ex.Message}"); }
 
         // 2. cp -rfT
         {
-            var cpCmd  = needsRoot ? pkexec! : "/bin/cp";
+            var cpCmd = needsRoot ? pkexec! : "/bin/cp";
             var cpArgs = needsRoot
-                ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
-                : $"-rfT \"{sourceDir}\" \"{installDir}\"";
+                ? new[] { "cp", "-rfT", sourceDir, installDir }
+                : new[] { "-rfT", sourceDir, installDir };
             var (cpExit, _, cpErr) = RunWithCapture(cpCmd, cpArgs, 120_000);
             log($"cp exit={cpExit} stderr={Truncate(cpErr)}");
             if (cpExit != 0)
@@ -1228,10 +1242,10 @@ public class UpdateChecker : IDesktopInstaller
         // 3. chmod +x (best effort)
         try
         {
-            var chmodCmd  = needsRoot ? pkexec! : "/bin/chmod";
+            var chmodCmd = needsRoot ? pkexec! : "/bin/chmod";
             var chmodArgs = needsRoot
-                ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
-                : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";
+                ? new[] { "chmod", "+x", $"{installDir}/VPNRouter.App", $"{installDir}/sing-box" }
+                : new[] { "+x", $"{installDir}/VPNRouter.App", $"{installDir}/sing-box" };
             var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
             log($"chmod exit={chExit} stderr={Truncate(chErr)}");
         }
@@ -1295,15 +1309,19 @@ public class UpdateChecker : IDesktopInstaller
     /// returns exitCode = -1.
     /// </summary>
     private static (int exit, string stdout, string stderr) RunWithCapture(
-        string fileName, string args, int timeoutMs)
+        string fileName, IEnumerable<string> args, int timeoutMs)
     {
-        var psi = new ProcessStartInfo(fileName, args)
+        var psi = new ProcessStartInfo(fileName)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
         using var proc = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start {fileName}");
         var outTask = proc.StandardOutput.ReadToEndAsync();
@@ -1320,6 +1338,13 @@ public class UpdateChecker : IDesktopInstaller
                 outTask.IsCompletedSuccessfully ? outTask.Result : "",
                 errTask.IsCompletedSuccessfully ? errTask.Result : "");
     }
+
+    /// <summary>
+    /// Escapes an argument for safe inclusion within single quotes in POSIX shell scripts.
+    /// Replaces each single quote with '\''.
+    /// </summary>
+    internal static string EscapeShellArgument(string arg) =>
+        arg.Replace("'", "'\\''");
 
     private static string Truncate(string s, int max = 120)
     {

@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
 using VPNRouter.Core.Models;
@@ -120,6 +121,41 @@ public sealed class UpdateCheckerTests
         // `-r-1` shouldn't exist in the wild but the parser uses
         // `rc < 0` as the validity gate. Pin it.
         Assert.False(UpdateChecker.TryParseSemVer("v2.35.0-r-1", out _));
+    }
+
+    // ─── Shell argument escaping ──────────────────────────────────────────
+
+    [Fact]
+    public void EscapeShellArgument_SingleQuotesEscapedCorrectly()
+    {
+        Assert.Equal("plainPath", UpdateChecker.EscapeShellArgument("plainPath"));
+        Assert.Equal("path'\\''sWithQuote", UpdateChecker.EscapeShellArgument("path'sWithQuote"));
+        Assert.Equal("path'\\''with'\\''multiple'\\''quotes", UpdateChecker.EscapeShellArgument("path'with'multiple'quotes"));
+    }
+
+    [Fact]
+    public void EscapeShellArgument_RoundTripsAdversarialValueThroughPosixShell()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        const string value = "path with spaces \"double\" $HOME $(printf injected) `printf injected`\nnext's";
+        var psi = new ProcessStartInfo("/bin/sh")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("-c");
+        psi.ArgumentList.Add($"printf %s '{UpdateChecker.EscapeShellArgument(value)}'");
+
+        using var process = Process.Start(psi);
+        Assert.NotNull(process);
+        var output = process!.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        Assert.True(process.ExitCode == 0, error);
+        Assert.Equal(value, output);
     }
 
     // ─── Version comparison ──────────────────────────────────────────────
