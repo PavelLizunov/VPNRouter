@@ -132,22 +132,33 @@ internal static class ProcessOwnership
         => IsUnderDirectory(processPath, trustedBinDir)
            || IsSamePath(processPath, validatedDurablePath);
 
-    public static bool IsOwnedSingBox(Process process)
+    public static bool IsOwnedSingBox(Process process) =>
+        TryReadOwnedSingBoxIdentity(process) is not null;
+
+    internal static OwnedProcessIdentity? TryReadOwnedSingBoxIdentity(Process process)
     {
         var identity = TryReadIdentity(process);
-        if (identity is null) return false;
-        if (IsUnderDirectory(identity.Value.ExecutablePath, BinDir)) return true;
+        if (identity is not { } value) return null;
+        if (IsUnderDirectory(value.ExecutablePath, BinDir)) return value;
 
         var owner = ReadRuntimeOwnerRecord(OwnerRecordPath);
-        return owner.Kind switch
+        var owned = owner.Kind switch
         {
             RuntimeOwnerRecordKind.CurrentV2 =>
-                owner.Record is { } v2 && MatchesCurrentRecord(v2, identity.Value),
+                owner.Record is { } v2 && MatchesCurrentRecord(v2, value),
             RuntimeOwnerRecordKind.LegacyV1 =>
-                owner.Record is { } v1 && MatchesLegacyRecord(v1, identity.Value, ReadCommandLine),
+                owner.Record is { } v1 && MatchesLegacyRecord(v1, value, ReadCommandLine),
             _ => false
         };
+        return owned ? value : null;
     }
+
+    internal static bool IsSameProcessIdentity(
+        OwnedProcessIdentity expected,
+        OwnedProcessIdentity current) =>
+        expected.Pid == current.Pid
+        && expected.StartedAtUtcTicks == current.StartedAtUtcTicks
+        && IsSamePath(expected.ExecutablePath, current.ExecutablePath);
 
     public static bool AnySingBoxOwned()
         => FindOwnedSingBox(ReadConfiguredExecutablePath(AppPaths.ConfigYamlPath)) is not null;

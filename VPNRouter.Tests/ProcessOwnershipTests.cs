@@ -78,4 +78,48 @@ public sealed class ProcessOwnershipTests
         var file = Path.Combine(Path.GetTempPath(), "vpnr-bin", "SING-BOX.exe");
         Assert.True(ProcessOwnership.IsUnderDirectory(file, dir));
     }
+
+    [Fact]
+    public void SameProcessIdentity_RequiresPidStartTimeAndPath()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "vpnr-bin", "sing-box.exe");
+        var expected = new OwnedProcessIdentity(42, 1_000, path, ParentPid: 7);
+
+        Assert.True(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            new OwnedProcessIdentity(42, 1_000, path, ParentPid: 99)));
+        Assert.True(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with
+            {
+                ExecutablePath = Path.Combine(
+                    Path.GetDirectoryName(path)!, "sub", "..", "sing-box.exe")
+            }));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(ProcessOwnership.IsSameProcessIdentity(
+                expected,
+                expected with { ExecutablePath = path.ToUpperInvariant() }));
+        }
+        else
+        {
+            Assert.False(ProcessOwnership.IsSameProcessIdentity(
+                expected,
+                expected with { ExecutablePath = path.ToUpperInvariant() }));
+        }
+
+        Assert.False(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with { Pid = 43 }));
+        Assert.False(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with { StartedAtUtcTicks = 1_001 }));
+        Assert.False(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with
+            {
+                ExecutablePath = Path.Combine(
+                    Path.GetTempPath(), "other", "sing-box.exe")
+            }));
+    }
 }
