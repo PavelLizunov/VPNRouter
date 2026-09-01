@@ -31,13 +31,13 @@ VPNRouter has 1,443 tracked files across desktop, Android, Core, platform networ
 | CR-3 | Core runtime | Subscriptions and protocols | subscription/VLESS resolvers, URI parsers, transport schema and selection | 3/3 complete | pending | pending |
 | CR-4 | Core runtime | Free configs and emergency paths | `Services/FreeConfigs/`, emergency channel, related orchestration | 3/3 complete | pending | pending |
 | PN-1 | Platform/network | Windows | TUN/split driver, firewall, process monitoring, service/launcher boundaries | 3/3 complete | pending | pending |
-| PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | 3/3 complete | pending | PN-2-4 confirmed P0; others pending |
-| PN-3 | Platform/network | macOS | macOS adapters, DNS/firewall/process behavior, app packaging/update paths | pending | pending | pending |
-| PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | pending | pending | pending |
-| CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | pending | pending | pending |
-| CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | pending | pending | pending |
-| CL-3 | Clients | CLI and Windows service | `VPNRouter.CLI/`, `VPNRouter.Service/`, IPC/coexistence and lifecycle | pending | pending | pending |
-| CL-4 | Clients | Localization, settings, migrations | Core/App/Android strings, settings loading/saving/migration and config examples | pending | pending | pending |
+| PN-2 | Platform/network | Linux | Linux platform adapters, DNS/firewall/process behavior and Linux packaging scripts | 3/3 complete | pending | PN-2-4 fixed in green PR #204; others pending |
+| PN-3 | Platform/network | macOS | macOS adapters, DNS/firewall/process behavior, app packaging/update paths | 3/3 complete | pending | pending |
+| PN-4 | Platform/network | Android | `VPNRouter.Android/`, Android Core adapters, VPN service/runtime/storage | 3/3 complete | pending | pending |
+| CL-1 | Clients | Avalonia ViewModels | `VPNRouter.App/ViewModels/`, commands, state, cancellation, bindings | 3/3 complete | pending | pending |
+| CL-2 | Clients | Avalonia views and accessibility | views, styles, resources, navigation, narrow-layout/accessibility contracts | 3/3 complete | pending | pending |
+| CL-3 | Clients | CLI and Windows service | `VPNRouter.CLI/`, `VPNRouter.Service/`, IPC/coexistence and lifecycle | 3/3 complete | pending | pending |
+| CL-4 | Clients | Localization, settings, migrations | Core/App/Android strings, settings loading/saving/migration and config examples | 3/3 complete | pending | pending |
 | SU-1 | Security/update | Updater, installer, extractor | update sources/checker, helper, install scripts, archive handling | pending | pending | pending |
 | SU-2 | Security/update | Diagnostics, secrets, logging | scrubbers, exporters, crash paths, logs and outward-facing errors | pending | pending | pending |
 | SU-3 | Security/update | Local API, auth, permissions | Clash API, local listeners, privilege boundaries, file/IPC permissions | pending | pending | pending |
