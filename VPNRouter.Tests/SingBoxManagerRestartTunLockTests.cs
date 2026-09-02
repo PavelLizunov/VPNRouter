@@ -551,7 +551,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
         var lockInstance = TunOwnershipLock.Instance(null);
         SetLockOwnedForTest(lockInstance, manager);
-        SetField(manager, "_handle", new StubbornProcessHandle(NewFakePid()));
+        var handle = new StubbornProcessHandle(NewFakePid());
+        SetField(manager, "_handle", handle);
 
         try
         {
@@ -560,10 +561,13 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.True(IsLockOwned(lockInstance),
                 "Dispose must not release ownership while the exact process may remain alive.");
+            Assert.False(handle.DisposeCalled,
+                "Dispose must retain the exact capability handle as retry authority after failed stop.");
         }
         finally
         {
             if (IsLockOwned(lockInstance)) lockInstance.Release();
+            handle.Dispose();
         }
     }
 
@@ -692,6 +696,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         public int Pid { get; } = pid;
         public bool HasExited => false;
         public int KillCallCount { get; private set; }
+        public bool DisposeCalled { get; private set; }
         public event EventHandler<string>? OutputLine { add { } remove { } }
         public event EventHandler<string>? ErrorLine { add { } remove { } }
         public event EventHandler<int>? Exited { add { } remove { } }
@@ -702,7 +707,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         public void Kill(bool entireProcessTree = true) => KillCallCount++;
         public void SuppressExitedEvent() { }
         public ProcessSnapshot? TryGetSnapshot() => null;
-        public void Dispose() { }
+        public void Dispose() => DisposeCalled = true;
     }
 
     private static void InvokePrivate(SingBoxManager m, string method, object?[] args)

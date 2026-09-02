@@ -350,7 +350,11 @@ public partial class SingBoxManager : IDisposable
         LastCrashWasTunOrphan = false;
         LastCrashWasLinuxTunPermissionFailure = false;
         Stop();
-        _handle?.Dispose();
+        // A failed capability-mode stop keeps the exact IProcessHandle as its
+        // only retry authority. Do not dispose that handle while its lease is
+        // deliberately retained.
+        if (!_ownsTunLock)
+            _handle?.Dispose();
         // TunOwnershipLock is deliberately process-wide. Normal Stop releases
         // this manager's lease; disposing the singleton here could race a newer
         // manager that acquired it. A failed stop retains this manager's lease.
