@@ -1333,4 +1333,81 @@ public class CustomConfigInjectorTests
                 File.Delete(tempPath);
         }
     }
+
+    [Fact]
+    public void Inject_MissingDnsHijackRule_InjectsHijackDnsAfterSniff()
+    {
+        // SEC-02: when custom config omits hijack-dns, ensure injector inserts it
+        // so port 53 DNS does not leak in plaintext to the local ISP.
+        var configJson = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy" }
+          ],
+          "route": {
+            "rules": [
+              { "action": "sniff" },
+              { "ip_is_private": true, "outbound": "direct" }
+            ]
+          }
+        }
+        """;
+
+        var settings = CreateSettings();
+        var result = CustomConfigInjector.Inject(configJson, Array.Empty<string>(), settings);
+        var doc = JsonDocument.Parse(result);
+        var rules = doc.RootElement.GetProperty("route").GetProperty("rules").EnumerateArray().ToList();
+
+        var hijackRule = rules.FirstOrDefault(r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "hijack-dns");
+
+        Assert.True(hijackRule.ValueKind != JsonValueKind.Undefined, "hijack-dns rule must be injected");
+        Assert.Equal("dns", hijackRule.GetProperty("protocol").GetString());
+
+        var sniffIdx = rules.FindIndex(r => r.TryGetProperty("action", out var a) && a.GetString() == "sniff");
+        var hijackIdx = rules.FindIndex(r => r.TryGetProperty("action", out var a) && a.GetString() == "hijack-dns");
+        Assert.True(hijackIdx > sniffIdx, "hijack-dns must be placed after sniff");
+    }
+
+    [Fact]
+    public void Inject_FullTunnel_SanitizesUserDirectRules_PreventingBypass()
+    {
+        // SEC-01: in full tunnel mode, user direct rules that would shadow route.final = proxy
+        // must be removed to prevent uninspected plaintext traffic leaks.
+        var configJson = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy" },
+            { "type": "direct", "tag": "direct" }
+          ],
+          "route": {
+            "rules": [
+              { "action": "sniff" },
+              { "ip_is_private": true, "outbound": "direct" },
+              { "domain_suffix": ["leaked.com"], "outbound": "direct" }
+            ],
+            "final": "direct"
+          }
+        }
+        """;
+
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "full";
+
+        var result = CustomConfigInjector.Inject(configJson, Array.Empty<string>(), settings);
+        var doc = JsonDocument.Parse(result);
+        var route = doc.RootElement.GetProperty("route");
+
+        Assert.Equal("proxy", route.GetProperty("final").GetString());
+
+        var rules = route.GetProperty("rules").EnumerateArray().ToList();
+
+        // Private IP direct bypass must be preserved
+        Assert.Contains(rules, r => r.TryGetProperty("ip_is_private", out var p) && p.GetBoolean());
+
+        // Leaked user direct rule must be removed
+        var leakedRule = rules.FirstOrDefault(r =>
+            r.TryGetProperty("domain_suffix", out var d) && d.EnumerateArray().Any(s => s.GetString() == "leaked.com"));
+        Assert.True(leakedRule.ValueKind == JsonValueKind.Undefined, "User direct rule must be sanitized in full tunnel");
+    }
 }
