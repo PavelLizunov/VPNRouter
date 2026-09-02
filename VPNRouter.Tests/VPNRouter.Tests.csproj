@@ -72,4 +72,9 @@
     <ProjectReference Include="..\VPNRouter.App\VPNRouter.App.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\VPNRouter.CLI\Helpers\StateFile.cs" Link="Linked\StateFile.cs" />
+    <Compile Include="..\VPNRouter.CLI\Helpers\CliJsonContext.cs" Link="Linked\CliJsonContext.cs" />
+  </ItemGroup>
+
 </Project>
