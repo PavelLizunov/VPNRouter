@@ -45,7 +45,7 @@ VPNRouter has 1,443 tracked files across desktop, Android, Core, platform networ
 | BR-2 | Build/release | Packaging and native dependencies | `packaging/`, build scripts, native payload pins/checksums/licenses | 3/3 complete | 3/3 complete | pending |
 | BR-3 | Build/release | Release feeds and verifiers | release/update-feed tools, BRAT/post-ship verification and asset contracts | 3/3 complete | 3/3 complete | pending |
 | QA-1 | Quality/architecture | Tests and characterization | `VPNRouter.Tests/`, test discovery, determinism, boundary coverage | 3/3 complete | 3/3 complete | pending |
-| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | 3/3 complete | generic split claims refuted/gated; no split accepted yet |
+| QA-2 | Quality/architecture | Large files and coupling | oversized source/XAML/scripts, extraction seams, partials and dependency direction | 3/3 complete | 3/3 complete + 2 focused Gemini passes | `ConfigGenerator` accepted as first mechanical split; UI/Android architecture remains gated |
 | QA-3 | Quality/architecture | Dependencies, dead code, duplication | project graphs, one-use abstractions, wrappers, obsolete flags and repeated logic | 3/3 complete | 3/3 complete | pending |
 | QA-4 | Quality/architecture | Docs, contracts, plans | active docs, AGENTS contracts, samples/profiles, stale/current-state divergence | 3/3 complete | 3/3 complete | pending |
 
@@ -103,4 +103,4 @@ The audit uses tracked-path accounting, two independent swarm iterations, primar
 
 ## Outcome
 
-Iterations A and B are complete for all 22 leaves (minimum 3 independent successful reports per leaf per iteration; null provider outputs and replacement lenses are recorded). Candidate and counter-audit indexes are durable under `plans/repository-audit-2026-09-01/`. PN-2-4 was lead-confirmed and fixed in exact-head-green PR #204; merge remains an owner decision. Pending: lead source verification/classification, remaining scoped implementation handoffs, and final exact-head evidence.
+Iterations A and B are complete for all 22 leaves (minimum 3 independent successful reports per leaf per iteration; null provider outputs and replacement lenses are recorded). Candidate and counter-audit indexes are durable under `plans/repository-audit-2026-09-01/`. PN-2-4 was lead-confirmed and fixed in exact-head-green PR #204; merge remains an owner decision. On 2026-09-02, two additional focused Gemini passes plus lead line/symbol/test-pin verification accepted `ConfigGenerator.cs` as the first low-risk mechanical god-file split; no product split has been implemented yet, and UI/Android object decomposition remains characterization/design-gated. Pending: lead source verification/classification, remaining scoped implementation handoffs, and final exact-head evidence.

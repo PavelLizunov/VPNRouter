@@ -86,6 +86,23 @@ Status: independent adversarial counter-audit; signals are not lead verdicts.
 | QA-B-6 | P3 | `ProcessQuery.CountAlive` has no product callers | `ProcessQuery.cs:69-86` | pending deletion proof |
 | QA-B-7 | P1 | Windows installer skips verification when the sidecar is absent | `install.ps1:206-208`; duplicate BR-2-6 | pending lead trace |
 
-## Lead status
+## Lead follow-up — QA-2 oversized-file triage (2026-09-02)
 
-Iteration B coverage is complete. This category rejected most generic god-file and coupling claims because they lacked a concrete extraction seam; only measured, source-backed candidates proceed to lead triage.
+The original counter-audit correctly rejected size-only refactors. After the owner asked whether large files had actually been split, two additional independent Gemini inventory/verification passes were run across Core, App, Android, tests, tooling, CLI and Service. The lead then recomputed the cited physical line counts on the accepted base and reopened the proposed symbol boundaries. Agreement is not treated as proof; the verdicts below require a concrete behavior-preserving seam and characterization gate.
+
+| Candidate | Measured evidence | Lead verdict | Safe next action |
+|---|---|---|---|
+| `ConfigGenerator.cs` | 2,173 lines; one stateless static class; 39 methods; contiguous custom-rule, DNS, inbound, outbound and route sections; 48 test files reference `ConfigGenerator`; no test source-pins this filename | **confirmed P2 mechanical split candidate** | First god-file task: preserve the public/internal surface and move whole method bodies into partial files. Capture pre/post serialized-config characterization and full-suite counts exactly. |
+| `CustomConfigInjector.cs` | 1,788 lines; 32 methods; mixes JSON transforms with `CopyToProgramData` file I/O | **confirmed size, deferred behind ConfigGenerator** | Split only after isolating and characterizing the pure JSON path; do not infer duplication with typed generation. |
+| `MainWindowViewModel.cs` | 7,335-line root inside a 15-partial, 13,659-line family; seven tests pin the root filename | **confirmed god object; architectural split design-gated** | A partial-file move would improve navigation but not coupling. Fix correctness defects first, then extract one independently testable collaborator per task; update source-pin helpers deliberately. |
+| `NetworkPage.axaml` | 2,478 lines with inline control themes and five major sections | **measurement-gated UI split** | Component extraction requires compiled-binding checks and fixed-target screenshot equality across supported widths/themes/languages. |
+| `AndroidApp.axaml.cs` / `VpnRouterService.java` / `AndroidStorage.cs` | 2,330 / 2,080 / 1,694 lines; UI, VPN lifecycle and persistence boundaries respectively | **confirmed size; platform-gated** | Separate tasks only after pre-change Android characterization, Release APK build and device/runtime gates; never combine UI, service and storage splits. |
+| `UpdateChecker.cs` / `StartupPipeline.cs` | 1,512 / 1,419 lines | **deferred** | Recent update atomicity and startup-order invariants outweigh file-size benefit; accept only a seam tied to a tested behavior change. |
+| `tools/brat-verify.ps1` / `build.ps1` | 1,757 / 896 lines | **keep together for now** | Dot-sourcing/module extraction can change scope, error and exit semantics; size alone does not justify release-tool risk. |
+| Oversized tests | e.g. `CustomConfigInjectorTests.cs` 1,336 lines | **maintenance-only** | Split by fixture only when touching that suite; preserve xUnit collection/static-state semantics. |
+
+### Accepted first split boundary
+
+`ConfigGenerator` is the only immediate low-risk candidate. Convert it to `public static partial class ConfigGenerator` and move complete existing methods without logic edits into cohesive partials: custom rules/ad blocking, DNS, inbounds, outbounds/transports/TLS, and route construction. `Generate`, serialization options and small shared normalization helpers stay in the root. This is file decomposition, not a claim of new architecture.
+
+No product file was changed by this triage. Implementation still requires its own approved Micro-Spec, task branch/PR, pre-change characterization baseline, exact post-split match, independent review and green CI.
