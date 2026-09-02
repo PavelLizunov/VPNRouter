@@ -190,7 +190,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         // instance SingBoxManager holds in its private `_tunLock`
         // field (set in ctor via TunOwnershipLock.Instance(_logger)).
         var lockInstance = TunOwnershipLock.Instance(null);
-        SetLockOwnedForTest(lockInstance);
+        SetLockOwnedForTest(lockInstance, manager);
         Assert.True(IsLockOwned(lockInstance),
             "Test setup could not seed the isolated lock as owned.");
 
@@ -262,7 +262,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             // owned state. Other tests in the class may have left it
             // released (Test 1's Restart did not release; Test 3
             // explicitly tests release).
-            SetLockOwnedForTest(lockInstance);
+            SetLockOwnedForTest(lockInstance, managerA);
 
             var handleA = new FakeProcessHandle(pid: NewFakePid());
             SetField(managerA, "_handle", handleA);
@@ -288,7 +288,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             DefaultSettings(), null, new FakeHttpClient(), runnerB))
         {
             var lockInstance = TunOwnershipLock.Instance(null);
-            SetLockOwnedForTest(lockInstance);
+            SetLockOwnedForTest(lockInstance, managerB);
 
             var handleB = new FakeProcessHandle(pid: NewFakePid());
             SetField(managerB, "_handle", handleB);
@@ -328,7 +328,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         // Seed the lock as owned + handle as alive so we land in path 4.
         var lockInstance = TunOwnershipLock.Instance(null);
-        SetLockOwnedForTest(lockInstance);
+        SetLockOwnedForTest(lockInstance, manager);
 
         var handle = new FakeProcessHandle(pid: NewFakePid());
         SetField(manager, "_handle", handle);
@@ -360,7 +360,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         using var manager = new SingBoxManager(
             DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
         var lockInstance = TunOwnershipLock.Instance(null);
-        SetLockOwnedForTest(lockInstance);
+        SetLockOwnedForTest(lockInstance, manager);
 
         var handle = new FakeProcessHandle(pid: NewFakePid());
         SetField(manager, "_handle", handle);
@@ -373,6 +373,195 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         SetField(manager, "_handle", null);
         handle.Dispose();
+    }
+
+    [Fact]
+    public void Stop_LinuxCapabilityMode_FailedExactStop_PreservesLockAndReportsFailed()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        using var manager = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        var handle = new StubbornProcessHandle(NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        try
+        {
+            manager.Stop();
+
+            Assert.Equal(SingBoxState.Failed, manager.State);
+            Assert.True(IsLockOwned(lockInstance),
+                "A failed exact stop must preserve TUN ownership.");
+            Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
+            Assert.Equal(1, handle.KillCallCount);
+        }
+        finally
+        {
+            SetField(manager, "_handle", null);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+        }
+    }
+
+    [Fact]
+    public void RejectedManagerDispose_CannotClearAnotherManagersFailedStopLease()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        var managerA = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var managerB = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, managerA);
+        var handle = new StubbornProcessHandle(NewFakePid());
+        SetField(managerA, "_handle", handle);
+
+        try
+        {
+            managerA.Stop();
+            Assert.Throws<TunOwnershipException>(() => managerB.StartWithJson("{}"));
+
+            managerB.Dispose();
+
+            Assert.True(IsLockOwned(lockInstance));
+            Assert.False((bool)GetField(managerB, "_ownsTunLock")!);
+            Assert.Same(handle, GetField(managerA, "_handle"));
+        }
+        finally
+        {
+            SetField(managerA, "_handle", null);
+            SetField(managerA, "_ownsTunLock", false);
+            SetField(managerA, "_exactStopUnconfirmed", false);
+            managerA.Dispose();
+            managerB.Dispose();
+            lockInstance.Release();
+        }
+    }
+
+    [Fact]
+    public void Start_UnconfirmedExistingLease_IsRejectedBeforeReplacementLaunch()
+    {
+        var manager = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        SetField(manager, "_exactStopUnconfirmed", true);
+
+        try
+        {
+            Assert.Throws<TunOwnershipException>(() => manager.StartWithJson("{}"));
+            Assert.True(IsLockOwned(lockInstance));
+        }
+        finally
+        {
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+            lockInstance.Release();
+        }
+    }
+
+    [Fact]
+    public async Task Stop_LinuxCapabilityMode_SerializesConcurrentStart()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        var manager = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        var handle = new BlockingExitProcessHandle(NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        try
+        {
+            var stopTask = Task.Run(manager.Stop);
+            Assert.True(handle.WaitEntered.Wait(TimeSpan.FromSeconds(2)));
+
+            using var startInvoked = new ManualResetEventSlim();
+            var startTask = Task.Run(() =>
+            {
+                startInvoked.Set();
+                return Record.Exception(() => manager.StartWithJson("{}"));
+            });
+            Assert.True(startInvoked.Wait(TimeSpan.FromSeconds(2)));
+            Assert.False(startTask.Wait(TimeSpan.FromMilliseconds(100)),
+                "Start must wait behind the in-flight exact Stop lifecycle gate.");
+            Assert.Same(handle, GetField(manager, "_handle"));
+
+            handle.AllowExit.Set();
+            await stopTask;
+            Assert.IsType<FileNotFoundException>(await startTask);
+        }
+        finally
+        {
+            handle.AllowExit.Set();
+            manager.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+        }
+    }
+
+    [Fact]
+    public void Restart_LinuxCapabilityMode_FailedExactStop_DoesNotLaunchReplacement()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        var runner = new FakeProcessRunner();
+        var manager = new SingBoxManager(DefaultSettings(), null, new FakeHttpClient(), runner);
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        var handle = new StubbornProcessHandle(NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        try
+        {
+            manager.Restart();
+
+            Assert.Equal(SingBoxState.Failed, manager.State);
+            Assert.Empty(runner.StartCalls);
+            Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.True(IsLockOwned(lockInstance));
+        }
+        finally
+        {
+            manager.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+        }
+    }
+
+    [Fact]
+    public void Dispose_LinuxCapabilityMode_FailedExactStop_PreservesLock()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        var manager = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        SetField(manager, "_handle", new StubbornProcessHandle(NewFakePid()));
+
+        try
+        {
+            manager.Dispose();
+
+            Assert.Equal(SingBoxState.Failed, manager.State);
+            Assert.True(IsLockOwned(lockInstance),
+                "Dispose must not release ownership while the exact process may remain alive.");
+        }
+        finally
+        {
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+        }
     }
 
     private static SingBoxSettings DefaultSettings() => new()
@@ -395,8 +584,12 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         return (bool)f!.GetValue(lockInstance)!;
     }
 
-    private static void SetLockOwnedForTest(TunOwnershipLock lockInstance)
+    private static void SetLockOwnedForTest(
+        TunOwnershipLock lockInstance,
+        SingBoxManager manager)
     {
+        SetField(manager, "_ownsTunLock", true);
+        SetField(manager, "_exactStopUnconfirmed", false);
         lockInstance.Release();
 
         var semaphoreField = typeof(TunOwnershipLock).GetField(
@@ -418,10 +611,11 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         try
         {
             var lockInstance = TunOwnershipLock.Instance(null);
-            // Idempotent — Release() is a no-op if _owned is already
-            // false. Both states are valid Dispose targets; we just
-            // want to guarantee subsequent tests see a clean slate.
+            // Release ownership, then dispose/reset the process-wide singleton.
+            // Failed-stop production paths intentionally preserve it, but this
+            // fixture replaces its semaphore and must not leak that test double.
             lockInstance.Release();
+            lockInstance.Dispose();
         }
         catch
         {
@@ -464,6 +658,48 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             ?? throw new InvalidOperationException(
                 $"SingBoxManager has no field '{fieldName}'");
         f.SetValue(m, value);
+    }
+
+    private sealed class BlockingExitProcessHandle(int pid) : IProcessHandle
+    {
+        private volatile bool _hasExited;
+        public int Pid { get; } = pid;
+        public bool HasExited => _hasExited;
+        public ManualResetEventSlim WaitEntered { get; } = new();
+        public ManualResetEventSlim AllowExit { get; } = new();
+        public event EventHandler<string>? OutputLine { add { } remove { } }
+        public event EventHandler<string>? ErrorLine { add { } remove { } }
+        public event EventHandler<int>? Exited { add { } remove { } }
+
+        public Task<int> WaitForExitAsync(CancellationToken ct)
+        {
+            WaitEntered.Set();
+            AllowExit.Wait(ct);
+            return Task.FromResult(-1);
+        }
+
+        public void Kill(bool entireProcessTree = true) => _hasExited = true;
+        public void SuppressExitedEvent() { }
+        public ProcessSnapshot? TryGetSnapshot() => null;
+        public void Dispose() { }
+    }
+
+    private sealed class StubbornProcessHandle(int pid) : IProcessHandle
+    {
+        public int Pid { get; } = pid;
+        public bool HasExited => false;
+        public int KillCallCount { get; private set; }
+        public event EventHandler<string>? OutputLine { add { } remove { } }
+        public event EventHandler<string>? ErrorLine { add { } remove { } }
+        public event EventHandler<int>? Exited { add { } remove { } }
+
+        public Task<int> WaitForExitAsync(CancellationToken ct)
+            => Task.FromException<int>(new OperationCanceledException(ct));
+
+        public void Kill(bool entireProcessTree = true) => KillCallCount++;
+        public void SuppressExitedEvent() { }
+        public ProcessSnapshot? TryGetSnapshot() => null;
+        public void Dispose() { }
     }
 
     private static void InvokePrivate(SingBoxManager m, string method, object?[] args)

@@ -77,10 +77,10 @@ public sealed class TunOwnershipLock : IDisposable
 
         try
         {
-            // Named Semaphore with max 1 — works like a mutex but can be
-            // released from any thread (unlike Mutex which is thread-affine
-            // and throws ApplicationException if released from wrong thread).
-            _semaphore = new Semaphore(1, 1, MutexName, out _);
+            // Reuse the one process-wide handle across manager lifetimes.
+            // Named Semaphore works like a mutex but may be released from any
+            // thread (unlike Mutex, which is thread-affine).
+            _semaphore ??= new Semaphore(1, 1, MutexName, out _);
         }
         catch (Exception ex)
         {
@@ -106,6 +106,15 @@ public sealed class TunOwnershipLock : IDisposable
             _logger.Information("[TunLock] Held by another VPNRouter instance");
 
         return _owned;
+    }
+
+    internal bool TryAcquireExclusive()
+    {
+        lock (InstanceGate)
+        {
+            if (_owned) return false;
+            return TryAcquire();
+        }
     }
 
     public void Release()

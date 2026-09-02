@@ -15,6 +15,19 @@ public partial class SingBoxManager
 
     public void StartWithJson(string configJson)
     {
+        lock (_lifecycleGate)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _logger.Debug("[SingBoxManager] Start ignored — manager already disposed");
+                return;
+            }
+            StartWithJsonCore(configJson);
+        }
+    }
+
+    private void StartWithJsonCore(string configJson)
+    {
         if (State == SingBoxState.Starting || _handle is { HasExited: false })
         {
             _logger.Warning(
@@ -33,7 +46,7 @@ public partial class SingBoxManager
         // Take exclusive ownership of the TUN adapter. If another VPNRouter
         // instance (desktop UI / Windows Service / CLI) already owns it,
         // bail out instead of fighting over the same TUN device.
-        if (!_tunLock.TryAcquire())
+        if (!TryAcquireTunOwnership())
         {
             throw new TunOwnershipException(
                 "Another VPNRouter instance already owns the TUN adapter. " +
@@ -52,7 +65,7 @@ public partial class SingBoxManager
 
         if (!File.Exists(exePath))
         {
-            _tunLock.Release();
+            ReleaseTunOwnership();
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
 
@@ -65,16 +78,43 @@ public partial class SingBoxManager
         try
         {
             LaunchProcess(exePath);
+            if (_handle is null)
+            {
+                State = SingBoxState.Failed;
+                ReleaseTunOwnership();
+            }
         }
         catch
         {
             State = SingBoxState.Failed;
-            _tunLock.Release();
+            ReleaseTunOwnership();
             throw;
         }
     }
 
+    private bool TryAcquireTunOwnership()
+    {
+        if (_ownsTunLock) return !_exactStopUnconfirmed;
+        if (!_tunLock.TryAcquireExclusive()) return false;
+        _ownsTunLock = true;
+        return true;
+    }
+
+    private void ReleaseTunOwnership()
+    {
+        if (!_ownsTunLock) return;
+        _tunLock.Release();
+        _ownsTunLock = false;
+        _exactStopUnconfirmed = false;
+    }
+
     public void Stop()
+    {
+        lock (_lifecycleGate)
+            StopCore();
+    }
+
+    private void StopCore()
     {
         // PinkuDani Fix #3 (2026-05-21): user-initiated stop clears the
         // TUN-orphan crash flag — the crash window from the previous
@@ -96,7 +136,11 @@ public partial class SingBoxManager
     /// relaunches without re-acquiring the lock. Same primitive Restart() uses, minus the
     /// immediate relaunch (recovery owns the backoff). NOT Stop() (that releases the lock).
     /// </summary>
-    public void KillWedgedForRecovery() => StopInternal(releaseLock: false);
+    public void KillWedgedForRecovery()
+    {
+        lock (_lifecycleGate)
+            StopInternal(releaseLock: false);
+    }
 
     private void StopInternal(bool releaseLock)
     {
@@ -141,6 +185,16 @@ public partial class SingBoxManager
             // Result: Stop was a no-op and sing-box kept running. Same
             // bug macOS would have had before we routed it here.
             //
+            // A manager that never acquired this process-wide lease owns no
+            // destructive or release authority. Disposing such an idle/rejected
+            // manager is a no-op and must not clear another manager's failed-stop
+            // guard.
+            if (!_ownsTunLock)
+            {
+                State = _handle is null ? SingBoxState.Stopped : SingBoxState.Failed;
+                return;
+            }
+
             // v2.28.0: Linux capability-mode path — if LaunchProcess spawned
             // sing-box as a plain user process (it has CAP_NET_ADMIN via
             // setcap), then `_process` points at the REAL sing-box (not a
@@ -148,30 +202,30 @@ public partial class SingBoxManager
             // it directly — no elevation needed, no password prompt.
             if (OperatingSystem.IsLinux() && !_linuxUsedPkexec)
             {
+                var targetHandle = _handle;
+                var capabilityStopped = false;
                 try
                 {
-                    if (_handle != null)
+                    if (targetHandle != null)
                     {
-                        // Phase 3+ (2026-05-21): explicit EnableRaisingEvents=false
-                        // dropped — ProcessHandle.Dispose handles that pattern
-                        // transitively (ProcessRunner.cs:288-290). The
-                        // Kill→WaitForExit→Dispose sequence preserves the
-                        // load-bearing intent (no spurious Crashed event for an
-                        // intentional Stop).
-                        if (!_handle.HasExited)
+                        if (!targetHandle.HasExited)
                         {
-                            // v2.36.0-r4 (brat 2026-05-24): suppress Exited
-                            // event BEFORE Kill — sibling fix to Windows graceful
-                            // path. See ProcessRunner.SuppressExitedEvent docs.
-                            _handle.SuppressExitedEvent();
-                            _handle.Kill(entireProcessTree: true);
+                            // Suppress the callback before exact-handle Kill so an
+                            // intentional stop is never reported as a crash.
+                            targetHandle.SuppressExitedEvent();
+                            targetHandle.Kill(entireProcessTree: true);
                             try
                             {
                                 using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                                _handle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
+                                targetHandle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
                             }
-                            catch (OperationCanceledException) { /* 5s elapsed; Dispose finalises */ }
+                            catch (OperationCanceledException)
+                            {
+                                // Confirm below; a timeout must not be reported as Stopped.
+                            }
                         }
+
+                        capabilityStopped = targetHandle.HasExited;
                     }
                 }
                 catch (Exception ex)
@@ -180,14 +234,26 @@ public partial class SingBoxManager
                     // in capability mode. Never widen a failed exact stop into a
                     // name-based sweep of unrelated sing-box processes.
                     _logger.Warning(ex, "[SingBoxManager] Linux capability-mode exact Stop failed");
+                    capabilityStopped = false;
                 }
                 finally
                 {
-                    _handle?.Dispose();
-                    _handle = null;
-                    State = SingBoxState.Stopped;
-                    if (releaseLock) _tunLock.Release();
-                    _logger.Information("[SingBoxManager] sing-box stopped (Linux capability mode, no pkexec)");
+                    if (!ReferenceEquals(_handle, targetHandle))
+                    {
+                        _logger.Error("[SingBoxManager] Capability stop lost exact-handle ownership");
+                        capabilityStopped = false;
+                    }
+                    else if (capabilityStopped)
+                    {
+                        targetHandle?.Dispose();
+                        _handle = null;
+                    }
+                    _exactStopUnconfirmed = !capabilityStopped;
+                    State = capabilityStopped ? SingBoxState.Stopped : SingBoxState.Failed;
+                    if (releaseLock && capabilityStopped) ReleaseTunOwnership();
+                    _logger.Information(
+                        "[SingBoxManager] Linux capability-mode stop completed={Stopped}",
+                        capabilityStopped);
                 }
                 return;
             }
@@ -211,8 +277,9 @@ public partial class SingBoxManager
             {
                 _handle?.Dispose();
                 _handle = null;
+                _exactStopUnconfirmed = !unixStopped;
                 State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
-                if (releaseLock && unixStopped) _tunLock.Release();
+                if (releaseLock && unixStopped) ReleaseTunOwnership();
                 _logger.Information(
                     "[SingBoxManager] Unix sing-box stop completed={Stopped}",
                     unixStopped);
@@ -260,7 +327,7 @@ public partial class SingBoxManager
                     _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
                 }
             }
-            if (releaseLock) _tunLock.Release();
+            if (releaseLock) ReleaseTunOwnership();
             return;
         }
 
@@ -333,7 +400,7 @@ public partial class SingBoxManager
             // Windows Stop releases it only after the PnP removal queue above
             // has settled, preventing another process from launching into our
             // outstanding cleanup.
-            if (releaseLock) _tunLock.Release();
+            if (releaseLock) ReleaseTunOwnership();
         }
         }
         finally
@@ -430,6 +497,12 @@ public partial class SingBoxManager
 
     public void Restart()
     {
+        lock (_lifecycleGate)
+            RestartCore();
+    }
+
+    private void RestartCore()
+    {
         // v2.44.3-r2 (concurrency audit): a HealthMonitor AttemptRestart
         // continuation can reach Restart() AFTER TeardownInternal disposed this
         // manager — the lifecycle gate that serialises the failover restart does
@@ -457,6 +530,13 @@ public partial class SingBoxManager
             // Keep the TUN lock across restart so another instance can't slip in
             // during the brief window between Stop and LaunchProcess.
             StopInternal(releaseLock: false);
+            if (State != SingBoxState.Stopped)
+            {
+                _logger.Error(
+                    "[SingBoxManager] Restart aborted: exact stop was not confirmed (state={State})",
+                    State);
+                return;
+            }
             State = SingBoxState.Restarting;
 
             // v2.31.9-r4 — give Windows a beat to tear down the wintun handle
@@ -482,11 +562,16 @@ public partial class SingBoxManager
                 ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
                 : AppPaths.SingBoxExePath;
             LaunchProcess(exePath);
+            if (_handle is null)
+            {
+                State = SingBoxState.Failed;
+                ReleaseTunOwnership();
+            }
         }
         catch
         {
             State = SingBoxState.Failed;
-            _tunLock.Release();
+            ReleaseTunOwnership();
             throw;
         }
         finally

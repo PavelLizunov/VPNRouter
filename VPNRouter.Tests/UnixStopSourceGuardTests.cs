@@ -45,8 +45,21 @@ public sealed class UnixStopSourceGuardTests
         Assert.Contains("name is \"VPNRouter.App\" or \"VPNRouter.CLI\"", stop);
 
         var lifecycle = ReadRepoFile("VPNRouter.Core", "Services", "SingBoxManager.Lifecycle.cs");
+        Assert.Contains("lock (_lifecycleGate)", lifecycle);
+        Assert.Contains("var targetHandle = _handle", lifecycle);
+        Assert.Contains("ReferenceEquals(_handle, targetHandle)", lifecycle);
+        Assert.Contains("if (!_ownsTunLock)", lifecycle);
+        Assert.Contains("TryAcquireExclusive()", lifecycle);
+        Assert.Contains("_exactStopUnconfirmed", lifecycle);
+        Assert.Contains("State = capabilityStopped ? SingBoxState.Stopped : SingBoxState.Failed", lifecycle);
+        Assert.Contains("if (releaseLock && capabilityStopped) ReleaseTunOwnership()", lifecycle);
         Assert.Contains("State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed", lifecycle);
-        Assert.Contains("if (releaseLock && unixStopped) _tunLock.Release()", lifecycle);
+        Assert.Contains("if (releaseLock && unixStopped) ReleaseTunOwnership()", lifecycle);
+        Assert.Contains("Restart aborted: exact stop was not confirmed", lifecycle);
+
+        var manager = ReadRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
+        Assert.Contains("if (_ownsTunLock)", manager);
+        Assert.Contains("Dispose preserved TUN ownership", manager);
     }
 
     [Fact]
