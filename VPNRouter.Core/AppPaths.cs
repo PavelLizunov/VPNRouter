@@ -167,14 +167,14 @@ public static class AppPaths
             throw new IOException($"Could not enforce owner-only file permissions: {path}");
     }
 
-    /// <summary>Create/truncate a file without exposing new Unix content through the process umask.</summary>
-    internal static FileStream CreatePrivateFile(string path)
+    /// <summary>Create a file without exposing new Unix content through the process umask.</summary>
+    internal static FileStream CreatePrivateFile(string path, FileMode mode = FileMode.Create)
     {
         var unix = OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
         if (unix) EnsurePrivateUnixFile(path);
         var options = new FileStreamOptions
         {
-            Mode = FileMode.Create,
+            Mode = mode,
             Access = FileAccess.Write,
             Share = FileShare.None
         };
