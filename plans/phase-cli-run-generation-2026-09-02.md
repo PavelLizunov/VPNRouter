@@ -1,12 +1,12 @@
 # Phase — CLI run-generation-bound stop
 
-**Owner**: DSH session `session-b7bb95fc-bbc1-4f52-8dfd-3eea0fae24de`  
-**Branch**: `dsh/cli-run-generation`  
-**Accepted base**: PR #211 head `632f44d8daa0ab7ea8d7a0140c34255c526c9e79`  
-**Roadmap ref**: matrix audit SU-3-1 adversarial follow-up / `plans/OPEN-DEFECTS.md`  
-**Effort**: 1 day  
-**Risk**: HIGH  
-**Blast radius**: CLI persisted state, Windows named-event shutdown, exact fallback process kill, test source linkage; no GUI/service/package behavior  
+**Owner**: DSH session `session-b7bb95fc-bbc1-4f52-8dfd-3eea0fae24de`
+**Branch**: `dsh/cli-run-generation`
+**Accepted base**: PR #211 head `632f44d8daa0ab7ea8d7a0140c34255c526c9e79`
+**Roadmap ref**: matrix audit SU-3-1 adversarial follow-up / `plans/OPEN-DEFECTS.md`
+**Effort**: 1 day
+**Risk**: HIGH
+**Blast radius**: CLI persisted state, Windows named-event shutdown, exact fallback process kill, test source linkage; no GUI/service/package behavior
 **Rollback**: revert this task's commits; the additive state fields preserve the existing schema-1 reader contract
 
 ## Why
@@ -35,36 +35,37 @@ PR #211 pins the post-wait Windows child handle, but `state.json` still identifi
 
 ### Tests written
 
-- `CliGenerationStateTests.LegacyState_RemainsReadable_ButCannotBeConditionallyCleared`.
-- `CliGenerationStateTests.OldGeneration_UpdateCannotOverwriteReplacement`.
-- `CliGenerationStateTests.OldGeneration_ClearCannotDeleteReplacement`.
-- `CliGenerationStateTests.ConcurrentReadNeverObservesPartialJson`.
-- Source guards pin event-before-state publication, generation-qualified IPC, persisted identity use, mutex/atomic write and absence of unconditional cleanup.
-- Controlled Windows characterization pins exact owner/child identity and retained native handles without touching VPN processes.
+- Seven `CliGenerationStateCharacterizationTests` cover legacy reads, matching update/clear, stale-generation update and clear refusal, monotonic child replacement, malformed-state refusal, random exclusive temp creation, and concurrent read/write integrity.
+- `ProcessOwnershipTests` cover generic exact snapshots and the independent v2 runtime-owner owner/child pair.
+- Source guards pin both stop events before state publication, generation-qualified IPC, current-user/session scopes, exact identities, mutex/atomic write, and absence of unconditional cleanup.
+- Windows characterization pins retained process handles and proves that an event created with .NET 10 current-user scoping remains discoverable by the legacy name-only client.
 
 ### Verification approach
 
-Run focused CLI/process/state tests, full discovered tests, Release solution build, Windows CLI publish/characterization, grep guard and repeated race tests. The control host has no local .NET/PowerShell, so GitHub Actions is the mechanical oracle. No worker may start or stop the real VPN.
+Run focused CLI/process/state tests, all discovered tests, affected Release builds, Windows CLI publish/characterization, grep guard and repeated race tests. The control host has no local .NET/PowerShell and the registered workers have no .NET SDK, so GitHub Actions is the mechanical oracle. No worker may start or stop the real VPN.
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: focused state/process tests, repeated race tests and all discovered tests pass.
-- [ ] **Gate 3 — Docs**: Outcome and `plans/OPEN-DEFECTS.md` updated; README/AGENTS unchanged unless public behavior requires it.
-- [ ] **Gate 4 — Self-review**: distinct correctness, security/process-isolation and test/concurrency reviews; every claim lead-source-verified.
-- [ ] **Gate 5 — UI verify**: N/A — no UI surface changes.
-- [ ] **Gate 6 — Characterization diff**: N/A — not a god-file split; PR #211 behavior stays covered by its exact-handle tests.
+- [x] **Gate 1 — Build clean**: affected Release graph built and Windows CLI publish completed with zero errors in workflow `33642120623`; the untouched PoolAggregator-only remainder of `VPNRouter.sln` was not separately rebuilt.
+- [x] **Gate 2 — Tests green**: baseline `2832 total / 2775 executed` became `2844 total / 2787 executed`, all passed with zero test warnings; Windows characterization passed `28/28` in workflow `33642120623`.
+- [x] **Gate 3 — Docs**: this outcome and `plans/OPEN-DEFECTS.md` were updated; README/AGENTS remain unchanged because command syntax and public setup did not change.
+- [x] **Gate 4 — Self-review**: four independent correctness/concurrency/security/test bug-hunt lanes plus two Opus reasoning lanes were lead-source-verified; all P0/P1 findings were fixed or refuted against the Windows-only target.
+- [x] **Gate 5 — UI verify**: N/A — no UI surface changes.
+- [x] **Gate 6 — Characterization diff**: N/A — not a god-file split; PR #211's exact-handle characterization remains green and the old-Stop/new-Start bridge gained a Windows test.
 
-## Outcome (filled before final handoff)
+## Outcome
 
-**Status**: IN PROGRESS  
-**Commits**: brief commit pending  
-**Pushed**: pending  
-**Test deltas**: pending  
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR remains open and unmerged
+**Commits**: `ff1b1ac9` brief; `f9462248` implementation; `bc057f65` adversarial race fixes; `0658b2c7` current-user named-handle scopes; `8a4eca55` legacy bridge characterization
+**Pushed**: `origin/dsh/cli-run-generation`; PR #214 — https://github.com/PavelLizunov/VPNRouter/pull/214
+**Test deltas**: +12 discovered and executed tests versus the brief-only baseline; `2844 total / 2787 executed / 2787 passed / 0 failed / 0 warning`
+**Files changed**: Start/Stop/StateFile, AppPaths private-file mode seam, ProcessOwnership exact authority checks, linked state/context test configuration, three regression test files, this brief, and the defect ledger
 
-**Gate results:** pending.
+**Gate results**: affected builds, Windows CLI publish, Ubuntu suite, Windows characterization, Go test and grep checks all passed on implementation head `8a4eca55`; a final docs-only exact-head run remains required after this outcome commit.
 
-**Surprises encountered**: pending.  
-**Follow-ups spawned**: the accepted `ConfigGenerator.cs` mechanical split remains a separate task/PR.  
-**Lessons for methodology doc**: pending.
+**Surprises encountered**: reviewers found and the implementation fixed a lost restart/publication race, ambiguous owner-liveness fallback, unreadable-state deletion, fixed-temp link exposure, stale runtime authority, and old-Stop/new-Start compatibility. Search-first verdict: **Adopt** .NET 10 `NamedWaitHandleOptions`; it scopes events to the current user/session and the mutex to the current user across sessions without adding the disallowed package dependency. An unexplained workspace actor committed and pushed `bc057f65`; no content was lost, exact-head CI passed, and candidate incident `INC-1334` records it.
+
+**Transition limitation**: a pre-generation CLI process already running before upgrade still contains its old unlocked callback and unconditional clear; new binaries cannot retroactively constrain that code. New Start accepts legacy Stop through a separately registered PID-only event, while destructive new Stop treats legacy state as status-only and refuses it.
+
+**Follow-ups spawned**: the accepted `ConfigGenerator.cs` mechanical split remains a separate task/PR.
+**Lessons for methodology doc**: persisted process authority needs generation, exact process identity, atomic conditional mutation, native-handle lifetime, and transition behavior reviewed as one protocol rather than isolated PID fixes.
