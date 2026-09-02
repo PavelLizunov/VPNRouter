@@ -986,9 +986,6 @@ public class HealthMonitor : IDisposable
                 }
 
                 _logger.Information("[HealthMonitor] sing-box restarted successfully");
-                // v2.31.6-r8: counter-reset under the lock (see comment above).
-                lock (_attemptRestartLock) { _restartAttempts = 0; }
-                _vpnWasRunning = true;
                 VpnStarted?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)

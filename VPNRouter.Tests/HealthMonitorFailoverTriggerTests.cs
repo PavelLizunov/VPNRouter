@@ -68,4 +68,23 @@ public class HealthMonitorFailoverTriggerTests
         var ex = Record.Exception(() => InvokeAttemptRestart(hm));
         Assert.Null(ex);
     }
+
+    [Fact]
+    public void AtTwoMaxRestarts_ProgressesAttemptsAndTriggersFailover()
+    {
+        // SEC-1.3-01: verify that when MaxRestartAttempts = 2, the counter increments
+        // across attempts rather than being prematurely reset, properly reaching the ceiling.
+        using var hm = BuildHm(maxRestarts: 2);
+        int raised = 0;
+        hm.FailoverRequested += (_, _) => raised++;
+
+        InvokeAttemptRestart(hm); // attempt 1 (counter: 0 -> 1)
+        Assert.Equal(0, raised);
+
+        InvokeAttemptRestart(hm); // attempt 2 (counter: 1 -> 2)
+        Assert.Equal(0, raised);
+
+        InvokeAttemptRestart(hm); // attempt 3 (counter: 2 >= 2 -> ceiling reached!)
+        Assert.Equal(1, raised);
+    }
 }

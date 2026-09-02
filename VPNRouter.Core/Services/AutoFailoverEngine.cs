@@ -216,6 +216,8 @@ public sealed class AutoFailoverEngine
             // Replacement never came up (user Disconnect cancelled the session, or the
             // restart failed). Roll the in-memory swap back to what the user last chose,
             // persist NOTHING, and stay quiet — no failover message after a Disconnect.
+            if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
+                _tried.Add(newName);
             _settings.Vless.ActiveServer = oldActive;
             _settings.App.ActiveSubscriptionServer = oldActiveSub;
             _logger?.Information(
