@@ -56,6 +56,9 @@ public static class RuleSetCacheManager
     /// rule-sets live. Created on demand by <see cref="EnsureLocalAsync"/>.</summary>
     public const string CacheSubdir = "rulesets";
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> FileLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Ensure a local copy of the rule-set at <paramref name="url"/> is
     /// available, returning its absolute path. Returns null if no
@@ -104,65 +107,86 @@ public static class RuleSetCacheManager
         }
 
         var localPath = Path.Combine(dir, filename);
-        var fi = new FileInfo(localPath);
-        var existsLocally = fi.Exists && fi.Length > 0;
-        var ageOk = existsLocally && (DateTime.UtcNow - fi.LastWriteTimeUtc) < MaxAgeForUseAsIs;
-
-        if (ageOk)
-        {
-            logger.Debug("[RuleSetCache] using cached {Path} (age {Age})",
-                localPath, DateTime.UtcNow - fi.LastWriteTimeUtc);
-            return localPath;
-        }
-
-        // Need to refresh. Either we have a stale file (use as fallback if fetch fails),
-        // or no file at all (fetch is mandatory for a usable rule-set).
-        var ownsClient = false;
-        if (httpClient == null)
-        {
-            httpClient = new HttpClient();
-            ownsClient = true;
-        }
+        var fileLock = FileLocks.GetOrAdd(localPath, _ => new SemaphoreSlim(1, 1));
+        await fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            httpClient.Timeout = FetchTimeout;
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(FetchTimeout);
+            var fi = new FileInfo(localPath);
+            var existsLocally = fi.Exists && fi.Length > 0;
+            var ageOk = existsLocally && (DateTime.UtcNow - fi.LastWriteTimeUtc) < MaxAgeForUseAsIs;
 
-            logger.Information("[RuleSetCache] fetching {Url} (timeout {Timeout})", CanaryPolicy.RedactUrl(url), FetchTimeout);
-            var response = await httpClient.GetAsync(url, cts.Token).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
-            if (bytes.Length == 0)
-                throw new InvalidDataException("empty body");
-
-            // Atomic write: tmp → rename.
-            var tmp = localPath + ".tmp";
-            await File.WriteAllBytesAsync(tmp, bytes, cts.Token).ConfigureAwait(false);
-            if (File.Exists(localPath))
-                File.Delete(localPath);
-            File.Move(tmp, localPath);
-            logger.Information("[RuleSetCache] cached {Path} ({Bytes} bytes)", localPath, bytes.Length);
-            return localPath;
-        }
-        catch (Exception ex)
-        {
-            if (existsLocally)
+            if (ageOk)
             {
-                logger.Warning(
-                    "[RuleSetCache] refresh failed ({Err}); falling back to stale {Path} (age {Age})",
-                    ex.Message, localPath, DateTime.UtcNow - fi.LastWriteTimeUtc);
+                logger.Debug("[RuleSetCache] using cached {Path} (age {Age})",
+                    localPath, DateTime.UtcNow - fi.LastWriteTimeUtc);
                 return localPath;
             }
-            logger.Warning(
-                "[RuleSetCache] fetch failed ({Err}) and no cached copy at {Path}; rule-set will be omitted from config",
-                ex.Message, localPath);
-            return null;
+
+            // Need to refresh. Either we have a stale file (use as fallback if fetch fails),
+            // or no file at all (fetch is mandatory for a usable rule-set).
+            var ownsClient = false;
+            if (httpClient == null)
+            {
+                httpClient = new HttpClient();
+                ownsClient = true;
+            }
+            try
+            {
+                httpClient.Timeout = FetchTimeout;
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(FetchTimeout);
+
+                logger.Information("[RuleSetCache] fetching {Url} (timeout {Timeout})", CanaryPolicy.RedactUrl(url), FetchTimeout);
+                var response = await httpClient.GetAsync(url, cts.Token).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                var mediaType = response.Content.Headers.ContentType?.MediaType;
+                if (mediaType != null && mediaType.Contains("html", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"Invalid Content-Type: {mediaType}");
+
+                var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
+                if (bytes.Length == 0 || bytes[0] == (byte)'<')
+                    throw new InvalidDataException("Downloaded rule-set is corrupt, truncated, or HTML");
+
+                // Atomic write: unique tmp → rename.
+                var tmp = Path.Combine(dir, $"{filename}.{Guid.NewGuid():N}.tmp");
+                try
+                {
+                    await File.WriteAllBytesAsync(tmp, bytes, cts.Token).ConfigureAwait(false);
+                    File.Move(tmp, localPath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(tmp))
+                        try { File.Delete(tmp); } catch { }
+                }
+
+                logger.Information("[RuleSetCache] cached {Path} ({Bytes} bytes)", localPath, bytes.Length);
+                return localPath;
+            }
+            catch (Exception ex)
+            {
+                if (existsLocally)
+                {
+                    logger.Warning(
+                        "[RuleSetCache] refresh failed ({Err}); falling back to stale {Path} (age {Age})",
+                        ex.Message, localPath, DateTime.UtcNow - fi.LastWriteTimeUtc);
+                    return localPath;
+                }
+                logger.Warning(
+                    "[RuleSetCache] fetch failed ({Err}) and no cached copy at {Path}; rule-set will be omitted from config",
+                    ex.Message, localPath);
+                return null;
+            }
+            finally
+            {
+                if (ownsClient)
+                    httpClient.Dispose();
+            }
         }
         finally
         {
-            if (ownsClient)
-                httpClient.Dispose();
+            fileLock.Release();
         }
     }
 
