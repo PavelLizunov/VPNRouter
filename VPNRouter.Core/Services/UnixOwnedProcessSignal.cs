@@ -128,11 +128,11 @@ internal static class UnixOwnedProcessSignal
             => SetHandle((IntPtr)fd);
 
         protected override bool ReleaseHandle()
-            => Close(handle.ToInt32()) == 0;
+            => UnixOwnedProcessSignal.CloseFd(handle.ToInt32()) == 0;
     }
 
     [DllImport("libc", EntryPoint = "close", SetLastError = true)]
-    private static extern int Close(int fd);
+    private static extern int CloseFd(int fd);
 
     [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
     private static extern long PidFdOpen(long number, int pid, uint flags);
