@@ -316,10 +316,30 @@ public class VpnEngine : IDisposable
                 return;
             }
 
-            // Fresh session: a new connect supersedes any prior disconnect intent.
+            // Fresh session: link caller token so Stop() or caller ct cancels bring-up.
             _sessionCts?.Dispose();
-            _sessionCts = new CancellationTokenSource();
-            await StartAsyncInternal(settings, ct, skipVpnConflictCheck).ConfigureAwait(false);
+            _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            try
+            {
+                await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                if (!IsRunning)
+                {
+                    _logger?.Warning(
+                        ex,
+                        "[VpnEngine] StartAsync failed to bring up VPN — tearing down partial state");
+                    try { TeardownInternal(); } catch { }
+                }
+                else
+                {
+                    _logger?.Warning(
+                        ex,
+                        "[VpnEngine] StartAsync bring-up threw after sing-box came up — leaving live tunnel for Stop/Dispose");
+                }
+                throw;
+            }
         }
         finally
         {
@@ -522,6 +542,10 @@ public class VpnEngine : IDisposable
         {
             _logger?.Warning(ex,
                 "[VpnEngine] Pre-start failover restart threw inside StartAsyncInternal");
+            if (!IsRunning)
+            {
+                try { TeardownInternal(); } catch { }
+            }
             return false;
         }
     }
@@ -895,7 +919,7 @@ public class VpnEngine : IDisposable
         // DNS-tunnel: tear the transport down AFTER sing-box (the outbound that
         // rode it is already gone). No-op for every non-dns-tunnel session
         // (_slipstream stays null unless a dns-tunnel server was started).
-        try { _slipstream?.Stop(); } catch { }
+        try { _slipstream?.Dispose(); } catch { }
 
         // W1.2 hook 3 — disengage the true-split driver AFTER sing-box is gone: excluded apps stay on
         // their NIC binds until this instant, then the TUN is down so their new binds hit the same
@@ -1007,6 +1031,10 @@ public class VpnEngine : IDisposable
             try { _unixDns.Restore(_logger); } catch { }  // Fix #1 (r3): mac DNS partial-start cleanup
             try { _firewall?.Dispose(); } catch { }   // Dispose -> DeleteAllRules
             _firewall = null;
+            try { _singBox?.Dispose(); } catch { }
+            _singBox = null;
+            try { _slipstream?.Dispose(); } catch { }
+            _slipstream = null;
         }
         // W1.2 hook 4 — release the split-tunnel driver (best-effort RESET + close handle). Idempotent
         // after a hook-3 disengage on the IsRunning path; the sole teardown on partial-start Dispose.
