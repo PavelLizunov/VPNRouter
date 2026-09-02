@@ -8,6 +8,11 @@ namespace VPNRouter.CLI.Commands;
 public class StopCommand : Command
 {
     internal const string StopEventPrefix = "VPNRouter_CLI_Stop_";
+    internal static readonly NamedWaitHandleOptions StopEventOptions = new()
+    {
+        CurrentUserOnly = true,
+        CurrentSessionOnly = true
+    };
 
     private enum OwnerStopResult
     {
@@ -208,6 +213,7 @@ public class StopCommand : Command
 
             if (!EventWaitHandle.TryOpenExisting(
                     BuildStopEventName(expectedOwner.Pid, generation),
+                    StopEventOptions,
                     out var ownerEvent))
                 return OwnerStopResult.Unavailable;
 

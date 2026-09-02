@@ -229,6 +229,7 @@ public class StartCommand : AsyncCommand<StartSettings>
                     false,
                     EventResetMode.AutoReset,
                     StopCommand.BuildStopEventName(owner.Pid, runGeneration),
+                    StopCommand.StopEventOptions,
                     out var stopEventCreated);
                 if (!stopEventCreated)
                     throw new InvalidOperationException("Generation stop event already exists.");
@@ -245,6 +246,7 @@ public class StartCommand : AsyncCommand<StartSettings>
                     false,
                     EventResetMode.AutoReset,
                     StopCommand.StopEventPrefix + owner.Pid,
+                    StopCommand.StopEventOptions,
                     out var legacyStopEventCreated);
                 if (!legacyStopEventCreated)
                     throw new InvalidOperationException("Legacy stop event already exists.");

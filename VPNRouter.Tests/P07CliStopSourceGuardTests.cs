@@ -17,6 +17,7 @@ public sealed class P07CliStopSourceGuardTests
         Assert.Contains("latestChildIdentity", start);
         Assert.Contains("StateFile.TryUpdateChild(runGeneration, identity)", start);
         Assert.Contains("StopCommand.BuildStopEventName(owner.Pid, runGeneration)", start);
+        Assert.Contains("StopCommand.StopEventOptions", start);
         Assert.Contains("out var stopEventCreated", start);
         Assert.Contains("StopCommand.StopEventPrefix + owner.Pid", start);
         Assert.Contains("out var legacyStopEventCreated", start);
@@ -50,6 +51,9 @@ public sealed class P07CliStopSourceGuardTests
         Assert.Contains("target.SingBoxStartedAtUtcTicks", stop);
         Assert.Contains("target.SingBoxExecutablePath", stop);
         Assert.Contains("BuildStopEventName(expectedOwner.Pid, generation)", stop);
+        Assert.Contains("CurrentUserOnly = true", stop);
+        Assert.Contains("CurrentSessionOnly = true", stop);
+        Assert.Contains("StopEventOptions", stop);
         Assert.Contains("ProcessOwnership.TryReadProcessIdentity(ownerProcess)", stop);
         Assert.Contains("ProcessOwnership.TryReadOwnedSingBoxIdentity(process)", stop);
         Assert.Contains("ProcessOwnership.IsSameProcessIdentity", stop);
@@ -110,7 +114,9 @@ public sealed class P07CliStopSourceGuardTests
         Assert.Contains("RunGeneration", stateFile);
         Assert.Contains("OwnerStartedAtUtcTicks", stateFile);
         Assert.Contains("SingBoxStartedAtUtcTicks", stateFile);
-        Assert.Contains("new Mutex(", stateFile);
+        Assert.Contains("CurrentUserOnly = true", stateFile);
+        Assert.Contains("CurrentSessionOnly = false", stateFile);
+        Assert.Contains("new Mutex(false, mutexName, StateMutexOptions, out _)", stateFile);
         Assert.Contains("mutex.WaitOne(StateLockTimeout)", stateFile);
         Assert.Contains("AbandonedMutexException", stateFile);
         Assert.Contains("Guid.NewGuid():N}.tmp", stateFile);

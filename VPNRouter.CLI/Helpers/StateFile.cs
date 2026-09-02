@@ -40,13 +40,16 @@ public static class StateFile
     public const int CurrentSchemaVersion = 1;
 
     private static readonly TimeSpan StateLockTimeout = TimeSpan.FromSeconds(5);
+    private static readonly NamedWaitHandleOptions StateMutexOptions = new()
+    {
+        CurrentUserOnly = true,
+        CurrentSessionOnly = false
+    };
     private static readonly string Path =
         System.IO.Path.Combine(
             Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter"),
             "state.json");
-    private static string StateMutexName => OperatingSystem.IsWindows()
-        ? @"Global\VPNRouter_CLI_State_v1"
-        : "VPNRouter_CLI_State_v1";
+    private const string StateMutexName = "VPNRouter_CLI_State_v1";
 
     public static void Write(RunState state) => Write(state, Path, StateMutexName);
 
@@ -166,7 +169,7 @@ public static class StateFile
         if (string.IsNullOrWhiteSpace(mutexName))
             throw new ArgumentException("Mutex name is required.", nameof(mutexName));
 
-        using var mutex = new Mutex(initiallyOwned: false, mutexName);
+        using var mutex = new Mutex(false, mutexName, StateMutexOptions, out _);
         var ownsMutex = false;
         try
         {
