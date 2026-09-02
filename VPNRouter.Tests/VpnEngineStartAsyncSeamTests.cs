@@ -126,6 +126,39 @@ public sealed class VpnEngineStartAsyncSeamTests
         settings.Vless.ActiveServer = "main";
     }
 
+    private static IDisposable EnsureDummySingBoxBinary(AppSettings settings)
+    {
+        var exePath = OperatingSystem.IsWindows()
+            ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
+            : AppPaths.SingBoxExePath;
+
+        var dir = Path.GetDirectoryName(exePath);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        bool created = false;
+        if (!File.Exists(exePath))
+        {
+            File.WriteAllText(exePath, "#!/bin/sh\nexit 0\n");
+            created = true;
+        }
+
+        return new ActionDisposable(() =>
+        {
+            if (created && File.Exists(exePath))
+            {
+                try { File.Delete(exePath); } catch { }
+            }
+        });
+    }
+
+    private sealed class ActionDisposable : IDisposable
+    {
+        private readonly Action _action;
+        public ActionDisposable(Action action) => _action = action;
+        public void Dispose() => _action();
+    }
+
     private sealed class StubFirewallManager : IFirewallManager
     {
         public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
@@ -637,6 +670,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         PopulateValidServer(settings);
         settings.ActiveProfile = "Discord_Privacy";
 
+        using var dummyBin = EnsureDummySingBoxBinary(settings);
         using var engine = BuildEngine(firewall: firewall);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -661,6 +695,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         settings.ActiveProfile = "Discord_Privacy";
         settings.App.RoutingMode = "split";
 
+        using var dummyBin = EnsureDummySingBoxBinary(settings);
         using var engine = BuildEngine(firewall: firewall);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
