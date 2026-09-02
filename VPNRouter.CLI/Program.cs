@@ -2,6 +2,9 @@ using Serilog;
 using Spectre.Console.Cli;
 using VPNRouter.CLI.Commands;
 
+if (VPNRouter.Core.Services.UnixOwnedProcessSignal.TryHandleHelper(args, out var helperExitCode))
+    return helperExitCode;
+
 // ─── Logging setup ────────────────────────────────────────────────────────────
 
 var logDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\logs");

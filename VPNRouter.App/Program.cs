@@ -60,6 +60,12 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (UnixOwnedProcessSignal.TryHandleHelper(args, out var helperExitCode))
+        {
+            Environment.ExitCode = helperExitCode;
+            return;
+        }
+
         // v2.24.0 self-healing: install crash reporter before anything
         // else. Writes crash-<stamp>.txt into %DataDir%/crashes/ on any
         // unhandled exception so the user has something to attach to a

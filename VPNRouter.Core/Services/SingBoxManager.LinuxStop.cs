@@ -1,171 +1,249 @@
 using System.Diagnostics;
-using System.Net.Http;
-using System.Text;
-using Serilog;
-using VPNRouter.Core.Models;
+using System.Globalization;
 
 namespace VPNRouter.Core.Services;
 
 public partial class SingBoxManager
 {
-    /// <summary>
-    /// v2.29.0-r5 — Unix stop escalation chain. Tries kill methods from
-    /// least-privileged to most-privileged, verifying after each step that
-    /// sing-box is actually gone. Shared by Linux and macOS; the platform
-    /// controls which steps run.
-    ///
-    /// <para>Steps (Linux runs all three; macOS runs only Step 3):</para>
-    /// <list type="number">
-    /// <item>Plain user pkill (Linux only — works in capability mode + .deb
-    ///   installs where sing-box runs as user via setcap CAP_NET_ADMIN).</item>
-    /// <item>pkexec pkill -KILL (Linux only — polkit GUI prompt; SIGKILL
-    ///   bypasses any signal mask sing-box might have set; pkexec does not
-    ///   exist on macOS).</item>
-    /// <item>sudo pkill -KILL (NOPASSWD if sudoers entry was set up at
-    ///   first Connect; falls through if not configured). This is the
-    ///   PRIMARY path on macOS, where sing-box runs as root via sudoers.</item>
-    /// </list>
-    ///
-    /// <para>v2.40.x (Fix #8, macOS deep-audit): Steps 1-2 are gated behind
-    /// <c>OperatingSystem.IsLinux()</c>. On macOS a user-level pkill cannot
-    /// signal the root sing-box and pkexec is absent, so both steps were
-    /// guaranteed-failing no-ops that wasted ~1.3 s of sleeps and emitted a
-    /// misleading "escalating to pkexec" WARN on every disconnect. macOS goes
-    /// straight to Step 3, which is the only step that has ever worked there.</para>
-    ///
-    /// <para>Each attempt is followed by IsSingBoxAlive() check (Clash API
-    /// probe + pgrep) so we know immediately if it worked. Logs each step
-    /// for postmortem.</para>
-    /// </summary>
-    private void LinuxStopEscalationChain()
+    private enum OwnedTargetState
     {
-        // Steps 1-2 only apply on Linux. On macOS sing-box runs as root and
-        // neither a user pkill nor pkexec can touch it — skip straight to the
-        // sudo path (Step 3) instead of burning a sleep + a failing pkexec spawn.
+        Matching,
+        GoneOrReplaced,
+        IdentityUnavailable
+    }
+
+    /// <summary>
+    /// Stop the one sing-box identity published by this VPNRouter owner.
+    /// Linux uses pidfd for the direct and elevated helper paths. macOS has
+    /// no process descriptor, so it performs a fresh identity check followed
+    /// immediately by an exact-PID sudo kill. No branch falls back to a name
+    /// or command-line pattern.
+    /// </summary>
+    private bool LinuxStopEscalationChain()
+    {
+        var target = ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath);
+        if (target is not { } owned)
+        {
+            _logger.Error(
+                "[SingBoxManager] Unix stop refused: no exact VPNRouter-owned sing-box identity is available");
+            return false;
+        }
+
         if (OperatingSystem.IsLinux())
         {
-            // Step 1: plain user pkill. Cheap and works in capability mode.
-            if (TrySpawnAndWait("/usr/bin/pkill", "-TERM -f sing-box", 3000, "user pkill -TERM"))
+            var direct = UnixOwnedProcessSignal.SignalLinux(owned, signal: 15);
+            if (direct == UnixOwnedSignalResult.TargetGone)
+                return true;
+            if (direct == UnixOwnedSignalResult.IdentityMismatch)
             {
-                // Wait briefly for graceful exit (sing-box on SIGTERM should
-                // tear down TUN cleanly within ~1 s).
-                System.Threading.Thread.Sleep(800);
-                if (!IsSingBoxAlive())
-                {
-                    _logger.Information("[SingBoxManager] Linux stop: user pkill -TERM succeeded");
-                    return;
-                }
+                _logger.Warning(
+                    "[SingBoxManager] Linux stop: owned PID {Pid} was replaced; refusing to signal its replacement",
+                    owned.Pid);
+                return true;
             }
 
-            _logger.Information("[SingBoxManager] Linux stop: user pkill didn't kill sing-box, escalating to pkexec");
+            if (direct == UnixOwnedSignalResult.Signaled)
+            {
+                Thread.Sleep(800);
+                var state = InspectOwnedTarget(owned);
+                if (state == OwnedTargetState.GoneOrReplaced)
+                {
+                    _logger.Information(
+                        "[SingBoxManager] Linux stop: exact PID {Pid} exited after pidfd SIGTERM",
+                        owned.Pid);
+                    return true;
+                }
+                if (state == OwnedTargetState.IdentityUnavailable)
+                    return RefuseUnknownIdentity(owned.Pid);
+                _logger.Information(
+                    "[SingBoxManager] Linux stop: PID {Pid} survived pidfd SIGTERM; escalating",
+                    owned.Pid);
+            }
+            else
+            {
+                _logger.Warning(
+                    "[SingBoxManager] Linux stop: direct pidfd signal returned {Result}; escalating",
+                    direct);
+            }
 
-            // Step 2: pkexec with SIGKILL. GUI prompt — user might dismiss.
+            var hostPath = ResolveSignalHelperHost();
+            if (hostPath is null)
+            {
+                _logger.Error(
+                    "[SingBoxManager] Linux stop refused: current VPNRouter helper executable is unavailable");
+                return false;
+            }
+
             var pkexec = LinuxRuntimeEnvironment.ResolvePkexec();
-            if (pkexec != null &&
-                TrySpawnAndWait(pkexec, "pkill -KILL -f sing-box", 30000, "pkexec pkill -KILL"))
+            if (pkexec != null)
             {
-                System.Threading.Thread.Sleep(500);
-                if (!IsSingBoxAlive())
+                _ = TrySpawnAndWait(
+                    pkexec,
+                    BuildLinuxOwnedSignalHelperArguments(hostPath, owned, signal: 9),
+                    30_000,
+                    "pkexec exact pidfd SIGKILL");
+                Thread.Sleep(500);
+
+                var state = InspectOwnedTarget(owned);
+                if (state == OwnedTargetState.GoneOrReplaced)
                 {
-                    _logger.Information("[SingBoxManager] Linux stop: pkexec pkill -KILL succeeded");
-                    return;
+                    _logger.Information(
+                        "[SingBoxManager] Linux stop: exact PID {Pid} exited after pkexec pidfd SIGKILL",
+                        owned.Pid);
+                    return true;
                 }
+                if (state == OwnedTargetState.IdentityUnavailable)
+                    return RefuseUnknownIdentity(owned.Pid);
             }
-            else if (pkexec == null)
+            else
             {
                 _logger.Warning("[SingBoxManager] Linux stop: trusted pkexec not found");
             }
 
-            _logger.Warning("[SingBoxManager] Linux stop: pkexec didn't kill sing-box, trying sudo");
+            _ = TrySpawnAndWait(
+                "/usr/bin/sudo",
+                BuildLinuxOwnedSignalHelperArguments(hostPath, owned, signal: 9, nonInteractiveSudo: true),
+                5_000,
+                "sudo -n exact pidfd SIGKILL");
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            var state = InspectOwnedTarget(owned);
+            if (state == OwnedTargetState.GoneOrReplaced)
+                return true;
+            if (state == OwnedTargetState.IdentityUnavailable)
+                return RefuseUnknownIdentity(owned.Pid);
+
+            _logger.Warning(
+                "[SingBoxManager] macOS has no pidfd; signaling freshly validated exact PID {Pid}",
+                owned.Pid);
+            _ = TrySpawnAndWait(
+                "/usr/bin/sudo",
+                BuildMacExactKillArguments(owned.Pid),
+                5_000,
+                "sudo -n exact PID SIGKILL");
+        }
+        else
+        {
+            return false;
         }
 
-        // Step 3: sudo with -n (non-interactive — fail if password needed
-        // rather than block forever). If user set up NOPASSWD sudoers, this
-        // works without prompt; otherwise it fails fast and we give up
-        // (better to surface the failure than hang forever).
-        if (TrySpawnAndWait("/usr/bin/sudo", "-n pkill -KILL -f sing-box", 5000, "sudo -n pkill -KILL"))
+        Thread.Sleep(500);
+        var finalState = InspectOwnedTarget(owned);
+        if (finalState == OwnedTargetState.GoneOrReplaced)
         {
-            System.Threading.Thread.Sleep(500);
-            if (!IsSingBoxAlive())
-            {
-                _logger.Information("[SingBoxManager] Unix stop: sudo -n pkill -KILL succeeded");
-                return;
-            }
+            _logger.Information(
+                "[SingBoxManager] Unix stop: exact owned PID {Pid} is gone",
+                owned.Pid);
+            return true;
         }
 
-        if (IsSingBoxAlive())
-        {
-            // Cause list is platform-specific: macOS only ever reaches Step 3,
-            // so a failure there is a missing/broken sudoers NOPASSWD grant.
-            var causes = OperatingSystem.IsMacOS()
-                ? "sudoers NOPASSWD not set up (re-grant via the app's mac sudo prompt); " +
-                  "sing-box running under a uid we can't sudo-kill."
-                : "pkexec/polkit agent not installed; sudoers NOPASSWD not set up; " +
-                  "sing-box running under a different uid we can't kill.";
-            _logger.Error("[SingBoxManager] Unix stop: ALL escalation steps failed — sing-box still alive. " +
-                          "Manual intervention required: `sudo pkill -KILL -f sing-box`. " +
-                          "Possible causes: " + causes);
-        }
+        if (finalState == OwnedTargetState.IdentityUnavailable)
+            return RefuseUnknownIdentity(owned.Pid);
+
+        var causes = OperatingSystem.IsMacOS()
+            ? "sudoers NOPASSWD exact-kill grant is missing or invalid"
+            : "pkexec/polkit agent is unavailable and sudo NOPASSWD is not configured";
+        _logger.Error(
+            "[SingBoxManager] Unix stop failed: exact VPNRouter-owned PID {Pid} remains alive. " +
+            "Manual intervention: verify that PID's start time and executable path, then run `sudo /bin/kill -KILL -- {Pid}`. " +
+            "Possible cause: {Cause}.",
+            owned.Pid,
+            owned.Pid,
+            causes);
+        return false;
     }
 
-    /// <summary>v2.29.0-r5: spawn an external process, wait, return true
-    /// iff exit code 0. Used by Linux stop escalation chain. Errors logged
-    /// but never thrown.</summary>
-    private bool TrySpawnAndWait(string fileName, string args, int timeoutMs, string label)
+    private bool RefuseUnknownIdentity(int pid)
+    {
+        _logger.Error(
+            "[SingBoxManager] Unix stop refused: PID {Pid} exists but its exact identity cannot be re-read",
+            pid);
+        return false;
+    }
+
+    private static OwnedTargetState InspectOwnedTarget(OwnedProcessIdentity expected)
     {
         try
         {
-            var psi = new ProcessStartInfo(fileName, args)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null)
-            {
-                _logger.Warning("[SingBoxManager] Linux stop: {Label} — Process.Start returned null", label);
-                return false;
-            }
-            if (!p.WaitForExit(timeoutMs))
-            {
-                _logger.Warning("[SingBoxManager] Linux stop: {Label} timed out after {Ms} ms", label, timeoutMs);
-                try { p.Kill(true); } catch { }
-                return false;
-            }
-            _logger.Information("[SingBoxManager] Linux stop: {Label} exit={Code}", label, p.ExitCode);
-            return p.ExitCode == 0;
+            using var process = Process.GetProcessById(expected.Pid);
+            if (process.HasExited) return OwnedTargetState.GoneOrReplaced;
+            var current = ProcessOwnership.TryReadOwnedSingBoxIdentity(process);
+            if (current is null) return OwnedTargetState.IdentityUnavailable;
+            return ProcessOwnership.IsSameProcessIdentity(expected, current.Value)
+                ? OwnedTargetState.Matching
+                : OwnedTargetState.GoneOrReplaced;
+        }
+        catch (ArgumentException)
+        {
+            return OwnedTargetState.GoneOrReplaced;
+        }
+        catch (InvalidOperationException)
+        {
+            return OwnedTargetState.GoneOrReplaced;
+        }
+        catch
+        {
+            return OwnedTargetState.IdentityUnavailable;
+        }
+    }
+
+    internal static IReadOnlyList<string> BuildLinuxOwnedSignalHelperArguments(
+        string hostPath,
+        OwnedProcessIdentity target,
+        int signal,
+        bool nonInteractiveSudo = false)
+    {
+        var args = new List<string>();
+        if (nonInteractiveSudo) args.Add("-n");
+        args.Add(hostPath);
+        args.Add(UnixOwnedProcessSignal.HelperFlag);
+        args.Add(target.Pid.ToString(CultureInfo.InvariantCulture));
+        args.Add(target.StartedAtUtcTicks.ToString(CultureInfo.InvariantCulture));
+        args.Add(target.ExecutablePath);
+        args.Add(signal.ToString(CultureInfo.InvariantCulture));
+        return args;
+    }
+
+    internal static IReadOnlyList<string> BuildMacExactKillArguments(int pid)
+        => new[] { "-n", "/bin/kill", "-KILL", "--", pid.ToString(CultureInfo.InvariantCulture) };
+
+    private static string? ResolveSignalHelperHost()
+    {
+        var path = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
+            return null;
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        return name is "VPNRouter.App" or "VPNRouter.CLI" ? path : null;
+    }
+
+    private bool TrySpawnAndWait(
+        string fileName,
+        IReadOnlyList<string> args,
+        int timeoutMs,
+        string label)
+    {
+        try
+        {
+            var result = _runner.RunAsync(new ProcessRequest(
+                    ExecutablePath: fileName,
+                    Arguments: args,
+                    Timeout: TimeSpan.FromMilliseconds(timeoutMs)))
+                .GetAwaiter()
+                .GetResult();
+
+            _logger.Information(
+                "[SingBoxManager] Unix stop: {Label} exit={Code} timeout={TimedOut}",
+                label,
+                result.ExitCode,
+                result.TimedOut);
+            return !result.TimedOut && result.ExitCode == 0;
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[SingBoxManager] Linux stop: {Label} threw", label);
+            _logger.Warning(ex, "[SingBoxManager] Unix stop: {Label} threw", label);
             return false;
         }
-    }
-
-    /// <summary>v2.29.0-r5: check if sing-box is still running.
-    /// Two-signal test: Clash API at 127.0.0.1:9090 + pgrep -f sing-box.
-    /// Returns true if EITHER signal says alive (defensive — false
-    /// negative on Clash API alone could leave a zombie).</summary>
-    private bool IsSingBoxAlive()
-    {
-        if (IsClashApiAlive()) return true;
-        try
-        {
-            var psi = new ProcessStartInfo("/usr/bin/pgrep", "-f sing-box")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            if (!p.WaitForExit(2000)) { try { p.Kill(true); } catch { } return false; }
-            // pgrep exit 0 = found at least one process; 1 = none.
-            return p.ExitCode == 0;
-        }
-        catch { return false; }
     }
 }

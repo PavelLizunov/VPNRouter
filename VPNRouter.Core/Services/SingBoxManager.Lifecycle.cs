@@ -176,19 +176,10 @@ public partial class SingBoxManager
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "[SingBoxManager] Linux capability-mode Stop failed, falling back to pkill");
-                    // Best-effort fallback — try plain pkill as user. Will
-                    // succeed because we own the process in capability mode.
-                    try
-                    {
-                        using var pk = Process.Start(new ProcessStartInfo("/usr/bin/pkill", "-f sing-box")
-                        {
-                            UseShellExecute = false, CreateNoWindow = true,
-                            RedirectStandardOutput = true, RedirectStandardError = true
-                        });
-                        pk?.WaitForExit(3000);
-                    }
-                    catch { /* swallow, State will be Stopped anyway */ }
+                    // The owned IProcessHandle is the only destructive authority
+                    // in capability mode. Never widen a failed exact stop into a
+                    // name-based sweep of unrelated sing-box processes.
+                    _logger.Warning(ex, "[SingBoxManager] Linux capability-mode exact Stop failed");
                 }
                 finally
                 {
@@ -201,38 +192,16 @@ public partial class SingBoxManager
                 return;
             }
 
-            // pkexec path (pre-v2.28 behaviour on Linux + always on macOS).
-            //
-            // v2.29.0-r5: stop became unreliable on Linux. User report
-            // 2026-04-29: «не могу остановить vpn ... кнопа stop не убивает
-            // sing-box». Pre-r5 the code fired ONE pkexec pkill and trusted
-            // its WaitForExit without checking the exit code or whether
-            // sing-box actually died. Failure modes that silently presented
-            // as "Stopped" in the UI:
-            //   - User dismissed the pkexec password prompt → exit 126,
-            //     sing-box still alive.
-            //   - Polkit agent not running (minimal WMs) → exit 127.
-            //   - pkill matched the wrong PID list (sing-box killed via
-            //     unexpected signal handler / refused).
-            // r5 escalation chain:
-            //   1. Try plain user pkill (works in capability mode + .deb
-            //      installs that drop us into the cgroup as the owner).
-            //   2. If still alive, pkexec pkill -KILL (SIGKILL — survives
-            //      most signal masks).
-            //   3. If still alive, sudo pkill -KILL (NOPASSWD if the
-            //      sudoers entry was set up at first connect).
-            //   4. Verify after each step that sing-box is gone (no
-            //      Clash API + no pgrep hit). Log each step's outcome.
-            // Phase 3+ (2026-05-21): the explicit EnableRaisingEvents=false
-            // on the local handle is gone — ProcessHandle.Dispose
-            // (ProcessRunner.cs:288-290) sets the flag before Kill anyway
-            // (load-bearing intent preserved transitively). The pkexec
-            // wrapper PID exited long ago by this point, but we still need
-            // to call the escalation chain to kill the real sing-box (root
-            // child) via pkexec pkill / sudo -n pkill.
+            // Elevated path (pkexec on Linux, sudo on macOS). The local
+            // IProcessHandle belongs to the short-lived elevation wrapper, so
+            // destructive authority comes from the durable child identity.
+            // Linux revalidates after pidfd_open and signals via that pidfd;
+            // macOS revalidates immediately before an exact-PID sudo command.
+            // Unknown identity never falls back to process-name matching.
+            var unixStopped = false;
             try
             {
-                LinuxStopEscalationChain();
+                unixStopped = LinuxStopEscalationChain();
             }
             catch (Exception ex)
             {
@@ -242,9 +211,11 @@ public partial class SingBoxManager
             {
                 _handle?.Dispose();
                 _handle = null;
-                State = SingBoxState.Stopped;
-                if (releaseLock) _tunLock.Release();
-                _logger.Information("[SingBoxManager] sing-box stopped");
+                State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
+                if (releaseLock && unixStopped) _tunLock.Release();
+                _logger.Information(
+                    "[SingBoxManager] Unix sing-box stop completed={Stopped}",
+                    unixStopped);
             }
             return;
         }

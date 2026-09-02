@@ -19,10 +19,8 @@ public partial class SingBoxManager : IDisposable
     // wiring, and the load-bearing EnableRaisingEvents=false-before-Kill
     // pattern (ProcessHandle.Dispose, ProcessRunner.cs:288-290).
     //
-    // What's NOT migrated through this seam: pkexec / sudo helper spawns
-    // inside LinuxStopEscalationChain + TrySpawnAndWait + IsSingBoxAlive
-    // (pgrep). Those are short-lived stop-side fire-and-forgets; their
-    // migration is a follow-up batch and won't affect this brief's surface.
+    // Unix stop-side pkexec / sudo commands also route through this seam so
+    // exact argument tokens and timeouts remain deterministic in tests.
     // The Linux/macOS sing-box-as-root chain (sudo / pkexec wrapping the
     // sing-box exec) IS migrated — argv just differs by platform; the
     // ProcessRequest construction below selects sudo / pkexec / direct as
