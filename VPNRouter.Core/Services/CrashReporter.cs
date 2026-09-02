@@ -186,7 +186,7 @@ public static class CrashReporter
     // clash_api secret (32 hex) is too short for _longBase64Pattern (>=40)
     // and ws/wss is not in _proxyUriPattern; match sensitive query parameters directly.
     private static readonly Regex _tokenParamPattern = new(
-        @"([?&])(token|secret|api[_-]?key|access[_-]?token|auth|pass(?:word|wd)?)=[^&\s]+",
+        @"([?&])(token|secret|client[_-]?secret|api[_-]?key|access[_-]?token|auth|pass(?:word|wd)?)=[^&\s]+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
