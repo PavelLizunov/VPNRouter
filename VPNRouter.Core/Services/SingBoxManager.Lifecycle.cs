@@ -515,6 +515,11 @@ public partial class SingBoxManager
             _logger.Debug("[SingBoxManager] Restart ignored — manager already disposed");
             return;
         }
+        if (!_ownsTunLock)
+        {
+            _logger.Warning("[SingBoxManager] Restart ignored — manager does not own the TUN lease");
+            return;
+        }
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
 

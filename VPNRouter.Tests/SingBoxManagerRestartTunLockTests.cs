@@ -416,8 +416,9 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         var managerA = new SingBoxManager(
             DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        var runnerB = new FakeProcessRunner();
         var managerB = new SingBoxManager(
-            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+            DefaultSettings(), null, new FakeHttpClient(), runnerB);
         var lockInstance = TunOwnershipLock.Instance(null);
         SetLockOwnedForTest(lockInstance, managerA);
         var handle = new StubbornProcessHandle(NewFakePid());
@@ -427,6 +428,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         {
             managerA.Stop();
             Assert.Throws<TunOwnershipException>(() => managerB.StartWithJson("{}"));
+            managerB.Restart();
+            Assert.Empty(runnerB.StartCalls);
 
             managerB.Dispose();
 

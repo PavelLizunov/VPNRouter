@@ -55,6 +55,7 @@ public sealed class UnixStopSourceGuardTests
         Assert.Contains("if (releaseLock && capabilityStopped) ReleaseTunOwnership()", lifecycle);
         Assert.Contains("State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed", lifecycle);
         Assert.Contains("if (releaseLock && unixStopped) ReleaseTunOwnership()", lifecycle);
+        Assert.Contains("Restart ignored — manager does not own the TUN lease", lifecycle);
         Assert.Contains("Restart aborted: exact stop was not confirmed", lifecycle);
 
         var manager = ReadRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
