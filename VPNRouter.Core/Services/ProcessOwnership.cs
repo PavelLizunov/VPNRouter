@@ -160,6 +160,23 @@ internal static class ProcessOwnership
         return owned ? value : null;
     }
 
+    internal static bool IsCurrentRuntimeOwnerPair(
+        OwnedProcessIdentity owner,
+        OwnedProcessIdentity child) =>
+        IsCurrentRuntimeOwnerPair(
+            ReadRuntimeOwnerRecord(OwnerRecordPath),
+            owner,
+            child);
+
+    internal static bool IsCurrentRuntimeOwnerPair(
+        RuntimeOwnerRecordRead ownerRecord,
+        OwnedProcessIdentity owner,
+        OwnedProcessIdentity child) =>
+        ownerRecord.Kind == RuntimeOwnerRecordKind.CurrentV2
+        && ownerRecord.Record is { } record
+        && MatchesOwnerIdentity(record, owner)
+        && MatchesCurrentRecord(record, child);
+
     internal static bool IsSameProcessIdentity(
         OwnedProcessIdentity expected,
         OwnedProcessIdentity current) =>

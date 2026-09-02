@@ -8,7 +8,7 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-public class CliGenerationStateTests
+public class CliGenerationStateCharacterizationTests
 {
     [Fact]
     public void LegacyState_RemainsReadable_ButCannotBeConditionallyCleared()
@@ -54,6 +54,35 @@ public class CliGenerationStateTests
     }
 
     [Fact]
+    public void Write_DoesNotOpenPreplantedLegacyTempPath()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "VPNRouter_Test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var path = Path.Combine(tempDir, "state.json");
+        var legacyTemp = path + ".tmp";
+        var mutexName = "VPNRouter_StateFile_TestMutex_" + Guid.NewGuid().ToString("N");
+
+        try
+        {
+            File.WriteAllText(legacyTemp, "sentinel");
+            StateFile.Write(
+                new RunState { ActiveProfile = "OwnedRun", RunGeneration = Guid.NewGuid() },
+                path,
+                mutexName);
+
+            Assert.Equal("sentinel", File.ReadAllText(legacyTemp));
+            Assert.NotNull(StateFile.Read(path, mutexName));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+            }
+        }
+    }
+
+    [Fact]
     public void MatchingGeneration_UpdatesExactChildAndClearsState()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "VPNRouter_Test_" + Guid.NewGuid().ToString("N"));
@@ -77,6 +106,11 @@ public class CliGenerationStateTests
 
             var child = new OwnedProcessIdentity(3000, 100000, Path.Combine(tempDir, "sing-box"));
             Assert.True(StateFile.TryUpdateChild(generation, child, path, mutexName));
+            var staleChild = new OwnedProcessIdentity(
+                child.Pid + 1,
+                child.StartedAtUtcTicks - 1,
+                Path.Combine(tempDir, "stale-sing-box"));
+            Assert.False(StateFile.TryUpdateChild(generation, staleChild, path, mutexName));
 
             var current = Assert.IsType<RunState>(StateFile.Read(path, mutexName));
             Assert.Equal(child.Pid, current.SingBoxPid);
@@ -181,7 +215,7 @@ public class CliGenerationStateTests
     }
 
     [Fact]
-    public void ConcurrentReadNeverObservesPartialJson()
+    public void MalformedState_IsNotReportedAsConditionallyCleared()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "VPNRouter_Test_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -190,47 +224,74 @@ public class CliGenerationStateTests
 
         try
         {
-            var initialGen = Guid.NewGuid();
-            var initialState = new RunState
+            File.WriteAllText(path, "{not-json");
+            Assert.False(StateFile.ClearIfGeneration(Guid.NewGuid(), path, mutexName));
+            Assert.NotEmpty(Directory.GetFiles(tempDir, "state.json.corrupt-*"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
             {
-                ActiveProfile = "InitialProfile",
-                SingBoxPid = 100,
-                OwnerPid = 50,
-                RunGeneration = initialGen
-            };
-            StateFile.Write(initialState, path, mutexName);
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+            }
+        }
+    }
 
-            const int iterations = 50;
+    [Fact]
+    public async Task ConcurrentReadNeverObservesPartialJson()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "VPNRouter_Test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var path = Path.Combine(tempDir, "state.json");
+        var mutexName = "VPNRouter_StateFile_TestMutex_" + Guid.NewGuid().ToString("N");
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        try
+        {
+            StateFile.Write(
+                new RunState
+                {
+                    ActiveProfile = "InitialProfile",
+                    SingBoxPid = 100,
+                    OwnerPid = 50,
+                    RunGeneration = Guid.NewGuid()
+                },
+                path,
+                mutexName);
+
+            const int iterations = 200;
+            using var start = new Barrier(2);
             var writeTask = Task.Run(() =>
             {
-                for (int i = 0; i < iterations; i++)
+                start.SignalAndWait(cancellationToken);
+                for (var i = 0; i < iterations; i++)
                 {
-                    var state = new RunState
-                    {
-                        ActiveProfile = $"Profile_{i}",
-                        SingBoxPid = 1000 + i,
-                        OwnerPid = 500 + i,
-                        RunGeneration = Guid.NewGuid()
-                    };
-                    StateFile.Write(state, path, mutexName);
+                    StateFile.Write(
+                        new RunState
+                        {
+                            ActiveProfile = $"Profile_{i}",
+                            SingBoxPid = 1000 + i,
+                            OwnerPid = 500 + i,
+                            RunGeneration = Guid.NewGuid()
+                        },
+                        path,
+                        mutexName);
                 }
-            });
+            }, cancellationToken);
 
             var readTask = Task.Run(() =>
             {
-                for (int i = 0; i < iterations * 2; i++)
+                start.SignalAndWait(cancellationToken);
+                for (var i = 0; i < iterations * 2; i++)
                 {
                     var readState = StateFile.Read(path, mutexName);
                     Assert.NotNull(readState);
-                    Assert.NotNull(readState.ActiveProfile);
                     Assert.False(string.IsNullOrEmpty(readState.ActiveProfile));
                 }
-            });
+            }, cancellationToken);
 
-            Task.WaitAll(writeTask, readTask);
-
-            var tempFiles = Directory.GetFiles(tempDir, "*.tmp");
-            Assert.Empty(tempFiles);
+            await Task.WhenAll(writeTask, readTask).WaitAsync(cancellationToken);
+            Assert.Empty(Directory.GetFiles(tempDir, "*.tmp"));
         }
         finally
         {

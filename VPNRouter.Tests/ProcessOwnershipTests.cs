@@ -125,6 +125,35 @@ public sealed class ProcessOwnershipTests
     }
 
     [Fact]
+    public void CurrentRuntimeOwnerPair_RequiresExactOwnerAndChildRecord()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "vpnr-bin", "sing-box.exe");
+        var owner = new OwnedProcessIdentity(41, 1_000, Path.Combine(Path.GetTempPath(), "vpnrouter.exe"));
+        var child = new OwnedProcessIdentity(42, 2_000, path, ParentPid: owner.Pid);
+        var current = new RuntimeOwnerRecordRead(
+            RuntimeOwnerRecordKind.CurrentV2,
+            new RuntimeOwnerRecord(2, path, owner.Pid, owner.StartedAtUtcTicks, child.Pid, child.StartedAtUtcTicks));
+
+        Assert.True(ProcessOwnership.IsCurrentRuntimeOwnerPair(current, owner, child));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            current,
+            owner with { StartedAtUtcTicks = owner.StartedAtUtcTicks + 1 },
+            child));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            current,
+            owner,
+            child with { Pid = child.Pid + 1 }));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            current,
+            owner,
+            child with { ExecutablePath = Path.Combine(Path.GetTempPath(), "other", "sing-box.exe") }));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            new RuntimeOwnerRecordRead(RuntimeOwnerRecordKind.Missing, null),
+            owner,
+            child));
+    }
+
+    [Fact]
     public void TryReadProcessIdentity_ReturnsExactSnapshotForCurrentProcess()
     {
         using var process = Process.GetCurrentProcess();

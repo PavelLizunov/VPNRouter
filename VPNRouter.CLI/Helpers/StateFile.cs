@@ -85,7 +85,9 @@ public static class StateFile
         return WithLock(mutexName, () =>
         {
             var current = ReadUnlocked(path);
-            if (current is null || current.RunGeneration != generation)
+            if (current is null
+                || current.RunGeneration != generation
+                || current.SingBoxStartedAtUtcTicks > child.StartedAtUtcTicks)
                 return false;
 
             current.SingBoxPid = child.Pid;
@@ -106,26 +108,31 @@ public static class StateFile
 
         return WithLock(mutexName, () =>
         {
-            var current = ReadUnlocked(path);
-            if (current is not null && current.RunGeneration != generation)
+            var result = LoadUnlocked(path);
+            if (!result.Loaded)
+                return result.Reason == RecoveryReason.NotFound;
+
+            if (result.Value!.RunGeneration != generation)
                 return false;
 
-            if (File.Exists(path))
-                File.Delete(path);
+            File.Delete(path);
             return true;
         });
     }
 
     private static RunState? ReadUnlocked(string path)
     {
-        var result = CacheRecovery.LoadOrRecover<RunState>(
+        var result = LoadUnlocked(path);
+        return result.Loaded ? result.Value : null;
+    }
+
+    private static CacheLoadResult<RunState> LoadUnlocked(string path) =>
+        CacheRecovery.LoadOrRecover<RunState>(
             path,
             CurrentSchemaVersion,
             json => JsonSerializer.Deserialize(json, CliJsonContext.Default.RunState),
             structuralCheck: null,
             logger: null);
-        return result.Loaded ? result.Value : null;
-    }
 
     private static void WriteUnlocked(RunState state, string path)
     {
@@ -135,10 +142,10 @@ public static class StateFile
         Directory.CreateDirectory(directory);
 
         var json = JsonSerializer.Serialize(state, CliJsonContext.Default.RunState);
-        var tmp = path + ".tmp";
+        var tmp = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            using (var stream = AppPaths.CreatePrivateFile(tmp))
+            using (var stream = AppPaths.CreatePrivateFile(tmp, FileMode.CreateNew))
             using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
             {
                 writer.Write(json);

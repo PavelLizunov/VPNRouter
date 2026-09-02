@@ -13,8 +13,13 @@ public sealed class P07CliStopSourceGuardTests
 
         Assert.Contains("var runGeneration = Guid.NewGuid()", start);
         Assert.Contains("ProcessOwnership.TryReadProcessIdentity(ownerProcess)", start);
+        Assert.Contains("lock (childStateGate)", start);
+        Assert.Contains("latestChildIdentity", start);
         Assert.Contains("StateFile.TryUpdateChild(runGeneration, identity)", start);
         Assert.Contains("StopCommand.BuildStopEventName(owner.Pid, runGeneration)", start);
+        Assert.Contains("out var stopEventCreated", start);
+        Assert.Contains("StopCommand.StopEventPrefix + owner.Pid", start);
+        Assert.Contains("out var legacyStopEventCreated", start);
         Assert.Contains("OwnerStartedAtUtcTicks = owner.StartedAtUtcTicks", start);
         Assert.Contains("SingBoxStartedAtUtcTicks = child.StartedAtUtcTicks", start);
         Assert.Contains("StateFile.ClearIfGeneration(runGeneration)", start);
@@ -22,12 +27,16 @@ public sealed class P07CliStopSourceGuardTests
 
         var eventCreation = start.IndexOf("stopEvent = new EventWaitHandle(", StringComparison.Ordinal);
         var registration = start.IndexOf("ThreadPool.RegisterWaitForSingleObject(", StringComparison.Ordinal);
+        var legacyEventCreation = start.IndexOf("legacyStopEvent = new EventWaitHandle(", StringComparison.Ordinal);
+        var legacyRegistration = start.LastIndexOf("ThreadPool.RegisterWaitForSingleObject(", StringComparison.Ordinal);
         var publication = start.IndexOf("StateFile.Write(new RunState", StringComparison.Ordinal);
         Assert.True(
             eventCreation >= 0
             && eventCreation < registration
-            && registration < publication,
-            "The generation-qualified event must be created and registered before state publication.");
+            && registration < legacyEventCreation
+            && legacyEventCreation < legacyRegistration
+            && legacyRegistration < publication,
+            "Both stop events must be created and registered before state publication.");
     }
 
     [Fact]
@@ -44,8 +53,10 @@ public sealed class P07CliStopSourceGuardTests
         Assert.Contains("ProcessOwnership.TryReadProcessIdentity(ownerProcess)", stop);
         Assert.Contains("ProcessOwnership.TryReadOwnedSingBoxIdentity(process)", stop);
         Assert.Contains("ProcessOwnership.IsSameProcessIdentity", stop);
+        Assert.Contains("ProcessOwnership.IsCurrentRuntimeOwnerPair", stop);
+        Assert.Contains("ExactProcessState.Unknown", stop);
         Assert.Contains("var pinnedOwnerHandle = ownerProcess.SafeHandle", stop);
-        Assert.Contains("var pinnedWindowsHandle = OperatingSystem.IsWindows()", stop);
+        Assert.Contains("var pinnedWindowsHandle = process.SafeHandle", stop);
         Assert.Contains("latest.RunGeneration != generation", stop);
         Assert.Contains("StateFile.ClearIfGeneration(generation)", stop);
         Assert.DoesNotContain("StateFile.Clear()", stop);
@@ -69,7 +80,7 @@ public sealed class P07CliStopSourceGuardTests
             "Legacy/replacement guards must precede exact child stop and conditional cleanup.");
 
         var ownerHelperStart = stop.IndexOf("private static OwnerStopResult TrySignalOwnerAndWait", StringComparison.Ordinal);
-        var ownerHelperEnd = stop.IndexOf("private static bool IsExactProcessAlive", StringComparison.Ordinal);
+        var ownerHelperEnd = stop.IndexOf("private static ExactProcessState ProbeExactProcess", StringComparison.Ordinal);
         var ownerHelper = stop[ownerHelperStart..ownerHelperEnd];
         Assert.True(
             ownerHelper.IndexOf("TryReadProcessIdentity", StringComparison.Ordinal)
@@ -80,7 +91,7 @@ public sealed class P07CliStopSourceGuardTests
                 < ownerHelper.IndexOf("WaitForExit(5000)", StringComparison.Ordinal),
             "The exact owner must be pinned and compared before signaling and waiting.");
 
-        var childHelper = stop[stop.IndexOf("private static bool TryStopExactChild", StringComparison.Ordinal)..];
+        var childHelper = stop[stop.IndexOf("private static ChildStopResult TryStopExactChild", StringComparison.Ordinal)..];
         Assert.True(
             childHelper.IndexOf("TryReadOwnedSingBoxIdentity", StringComparison.Ordinal)
                 < childHelper.IndexOf("IsSameProcessIdentity", StringComparison.Ordinal)
@@ -102,18 +113,21 @@ public sealed class P07CliStopSourceGuardTests
         Assert.Contains("new Mutex(", stateFile);
         Assert.Contains("mutex.WaitOne(StateLockTimeout)", stateFile);
         Assert.Contains("AbandonedMutexException", stateFile);
-        Assert.Contains("AppPaths.CreatePrivateFile(tmp)", stateFile);
+        Assert.Contains("Guid.NewGuid():N}.tmp", stateFile);
+        Assert.Contains("AppPaths.CreatePrivateFile(tmp, FileMode.CreateNew)", stateFile);
         Assert.Contains("stream.Flush(true)", stateFile);
         Assert.Contains("File.Move(tmp, path, overwrite: true)", stateFile);
         Assert.Contains("current.RunGeneration != generation", stateFile);
+        Assert.Contains("current.SingBoxStartedAtUtcTicks > child.StartedAtUtcTicks", stateFile);
         Assert.Contains("TryUpdateChild", stateFile);
         Assert.Contains("ClearIfGeneration", stateFile);
         Assert.DoesNotContain("public static void Clear()", stateFile);
 
-        var generationCheck = stateFile.LastIndexOf("current.RunGeneration != generation", StringComparison.Ordinal);
+        Assert.Contains("result.Reason == RecoveryReason.NotFound", stateFile);
+        var generationCheck = stateFile.IndexOf("result.Value!.RunGeneration != generation", StringComparison.Ordinal);
         var delete = stateFile.IndexOf("File.Delete(path)", StringComparison.Ordinal);
         Assert.True(generationCheck >= 0 && generationCheck < delete,
-            "Conditional clear must compare generation while holding the shared lock before deletion.");
+            "Conditional clear must load and compare generation while holding the shared lock before deletion.");
     }
 
     [Fact]

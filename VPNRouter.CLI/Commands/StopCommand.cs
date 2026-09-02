@@ -11,10 +11,23 @@ public class StopCommand : Command
 
     private enum OwnerStopResult
     {
-        NotSupported,
         Unavailable,
         Exited,
         TimedOut
+    }
+
+    private enum ExactProcessState
+    {
+        DeadOrReplaced,
+        Alive,
+        Unknown
+    }
+
+    private enum ChildStopResult
+    {
+        Stopped,
+        AlreadyGone,
+        Refused
     }
 
     public override int Execute(CommandContext context)
@@ -26,7 +39,8 @@ public class StopCommand : Command
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]✗ Could not read CLI run state:[/] {Markup.Escape(ex.Message)}");
+            Serilog.Log.Warning(ex, "Could not read CLI run state");
+            AnsiConsole.MarkupLine("[red]Could not read CLI run state.[/]");
             return 1;
         }
 
@@ -39,7 +53,7 @@ public class StopCommand : Command
         if (observed.RunGeneration == Guid.Empty)
         {
             AnsiConsole.MarkupLine(
-                "[yellow]Legacy CLI state has no run identity — refusing to signal, kill, or delete it. Stop its original terminal or restart it with this version.[/]");
+                "[yellow]Legacy CLI state has no run identity; refusing to signal, kill, or delete it. Stop its original terminal or restart it with this version.[/]");
             return 1;
         }
 
@@ -55,35 +69,40 @@ public class StopCommand : Command
         if (expectedOwner is null || expectedChild is null)
         {
             AnsiConsole.MarkupLine(
-                "[yellow]CLI state has incomplete process identity — refusing every destructive action.[/]");
+                "[yellow]CLI state has incomplete process identity; refusing every destructive action.[/]");
             return 1;
         }
 
-        var ownerResult = OperatingSystem.IsWindows()
-            ? TrySignalOwnerAndWait(expectedOwner.Value, generation)
-            : OwnerStopResult.NotSupported;
+        var ownerResult = TrySignalOwnerAndWait(expectedOwner.Value, generation);
         if (ownerResult == OwnerStopResult.TimedOut)
         {
             AnsiConsole.MarkupLine(
-                "[red]✗ Timed out waiting for the exact CLI owner; state and child were preserved.[/]");
+                "[red]Timed out waiting for the exact CLI owner; state and child were preserved.[/]");
             return 1;
         }
 
-        // A generation-published event cannot be absent while its exact owner is
-        // alive. Do not kill a child that the live owner may be cleaning up or
-        // restarting; retain state for a later exact retry.
-        if (ownerResult == OwnerStopResult.Unavailable
-            && IsExactProcessAlive(expectedOwner.Value))
+        if (ownerResult == OwnerStopResult.Unavailable)
         {
-            AnsiConsole.MarkupLine(
-                "[yellow]The exact CLI owner is alive but its stop capability is unavailable — refusing fallback kill.[/]");
-            return 1;
+            var ownerState = ProbeExactProcess(expectedOwner.Value);
+            if (ownerState != ExactProcessState.DeadOrReplaced)
+            {
+                AnsiConsole.MarkupLine(ownerState == ExactProcessState.Alive
+                    ? "[yellow]The exact CLI owner is alive but its stop capability is unavailable; refusing fallback kill.[/]"
+                    : "[yellow]The CLI owner identity could not be verified; refusing fallback kill.[/]");
+                return 1;
+            }
         }
 
         RunState target = observed;
         try
         {
             var latest = StateFile.Read();
+            if (latest is null && ownerResult == OwnerStopResult.Exited)
+            {
+                AnsiConsole.MarkupLine("[green]VPN Router stopped.[/]");
+                return 0;
+            }
+
             if (latest is not null)
             {
                 if (latest.RunGeneration != generation)
@@ -98,7 +117,8 @@ public class StopCommand : Command
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]✗ Could not re-read CLI run state:[/] {Markup.Escape(ex.Message)}");
+            Serilog.Log.Warning(ex, "Could not re-read CLI run state");
+            AnsiConsole.MarkupLine("[red]Could not re-read CLI run state.[/]");
             return 1;
         }
 
@@ -109,12 +129,31 @@ public class StopCommand : Command
         if (expectedChild is null)
         {
             AnsiConsole.MarkupLine(
-                "[yellow]The observed generation lost its exact child identity — refusing fallback kill and cleanup.[/]");
+                "[yellow]The observed generation lost its exact child identity; refusing fallback kill and cleanup.[/]");
             return 1;
         }
 
-        if (!TryStopExactChild(expectedChild.Value))
+        // state.json is user-readable status, not the destructive authority.
+        // The TUN owner's v2 durable record must independently bind this exact
+        // owner and child before fallback may open the process for termination.
+        if (!ProcessOwnership.IsCurrentRuntimeOwnerPair(
+                expectedOwner.Value,
+                expectedChild.Value))
+        {
+            AnsiConsole.MarkupLine(
+                "[yellow]CLI state no longer matches the runtime owner record; refusing fallback kill.[/]");
             return 1;
+        }
+
+        var childResult = TryStopExactChild(expectedChild.Value);
+        if (childResult == ChildStopResult.Refused)
+            return 1;
+        if (childResult == ChildStopResult.AlreadyGone)
+        {
+            AnsiConsole.MarkupLine(
+                "[yellow]The persisted child is gone but state remains; refusing to assume no later child exists.[/]");
+            return 1;
+        }
 
         try
         {
@@ -127,11 +166,12 @@ public class StopCommand : Command
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]✗ Could not clear the exact CLI run state:[/] {Markup.Escape(ex.Message)}");
+            Serilog.Log.Warning(ex, "Could not clear exact CLI run state");
+            AnsiConsole.MarkupLine("[red]Could not clear the exact CLI run state.[/]");
             return 1;
         }
 
-        AnsiConsole.MarkupLine("[green]✓[/] VPN Router stopped.");
+        AnsiConsole.MarkupLine("[green]VPN Router stopped.[/]");
         return 0;
     }
 
@@ -192,57 +232,77 @@ public class StopCommand : Command
         }
     }
 
-    private static bool IsExactProcessAlive(OwnedProcessIdentity expected)
+    private static ExactProcessState ProbeExactProcess(OwnedProcessIdentity expected)
     {
         try
         {
             using var process = Process.GetProcessById(expected.Pid);
-            var pinnedHandle = OperatingSystem.IsWindows() ? process.SafeHandle : null;
-            if (pinnedHandle is { IsInvalid: true } or { IsClosed: true })
-                return false;
-            var current = ProcessOwnership.TryReadProcessIdentity(process);
-            var matches = current is { } value
-                && ProcessOwnership.IsSameProcessIdentity(expected, value);
+            var pinnedHandle = process.SafeHandle;
+            ExactProcessState result;
+            if (pinnedHandle.IsInvalid || pinnedHandle.IsClosed)
+            {
+                result = process.HasExited
+                    ? ExactProcessState.DeadOrReplaced
+                    : ExactProcessState.Unknown;
+            }
+            else
+            {
+                var current = ProcessOwnership.TryReadProcessIdentity(process);
+                result = current is { } value
+                    ? ProcessOwnership.IsSameProcessIdentity(expected, value)
+                        ? ExactProcessState.Alive
+                        : ExactProcessState.DeadOrReplaced
+                    : process.HasExited
+                        ? ExactProcessState.DeadOrReplaced
+                        : ExactProcessState.Unknown;
+            }
+
             GC.KeepAlive(pinnedHandle);
-            return matches;
+            return result;
+        }
+        catch (ArgumentException)
+        {
+            return ExactProcessState.DeadOrReplaced;
+        }
+        catch (InvalidOperationException)
+        {
+            return ExactProcessState.DeadOrReplaced;
         }
         catch
         {
-            return false;
+            return ExactProcessState.Unknown;
         }
     }
 
-    private static bool TryStopExactChild(OwnedProcessIdentity expectedChild)
+    private static ChildStopResult TryStopExactChild(OwnedProcessIdentity expectedChild)
     {
         try
         {
             using var process = Process.GetProcessById(expectedChild.Pid);
-            var pinnedWindowsHandle = OperatingSystem.IsWindows()
-                ? process.SafeHandle
-                : null;
-            if (pinnedWindowsHandle is { IsInvalid: true } or { IsClosed: true })
+            var pinnedWindowsHandle = process.SafeHandle;
+            if (pinnedWindowsHandle.IsInvalid || pinnedWindowsHandle.IsClosed)
             {
                 AnsiConsole.MarkupLine(
-                    $"[yellow]Could not pin PID {expectedChild.Pid} — refusing to kill.[/]");
-                return false;
+                    $"[yellow]Could not pin PID {expectedChild.Pid}; refusing to kill.[/]");
+                return ChildStopResult.Refused;
             }
 
             var currentChild = ProcessOwnership.TryReadOwnedSingBoxIdentity(process);
             if (currentChild is not { } current)
             {
                 if (process.HasExited)
-                    return true;
+                    return ChildStopResult.AlreadyGone;
 
                 AnsiConsole.MarkupLine(
-                    $"[yellow]PID {expectedChild.Pid} is not a VPNRouter-owned sing-box process — refusing to kill.[/]");
-                return false;
+                    $"[yellow]PID {expectedChild.Pid} is not a VPNRouter-owned sing-box process; refusing to kill.[/]");
+                return ChildStopResult.Refused;
             }
 
             if (!ProcessOwnership.IsSameProcessIdentity(expectedChild, current))
             {
                 AnsiConsole.MarkupLine(
-                    $"[yellow]PID {expectedChild.Pid} no longer matches the persisted child identity — refusing to kill.[/]");
-                return false;
+                    $"[yellow]PID {expectedChild.Pid} no longer matches the persisted child identity; refusing to kill.[/]");
+                return ChildStopResult.Refused;
             }
 
             process.Kill(entireProcessTree: true);
@@ -251,27 +311,28 @@ public class StopCommand : Command
             if (!exited)
             {
                 AnsiConsole.MarkupLine(
-                    $"[red]✗ Timed out waiting for sing-box PID {expectedChild.Pid} to stop.[/]");
-                return false;
+                    $"[red]Timed out waiting for sing-box PID {expectedChild.Pid} to stop.[/]");
+                return ChildStopResult.Refused;
             }
 
-            AnsiConsole.MarkupLine($"[green]✓[/] sing-box stopped (was PID {expectedChild.Pid})");
-            return true;
+            AnsiConsole.MarkupLine($"[green]sing-box stopped (was PID {expectedChild.Pid})[/]");
+            return ChildStopResult.Stopped;
         }
         catch (ArgumentException)
         {
             AnsiConsole.MarkupLine($"[grey]sing-box (PID {expectedChild.Pid}) already stopped[/]");
-            return true;
+            return ChildStopResult.AlreadyGone;
         }
         catch (InvalidOperationException)
         {
             AnsiConsole.MarkupLine($"[grey]sing-box (PID {expectedChild.Pid}) already stopped[/]");
-            return true;
+            return ChildStopResult.AlreadyGone;
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]✗ Error stopping sing-box:[/] {Markup.Escape(ex.Message)}");
-            return false;
+            Serilog.Log.Warning(ex, "Could not stop exact sing-box child");
+            AnsiConsole.MarkupLine("[red]Could not stop the exact sing-box child.[/]");
+            return ChildStopResult.Refused;
         }
     }
 }

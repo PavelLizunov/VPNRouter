@@ -119,7 +119,7 @@ public class StartCommand : AsyncCommand<StartSettings>
         var ownerIdentity = ProcessOwnership.TryReadProcessIdentity(ownerProcess);
         if (ownerIdentity is not { } owner)
         {
-            AnsiConsole.MarkupLine("[red]✗ Could not capture the CLI owner identity.[/]");
+            AnsiConsole.MarkupLine("[red]Could not capture the CLI owner identity.[/]");
             return 1;
         }
 
@@ -168,22 +168,31 @@ public class StartCommand : AsyncCommand<StartSettings>
         engine.Warning += msg =>
             AnsiConsole.MarkupLine($"[yellow]⚠ {Markup.Escape(msg)}[/]");
 
-        // Keep the persisted child capability current after HealthMonitor
-        // restarts, but only while this exact run still owns state.json. The
-        // initial launch fires before publication and therefore no-ops here;
-        // the complete initial identity is written below.
+        // The callback and initial publication share one gate so an initial
+        // event cannot be lost and an older delayed event cannot regress state.
+        var childStateGate = new object();
+        OwnedProcessIdentity? latestChildIdentity = null;
+        var statePublished = false;
         engine.SingBoxStarted += newPid =>
         {
-            try
+            lock (childStateGate)
             {
-                using var process = Process.GetProcessById(newPid);
-                var child = ProcessOwnership.TryReadOwnedSingBoxIdentity(process);
-                if (child is { } identity)
-                    StateFile.TryUpdateChild(runGeneration, identity);
-            }
-            catch (Exception ex)
-            {
-                Serilog.Log.Warning(ex, "Could not publish restarted sing-box identity");
+                try
+                {
+                    var child = TryCaptureOwnedChild(newPid);
+                    if (child is not { } identity
+                        || latestChildIdentity is { } latest
+                        && latest.StartedAtUtcTicks > identity.StartedAtUtcTicks)
+                        return;
+
+                    latestChildIdentity = identity;
+                    if (statePublished)
+                        StateFile.TryUpdateChild(runGeneration, identity);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "Could not publish restarted sing-box identity");
+                }
             }
         };
 
@@ -210,63 +219,86 @@ public class StartCommand : AsyncCommand<StartSettings>
 
         EventWaitHandle? stopEvent = null;
         RegisteredWaitHandle? stopWait = null;
+        EventWaitHandle? legacyStopEvent = null;
+        RegisteredWaitHandle? legacyStopWait = null;
         try
         {
-            if (OperatingSystem.IsWindows())
+            try
             {
                 stopEvent = new EventWaitHandle(
                     false,
                     EventResetMode.AutoReset,
-                    StopCommand.BuildStopEventName(owner.Pid, runGeneration));
+                    StopCommand.BuildStopEventName(owner.Pid, runGeneration),
+                    out var stopEventCreated);
+                if (!stopEventCreated)
+                    throw new InvalidOperationException("Generation stop event already exists.");
                 stopWait = ThreadPool.RegisterWaitForSingleObject(
                     stopEvent,
                     (_, _) => cts.Cancel(),
                     state: null,
                     timeout: Timeout.InfiniteTimeSpan,
                     executeOnlyOnce: true);
-            }
 
-            var childPid = engine.SingBoxPid ?? 0;
-            OwnedProcessIdentity? childIdentity = null;
-            if (childPid > 0)
-            {
-                try
-                {
-                    using var childProcess = Process.GetProcessById(childPid);
-                    childIdentity = ProcessOwnership.TryReadOwnedSingBoxIdentity(childProcess);
-                }
-                catch (ArgumentException)
-                {
-                    // The child exited before its capability could be published.
-                }
-            }
-
-            if (childIdentity is not { } child)
-            {
-                AnsiConsole.MarkupLine("[red]✗ Could not capture the owned sing-box identity.[/]");
-                return 1;
-            }
-
-            try
-            {
-                StateFile.Write(new RunState
-                {
-                    ActiveProfile = engine.ActiveProfileName,
-                    SingBoxPid = child.Pid,
-                    OwnerPid = owner.Pid,
-                    StartedAt = DateTime.Now,
-                    ProcessNames = engine.MonitoredProcesses,
-                    RunGeneration = runGeneration,
-                    OwnerStartedAtUtcTicks = owner.StartedAtUtcTicks,
-                    OwnerExecutablePath = owner.ExecutablePath,
-                    SingBoxStartedAtUtcTicks = child.StartedAtUtcTicks,
-                    SingBoxExecutablePath = child.ExecutablePath
-                });
+                // Transition bridge: an already-installed older Stop binary only
+                // knows the PID-qualified name. Both capabilities cancel this run.
+                legacyStopEvent = new EventWaitHandle(
+                    false,
+                    EventResetMode.AutoReset,
+                    StopCommand.StopEventPrefix + owner.Pid,
+                    out var legacyStopEventCreated);
+                if (!legacyStopEventCreated)
+                    throw new InvalidOperationException("Legacy stop event already exists.");
+                legacyStopWait = ThreadPool.RegisterWaitForSingleObject(
+                    legacyStopEvent,
+                    (_, _) => cts.Cancel(),
+                    state: null,
+                    timeout: Timeout.InfiniteTimeSpan,
+                    executeOnlyOnce: true);
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[red]✗ Could not publish CLI run state:[/] {Markup.Escape(ex.Message)}");
+                Serilog.Log.Warning(ex, "Could not create CLI stop capabilities");
+                AnsiConsole.MarkupLine("[red]Could not create the CLI stop capability.[/]");
                 return 1;
+            }
+
+            lock (childStateGate)
+            {
+                var currentChild = TryCaptureOwnedChild(engine.SingBoxPid ?? 0);
+                if (currentChild is { } current
+                    && (latestChildIdentity is not { } latest
+                        || current.StartedAtUtcTicks >= latest.StartedAtUtcTicks))
+                    latestChildIdentity = current;
+
+                if (latestChildIdentity is not { } child)
+                {
+                    AnsiConsole.MarkupLine("[red]Could not capture the owned sing-box identity.[/]");
+                    return 1;
+                }
+
+                try
+                {
+                    StateFile.Write(new RunState
+                    {
+                        ActiveProfile = engine.ActiveProfileName,
+                        SingBoxPid = child.Pid,
+                        OwnerPid = owner.Pid,
+                        StartedAt = DateTime.Now,
+                        ProcessNames = engine.MonitoredProcesses,
+                        RunGeneration = runGeneration,
+                        OwnerStartedAtUtcTicks = owner.StartedAtUtcTicks,
+                        OwnerExecutablePath = owner.ExecutablePath,
+                        SingBoxStartedAtUtcTicks = child.StartedAtUtcTicks,
+                        SingBoxExecutablePath = child.ExecutablePath
+                    });
+                    statePublished = true;
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "Could not publish CLI run state");
+                    AnsiConsole.MarkupLine("[red]Could not publish CLI run state.[/]");
+                    return 1;
+                }
             }
 
             AnsiConsole.MarkupLine("\n[bold green]VPN Router is running.[/]");
@@ -286,9 +318,32 @@ public class StartCommand : AsyncCommand<StartSettings>
         }
         finally
         {
+            legacyStopWait?.Unregister(null);
+            legacyStopEvent?.Dispose();
             stopWait?.Unregister(null);
             stopEvent?.Dispose();
             Console.CancelKeyPress -= cancelHandler;
+        }
+    }
+
+    private static OwnedProcessIdentity? TryCaptureOwnedChild(int pid)
+    {
+        if (pid <= 0) return null;
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            var identity = ProcessOwnership.TryReadProcessIdentity(process);
+            return identity is { } child
+                   && ProcessOwnership.IsTrustedRuntimePath(
+                       child.ExecutablePath,
+                       AppPaths.BinDir,
+                       ProcessOwnership.ConfiguredExePath)
+                ? child
+                : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
