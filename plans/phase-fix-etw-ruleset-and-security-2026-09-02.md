@@ -54,22 +54,34 @@ Run focused unit tests and full test suites on Ubuntu and Windows. GitHub Action
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: all unit and characterization tests pass with zero failures.
-- [ ] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
-- [ ] **Gate 4 — Self-review**: adversarial review confirms thread synchronization, cache atomicity, and ACL security.
-- [ ] **Gate 5 — UI verify**: N/A (Core services changes; UI surface untouched).
-- [ ] **Gate 6 — Characterization diff**: existing process monitor and cache tests continue to pass.
+- [x] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors in PR workflow `33696412058`.
+- [x] **Gate 2 — Tests green**: baseline `2858 total / 2801 executed` became `2866 total / 2809 executed`, all passed with zero errors and zero warnings; Windows characterization passed `33/33` with zero failures.
+- [x] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
+- [x] **Gate 4 — Self-review**: independent Opus review verified ETW reset, cache synchronization, shell metacharacter rejection, and ACL isolation.
+- [x] **Gate 5 — UI verify**: N/A (Core platform and service changes; UI surface untouched).
+- [x] **Gate 6 — Characterization diff**: existing process monitor, ruleset cache, and post-ship characterizations continue to pass.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: brief commit pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR #221 remains open and unmerged (or ready for merge)
+**Commits**: `9ad82908` (brief); `f830437e` (implementation + tests); `2de64807` (standard tmp path fix)
+**Pushed**: `origin/dsh/fix-etw-ruleset-and-security`; PR #221 — https://github.com/PavelLizunov/VPNRouter/pull/221
+**Test deltas**: +8 unit tests across `RuleSetCacheManagerTests`, `ZapretActionsTests`, and characterization suites (`2866 total / 2809 executed / 2809 passed / 0 failed / 0 warning`); Windows characterization `33/33 passed`
+**Files changed**:
+- `VPNRouter.Core/Services/EtwProcessMonitor.cs`: added `_sessionReady.Reset()` in `Start()` to prevent thread deadlock on multi-cycle connections.
+- `VPNRouter.Core/Services/RuleSetCacheManager.cs`: serialized downloads with per-file `SemaphoreSlim`, non-HTML binary validation, and atomic move replacement.
+- `VPNRouter.Core/AppPaths.cs`: added `RestrictWindowsBinDirAcl(BinDir)` to prevent unprivileged users from modifying service binaries.
+- `VPNRouter.Core/Services/ZapretManager.cs`: reject shell metacharacters in `BuildCygwinLaunchBat` to prevent command injection under SYSTEM.
+- `VPNRouter.Tests/PostShipVerifierContractTests.cs`: replaced naked temp deletes with `DeleteBestEffort` to eliminate Windows file lock flakiness.
+- `VPNRouter.Tests/RuleSetCacheManagerTests.cs`: added unit test verifying HTML/corrupt payload rejection.
+- `VPNRouter.Tests/ZapretActionsTests.cs`: added unit test verifying rejection of shell metacharacters in batch arguments.
+- `plans/phase-fix-etw-ruleset-and-security-2026-09-02.md`: this phase brief and outcome record.
 
-**Gate results**: pending.
-**Surprises encountered**: pending.
-**Follow-ups spawned**: pending.
-**Lessons for methodology doc**: pending.
+**Gate results**: All 6 gates passed in workflow `33696412058`.
+
+**Surprises encountered**:
+- `PostShipVerifierContractTests` on Windows runner failed with an `IOException` due to Windows Defender/system process lock on temporary folders; wrapping with `DeleteBestEffort` resolved the flakiness permanently.
+- `RuleSetCacheManager` required retaining the standard `localPath + ".tmp"` path under the file lock to satisfy existing test assertions that pre-plant and check for `.tmp` cleanup.
+
+**Follow-ups spawned**: Next confirmed defect packages (Packet 5: `FreeConfigTester` leaks and `DeepVerifyProbe` reflection; Packet 6: `MainWindowViewModel` UI races and god-file split) are ready for subsequent task branches.
+**Lessons for methodology doc**: Multi-threaded process monitors using `ManualResetEventSlim` must always reset the event before launching the worker thread on subsequent activations.
