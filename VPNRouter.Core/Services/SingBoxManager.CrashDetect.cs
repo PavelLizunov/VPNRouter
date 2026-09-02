@@ -8,7 +8,9 @@ namespace VPNRouter.Core.Services;
 
 public partial class SingBoxManager
 {
-    private void OnProcessExited()
+    private void OnProcessExited() => OnProcessExited(null);
+
+    private void OnProcessExited(int? eventExitCode)
     {
         // v2.31.0-r1 (CO-8 audit fix): the previous catch { } empty
         // block swallowed any failure to read ExitCode — but the
@@ -19,27 +21,25 @@ public partial class SingBoxManager
         // can distinguish "exited cleanly" vs "exit info unavailable".
         //
         // Phase 3+ (2026-05-21): IProcessHandle.Exited fires with the int
-        // code directly; we still attempt a snapshot-style read here for
-        // backcompat with the legacy log shape, but the WaitForExitAsync
-        // path (used by the immediate kill-then-wait sequences) already
-        // surfaces the code through its return value. Since this callback
-        // doesn't receive the exit code as a parameter (we wired the
-        // adapter as `(_, _) => OnProcessExited()` to preserve the
-        // legacy signature), we re-fetch from the handle.
-        int? exitCode = null;
+        // code directly; we prefer the event-captured exit code if present,
+        // falling back to querying the handle if unpopulated.
+        int? exitCode = eventExitCode;
         Exception? exitCodeError = null;
-        try
+        if (!exitCode.HasValue)
         {
-            if (_handle is { HasExited: true } h)
+            try
             {
-                // WaitForExitAsync on an already-exited handle returns
-                // synchronously with the cached exit code.
-                exitCode = h.WaitForExitAsync(CancellationToken.None).GetAwaiter().GetResult();
+                if (_handle is { HasExited: true } h)
+                {
+                    // WaitForExitAsync on an already-exited handle returns
+                    // synchronously with the cached exit code.
+                    exitCode = h.WaitForExitAsync(CancellationToken.None).GetAwaiter().GetResult();
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            exitCodeError = ex;
+            catch (Exception ex)
+            {
+                exitCodeError = ex;
+            }
         }
 
         // v2.37.0-r52 (ekko 2026-05-25 routing-flip suppression) + v2.41.2-r4
