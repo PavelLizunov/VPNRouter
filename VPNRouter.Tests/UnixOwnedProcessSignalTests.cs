@@ -86,17 +86,44 @@ public sealed class UnixOwnedProcessSignalTests
         {
             var identity = ProcessOwnership.TryReadOwnedSingBoxIdentity(child);
             Assert.NotNull(identity);
-            var wrong = identity.Value with { StartedAtUtcTicks = identity.Value.StartedAtUtcTicks + 1 };
+            var wrongStart = identity.Value with
+            {
+                StartedAtUtcTicks = identity.Value.StartedAtUtcTicks + 1
+            };
+            var wrongPath = identity.Value with
+            {
+                ExecutablePath = identity.Value.ExecutablePath + ".not-owned"
+            };
 
-            var result = UnixOwnedProcessSignal.SignalLinux(wrong, signal: 15);
-
-            Assert.Equal(UnixOwnedSignalResult.IdentityMismatch, result);
+            Assert.Equal(
+                UnixOwnedSignalResult.IdentityMismatch,
+                UnixOwnedProcessSignal.SignalLinux(wrongStart, signal: 15));
+            Assert.False(child.HasExited);
+            Assert.Equal(
+                UnixOwnedSignalResult.IdentityMismatch,
+                UnixOwnedProcessSignal.SignalLinux(wrongPath, signal: 15));
+            Assert.False(child.HasExited);
+            Assert.Equal(
+                UnixOwnedSignalResult.Unsupported,
+                UnixOwnedProcessSignal.SignalLinux(identity.Value, signal: 1));
             Assert.False(child.HasExited);
         }
         finally
         {
             StopControlledChild(child);
         }
+    }
+
+    [Fact]
+    public void LinuxPidFdSignal_MissingTargetIsNoOp()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux pidfd behavior only");
+
+        var result = UnixOwnedProcessSignal.SignalLinux(
+            new OwnedProcessIdentity(int.MaxValue, 1, "/nonexistent/sing-box"),
+            signal: 15);
+
+        Assert.Equal(UnixOwnedSignalResult.TargetGone, result);
     }
 
     [Fact]

@@ -14,6 +14,9 @@ public sealed class UnixStopSourceGuardTests
         Assert.True(open >= 0 && open < read && read < compare && compare < signal,
             "pidfd open and fresh identity comparison must precede pidfd signaling");
         Assert.Contains("signal is not (9 or 15)", source);
+        Assert.Contains("SafePidFd : SafeHandleMinusOneIsInvalid", source);
+        Assert.Contains("UnixOwnedProcessSignal.CloseFd(handle.ToInt32())", source);
+        Assert.Contains("return UnixOwnedSignalResult.IdentityUnavailable", source);
     }
 
     [Fact]
