@@ -208,7 +208,7 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
         // chokepoint. No need to count — one good call suffices
         // because Restart's structure guarantees iteration N+1 lands
         // here.
-        var restartRegion = ExtractMethodRegion(stripped, "Restart");
+        var restartRegion = ExtractMethodRegion(stripped, "RestartCore");
         // Restart must still call LaunchProcess (so the cleanup it
         // performs is reached). Sanity pin against a refactor that
         // accidentally drops the LaunchProcess call from Restart's tail.
@@ -261,7 +261,7 @@ public sealed class SingBoxManagerRestartTunHandshakeTests
         if (src == null) return;
 
         var stripped = StripLineComments(src);
-        var restartRegion = ExtractMethodRegion(stripped, "Restart");
+        var restartRegion = ExtractMethodRegion(stripped, "RestartCore");
 
         // The sleep matches "Thread.Sleep(750)" or any 4-digit ms value
         // in the same ballpark. Agent 1 might tune it, but it should
