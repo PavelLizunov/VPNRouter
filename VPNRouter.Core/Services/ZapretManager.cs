@@ -280,6 +280,9 @@ public class ZapretManager : IDisposable
     /// </summary>
     internal static string BuildCygwinLaunchBat(string binDir, string listsDir, string args)
     {
+        if (args.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%'))
+            throw new ArgumentException("Zapret arguments contain disallowed shell metacharacters", nameof(args));
+
         // Use Windows path separator explicitly — the .bat file runs in cmd.exe
         // on Windows only, and the trailing slash is what downstream Flowseal
         // scripts rely on. Hard-coded `\` instead of Path.DirectorySeparatorChar

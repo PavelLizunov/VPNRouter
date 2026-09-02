@@ -82,7 +82,7 @@ public sealed class PostShipVerifierContractTests
         }
         finally
         {
-            temp.Delete(recursive: true);
+            DeleteBestEffort(temp);
         }
     }
 
@@ -148,7 +148,7 @@ public sealed class PostShipVerifierContractTests
         }
         finally
         {
-            temp.Delete(recursive: true);
+            DeleteBestEffort(temp);
         }
     }
 
@@ -179,7 +179,7 @@ public sealed class PostShipVerifierContractTests
         }
         finally
         {
-            temp.Delete(recursive: true);
+            DeleteBestEffort(temp);
         }
     }
 
@@ -350,7 +350,7 @@ public sealed class PostShipVerifierContractTests
         }
         finally
         {
-            temp.Delete(recursive: true);
+            DeleteBestEffort(temp);
         }
     }
 
@@ -593,7 +593,7 @@ public sealed class PostShipVerifierContractTests
         }
         finally
         {
-            temp.Delete(recursive: true);
+            DeleteBestEffort(temp);
         }
     }
 
@@ -710,5 +710,19 @@ public sealed class PostShipVerifierContractTests
         Assert.True(start >= 0, $"Start marker not found: {startMarker}");
         Assert.True(end > start, $"End marker not found after {startMarker}: {endMarker}");
         return source[start..end];
+    }
+
+    private static void DeleteBestEffort(DirectoryInfo? temp)
+    {
+        if (temp == null) return;
+        try
+        {
+            if (temp.Exists)
+                temp.Delete(recursive: true);
+        }
+        catch
+        {
+            // best-effort cleanup on Windows where background process/antivirus can briefly lock files
+        }
     }
 }
