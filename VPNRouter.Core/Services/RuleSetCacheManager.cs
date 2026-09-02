@@ -148,8 +148,8 @@ public static class RuleSetCacheManager
                 if (bytes.Length == 0 || bytes[0] == (byte)'<')
                     throw new InvalidDataException("Downloaded rule-set is corrupt, truncated, or HTML");
 
-                // Atomic write: unique tmp → rename.
-                var tmp = Path.Combine(dir, $"{filename}.{Guid.NewGuid():N}.tmp");
+                // Atomic write: tmp → rename.
+                var tmp = localPath + ".tmp";
                 try
                 {
                     await File.WriteAllBytesAsync(tmp, bytes, cts.Token).ConfigureAwait(false);
