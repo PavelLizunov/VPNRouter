@@ -1,6 +1,7 @@
 using Spectre.Console;
 using Spectre.Console.Cli;
 using System.ComponentModel;
+using System.Diagnostics;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -113,6 +114,15 @@ public class StartCommand : AsyncCommand<StartSettings>
             return await DryRunAsync(appSettings);
         }
 
+        var runGeneration = Guid.NewGuid();
+        using var ownerProcess = Process.GetCurrentProcess();
+        var ownerIdentity = ProcessOwnership.TryReadProcessIdentity(ownerProcess);
+        if (ownerIdentity is not { } owner)
+        {
+            AnsiConsole.MarkupLine("[red]Could not capture the CLI owner identity.[/]");
+            return 1;
+        }
+
         // v2.40.0-r10 #4 (core-audit): sweep leftover firewall kill-switch
         // rules before taking VPN ownership. The GUI front-end has always
         // done this on startup (App/Program.cs); the CLI did not, so a CLI
@@ -158,17 +168,32 @@ public class StartCommand : AsyncCommand<StartSettings>
         engine.Warning += msg =>
             AnsiConsole.MarkupLine($"[yellow]⚠ {Markup.Escape(msg)}[/]");
 
-        // Keep state.json's SingBoxPid in sync with reality: this event fires
-        // after every successful sing-box launch (initial + every HealthMonitor
-        // restart). Without it, `vpnrouter stop` from another terminal would
-        // target the stale launch-time PID and silently no-op while the current
-        // sing-box keeps running.
+        // The callback and initial publication share one gate so an initial
+        // event cannot be lost and an older delayed event cannot regress state.
+        var childStateGate = new object();
+        OwnedProcessIdentity? latestChildIdentity = null;
+        var statePublished = false;
         engine.SingBoxStarted += newPid =>
         {
-            var existing = StateFile.Read();
-            if (existing == null) return; // StartCommand hasn't written yet; first write below handles it
-            existing.SingBoxPid = newPid;
-            StateFile.Write(existing);
+            lock (childStateGate)
+            {
+                try
+                {
+                    var child = TryCaptureOwnedChild(newPid);
+                    if (child is not { } identity
+                        || latestChildIdentity is { } latest
+                        && latest.StartedAtUtcTicks > identity.StartedAtUtcTicks)
+                        return;
+
+                    latestChildIdentity = identity;
+                    if (statePublished)
+                        StateFile.TryUpdateChild(runGeneration, identity);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "Could not publish restarted sing-box identity");
+                }
+            }
         };
 
         try
@@ -181,59 +206,147 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // Save state for status command
-        StateFile.Write(new RunState
-        {
-            ActiveProfile = engine.ActiveProfileName,
-            SingBoxPid = engine.SingBoxPid ?? 0,
-            OwnerPid = Environment.ProcessId,
-            StartedAt = DateTime.Now,
-            ProcessNames = engine.MonitoredProcesses
-        });
-
-        AnsiConsole.MarkupLine($"\n[bold green]VPN Router is running.[/]");
-        AnsiConsole.MarkupLine($"[grey]Profile:[/] [cyan]{engine.ActiveProfileName}[/]  [grey]|[/]  [grey]Processes:[/] [cyan]{engine.MonitoredProcesses.Count}[/]  [grey]|[/]  [grey]ETW:[/] [cyan]active[/]");
-        AnsiConsole.MarkupLine($"[grey]Press Ctrl+C to stop.[/]\n");
-
-        // 6. Block and handle Ctrl+C / external stop signal
-        var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) =>
+        // 6. Create and register the generation-qualified stop capability
+        // before state publication. AutoResetEvent retains an early signal, so
+        // a Stop that can read this generation can never race event creation.
+        using var cts = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancelHandler = (_, e) =>
         {
             e.Cancel = true;
             cts.Cancel();
         };
+        Console.CancelKeyPress += cancelHandler;
 
-        // CLI-1: named event lets `vpnrouter stop` request a graceful
-        // shutdown (same CTS as Ctrl+C). Windows-only; Linux/macOS use
-        // the Avalonia app, not CLI start.
         EventWaitHandle? stopEvent = null;
         RegisteredWaitHandle? stopWait = null;
-        if (OperatingSystem.IsWindows())
+        EventWaitHandle? legacyStopEvent = null;
+        RegisteredWaitHandle? legacyStopWait = null;
+        try
         {
-            stopEvent = new EventWaitHandle(
-                false,
-                EventResetMode.AutoReset,
-                StopCommand.StopEventPrefix + Environment.ProcessId);
-            stopWait = ThreadPool.RegisterWaitForSingleObject(
-                stopEvent,
-                (_, _) => cts.Cancel(),
-                state: null,
-                timeout: Timeout.InfiniteTimeSpan,
-                executeOnlyOnce: true);
+            try
+            {
+                stopEvent = new EventWaitHandle(
+                    false,
+                    EventResetMode.AutoReset,
+                    StopCommand.BuildStopEventName(owner.Pid, runGeneration),
+                    StopCommand.StopEventOptions,
+                    out var stopEventCreated);
+                if (!stopEventCreated)
+                    throw new InvalidOperationException("Generation stop event already exists.");
+                stopWait = ThreadPool.RegisterWaitForSingleObject(
+                    stopEvent,
+                    (_, _) => cts.Cancel(),
+                    state: null,
+                    timeout: Timeout.InfiniteTimeSpan,
+                    executeOnlyOnce: true);
+
+                // Transition bridge: an already-installed older Stop binary only
+                // knows the PID-qualified name. Both capabilities cancel this run.
+                legacyStopEvent = new EventWaitHandle(
+                    false,
+                    EventResetMode.AutoReset,
+                    StopCommand.StopEventPrefix + owner.Pid,
+                    StopCommand.StopEventOptions,
+                    out var legacyStopEventCreated);
+                if (!legacyStopEventCreated)
+                    throw new InvalidOperationException("Legacy stop event already exists.");
+                legacyStopWait = ThreadPool.RegisterWaitForSingleObject(
+                    legacyStopEvent,
+                    (_, _) => cts.Cancel(),
+                    state: null,
+                    timeout: Timeout.InfiniteTimeSpan,
+                    executeOnlyOnce: true);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Could not create CLI stop capabilities");
+                AnsiConsole.MarkupLine("[red]Could not create the CLI stop capability.[/]");
+                return 1;
+            }
+
+            lock (childStateGate)
+            {
+                var currentChild = TryCaptureOwnedChild(engine.SingBoxPid ?? 0);
+                if (currentChild is { } current
+                    && (latestChildIdentity is not { } latest
+                        || current.StartedAtUtcTicks >= latest.StartedAtUtcTicks))
+                    latestChildIdentity = current;
+
+                if (latestChildIdentity is not { } child)
+                {
+                    AnsiConsole.MarkupLine("[red]Could not capture the owned sing-box identity.[/]");
+                    return 1;
+                }
+
+                try
+                {
+                    StateFile.Write(new RunState
+                    {
+                        ActiveProfile = engine.ActiveProfileName,
+                        SingBoxPid = child.Pid,
+                        OwnerPid = owner.Pid,
+                        StartedAt = DateTime.Now,
+                        ProcessNames = engine.MonitoredProcesses,
+                        RunGeneration = runGeneration,
+                        OwnerStartedAtUtcTicks = owner.StartedAtUtcTicks,
+                        OwnerExecutablePath = owner.ExecutablePath,
+                        SingBoxStartedAtUtcTicks = child.StartedAtUtcTicks,
+                        SingBoxExecutablePath = child.ExecutablePath
+                    });
+                    statePublished = true;
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "Could not publish CLI run state");
+                    AnsiConsole.MarkupLine("[red]Could not publish CLI run state.[/]");
+                    return 1;
+                }
+            }
+
+            AnsiConsole.MarkupLine("\n[bold green]VPN Router is running.[/]");
+            AnsiConsole.MarkupLine($"[grey]Profile:[/] [cyan]{engine.ActiveProfileName}[/]  [grey]|[/]  [grey]Processes:[/] [cyan]{engine.MonitoredProcesses.Count}[/]  [grey]|[/]  [grey]ETW:[/] [cyan]active[/]");
+            AnsiConsole.MarkupLine("[grey]Press Ctrl+C to stop.[/]\n");
+
+            try { await Task.Delay(Timeout.Infinite, cts.Token); }
+            catch (OperationCanceledException) { }
+
+            // 7. Graceful shutdown. A replacement generation is never deleted.
+            AnsiConsole.MarkupLine("\n[yellow]Stopping...[/]");
+            engine.Stop();
+            if (!StateFile.ClearIfGeneration(runGeneration))
+                AnsiConsole.MarkupLine("[yellow]A newer CLI run owns state; its state was preserved.[/]");
+            AnsiConsole.MarkupLine("[green]✓[/] Stopped.");
+            return 0;
         }
+        finally
+        {
+            legacyStopWait?.Unregister(null);
+            legacyStopEvent?.Dispose();
+            stopWait?.Unregister(null);
+            stopEvent?.Dispose();
+            Console.CancelKeyPress -= cancelHandler;
+        }
+    }
 
-        try { await Task.Delay(Timeout.Infinite, cts.Token); }
-        catch (OperationCanceledException) { }
-
-        // 7. Graceful shutdown
-        stopWait?.Unregister(null);
-        stopEvent?.Dispose();
-        AnsiConsole.MarkupLine("\n[yellow]Stopping...[/]");
-        engine.Stop();
-        StateFile.Clear();
-        AnsiConsole.MarkupLine("[green]✓[/] Stopped.");
-
-        return 0;
+    private static OwnedProcessIdentity? TryCaptureOwnedChild(int pid)
+    {
+        if (pid <= 0) return null;
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            var identity = ProcessOwnership.TryReadProcessIdentity(process);
+            return identity is { } child
+                   && ProcessOwnership.IsTrustedRuntimePath(
+                       child.ExecutablePath,
+                       AppPaths.BinDir,
+                       ProcessOwnership.ConfiguredExePath)
+                ? child
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static async Task<int> DryRunAsync(AppSettings settings)
