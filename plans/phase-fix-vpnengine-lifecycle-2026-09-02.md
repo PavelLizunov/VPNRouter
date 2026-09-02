@@ -44,22 +44,28 @@ Run focused `VpnEngine` lifecycle tests, full discovered test suites on Ubuntu a
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: all unit and characterization tests pass with zero failures.
-- [ ] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
-- [ ] **Gate 4 — Self-review**: adversarial review confirms cancellation linkage and exception safety without regressions.
-- [ ] **Gate 5 — UI verify**: N/A (Core lifecycle change; UI surface untouched).
-- [ ] **Gate 6 — Characterization diff**: existing lifecycle characterizations continue to pass.
+- [x] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors in PR workflow `33680869292`.
+- [x] **Gate 2 — Tests green**: baseline `2830 total / 2773 executed` became `2833 total / 2776 executed`, all passed with zero errors and zero warnings; Windows characterization passed `19/19` with zero failures.
+- [x] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
+- [x] **Gate 4 — Self-review**: independent Opus review verified cancellation linkage, failure teardown, and safe disposal without double-free or object disposal leaks.
+- [x] **Gate 5 — UI verify**: N/A (Core lifecycle change; UI surface untouched).
+- [x] **Gate 6 — Characterization diff**: all existing lifecycle seam and characterization tests continue to pass.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: brief commit pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR #216 remains open and unmerged
+**Commits**: `5a5904d8` (brief); `06e6f00b` (lifecycle safety fix); `f75ef4c1` (key alignment); `fb623942` (dummy binary fixture); `36855a8d` (using directive)
+**Pushed**: `origin/dsh/fix-vpnengine-lifecycle`; PR #216 — https://github.com/PavelLizunov/VPNRouter/pull/216
+**Test deltas**: +3 unit tests in `VPNRouter.Tests/VpnEngineStartAsyncSeamTests.cs` (`2833 total / 2776 executed / 2776 passed / 0 failed / 0 warning`); Windows characterization `19/19 passed`
+**Files changed**:
+- `VPNRouter.Core/Services/VpnEngine.cs`: linked `_sessionCts` via `CreateLinkedTokenSource(ct)` in `StartAsync`, teardown on failure if `!IsRunning`, symmetric `_slipstream?.Dispose()` in `TeardownInternal`, and cleanup in `Dispose()` and pre-start failover restart.
+- `VPNRouter.Tests/VpnEngineStartAsyncSeamTests.cs`: added 3 unit tests verifying cancellation abort and teardown cleanup on failure.
+- `plans/phase-fix-vpnengine-lifecycle-2026-09-02.md`: this phase brief and outcome record.
 
-**Gate results**: pending.
-**Surprises encountered**: pending.
-**Follow-ups spawned**: pending.
-**Lessons for methodology doc**: pending.
+**Gate results**: All 6 gates passed in workflow `33680869292`.
+
+**Surprises encountered**:
+- During testing, Phase 6 `DeploySingBoxBinary` required ensuring a dummy binary file existed at `SingBoxExePath` so the pipeline reaches the firewall setup and teardown phase without throwing an earlier `FileNotFoundException`.
+
+**Follow-ups spawned**: Remaining Category 1 packets (Packet 2: `SingBoxManager` exit code handling and `HealthMonitor` counter reset; Packet 3: `CustomConfigInjector` rule leaks) are ready for subsequent implementation branches.
+**Lessons for methodology doc**: Asynchronous startup sequences must always link the outer session cancellation token with caller tokens, and ensure that failure at any intermediate pipeline stage guarantees complete teardown of already-allocated OS packet filter rules.
