@@ -76,15 +76,26 @@ public sealed class VpnEngineStartAsyncSeamTests
     private sealed class TrackingFirewallManager : IFirewallManager
     {
         private readonly bool _throwOnCreate;
+        private readonly CancellationTokenSource? _cancelOnCreate;
         public bool DeleteAllRulesCalled { get; private set; }
         public bool DisposeCalled { get; private set; }
 
-        public TrackingFirewallManager(bool throwOnCreate = false) => _throwOnCreate = throwOnCreate;
+        public TrackingFirewallManager(bool throwOnCreate = false, CancellationTokenSource? cancelOnCreate = null)
+        {
+            _throwOnCreate = throwOnCreate;
+            _cancelOnCreate = cancelOnCreate;
+        }
 
         public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
         {
             if (_throwOnCreate)
                 throw new InvalidOperationException("Simulated firewall rule creation failure during bring-up");
+
+            if (_cancelOnCreate != null)
+            {
+                _cancelOnCreate.Cancel();
+                throw new OperationCanceledException(_cancelOnCreate.Token);
+            }
         }
         public void EnableBlockRules() { }
         public void DisableBlockRules() { }
@@ -107,7 +118,7 @@ public sealed class VpnEngineStartAsyncSeamTests
                 Reality = new VlessRealityConfig
                 {
                     Enabled = true,
-                    PublicKey = "test_public_key_x25519_base64url_format",
+                    PublicKey = "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
                     ShortId = "abcd1234"
                 }
             }
@@ -621,17 +632,17 @@ public sealed class VpnEngineStartAsyncSeamTests
     [Fact]
     public async Task StartAsync_FailureDuringBringUp_TearsDownFirewallRulesAndState()
     {
-        var firewall = new TrackingFirewallManager();
+        var firewall = new TrackingFirewallManager(throwOnCreate: true);
         var settings = BuildSafePreStartSettings(configMode: "generated");
         PopulateValidServer(settings);
         settings.ActiveProfile = "Discord_Privacy";
 
         using var engine = BuildEngine(firewall: firewall);
 
-        var ex = await Assert.ThrowsAsync<Exception>(async () =>
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true));
 
-        Assert.Contains("sing-box failed to start", ex.Message);
+        Assert.Equal("Simulated firewall rule creation failure during bring-up", ex.Message);
         Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
             "TeardownInternal must clean up firewall rules when bring-up throws");
         Assert.False(engine.IsRunning);
@@ -642,21 +653,15 @@ public sealed class VpnEngineStartAsyncSeamTests
     [Fact]
     public async Task StartAsync_CancelledDuringBringUp_InvokesTeardownAndReleasesState()
     {
-        var firewall = new TrackingFirewallManager();
         using var cts = new CancellationTokenSource();
-
-        var scanner = new SlowOrThrowingScanner(() =>
-        {
-            cts.Cancel();
-            throw new OperationCanceledException(cts.Token);
-        });
+        var firewall = new TrackingFirewallManager(cancelOnCreate: cts);
 
         var settings = BuildSafePreStartSettings(configMode: "generated");
         PopulateValidServer(settings);
         settings.ActiveProfile = "Discord_Privacy";
         settings.App.RoutingMode = "split";
 
-        using var engine = BuildEngine(firewall: firewall, scanner: scanner);
+        using var engine = BuildEngine(firewall: firewall);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await engine.StartAsync(settings, cts.Token, skipVpnConflictCheck: true));
