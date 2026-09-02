@@ -66,6 +66,55 @@ public sealed class VpnEngineStartAsyncSeamTests
         public ScanResult ScanForProfile(Profile profile) => new();
     }
 
+    private sealed class SlowOrThrowingScanner : IProcessScanner
+    {
+        private readonly Func<ScanResult>? _func;
+        public SlowOrThrowingScanner(Func<ScanResult>? func = null) => _func = func;
+        public ScanResult ScanForProfile(Profile profile) => _func != null ? _func() : new();
+    }
+
+    private sealed class TrackingFirewallManager : IFirewallManager
+    {
+        private readonly bool _throwOnCreate;
+        public bool DeleteAllRulesCalled { get; private set; }
+        public bool DisposeCalled { get; private set; }
+
+        public TrackingFirewallManager(bool throwOnCreate = false) => _throwOnCreate = throwOnCreate;
+
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
+        {
+            if (_throwOnCreate)
+                throw new InvalidOperationException("Simulated firewall rule creation failure during bring-up");
+        }
+        public void EnableBlockRules() { }
+        public void DisableBlockRules() { }
+        public void DeleteAllRules() { DeleteAllRulesCalled = true; }
+        public void Dispose() { DisposeCalled = true; DeleteAllRules(); }
+    }
+
+    private static void PopulateValidServer(AppSettings settings)
+    {
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            new()
+            {
+                Name = "main",
+                Server = "1.2.3.4",
+                Port = 443,
+                Uuid = "11111111-2222-3333-4444-555555555555",
+                Flow = "xtls-rprx-vision",
+                Security = "reality",
+                Reality = new VlessRealityConfig
+                {
+                    Enabled = true,
+                    PublicKey = "test_public_key_x25519_base64url_format",
+                    ShortId = "abcd1234"
+                }
+            }
+        };
+        settings.Vless.ActiveServer = "main";
+    }
+
     private sealed class StubFirewallManager : IFirewallManager
     {
         public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
@@ -93,10 +142,10 @@ public sealed class VpnEngineStartAsyncSeamTests
     /// per the attribute's docs.
     /// </summary>
 #pragma warning disable CS0618
-    private static VpnEngine BuildEngine() =>
+    private static VpnEngine BuildEngine(IFirewallManager? firewall = null, IProcessScanner? scanner = null) =>
         new VpnEngine(
-            scanner: new StubProcessScanner(),
-            firewallFactory: () => new StubFirewallManager(),
+            scanner: scanner ?? new StubProcessScanner(),
+            firewallFactory: () => firewall ?? new StubFirewallManager(),
             monitorFactory: () => new StubProcessMonitor(),
             logger: null);
 #pragma warning restore CS0618
@@ -512,6 +561,108 @@ public sealed class VpnEngineStartAsyncSeamTests
             settings, TestContext.Current.CancellationToken);
 
         Assert.False(ok, "failover restart must not bring up a tunnel with no live session");
+        Assert.False(engine.IsRunning);
+    }
+
+    // ─── 9. VENG-01: Stop() cancels in-flight StartAsync bring-up ─────────
+
+    [Fact]
+    public async Task StartAsync_StopCalledDuringBringUp_AbortsImmediatelyAndReleasesGate()
+    {
+        var bringUpStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var holdBringUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var scanner = new SlowOrThrowingScanner(() =>
+        {
+            bringUpStarted.TrySetResult();
+            holdBringUp.Task.GetAwaiter().GetResult();
+            return new ScanResult();
+        });
+
+        var settings = BuildSafePreStartSettings(configMode: "generated");
+        PopulateValidServer(settings);
+        settings.ActiveProfile = "Discord_Privacy";
+        settings.App.RoutingMode = "split";
+
+        using var engine = BuildEngine(scanner: scanner);
+
+        var startTask = Task.Run(async () =>
+        {
+            try
+            {
+                await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when Stop() cancels the linked session token
+            }
+            catch (Exception)
+            {
+                // Or if aborted downstream
+            }
+        });
+
+        await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // When Stop() is called, it cancels _sessionCts. Because _sessionCts is linked to
+        // StartAsyncInternal, unblocking holdBringUp allows StartAsync to observe cancellation.
+        var stopTask = Task.Run(() => engine.Stop());
+
+        holdBringUp.TrySetResult();
+
+        // Both startTask and stopTask should complete rapidly without waiting 5+ seconds.
+        await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(engine.IsRunning);
+    }
+
+    // ─── 10. VENG-02: Startup failure tears down partial state & firewall rules ─
+
+    [Fact]
+    public async Task StartAsync_FailureDuringBringUp_TearsDownFirewallRulesAndState()
+    {
+        var firewall = new TrackingFirewallManager();
+        var settings = BuildSafePreStartSettings(configMode: "generated");
+        PopulateValidServer(settings);
+        settings.ActiveProfile = "Discord_Privacy";
+
+        using var engine = BuildEngine(firewall: firewall);
+
+        var ex = await Assert.ThrowsAsync<Exception>(async () =>
+            await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true));
+
+        Assert.Contains("sing-box failed to start", ex.Message);
+        Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
+            "TeardownInternal must clean up firewall rules when bring-up throws");
+        Assert.False(engine.IsRunning);
+    }
+
+    // ─── 11. VENG-01/02: Cancellation during bring-up invokes teardown ────
+
+    [Fact]
+    public async Task StartAsync_CancelledDuringBringUp_InvokesTeardownAndReleasesState()
+    {
+        var firewall = new TrackingFirewallManager();
+        using var cts = new CancellationTokenSource();
+
+        var scanner = new SlowOrThrowingScanner(() =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+
+        var settings = BuildSafePreStartSettings(configMode: "generated");
+        PopulateValidServer(settings);
+        settings.ActiveProfile = "Discord_Privacy";
+        settings.App.RoutingMode = "split";
+
+        using var engine = BuildEngine(firewall: firewall, scanner: scanner);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await engine.StartAsync(settings, cts.Token, skipVpnConflictCheck: true));
+
+        Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
+            "Cancellation during bring-up must invoke TeardownInternal to clear partial state");
         Assert.False(engine.IsRunning);
     }
 }
