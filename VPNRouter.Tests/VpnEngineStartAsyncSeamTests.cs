@@ -28,6 +28,7 @@
 
 #nullable enable
 
+using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
