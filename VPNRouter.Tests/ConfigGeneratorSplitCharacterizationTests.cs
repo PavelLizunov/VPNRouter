@@ -187,7 +187,7 @@ public sealed class ConfigGeneratorSplitCharacterizationTests : IDisposable
         Assert.Equal("direct", config.Route.Final);
         Assert.Contains(config.Route.Rules, r => r.Protocol == "dns" && r.Action == "hijack-dns");
         Assert.Contains(config.Route.Rules, r => r.IpIsPrivate == true && r.Action == "route" && r.Outbound == "direct");
-        Assert.Contains(config.Route.Rules, r => r.ProcessName != null && r.ProcessName.Contains("Discord.exe") && r.Protocol == "quic" && r.Action == "reject");
+        Assert.DoesNotContain(config.Route.Rules, r => r.Protocol == "quic" && r.Action == "reject");
         Assert.Contains(config.Route.Rules, r => r.ProcessName != null && r.ProcessName.Contains("Discord.exe") && r.Network == "tcp" && r.Outbound == "proxy");
         Assert.Contains(config.Route.Rules, r => r.ProcessName != null && r.ProcessName.Contains("Discord.exe") && r.Network == "udp" && r.Outbound == "proxy-udp");
 
