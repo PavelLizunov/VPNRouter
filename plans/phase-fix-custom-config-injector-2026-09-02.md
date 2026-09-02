@@ -43,22 +43,28 @@ Run focused `CustomConfigInjector` unit tests and full test suites on Ubuntu and
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: all unit and characterization tests pass with zero failures.
-- [ ] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
-- [ ] **Gate 4 — Self-review**: adversarial review confirms fail-closed routing and DNS hijack safety.
-- [ ] **Gate 5 — UI verify**: N/A (Core injector changes; UI surface untouched).
-- [ ] **Gate 6 — Characterization diff**: existing custom config injection tests continue to pass.
+- [x] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors in PR workflow `33691661930`.
+- [x] **Gate 2 — Tests green**: baseline `2856 total / 2799 executed` became `2858 total / 2801 executed`, all passed with zero errors and zero warnings; Windows characterization passed `33/33` with zero failures.
+- [x] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
+- [x] **Gate 4 — Self-review**: independent Opus review verified DNS hijack insertion, full-tunnel direct rule sanitization, and fail-closed routing without regressions.
+- [x] **Gate 5 — UI verify**: N/A (Core injector changes; UI surface untouched).
+- [x] **Gate 6 — Characterization diff**: existing custom config injection tests continue to pass.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: brief commit pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR #220 remains open and unmerged (or ready for merge)
+**Commits**: `84de4287` (brief); `fb91ca73` (implementation + tests); `50d26dcc` (using directive)
+**Pushed**: `origin/dsh/fix-custom-config-injector`; PR #220 — https://github.com/PavelLizunov/VPNRouter/pull/220
+**Test deltas**: +2 unit tests in `VPNRouter.Tests/CustomConfigInjectorTests.cs` (`2858 total / 2801 executed / 2801 passed / 0 failed / 0 warning`); Windows characterization `33/33 passed`
+**Files changed**:
+- `VPNRouter.Core/Services/CustomConfigInjector.cs`: implement `EnsureDnsHijackRule` and `SanitizeFullTunnelDirectRules` to close DNS and full-tunnel traffic leaks.
+- `VPNRouter.Tests/CustomConfigInjectorTests.cs`: added unit tests verifying `hijack-dns` rule injection and full-tunnel direct rule removal.
+- `plans/phase-fix-custom-config-injector-2026-09-02.md`: this phase brief and outcome record.
 
-**Gate results**: pending.
-**Surprises encountered**: pending.
-**Follow-ups spawned**: pending.
-**Lessons for methodology doc**: pending.
+**Gate results**: All 6 gates passed in workflow `33691661930`.
+
+**Surprises encountered**:
+- In `CustomConfigInjectorTests.cs`, adding `using System.Text.Json;` was required for `JsonDocument` and `JsonValueKind` in the test file.
+
+**Follow-ups spawned**: Next confirmed defect packages (Packet 4: `EtwProcessMonitor` reset and `NaivePairing` global fallback; Packet 5: `RuleSetCacheManager` and `AppPaths` LPE) are ready for subsequent task branches.
+**Lessons for methodology doc**: When applying full-tunnel routing policies to user-supplied configurations, overriding `route.final` alone is insufficient; custom direct rules in `route.rules` must be sanitized to prevent rule shadowing.
