@@ -249,14 +249,49 @@ public sealed class ServiceAppCoexistenceTests
     /// instantly drops a live App tunnel).
     /// </summary>
     [Fact]
-    public void Service_Startup_GuardsZombieKillWithTunLockCheck()
+    public void Service_Startup_GuardsAndFiltersOrphanCleanup()
     {
-        var src = LoadSource("VPNRouter.Service", "Program.cs");
-        if (src == null) return;
-
+        var src = LoadSource("VPNRouter.Service", "Program.cs")
+            ?? throw new FileNotFoundException("VPNRouter.Service/Program.cs was not found.");
         var stripped = StripLineComments(src);
-        Assert.Contains("TunOwnershipLock.IsOwnedByAnyone", stripped);
-        Assert.Contains("sing-box", stripped);  // the kill itself still exists
+
+        Assert.Contains("using var cleanupLock = new VPNRouter.Core.Services.TunOwnershipLock()", stripped);
+        Assert.Contains("_ = cleanupLock.TryAcquire()", stripped);
+        Assert.Contains("if (!cleanupLock.HasOwnership)", stripped);
+        Assert.Contains("if (!VPNRouter.Core.Services.ProcessOwnership.IsOwnedSingBox(z))", stripped);
+        Assert.Contains("pinnedHandle.IsInvalid || pinnedHandle.IsClosed", stripped);
+        Assert.Equal(1, stripped.Split("z.Kill(", System.StringSplitOptions.None).Length - 1);
+
+        var reservation = stripped.IndexOf("_ = cleanupLock.TryAcquire()", System.StringComparison.Ordinal);
+        var reservationGate = stripped.IndexOf("if (!cleanupLock.HasOwnership)", System.StringComparison.Ordinal);
+        var enumeration = stripped.IndexOf("Process.GetProcessesByName(\"sing-box\")", System.StringComparison.Ordinal);
+        var pin = stripped.IndexOf("var pinnedHandle = z.SafeHandle", System.StringComparison.Ordinal);
+        var ownership = stripped.IndexOf("ProcessOwnership.IsOwnedSingBox(z)", System.StringComparison.Ordinal);
+        var kill = stripped.IndexOf("z.Kill(", System.StringComparison.Ordinal);
+        var wait = stripped.IndexOf("var exited = z.WaitForExit(3000)", System.StringComparison.Ordinal);
+        var keepAlive = stripped.IndexOf("GC.KeepAlive(pinnedHandle)", System.StringComparison.Ordinal);
+        var confirmed = stripped.IndexOf("killedOwnedProcess = true", System.StringComparison.Ordinal);
+        var delayGate = stripped.IndexOf("if (killedOwnedProcess)", System.StringComparison.Ordinal);
+        var delay = stripped.IndexOf("Thread.Sleep(2000)", System.StringComparison.Ordinal);
+        Assert.True(
+            reservation >= 0
+            && reservation < reservationGate
+            && reservationGate < enumeration
+            && enumeration < pin
+            && pin < ownership
+            && ownership < kill
+            && kill < wait
+            && wait < keepAlive
+            && keepAlive < confirmed
+            && confirmed < delayGate
+            && delayGate < delay,
+            "TUN reservation and pinned ownership proof must precede Kill and release delay");
+
+        var rejectionBlock = stripped[ownership..kill];
+        Assert.Contains("continue;", rejectionBlock);
+        var postKillBlock = stripped[kill..confirmed];
+        Assert.Contains("continue;", postKillBlock);
+        Assert.Contains("finally { z.Dispose(); }", stripped);
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────

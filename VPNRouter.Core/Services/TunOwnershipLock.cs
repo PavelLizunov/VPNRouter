@@ -65,6 +65,8 @@ public sealed class TunOwnershipLock : IDisposable
         _logger = logger ?? Log.Logger;
     }
 
+    internal bool HasOwnership => _owned;
+
     /// <summary>
     /// Try to acquire ownership immediately. Returns true if we got it,
     /// false if another process already owns it.
