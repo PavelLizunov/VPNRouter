@@ -5,8 +5,19 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-public sealed class ConfigGeneratorSplitCharacterizationTests
+[Collection("SingBoxFeaturesSerial")]
+public sealed class ConfigGeneratorSplitCharacterizationTests : IDisposable
 {
+    public ConfigGeneratorSplitCharacterizationTests()
+    {
+        SingBoxFeatures.OverrideAwg = true;
+    }
+
+    public void Dispose()
+    {
+        SingBoxFeatures.ResetForTests();
+    }
+
     [Fact]
     public void AllFiftyMembersPreserved_AcrossSplitFilesOrMonolith()
     {
@@ -138,8 +149,8 @@ public sealed class ConfigGeneratorSplitCharacterizationTests
                     new()
                     {
                         Name = "server-noflow",
-                        Server = "5.6.7.8",
-                        Port = 443,
+                        Server = "1.2.3.4",
+                        Port = 8443,
                         Uuid = "uuid-2",
                         Security = "reality",
                         Reality = new VlessRealityConfig { PublicKey = "key2", ShortId = "bb" }
