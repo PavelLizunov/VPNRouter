@@ -197,6 +197,11 @@ public sealed class CrashReporterScrubberTests
     [InlineData("wss://example.com/api?api_key=mykey999", "api_key=[REDACTED]")]
     [InlineData("ws://example.com/api?apikey=mykey999", "apikey=[REDACTED]")]
     [InlineData("wss://example.com/api?access_token=tok12345", "access_token=[REDACTED]")]
+    [InlineData("wss://example.com/api?refresh_token=tok67890", "refresh_token=[REDACTED]")]
+    [InlineData("ws://example.com/api?auth_token=tok11223", "auth_token=[REDACTED]")]
+    [InlineData("wss://example.com/api?client_secret=sec99887", "client_secret=[REDACTED]")]
+    [InlineData("ws://example.com/api?api_secret=sec77665", "api_secret=[REDACTED]")]
+    [InlineData("wss://example.com/api?private_key=key33221", "private_key=[REDACTED]")]
     [InlineData("ws://example.com/api?auth=credential_data", "auth=[REDACTED]")]
     [InlineData("wss://example.com/api?password=mypassword", "password=[REDACTED]")]
     [InlineData("ws://example.com/api?passwd=mypassword", "passwd=[REDACTED]")]
@@ -207,6 +212,11 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain("supersecret123", s);
         Assert.DoesNotContain("mykey999", s);
         Assert.DoesNotContain("tok12345", s);
+        Assert.DoesNotContain("tok67890", s);
+        Assert.DoesNotContain("tok11223", s);
+        Assert.DoesNotContain("sec99887", s);
+        Assert.DoesNotContain("sec77665", s);
+        Assert.DoesNotContain("key33221", s);
         Assert.DoesNotContain("credential_data", s);
         Assert.DoesNotContain("mypassword", s);
     }
