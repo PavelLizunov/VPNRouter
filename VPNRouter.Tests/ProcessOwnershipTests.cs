@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -77,5 +78,92 @@ public sealed class ProcessOwnershipTests
         var dir = Path.Combine(Path.GetTempPath(), "VpnR-Bin");
         var file = Path.Combine(Path.GetTempPath(), "vpnr-bin", "SING-BOX.exe");
         Assert.True(ProcessOwnership.IsUnderDirectory(file, dir));
+    }
+
+    [Fact]
+    public void SameProcessIdentity_RequiresPidStartTimeAndPath()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "vpnr-bin", "sing-box.exe");
+        var expected = new OwnedProcessIdentity(42, 1_000, path, ParentPid: 7);
+
+        Assert.True(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            new OwnedProcessIdentity(42, 1_000, path, ParentPid: 99)));
+        Assert.True(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with
+            {
+                ExecutablePath = Path.Combine(
+                    Path.GetDirectoryName(path)!, "sub", "..", "sing-box.exe")
+            }));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(ProcessOwnership.IsSameProcessIdentity(
+                expected,
+                expected with { ExecutablePath = path.ToUpperInvariant() }));
+        }
+        else
+        {
+            Assert.False(ProcessOwnership.IsSameProcessIdentity(
+                expected,
+                expected with { ExecutablePath = path.ToUpperInvariant() }));
+        }
+
+        Assert.False(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with { Pid = 43 }));
+        Assert.False(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with { StartedAtUtcTicks = 1_001 }));
+        Assert.False(ProcessOwnership.IsSameProcessIdentity(
+            expected,
+            expected with
+            {
+                ExecutablePath = Path.Combine(
+                    Path.GetTempPath(), "other", "sing-box.exe")
+            }));
+    }
+
+    [Fact]
+    public void CurrentRuntimeOwnerPair_RequiresExactOwnerAndChildRecord()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "vpnr-bin", "sing-box.exe");
+        var owner = new OwnedProcessIdentity(41, 1_000, Path.Combine(Path.GetTempPath(), "vpnrouter.exe"));
+        var child = new OwnedProcessIdentity(42, 2_000, path, ParentPid: owner.Pid);
+        var current = new RuntimeOwnerRecordRead(
+            RuntimeOwnerRecordKind.CurrentV2,
+            new RuntimeOwnerRecord(2, path, owner.Pid, owner.StartedAtUtcTicks, child.Pid, child.StartedAtUtcTicks));
+
+        Assert.True(ProcessOwnership.IsCurrentRuntimeOwnerPair(current, owner, child));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            current,
+            owner with { StartedAtUtcTicks = owner.StartedAtUtcTicks + 1 },
+            child));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            current,
+            owner,
+            child with { Pid = child.Pid + 1 }));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            current,
+            owner,
+            child with { ExecutablePath = Path.Combine(Path.GetTempPath(), "other", "sing-box.exe") }));
+        Assert.False(ProcessOwnership.IsCurrentRuntimeOwnerPair(
+            new RuntimeOwnerRecordRead(RuntimeOwnerRecordKind.Missing, null),
+            owner,
+            child));
+    }
+
+    [Fact]
+    public void TryReadProcessIdentity_ReturnsExactSnapshotForCurrentProcess()
+    {
+        using var process = Process.GetCurrentProcess();
+        var snapshot = ProcessOwnership.TryReadProcessIdentity(process);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(process.Id, snapshot.Value.Pid);
+        Assert.True(snapshot.Value.StartedAtUtcTicks > 0);
+        Assert.False(string.IsNullOrWhiteSpace(snapshot.Value.ExecutablePath));
+        Assert.True(Path.IsPathRooted(snapshot.Value.ExecutablePath));
+        Assert.True(ProcessOwnership.IsSameProcessIdentity(snapshot.Value, snapshot.Value));
     }
 }
