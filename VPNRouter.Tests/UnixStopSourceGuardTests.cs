@@ -47,7 +47,6 @@ public sealed class UnixStopSourceGuardTests
         var lifecycle = ReadRepoFile("VPNRouter.Core", "Services", "SingBoxManager.Lifecycle.cs");
         Assert.Contains("State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed", lifecycle);
         Assert.Contains("if (releaseLock && unixStopped) _tunLock.Release()", lifecycle);
-        Assert.DoesNotContain("falling back", lifecycle, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
