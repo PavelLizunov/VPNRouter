@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -121,5 +122,19 @@ public sealed class ProcessOwnershipTests
                 ExecutablePath = Path.Combine(
                     Path.GetTempPath(), "other", "sing-box.exe")
             }));
+    }
+
+    [Fact]
+    public void TryReadProcessIdentity_ReturnsExactSnapshotForCurrentProcess()
+    {
+        using var process = Process.GetCurrentProcess();
+        var snapshot = ProcessOwnership.TryReadProcessIdentity(process);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(process.Id, snapshot.Value.Pid);
+        Assert.True(snapshot.Value.StartedAtUtcTicks > 0);
+        Assert.False(string.IsNullOrWhiteSpace(snapshot.Value.ExecutablePath));
+        Assert.True(Path.IsPathRooted(snapshot.Value.ExecutablePath));
+        Assert.True(ProcessOwnership.IsSameProcessIdentity(snapshot.Value, snapshot.Value));
     }
 }

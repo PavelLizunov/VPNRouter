@@ -1,94 +1,186 @@
 #nullable enable
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using VPNRouter.CLI.Helpers;
+using VPNRouter.Core;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.CLI.Commands;
 
 /// <summary>
-/// Persists running state so stop/status commands can find the sing-box PID
-/// even from a different CLI invocation.
-///
-/// <para>Phase 4 (2026-05-18) — migrated from Newtonsoft.Json
-/// <c>[JsonProperty]</c> + <c>JsonConvert</c> to System.Text.Json. The on-
-/// disk wire format is preserved byte-for-byte: <c>schema_version</c> is
-/// the only [JsonPropertyName]-pinned key (matches the pre-migration
-/// Newtonsoft <c>[JsonProperty("schema_version")]</c> contract); the
-/// other fields stay PascalCase (Newtonsoft's default conversion for un-
-/// annotated properties — STJ does the same with no naming policy set).
-/// <c>PropertyNameCaseInsensitive=true</c> in <see cref="StateFile.Options"/>
-/// keeps any user-edited state.json (rare but possible) parseable.</para>
+/// Persists running state so stop/status commands can find the exact CLI run
+/// and sing-box child from a different invocation.
 /// </summary>
 public class RunState
 {
     /// <summary>
-    /// v2.32.0 — schema marker. Bumped whenever the on-disk shape changes
-    /// in a non-backward-compatible way; older state files are quarantined
-    /// and rebuilt by <see cref="CacheRecovery"/>.
+    /// v2.32.0 — schema marker. Additive optional fields keep schema 1 readable;
+    /// incompatible shape changes must bump this value.
     /// </summary>
     [JsonPropertyName("schema_version")]
     public int SchemaVersion { get; set; } = StateFile.CurrentSchemaVersion;
 
     public string ActiveProfile { get; set; } = string.Empty;
     public int SingBoxPid { get; set; }
-
-    // CLI-1: PID of the `start` process that owns the sing-box child.
-    // Default 0 for pre-existing state files (stop falls back to child-kill).
     public int OwnerPid { get; set; }
-
     public DateTime StartedAt { get; set; }
     public List<string> ProcessNames { get; set; } = new();
+
+    // Additive defaults preserve legacy schema-1 readability. A missing/empty
+    // generation is status-only: new Stop code refuses every destructive action.
+    public Guid RunGeneration { get; set; }
+    public long OwnerStartedAtUtcTicks { get; set; }
+    public string OwnerExecutablePath { get; set; } = string.Empty;
+    public long SingBoxStartedAtUtcTicks { get; set; }
+    public string SingBoxExecutablePath { get; set; } = string.Empty;
 }
 
 public static class StateFile
 {
-    /// <summary>
-    /// v2.32.0 — current state.json schema version. A wrong/missing
-    /// <c>schema_version</c> on load is treated as "no running instance"
-    /// (i.e. <see cref="Read"/> returns null).
-    /// </summary>
     public const int CurrentSchemaVersion = 1;
 
-    // Phase 7 Wave 34 (2026-05-19): retired the local Options field.
-    // Both Write/Read now use the JsonTypeInfo<RunState> overload directly
-    // against CliJsonContext.Default. WriteIndented + PropertyNameCaseInsensitive
-    // moved to CliJsonContext's [JsonSourceGenerationOptions] (Wave 34
-    // change). Wire format identical.
-
+    private static readonly TimeSpan StateLockTimeout = TimeSpan.FromSeconds(5);
     private static readonly string Path =
         System.IO.Path.Combine(
             Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter"),
             "state.json");
+    private static string StateMutexName => OperatingSystem.IsWindows()
+        ? @"Global\VPNRouter_CLI_State_v1"
+        : "VPNRouter_CLI_State_v1";
 
-    public static void Write(RunState state)
+    public static void Write(RunState state) => Write(state, Path, StateMutexName);
+
+    public static RunState? Read() => Read(Path, StateMutexName);
+
+    internal static bool TryUpdateChild(Guid generation, OwnedProcessIdentity child) =>
+        TryUpdateChild(generation, child, Path, StateMutexName);
+
+    internal static bool ClearIfGeneration(Guid generation) =>
+        ClearIfGeneration(generation, Path, StateMutexName);
+
+    // Internal path/name overloads let the cross-platform test assembly compile
+    // this exact source and exercise real locking without touching ProgramData.
+    internal static void Write(RunState state, string path, string mutexName) =>
+        WithLock(mutexName, () =>
+        {
+            WriteUnlocked(state, path);
+            return true;
+        });
+
+    internal static RunState? Read(string path, string mutexName) =>
+        WithLock(mutexName, () => ReadUnlocked(path));
+
+    internal static bool TryUpdateChild(
+        Guid generation,
+        OwnedProcessIdentity child,
+        string path,
+        string mutexName)
     {
-        // Stamp the current schema on every write — covers callers that
-        // constructed RunState externally without touching the property.
-        state.SchemaVersion = CurrentSchemaVersion;
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-        File.WriteAllText(Path, JsonSerializer.Serialize(state, CliJsonContext.Default.RunState));
+        if (generation == Guid.Empty
+            || child.Pid <= 0
+            || child.StartedAtUtcTicks <= 0
+            || string.IsNullOrWhiteSpace(child.ExecutablePath))
+            return false;
+
+        return WithLock(mutexName, () =>
+        {
+            var current = ReadUnlocked(path);
+            if (current is null || current.RunGeneration != generation)
+                return false;
+
+            current.SingBoxPid = child.Pid;
+            current.SingBoxStartedAtUtcTicks = child.StartedAtUtcTicks;
+            current.SingBoxExecutablePath = child.ExecutablePath;
+            WriteUnlocked(current, path);
+            return true;
+        });
     }
 
-    public static RunState? Read()
+    internal static bool ClearIfGeneration(
+        Guid generation,
+        string path,
+        string mutexName)
     {
-        // state.json is consulted by stop/status from a fresh CLI process,
-        // so a corrupt file blocking the workflow would be especially
-        // painful — quarantine and treat as "no running instance".
+        if (generation == Guid.Empty)
+            return false;
+
+        return WithLock(mutexName, () =>
+        {
+            var current = ReadUnlocked(path);
+            if (current is not null && current.RunGeneration != generation)
+                return false;
+
+            if (File.Exists(path))
+                File.Delete(path);
+            return true;
+        });
+    }
+
+    private static RunState? ReadUnlocked(string path)
+    {
         var result = CacheRecovery.LoadOrRecover<RunState>(
-            Path,
+            path,
             CurrentSchemaVersion,
             json => JsonSerializer.Deserialize(json, CliJsonContext.Default.RunState),
             structuralCheck: null,
             logger: null);
-
         return result.Loaded ? result.Value : null;
     }
 
-    public static void Clear()
+    private static void WriteUnlocked(RunState state, string path)
     {
-        if (File.Exists(Path))
-            File.Delete(Path);
+        state.SchemaVersion = CurrentSchemaVersion;
+        var directory = System.IO.Path.GetDirectoryName(path)
+            ?? throw new IOException("CLI state path has no parent directory.");
+        Directory.CreateDirectory(directory);
+
+        var json = JsonSerializer.Serialize(state, CliJsonContext.Default.RunState);
+        var tmp = path + ".tmp";
+        try
+        {
+            using (var stream = AppPaths.CreatePrivateFile(tmp))
+            using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+            {
+                writer.Write(json);
+                writer.Flush();
+                stream.Flush(true);
+            }
+
+            File.Move(tmp, path, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+        }
+    }
+
+    private static T WithLock<T>(string mutexName, Func<T> action)
+    {
+        if (string.IsNullOrWhiteSpace(mutexName))
+            throw new ArgumentException("Mutex name is required.", nameof(mutexName));
+
+        using var mutex = new Mutex(initiallyOwned: false, mutexName);
+        var ownsMutex = false;
+        try
+        {
+            try
+            {
+                ownsMutex = mutex.WaitOne(StateLockTimeout);
+            }
+            catch (AbandonedMutexException)
+            {
+                // WaitOne grants ownership when reporting an abandoned mutex.
+                ownsMutex = true;
+            }
+
+            if (!ownsMutex)
+                throw new TimeoutException("Timed out waiting for the CLI state lock.");
+            return action();
+        }
+        finally
+        {
+            if (ownsMutex)
+                mutex.ReleaseMutex();
+        }
     }
 }

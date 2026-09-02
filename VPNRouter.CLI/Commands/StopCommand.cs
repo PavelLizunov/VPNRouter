@@ -7,162 +7,270 @@ namespace VPNRouter.CLI.Commands;
 
 public class StopCommand : Command
 {
-    // CLI-1: named-event prefix for the stop-request protocol.
-    // `start` creates VPNRouter_CLI_Stop_{pid}; `stop` signals it.
     internal const string StopEventPrefix = "VPNRouter_CLI_Stop_";
+
+    private enum OwnerStopResult
+    {
+        NotSupported,
+        Unavailable,
+        Exited,
+        TimedOut
+    }
 
     public override int Execute(CommandContext context)
     {
-        var state = StateFile.Read();
-        if (state == null)
+        RunState? observed;
+        try
+        {
+            observed = StateFile.Read();
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ Could not read CLI run state:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
+
+        if (observed is null)
         {
             AnsiConsole.MarkupLine("[yellow]VPN Router is not running.[/]");
             return 0;
         }
 
-        // CLI-2: refuse to kill a PID that is not a VPNRouter-owned sing-box
-        // (guards against OS PID reuse). Keep the complete identity so the
-        // post-wait fallback can prove it is still the same process.
-        OwnedProcessIdentity? observedIdentity = null;
-        if (state.SingBoxPid > 0)
+        if (observed.RunGeneration == Guid.Empty)
         {
-            try
+            AnsiConsole.MarkupLine(
+                "[yellow]Legacy CLI state has no run identity — refusing to signal, kill, or delete it. Stop its original terminal or restart it with this version.[/]");
+            return 1;
+        }
+
+        var generation = observed.RunGeneration;
+        var expectedOwner = PersistedIdentity(
+            observed.OwnerPid,
+            observed.OwnerStartedAtUtcTicks,
+            observed.OwnerExecutablePath);
+        var expectedChild = PersistedIdentity(
+            observed.SingBoxPid,
+            observed.SingBoxStartedAtUtcTicks,
+            observed.SingBoxExecutablePath);
+        if (expectedOwner is null || expectedChild is null)
+        {
+            AnsiConsole.MarkupLine(
+                "[yellow]CLI state has incomplete process identity — refusing every destructive action.[/]");
+            return 1;
+        }
+
+        var ownerResult = OperatingSystem.IsWindows()
+            ? TrySignalOwnerAndWait(expectedOwner.Value, generation)
+            : OwnerStopResult.NotSupported;
+        if (ownerResult == OwnerStopResult.TimedOut)
+        {
+            AnsiConsole.MarkupLine(
+                "[red]✗ Timed out waiting for the exact CLI owner; state and child were preserved.[/]");
+            return 1;
+        }
+
+        // A generation-published event cannot be absent while its exact owner is
+        // alive. Do not kill a child that the live owner may be cleaning up or
+        // restarting; retain state for a later exact retry.
+        if (ownerResult == OwnerStopResult.Unavailable
+            && IsExactProcessAlive(expectedOwner.Value))
+        {
+            AnsiConsole.MarkupLine(
+                "[yellow]The exact CLI owner is alive but its stop capability is unavailable — refusing fallback kill.[/]");
+            return 1;
+        }
+
+        RunState target = observed;
+        try
+        {
+            var latest = StateFile.Read();
+            if (latest is not null)
             {
-                using var proc = Process.GetProcessById(state.SingBoxPid);
-                observedIdentity = ProcessOwnership.TryReadOwnedSingBoxIdentity(proc);
-                if (observedIdentity is null && !proc.HasExited)
+                if (latest.RunGeneration != generation)
                 {
                     AnsiConsole.MarkupLine(
-                        $"[yellow]PID {state.SingBoxPid} is not a VPNRouter-owned sing-box process — refusing to kill[/]");
+                        "[yellow]A newer CLI run replaced the observed generation; it was not touched.[/]");
                     return 1;
                 }
+
+                target = latest;
             }
-            catch (ArgumentException)
-            {
-                // Process already gone — fall through to cleanup.
-            }
-            catch (Exception ex)
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ Could not re-read CLI run state:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
+
+        expectedChild = PersistedIdentity(
+            target.SingBoxPid,
+            target.SingBoxStartedAtUtcTicks,
+            target.SingBoxExecutablePath);
+        if (expectedChild is null)
+        {
+            AnsiConsole.MarkupLine(
+                "[yellow]The observed generation lost its exact child identity — refusing fallback kill and cleanup.[/]");
+            return 1;
+        }
+
+        if (!TryStopExactChild(expectedChild.Value))
+            return 1;
+
+        try
+        {
+            if (!StateFile.ClearIfGeneration(generation))
             {
                 AnsiConsole.MarkupLine(
-                    $"[red]✗ Error verifying sing-box identity:[/] {ex.Message}");
+                    "[yellow]A newer CLI run now owns state; its state was preserved.[/]");
                 return 1;
             }
         }
-
-        // CLI-1: signal the owner (start) process to shut down gracefully.
-        // Windows-only; Linux/macOS fall back to the legacy child-kill.
-        if (OperatingSystem.IsWindows() && state.OwnerPid > 0)
+        catch (Exception ex)
         {
-            if (TrySignalOwnerAndWait(state.OwnerPid))
-            {
-                if (StateFile.Read() is not null)
-                    StateFile.Clear();
-                AnsiConsole.MarkupLine("[green]✓[/] VPN Router stopped.");
-                return 0;
-            }
+            AnsiConsole.MarkupLine($"[red]✗ Could not clear the exact CLI run state:[/] {Markup.Escape(ex.Message)}");
+            return 1;
         }
 
-        // Legacy fallback: kill the sing-box child directly, but only if the
-        // freshly-opened process still has the exact identity observed above.
-        if (state.SingBoxPid > 0 && observedIdentity is { } expectedIdentity)
-        {
-            try
-            {
-                using var proc = Process.GetProcessById(state.SingBoxPid);
-                // On Windows, retaining this native handle prevents the PID
-                // from being recycled between identity comparison and Kill.
-                var pinnedWindowsHandle = OperatingSystem.IsWindows()
-                    ? proc.SafeHandle
-                    : null;
-                if (pinnedWindowsHandle is { IsInvalid: true } or { IsClosed: true })
-                {
-                    AnsiConsole.MarkupLine(
-                        $"[yellow]Could not pin PID {state.SingBoxPid} — refusing to kill[/]");
-                    return 1;
-                }
-
-                var currentIdentity = ProcessOwnership.TryReadOwnedSingBoxIdentity(proc);
-                if (currentIdentity is not { } current)
-                {
-                    if (proc.HasExited)
-                    {
-                        AnsiConsole.MarkupLine($"[grey]sing-box (PID {state.SingBoxPid}) already stopped[/]");
-                    }
-                    else
-                    {
-                        AnsiConsole.MarkupLine(
-                            $"[yellow]PID {state.SingBoxPid} is no longer a VPNRouter-owned sing-box process — refusing to kill[/]");
-                        return 1;
-                    }
-                }
-                else
-                {
-                    if (!ProcessOwnership.IsSameProcessIdentity(expectedIdentity, current))
-                    {
-                        AnsiConsole.MarkupLine(
-                            $"[yellow]PID {state.SingBoxPid} changed identity while stop was waiting — refusing to kill[/]");
-                        return 1;
-                    }
-
-                    proc.Kill(entireProcessTree: true);
-                    var exited = proc.WaitForExit(5000);
-                    GC.KeepAlive(pinnedWindowsHandle);
-                    if (!exited)
-                    {
-                        AnsiConsole.MarkupLine(
-                            $"[red]✗ Timed out waiting for sing-box PID {state.SingBoxPid} to stop[/]");
-                        return 1;
-                    }
-                    AnsiConsole.MarkupLine($"[green]✓[/] sing-box stopped (was PID {state.SingBoxPid})");
-                }
-            }
-            catch (ArgumentException)
-            {
-                AnsiConsole.MarkupLine($"[grey]sing-box (PID {state.SingBoxPid}) already stopped[/]");
-            }
-            catch (InvalidOperationException)
-            {
-                AnsiConsole.MarkupLine($"[grey]sing-box (PID {state.SingBoxPid}) already stopped[/]");
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]✗ Error stopping sing-box:[/] {ex.Message}");
-                return 1;
-            }
-        }
-        else if (state.SingBoxPid > 0)
-        {
-            AnsiConsole.MarkupLine($"[grey]sing-box (PID {state.SingBoxPid}) already stopped[/]");
-        }
-
-        StateFile.Clear();
         AnsiConsole.MarkupLine("[green]✓[/] VPN Router stopped.");
         return 0;
     }
 
-    private static bool TrySignalOwnerAndWait(int ownerPid)
+    internal static string BuildStopEventName(int ownerPid, Guid generation)
+    {
+        if (ownerPid <= 0) throw new ArgumentOutOfRangeException(nameof(ownerPid));
+        if (generation == Guid.Empty) throw new ArgumentException("Run generation is required.", nameof(generation));
+        return $"{StopEventPrefix}{ownerPid}_{generation:N}";
+    }
+
+    private static OwnedProcessIdentity? PersistedIdentity(
+        int pid,
+        long startedAtUtcTicks,
+        string executablePath)
+        => pid > 0 && startedAtUtcTicks > 0 && !string.IsNullOrWhiteSpace(executablePath)
+            ? new OwnedProcessIdentity(pid, startedAtUtcTicks, executablePath)
+            : null;
+
+    private static OwnerStopResult TrySignalOwnerAndWait(
+        OwnedProcessIdentity expectedOwner,
+        Guid generation)
     {
         try
         {
+            using var ownerProcess = Process.GetProcessById(expectedOwner.Pid);
+            var pinnedOwnerHandle = ownerProcess.SafeHandle;
+            if (pinnedOwnerHandle.IsInvalid || pinnedOwnerHandle.IsClosed)
+                return OwnerStopResult.Unavailable;
+
+            var currentOwner = ProcessOwnership.TryReadProcessIdentity(ownerProcess);
+            if (currentOwner is not { } current
+                || !ProcessOwnership.IsSameProcessIdentity(expectedOwner, current))
+                return OwnerStopResult.Unavailable;
+
             if (!EventWaitHandle.TryOpenExisting(
-                    StopEventPrefix + ownerPid, out var ownerEvent))
-                return false;
+                    BuildStopEventName(expectedOwner.Pid, generation),
+                    out var ownerEvent))
+                return OwnerStopResult.Unavailable;
 
             using (ownerEvent)
                 ownerEvent.Set();
 
-            try
-            {
-                using var ownerProc = Process.GetProcessById(ownerPid);
-                return ownerProc.WaitForExit(5000);
-            }
-            catch (ArgumentException)
-            {
-                return true;
-            }
+            var exited = ownerProcess.WaitForExit(5000);
+            GC.KeepAlive(pinnedOwnerHandle);
+            return exited ? OwnerStopResult.Exited : OwnerStopResult.TimedOut;
+        }
+        catch (ArgumentException)
+        {
+            return OwnerStopResult.Unavailable;
+        }
+        catch (InvalidOperationException)
+        {
+            return OwnerStopResult.Unavailable;
         }
         catch
         {
+            return OwnerStopResult.Unavailable;
+        }
+    }
+
+    private static bool IsExactProcessAlive(OwnedProcessIdentity expected)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(expected.Pid);
+            var pinnedHandle = OperatingSystem.IsWindows() ? process.SafeHandle : null;
+            if (pinnedHandle is { IsInvalid: true } or { IsClosed: true })
+                return false;
+            var current = ProcessOwnership.TryReadProcessIdentity(process);
+            var matches = current is { } value
+                && ProcessOwnership.IsSameProcessIdentity(expected, value);
+            GC.KeepAlive(pinnedHandle);
+            return matches;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryStopExactChild(OwnedProcessIdentity expectedChild)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(expectedChild.Pid);
+            var pinnedWindowsHandle = OperatingSystem.IsWindows()
+                ? process.SafeHandle
+                : null;
+            if (pinnedWindowsHandle is { IsInvalid: true } or { IsClosed: true })
+            {
+                AnsiConsole.MarkupLine(
+                    $"[yellow]Could not pin PID {expectedChild.Pid} — refusing to kill.[/]");
+                return false;
+            }
+
+            var currentChild = ProcessOwnership.TryReadOwnedSingBoxIdentity(process);
+            if (currentChild is not { } current)
+            {
+                if (process.HasExited)
+                    return true;
+
+                AnsiConsole.MarkupLine(
+                    $"[yellow]PID {expectedChild.Pid} is not a VPNRouter-owned sing-box process — refusing to kill.[/]");
+                return false;
+            }
+
+            if (!ProcessOwnership.IsSameProcessIdentity(expectedChild, current))
+            {
+                AnsiConsole.MarkupLine(
+                    $"[yellow]PID {expectedChild.Pid} no longer matches the persisted child identity — refusing to kill.[/]");
+                return false;
+            }
+
+            process.Kill(entireProcessTree: true);
+            var exited = process.WaitForExit(5000);
+            GC.KeepAlive(pinnedWindowsHandle);
+            if (!exited)
+            {
+                AnsiConsole.MarkupLine(
+                    $"[red]✗ Timed out waiting for sing-box PID {expectedChild.Pid} to stop.[/]");
+                return false;
+            }
+
+            AnsiConsole.MarkupLine($"[green]✓[/] sing-box stopped (was PID {expectedChild.Pid})");
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            AnsiConsole.MarkupLine($"[grey]sing-box (PID {expectedChild.Pid}) already stopped[/]");
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            AnsiConsole.MarkupLine($"[grey]sing-box (PID {expectedChild.Pid}) already stopped[/]");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ Error stopping sing-box:[/] {Markup.Escape(ex.Message)}");
             return false;
         }
     }

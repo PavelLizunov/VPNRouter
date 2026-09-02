@@ -135,6 +135,13 @@ internal static class ProcessOwnership
     public static bool IsOwnedSingBox(Process process) =>
         TryReadOwnedSingBoxIdentity(process) is not null;
 
+    /// <summary>
+    /// Read one exact process capability snapshot without granting ownership.
+    /// Callers must apply their own trusted identity before any destructive use.
+    /// </summary>
+    internal static OwnedProcessIdentity? TryReadProcessIdentity(Process process) =>
+        TryReadIdentity(process);
+
     internal static OwnedProcessIdentity? TryReadOwnedSingBoxIdentity(Process process)
     {
         var identity = TryReadIdentity(process);
