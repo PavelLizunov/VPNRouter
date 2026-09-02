@@ -52,6 +52,32 @@ public sealed class CliStopHandleCharacterizationTests
         }
     }
 
+    [Fact]
+    public void UserScopedEvent_CanBeOpenedByLegacyNameOnlyClient()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var name = "VPNRouter_CLI_Stop_Test_" + Guid.NewGuid().ToString("N");
+        var options = new NamedWaitHandleOptions
+        {
+            CurrentUserOnly = true,
+            CurrentSessionOnly = true
+        };
+        using var created = new EventWaitHandle(
+            false,
+            EventResetMode.AutoReset,
+            name,
+            options,
+            out var createdNew);
+        Assert.True(createdNew);
+        Assert.True(EventWaitHandle.TryOpenExisting(name, out var legacyClient));
+        Assert.NotNull(legacyClient);
+        using (legacyClient)
+            legacyClient.Set();
+        Assert.True(created.WaitOne(TimeSpan.FromSeconds(1)));
+    }
+
     [SupportedOSPlatform("windows")]
     private static OwnedProcessIdentity Snapshot(Process process) => new(
         process.Id,
