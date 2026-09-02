@@ -61,7 +61,7 @@ Run focused CLI/process/state tests, all discovered tests, affected Release buil
 **Test deltas**: +12 discovered and executed tests versus the brief-only baseline; `2844 total / 2787 executed / 2787 passed / 0 failed / 0 warning`
 **Files changed**: Start/Stop/StateFile, AppPaths private-file mode seam, ProcessOwnership exact authority checks, linked state/context test configuration, three regression test files, this brief, and the defect ledger
 
-**Gate results**: affected builds, Windows CLI publish, Ubuntu suite, Windows characterization, Go test and grep checks all passed on implementation head `8a4eca55`; a final docs-only exact-head run remains required after this outcome commit.
+**Gate results**: affected builds, Windows CLI publish, Ubuntu suite, Windows characterization, Go test and grep checks passed on implementation head `8a4eca55` and remained green through the outcome update; exact handoff links are maintained in PR #214.
 
 **Surprises encountered**: reviewers found and the implementation fixed a lost restart/publication race, ambiguous owner-liveness fallback, unreadable-state deletion, fixed-temp link exposure, stale runtime authority, and old-Stop/new-Start compatibility. Search-first verdict: **Adopt** .NET 10 `NamedWaitHandleOptions`; it scopes events to the current user/session and the mutex to the current user across sessions without adding the disallowed package dependency. An unexplained workspace actor committed and pushed `bc057f65`; no content was lost, exact-head CI passed, and candidate incident `INC-1334` records it.
 
