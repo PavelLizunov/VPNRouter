@@ -54,22 +54,33 @@ Run focused unit tests and full test suites on Ubuntu and Windows. GitHub Action
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: all unit and characterization tests pass with zero failures.
-- [ ] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
-- [ ] **Gate 4 — Self-review**: adversarial review confirms exit suppression, semaphore safety, backoff progression, and candidate rotation.
-- [ ] **Gate 5 — UI verify**: N/A (Core services changes; UI surface untouched).
-- [ ] **Gate 6 — Characterization diff**: existing lifecycle characterizations continue to pass.
+- [x] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors in PR workflow `33684042693`.
+- [x] **Gate 2 — Tests green**: baseline `2830 total / 2773 executed` became `2834 total / 2777 executed`, all passed with zero errors and zero warnings; Windows characterization passed `19/19` with zero failures.
+- [x] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
+- [x] **Gate 4 — Self-review**: independent Opus review verified exit-code capture, TUN lock release, counter reset logic, and candidate rotation without regressions.
+- [x] **Gate 5 — UI verify**: N/A (Core services changes; UI surface untouched).
+- [x] **Gate 6 — Characterization diff**: existing lifecycle and process runner characterizations continue to pass.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: brief commit pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR #218 remains open and unmerged
+**Commits**: `a29ce880` (brief); `dadde426` (implementation + tests)
+**Pushed**: `origin/dsh/fix-singbox-and-failover`; PR #218 — https://github.com/PavelLizunov/VPNRouter/pull/218
+**Test deltas**: +4 unit tests across `AutoFailoverEngineTests`, `HealthMonitorFailoverTriggerTests`, and `SingBoxManagerProcessRunnerTests` (`2834 total / 2777 executed / 2777 passed / 0 failed / 0 warning`); Windows characterization `19/19 passed`
+**Files changed**:
+- `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs`: pass event-captured exit code to `OnProcessExited(code)`, and wrap `Restart()` in `catch` block to set `State = Failed` and release `_tunLock`.
+- `VPNRouter.Core/Services/SingBoxManager.CrashDetect.cs`: prioritize event-captured `eventExitCode` over reading mutable `_handle`.
+- `VPNRouter.Core/Services/HealthMonitor.cs`: remove premature `_restartAttempts = 0` from restart continuation, preserving exponential backoff and `FailoverRequested`.
+- `VPNRouter.Core/Services/AutoFailoverEngine.cs`: record failed candidate in `_tried` upon restart failure, ensuring rotation to subsequent servers.
+- `VPNRouter.Tests/AutoFailoverEngineTests.cs`: added unit test verifying candidate rotation after failed restart.
+- `VPNRouter.Tests/HealthMonitorFailoverTriggerTests.cs`: added unit test verifying multi-attempt backoff progression to ceiling.
+- `VPNRouter.Tests/SingBoxManagerProcessRunnerTests.cs`: added unit tests verifying `Restart()` releases `_tunLock` on failure and `Stop()` suppresses exit events even when `_handle` is nulled.
+- `plans/phase-fix-singbox-and-failover-2026-09-02.md`: this phase brief and outcome record.
 
-**Gate results**: pending.
-**Surprises encountered**: pending.
-**Follow-ups spawned**: pending.
-**Lessons for methodology doc**: pending.
+**Gate results**: All 6 gates passed in workflow `33684042693`.
+
+**Surprises encountered**:
+- In `HealthMonitor.cs`, `AttemptRestart()` evaluates `_restartAttempts >= MaxRestartAttempts` before incrementing the counter. For `MaxRestartAttempts = 2`, the ceiling is hit on invocation 3, which our unit test reflects.
+
+**Follow-ups spawned**: Next confirmed defect packages (Packet 3: `CustomConfigInjector` rule leaks; Packet 4: `EtwProcessMonitor` reset and `NaivePairing` global fallback) are ready for subsequent task branches.
+**Lessons for methodology doc**: Process exit listeners must always capture exit codes directly from the event args rather than re-querying mutable instance state that may have been disposed or cleared by stopping threads.
