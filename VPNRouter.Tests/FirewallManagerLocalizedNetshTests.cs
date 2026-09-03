@@ -1,6 +1,7 @@
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 /// <summary>v2.31.0-r1 (CO-5 audit fix): netsh output parser must NOT match

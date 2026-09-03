@@ -57,13 +57,18 @@ public partial class ServiceViewModel : ObservableObject
             if (Dispatcher.UIThread.CheckAccess())
             {
                 ApplyState(isInstalled, isRunning, pid);
+                _isLoading = false;
             }
             else
             {
-                Dispatcher.UIThread.Post(() => ApplyState(isInstalled, isRunning, pid));
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ApplyState(isInstalled, isRunning, pid);
+                    _isLoading = false;
+                });
             }
         }
-        finally
+        catch
         {
             _isLoading = false;
         }

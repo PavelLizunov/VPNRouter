@@ -80,9 +80,10 @@ public partial class MainWindowViewModel
             await Task.Delay(500).ConfigureAwait(false);
 
             // Re-poll the SCM directly in background (don't block the UI thread with synchronous sc.exe queries).
+            var isRunning = await Task.Run(() => VPNRouter.App.Services.WindowsServiceHelper.IsRunning()).ConfigureAwait(false);
             ServiceVm.Refresh();
 
-            if (ServiceVm.IsRunning)
+            if (isRunning)
             {
                 _logger.Information(
                     "[App-Autostart] Windows Service is running — deferring " +
