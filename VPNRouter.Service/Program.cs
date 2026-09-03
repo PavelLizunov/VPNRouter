@@ -29,7 +29,7 @@ WriteEvent($"VPNRouter Service process started. PID={Environment.ProcessId}, Arg
 // ─── Kill zombie sing-box processes from previous runs ───────────────────────
 // If the service was stopped uncleanly (race condition, power loss, etc.),
 // a sing-box process may still be running and holding the TUN interface.
-// v2.26.3 fix for Bug A: before killing, check TunLock. If another VPNRouter
+// v2.26.3 fix for Bug A: before killing, reserve TunLock. If another VPNRouter
 // instance (App / CLI) legitimately holds the TUN adapter, its sing-box is
 // NOT an orphan — it's in active use. Killing it caused the v2.26.1-r1 bug
 // where ticking "Enable background service" in Advanced while VPN was up
@@ -39,33 +39,70 @@ WriteEvent($"VPNRouter Service process started. PID={Environment.ProcessId}, Arg
 
 try
 {
-    if (VPNRouter.Core.Services.TunOwnershipLock.IsOwnedByAnyone())
+    // Reserve TUN ownership for the full sweep so another VPNRouter instance
+    // cannot start a new sing-box between a lock probe and our Kill call.
+    using var cleanupLock = new VPNRouter.Core.Services.TunOwnershipLock();
+    _ = cleanupLock.TryAcquire();
+    if (!cleanupLock.HasOwnership)
     {
-        WriteEvent("TUN is held by another VPNRouter instance — skipping orphan sing-box cleanup (its sing-box is not an orphan)");
+        WriteEvent("TUN cleanup reservation is held or unavailable — skipping orphan sing-box cleanup");
     }
     else
     {
         var zombies = Process.GetProcessesByName("sing-box");
         if (zombies.Length > 0)
         {
-            WriteEvent($"Found {zombies.Length} orphan sing-box process(es), killing before startup", EventLogEntryType.Warning);
+            WriteEvent($"Found {zombies.Length} sing-box candidate(s), verifying VPNRouter ownership before cleanup");
+            var killedOwnedProcess = false;
             foreach (var z in zombies)
             {
+                var pid = 0;
                 try
                 {
+                    pid = z.Id;
+                    // Retaining the native handle prevents Windows from
+                    // recycling this PID between ownership proof and Kill.
+                    var pinnedHandle = z.SafeHandle;
+                    if (pinnedHandle.IsInvalid || pinnedHandle.IsClosed)
+                    {
+                        WriteEvent($"Could not pin sing-box PID {pid}; preserving it", EventLogEntryType.Warning);
+                        continue;
+                    }
+
+                    if (!VPNRouter.Core.Services.ProcessOwnership.IsOwnedSingBox(z))
+                    {
+                        WriteEvent($"sing-box PID {pid} is not proven VPNRouter-owned; preserving it", EventLogEntryType.Warning);
+                        continue;
+                    }
+
                     z.Kill(entireProcessTree: true);
-                    z.WaitForExit(3000);
-                    WriteEvent($"Killed orphan sing-box PID {z.Id}");
+                    var exited = z.WaitForExit(3000);
+                    GC.KeepAlive(pinnedHandle);
+                    if (!exited)
+                    {
+                        WriteEvent($"Timed out waiting for owned sing-box PID {pid} to stop", EventLogEntryType.Warning);
+                        continue;
+                    }
+
+                    killedOwnedProcess = true;
+                    WriteEvent($"Killed VPNRouter-owned orphan sing-box PID {pid}");
+                }
+                catch (InvalidOperationException)
+                {
+                    WriteEvent($"sing-box PID {pid} already exited before orphan cleanup");
                 }
                 catch (Exception ex)
                 {
-                    WriteEvent($"Failed to kill orphan sing-box PID {z.Id}: {ex.Message}", EventLogEntryType.Warning);
+                    WriteEvent($"Failed to inspect or stop sing-box PID {pid}: {ex.Message}", EventLogEntryType.Warning);
                 }
                 finally { z.Dispose(); }
             }
 
-            // Give OS time to release TUN interface after killing sing-box
-            Thread.Sleep(2000);
+            if (killedOwnedProcess)
+            {
+                // Give OS time to release TUN after confirmed termination.
+                Thread.Sleep(2000);
+            }
         }
     }
 }
