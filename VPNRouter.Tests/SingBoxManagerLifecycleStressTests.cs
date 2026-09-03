@@ -79,8 +79,14 @@ public sealed class SingBoxManagerLifecycleStressTests : IDisposable
         if (_savedTunDiagRunner != null)
             runnerProp?.SetValue(null, _savedTunDiagRunner);
 
-        // Leave the process-wide named semaphore released for the next class.
-        try { TunOwnershipLock.Instance(null).Release(); } catch { }
+        // Reset the process-wide singleton after the fixture's direct lock use.
+        try
+        {
+            var tunLock = TunOwnershipLock.Instance(null);
+            tunLock.Release();
+            tunLock.Dispose();
+        }
+        catch { }
     }
 
     [Fact]
@@ -114,6 +120,7 @@ public sealed class SingBoxManagerLifecycleStressTests : IDisposable
                 $"previous storm's concurrent Stop() leaked it (failed to " +
                 $"release under contention). B2 guard or a releaseLock-gated " +
                 $"release site regressed.");
+            SetField(mgr, "_ownsTunLock", true);
 
             var handle = new FakeProcessHandle(NewFakePid());
             SetField(mgr, "_handle", handle);

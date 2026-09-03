@@ -4,20 +4,24 @@
 # with the .deb to /usr/libexec/vpnrouter-update-helper.
 #
 # Usage: vpnrouter-update-helper <staging-dir> <install-dir>
+#        [--owned-signal-v1 <pid> <started-at-utc-ticks> <executable-path>]
 #
-# Validates both paths, kills sing-box, copies staging to install dir,
-# sets +x on the two binaries. Keeping all privileged work in one
-# helper means polkit has to authorize only ONE action per update
-# instead of three (cp + chmod + pkill) — and the annotated exec.path
-# keeps privileged cp/chmod/pkill behind one administrator-authenticated
-# polkit action instead of authorizing those tools globally.
+# Validates both paths, optionally asks the installed VPNRouter host to signal
+# one exact owned identity, copies staging to install dir, and sets +x on the
+# two binaries. Keeping all privileged work in one helper means polkit has to
+# authorize only ONE action per update without granting broad process matching.
 set -e
 
-SRC="$1"
-DST="$2"
+SRC="${1:-}"
+DST="${2:-}"
 
 if [ -z "$SRC" ] || [ -z "$DST" ]; then
-    echo "usage: $0 <source-dir> <install-dir>" >&2
+    echo "usage: $0 <source-dir> <install-dir> [--owned-signal-v1 <pid> <started-at-utc-ticks> <executable-path>]" >&2
+    exit 2
+fi
+
+if [ "$#" -ne 2 ] && { [ "$#" -ne 6 ] || [ "$3" != "--owned-signal-v1" ]; }; then
+    echo "Invalid owned-process signal arguments" >&2
     exit 2
 fi
 
@@ -41,8 +45,20 @@ if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
     exit 5
 fi
 
-# Stop sing-box first (ignore failure if not running)
-pkill -f sing-box 2>/dev/null || true
+# Stop only the identity selected by the owning VPNRouter process. The current
+# host opens a Linux pidfd, re-reads PID/start/path after open, and signals that
+# descriptor. Refusal aborts before copy; there is deliberately no name fallback.
+if [ "$#" -eq 6 ]; then
+    CURRENT_HOST="$DST/VPNRouter.App"
+    if [ ! -x "$CURRENT_HOST" ]; then
+        echo "Current VPNRouter helper executable is unavailable: $CURRENT_HOST" >&2
+        exit 6
+    fi
+    if ! "$CURRENT_HOST" --vpnrouter-internal-signal-owned-v1 "$4" "$5" "$6" 9; then
+        echo "Exact owned sing-box stop failed" >&2
+        exit 6
+    fi
+fi
 
 # Copy contents into installation dir (-T treats DST as the target, not
 # parent), preserving modes from the tarball extraction.

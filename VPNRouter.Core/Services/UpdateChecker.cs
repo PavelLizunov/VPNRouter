@@ -982,6 +982,14 @@ public class UpdateChecker : IDesktopInstaller
         var installDir = AppContext.BaseDirectory.TrimEnd('/');
         Log($"Install dir: {installDir}");
 
+        // SU-3-3: carry one coherent process identity into whichever update
+        // helper performs the stop. A missing identity means "signal nobody",
+        // never "fall back to every command line containing sing-box".
+        var ownedTarget = ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath);
+        Log(ownedTarget is { } target
+            ? $"Owned sing-box target: PID {target.Pid}"
+            : "Owned sing-box target: none");
+
         // AppImage: BaseDirectory lives on a FUSE mount under /tmp/.mount_*
         // Writing there while the AppImage is running is not safe.
         if (installDir.Contains("/.mount_", StringComparison.OrdinalIgnoreCase) ||
@@ -1006,8 +1014,8 @@ public class UpdateChecker : IDesktopInstaller
 
         if (needsRoot)
         {
-            // v2.22.2-r8: all three privileged steps (pkill sing-box, cp,
-            // chmod) are now collapsed into a single invocation of our
+            // v2.22.2-r8: privileged stop, copy, and chmod are collapsed
+            // into a single invocation of our
             // update-helper shipped with the .deb at
             // /usr/libexec/vpnrouter-update-helper. The packaged helper is
             // bound to /usr/libexec/vpnrouter-update-helper and requires
@@ -1015,16 +1023,17 @@ public class UpdateChecker : IDesktopInstaller
             // pkexec steps if the update helper is missing (e.g. tar.gz
             // install that skipped the .deb postinst).
             const string helper = "/usr/libexec/vpnrouter-update-helper";
-            var helperExists = File.Exists(helper);
-            if (!helperExists)
+            var helperSupportsExactSignal = HelperSupportsExactOwnedSignal(helper);
+            if (!helperSupportsExactSignal)
             {
-                Log($"WARNING: {helper} missing — falling back to inline cp/chmod (will prompt for password each time)");
-                RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath, pkexec);
+                Log($"WARNING: {helper} missing or legacy — using exact inline helper path");
+                RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath, pkexec, ownedTarget);
             }
             else
             {
                 Log($"Invoking update helper via pkexec: {helper}");
-                var helperArgs = new[] { helper, sourceDir, installDir };
+                var helperArgs = new List<string> { helper, sourceDir, installDir };
+                AppendOwnedSignalArguments(helperArgs, ownedTarget);
                 var (hExit, hOut, hErr) = RunWithCapture(
                     pkexec!,
                     helperArgs,
@@ -1040,6 +1049,7 @@ public class UpdateChecker : IDesktopInstaller
                         3   => " (helper: refused destination for safety)",
                         4   => " (helper: staging dir missing or not a directory)",
                         5   => " (helper: source missing VPNRouter.App)",
+                        6   => " (helper: exact owned sing-box stop failed)",
                         _   => ""
                     };
                     throw new InvalidOperationException(
@@ -1049,9 +1059,9 @@ public class UpdateChecker : IDesktopInstaller
         }
         else
         {
-            // User-writable install (tar.gz extracted to $HOME etc): do the
-            // cp + chmod + pkill inline. No privilege escalation needed.
-            RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath, null);
+            // User-writable install (tar.gz extracted to $HOME etc): perform
+            // the same exact-identity stop, copy, and chmod without elevation.
+            RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath, null, ownedTarget);
         }
 
         // Drop an install receipt BEFORE attempting launch. Next boot, if
@@ -1193,29 +1203,43 @@ public class UpdateChecker : IDesktopInstaller
     /// <summary>
     /// Fallback path for when the privileged update helper isn't installed
     /// (e.g. user is running a tar.gz install instead of the .deb, or the
-    /// .deb postinst didn't run). Runs pkill + cp + chmod inline. Each
-    /// step still goes through pkexec if needsRoot, so users get 3
-    /// password prompts — the whole point of the helper + polkit policy
-    /// is to avoid this, but we keep the code so pre-policy environments
-    /// still work.
+    /// .deb postinst didn't run). Signals only an optional exact owned identity,
+    /// then runs copy + chmod. Privileged steps still go through pkexec.
     /// </summary>
     private void RunLegacyPrivilegedSteps(string sourceDir, string installDir,
-        Action<string> log, string logPath, string? pkexec)
+        Action<string> log, string logPath, string? pkexec,
+        OwnedProcessIdentity? ownedTarget)
     {
         var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
 
-        // 1. Stop sing-box (ignore failure if not running)
-        try
+        // 1. Stop only the identity selected before update. The internal Linux
+        // helper opens a pidfd, re-reads PID/start/path, then signals through
+        // that stable descriptor. Any refusal aborts the update before copy.
+        if (ownedTarget is { } target)
         {
-            var pkillArgs = needsRoot
-                ? new[] { "pkill", "-f", "sing-box" }
-                : new[] { "-f", "sing-box" };
-            var pkillCmd = needsRoot ? pkexec! : "/usr/bin/pkill";
-            var (_, _, kserr) = RunWithCapture(pkillCmd, pkillArgs, 5000);
-            log($"pkill sing-box: stderr={Truncate(kserr)}");
+            var hostPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(hostPath) || !Path.IsPathFullyQualified(hostPath))
+                throw new InvalidOperationException("Current VPNRouter helper executable is unavailable.");
+
+            var helperArgs = SingBoxManager.BuildLinuxOwnedSignalHelperArguments(
+                hostPath,
+                target,
+                signal: 9);
+            var helperCommand = hostPath;
+            IReadOnlyList<string> signalArgs = helperArgs.Skip(1).ToArray();
+            if (needsRoot)
+            {
+                helperCommand = pkexec!;
+                signalArgs = helperArgs;
+            }
+
+            var (signalExit, _, signalError) = RunWithCapture(helperCommand, signalArgs, 30_000);
+            log($"exact owned sing-box signal exit={signalExit} stderr={Truncate(signalError)}");
+            if (signalExit != 0)
+                throw new InvalidOperationException(
+                    $"Exact owned sing-box stop failed (exit {signalExit}): {Truncate(signalError, 200)}".Trim());
         }
-        catch (Exception ex) { log($"pkill sing-box threw: {ex.Message}"); }
 
         // 2. cp -rfT
         {
@@ -1249,6 +1273,30 @@ public class UpdateChecker : IDesktopInstaller
             log($"chmod exit={chExit} stderr={Truncate(chErr)}");
         }
         catch (Exception ex) { log($"chmod threw: {ex.Message}"); }
+    }
+
+    internal static bool HelperSupportsExactOwnedSignal(string path)
+    {
+        try
+        {
+            return File.Exists(path)
+                   && File.ReadAllText(path).Contains("--owned-signal-v1", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static void AppendOwnedSignalArguments(
+        ICollection<string> args,
+        OwnedProcessIdentity? target)
+    {
+        if (target is not { } owned) return;
+        args.Add("--owned-signal-v1");
+        args.Add(owned.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        args.Add(owned.StartedAtUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        args.Add(owned.ExecutablePath);
     }
 
     // ─── Update log + install receipt helpers ────────────────────────────────

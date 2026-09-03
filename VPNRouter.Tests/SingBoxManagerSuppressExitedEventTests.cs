@@ -83,11 +83,9 @@ public sealed class SingBoxManagerSuppressExitedEventTests
 
         var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
 
-        // The Linux capability path calls `_handle.Kill(entireProcessTree: true)`
-        // (without the `!` because the handle was null-checked in the
-        // enclosing if). Look for the SuppressExitedEvent and the Kill
-        // inside the Linux branch — both should appear and Suppress comes
-        // first.
+        // The Linux capability path captures the exact handle locally so a
+        // concurrent lifecycle cannot replace the signal target. Pin both
+        // calls on that captured target and their ordering.
         var linuxBranch = src.IndexOf("v2.28.0: Linux capability-mode path", StringComparison.Ordinal);
         Assert.True(linuxBranch >= 0, "Linux capability path landmark missing");
 
@@ -97,11 +95,11 @@ public sealed class SingBoxManagerSuppressExitedEventTests
         Assert.True(nextCatch > linuxBranch, "Linux branch catch-block not found");
         var linuxWindow = src.Substring(linuxBranch, nextCatch - linuxBranch);
 
-        var suppressIdx = linuxWindow.IndexOf("_handle.SuppressExitedEvent()", StringComparison.Ordinal);
-        var killIdx = linuxWindow.IndexOf("_handle.Kill(entireProcessTree: true)", StringComparison.Ordinal);
+        var suppressIdx = linuxWindow.IndexOf("targetHandle.SuppressExitedEvent()", StringComparison.Ordinal);
+        var killIdx = linuxWindow.IndexOf("targetHandle.Kill(entireProcessTree: true)", StringComparison.Ordinal);
 
-        Assert.True(suppressIdx >= 0, "Expected `_handle.SuppressExitedEvent()` in Linux capability-mode path");
-        Assert.True(killIdx >= 0, "Expected `_handle.Kill(entireProcessTree: true)` in Linux capability-mode path");
+        Assert.True(suppressIdx >= 0, "Expected exact targetHandle.SuppressExitedEvent() in Linux capability-mode path");
+        Assert.True(killIdx >= 0, "Expected exact targetHandle.Kill(entireProcessTree: true) in Linux capability-mode path");
         Assert.True(suppressIdx < killIdx,
             $"SuppressExitedEvent must be called BEFORE Kill in the Linux capability-mode Stop path. " +
             $"suppressIdx={suppressIdx}, killIdx={killIdx}.");

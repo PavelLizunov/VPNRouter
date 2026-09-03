@@ -15,13 +15,11 @@
 //   was fragile: a future refactor of TunOwnershipLock that dropped the
 //   idempotency guard would silently introduce a double-dispose bug.
 //
-// B1 fix (plans/singbox-lifecycle-hardening-v2.36.md):
-//   - Widened `_disposed` from bool to int so Dispose can use
-//     Interlocked.CompareExchange for atomic single-execution.
-//   - ProcessExit handler now reads `_disposed` via Volatile.Read and
-//     no-ops if Dispose already ran.
-//   - Dispose() explicitly calls _tunLock.Dispose() in the normal path
-//     (was previously only via the ProcessExit fallback).
+// B1 fix (plans/singbox-lifecycle-hardening-v2.36.md), refined by SU-3-3:
+//   - `_disposed` uses Interlocked.CompareExchange for single execution.
+//   - ProcessExit reads `_disposed` and no-ops after normal Dispose.
+//   - Normal Dispose stops/releases only its lease; it must not dispose the
+//     process-wide singleton out from under a newer manager.
 //
 // What this file pins:
 //   1. Source-string pins — the Interlocked.CompareExchange in Dispose
@@ -103,32 +101,19 @@ public sealed class SingBoxManagerCleanupPathTests
     }
 
     [Fact]
-    public void Source_Dispose_ExplicitlyDisposesTunLock()
+    public void Source_Dispose_StopsLeaseWithoutDisposingProcessWideLock()
     {
-        // B1 cleanup-completeness pin: Dispose() must call
-        // _tunLock.Dispose() directly in its body, not rely on the
-        // ProcessExit fallback. This ensures the normal cleanup path
-        // is self-contained.
-
+        // A SingBoxManager owns a lease, not the process-wide singleton.
+        // Disposing an old manager must not invalidate a lock that a newer
+        // manager may already have acquired after normal Stop released it.
         var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
         var source = SingBoxSourceText.ReadAll(sourcePath);
-
-        // The Dispose body emits _tunLock.Dispose() — find the call
-        // and verify it's inside the Dispose method (after the
-        // CompareExchange guard).
         var disposeMethodStart = source.IndexOf("public void Dispose()", StringComparison.Ordinal);
         Assert.True(disposeMethodStart >= 0, "Dispose method not found");
 
-        // The next public method after Dispose is LinuxStopEscalationChain
-        // (private — actually). Just look at the next ~50 lines after
-        // Dispose's opening for the _tunLock.Dispose() call.
-        // Take enough context to span Dispose's body fully — comments
-        // describing the B1 fix make the body ~1500 chars long. Use a
-        // 2500-char window which is small enough to stay inside Dispose
-        // (and not bleed into the next method) but large enough to
-        // cover the body including the new B1 commentary.
-        var disposeBodyApprox = source.Substring(disposeMethodStart, Math.Min(2500, source.Length - disposeMethodStart));
-        Assert.Contains("_tunLock.Dispose()", disposeBodyApprox);
+        var disposeBodyApprox = source.Substring(disposeMethodStart, Math.Min(1800, source.Length - disposeMethodStart));
+        Assert.Contains("Stop();", disposeBodyApprox);
+        Assert.DoesNotContain("_tunLock.Dispose()", disposeBodyApprox);
     }
 
     [Fact]

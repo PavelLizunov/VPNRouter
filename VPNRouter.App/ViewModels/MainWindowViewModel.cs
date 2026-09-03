@@ -3497,7 +3497,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// rewrite (which means the user gets a one-time osascript prompt
     /// after upgrading).</para>
     /// </summary>
-    private const string SudoersFormatMarker = "# vpnrouter v2.41.0-r6 sudoers (sing-box + pkill + networksetup DNS + pfctl kill-switch)";
+    private const string SudoersFormatMarker = "# vpnrouter 2026-09-02 sudoers (sing-box + exact kill + networksetup DNS + pfctl kill-switch)";
 
     private void EnsureMacSudoAccess()
     {
@@ -3552,7 +3552,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         File.WriteAllText(tmpFile,
             $"{SudoersFormatMarker}\n" +
             $"{user} ALL=(root) NOPASSWD: {singboxEscaped} *\n" +
-            $"{user} ALL=(root) NOPASSWD: /usr/bin/pkill *\n" +
+            // SU-3-3: exact PID only; never grant a pattern-based process sweep.
+            $"{user} ALL=(root) NOPASSWD: /bin/kill -KILL -- [0-9]*\n" +
             // Fix #1 (v2.41.0 r3): macOS DNS-leak hardening needs to repoint the
             // primary service's resolver to the TUN gateway + flush the cache.
             $"{user} ALL=(root) NOPASSWD: /usr/sbin/networksetup *\n" +

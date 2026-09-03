@@ -19,10 +19,8 @@ public partial class SingBoxManager : IDisposable
     // wiring, and the load-bearing EnableRaisingEvents=false-before-Kill
     // pattern (ProcessHandle.Dispose, ProcessRunner.cs:288-290).
     //
-    // What's NOT migrated through this seam: pkexec / sudo helper spawns
-    // inside LinuxStopEscalationChain + TrySpawnAndWait + IsSingBoxAlive
-    // (pgrep). Those are short-lived stop-side fire-and-forgets; their
-    // migration is a follow-up batch and won't affect this brief's surface.
+    // Unix stop-side pkexec / sudo commands also route through this seam so
+    // exact argument tokens and timeouts remain deterministic in tests.
     // The Linux/macOS sing-box-as-root chain (sudo / pkexec wrapping the
     // sing-box exec) IS migrated — argv just differs by platform; the
     // ProcessRequest construction below selects sudo / pkexec / direct as
@@ -85,6 +83,9 @@ public partial class SingBoxManager : IDisposable
     /// no pkexec round-trip, no password prompt.
     /// </summary>
     private bool _linuxUsedPkexec;
+    private bool _ownsTunLock;
+    private bool _exactStopUnconfirmed;
+    private readonly object _lifecycleGate = new();
 
     // 3G-2 (v3.0 refactor): replaced the per-class `static readonly HttpClient`
     // with the shared IHttpClient seam — consolidated retry policy, shared
@@ -240,19 +241,11 @@ public partial class SingBoxManager : IDisposable
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
 
-        // B1 (v2.36 SingBoxManager lifecycle hardening): ProcessExit
-        // fallback runs ONLY if Dispose() hasn't already executed.
-        //   Normal shutdown: Dispose() sets _disposed=1 first → this
-        //     lambda reads 1 and no-ops. Cleanup goes through the
-        //     explicit Dispose path (which calls _tunLock.Dispose() too).
-        //   Abrupt termination (Environment.Exit, OOM-kill, Ctrl+C
-        //     without graceful shutdown): _disposed stays 0 → this
-        //     lambda runs as the last-resort cleanup, releasing the
-        //     TUN lock so the next instance can acquire it.
-        // Pre-B1 the lambda always ran AND Dispose did its cleanup —
-        // TunOwnershipLock.Dispose is idempotent so no crash, but the
-        // dual-path pattern was muddled. See
-        // plans/singbox-lifecycle-hardening-v2.36.md.
+        // ProcessExit is a last-resort release for a live manager. Normal
+        // Dispose unsubscribes after Stop releases only this manager's lease;
+        // the singleton itself remains process-wide so an older manager cannot
+        // dispose a lock already acquired by a newer one. The kernel releases
+        // its semaphore handle on abrupt process termination regardless.
         // v2.40.0 (audit P1, plans/bug-responsiveness-memory-audit-targets):
         // use a NAMED handler (not a capturing lambda) so Dispose() can
         // unsubscribe it. Pre-fix the anonymous lambda captured `this` and
@@ -357,14 +350,20 @@ public partial class SingBoxManager : IDisposable
         LastCrashWasTunOrphan = false;
         LastCrashWasLinuxTunPermissionFailure = false;
         Stop();
-        _handle?.Dispose();
-        // B1 (v2.36): explicit _tunLock disposal in the normal cleanup
-        // path. Pre-B1 the ProcessExit ApplyDomain hook was the only
-        // site that called _tunLock.Dispose(); now Dispose() owns the
-        // cleanup directly and ProcessExit no-ops (via the
-        // Volatile.Read(_disposed) gate in the ctor lambda). The
-        // double-cleanup ambiguity is gone.
-        _tunLock.Dispose();
+        // A failed capability-mode stop keeps the exact IProcessHandle as its
+        // only retry authority. Do not dispose that handle while its lease is
+        // deliberately retained.
+        if (!_ownsTunLock)
+            _handle?.Dispose();
+        // TunOwnershipLock is deliberately process-wide. Normal Stop releases
+        // this manager's lease; disposing the singleton here could race a newer
+        // manager that acquired it. A failed stop retains this manager's lease.
+        if (_ownsTunLock)
+        {
+            _logger.Warning(
+                "[SingBoxManager] Dispose preserved TUN ownership because exact stop was not confirmed (state={State})",
+                State);
+        }
     }
 }
 
