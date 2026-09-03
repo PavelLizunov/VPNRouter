@@ -159,12 +159,14 @@ public static class VlessUriParser
     public static List<VlessServerEntry> ParseMultiple(string text)
     {
         var entries = new List<VlessServerEntry>();
+        if (string.IsNullOrWhiteSpace(text)) return entries;
 
-        foreach (var line in text.Split('\n', '\r'))
+        foreach (var lineSpan in MemoryExtensions.EnumerateLines(text.AsSpan()))
         {
-            var trimmed = line.Trim();
-            if (!trimmed.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+            var trimmedSpan = lineSpan.Trim();
+            if (!trimmedSpan.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
                 continue;
+            var trimmed = trimmedSpan.ToString();
             // Drop-on-throw — match ServerUriParser.ParseMultiple's forgiving
             // contract. A single malformed line, or a fork-only type=xhttp line
             // that now throws on an official build (no with_xhttp), must not

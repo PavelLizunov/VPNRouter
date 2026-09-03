@@ -6481,6 +6481,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void AddServer()
     {
         var lines = VlessUri?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+        var addedAny = false;
 
         foreach (var line in lines)
         {
@@ -6502,13 +6503,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
                     continue;
                 Servers.Add(new ServerViewModel(entry));
-                SaveSettings();
+                addedAny = true;
             }
             catch (Exception ex)
             {
                 _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
             }
         }
+
+        if (addedAny)
+            SaveSettings();
 
         VlessUri = string.Empty;
     }

@@ -224,7 +224,11 @@ public static class TcpTlsProbe
         var sw = Stopwatch.StartNew();
         try
         {
-            using var client = new TcpClient(AddressFamily.InterNetwork) { NoDelay = true };
+            using var client = new TcpClient(AddressFamily.InterNetwork)
+            {
+                NoDelay = true,
+                LingerState = new LingerOption(enable: true, seconds: 0)
+            };
             await client.ConnectAsync(host, port, cts.Token);
             sw.Stop();
             return (true, (int)sw.ElapsedMilliseconds, null);
@@ -267,7 +271,11 @@ public static class TcpTlsProbe
         SslStream? ssl = null;
         try
         {
-            tcp = new TcpClient(AddressFamily.InterNetwork) { NoDelay = true };
+            tcp = new TcpClient(AddressFamily.InterNetwork)
+            {
+                NoDelay = true,
+                LingerState = new LingerOption(enable: true, seconds: 0)
+            };
             await tcp.ConnectAsync(host, port, cts.Token);
 
             string? certError = null;
