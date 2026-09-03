@@ -73,9 +73,11 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
         var source = ReadAppFile("ViewModels", "MainWindowViewModel.SimpleMode.cs");
 
         var methodIdx = source.IndexOf("private async Task SmpToggleConnectAsync()", StringComparison.Ordinal);
+        var nextMethodIdx = source.IndexOf("private bool TryApplyVless", StringComparison.Ordinal);
         Assert.True(methodIdx >= 0, "SmpToggleConnectAsync method must exist");
+        Assert.True(nextMethodIdx > methodIdx, "Next method boundary must exist");
 
-        var body = source.Substring(methodIdx, 2500);
+        var body = source[methodIdx..nextMethodIdx];
 
         var isConnectingCheck = body.IndexOf("if (IsConnecting) return;", StringComparison.Ordinal);
         var isConnectingSet = body.IndexOf("IsConnecting = true;", StringComparison.Ordinal);
