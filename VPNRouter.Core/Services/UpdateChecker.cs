@@ -1009,12 +1009,11 @@ public class UpdateChecker : IDesktopInstaller
             // v2.22.2-r8: all three privileged steps (pkill sing-box, cp,
             // chmod) are now collapsed into a single invocation of our
             // update-helper shipped with the .deb at
-            // /usr/libexec/vpnrouter-update-helper. That helper is
-            // whitelisted in /usr/share/polkit-1/actions/com.vpnrouter.update.policy
-            // with allow_active=yes — so a locally-logged-in user doesn't
-            // get the polkit password prompt at all. Falls back to admin
-            // auth if the policy file is missing (e.g. tar.gz install
-            // that skipped the .deb postinst).
+            // /usr/libexec/vpnrouter-update-helper. The packaged helper is
+            // bound to /usr/libexec/vpnrouter-update-helper and requires
+            // administrator authentication. Falls back to legacy inline
+            // pkexec steps if the update helper is missing (e.g. tar.gz
+            // install that skipped the .deb postinst).
             const string helper = "/usr/libexec/vpnrouter-update-helper";
             var helperExists = File.Exists(helper);
             if (!helperExists)
