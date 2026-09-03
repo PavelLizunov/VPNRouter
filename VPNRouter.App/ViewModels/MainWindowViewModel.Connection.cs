@@ -101,6 +101,8 @@ public partial class MainWindowViewModel
             }
             else if (status == "Stopped")
             {
+                if (IsConnecting) return;
+
                 IsConnected = false;
                 IsConnecting = false;
                 ConnectButtonText = Strings.StartVPN;
