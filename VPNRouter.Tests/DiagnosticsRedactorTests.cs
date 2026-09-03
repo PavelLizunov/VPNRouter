@@ -200,11 +200,24 @@ app:
         // short secrets in a key=value / key: value shape that ScrubSecrets
         // (uri/uuid/base64 only) would not catch.
         var outp = DiagnosticsRedactor.RedactLogText(
-            "[DBG] auth password=hunter2 ok\n[DBG] reality short_id: abcd1234 set\n[INF] token=ZsecretTok99");
+            "[DBG] auth password=hunter2 ok\n[DBG] reality short_id: abcd1234 set\n" +
+            "[DBG] reality sid=78ca7952 set\n[INF] token=ZsecretTok99");
         Assert.DoesNotContain("hunter2", outp);
         Assert.DoesNotContain("abcd1234", outp);
+        Assert.DoesNotContain("78ca7952", outp);
         Assert.DoesNotContain("ZsecretTok99", outp);
         Assert.Contains("password=", outp);  // key kept for context
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
+
+    [Fact]
+    public void Logs_RedactJsonStyleKeyValueSecrets()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "sing-box: {\"short_id\":\"0123456789abcdef\",\"token\":\"deadbeef00112233445566778899aabbcc\"}");
+
+        Assert.DoesNotContain("0123456789abcdef", outp);
+        Assert.DoesNotContain("deadbeef00112233445566778899aabbcc", outp);
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
 

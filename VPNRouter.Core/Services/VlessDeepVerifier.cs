@@ -274,7 +274,7 @@ public sealed class VlessDeepVerifier
         var clashPort = NetPortUtil.FindFreePort();
         string? tmpConfigPath = null;
         IProcessHandle? handle = null;
-        var stderrBuffer = new StringBuilder(capacity: 2048);
+        var stderrBuffer = new StringBuilder(DeepVerifyProbe.MaxDiagnosticBufferChars);
 
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         overallCts.CancelAfter(OverallTimeout);
@@ -310,15 +310,16 @@ public sealed class VlessDeepVerifier
             }
 
             handle.ErrorLine += (_, line) =>
-            {
-                if (line != null) stderrBuffer.Append(line).Append('\n');
-            };
+                DeepVerifyProbe.AppendSanitizedLine(
+                    stderrBuffer,
+                    line,
+                    DeepVerifyProbe.MaxDiagnosticBufferChars);
 
             _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, handle.Pid, socksPort);
 
             if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
             {
-                var snip = DeepVerifyProbe.TrimSnippet(stderrBuffer.ToString(), 80);
+                var snip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 80);
                 _logger.Warning("[VlessDeepVerifier] {Name}: SOCKS port {Port} never bound. stderr: {Stderr}", label, socksPort, snip);
                 return DeepVerifyResult.Failed(string.IsNullOrWhiteSpace(snip)
                     ? "sing-box didn't bind"

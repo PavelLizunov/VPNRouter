@@ -35,6 +35,8 @@ namespace VPNRouter.Core.Services;
 ///         so long-lived processes pick up DNS changes (per .NET 8 best practice).</item>
 ///   <item>Opt-in retry-on-transient-failure (off by default; callers set
 ///         <see cref="HttpRequest.RetryCount"/> &gt; 0 to enable).</item>
+///   <item>Bounded buffered bodies, optionally narrowed per request with
+///         <see cref="HttpRequest.MaxResponseBytes"/>.</item>
 /// </list>
 ///
 /// <para>Concrete production impl: <see cref="PolicyHttpClient"/>. Tests use
@@ -50,10 +52,11 @@ public interface IHttpClient
     /// <summary>
     /// Issue an HTTP request and await the full response body.
     /// </summary>
-    /// <param name="request">Request envelope: method, URI, optional headers, body, timeout, retry policy.</param>
+    /// <param name="request">Request envelope: method, URI, optional headers, body, timeout, retry, and response-size policy.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Full response envelope including buffered body bytes.</returns>
-    /// <exception cref="OperationCanceledException">Cancelled via <paramref name="ct"/> or timeout elapsed.</exception>
+    /// <exception cref="OperationCanceledException">Cancelled via <paramref name="ct"/>.</exception>
+    /// <exception cref="TimeoutException">Per-request timeout elapsed on the final allowed attempt.</exception>
     /// <exception cref="HttpRequestException">Transport-level failure that survived all retries.</exception>
     Task<HttpResponse> SendAsync(HttpRequest request, CancellationToken ct = default);
 
@@ -140,7 +143,7 @@ public interface IHttpStreamingResponse : IAsyncDisposable
 /// <param name="Body">Optional request body. Pair with <paramref name="BodyContentType"/>.</param>
 /// <param name="BodyContentType">MIME type of <paramref name="Body"/>; required when body is non-null.</param>
 /// <param name="Timeout">Per-request timeout override; <c>null</c> = use the client default (30 s).</param>
-/// <param name="RetryCount">Number of additional attempts on transient failure (5xx, network errors); <c>0</c> = no retry.</param>
+/// <param name="RetryCount">Number of additional attempts on transient failure (5xx, network errors, per-request timeouts); <c>0</c> = no retry.</param>
 /// <param name="RetryBaseDelay">Exponential backoff base; <c>null</c> = 200 ms. Effective delay per attempt: <c>base * 2^(attempt-1)</c> with ±25 % jitter.</param>
 public sealed record HttpRequest(
     HttpMethod Method,
@@ -150,7 +153,11 @@ public sealed record HttpRequest(
     string? BodyContentType = null,
     TimeSpan? Timeout = null,
     int RetryCount = 0,
-    TimeSpan? RetryBaseDelay = null);
+    TimeSpan? RetryBaseDelay = null)
+{
+    /// <summary>Optional per-request override for the buffered response-body ceiling.</summary>
+    public long? MaxResponseBytes { get; init; }
+}
 
 /// <summary>
 /// HTTP response envelope with buffered body.

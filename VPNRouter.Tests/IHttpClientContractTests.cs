@@ -79,6 +79,34 @@ public sealed class IHttpClientContractTests
     }
 
     [Fact]
+    public async Task Send_TimeoutWithRetry_RetriesThenSucceeds()
+    {
+        var attempt = 0;
+        var handler = StubHandler.Async(async (_, ct) =>
+        {
+            if (Interlocked.Increment(ref attempt) == 1)
+                await Task.Delay(TimeSpan.FromSeconds(30), ct);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("ok"),
+            };
+        });
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+
+        var response = await http.SendAsync(new HttpRequest(
+            HttpMethod.Get,
+            new Uri(TestUrl),
+            Timeout: TimeSpan.FromMilliseconds(50),
+            RetryCount: 1,
+            RetryBaseDelay: TimeSpan.FromMilliseconds(1)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(200, response.StatusCode);
+        Assert.Equal(2, handler.CallCount);
+    }
+
+    [Fact]
     public async Task Send_RetryCount2_RetriesTwiceOnTransientFailure()
     {
         // Arrange — first 2 attempts return 503 (transient), 3rd returns 200.
@@ -146,6 +174,71 @@ public sealed class IHttpClientContractTests
         await Assert.ThrowsAsync<InvalidDataException>(() => http.SendAsync(
             new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
             TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Send_PerRequestBodyLimit_OverridesDefaultLimit()
+    {
+        const long perRequestLimit = 1024;
+        var handler = StubHandler.Sync((_, _) =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new ExpandingStream(perRequestLimit + 1)),
+            });
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+        var request = new HttpRequest(
+            HttpMethod.Get,
+            new Uri(TestUrl),
+            RetryCount: 1,
+            RetryBaseDelay: TimeSpan.FromMilliseconds(1))
+        {
+            MaxResponseBytes = perRequestLimit,
+        };
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => http.SendAsync(
+            request,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task Send_PerRequestBodyLimit_AllowsExactLimit()
+    {
+        const long perRequestLimit = 1024;
+        var handler = StubHandler.Sync((_, _) =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new ExpandingStream(perRequestLimit)),
+            });
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+        var request = new HttpRequest(HttpMethod.Get, new Uri(TestUrl))
+        {
+            MaxResponseBytes = perRequestLimit,
+        };
+
+        var response = await http.SendAsync(
+            request,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(perRequestLimit, response.Body.LongLength);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task Send_PerRequestBodyLimit_CannotRaiseGlobalCap()
+    {
+        var handler = StubHandler.Sync((_, _) =>
+            new HttpResponseMessage(HttpStatusCode.OK));
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+        var request = new HttpRequest(HttpMethod.Get, new Uri(TestUrl))
+        {
+            MaxResponseBytes = PolicyHttpClient.MaxResponseBytes + 1,
+        };
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => http.SendAsync(
+            request,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(0, handler.CallCount);
     }
 
     // ─── FakeHttpClient contract ───────────────────────────────────────
