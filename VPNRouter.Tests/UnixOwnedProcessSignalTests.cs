@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using VPNRouter.Core;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
