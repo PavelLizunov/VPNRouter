@@ -54,6 +54,39 @@ public sealed class PerformanceThrottleContractTests
         Assert.Contains("!window.IsVisible", runtimeStatus);
     }
 
+    [Fact]
+    public void DesktopStartup_ServiceViewModel_EagerRefreshDisabledByDefault()
+    {
+        var serviceVm = LoadSource("VPNRouter.App", "ViewModels", "ServiceViewModel.cs");
+        var bootstrap = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.AutostartBootstrap.cs");
+
+        // Verify ServiceViewModel constructor defaults eagerRefresh to false
+        Assert.Contains("public ServiceViewModel(ILogger logger, bool eagerRefresh = false)", serviceVm);
+        Assert.Contains("if (eagerRefresh)", serviceVm);
+
+        // Verify BootstrapAutostart does not invoke ServiceVm.Refresh on the UI thread
+        Assert.DoesNotContain("InvokeAsync(() => ServiceVm.Refresh())", bootstrap);
+        Assert.Contains("ServiceVm.Refresh()", bootstrap);
+    }
+
+    [Fact]
+    public void DesktopDnsFlusher_NativeDnsFlush_WiresDllImport()
+    {
+        var dnsFlusher = LoadSource("VPNRouter.Core", "Services", "DnsFlusher.cs");
+
+        Assert.Contains("DnsFlushResolverCache", dnsFlusher);
+        Assert.Contains("dnsapi.dll", dnsFlusher);
+    }
+
+    [Fact]
+    public void DesktopFirewallManager_CleanupOrphanedRules_UsesSinglePassFindRulesByPrefixes()
+    {
+        var fw = LoadSource("VPNRouter.Core", "Services", "FirewallManager.cs");
+
+        Assert.Contains("var orphaned = FindRulesByPrefixes(AllPrefixes);", fw);
+        Assert.Contains("FindRulesByPrefixes(IEnumerable<string> prefixes)", fw);
+    }
+
     private static string LoadSource(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());

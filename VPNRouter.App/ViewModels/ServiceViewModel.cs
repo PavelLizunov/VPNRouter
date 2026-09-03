@@ -37,10 +37,11 @@ public partial class ServiceViewModel : ObservableObject
     public bool IsAvailable => false;
 #endif
 
-    public ServiceViewModel(ILogger logger)
+    public ServiceViewModel(ILogger logger, bool eagerRefresh = false)
     {
         _logger = logger;
-        Refresh();
+        if (eagerRefresh)
+            Refresh();
     }
 
     public void Refresh()
@@ -49,16 +50,37 @@ public partial class ServiceViewModel : ObservableObject
         _isLoading = true;
         try
         {
-            IsInstalled = WindowsServiceHelper.IsInstalled();
-            IsRunning = WindowsServiceHelper.IsRunning();
-            AutostartChecked = IsInstalled;
-            ServicePid = IsRunning ? ResolveServicePid() : null;
+            var isInstalled = WindowsServiceHelper.IsInstalled();
+            var isRunning = WindowsServiceHelper.IsRunning();
+            var pid = isRunning ? ResolveServicePid() : null;
+
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                ApplyState(isInstalled, isRunning, pid);
+                _isLoading = false;
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ApplyState(isInstalled, isRunning, pid);
+                    _isLoading = false;
+                });
+            }
         }
-        finally
+        catch
         {
             _isLoading = false;
         }
 #endif
+    }
+
+    private void ApplyState(bool isInstalled, bool isRunning, int? pid)
+    {
+        IsInstalled = isInstalled;
+        IsRunning = isRunning;
+        AutostartChecked = isInstalled;
+        ServicePid = pid;
     }
 
 #if PLATFORM_WINDOWS

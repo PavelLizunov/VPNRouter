@@ -228,4 +228,35 @@ public sealed class DnsFlusherTests
         var ex = Record.Exception(() => DnsFlusher.Flush());
         Assert.Null(ex);
     }
+
+    [Fact]
+    public void FlushInstance_NativeFlusherSuccess_ReturnsTrueWithoutRunningProcess()
+    {
+        if (!IsWindows) return;
+
+        var fake = new FakeProcessRunner();
+        var sut = new DnsFlusher(fake, nativeFlusher: () => true);
+        var ok = sut.FlushInstance();
+
+        Assert.True(ok);
+        Assert.Empty(fake.RunCalls); // In-process flush avoids launching ipconfig.exe
+    }
+
+    [Fact]
+    public void FlushInstance_NativeFlusherFails_FallsBackToIpconfig()
+    {
+        if (!IsWindows) return;
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(
+            r => r.ExecutablePath == "ipconfig.exe",
+            new ProcessResult(0, "Successfully flushed the DNS Resolver Cache.", "", TimeSpan.FromMilliseconds(10), false));
+
+        var sut = new DnsFlusher(fake, nativeFlusher: () => false);
+        var ok = sut.FlushInstance();
+
+        Assert.True(ok);
+        Assert.Single(fake.RunCalls); // Fallback executes ipconfig.exe
+        Assert.Equal("ipconfig.exe", fake.RunCalls[0].ExecutablePath);
+    }
 }
