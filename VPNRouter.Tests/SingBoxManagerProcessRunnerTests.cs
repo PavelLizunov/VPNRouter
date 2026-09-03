@@ -383,4 +383,75 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         Assert.Same(injected, runnerField!.GetValue(sbm));
         sbm.Dispose();
     }
+
+    // ─── 7. SEC-1.2-02 & SEC-1.2-01 Regression Tests ─────────────────────
+
+    [Fact]
+    public void Restart_WhenLaunchThrows_ReleasesTunLockAndSetsFailedState()
+    {
+        // SEC-1.2-02: when LaunchProcess throws inside Restart, State must be set to Failed
+        // and _tunLock released so the global named semaphore is not permanently leaked.
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        int startCount = 0;
+        fake.OnStart(_ => true, _ =>
+        {
+            startCount++;
+            if (startCount > 1)
+                throw new InvalidOperationException("Simulated second launch failure inside Restart");
+            return new FakeProcessHandle(pid: 7777);
+        });
+
+        var exe = CreateStubExe();
+        try
+        {
+            using var manager = BuildManager(fake, exe);
+            manager.StartWithJson("{}");
+
+            var ex = Assert.Throws<InvalidOperationException>(() => manager.Restart());
+            Assert.Equal("Simulated second launch failure inside Restart", ex.Message);
+            Assert.Equal(SingBoxState.Failed, manager.State);
+
+            // Verify _tunLock was released by verifying a new manager can acquire it:
+            using var secondManager = BuildManager(fake, exe);
+            // If the lock was not released, StartWithJson would throw TunOwnershipException
+            var started = Record.Exception(() => secondManager.StartWithJson("{}"));
+            Assert.Null(started);
+        }
+        finally
+        {
+            try { File.Delete(exe); } catch { /* best-effort */ }
+        }
+    }
+
+    [Fact]
+    public void Stop_WhenHandleNulled_SuppressesExitEventUsingEventCode()
+    {
+        // SEC-1.2-01: verify that when Exited event carries code -1, even if _handle
+        // was already disposed/nulled by StopInternal, suppression correctly engages.
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        var fakeHandle = new FakeProcessHandle(pid: 8888) { SimulateExitedRaceLost = true };
+        fake.OnStart(_ => true, _ => fakeHandle);
+
+        var exe = CreateStubExe();
+        try
+        {
+            using var manager = BuildManager(fake, exe);
+            bool crashedFired = false;
+            manager.Crashed += (_, _) => crashedFired = true;
+
+            manager.StartWithJson("{}");
+            manager.Stop();
+
+            Assert.False(crashedFired, "Intentional stop must suppress Crashed even if Exited callback arrives late.");
+            Assert.Equal(SingBoxState.Stopped, manager.State);
+        }
+        finally
+        {
+            try { File.Delete(exe); } catch { /* best-effort */ }
+        }
+    }
 }

@@ -227,13 +227,18 @@ jobs:
             fi
           done
           if [ "${#MISSING[@]}" -gt 0 ]; then
-            # Soft warning: parallel CI (build-mac.yml, build-linux.yml,
-            # build-android.yml) may still be uploading at the time of
-            # `release: published`. Each `gh release upload --clobber`
-            # fires a fresh `release: edited` that re-runs this workflow
-            # until all 16 are present.
-            WARNINGS+=("Missing ${#MISSING[@]}/${#EXPECTED_FILES[@]} expected assets — parallel CI may still be uploading:")
-            for m in "${MISSING[@]}"; do WARNINGS+=("  - $m"); done
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              ERRORS+=("Missing ${#MISSING[@]}/${#EXPECTED_FILES[@]} expected assets on explicit verification:")
+              for m in "${MISSING[@]}"; do ERRORS+=("  - $m"); done
+            else
+              # Soft warning: parallel CI (build-mac.yml, build-linux.yml,
+              # build-android.yml) may still be uploading at the time of
+              # `release: published`. Each `gh release upload --clobber`
+              # fires a fresh `release: edited` that re-runs this workflow
+              # until all 16 are present.
+              WARNINGS+=("Missing ${#MISSING[@]}/${#EXPECTED_FILES[@]} expected assets — parallel CI may still be uploading:")
+              for m in "${MISSING[@]}"; do WARNINGS+=("  - $m"); done
+            fi
           else
             echo "✓ All 16 expected assets present"
           fi

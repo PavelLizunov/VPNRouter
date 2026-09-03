@@ -332,6 +332,25 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains($"set \"LISTS={fakeListsDir}{System.IO.Path.DirectorySeparatorChar}", bat);
     }
 
+    [Theory]
+    [InlineData("& whoami > C:\\pwn.txt")]
+    [InlineData("| powershell.exe -c calc.exe")]
+    [InlineData("arg \r\n net user hacker password /add")]
+    [InlineData("arg ^ echo hello")]
+    [InlineData("arg < input.txt")]
+    [InlineData("arg > output.txt")]
+    [InlineData("arg %EVIL%")]
+    public void BuildCygwinLaunchBat_RejectsShellMetacharacters(string maliciousArgs)
+    {
+        const string fakeBinDir = @"C:\ProgramData\VPNRouter\zapret\bin";
+        const string fakeListsDir = @"C:\ProgramData\VPNRouter\zapret\lists";
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            ZapretManager.BuildCygwinLaunchBat(fakeBinDir, fakeListsDir, maliciousArgs));
+
+        Assert.Contains("Zapret arguments contain disallowed shell metacharacters", ex.Message);
+    }
+
     // ── 12. Strategy parser: extracts winws args from Flowseal-shape .bat ──
 
     [Fact]

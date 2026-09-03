@@ -53,6 +53,7 @@ public class EtwProcessMonitor : IProcessMonitor
         if (_session != null) return;
 
         _logger.Information("[ETW] Starting process monitor session");
+        _sessionReady.Reset();
 
         _sessionThread = new Thread(RunSession)
         {

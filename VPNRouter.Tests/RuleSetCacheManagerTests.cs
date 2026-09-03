@@ -253,6 +253,29 @@ public sealed class RuleSetCacheManagerTests : IDisposable
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task EnsureLocal_HtmlResponse_RejectedBeforeCaching()
+    {
+        // EVA-07: verify that an HTTP 200 containing HTML (captive portal / block page)
+        // is rejected and not cached as a valid binary .srs file.
+        var filename = "test-captive-portal.srs";
+        var path = ExpectedCachedFile(filename);
+
+        var htmlPayload = Encoding.UTF8.GetBytes("<!DOCTYPE html><html><body>Blocked</body></html>");
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, htmlPayload);
+        using var client = new HttpClient(handler);
+
+        var result = await RuleSetCacheManager.EnsureLocalAsync(
+            "https://example.invalid/blocked.srs",
+            filename,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
+        Assert.False(File.Exists(path), "Corrupted HTML payload must never be written to local cache.");
+    }
+
     /// <summary>
     /// brat-2026-05-05 regression pin. Pre-r3 sing-box was fed a
     /// <c>type:remote</c> rule-set with the URL embedded; on TLS

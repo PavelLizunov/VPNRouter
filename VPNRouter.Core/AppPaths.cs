@@ -132,7 +132,10 @@ public static class AppPaths
 
         // SEC-2: tighten %ProgramData% ACL on first run without installer.
         if (OperatingSystem.IsWindows())
+        {
             TryRestrictWindowsDataDirAcl(DataDir);
+            RestrictWindowsBinDirAcl(BinDir);
+        }
     }
 
     /// <summary>Create and verify an owner-only Linux/macOS directory.</summary>
@@ -167,14 +170,14 @@ public static class AppPaths
             throw new IOException($"Could not enforce owner-only file permissions: {path}");
     }
 
-    /// <summary>Create/truncate a file without exposing new Unix content through the process umask.</summary>
-    internal static FileStream CreatePrivateFile(string path)
+    /// <summary>Create a file without exposing new Unix content through the process umask.</summary>
+    internal static FileStream CreatePrivateFile(string path, FileMode mode = FileMode.Create)
     {
         var unix = OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
         if (unix) EnsurePrivateUnixFile(path);
         var options = new FileStreamOptions
         {
-            Mode = FileMode.Create,
+            Mode = mode,
             Access = FileAccess.Write,
             Share = FileShare.None
         };
@@ -247,6 +250,46 @@ public static class AppPaths
             // RemoveAccessRuleAll drops EVERY Allow ACE for BUILTIN\Users
             // regardless of rights/inheritance/propagation flags.
             security.RemoveAccessRuleAll(new FileSystemAccessRule(
+                usersSid, FileSystemRights.ReadAndExecute,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+
+            dirInfo.SetAccessControl(security);
+        }
+        catch
+        {
+            // Best-effort: never throw from the startup path.
+        }
+    }
+
+    /// <summary>
+    /// SEC-01: Lock down %ProgramData%\VPNRouter\bin permissions so that non-admin users
+    /// cannot replace binaries (sing-box.exe) executed by privileged services.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    internal static void RestrictWindowsBinDirAcl(string binDir)
+    {
+        try
+        {
+            var dirInfo = new DirectoryInfo(binDir);
+            if (!dirInfo.Exists) return;
+
+            var security = new DirectorySecurity();
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+
+            const InheritanceFlags inherit =
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+
+            var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+            var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            var usersSid  = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+
+            security.AddAccessRule(new FileSystemAccessRule(
+                systemSid, FileSystemRights.FullControl,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(
+                adminsSid, FileSystemRights.FullControl,
+                inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(
                 usersSid, FileSystemRights.ReadAndExecute,
                 inherit, PropagationFlags.None, AccessControlType.Allow));
 

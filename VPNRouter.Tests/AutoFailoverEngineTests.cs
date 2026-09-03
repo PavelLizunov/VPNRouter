@@ -357,4 +357,39 @@ public class AutoFailoverEngineTests
         Assert.True(outcome.Switched);
         Assert.Equal("manual-2", outcome.NewActiveServer);
     }
+
+    [Fact]
+    public async Task HandleDeadConfigAsync_FailedRestart_ExcludesCandidateFromNextAttempt()
+    {
+        // SEC-1.3-04: when candidate restart fails (committed == false), the candidate must be
+        // recorded in _tried so the next failover evaluation does NOT re-select it in a loop.
+        var settings = BuildSubscribeSettings(
+            activeServer: "s1",
+            ("s1", "1.1.1.1"),
+            ("s2", "2.2.2.2"),
+            ("s3", "3.3.3.3"));
+
+        int attemptCount = 0;
+        var sanity = new ConfigSanityCheck();
+        var engine = new AutoFailoverEngine(
+            settings, sanity,
+            restart: _ =>
+            {
+                attemptCount++;
+                // First attempt (candidate s2) fails; second attempt (candidate s3) succeeds.
+                return Task.FromResult(attemptCount > 1);
+            },
+            store: _store);
+
+        // First trigger: should pick s2, fail to restart, revert ActiveServer to s1
+        var outcome1 = await engine.HandleDeadConfigAsync("timeout", TestContext.Current.CancellationToken);
+        Assert.False(outcome1.Switched);
+        Assert.Equal("s1", settings.Vless.ActiveServer);
+
+        // Second trigger: should exclude s2 (already tried) and advance to s3!
+        var outcome2 = await engine.HandleDeadConfigAsync("timeout", TestContext.Current.CancellationToken);
+        Assert.True(outcome2.Switched);
+        Assert.Equal("s3", outcome2.NewActiveServer);
+        Assert.Equal("s3", settings.Vless.ActiveServer);
+    }
 }

@@ -41,8 +41,8 @@ public static class VlessUriParser
             throw new FormatException("Invalid VLESS URI: UUID is missing (expected vless://UUID@server:port)");
 
         // Server + Port
-        var server = parsed.Host;
-        var port = parsed.Port > 0 ? parsed.Port : 443;
+        var server = NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
 
         if (string.IsNullOrEmpty(server))
             throw new FormatException("Invalid VLESS URI: server is missing");
@@ -236,5 +236,17 @@ public static class VlessUriParser
             return true;
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Strips surrounding brackets from IPv6 host literals (e.g. "[2001:db8::1]" -> "2001:db8::1")
+    /// so downstream outbound builders don't double-bracket when formatting host:port endpoints.
+    /// </summary>
+    internal static string NormalizeHost(string host)
+    {
+        if (string.IsNullOrEmpty(host)) return host;
+        if (host.StartsWith('[') && host.EndsWith(']') && host.Length > 2)
+            return host[1..^1];
+        return host;
     }
 }

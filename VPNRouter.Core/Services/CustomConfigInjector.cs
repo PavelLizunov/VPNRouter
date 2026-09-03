@@ -143,6 +143,8 @@ public static class CustomConfigInjector
         if (hasGeoBypass)
             _ = EnsureGeoProxyDns(config, proxyTag);
 
+        EnsureDnsHijackRule(config, isActionBased);
+
         // Per-app routing applies ONLY in split tunnel. Full tunnel sends every
         // process through route.final = proxy below, so no per-app rules needed.
         if (!isFullTunnel && processes.Count > 0)
@@ -196,6 +198,8 @@ public static class CustomConfigInjector
             config["route"] = route;
         }
         route["final"] = (isFullTunnel || isExcludeMode) ? proxyTag : "direct";
+        if (isFullTunnel)
+            SanitizeFullTunnelDirectRules(config);
 
         // Align dns.final with the routing policy too. StripUnsupportedFeatures
         // above forces dns.final to the LOCAL resolver by default, which LEAKS
@@ -1784,5 +1788,87 @@ public static class CustomConfigInjector
             }
         }
         return removed;
+    }
+
+    private static void EnsureDnsHijackRule(JsonObject config, bool isActionBased)
+    {
+        var route = config["route"] as JsonObject;
+        if (route == null)
+        {
+            route = new JsonObject { ["rules"] = new JsonArray() };
+            config["route"] = route;
+        }
+
+        var rules = route["rules"] as JsonArray;
+        if (rules == null)
+        {
+            rules = new JsonArray();
+            route["rules"] = rules;
+        }
+
+        bool hasDnsRule = rules.OfType<JsonObject>().Any(r =>
+            string.Equals(StjNodeHelpers.AsString(r["action"]), "hijack-dns", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(StjNodeHelpers.AsString(r["protocol"]), "dns", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasDnsRule)
+        {
+            int insertIndex = 0;
+            for (int i = 0; i < rules.Count; i++)
+            {
+                if (rules[i] is JsonObject r && string.Equals(StjNodeHelpers.AsString(r["action"]), "sniff", StringComparison.OrdinalIgnoreCase))
+                {
+                    insertIndex = i + 1;
+                    break;
+                }
+            }
+
+            var hijackRule = new JsonObject { ["protocol"] = "dns" };
+            if (isActionBased)
+                hijackRule["action"] = "hijack-dns";
+            else
+                hijackRule["outbound"] = "dns-out";
+
+            rules.Insert(insertIndex, hijackRule);
+        }
+    }
+
+    private static void SanitizeFullTunnelDirectRules(JsonObject config)
+    {
+        var route = config["route"] as JsonObject;
+        if (route?["rules"] is not JsonArray rules)
+            return;
+
+        for (int i = rules.Count - 1; i >= 0; i--)
+        {
+            if (rules[i] is not JsonObject r) continue;
+            var outbound = StjNodeHelpers.AsString(r["outbound"]);
+            var action = StjNodeHelpers.AsString(r["action"]);
+
+            bool isDirect = string.Equals(outbound, "direct", StringComparison.OrdinalIgnoreCase)
+                || (string.Equals(action, "route", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(outbound, "direct", StringComparison.OrdinalIgnoreCase));
+
+            if (isDirect)
+            {
+                // Preserve RFC1918 private IP bypass
+                if (StjNodeHelpers.AsBool(r["ip_is_private"]) == true)
+                    continue;
+
+                // Preserve Russian geo bypass rulesets
+                if (r["rule_set"] is JsonArray ruleSets)
+                {
+                    bool isGeoBypass = ruleSets.Any(rs =>
+                    {
+                        var tag = StjNodeHelpers.AsString(rs);
+                        return tag is GeoSiteRuleSetTag or GeoIpRuleSetTag;
+                    });
+                    if (isGeoBypass)
+                        continue;
+                }
+
+                // Remove user direct rule that would shadow route.final = proxy
+                rules.RemoveAt(i);
+            }
+        }
     }
 }

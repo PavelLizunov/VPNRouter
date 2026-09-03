@@ -486,6 +486,7 @@ public partial class SingBoxManager
             // Keep the TUN lock across restart so another instance can't slip in
             // during the brief window between Stop and LaunchProcess.
             StopInternal(releaseLock: false);
+            State = SingBoxState.Restarting;
 
             // v2.31.9-r4 — give Windows a beat to tear down the wintun handle
             // before the next sing-box tries to open it. brat-2026-05-05 logged
@@ -510,6 +511,12 @@ public partial class SingBoxManager
                 ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
                 : AppPaths.SingBoxExePath;
             LaunchProcess(exePath);
+        }
+        catch
+        {
+            State = SingBoxState.Failed;
+            _tunLock.Release();
+            throw;
         }
         finally
         {
@@ -822,7 +829,7 @@ public partial class SingBoxManager
                 }
             }
         };
-        startedHandle.Exited += (_, _) => OnProcessExited();
+        startedHandle.Exited += (_, code) => OnProcessExited(code);
 
         State = SingBoxState.Running;
         _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", startedHandle.Pid);
