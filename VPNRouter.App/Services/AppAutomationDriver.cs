@@ -34,8 +34,8 @@ public static class AppAutomationDriver
     private static string? _token;
     private static int _port;
 
-    public static int? AutomationPort { get; set; }
-    public static string? AutomationToken { get; set; }
+    public static int? AutomationPort { get; internal set; }
+    public static string? AutomationToken { get; internal set; }
     public static bool IsRunning => _listener?.IsListening == true;
 
     public static void ParseArgs(string[] args)
@@ -290,7 +290,7 @@ public static class AppAutomationDriver
         await WriteJsonAsync(response, new { ok = true, root = tree }, 200);
     }
 
-    private static object DumpVisualNode(Visual visual)
+    private static object DumpVisualNode(Visual visual, int depth = 0, int maxDepth = 30)
     {
         var name = (visual as Control)?.Name ?? "";
         var type = visual.GetType().Name;
@@ -301,9 +301,12 @@ public static class AppAutomationDriver
                        ?? (visual as TextBox)?.Text;
 
         var children = new List<object>();
-        foreach (var child in visual.GetVisualChildren())
+        if (depth < maxDepth)
         {
-            children.Add(DumpVisualNode(child));
+            foreach (var child in visual.GetVisualChildren())
+            {
+                children.Add(DumpVisualNode(child, depth + 1, maxDepth));
+            }
         }
 
         return new
@@ -322,102 +325,115 @@ public static class AppAutomationDriver
     {
         using var reader = new StreamReader(request.InputStream, Encoding.UTF8);
         var body = await reader.ReadToEndAsync();
-        using var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
 
-        var action = root.TryGetProperty("action", out var pAction) ? pAction.GetString() : null;
-        var target = root.TryGetProperty("target", out var pTarget) ? pTarget.GetString() : null;
-        var val = root.TryGetProperty("value", out var pVal) ? pVal.GetString() : null;
-
-        if (string.IsNullOrWhiteSpace(action))
+        JsonDocument doc;
+        try
         {
-            await WriteJsonAsync(response, new { ok = false, error = "Missing action" }, 400);
+            doc = JsonDocument.Parse(body);
+        }
+        catch (JsonException)
+        {
+            await WriteJsonAsync(response, new { ok = false, error = "Invalid JSON body" }, 400);
             return;
         }
 
-        bool executed = false;
-        string detail = "";
-
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        using (doc)
         {
-            if (_viewModel == null || _window == null)
+            var root = doc.RootElement;
+            var action = root.TryGetProperty("action", out var pAction) ? pAction.GetString() : null;
+            var target = root.TryGetProperty("target", out var pTarget) ? pTarget.GetString() : null;
+            var val = root.TryGetProperty("value", out var pVal) ? pVal.GetString() : null;
+
+            if (string.IsNullOrWhiteSpace(action))
             {
-                detail = "ViewModel or Window is null";
+                await WriteJsonAsync(response, new { ok = false, error = "Missing action" }, 400);
                 return;
             }
 
-            switch (action.ToLowerInvariant())
+            bool executed = false;
+            string detail = "";
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                case "switch_tab":
-                    if (int.TryParse(val ?? target, out var tabIndex))
-                    {
-                        _viewModel.SelectedTabIndex = tabIndex;
-                        executed = true;
-                        detail = $"Switched tab to {tabIndex}";
-                    }
-                    else
-                    {
-                        detail = "Invalid tab index";
-                    }
-                    break;
+                if (_viewModel == null || _window == null)
+                {
+                    detail = "ViewModel or Window is null";
+                    return;
+                }
 
-                case "toggle_mode":
-                    _viewModel.ToggleUiModeCommand.Execute(null);
-                    executed = true;
-                    detail = $"Toggled SimpleMode to {_viewModel.IsSimpleMode}";
-                    break;
-
-                case "connect":
-                case "toggle_connection":
-                    _viewModel.ToggleConnectionCommand.Execute(null);
-                    executed = true;
-                    detail = "Invoked ToggleConnectionCommand";
-                    break;
-
-                case "click":
-                    var btn = FindControl<Button>(_window, target);
-                    if (btn != null)
-                    {
-                        if (btn.Command != null && btn.Command.CanExecute(btn.CommandParameter))
+                switch (action.ToLowerInvariant())
+                {
+                    case "switch_tab":
+                        if (int.TryParse(val ?? target, out var tabIndex))
                         {
-                            btn.Command.Execute(btn.CommandParameter);
+                            _viewModel.SelectedTabIndex = tabIndex;
                             executed = true;
-                            detail = $"Executed command on button {target}";
+                            detail = $"Switched tab to {tabIndex}";
                         }
                         else
                         {
-                            btn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                            executed = true;
-                            detail = $"Raised click on button {target}";
+                            detail = "Invalid tab index";
                         }
-                    }
-                    else
-                    {
-                        detail = $"Button '{target}' not found";
-                    }
-                    break;
+                        break;
 
-                case "set_text":
-                    var tb = FindControl<TextBox>(_window, target);
-                    if (tb != null)
-                    {
-                        tb.Text = val ?? "";
+                    case "toggle_mode":
+                        _viewModel.ToggleUiModeCommand.Execute(null);
                         executed = true;
-                        detail = $"Set text on TextBox {target}";
-                    }
-                    else
-                    {
-                        detail = $"TextBox '{target}' not found";
-                    }
-                    break;
+                        detail = $"Toggled SimpleMode to {_viewModel.IsSimpleMode}";
+                        break;
 
-                default:
-                    detail = $"Unknown action '{action}'";
-                    break;
-            }
-        });
+                    case "connect":
+                    case "toggle_connection":
+                        _viewModel.ToggleConnectionCommand.Execute(null);
+                        executed = true;
+                        detail = "Invoked ToggleConnectionCommand";
+                        break;
 
-        await WriteJsonAsync(response, new { ok = executed, message = detail }, executed ? 200 : 400);
+                    case "click":
+                        var btn = FindControl<Button>(_window, target);
+                        if (btn != null)
+                        {
+                            if (btn.Command != null && btn.Command.CanExecute(btn.CommandParameter))
+                            {
+                                btn.Command.Execute(btn.CommandParameter);
+                                executed = true;
+                                detail = $"Executed command on button {target}";
+                            }
+                            else
+                            {
+                                btn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                                executed = true;
+                                detail = $"Raised click on button {target}";
+                            }
+                        }
+                        else
+                        {
+                            detail = $"Button '{target}' not found";
+                        }
+                        break;
+
+                    case "set_text":
+                        var tb = FindControl<TextBox>(_window, target);
+                        if (tb != null)
+                        {
+                            tb.Text = val ?? "";
+                            executed = true;
+                            detail = $"Set text on TextBox {target}";
+                        }
+                        else
+                        {
+                            detail = $"TextBox '{target}' not found";
+                        }
+                        break;
+
+                    default:
+                        detail = $"Unknown action '{action}'";
+                        break;
+                }
+            });
+
+            await WriteJsonAsync(response, new { ok = executed, message = detail }, executed ? 200 : 400);
+        }
     }
 
     private static T? FindControl<T>(Visual parent, string? target) where T : Control

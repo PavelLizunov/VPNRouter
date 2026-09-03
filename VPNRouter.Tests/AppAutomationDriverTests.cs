@@ -132,6 +132,18 @@ public sealed class AppAutomationDriverTests : IDisposable
             using var treeDoc = JsonDocument.Parse(treeJson);
             Assert.True(treeDoc.RootElement.GetProperty("ok").GetBoolean());
             Assert.NotNull(treeDoc.RootElement.GetProperty("root"));
+
+            // 5. POST /ui/action: malformed JSON returns 400
+            var badContent = new StringContent("not-valid-json", Encoding.UTF8, "application/json");
+            var badResp = await client.PostAsync($"{baseUri}/ui/action", badContent);
+            Assert.Equal(HttpStatusCode.BadRequest, badResp.StatusCode);
+
+            // 6. GET /ui/screenshot: returns 200 OK + image/png
+            var screenResp = await client.GetAsync($"{baseUri}/ui/screenshot");
+            Assert.Equal(HttpStatusCode.OK, screenResp.StatusCode);
+            Assert.Equal("image/png", screenResp.Content.Headers.ContentType?.MediaType);
+            var pngBytes = await screenResp.Content.ReadAsByteArrayAsync();
+            Assert.NotEmpty(pngBytes);
         }
         finally
         {
