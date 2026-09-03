@@ -3952,15 +3952,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 .ToList() ?? new();
 
             // Persist user-added apps for every default group (except Custom Apps / custom categories)
-            var customGroupApps = new Dictionary<string, List<string>>();
-            foreach (var group in AppGroups)
+            // F-02: only overwrite if default groups exist to protect against wiped profiles on deserialize errors
+            var defaultGroupsCount = AppGroups.Count(g => g.Name != "Custom Apps" && !g.IsCustomCategory);
+            if (defaultGroupsCount > 0)
             {
-                if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
-                var extras = group.Apps.Where(a => a.IsCustom).Select(a => a.ProcessName).ToList();
-                if (extras.Count > 0)
-                    customGroupApps[group.Name] = extras;
+                var customGroupApps = new Dictionary<string, List<string>>();
+                foreach (var group in AppGroups)
+                {
+                    if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
+                    var extras = group.Apps.Where(a => a.IsCustom).Select(a => a.ProcessName).ToList();
+                    if (extras.Count > 0)
+                        customGroupApps[group.Name] = extras;
+                }
+                _settings.CustomGroupApps = customGroupApps;
             }
-            _settings.CustomGroupApps = customGroupApps;
 
             // Persist user-created categories (full content)
             _settings.CustomCategories = AppGroups

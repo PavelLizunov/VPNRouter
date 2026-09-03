@@ -435,135 +435,155 @@ public partial class MainWindowViewModel
         }
 
         if (IsConnecting) return;
-
-        var kind = SimpleInputDetector.Classify(_smpInput);
-
-        // Empty / garbage input is OK if the user already has a working
-        // config in settings — we just connect with what's there. This is
-        // the common case when Simple is opened on an install that was
-        // already configured (upgrader, Advanced → Simple toggle, or
-        // service-autostarted VPN that's currently running).
-        var hasExistingConfig =
-            (_settings.Vless.Servers?.Count > 0) ||
-            (_settings.App.Subscriptions?.Any(s => s.Enabled && s.Servers.Count > 0) == true);
-
-        if (kind == SmpInputKind.Invalid)
+        IsConnecting = true;
+        try
         {
-            if (hasExistingConfig)
+            var kind = SimpleInputDetector.Classify(_smpInput);
+
+            // Empty / garbage input is OK if the user already has a working
+            // config in settings — we just connect with what's there. This is
+            // the common case when Simple is opened on an install that was
+            // already configured (upgrader, Advanced → Simple toggle, or
+            // service-autostarted VPN that's currently running).
+            var hasExistingConfig =
+                (_settings.Vless.Servers?.Count > 0) ||
+                (_settings.App.Subscriptions?.Any(s => s.Enabled && s.Servers.Count > 0) == true);
+
+            if (kind == SmpInputKind.Invalid)
             {
-                // No-op: skip parsing, fall through to RoutingMode + connect.
+                if (hasExistingConfig)
+                {
+                    // No-op: skip parsing, fall through to RoutingMode + connect.
+                }
+                else
+                {
+                    SmpErrorText = IsRussian
+                        ? "Вставь ссылку (vless:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
+                        : "Paste a server link (vless:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
+                    IsConnecting = false;
+                    return;
+                }
             }
-            else
+            else if (kind == SmpInputKind.ServerUri)
             {
-                SmpErrorText = IsRussian
-                    ? "Вставь ссылку (vless:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
-                    : "Paste a server link (vless:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
-                return;
+                if (!TryApplyVless(_smpInput.Trim()))
+                {
+                    IsConnecting = false;
+                    return;
+                }
             }
-        }
-        else if (kind == SmpInputKind.ServerUri)
-        {
-            if (!TryApplyVless(_smpInput.Trim())) return;
-        }
-        else if (kind == SmpInputKind.SubscriptionUrl)
-        {
-            if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
-        }
-
-        // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
-        _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
-
-        // Simple-Split uses the hardcoded default profile. Full tunnel
-        // ignores the profile field entirely.
-        if (IsSplitTunnel)
-            _settings.ActiveProfile = SimpleSplitProfile;
-
-        SaveSettings();
-        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
-        // Subscription mode needs a fresh fetch BEFORE connect so we have
-        // servers to hand to the engine.
-        if (kind == SmpInputKind.SubscriptionUrl)
-        {
-            try
+            else if (kind == SmpInputKind.SubscriptionUrl)
             {
-                await RefreshAllSubscriptionsAsync();
+                if (!TryApplySubscriptionUrl(_smpInput.Trim()))
+                {
+                    IsConnecting = false;
+                    return;
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[Simple] Subscription refresh failed");
-                SmpErrorText = IsRussian
-                    ? $"Не удалось получить подписку: {CrashReporter.ScrubSecrets(ex.Message)}"
-                    : $"Couldn't fetch the subscription: {CrashReporter.ScrubSecrets(ex.Message)}";
-                return;
-            }
-        }
 
-        // G1 Smart Connect: probe the subscription pool and land on a LIVE
-        // server before bringing the tunnel up — never connect blind to a dead
-        // one (the Latvia-HY2 i/o-timeout that caused "часто теряется"). Keeps
-        // the active pick if it's alive; else fastest live; else honest error.
-        // Inlined (no new VM member) so the characterization surface is unchanged;
-        // the pick decision is unit-tested in ServerHealthProbe.PickForConnect.
-        if ((_settings.App.ConfigMode ?? "generated")
-            .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            var candidates = (_settings.App.Subscriptions
-                    ?? new System.Collections.Generic.List<SubscriptionEntry>())
-                .Where(s => s.Enabled)
-                .SelectMany(s => s.Servers ?? Enumerable.Empty<VlessServerEntry>())
-                .ToList();
+            // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
+            _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
 
-            if (candidates.Count > 0)
+            // Simple-Split uses the hardcoded default profile. Full tunnel
+            // ignores the profile field entirely.
+            if (IsSplitTunnel)
+                _settings.ActiveProfile = SimpleSplitProfile;
+
+            SaveSettings();
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+
+            // Subscription mode needs a fresh fetch BEFORE connect so we have
+            // servers to hand to the engine.
+            if (kind == SmpInputKind.SubscriptionUrl)
             {
-                StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 try
                 {
-                    var results = await new ServerHealthProbe(_logger)
-                        .ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
-                    var chosen = ConnectionIntentScorer.PickServer(
-                        results,
-                        _settings.App.ConnectionIntent,
-                        _settings.App.ActiveSubscriptionServer);
-
-                    if (chosen == null)
-                    {
-                        SmpErrorText = IsRussian
-                            ? "Все серверы недоступны — проверь подписку или интернет."
-                            : "All servers are unreachable — check your subscription or internet.";
-                        return;
-                    }
-
-                    if (!string.Equals(chosen.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal))
-                    {
-                        _logger.Information(
-                            "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
-                        _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
-
-                        // Sync UI selection to winner before SaveSettings re-derives from it.
-                        var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
-                        if (winnerVm is not null)
-                            SelectedSubscriptionServer = winnerVm;
-
-                        SaveSettings();
-                    }
-
-                    if (ConnectionIntent.Normalize(_settings.App.ConnectionIntent) != ConnectionIntent.General)
-                    {
-                        StatusText = $"{ConnectionIntentStatusText} -> {chosen.Name}";
-                    }
+                    await RefreshAllSubscriptionsAsync();
                 }
                 catch (Exception ex)
                 {
-                    // Probe failure must never block connect — fall through.
-                    _logger.Warning(ex, "[SmartConnect] probe failed — connecting without pre-flight");
+                    _logger.Warning(ex, "[Simple] Subscription refresh failed");
+                    SmpErrorText = IsRussian
+                        ? $"Не удалось получить подписку: {CrashReporter.ScrubSecrets(ex.Message)}"
+                        : $"Couldn't fetch the subscription: {CrashReporter.ScrubSecrets(ex.Message)}";
+                    IsConnecting = false;
+                    return;
                 }
             }
-        }
 
-        // Hand off to the shared Connect path — it already handles mode
-        // dispatch, TUN conflicts, service-managed warnings, etc.
-        await ToggleConnectionAsync();
+            // G1 Smart Connect: probe the subscription pool and land on a LIVE
+            // server before bringing the tunnel up — never connect blind to a dead
+            // one (the Latvia-HY2 i/o-timeout that caused "часто теряется"). Keeps
+            // the active pick if it's alive; else fastest live; else honest error.
+            // Inlined (no new VM member) so the characterization surface is unchanged;
+            // the pick decision is unit-tested in ServerHealthProbe.PickForConnect.
+            if ((_settings.App.ConfigMode ?? "generated")
+                .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
+            {
+                var candidates = (_settings.App.Subscriptions
+                        ?? new System.Collections.Generic.List<SubscriptionEntry>())
+                    .Where(s => s.Enabled)
+                    .SelectMany(s => s.Servers ?? Enumerable.Empty<VlessServerEntry>())
+                    .ToList();
+
+                if (candidates.Count > 0)
+                {
+                    StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
+                    try
+                    {
+                        var results = await new ServerHealthProbe(_logger)
+                            .ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                        var chosen = ConnectionIntentScorer.PickServer(
+                            results,
+                            _settings.App.ConnectionIntent,
+                            _settings.App.ActiveSubscriptionServer);
+
+                        if (chosen == null)
+                        {
+                            SmpErrorText = IsRussian
+                                ? "Все серверы недоступны — проверь подписку или интернет."
+                                : "All servers are unreachable — check your subscription or internet.";
+                            IsConnecting = false;
+                            return;
+                        }
+
+                        if (!string.Equals(chosen.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal))
+                        {
+                            _logger.Information(
+                                "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
+                            _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
+
+                            // Sync UI selection to winner before SaveSettings re-derives from it.
+                            var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
+                            if (winnerVm is not null)
+                                SelectedSubscriptionServer = winnerVm;
+
+                            SaveSettings();
+                        }
+
+                        if (ConnectionIntent.Normalize(_settings.App.ConnectionIntent) != ConnectionIntent.General)
+                        {
+                            StatusText = $"{ConnectionIntentStatusText} -> {chosen.Name}";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Probe failure must never block connect — fall through.
+                        _logger.Warning(ex, "[SmartConnect] probe failed — connecting without pre-flight");
+                    }
+                }
+            }
+
+            // Hand off to the shared Connect path — reset IsConnecting first so
+            // ToggleConnectionAsync's own re-entrancy guard allows it to enter.
+            IsConnecting = false;
+            await ToggleConnectionAsync();
+        }
+        catch
+        {
+            IsConnecting = false;
+            throw;
+        }
     }
 
     /// <summary>
