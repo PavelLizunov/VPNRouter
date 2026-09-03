@@ -166,4 +166,16 @@ public sealed class ProcessOwnershipTests
         Assert.True(Path.IsPathRooted(snapshot.Value.ExecutablePath));
         Assert.True(ProcessOwnership.IsSameProcessIdentity(snapshot.Value, snapshot.Value));
     }
+
+    [Fact]
+    public void ProcessQuery_AnyAlive_CachesAndResolvesCurrentProcess()
+    {
+        using var cur = Process.GetCurrentProcess();
+        var procName = cur.ProcessName;
+
+        Assert.True(ProcessQuery.AnyAlive(procName));
+        // Second call exercises the PID-cached fast path
+        Assert.True(ProcessQuery.AnyAlive(procName));
+        Assert.False(ProcessQuery.AnyAlive("nonexistent-proc-" + Guid.NewGuid().ToString("N")));
+    }
 }

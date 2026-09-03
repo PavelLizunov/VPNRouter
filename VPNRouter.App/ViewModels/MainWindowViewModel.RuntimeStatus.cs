@@ -1,4 +1,5 @@
 using System;
+using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -102,19 +103,14 @@ public partial class MainWindowViewModel
     {
         try
         {
-            // v2.28.5-r5: adaptive poll. If everything's been idle for a
-            // while, skip some ticks to cut CPU "0-1% cycling at idle".
-            // The skip plan: 0–2 idle ticks → poll every tick (no skip,
-            // 2 s effective). 3–5 idle ticks → skip every other tick
-            // (4 s effective). 6+ idle ticks → skip 2-of-3 (6 s effective),
-            // capped at 3-of-4 (8 s effective). Any time something
-            // actually starts running, the streak resets and full polling
-            // resumes immediately.
             if (_runtimeSkipRemaining > 0)
             {
                 _runtimeSkipRemaining--;
                 return;
             }
+
+            var window = GetMainWindow();
+            var isHidden = window != null && (!window.IsVisible || window.WindowState == WindowState.Minimized);
 
             var vpnRunning = RuntimeStatusDetector.IsVpnRunning();
             var zapretRunning = RuntimeStatusDetector.IsZapretRunning();
@@ -133,7 +129,12 @@ public partial class MainWindowViewModel
                 tgProxyRunning = RuntimeStatusDetector.IsTgProxyRunning(tgPort);
             }
 
-            if (vpnRunning || zapretRunning || tgProxyRunning)
+            if (isHidden)
+            {
+                // When window is minimized or hidden in tray, poll at 10s effective interval
+                _runtimeSkipRemaining = 4;
+            }
+            else if (vpnRunning || zapretRunning || tgProxyRunning)
             {
                 _runtimeIdleStreak = 0;
                 _runtimeSkipRemaining = 0;

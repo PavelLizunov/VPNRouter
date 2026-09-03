@@ -526,6 +526,8 @@ public partial class AndroidApp
 
     private void OnDiagnosticsTick()
     {
+        if (MainActivity.IsActivityPaused) return;
+
         try
         {
             // 1. Uptime — refresh title every tick while connected.

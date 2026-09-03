@@ -196,6 +196,21 @@ internal static class ProcessOwnership
     internal static OwnedProcessIdentity? FindOwnedSingBox(string? configuredCandidate)
     {
         var owner = ReadRuntimeOwnerRecord(OwnerRecordPath);
+        if (owner.Kind == RuntimeOwnerRecordKind.CurrentV2 && owner.Record is { } v2)
+        {
+            // Fast path for authoritative v2 runtime records: verify exact owner and child PIDs directly
+            // without triggering full system process enumeration via GetProcessesByName.
+            var liveOwner = TryReadIdentityByPid(v2.OwnerPid);
+            if (liveOwner is not { } ownerIdentity || !MatchesOwnerIdentity(v2, ownerIdentity))
+                return null;
+
+            var liveChild = TryReadIdentityByPid(v2.ChildPid);
+            if (liveChild is { } child && MatchesCurrentRecord(v2, child))
+                return child;
+
+            return null;
+        }
+
         return FindOwnedSingBox(
             owner,
             EnumerateCandidateProcesses(owner.Record?.ExecutablePath, configuredCandidate),
