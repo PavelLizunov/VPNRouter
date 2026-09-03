@@ -129,6 +129,7 @@ public partial class App : Application
 
             desktop.MainWindow = mainWindow;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            VPNRouter.App.Services.AppAutomationDriver.StartIfConfigured(mainWindow, _viewModel);
 
             // Hide to tray on close instead of quitting
             mainWindow.Closing += (_, e) =>
@@ -140,6 +141,7 @@ public partial class App : Application
             // Cleanup sing-box on any kind of app exit
             desktop.ShutdownRequested += (_, _) =>
             {
+                VPNRouter.App.Services.AppAutomationDriver.Stop();
                 _viewModel?.QuitCommand.Execute(null);
                 // v2.23.0: drop the crash-detection lock on clean exit so
                 // the next run won't falsely think we crashed.
