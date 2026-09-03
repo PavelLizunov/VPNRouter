@@ -81,7 +81,7 @@ public sealed class UnixOwnedProcessSignalTests
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux pidfd behavior only");
 
-        using var child = StartControlledChild();
+        var (child, exePath) = StartControlledChild();
         try
         {
             var identity = ProcessOwnership.TryReadOwnedSingBoxIdentity(child);
@@ -110,7 +110,7 @@ public sealed class UnixOwnedProcessSignalTests
         }
         finally
         {
-            StopControlledChild(child);
+            StopControlledChild(child, exePath);
         }
     }
 
@@ -131,7 +131,7 @@ public sealed class UnixOwnedProcessSignalTests
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(), "Linux pidfd behavior only");
 
-        using var child = StartControlledChild();
+        var (child, exePath) = StartControlledChild();
         try
         {
             var identity = ProcessOwnership.TryReadOwnedSingBoxIdentity(child);
@@ -144,21 +144,35 @@ public sealed class UnixOwnedProcessSignalTests
         }
         finally
         {
-            StopControlledChild(child);
+            StopControlledChild(child, exePath);
         }
     }
 
-    private static Process StartControlledChild()
+    private static (Process child, string exePath) StartControlledChild()
     {
-        var child = Process.Start(new ProcessStartInfo("/bin/sleep", "30")
+        var binDir = AppPaths.BinDir;
+        Directory.CreateDirectory(binDir);
+        var testExe = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
+        File.Copy("/bin/sleep", testExe, overwrite: true);
+        if (OperatingSystem.IsLinux())
+        {
+            File.SetUnixFileMode(testExe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var child = Process.Start(new ProcessStartInfo(testExe, "30")
         {
             UseShellExecute = false,
             CreateNoWindow = true
         });
-        return child ?? throw new InvalidOperationException("Could not start controlled sleep child.");
+        if (child == null)
+        {
+            try { File.Delete(testExe); } catch { }
+            throw new InvalidOperationException("Could not start controlled sleep child.");
+        }
+        return (child, testExe);
     }
 
-    private static void StopControlledChild(Process child)
+    private static void StopControlledChild(Process child, string? exePath = null)
     {
         try
         {
@@ -172,5 +186,13 @@ public sealed class UnixOwnedProcessSignalTests
         {
             // Bounded cleanup of this test's own child only.
         }
+        finally
+        {
+            if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+            {
+                try { File.Delete(exePath); } catch { }
+            }
+        }
+    }
     }
 }
