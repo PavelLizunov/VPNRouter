@@ -25,6 +25,9 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class ProcessQuery
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _lastKnownAlivePids =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// True if at least one process with the given base name (no <c>.exe</c>) is
     /// running. Disposes every returned <see cref="Process"/> handle. Enumeration
@@ -34,11 +37,37 @@ public static class ProcessQuery
     public static bool AnyAlive(string? processName)
     {
         if (string.IsNullOrWhiteSpace(processName)) return false;
+
+        if (string.Equals(processName, "winws", StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsWindows())
+            return false;
+
+        // Fast path: if a previously detected process is still running with the expected name,
+        // we can confirm liveness via its PID directly without walking the full OS process table.
+        if (_lastKnownAlivePids.TryGetValue(processName, out var lastPid))
+        {
+            try
+            {
+                using var p = Process.GetProcessById(lastPid);
+                if (!p.HasExited && string.Equals(p.ProcessName, processName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            catch
+            {
+                _lastKnownAlivePids.TryRemove(processName, out _);
+            }
+        }
+
         Process[]? procs = null;
         try
         {
             procs = Process.GetProcessesByName(processName);
-            return procs.Length > 0;
+            if (procs.Length > 0)
+            {
+                try { _lastKnownAlivePids[processName] = procs[0].Id; } catch { }
+                return true;
+            }
+            _lastKnownAlivePids.TryRemove(processName, out _);
+            return false;
         }
         catch
         {

@@ -166,4 +166,85 @@ public sealed class ProcessOwnershipTests
         Assert.True(Path.IsPathRooted(snapshot.Value.ExecutablePath));
         Assert.True(ProcessOwnership.IsSameProcessIdentity(snapshot.Value, snapshot.Value));
     }
+
+    [Fact]
+    public void ReadConfiguredExecutablePath_CachesResultUntilFileModified()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"config-cache-test-{Guid.NewGuid():N}.yaml");
+        try
+        {
+            File.WriteAllText(temp, "singbox:\n  executable_path: /custom/sing-box-1\n");
+            var first = ProcessOwnership.ReadConfiguredExecutablePath(temp);
+            Assert.Equal("/custom/sing-box-1", first);
+
+            // Overwrite with new value and touch timestamp
+            File.WriteAllText(temp, "singbox:\n  executable_path: /custom/sing-box-2\n");
+            File.SetLastWriteTimeUtc(temp, DateTime.UtcNow.AddSeconds(2));
+
+            var second = ProcessOwnership.ReadConfiguredExecutablePath(temp);
+            Assert.Equal("/custom/sing-box-2", second);
+        }
+        finally
+        {
+            try { File.Delete(temp); } catch { }
+            ProcessOwnership.InvalidateConfiguredExecutablePathCache();
+        }
+    }
+
+    [Fact]
+    public void ReadRuntimeOwnerRecord_CachesResultUntilFileModified()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"owner-cache-test-{Guid.NewGuid():N}.json");
+        try
+        {
+            var content1 = """
+                {
+                  "schema_version": 2,
+                  "executable_path": "/opt/vpnrouter/bin/sing-box",
+                  "owner_pid": 100,
+                  "owner_started_at_utc_ticks": 1000,
+                  "child_pid": 200,
+                  "child_started_at_utc_ticks": 2000
+                }
+                """;
+            File.WriteAllText(temp, content1);
+            var first = ProcessOwnership.ReadRuntimeOwnerRecord(temp);
+            Assert.Equal(RuntimeOwnerRecordKind.CurrentV2, first.Kind);
+            Assert.Equal(200, first.Record?.ChildPid);
+
+            var content2 = """
+                {
+                  "schema_version": 2,
+                  "executable_path": "/opt/vpnrouter/bin/sing-box",
+                  "owner_pid": 100,
+                  "owner_started_at_utc_ticks": 1000,
+                  "child_pid": 201,
+                  "child_started_at_utc_ticks": 2000
+                }
+                """;
+            File.WriteAllText(temp, content2);
+            File.SetLastWriteTimeUtc(temp, DateTime.UtcNow.AddSeconds(2));
+
+            var second = ProcessOwnership.ReadRuntimeOwnerRecord(temp);
+            Assert.Equal(RuntimeOwnerRecordKind.CurrentV2, second.Kind);
+            Assert.Equal(201, second.Record?.ChildPid);
+        }
+        finally
+        {
+            try { File.Delete(temp); } catch { }
+            ProcessOwnership.InvalidateRuntimeOwnerRecordCache();
+        }
+    }
+
+    [Fact]
+    public void ProcessQuery_AnyAlive_CachesAndResolvesCurrentProcess()
+    {
+        using var cur = Process.GetCurrentProcess();
+        var procName = cur.ProcessName;
+
+        Assert.True(ProcessQuery.AnyAlive(procName));
+        // Second call exercises the PID-cached fast path
+        Assert.True(ProcessQuery.AnyAlive(procName));
+        Assert.False(ProcessQuery.AnyAlive("nonexistent-proc-" + Guid.NewGuid().ToString("N")));
+    }
 }

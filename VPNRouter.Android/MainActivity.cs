@@ -424,6 +424,15 @@ public class MainActivity : AvaloniaMainActivity
         base.OnDestroy();
     }
 
+    private static volatile bool _isActivityPaused;
+    public static bool IsActivityPaused => _isActivityPaused;
+
+    protected override void OnPause()
+    {
+        _isActivityPaused = true;
+        base.OnPause();
+    }
+
     /// <summary>
     /// Resume re-sync (demote-only). The <see cref="TunnelStateReceiver"/> only
     /// lives while this Activity is alive (registered in <see cref="OnCreate"/>,
@@ -447,6 +456,7 @@ public class MainActivity : AvaloniaMainActivity
     /// </summary>
     protected override void OnResume()
     {
+        _isActivityPaused = false;
         base.OnResume();
         try
         {
@@ -550,6 +560,7 @@ public class MainActivity : AvaloniaMainActivity
                     break;
                 case ActionStats:
                     // P1: live stats from the protected-socket clash_api poll.
+                    if (_isActivityPaused) break;
                     try
                     {
                         long d = intent?.GetLongExtra(ExtraStatsDown, 0L) ?? 0L;

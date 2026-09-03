@@ -377,6 +377,7 @@ public final class VpnRouterService extends VpnService {
         // Activity side reads the same dir on next launch and the kebab
         // "View crash log" surface picks up either origin transparently.
         installJavaUncaughtHandler();
+        initScreenStateReceiver();
     }
 
     private void installJavaUncaughtHandler() {
@@ -409,6 +410,53 @@ public final class VpnRouterService extends VpnService {
             Log.i(LOG_TAG, "AND-CRASH-HOOK: Java uncaught-handler installed");
         } catch (Exception e) {
             Log.w(LOG_TAG, "AND-CRASH-HOOK: install failed: " + e.getMessage());
+        }
+    }
+
+    private void initScreenStateReceiver() {
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                    isScreenOn = pm.isInteractive();
+                } else {
+                    isScreenOn = pm.isScreenOn();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            android.content.IntentFilter filter = new android.content.IntentFilter();
+            filter.addAction(Intent.ACTION_SCREEN_ON);
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            screenStateReceiver = new android.content.BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (intent == null) return;
+                    String action = intent.getAction();
+                    if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                        isScreenOn = false;
+                        stopStatsPoller();
+                    } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                        isScreenOn = true;
+                        if (tunnelLive) {
+                            startStatsPoller();
+                        }
+                    }
+                }
+            };
+            registerReceiver(screenStateReceiver, filter);
+        } catch (Exception ex) {
+            Log.w(LOG_TAG, "Failed to register screenStateReceiver: " + ex.getMessage());
+        }
+    }
+
+    private void releaseScreenStateReceiver() {
+        if (screenStateReceiver != null) {
+            try {
+                unregisterReceiver(screenStateReceiver);
+            } catch (Exception ignored) {}
+            screenStateReceiver = null;
         }
     }
 
@@ -1105,6 +1153,8 @@ public final class VpnRouterService extends VpnService {
     // in-process managed HttpClient didn't.) Parse downloadTotal/uploadTotal + the
     // connection count, broadcast to the C# UI. Every 2s while live; fully best-effort.
     private java.util.concurrent.ScheduledExecutorService statsPoller;
+    private android.content.BroadcastReceiver screenStateReceiver = null;
+    private volatile boolean isScreenOn = true;
 
     // P1 clash_api secret (2026-07-10): bearer token the generated config locks
     // the Clash API with. Set by startTunnel from the launching config; the raw
@@ -1130,6 +1180,7 @@ public final class VpnRouterService extends VpnService {
 
     private synchronized void startStatsPoller() {
         stopStatsPoller();
+        if (!isScreenOn) return;
         java.util.concurrent.ScheduledExecutorService ex =
             java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new java.util.concurrent.ThreadFactory() {
                 @Override public Thread newThread(Runnable r) {
@@ -1299,6 +1350,7 @@ public final class VpnRouterService extends VpnService {
 
     @Override
     public void onDestroy() {
+        releaseScreenStateReceiver();
         // B1: enqueue a final teardown, then stop accepting new lifecycle work.
         // shutdown() is non-blocking — it lets the queued stop drain on the daemon
         // worker without blocking onDestroy (main thread). On process death the OS
