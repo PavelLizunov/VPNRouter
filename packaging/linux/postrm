@@ -10,8 +10,10 @@ set -e
 # Only act on full removal / purge, not configure failures etc.
 case "$1" in
     remove|purge)
-        pkill -f /opt/vpnrouter/sing-box 2>/dev/null || true
-        pkill -f VPNRouter.App          2>/dev/null || true
+        pkill -f /opt/vpnrouter/sing-box            2>/dev/null || true
+        pkill -f /opt/vpnrouter/VPNRouter.App       2>/dev/null || true
+        pkill -f /usr/local/vpnrouter/sing-box      2>/dev/null || true
+        pkill -f /usr/local/vpnrouter/VPNRouter.App 2>/dev/null || true
         ;;
 esac
 

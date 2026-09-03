@@ -569,18 +569,21 @@ public class ZapretUpdater
 
         // 2. Try stopping known WinDivert service names. WinDivert registers under
         //    various names depending on version (WinDivert, WinDivert14, WinDivertXX).
+        var scPath = OperatingSystem.IsWindows() ? WindowsServiceCommand.GetSystemScPath() : "sc";
         var serviceNames = new[] { "WinDivert", "WinDivert14", "WinDivert15", "windivert" };
         foreach (var name in serviceNames)
         {
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("sc", $"stop {name}")
+                var psi = new System.Diagnostics.ProcessStartInfo(scPath)
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
+                psi.ArgumentList.Add("stop");
+                psi.ArgumentList.Add(name);
                 using var p = System.Diagnostics.Process.Start(psi);
                 p?.WaitForExit(5000);
                 var stdout = p?.StandardOutput.ReadToEnd() ?? "";
@@ -598,13 +601,15 @@ public class ZapretUpdater
         {
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("sc", $"delete {name}")
+                var psi = new System.Diagnostics.ProcessStartInfo(scPath)
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
+                psi.ArgumentList.Add("delete");
+                psi.ArgumentList.Add(name);
                 using var p = System.Diagnostics.Process.Start(psi);
                 p?.WaitForExit(3000);
             }

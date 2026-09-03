@@ -397,6 +397,24 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("<annotate key=\"org.freedesktop.policykit.exec.path\">/usr/libexec/vpnrouter-update-helper</annotate>", policy);
     }
 
+    [Fact]
+    public void LinuxPostrm_ScopesProcessTermination_NoBarePkill()
+    {
+        var postrm = Read("packaging", "linux", "postrm");
+
+        // Verify path-scoped kill patterns
+        Assert.Contains("pkill -f /opt/vpnrouter/sing-box", postrm);
+        Assert.Contains("pkill -f /opt/vpnrouter/VPNRouter.App", postrm);
+        Assert.Contains("pkill -f /usr/local/vpnrouter/sing-box", postrm);
+        Assert.Contains("pkill -f /usr/local/vpnrouter/VPNRouter.App", postrm);
+
+        // Verify that un-scoped pattern kills are absent
+        var stripped = postrm
+            .Replace("/opt/vpnrouter/VPNRouter.App", "")
+            .Replace("/usr/local/vpnrouter/VPNRouter.App", "");
+        Assert.DoesNotContain("pkill -f VPNRouter.App", stripped);
+    }
+
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { FindRoot() }.Concat(parts).ToArray()));
 

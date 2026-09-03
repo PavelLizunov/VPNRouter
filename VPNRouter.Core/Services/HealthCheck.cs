@@ -700,13 +700,15 @@ public static class HealthCheck
     {
         try
         {
-            var psi = new ProcessStartInfo("sc.exe", "query VPNRouter")
+            var psi = new ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("query");
+            psi.ArgumentList.Add("VPNRouter");
             using var proc = Process.Start(psi);
             if (proc == null) return;
             var stdout = proc.StandardOutput.ReadToEnd();
@@ -794,13 +796,15 @@ public static class HealthCheck
     [SupportedOSPlatform("windows")]
     private static (bool Exists, bool Running, string Output) RunSc(string verb, string serviceName)
     {
-        var psi = new ProcessStartInfo("sc.exe", $"{verb} {serviceName}")
+        var psi = new ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        psi.ArgumentList.Add(verb);
+        psi.ArgumentList.Add(serviceName);
         using var proc = Process.Start(psi);
         if (proc == null) return (false, false, "");
         var output = proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd();
