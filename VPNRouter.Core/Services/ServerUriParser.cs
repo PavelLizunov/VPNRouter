@@ -400,8 +400,8 @@ public static class ServerUriParser
         if (password.Length == 0)
             throw new FormatException("Invalid hysteria2 URI: password missing (expected hysteria2://password@host:port)");
 
-        var server = parsed.Host;
-        var port = parsed.Port > 0 ? parsed.Port : 443;
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid hysteria2 URI: host missing");
 
@@ -604,8 +604,8 @@ public static class ServerUriParser
             password = userinfo.Substring(colon + 1);
         }
 
-        var server = parsed.Host;
-        var port = parsed.Port > 0 ? parsed.Port : 443;
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid tuic URI: host missing");
 
@@ -699,8 +699,8 @@ public static class ServerUriParser
             password = decoded.Substring(colon2 + 1);
         }
 
-        var server = parsed.Host;
-        var port = parsed.Port > 0 ? parsed.Port : 443;
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid ss URI: host missing");
 
@@ -788,8 +788,8 @@ public static class ServerUriParser
             password = userinfo.Substring(colon + 1);
         }
 
-        var server = parsed.Host;
-        var port = parsed.Port > 0 ? parsed.Port : 443;
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid naive URI: host missing");
 

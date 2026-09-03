@@ -55,6 +55,7 @@ public sealed class LinuxFirewallManager : IFirewallManager
     private readonly ILogger _logger;
     private readonly string _currentConfigPath;
     private readonly string _markerPath;
+    private readonly string _rulesetPath;
     private readonly Func<string, IReadOnlyList<string>> _resolveHost;
 
     private bool _armed;     // full-tunnel detected at CreateBlockRules
@@ -67,7 +68,8 @@ public sealed class LinuxFirewallManager : IFirewallManager
         IProcessRunner? runner = null,
         string? currentConfigPath = null,
         string? markerPath = null,
-        Func<string, IReadOnlyList<string>>? hostResolver = null)
+        Func<string, IReadOnlyList<string>>? hostResolver = null,
+        string? rulesetPath = null)
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? new ProcessRunner();
@@ -76,6 +78,7 @@ public sealed class LinuxFirewallManager : IFirewallManager
         // clean teardown. If it survives to the next launch, a hard kill stranded
         // the kill-switch and the orphan sweep removes the leftover nft table.
         _markerPath = markerPath ?? System.IO.Path.Combine(AppPaths.DataDir, "nft-killswitch-engaged.marker");
+        _rulesetPath = rulesetPath ?? System.IO.Path.Combine(AppPaths.DataDir, "vpnrouter-nft-killswitch.conf");
         _resolveHost = hostResolver ?? DefaultResolveHost;
     }
 
@@ -120,11 +123,12 @@ public sealed class LinuxFirewallManager : IFirewallManager
         if (_loaded) return; // idempotent
 
         var ruleset = BuildRuleset(_serverIps);
-        string tmp;
         try
         {
-            tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnrouter-nft-killswitch.conf");
-            System.IO.File.WriteAllText(tmp, ruleset);
+            var dir = System.IO.Path.GetDirectoryName(_rulesetPath);
+            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
+            AppPaths.WritePrivateText(_rulesetPath, ruleset);
         }
         catch (Exception ex)
         {
@@ -132,7 +136,7 @@ public sealed class LinuxFirewallManager : IFirewallManager
             return;
         }
 
-        var load = RunSudo(new[] { "-n", Nft, "-f", tmp });
+        var load = RunSudo(new[] { "-n", Nft, "-f", _rulesetPath });
         if (load.ok)
         {
             _loaded = true;

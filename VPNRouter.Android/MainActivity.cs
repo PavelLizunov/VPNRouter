@@ -746,26 +746,30 @@ public class MainActivity : AvaloniaMainActivity
             return;
         }
 
-        try
+        // AND-PERF-01: offload stream I/O from Android main Looper thread to prevent ANR.
+        _ = System.Threading.Tasks.Task.Run(() =>
         {
-            using var stream = ContentResolver!.OpenOutputStream(data.Data);
-            if (stream is null)
+            try
             {
-                callback?.Invoke(false, "openOutputStream returned null");
-                return;
+                using var stream = ContentResolver!.OpenOutputStream(data.Data);
+                if (stream is null)
+                {
+                    callback?.Invoke(false, "openOutputStream returned null");
+                    return;
+                }
+                var bytes = System.Text.Encoding.UTF8.GetBytes(pendingJson);
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush();
+                // Surface the human-readable URI so the UI can echo it.
+                callback?.Invoke(true, data.Data.ToString());
             }
-            var bytes = System.Text.Encoding.UTF8.GetBytes(pendingJson);
-            stream.Write(bytes, 0, bytes.Length);
-            stream.Flush();
-            // Surface the human-readable URI so the UI can echo it.
-            callback?.Invoke(true, data.Data.ToString());
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Error("VpnRouter.ConfigShare",
-                $"export write failed: {ex.GetType().Name}: {ex.Message}");
-            callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
-        }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("VpnRouter.ConfigShare",
+                    $"export write failed: {ex.GetType().Name}: {ex.Message}");
+                callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
+            }
+        });
     }
 
     private void HandleImportResult(Result resultCode, Intent? data)
@@ -779,24 +783,28 @@ public class MainActivity : AvaloniaMainActivity
             return;
         }
 
-        try
+        // AND-PERF-01: offload stream I/O from Android main Looper thread to prevent ANR.
+        _ = System.Threading.Tasks.Task.Run(() =>
         {
-            using var stream = ContentResolver!.OpenInputStream(data.Data);
-            if (stream is null)
+            try
             {
-                callback?.Invoke(false, "openInputStream returned null");
-                return;
+                using var stream = ContentResolver!.OpenInputStream(data.Data);
+                if (stream is null)
+                {
+                    callback?.Invoke(false, "openInputStream returned null");
+                    return;
+                }
+                using var sr = new System.IO.StreamReader(stream, System.Text.Encoding.UTF8);
+                var content = sr.ReadToEnd();
+                callback?.Invoke(true, content);
             }
-            using var sr = new System.IO.StreamReader(stream, System.Text.Encoding.UTF8);
-            var content = sr.ReadToEnd();
-            callback?.Invoke(true, content);
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Error("VpnRouter.ConfigShare",
-                $"import read failed: {ex.GetType().Name}: {ex.Message}");
-            callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
-        }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("VpnRouter.ConfigShare",
+                    $"import read failed: {ex.GetType().Name}: {ex.Message}");
+                callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
+            }
+        });
     }
 
     // ── Bug-AND-023 v2 (2026-05-17) — live-preview QR scan ────────────────

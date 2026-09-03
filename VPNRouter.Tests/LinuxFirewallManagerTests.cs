@@ -272,4 +272,22 @@ public class LinuxFirewallManagerTests : IDisposable
 
         Assert.Empty(fake.RunCalls); // a normal launch must never touch nft
     }
+
+    [Fact]
+    public void Enable_WritesRulesetToConfiguredPath_NotSharedTemp()
+    {
+        // FW-02: verify that LinuxFirewallManager writes rulesets into private AppPaths.DataDir
+        // or the explicitly configured ruleset path, never world-writable /tmp.
+        WriteConfig("9.9.9.9");
+        var customRuleset = Path.Combine(_tmp, "custom-ruleset.conf");
+        var fake = OkRunner();
+        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker, rulesetPath: customRuleset);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        Assert.True(File.Exists(customRuleset));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains(customRuleset));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Any(a => a.Contains("/tmp/vpnrouter-nft-killswitch.conf")));
+    }
 }
