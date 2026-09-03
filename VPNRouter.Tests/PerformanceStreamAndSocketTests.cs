@@ -15,12 +15,12 @@ public sealed class PerformanceStreamAndSocketTests
         var source = LoadSource("VPNRouter.Core", "Services", "TcpTlsProbe.cs");
 
         // Assert both ProbeTcpAsync and ProbeTlsAsync configure immediate RST linger to avoid TIME_WAIT
-        var probeTcpIndex = source.IndexOf("ProbeTcpAsync(", StringComparison.Ordinal);
-        var probeTlsIndex = source.IndexOf("ProbeTlsAsync(", StringComparison.Ordinal);
-        Assert.True(probeTcpIndex >= 0 && probeTlsIndex > probeTcpIndex);
+        var probeTcpDef = source.IndexOf("Task<(bool ok, int latencyMs, string? err)> ProbeTcpAsync(", StringComparison.Ordinal);
+        var probeTlsDef = source.IndexOf("Task<(bool ok, string? err)> ProbeTlsAsync(", StringComparison.Ordinal);
+        Assert.True(probeTcpDef >= 0 && probeTlsDef > probeTcpDef);
 
-        var tcpBody = source[probeTcpIndex..probeTlsIndex];
-        var tlsBody = source[probeTlsIndex..];
+        var tcpBody = source[probeTcpDef..probeTlsDef];
+        var tlsBody = source[probeTlsDef..];
 
         Assert.Contains("LingerState = new LingerOption(enable: true, seconds: 0)", tcpBody);
         Assert.Contains("LingerState = new LingerOption(enable: true, seconds: 0)", tlsBody);
