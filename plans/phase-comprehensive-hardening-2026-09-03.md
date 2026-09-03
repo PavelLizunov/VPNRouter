@@ -67,22 +67,39 @@ Run unit tests and full GitHub Actions test suites (Ubuntu, Windows characteriza
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: all unit and characterization tests pass with zero failures.
-- [ ] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
-- [ ] **Gate 4 — Self-review**: multi-iteration adversarial review verifies all changes without regressions.
-- [ ] **Gate 5 — UI verify**: N/A (headless UI and Android unit tests pass).
-- [ ] **Gate 6 — Characterization diff**: existing characterizations pass.
+- [x] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors in PR workflow `33717383005`.
+- [x] **Gate 2 — Tests green**: baseline `2869 total / 2812 executed` became `2888 total / 2831 executed`, all passed with zero errors and zero warnings; Windows characterization passed `33/33` with zero failures.
+- [x] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
+- [x] **Gate 4 — Self-review**: two-agent Opus adversarial review verified Step 3 same-host prioritization, host IP reflection rejection, IPv6 bracket stripping, Unix firewall private temp file management, Android VpnService fd lifecycle, and CI release asset gates.
+- [x] **Gate 5 — UI verify**: N/A (headless UI and Android unit tests pass).
+- [x] **Gate 6 — Characterization diff**: existing characterizations pass cleanly.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: brief commit pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR #223 remains open and unmerged (or ready for merge)
+**Commits**: `8a76be8c` (brief); `a945f7e4` (comprehensive implementation + tests); `e407757e` (test path fix and unparseable IP rejection); `fb5c8db2` (port test distinction)
+**Pushed**: `origin/dsh/fix-comprehensive-hardening`; PR #223 — https://github.com/PavelLizunov/VPNRouter/pull/223
+**Test deltas**: +19 executed tests across `DeepVerifyHostReflectionTests`, `NaivePairingUdpLivenessTests`, `ServerUriParserTests`, `LinuxFirewallManagerTests`, and `MacFirewallManagerTests` (`2888 total / 2831 executed / 2831 passed / 0 failed / 0 warning`); Windows characterization `33/33 passed`
+**Files changed**:
+- `VPNRouter.Core/Services/NaivePairing.cs`: prioritize same-host siblings in Step 3 before falling back to any alive UDP server.
+- `VPNRouter.Core/Services/DeepVerifyProbe.cs`: added `EvaluateProbeResponse` with host public IP reflection check to reject transparent proxies and unparseable IP lines.
+- `VPNRouter.Core/Services/ServerUriParser.cs` & `VlessUriParser.cs`: added `NormalizeHost` to strip surrounding brackets from IPv6 host strings and clamped ports to `1..65535`.
+- `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs`: eliminated `/tmp` paths in favor of `AppPaths.DataDir` with `AppPaths.WritePrivateText`.
+- `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs`: eliminated `/tmp` paths for both anchor ruleset and main carrier config in favor of `AppPaths.DataDir`.
+- `VPNRouter.Android/VpnRouterService.java`: guaranteed `teardownTunnelResources()` in `startTunnel()` failure catch block, and enforced mutually exclusive `addAllowedApplication` vs `addDisallowedApplication` calls on `VpnService.Builder`.
+- `VPNRouter.Android/MainActivity.cs`: offloaded SAF ContentResolver file I/O to background `Task.Run` to eliminate ANR risk.
+- `.github/workflows/verify-release-integrity.yml`: enforced that missing release assets on explicit `workflow_dispatch` append to `ERRORS` and fail closed.
+- `VPNRouter.Tests/DeepVerifyHostReflectionTests.cs`: new unit test suite pinning valid, private, reflecting, and malformed probe responses.
+- `VPNRouter.Tests/NaivePairingUdpLivenessTests.cs`: added test verifying same-host priority in Step 3.
+- `VPNRouter.Tests/ServerUriParserTests.cs`: added tests verifying IPv6 bracket stripping and port fallback/overflow behavior.
+- `VPNRouter.Tests/LinuxFirewallManagerTests.cs` & `MacFirewallManagerTests.cs`: added tests verifying rules are written to configured private paths and not shared `/tmp`.
+- `plans/phase-comprehensive-hardening-2026-09-03.md`: this phase brief and outcome record.
 
-**Gate results**: pending.
-**Surprises encountered**: pending.
-**Follow-ups spawned**: pending.
-**Lessons for methodology doc**: pending.
+**Gate results**: All 6 gates passed in workflow `33717383005`.
+
+**Surprises encountered**:
+- During testing, `Uri.TryCreate` in .NET returns false when given port `70000`, throwing `FormatException` rather than setting `Port = -1`. The test was adjusted to test port `0` for fallback to 443 and port `70000` for `FormatException`.
+- `LinuxFirewallManagerTests` needed an explicit temp folder path instead of referencing an undeclared field, which was spotted by Opus adversarial review.
+
+**Follow-ups spawned**: All primary code-level defects from the matrix audit across Categories 1 through 7 are now fully resolved and covered by tests.
+**Lessons for methodology doc**: Combining comprehensive cross-cutting implementation with dual-model adversarial swarm review catches edge cases (such as URI parser port-overflow behavior and test path declarations) before final CI settlement.
