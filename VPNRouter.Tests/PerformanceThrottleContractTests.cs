@@ -87,6 +87,17 @@ public sealed class PerformanceThrottleContractTests
         Assert.Contains("FindRulesByPrefixes(IEnumerable<string> prefixes)", fw);
     }
 
+    [Fact]
+    public void DesktopApp_WiresAppAutomationDriverLifecycle()
+    {
+        var program = LoadSource("VPNRouter.App", "Program.cs");
+        var appAxaml = LoadSource("VPNRouter.App", "App.axaml.cs");
+
+        Assert.Contains("AppAutomationDriver.ParseArgs(args);", program);
+        Assert.Contains("AppAutomationDriver.StartIfConfigured(mainWindow, _viewModel);", appAxaml);
+        Assert.Contains("AppAutomationDriver.Stop();", appAxaml);
+    }
+
     private static string LoadSource(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());

@@ -74,6 +74,7 @@ sealed class Program
 
         StartMinimized = args.Contains("--minimized");
         SafeMode = args.Contains("--safe");
+        VPNRouter.App.Services.AppAutomationDriver.ParseArgs(args);
 
         // Flip the Core-level flag so services below the App layer
         // (SettingsLoader, VpnEngine) see it without having to thread
