@@ -40,12 +40,26 @@
 
 ## Verification gate
 
-- [ ] Gate 1 — Build clean: Release solution build completes with zero errors.
-- [ ] Gate 2 — Tests green: all unit and characterization tests pass (0 failures).
-- [ ] Gate 3 — Docs: outcome recorded and plans updated.
-- [ ] Gate 4 — Adversarial review: Opus swarm review confirms no stale status or missed reconnects.
-- [ ] Gate 5 — Public API surface: MainWindowViewModel public surface hash unchanged.
+- [x] Gate 1 — Build clean: Release solution build completes with zero errors in CI workflow `33786750435`.
+- [x] Gate 2 — Tests green: all unit and characterization tests pass (2,909 passed, 0 failed, 0 errors, 0 warnings; Windows characterization 33/33 passed).
+- [x] Gate 3 — Docs: outcome recorded and plans updated.
+- [x] Gate 4 — Adversarial review: Opus swarm review verified fast-path PID check, ProcessQuery caching, Android screen-state lifecycle, and window-state throttling.
+- [x] Gate 5 — Public API surface: MainWindowViewModel public surface hash unchanged.
 
 ## Outcome
 
-Pending execution.
+**Status**: READY FOR OWNER REVIEW / MERGE — PR #225
+**Commits**: `a09c94ba` (brief); `fc04798d` (initial implementation); `48a470ab` (review fixes); pending docs commit
+**Pushed**: `origin/dsh/perf-idle-cpu-and-battery`; PR #225 — https://github.com/PavelLizunov/VPNRouter/pull/225
+**Files changed**:
+- `VPNRouter.Core/Services/ProcessOwnership.cs`: added fast-path PID liveness validation in `FindOwnedSingBox(null)` for authoritative v2 records without process enumeration.
+- `VPNRouter.Core/Services/RuntimeStatusDetector.cs`: in `GetVpnRuntime()`, checks fast path `FindOwnedSingBox(null)` first, avoiding reading and parsing `config.yaml` while the tunnel is live.
+- `VPNRouter.Core/Services/ProcessQuery.cs`: in `AnyAlive(string)`, caches last-known alive PID and validates with `Process.GetProcessById`, bypassing full OS process table sweeps on repeated polls.
+- `VPNRouter.App/ViewModels/MainWindowViewModel.RuntimeStatus.cs`: throttles background polling to 10s effective interval when the window is hidden or minimized, without introducing any new fields or drifting the reflection surface hash.
+- `VPNRouter.Android/VpnRouterService.java`: registers dynamic `BroadcastReceiver` for `Intent.ACTION_SCREEN_OFF` / `Intent.ACTION_SCREEN_ON`; stops `statsPoller` when the screen turns off and resumes when the screen turns on if `boxService != null`.
+- `VPNRouter.Android/MainActivity.cs`: tracks `_isActivityPaused` across `OnPause` and `OnResume`; skips dispatching `ActionStats` to the Avalonia UI while the activity is paused.
+- `VPNRouter.Android/AndroidApp.VpnLifecycle.cs`: skips `OnDiagnosticsTick` execution while `MainActivity.IsActivityPaused` is true.
+- `VPNRouter.Tests/PerformanceThrottleContractTests.cs`: tests screen-state receiver registration, activity pause tracking, and window throttle contracts.
+- `VPNRouter.Tests/ProcessOwnershipTests.cs`: tests `ProcessQuery.AnyAlive` cached PID fast path.
+
+**Gate results**: All 5 verification gates passed cleanly in workflow `33786750435`. Total executed tests: 2,909 passed with 0 failures.
