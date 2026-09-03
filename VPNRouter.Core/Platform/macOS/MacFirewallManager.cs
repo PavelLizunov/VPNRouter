@@ -65,6 +65,8 @@ public sealed class MacFirewallManager : IFirewallManager
     private readonly string _currentConfigPath;
     private readonly string _markerPath;
     private readonly string _pfConfPath;
+    private readonly string _rulesPath;
+    private readonly string _mainConfPath;
     private readonly Func<string, IReadOnlyList<string>> _resolveHost;
 
     private bool _armed;            // full-tunnel detected at CreateBlockRules
@@ -80,7 +82,9 @@ public sealed class MacFirewallManager : IFirewallManager
         string? currentConfigPath = null,
         string? markerPath = null,
         Func<string, IReadOnlyList<string>>? hostResolver = null,
-        string? pfConfPath = null)
+        string? pfConfPath = null,
+        string? rulesPath = null,
+        string? mainConfPath = null)
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? new ProcessRunner();
@@ -91,6 +95,8 @@ public sealed class MacFirewallManager : IFirewallManager
         // anchor-v1, stock-ruleset restore for legacy).
         _markerPath = markerPath ?? System.IO.Path.Combine(AppPaths.DataDir, "pf-killswitch-engaged.marker");
         _pfConfPath = pfConfPath ?? DefaultPfConf;
+        _rulesPath = rulesPath ?? System.IO.Path.Combine(AppPaths.DataDir, "vpnrouter-pf-killswitch.conf");
+        _mainConfPath = mainConfPath ?? System.IO.Path.Combine(AppPaths.DataDir, "vpnrouter-pf-main.conf");
         _resolveHost = hostResolver ?? DefaultResolveHost;
     }
 
@@ -135,11 +141,12 @@ public sealed class MacFirewallManager : IFirewallManager
         if (_loaded) return; // idempotent
 
         var rules = BuildRules(_serverIps);
-        string tmp;
         try
         {
-            tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnrouter-pf-killswitch.conf");
-            System.IO.File.WriteAllText(tmp, rules);
+            var dir = System.IO.Path.GetDirectoryName(_rulesPath);
+            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
+            AppPaths.WritePrivateText(_rulesPath, rules);
         }
         catch (Exception ex)
         {
@@ -153,20 +160,9 @@ public sealed class MacFirewallManager : IFirewallManager
         if (en.ok) _enableToken = ParsePfToken(en.stderr);
 
         // ── P0.3 anchor mode ──
-        // 1. Ensure the main ruleset CARRIES our anchor. pf evaluates anchor
-        //    rules only when the main ruleset contains an `anchor "…"` call —
-        //    stock macOS calls only com.apple/*, so loading rules into the
-        //    anchor without the carrier is a silent no-op (dead kill-switch,
-        //    proven live 2026-07-10). The carrier is added by reloading
-        //    /etc/pf.conf + one trailing line; once present it stays across
-        //    engage cycles (an EMPTY anchor is inert), so subsequent enables
-        //    touch ONLY the anchor.
-        // 2. Load the block rules into the anchor.
-        // Failure of either step → release + stay unloaded (never claim a block
-        // we didn't prove; the empty carrier left by a step-2 failure is inert).
         if (EnsureCarrier())
         {
-            var load = RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-f", tmp });
+            var load = RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-f", _rulesPath });
             if (load.ok)
             {
                 _loaded = true;
@@ -187,7 +183,7 @@ public sealed class MacFirewallManager : IFirewallManager
         // fall back to the pre-P0.3 broad main-ruleset load so the kill-switch
         // still BLOCKS (correctness over blast-radius hygiene).
         _logger.Warning("[MacFirewall] anchor carrier unavailable — falling back to legacy broad pf load");
-        var legacy = RunSudo(new[] { "-n", PfCtl, "-f", tmp });
+        var legacy = RunSudo(new[] { "-n", PfCtl, "-f", _rulesPath });
         if (legacy.ok)
         {
             _loaded = true;
@@ -293,23 +289,24 @@ public sealed class MacFirewallManager : IFirewallManager
             return false;
         }
 
-        string merged;
         try
         {
-            merged = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "vpnrouter-pf-main.conf");
+            var dir = System.IO.Path.GetDirectoryName(_mainConfPath);
+            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
             if (!conf.EndsWith('\n')) conf += "\n";
-            System.IO.File.WriteAllText(merged, conf + $"anchor \"{Anchor}\"\n");
+            AppPaths.WritePrivateText(_mainConfPath, conf + $"anchor \"{Anchor}\"\n");
+
+            var load = RunSudo(new[] { "-n", PfCtl, "-f", _mainConfPath });
+            if (!load.ok)
+                _logger.Warning("[MacFirewall] failed to load main ruleset with anchor carrier: {Err}", load.stderr?.Trim());
+            return load.ok;
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[MacFirewall] failed to write merged pf main ruleset");
             return false;
         }
-
-        var load = RunSudo(new[] { "-n", PfCtl, "-f", merged });
-        if (!load.ok)
-            _logger.Warning("[MacFirewall] failed to load main ruleset with anchor carrier: {Err}", load.stderr?.Trim());
-        return load.ok;
     }
 
     private void ReleaseEnable()

@@ -81,10 +81,15 @@ internal static class DeepVerifyProbe
         return false;
     }
 
+    /// <summary>Known public IP of the host machine, if resolved. When set, proxies reflecting
+    /// this IP are rejected as transparent/non-anonymizing.</summary>
+    public static IPAddress? KnownHostPublicIp { get; set; }
+
     /// <summary>Make an HTTP GET through a local SOCKS5 proxy. Returns (ok, latency_ms, err).
-    /// Fails if the trace response carries a private/loopback ip= (the proxy leaked local).</summary>
+    /// Fails if the trace response carries a private/loopback ip= (the proxy leaked local),
+    /// or if the response reflects the host machine's real public IP.</summary>
     public static async Task<(bool ok, int latencyMs, string? err)> ProbeViaSocksAsync(
-        int socksPort, TimeSpan httpTimeout, CancellationToken ct)
+        int socksPort, TimeSpan httpTimeout, CancellationToken ct, IPAddress? hostPublicIp = null)
     {
         var handler = new SocketsHttpHandler
         {
@@ -103,20 +108,9 @@ internal static class DeepVerifyProbe
 
             var body = await resp.Content.ReadAsStringAsync(ct);
 
-            // Trace endpoint format: multiline "key=value". Look for "ip=" line with a non-local IP.
-            if (!body.Contains("ip=", StringComparison.Ordinal))
-                return (false, 0, "bad response");
-
-            var ipLine = body.Split('\n').FirstOrDefault(l => l.StartsWith("ip=", StringComparison.Ordinal));
-            if (ipLine != null)
-            {
-                var ipStr = ipLine[3..].Trim();
-                if (IPAddress.TryParse(ipStr, out var ip))
-                {
-                    if (IsPrivateOrLoopback(ip))
-                        return (false, 0, "local ip in response");
-                }
-            }
+            var (valid, evalErr) = EvaluateProbeResponse(body, hostPublicIp);
+            if (!valid)
+                return (false, 0, evalErr);
 
             sw.Stop();
             return (true, (int)sw.ElapsedMilliseconds, null);
@@ -195,6 +189,32 @@ internal static class DeepVerifyProbe
             catch { /* try next URL */ }
         }
         return (false, 0, "all bandwidth URLs failed");
+    }
+
+    /// <summary>
+    /// Evaluates a raw trace endpoint response body (e.g. from https://speed.cloudflare.com/meta).
+    /// Returns ok=true if response contains valid non-private IP that does not reflect the host's public IP.
+    /// </summary>
+    internal static (bool ok, string? err) EvaluateProbeResponse(string body, IPAddress? hostPublicIp = null)
+    {
+        if (!body.Contains("ip=", StringComparison.Ordinal))
+            return (false, "bad response");
+
+        var ipLine = body.Split('\n').FirstOrDefault(l => l.StartsWith("ip=", StringComparison.Ordinal));
+        if (ipLine != null)
+        {
+            var ipStr = ipLine[3..].Trim();
+            if (!IPAddress.TryParse(ipStr, out var ip))
+                return (false, "bad response");
+
+            if (IsPrivateOrLoopback(ip))
+                return (false, "local ip in response");
+
+            var hostIp = hostPublicIp ?? KnownHostPublicIp;
+            if (hostIp != null && ip.Equals(hostIp))
+                return (false, "proxy reflects host public ip");
+        }
+        return (true, null);
     }
 
     /// <summary>True for loopback / RFC1918 / CGNAT IPv4 — a trace ip= in these ranges

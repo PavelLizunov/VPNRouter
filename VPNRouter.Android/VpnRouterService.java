@@ -683,6 +683,11 @@ public final class VpnRouterService extends VpnService {
             // Throwable to Log.e — its toString() embeds the unsanitized message.
             String safeMsg = scrubSecrets(e.getMessage());
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + safeMsg);
+            try {
+                teardownTunnelResources();
+            } catch (Exception te) {
+                Log.w(LOG_TAG, "teardownTunnelResources on start failure threw: " + te.getMessage());
+            }
             Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
             err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + safeMsg);
             sendBroadcast(err);
@@ -1481,45 +1486,47 @@ public final class VpnRouterService extends VpnService {
         } catch (Exception ignored) {}
         if (!dnsAdded) builder.addDnsServer("1.1.1.1");
 
-        addPackages(builder, options.getIncludePackage(), true);
-        addPackages(builder, options.getExcludePackage(), false);
+        // v3.0 Phase 7.5 (2026-05-04) & AND-CRASH-01 fix:
+        // Android's VpnService.Builder strictly forbids calling both
+        // addAllowedApplication and addDisallowedApplication on the same
+        // Builder instance (throws IllegalArgumentException). Ensure mutually exclusive paths:
+        boolean isInclude = "include".equalsIgnoreCase(pendingPerAppMode);
+        boolean isExclude = "exclude".equalsIgnoreCase(pendingPerAppMode);
 
-        // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
-        // Apply user's package allow/disallow list from the Activity-side
-        // settings. "include" → only listed packages route via tunnel.
-        // "exclude" → listed packages bypass tunnel. "off" / null →
-        // no filter (existing behaviour).
-        //
-        // Note: Android's VpnService.Builder doesn't allow mixing
-        // addAllowedApplication + addDisallowedApplication on the same
-        // Builder (throws IllegalArgumentException), so we pick one path.
-        if ("include".equalsIgnoreCase(pendingPerAppMode) && pendingPerAppPackages != null) {
-            for (String pkg : pendingPerAppPackages) {
-                if (pkg == null || pkg.isEmpty()) continue;
-                try {
-                    builder.addAllowedApplication(pkg);
-                } catch (PackageManager.NameNotFoundException ignored) {}
+        if (isInclude) {
+            addPackages(builder, options.getIncludePackage(), true);
+            if (pendingPerAppPackages != null) {
+                for (String pkg : pendingPerAppPackages) {
+                    if (pkg == null || pkg.isEmpty()) continue;
+                    try {
+                        builder.addAllowedApplication(pkg);
+                    } catch (PackageManager.NameNotFoundException ignored) {}
+                }
             }
-            // Per-app include doesn't require self-disallow because if
-            // we're not in the allowed list, we're already excluded.
-        } else if ("exclude".equalsIgnoreCase(pendingPerAppMode) && pendingPerAppPackages != null) {
-            for (String pkg : pendingPerAppPackages) {
-                if (pkg == null || pkg.isEmpty()) continue;
-                try {
-                    builder.addDisallowedApplication(pkg);
-                } catch (PackageManager.NameNotFoundException ignored) {}
+        } else if (isExclude) {
+            addPackages(builder, options.getExcludePackage(), false);
+            if (pendingPerAppPackages != null) {
+                for (String pkg : pendingPerAppPackages) {
+                    if (pkg == null || pkg.isEmpty()) continue;
+                    try {
+                        builder.addDisallowedApplication(pkg);
+                    } catch (PackageManager.NameNotFoundException ignored) {}
+                }
             }
-            // Self-disallow is still important here so VpnRouter's own
-            // traffic doesn't loop through its own TUN.
             try {
                 builder.addDisallowedApplication(getPackageName());
             } catch (PackageManager.NameNotFoundException ignored) {}
         } else {
-            // Mode off / null — keep the original always-self-disallow
-            // safety net.
-            try {
-                builder.addDisallowedApplication(getPackageName());
-            } catch (PackageManager.NameNotFoundException ignored) {}
+            // Mode off / null: default behavior
+            boolean hasInclude = options.getIncludePackage() != null && options.getIncludePackage().hasNext();
+            if (hasInclude) {
+                addPackages(builder, options.getIncludePackage(), true);
+            } else {
+                addPackages(builder, options.getExcludePackage(), false);
+                try {
+                    builder.addDisallowedApplication(getPackageName());
+                } catch (PackageManager.NameNotFoundException ignored) {}
+            }
         }
 
         ParcelFileDescriptor pfd = builder.establish();

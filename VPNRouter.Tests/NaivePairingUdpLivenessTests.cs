@@ -77,6 +77,25 @@ public class NaivePairingUdpLivenessTests
     }
 
     [Fact]
+    public void Probe_PairedSiblingDead_PrefersSameHostOverRemote()
+    {
+        // SEC-01: when paired sibling fails, Step 3 must prefer a live sibling on the SAME host
+        // before falling back to any random server in the global pool, preventing exit IP divergence.
+        var naive = Naive("Latvia NAIVE", "lv");
+        naive.Server = "198.51.100.5";
+        var deadHy2 = Hy2("Latvia HY2", "lv", "198.51.100.5"); // paired but DEAD
+        var remoteLiveHy2 = Hy2("US HY2", "us", "203.0.113.1"); // different host, ALIVE
+        var sameHostLiveTuic = Tuic("Latvia TUIC", "lv-other", "198.51.100.5"); // SAME host, ALIVE
+        var pool = new[] { naive, deadHy2, remoteLiveHy2, sameHostLiveTuic };
+
+        Func<VlessServerEntry, bool> alive = s => s.Name != "Latvia HY2";
+        var pick = NaivePairing.FindUdpSibling(naive, pool, alive);
+
+        Assert.NotNull(pick);
+        Assert.Equal("Latvia TUIC", pick!.Name); // Same-host node prioritized over remote US node!
+    }
+
+    [Fact]
     public void Probe_AllUdpDead_ReturnsNull_NoDeadSibling()
     {
         var naive = Naive("Latvia NAIVE", "lv");
