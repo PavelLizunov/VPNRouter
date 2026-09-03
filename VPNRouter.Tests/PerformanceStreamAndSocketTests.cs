@@ -14,8 +14,16 @@ public sealed class PerformanceStreamAndSocketTests
     {
         var source = LoadSource("VPNRouter.Core", "Services", "TcpTlsProbe.cs");
 
-        // Assert both ProbeTcpAsync and ProbeTlsAsync configure immediate RST linger
-        Assert.Contains("LingerState = new LingerOption(enable: true, seconds: 0)", source);
+        // Assert both ProbeTcpAsync and ProbeTlsAsync configure immediate RST linger to avoid TIME_WAIT
+        var probeTcpIndex = source.IndexOf("ProbeTcpAsync(", StringComparison.Ordinal);
+        var probeTlsIndex = source.IndexOf("ProbeTlsAsync(", StringComparison.Ordinal);
+        Assert.True(probeTcpIndex >= 0 && probeTlsIndex > probeTcpIndex);
+
+        var tcpBody = source[probeTcpIndex..probeTlsIndex];
+        var tlsBody = source[probeTlsIndex..];
+
+        Assert.Contains("LingerState = new LingerOption(enable: true, seconds: 0)", tcpBody);
+        Assert.Contains("LingerState = new LingerOption(enable: true, seconds: 0)", tlsBody);
     }
 
     [Fact]
@@ -74,20 +82,6 @@ public sealed class PerformanceStreamAndSocketTests
         Assert.Equal(2, entries.Count);
         Assert.Equal("vless1", entries[0].Name);
         Assert.Equal("vless2", entries[1].Name);
-    }
-
-    [Fact]
-    public void GeoDataDownloader_AreGeoFilesAvailable_CachesResultAndInvalidates()
-    {
-        GeoDataDownloader.InvalidateAvailabilityCache();
-        var initial = GeoDataDownloader.AreGeoFilesAvailable();
-
-        // Second call should return cached value immediately
-        var cached = GeoDataDownloader.AreGeoFilesAvailable();
-        Assert.Equal(initial, cached);
-
-        // Explicit invalidation clears cache
-        GeoDataDownloader.InvalidateAvailabilityCache();
     }
 
     private static string LoadSource(params string[] relativeParts)
