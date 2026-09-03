@@ -226,14 +226,15 @@ public static class DiagnosticsExporter
             return sb.ToString();
         }
 
-        AppendCommand(sb, "sc qc VPNRouter", "sc.exe", "qc", "VPNRouter");
-        AppendCommand(sb, "sc query VPNRouter", "sc.exe", "query", "VPNRouter");
-        AppendCommand(sb, "sc qc mullvad-split-tunnel", "sc.exe", "qc", "mullvad-split-tunnel");
-        AppendCommand(sb, "sc query mullvad-split-tunnel", "sc.exe", "query", "mullvad-split-tunnel");
-        AppendCommand(sb, "sc qc AmneziaVPNSplitTunnel", "sc.exe", "qc", "AmneziaVPNSplitTunnel");
-        AppendCommand(sb, "sc query AmneziaVPNSplitTunnel", "sc.exe", "query", "AmneziaVPNSplitTunnel");
-        AppendCommand(sb, "sc qc AmneziaVPN-service", "sc.exe", "qc", "AmneziaVPN-service");
-        AppendCommand(sb, "sc query AmneziaVPN-service", "sc.exe", "query", "AmneziaVPN-service");
+        var scPath = WindowsServiceCommand.GetSystemScPath();
+        AppendCommand(sb, "sc qc VPNRouter", scPath, "qc", "VPNRouter");
+        AppendCommand(sb, "sc query VPNRouter", scPath, "query", "VPNRouter");
+        AppendCommand(sb, "sc qc mullvad-split-tunnel", scPath, "qc", "mullvad-split-tunnel");
+        AppendCommand(sb, "sc query mullvad-split-tunnel", scPath, "query", "mullvad-split-tunnel");
+        AppendCommand(sb, "sc qc AmneziaVPNSplitTunnel", scPath, "qc", "AmneziaVPNSplitTunnel");
+        AppendCommand(sb, "sc query AmneziaVPNSplitTunnel", scPath, "query", "AmneziaVPNSplitTunnel");
+        AppendCommand(sb, "sc qc AmneziaVPN-service", scPath, "qc", "AmneziaVPN-service");
+        AppendCommand(sb, "sc query AmneziaVPN-service", scPath, "query", "AmneziaVPN-service");
 
         AppendCommand(sb, "matching Win32_SystemDriver rows", "powershell.exe",
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",

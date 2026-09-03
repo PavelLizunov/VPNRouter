@@ -191,13 +191,15 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
                     try
                     {
-                        var psi = new System.Diagnostics.ProcessStartInfo("sc.exe", "stop VPNRouter")
+                        var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
                         {
                             UseShellExecute = false,
                             CreateNoWindow = true,
                             RedirectStandardOutput = true,
                             RedirectStandardError = true
                         };
+                        psi.ArgumentList.Add("stop");
+                        psi.ArgumentList.Add("VPNRouter");
                         using var proc = System.Diagnostics.Process.Start(psi);
                         proc?.WaitForExit(5000);
                     }
@@ -267,13 +269,15 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
                 try
                 {
-                    var psi = new System.Diagnostics.ProcessStartInfo("sc.exe", "stop VPNRouter")
+                    var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
                     {
                         UseShellExecute = false,
                         CreateNoWindow = true,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true
                     };
+                    psi.ArgumentList.Add("stop");
+                    psi.ArgumentList.Add("VPNRouter");
                     using var proc = System.Diagnostics.Process.Start(psi);
                     proc?.WaitForExit(5000);
                     if (proc?.ExitCode == 0) Thread.Sleep(2000);

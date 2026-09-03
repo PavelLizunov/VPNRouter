@@ -183,6 +183,45 @@ public sealed class WindowsServiceCommandTests
         }
     }
 
+    [Fact]
+    public void GetSystemScPath_ResolvesSystem32OrThrowsOnNonWindows()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var path = WindowsServiceCommand.GetSystemScPath();
+            Assert.True(Path.IsPathFullyQualified(path));
+            Assert.EndsWith(Path.Combine("System32", "sc.exe"), path, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            Assert.Throws<PlatformNotSupportedException>(() => WindowsServiceCommand.GetSystemScPath());
+        }
+    }
+
+    [Fact]
+    public void WindowsInboxTool_AuditedSourcesUseSystemScPath_NoBareSc()
+    {
+        var vmConnection = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
+        var healthCheck = LoadSource("VPNRouter.Core", "Services", "HealthCheck.cs");
+        var diagExporter = LoadSource("VPNRouter.Core", "Services", "Diagnostics", "DiagnosticsExporter.cs");
+        var zapretActions = LoadSource("VPNRouter.Core", "Services", "ZapretActions.cs");
+        var zapretUpdater = LoadSource("VPNRouter.Core", "Services", "ZapretUpdater.cs");
+
+        // Verify WindowsServiceCommand.GetSystemScPath usage
+        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", vmConnection);
+        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", healthCheck);
+        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", diagExporter);
+        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretActions);
+        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretUpdater);
+
+        // Verify no bare "sc.exe" / "sc" invocations remain
+        Assert.DoesNotContain("new ProcessStartInfo(\"sc.exe\"", healthCheck);
+        Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc.exe\"", vmConnection);
+        Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc\"", zapretUpdater);
+        Assert.DoesNotContain("\"sc.exe\"", diagExporter);
+        Assert.DoesNotContain("ExecutablePath: \"sc\"", zapretActions);
+    }
+
     private static string LoadSource(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());

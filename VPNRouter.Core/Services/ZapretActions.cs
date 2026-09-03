@@ -527,13 +527,16 @@ public static class ZapretActions
     // preserved: an exception path (FileNotFoundException etc.) still
     // collapses to `false` so the consuming `StopDeleteServiceLineAsync`
     // can fall through to "not installed".
+    internal static string ScExecutablePath { get; set; } =
+        OperatingSystem.IsWindows() ? WindowsServiceCommand.GetSystemScPath() : "sc";
+
     internal static bool ServiceExists(string svc)
     {
         try
         {
             var task = _processRunner.RunAsync(
                 new ProcessRequest(
-                    ExecutablePath: "sc",
+                    ExecutablePath: ScExecutablePath,
                     Arguments: new[] { "query", svc },
                     Timeout: TimeSpan.FromSeconds(2)));
             var result = task.GetAwaiter().GetResult();
@@ -558,7 +561,7 @@ public static class ZapretActions
         var argList = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         await _processRunner.RunAsync(
             new ProcessRequest(
-                ExecutablePath: "sc",
+                ExecutablePath: ScExecutablePath,
                 Arguments: argList,
                 Timeout: ScCommandTimeout));
     }
@@ -593,7 +596,7 @@ public static class ZapretActions
         {
             var task = _processRunner.RunAsync(
                 new ProcessRequest(
-                    ExecutablePath: "sc",
+                    ExecutablePath: ScExecutablePath,
                     Arguments: new[] { "query", serviceName },
                     Timeout: TimeSpan.FromSeconds(2)));
             var result = task.GetAwaiter().GetResult();
@@ -618,7 +621,7 @@ public static class ZapretActions
         {
             var task = _processRunner.RunAsync(
                 new ProcessRequest(
-                    ExecutablePath: "sc",
+                    ExecutablePath: ScExecutablePath,
                     Arguments: new[] { "query", "state=", "all" },
                     Timeout: TimeSpan.FromSeconds(3)));
             var result = task.GetAwaiter().GetResult();
