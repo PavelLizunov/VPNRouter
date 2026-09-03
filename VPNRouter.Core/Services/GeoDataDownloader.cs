@@ -87,10 +87,43 @@ public class GeoDataDownloader
         return geoIpOk && geoSiteOk;
     }
 
+    private static (bool available, DateTime checkedAt) _cachedAvailability = (false, DateTime.MinValue);
+    private static readonly TimeSpan AvailabilityCacheTtl = TimeSpan.FromSeconds(15);
+    private static readonly object _availabilityLock = new();
+
+    /// <summary>Invalidate the memory cache for geo-data availability.</summary>
+    public static void InvalidateAvailabilityCache()
+    {
+        lock (_availabilityLock)
+        {
+            _cachedAvailability = (false, DateTime.MinValue);
+        }
+    }
+
     /// <summary>
     /// Returns true if both geo files exist on disk and pass sanity size check.
+    /// Result is cached in memory with a short TTL to eliminate redundant disk stat probes.
     /// </summary>
     public static bool AreGeoFilesAvailable()
+    {
+        var now = DateTime.UtcNow;
+        lock (_availabilityLock)
+        {
+            if (now - _cachedAvailability.checkedAt < AvailabilityCacheTtl)
+                return _cachedAvailability.available;
+        }
+
+        var available = CheckGeoFilesOnDisk();
+
+        lock (_availabilityLock)
+        {
+            _cachedAvailability = (available, now);
+        }
+
+        return available;
+    }
+
+    private static bool CheckGeoFilesOnDisk()
     {
         try
         {
@@ -119,6 +152,7 @@ public class GeoDataDownloader
                 {
                     _logger.Warning("[GeoData] {Label} exists but too small ({Size} bytes) — re-downloading", label, existing);
                     File.Delete(destPath);
+                    InvalidateAvailabilityCache();
                 }
                 else
                 {
@@ -177,6 +211,7 @@ public class GeoDataDownloader
                 // Atomic replace (Windows allows File.Move with overwrite as of .NET Core 3+).
                 if (File.Exists(destPath)) File.Delete(destPath);
                 File.Move(tmpPath, destPath);
+                InvalidateAvailabilityCache();
 
                 _logger.Information("[GeoData] {Label} downloaded ({Size} bytes)", label, size);
                 return true;

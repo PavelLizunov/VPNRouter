@@ -169,10 +169,13 @@ public static class ServerUriParser
     public static List<VlessServerEntry> ParseMultiple(string text)
     {
         var result = new List<VlessServerEntry>();
-        foreach (var line in (text ?? string.Empty).Split('\n', '\r'))
+        if (string.IsNullOrWhiteSpace(text)) return result;
+
+        foreach (var lineSpan in MemoryExtensions.EnumerateLines(text.AsSpan()))
         {
-            var trimmed = line.Trim();
-            if (trimmed.Length == 0) continue;
+            var trimmedSpan = lineSpan.Trim();
+            if (trimmedSpan.IsEmpty) continue;
+            var trimmed = trimmedSpan.ToString();
             if (!IsSupportedScheme(trimmed)) continue;
             try { result.Add(Parse(trimmed)); } catch { /* skip malformed */ }
         }
