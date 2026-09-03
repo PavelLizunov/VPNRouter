@@ -439,7 +439,7 @@ public final class VpnRouterService extends VpnService {
                         stopStatsPoller();
                     } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                         isScreenOn = true;
-                        if (tunnelLive) {
+                        if (boxService != null) {
                             startStatsPoller();
                         }
                     }

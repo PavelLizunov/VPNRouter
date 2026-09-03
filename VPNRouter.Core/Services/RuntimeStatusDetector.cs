@@ -43,9 +43,16 @@ public static class RuntimeStatusDetector
     /// </summary>
     public static VpnRuntimeProcess? GetVpnRuntime()
     {
-        var configuredCandidate = ProcessOwnership.ReadConfiguredExecutablePath(
-            AppPaths.ConfigYamlPath);
-        var child = ProcessOwnership.FindOwnedSingBox(configuredCandidate);
+        // Fast path: if an authoritative v2 runtime-owner record is live, resolve it directly
+        // without reading or parsing config.yaml from disk.
+        var child = ProcessOwnership.FindOwnedSingBox(null);
+        if (child is null && System.IO.File.Exists(AppPaths.ConfigYamlPath))
+        {
+            var configuredCandidate = ProcessOwnership.ReadConfiguredExecutablePath(
+                AppPaths.ConfigYamlPath);
+            child = ProcessOwnership.FindOwnedSingBox(configuredCandidate);
+        }
+
         var ownership = TunOwnershipLock.ProbeOwnership();
         if (!IsTunnelPresent(child is not null, ownership) || child is not { } live)
             return null;

@@ -289,74 +289,12 @@ internal static class ProcessOwnership
         }
     }
 
-    private static readonly object _configPathCacheLock = new();
-    private static string? _cachedConfigPathKey;
-    private static DateTime _cachedConfigLastWriteUtc;
-    private static long _cachedConfigFileLength;
-    private static string? _cachedConfigExecutablePath;
-
-    internal static void InvalidateConfiguredExecutablePathCache()
-    {
-        lock (_configPathCacheLock)
-        {
-            _cachedConfigPathKey = null;
-            _cachedConfigExecutablePath = null;
-        }
-    }
-
     internal static string? ReadConfiguredExecutablePath(string configPath)
     {
         try
         {
-            if (!File.Exists(configPath))
-            {
-                lock (_configPathCacheLock)
-                {
-                    if (_cachedConfigPathKey == configPath)
-                    {
-                        _cachedConfigPathKey = null;
-                        _cachedConfigExecutablePath = null;
-                    }
-                }
-                return null;
-            }
+            if (!File.Exists(configPath)) return null;
 
-            var fileInfo = new FileInfo(configPath);
-            var lastWrite = fileInfo.LastWriteTimeUtc;
-            var length = fileInfo.Length;
-
-            lock (_configPathCacheLock)
-            {
-                if (_cachedConfigPathKey == configPath
-                    && _cachedConfigLastWriteUtc == lastWrite
-                    && _cachedConfigFileLength == length)
-                {
-                    return _cachedConfigExecutablePath;
-                }
-            }
-
-            var path = ReadConfiguredExecutablePathUncached(configPath);
-
-            lock (_configPathCacheLock)
-            {
-                _cachedConfigPathKey = configPath;
-                _cachedConfigLastWriteUtc = lastWrite;
-                _cachedConfigFileLength = length;
-                _cachedConfigExecutablePath = path;
-            }
-
-            return path;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string? ReadConfiguredExecutablePathUncached(string configPath)
-    {
-        try
-        {
             using var stream = new FileStream(
                 configPath,
                 FileMode.Open,
@@ -380,70 +318,11 @@ internal static class ProcessOwnership
         }
     }
 
-    private static readonly object _ownerRecordCacheLock = new();
-    private static string? _cachedOwnerRecordPath;
-    private static DateTime _cachedOwnerRecordLastWriteUtc;
-    private static long _cachedOwnerRecordFileLength;
-    private static RuntimeOwnerRecordRead _cachedOwnerRecord;
-
-    internal static void InvalidateRuntimeOwnerRecordCache()
-    {
-        lock (_ownerRecordCacheLock)
-        {
-            _cachedOwnerRecordPath = null;
-        }
-    }
-
     internal static RuntimeOwnerRecordRead ReadRuntimeOwnerRecord(string path)
     {
         if (!File.Exists(path))
-        {
-            lock (_ownerRecordCacheLock)
-            {
-                if (_cachedOwnerRecordPath == path)
-                {
-                    _cachedOwnerRecordPath = null;
-                }
-            }
             return new RuntimeOwnerRecordRead(RuntimeOwnerRecordKind.Missing, null);
-        }
 
-        try
-        {
-            var fileInfo = new FileInfo(path);
-            var lastWrite = fileInfo.LastWriteTimeUtc;
-            var length = fileInfo.Length;
-
-            lock (_ownerRecordCacheLock)
-            {
-                if (_cachedOwnerRecordPath == path
-                    && _cachedOwnerRecordLastWriteUtc == lastWrite
-                    && _cachedOwnerRecordFileLength == length)
-                {
-                    return _cachedOwnerRecord;
-                }
-            }
-
-            var record = ReadRuntimeOwnerRecordUncached(path);
-
-            lock (_ownerRecordCacheLock)
-            {
-                _cachedOwnerRecordPath = path;
-                _cachedOwnerRecordLastWriteUtc = lastWrite;
-                _cachedOwnerRecordFileLength = length;
-                _cachedOwnerRecord = record;
-            }
-
-            return record;
-        }
-        catch
-        {
-            return new RuntimeOwnerRecordRead(RuntimeOwnerRecordKind.Malformed, null);
-        }
-    }
-
-    private static RuntimeOwnerRecordRead ReadRuntimeOwnerRecordUncached(string path)
-    {
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
@@ -530,7 +409,6 @@ internal static class ProcessOwnership
             }
 
             File.Move(tempPath, path, overwrite: true);
-            InvalidateRuntimeOwnerRecordCache();
         }
         finally
         {
