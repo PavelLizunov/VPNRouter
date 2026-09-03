@@ -41,12 +41,22 @@ Currently, automated E2E testing and live telemetry measurement on real user int
 
 ## Verification gate
 
-- [ ] Gate 1 — Build clean: Release solution build completes with zero errors.
-- [ ] Gate 2 — Tests green: all unit and characterization tests pass (0 failures).
-- [ ] Gate 3 — Docs: outcome recorded and plans updated.
-- [ ] Gate 4 — Adversarial review: Opus swarm review confirms loopback isolation, auth enforcement, and zero VM surface drift.
-- [ ] Gate 5 — Public API surface: MainWindowViewModel public surface hash unchanged.
+- [x] Gate 1 — Build clean: Release solution build completes with zero errors in CI workflow `33809166315`.
+- [x] Gate 2 — Tests green: all unit and characterization tests pass (2,927 passed, 0 failed, 0 errors, 0 warnings; Windows characterization 33/33 passed).
+- [x] Gate 3 — Docs: outcome recorded and plans updated.
+- [x] Gate 4 — Adversarial review: Opus swarm review confirmed loopback isolation (`127.0.0.1`), token enforcement, UI thread dispatch safety, and zero ViewModel reflection surface drift.
+- [x] Gate 5 — Public API surface: MainWindowViewModel public surface hash unchanged.
 
 ## Outcome
 
-Pending execution.
+**Status**: READY FOR OWNER REVIEW / MERGE — PR #230
+**Commits**: `93d832b3` (brief); `002697ae` (implementation & tests); `b128ef68` (review hardening fixes); pending docs commit
+**Pushed**: `origin/dsh/feat-app-automation-telemetry`; PR #230 — https://github.com/PavelLizunov/VPNRouter/pull/230
+**Files changed**:
+- `VPNRouter.App/Services/AppAutomationDriver.cs`: embedded loopback HTTP server (`http://127.0.0.1:<port>/`) implementing `/metrics`, `/ui/tree`, `/ui/action`, and `/ui/screenshot` with Bearer auth and recursion depth capping.
+- `VPNRouter.App/Program.cs`: parses `--automation-port` and `--automation-token` (with environment variable fallbacks) into `AppAutomationDriver`.
+- `VPNRouter.App/App.axaml.cs`: calls `AppAutomationDriver.StartIfConfigured` upon desktop window startup and `AppAutomationDriver.Stop()` upon application exit.
+- `VPNRouter.Tests/AppAutomationDriverTests.cs`: unit tests verifying argument parsing, environment variable fallbacks, Bearer token authorization, metrics gathering, tab switching, and visual tree extraction.
+- `VPNRouter.Tests/PerformanceThrottleContractTests.cs`: added contract test verifying lifecycle wiring in `Program.cs` and `App.axaml.cs`.
+
+**Gate results**: All 5 verification gates passed cleanly in workflow `33809166315`. Total executed tests: 2,927 passed with 0 failures.
