@@ -293,4 +293,31 @@ app:
         Assert.DoesNotContain("SECRETAWGPRIV", outp);
         Assert.Contains("1.2.3.4", outp);  // peer address (host) kept
     }
+
+    [Fact]
+    public void Yaml_MalformedYaml_RedactsSecretsAndPreservesStructure()
+    {
+        var malformedYaml =
+            "app:\n" +
+            "  routing_mode: split\n" +
+            "  subscription_url: https://ninitux.com/api/v1/app/config/" + SubToken + "\n" +
+            "  uuid: " + Uuid + "\n" +
+            "  password: " + Password + "\n" +
+            "  bad_line: [unclosed quote \"foo\n" +
+            "  unknown_secret_key: " + PrivKey + "\n";
+
+        var outp = DiagnosticsRedactor.RedactConfigYaml(malformedYaml);
+
+        // Verify all secrets are redacted
+        Assert.DoesNotContain(SubToken, outp);
+        Assert.DoesNotContain(Uuid, outp);
+        Assert.DoesNotContain(Password, outp);
+        Assert.DoesNotContain(PrivKey, outp);
+
+        // Verify diagnostic structure and safe keys are preserved
+        Assert.Contains("routing_mode: split", outp);
+        Assert.Contains("ninitux.com", outp);
+        Assert.Contains("bad_line: ***", outp);
+        Assert.Contains("unknown_secret_key: ***", outp);
+    }
 }
