@@ -195,10 +195,16 @@ public class ServerUriParserTests
 
     [Theory]
     [InlineData("vless://00000000-0000-0000-0000-000000000001@example.com:0#zero-port", 443)]
-    [InlineData("hysteria2://pw@example.com:70000#overflow-port", 443)]
-    public void Parse_OutOfRangePort_FallsBackToDefault443(string uri, int expectedPort)
+    public void Parse_ZeroPort_FallsBackToDefault443(string uri, int expectedPort)
     {
         var entry = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
         Assert.Equal(expectedPort, entry.Port);
+    }
+
+    [Fact]
+    public void Parse_OverflowPort_ThrowsFormatException()
+    {
+        Assert.Throws<FormatException>(() =>
+            VPNRouter.Core.Services.ServerUriParser.Parse("hysteria2://pw@example.com:70000#overflow-port"));
     }
 }
