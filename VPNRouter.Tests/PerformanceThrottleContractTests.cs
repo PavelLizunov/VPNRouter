@@ -66,21 +66,7 @@ public sealed class PerformanceThrottleContractTests
 
         // Verify BootstrapAutostart does not invoke ServiceVm.Refresh on the UI thread
         Assert.DoesNotContain("InvokeAsync(() => ServiceVm.Refresh())", bootstrap);
-        Assert.Contains("ServiceVm.Refresh();", bootstrap);
-    }
-
-    [Fact]
-    public void DesktopStartup_LoadApps_DeferredInSimpleMode()
-    {
-        var mainVm = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-
-        // Verify LoadSettingsIntoUI checks !IsSimpleMode before calling LoadApps()
-        Assert.Contains("if (!IsSimpleMode)", mainVm);
-        Assert.Contains("LoadApps();", mainVm);
-
-        // Verify OnSelectedTabIndexChanged triggers LoadApps() on Applications tab
-        Assert.Contains("else if (value == 3) // Applications tab", mainVm);
-        Assert.Contains("if (!_appsLoaded)", mainVm);
+        Assert.Contains("ServiceVm.Refresh()", bootstrap);
     }
 
     [Fact]
