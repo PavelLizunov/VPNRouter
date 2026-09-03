@@ -53,22 +53,31 @@ Run focused unit tests and full test suites on Ubuntu and Windows. GitHub Action
 
 ## Verification gate
 
-- [ ] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors.
-- [ ] **Gate 2 — Tests green**: all unit and characterization tests pass with zero failures.
-- [ ] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
-- [ ] **Gate 4 — Self-review**: adversarial review confirms UI concurrency and persistence safety.
-- [ ] **Gate 5 — UI verify**: N/A (ViewModel logic changes; headless UI tests pass).
-- [ ] **Gate 6 — Characterization diff**: existing ViewModel characterization tests continue to pass.
+- [x] **Gate 1 — Build clean**: Release solution build and Windows CLI publish complete with zero errors in PR workflow `33699482672`.
+- [x] **Gate 2 — Tests green**: baseline `2866 total / 2809 executed` became `2869 total / 2812 executed`, all passed with zero errors and zero warnings; Windows characterization passed `33/33` with zero failures.
+- [x] **Gate 3 — Docs**: outcome recorded with commit SHAs and test counts; `plans/` updated.
+- [x] **Gate 4 — Self-review**: independent Opus review verified UI concurrency, state synchronization, profile preservation, and identified/fixed `ToggleConnectionAsync` re-entrancy handoff.
+- [x] **Gate 5 — UI verify**: N/A (ViewModel logic changes; headless UI tests pass).
+- [x] **Gate 6 — Characterization diff**: existing ViewModel characterization tests continue to pass with public surface hash untouched.
 
 ## Outcome
 
-**Status**: IN PROGRESS
-**Commits**: brief commit pending
-**Pushed**: pending
-**Test deltas**: pending
-**Files changed**: pending
+**Status**: READY FOR OWNER REVIEW — PR #222 remains open and unmerged (or ready for merge)
+**Commits**: `9e6b039f` (brief); `70aa7088` (implementation + tests); `54d56b3a` (full method boundary slice)
+**Pushed**: `origin/dsh/fix-desktop-gui-races`; PR #222 — https://github.com/PavelLizunov/VPNRouter/pull/222
+**Test deltas**: +3 unit tests across `MainWindowViewModelConcurrencyAndDataLossTests` (`2869 total / 2812 executed / 2812 passed / 0 failed / 0 warning`); Windows characterization `33/33 passed`
+**Files changed**:
+- `VPNRouter.App/ViewModels/MainWindowViewModel.SimpleMode.cs`: set `IsConnecting = true` during pre-flight candidate probing in Simple Mode with try/finally handoff to `ToggleConnectionAsync`.
+- `VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs`: guard against resetting `IsConnecting = false` when pre-start cleanup emits `Stopped`.
+- `VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs`: set `IsConnecting = true` before `SelectedServer = target` to suppress unwanted concurrent `ReconnectAsync`.
+- `VPNRouter.App/ViewModels/MainWindowViewModel.cs`: guard `CustomGroupApps` against destructive wipes when default profiles fail to parse or are absent.
+- `VPNRouter.Tests/MainWindowViewModelConcurrencyAndDataLossTests.cs`: added unit tests verifying Simple Mode probe protection, `OnEngineStatus("Stopped")` suppression during connect, and profile data preservation.
+- `plans/phase-fix-desktop-gui-races-2026-09-02.md`: this phase brief and outcome record.
 
-**Gate results**: pending.
-**Surprises encountered**: pending.
-**Follow-ups spawned**: pending.
-**Lessons for methodology doc**: pending.
+**Gate results**: All 6 gates passed in workflow `33699482672`.
+
+**Surprises encountered**:
+- In `MainWindowViewModel.SimpleMode.cs`, setting `IsConnecting = true` across the pre-flight candidate probe required explicitly resetting `IsConnecting = false` immediately before invoking `ToggleConnectionAsync()` so that `ToggleConnectionAsync()`'s internal `if (IsConnecting) return;` entry guard does not prematurely reject the connect handoff. Caught by Opus adversarial review.
+
+**Follow-ups spawned**: Next confirmed defect packages (Packet 5: `FreeConfigTester` leaks and `DeepVerifyProbe` reflection; Packet 6: `NaivePairing` global fallback) are ready for subsequent task branches.
+**Lessons for methodology doc**: When delegating connection execution between ViewModel modes, re-entrancy flags must be sequenced so the receiving command's entry guard can take ownership of the transition.
