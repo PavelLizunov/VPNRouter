@@ -66,10 +66,12 @@ public sealed class DeepVerifyHostReflectionTests
         }
     }
 
-    [Fact]
-    public void EvaluateProbeResponse_MalformedOrMissingIp_Rejected()
+    [Theory]
+    [InlineData("<html><body>error</body></html>")]
+    [InlineData("ip=not-an-ip\n")]
+    [InlineData("ip=\n")]
+    public void EvaluateProbeResponse_MalformedOrMissingIp_Rejected(string body)
     {
-        var body = "<html><body>error</body></html>";
         var (ok, err) = DeepVerifyProbe.EvaluateProbeResponse(body);
 
         Assert.False(ok);

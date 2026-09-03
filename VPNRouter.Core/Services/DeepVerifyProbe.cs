@@ -204,15 +204,15 @@ internal static class DeepVerifyProbe
         if (ipLine != null)
         {
             var ipStr = ipLine[3..].Trim();
-            if (IPAddress.TryParse(ipStr, out var ip))
-            {
-                if (IsPrivateOrLoopback(ip))
-                    return (false, "local ip in response");
+            if (!IPAddress.TryParse(ipStr, out var ip))
+                return (false, "bad response");
 
-                var hostIp = hostPublicIp ?? KnownHostPublicIp;
-                if (hostIp != null && ip.Equals(hostIp))
-                    return (false, "proxy reflects host public ip");
-            }
+            if (IsPrivateOrLoopback(ip))
+                return (false, "local ip in response");
+
+            var hostIp = hostPublicIp ?? KnownHostPublicIp;
+            if (hostIp != null && ip.Equals(hostIp))
+                return (false, "proxy reflects host public ip");
         }
         return (true, null);
     }
