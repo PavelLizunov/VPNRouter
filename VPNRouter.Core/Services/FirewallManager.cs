@@ -428,9 +428,7 @@ public class FirewallManager : IFirewallManager
     /// </summary>
     public void CleanupOrphanedRules()
     {
-        var orphaned = new List<string>();
-        foreach (var prefix in AllPrefixes)
-            orphaned.AddRange(FindRulesByPrefix(prefix));
+        var orphaned = FindRulesByPrefixes(AllPrefixes);
 
         if (orphaned.Count == 0)
         {
@@ -448,21 +446,19 @@ public class FirewallManager : IFirewallManager
     }
 
     /// <summary>
-    /// Enumerate firewall rules whose name starts with the given prefix.
+    /// Enumerate firewall rules whose name starts with any of the given prefixes in a single netsh pass.
     /// Uses 'netsh advfirewall firewall show rule name=all' and parses output.
     /// </summary>
-    private List<string> FindRulesByPrefix(string prefix)
+    internal List<string> FindRulesByPrefixes(IEnumerable<string> prefixes)
     {
+        var prefixList = (prefixes ?? Enumerable.Empty<string>())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToList();
         var result = new List<string>();
+        if (prefixList.Count == 0) return result;
 
         try
         {
-            // Phase 3+ (2026-05-21): routed through IProcessRunner. Wire shape
-            // preserved — same `advfirewall firewall show rule name=all
-            // dir=out` netsh args, same 10s outer cap. The block-aware
-            // parser below is locale-tolerant (it uses blank-line boundaries
-            // rather than label match), so the lost OEM encoding override
-            // does not affect rule-name detection (rule names are ASCII).
             var psiResult = _runner.RunAsync(new ProcessRequest(
                 ExecutablePath: "netsh.exe",
                 Arguments: new[] { "advfirewall", "firewall", "show", "rule", "name=all", "dir=out" },
@@ -471,20 +467,6 @@ public class FirewallManager : IFirewallManager
             if (psiResult.TimedOut) return result;
             var output = psiResult.Stdout;
 
-            // v2.31.0-r1 (CO-5 audit fix): the previous parser matched ANY
-            // line where the value-after-`:` started with the prefix. On
-            // localized Windows (RU/DE/ES) `netsh` outputs `Description:`
-            // / `Описание:` / `Beschreibung:` BESIDE `Rule Name:` / `Имя
-            // правила:` / `Regelname:`. If a user happened to have any
-            // firewall rule whose Description began with `VPNRouter_Block_`
-            // — including descriptions of UNRELATED rules — they'd get
-            // silently deleted by FlushOrphanRules at startup. Real risk
-            // of clobbering user firewall config on non-EN locales.
-            //
-            // Fix: structurally rely on the BLANK-LINE-separated rule
-            // blocks. The first field of each block is always the rule
-            // name (regardless of locale label). Track block boundaries
-            // and only inspect the first colon-line per block.
             var inNewBlock = true;
             foreach (var line in output.Split('\n'))
             {
@@ -501,9 +483,13 @@ public class FirewallManager : IFirewallManager
                 if (colonIdx < 0) continue;
 
                 var value = trimmed[(colonIdx + 1)..].Trim();
-                if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                foreach (var prefix in prefixList)
                 {
-                    result.Add(value);
+                    if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        result.Add(value);
+                        break;
+                    }
                 }
             }
         }
@@ -514,6 +500,12 @@ public class FirewallManager : IFirewallManager
 
         return result;
     }
+
+    /// <summary>
+    /// Enumerate firewall rules whose name starts with the given prefix.
+    /// Uses 'netsh advfirewall firewall show rule name=all' and parses output.
+    /// </summary>
+    private List<string> FindRulesByPrefix(string prefix) => FindRulesByPrefixes(new[] { prefix });
 
     /// <summary>
     /// Execute a netsh command. Returns true if exit code is 0.

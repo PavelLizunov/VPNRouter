@@ -31,6 +31,7 @@ public sealed class DnsFlusher
     private static readonly TimeSpan FlushTimeout = TimeSpan.FromMilliseconds(5000);
 
     private readonly IProcessRunner _runner;
+    private readonly Func<bool>? _nativeFlusher;
 
     /// <summary>
     /// Default singleton wired to <see cref="ProcessRunner"/>. Used by the
@@ -44,9 +45,10 @@ public sealed class DnsFlusher
     /// production code typically uses the static <see cref="Flush"/>
     /// facade which dispatches to <see cref="DefaultInstance"/>.
     /// </summary>
-    public DnsFlusher(IProcessRunner? runner = null)
+    public DnsFlusher(IProcessRunner? runner = null, Func<bool>? nativeFlusher = null)
     {
         _runner = runner ?? new ProcessRunner();
+        _nativeFlusher = nativeFlusher;
     }
 
     /// <summary>
@@ -76,8 +78,30 @@ public sealed class DnsFlusher
         }
     }
 
+    [System.Runtime.InteropServices.DllImport("dnsapi.dll", EntryPoint = "DnsFlushResolverCache")]
+    private static extern bool NativeDnsFlush();
+
     private bool FlushWindows(ILogger log)
     {
+        // When running in production (or when an explicit native flusher delegate is injected),
+        // try in-process Win32 DnsFlushResolverCache first (< 0.5 ms latency, 0 child processes).
+        if (_nativeFlusher != null || _runner is ProcessRunner)
+        {
+            try
+            {
+                var ok = _nativeFlusher != null ? _nativeFlusher() : (OperatingSystem.IsWindows() && NativeDnsFlush());
+                if (ok)
+                {
+                    log.Information("[DnsFlusher] Windows DNS cache flushed via DnsFlushResolverCache");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Debug(ex, "[DnsFlusher] Native DnsFlushResolverCache threw — falling back to ipconfig");
+            }
+        }
+
         var request = new ProcessRequest(
             ExecutablePath: "ipconfig.exe",
             Arguments: new[] { "/flushdns" },

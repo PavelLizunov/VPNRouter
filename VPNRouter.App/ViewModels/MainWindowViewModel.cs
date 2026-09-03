@@ -538,6 +538,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             IsSubscribeMode = true;
             IsVlessMode = false;
         }
+        else if (value == 3) // Applications tab
+        {
+            if (!_appsLoaded)
+                LoadApps();
+        }
         else if (value == 5) // FreeConfigs tab
         {
             // v2.20.1: lazy-load the FreeConfigs snapshot on first visit.
@@ -3301,8 +3306,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             "[VM] Sub-tab init: ServerModeIndex={Idx} (manual={M}, custom={C}, configMode={CM})",
             subTabIndex, Servers.Count, CustomConfigs.Count, _settings.App.ConfigMode);
 
-        // Load apps from profiles + custom apps
-        LoadApps();
+        // Load apps from profiles + custom apps (lazy when starting in Simple Mode)
+        if (!IsSimpleMode)
+            LoadApps();
 
         RefreshLocalization();
         }

@@ -627,6 +627,8 @@ public partial class MainWindowViewModel
     {
         IsSimpleMode = !IsSimpleMode;
         _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
+        if (!IsSimpleMode && SelectedTabIndex == 3 && !_appsLoaded)
+            LoadApps();
         SaveSettings();
     }
 

@@ -79,10 +79,8 @@ public partial class MainWindowViewModel
             // and long enough to avoid a flapping race in CI / fresh logon.
             await Task.Delay(500).ConfigureAwait(false);
 
-            // Re-poll the SCM directly (don't trust the ctor-time snapshot
-            // alone). If the Service is running we hand off — it owns the
-            // autostart spawn at boot.
-            await Dispatcher.UIThread.InvokeAsync(() => ServiceVm.Refresh());
+            // Re-poll the SCM directly in background (don't block the UI thread with synchronous sc.exe queries).
+            ServiceVm.Refresh();
 
             if (ServiceVm.IsRunning)
             {
