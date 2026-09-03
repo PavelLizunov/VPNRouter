@@ -210,6 +210,12 @@ public sealed class CrashReporterScrubberTests
     [InlineData("ws://example.com/api?auth=credential_data", "auth=[REDACTED]")]
     [InlineData("wss://example.com/api?password=mypassword", "password=[REDACTED]")]
     [InlineData("ws://example.com/api?passwd=mypassword", "passwd=[REDACTED]")]
+    [InlineData("ws://example.com/api?session_id=sess_abc123", "session_id=[REDACTED]")]
+    [InlineData("wss://example.com/api?sig=sig_xyz789", "sig=[REDACTED]")]
+    [InlineData("ws://example.com/api?signature=signature_def456", "signature=[REDACTED]")]
+    [InlineData("wss://example.com/api?sid=sid_998877", "sid=[REDACTED]")]
+    [InlineData("ws://example.com/api?short_id=short123", "short_id=[REDACTED]")]
+    [InlineData("wss://example.com/api?key=my_key_value", "key=[REDACTED]")]
     public void ScrubSecrets_RedactsSensitiveQueryParams(string input, string expectedSubstring)
     {
         var s = CrashReporter.ScrubSecrets(input);
@@ -224,6 +230,12 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain("key33221", s);
         Assert.DoesNotContain("credential_data", s);
         Assert.DoesNotContain("mypassword", s);
+        Assert.DoesNotContain("sess_abc123", s);
+        Assert.DoesNotContain("sig_xyz789", s);
+        Assert.DoesNotContain("signature_def456", s);
+        Assert.DoesNotContain("sid_998877", s);
+        Assert.DoesNotContain("short123", s);
+        Assert.DoesNotContain("my_key_value", s);
     }
 
     [Fact]
