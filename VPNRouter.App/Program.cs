@@ -243,7 +243,8 @@ sealed class Program
         try
         {
             var healResult = VPNRouter.App.Services.WindowsServiceHelper.EnsureCurrentBinPath();
-            if (healResult.Success && healResult.Message.StartsWith("binPath updated", StringComparison.OrdinalIgnoreCase))
+            if (!healResult.Success
+                || healResult.Message.StartsWith("binPath updated", StringComparison.OrdinalIgnoreCase))
             {
                 try { Console.Error.WriteLine($"[service-heal] {healResult.Message}"); }
                 catch { }

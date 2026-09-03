@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Services;
 
@@ -23,14 +24,14 @@ public static class WindowsServiceHelper
 
     public static bool IsInstalled()
     {
-        var (code, _) = RunSc($"query {ServiceName}");
+        var (code, _) = RunSc("query", ServiceName);
         // sc query returns 0 if service exists, 1060 (ERROR_SERVICE_DOES_NOT_EXIST) if not
         return code == 0;
     }
 
     public static bool IsRunning()
     {
-        var (code, output) = RunSc($"query {ServiceName}");
+        var (code, output) = RunSc("query", ServiceName);
         if (code != 0) return false;
         // Parse "STATE : 4 RUNNING" or "STATE : 1 STOPPED"
         return output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
@@ -47,19 +48,15 @@ public static class WindowsServiceHelper
         if (IsInstalled())
             return new ServiceResult(false, $"Service '{ServiceName}' is already installed.");
 
-        var args = $"create {ServiceName} " +
-                   $"binPath= \"{exePath} --service\" " +
-                   $"start= auto " +
-                   $"obj= LocalSystem " +
-                   $"DisplayName= \"{DisplayName}\"";
-
-        var (code, output) = RunSc(args);
+        var (code, output) = RunSc(
+            WindowsServiceCommand.BuildCreateArguments(
+                ServiceName, exePath, DisplayName));
         if (code != 0)
             return new ServiceResult(false, $"sc create failed (exit {code}): {output}");
 
         // Set description + failure recovery
-        RunSc($"description {ServiceName} \"{Description}\"");
-        RunSc($"failure {ServiceName} reset= 86400 actions= restart/60000/restart/60000/restart/60000");
+        RunSc("description", ServiceName, Description);
+        RunSc(WindowsServiceCommand.BuildFailureRecoveryArguments(ServiceName));
 
         return new ServiceResult(true, $"Service installed at: {exePath}");
     }
@@ -76,7 +73,7 @@ public static class WindowsServiceHelper
                 return new ServiceResult(false, $"Cannot stop before uninstall: {stopResult.Message}");
         }
 
-        var (code, output) = RunSc($"delete {ServiceName}");
+        var (code, output) = RunSc("delete", ServiceName);
         return code == 0
             ? new ServiceResult(true, $"Service '{ServiceName}' uninstalled.")
             : new ServiceResult(false, $"sc delete failed (exit {code}): {output}");
@@ -91,7 +88,7 @@ public static class WindowsServiceHelper
         if (IsRunning())
             return new ServiceResult(true, $"Service '{ServiceName}' is already running.");
 
-        var (code, output) = RunSc($"start {ServiceName}");
+        var (code, output) = RunSc("start", ServiceName);
         if (code != 0)
             return new ServiceResult(false, $"sc start failed (exit {code}): {output}");
 
@@ -112,7 +109,7 @@ public static class WindowsServiceHelper
         if (!IsRunning())
             return new ServiceResult(true, $"Service '{ServiceName}' is already stopped.");
 
-        var (code, output) = RunSc($"stop {ServiceName}");
+        var (code, output) = RunSc("stop", ServiceName);
         if (code != 0)
             return new ServiceResult(false, $"sc stop failed (exit {code}): {output}");
 
@@ -132,17 +129,17 @@ public static class WindowsServiceHelper
     /// Query the currently-configured binary path from `sc qc VPNRouter`.
     /// Returns null if the service isn't installed or the line couldn't be
     /// parsed. The returned string includes arguments (e.g. `... --service`)
-    /// exactly as sc reported them, unwrapped from outer quotes.
+    /// exactly as sc reported them, including executable-path quotes.
     /// </summary>
     public static string? GetBinPath()
     {
-        var (code, output) = RunSc($"qc {ServiceName}");
+        var (code, output) = RunSc("qc", ServiceName);
         if (code != 0) return null;
 
         // sc qc emits a line like:
-        //     BINARY_PATH_NAME   : "C:\...\VPNRouter.Service.exe --service"
-        // Find that line, strip the label+colon, then trim whitespace and
-        // surrounding quotes.
+        //     BINARY_PATH_NAME   : "C:\...\VPNRouter.Service.exe" --service
+        // Find that line and strip only the label, colon, and outer whitespace.
+        // The executable quotes are part of the persisted SCM value.
         foreach (var line in output.Split('\n'))
         {
             var label = "BINARY_PATH_NAME";
@@ -151,8 +148,7 @@ public static class WindowsServiceHelper
             var colon = line.IndexOf(':', idx);
             if (colon < 0) continue;
 
-            var value = line[(colon + 1)..].Trim().Trim('"').Trim();
-            return value;
+            return line[(colon + 1)..].Trim();
         }
         return null;
     }
@@ -167,7 +163,7 @@ public static class WindowsServiceHelper
     /// Called from Program.Main() on every Windows app startup. If the
     /// service is installed AND the installed binPath doesn't match the
     /// currently-discovered VPNRouter.Service.exe, run
-    /// `sc config VPNRouter binPath= "<new path> --service"`. The change
+    /// `sc config VPNRouter binPath= '"<new path>" --service'`. The change
     /// takes effect on the next service start — we don't auto-stop/start
     /// here because:
     ///   • doing so would interrupt any in-flight VPN session;
@@ -191,19 +187,25 @@ public static class WindowsServiceHelper
         if (installed == null)
             return new ServiceResult(false, "Couldn't parse installed binPath from sc qc.");
 
-        var expected = $"{currentServiceExePath} --service";
-
-        // sc typically stores the path quoted but returns it unquoted after
-        // our Trim('"'). Compare case-insensitively so we don't churn on
-        // drive-letter casing differences (C:\ vs c:\).
-        if (string.Equals(installed, expected, StringComparison.OrdinalIgnoreCase))
+        // Preserve and compare the literal executable quotes stored by SCM.
+        // Compare case-insensitively so drive-letter casing does not churn.
+        if (WindowsServiceCommand.IsCurrentImagePath(installed, currentServiceExePath))
             return new ServiceResult(true, "binPath already correct, no-op.");
 
-        var (code, output) = RunSc($"config {ServiceName} binPath= \"{expected}\"");
+        if (!WindowsServiceCommand.IsRecognizedVpnRouterImagePath(installed, out _))
+        {
+            return new ServiceResult(
+                false,
+                $"Service '{ServiceName}' has an unrecognized ImagePath; refusing to overwrite it.");
+        }
+
+        var expected = WindowsServiceCommand.FormatImagePath(currentServiceExePath);
+        var (code, output) = RunSc(
+            "config", ServiceName, "binPath=", expected);
         if (code != 0)
             return new ServiceResult(false, $"sc config binPath= failed (exit {code}): {output}");
 
-        return new ServiceResult(true, $"binPath updated: \"{installed}\" → \"{expected}\" (effective next service start).");
+        return new ServiceResult(true, $"binPath updated: {installed} → {expected} (effective next service start).");
     }
 
     // ─── Path resolution ──────────────────────────────────────────────────────
@@ -228,19 +230,20 @@ public static class WindowsServiceHelper
 
     // ─── Private ──────────────────────────────────────────────────────────────
 
-    private static (int ExitCode, string Output) RunSc(string arguments)
+    private static (int ExitCode, string Output) RunSc(params string[] arguments)
     {
         try
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "sc.exe",
-                Arguments = arguments,
+                FileName = WindowsServiceCommand.GetSystemScPath(),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            foreach (var argument in arguments)
+                psi.ArgumentList.Add(argument);
 
             using var proc = Process.Start(psi);
             if (proc == null) return (-1, "Failed to start sc.exe");
