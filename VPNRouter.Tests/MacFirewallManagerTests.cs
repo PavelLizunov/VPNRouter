@@ -455,4 +455,34 @@ public class MacFirewallManagerTests : IDisposable
 
         Assert.Empty(fake.RunCalls); // a normal launch must never touch pf
     }
+
+    [Fact]
+    public void Enable_WritesRulesToConfiguredPath_NotSharedTemp()
+    {
+        // FW-02: verify that MacFirewallManager writes rulesets into private AppPaths.DataDir
+        // or explicitly configured paths, never world-writable /tmp.
+        WriteConfig("9.9.9.9");
+        var customRules = Path.Combine(Path.GetTempPath(), "custom-mac-rules-" + Guid.NewGuid().ToString("N") + ".conf");
+        var customMain = Path.Combine(Path.GetTempPath(), "custom-mac-main-" + Guid.NewGuid().ToString("N") + ".conf");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker, null, _pfconf, rulesPath: customRules, mainConfPath: customMain);
+
+        try
+        {
+            sut.CreateBlockRules(Array.Empty<string>());
+            sut.EnableBlockRules();
+
+            Assert.True(File.Exists(customRules));
+            Assert.True(File.Exists(customMain));
+            Assert.Contains(fake.RunCalls, c => c.Arguments.Contains(customRules));
+            Assert.Contains(fake.RunCalls, c => c.Arguments.Contains(customMain));
+            Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Any(a => a.Contains("/tmp/vpnrouter-pf-killswitch.conf")));
+            Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Any(a => a.Contains("/tmp/vpnrouter-pf-main.conf")));
+        }
+        finally
+        {
+            try { if (File.Exists(customRules)) File.Delete(customRules); } catch { }
+            try { if (File.Exists(customMain)) File.Delete(customMain); } catch { }
+        }
+    }
 }

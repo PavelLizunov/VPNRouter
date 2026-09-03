@@ -1,4 +1,4 @@
-﻿using VPNRouter.Core.Models;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
 
@@ -176,5 +176,35 @@ public class ServerUriParserTests
         Assert.Equal("vless",     list[0].Protocol);
         Assert.Equal("hysteria2", list[1].Protocol);
         Assert.Equal("tuic",      list[2].Protocol);
+    }
+
+    [Theory]
+    [InlineData("vless://00000000-0000-0000-0000-000000000001@[2001:db8::1]:443?security=none#test-ipv6", "2001:db8::1", 443)]
+    [InlineData("hysteria2://pw@[2001:db8::2]:8443?sni=example.com#test-hy2", "2001:db8::2", 8443)]
+    [InlineData("tuic://00000000-0000-0000-0000-000000000001:pw@[2001:db8::3]:443#test-tuic", "2001:db8::3", 443)]
+    public void Parse_IPv6Literal_StripsBracketsAndNormalizesServer(string uri, string expectedHost, int expectedPort)
+    {
+        // URI-01: verify that bracketed IPv6 hosts (e.g. [2001:db8::1]) have outer brackets stripped
+        // so that sing-box config builders don't emit double-bracketed hostnames.
+        var entry = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
+        Assert.Equal(expectedHost, entry.Server);
+        Assert.Equal(expectedPort, entry.Port);
+        Assert.False(entry.Server.StartsWith('['));
+        Assert.False(entry.Server.EndsWith(']'));
+    }
+
+    [Theory]
+    [InlineData("vless://00000000-0000-0000-0000-000000000001@example.com:0#zero-port", 443)]
+    public void Parse_ZeroPort_FallsBackToDefault443(string uri, int expectedPort)
+    {
+        var entry = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
+        Assert.Equal(expectedPort, entry.Port);
+    }
+
+    [Fact]
+    public void Parse_OverflowPort_ThrowsFormatException()
+    {
+        Assert.Throws<FormatException>(() =>
+            VPNRouter.Core.Services.ServerUriParser.Parse("hysteria2://pw@example.com:70000#overflow-port"));
     }
 }

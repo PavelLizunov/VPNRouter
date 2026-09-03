@@ -118,6 +118,7 @@ public partial class MainWindowViewModel
             // ConfigMode from VM flags (IsSubscribeMode/IsVlessMode) and overwrites
             // any direct assignment. Only the flag flips below matter. Dropped
             // the redundant assignment.
+            IsConnecting = true;
             SelectedServer = target;
             IsSubscribeMode = false;
             IsVlessMode = true;

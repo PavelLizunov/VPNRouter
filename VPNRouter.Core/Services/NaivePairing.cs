@@ -82,12 +82,18 @@ public static class NaivePairing
         }
 
         // 3. RB1 liveness fallback — only when a probe is available. The paired /
-        // same-name sibling is dead (or absent), so rather than carry UDP on a
-        // dead node, route it through ANY alive UDP-capable server (prefer Hy2/TUIC).
-        // Different exit IP than the naive TCP path, but a working game beats a
-        // dead one; gated on isAlive so default behaviour is unchanged.
+        // same-name sibling is dead (or absent). Prefer same-host candidates first
+        // to avoid cross-endpoint UDP divergence, then fall back to any alive server.
         if (isAlive != null)
         {
+            if (!string.IsNullOrWhiteSpace(naive.Server))
+            {
+                var sameHost = list.Where(s => !IsNaive(s) && IsUdpCapable(s) && Alive(s)
+                    && string.Equals(s.Server, naive.Server, StringComparison.OrdinalIgnoreCase));
+                var pickSameHost = PreferUdp(sameHost);
+                if (pickSameHost != null) return pickSameHost;
+            }
+
             var anyAlive = list.Where(s => !IsNaive(s) && IsUdpCapable(s) && Alive(s));
             var pick = PreferUdp(anyAlive);
             if (pick != null) return pick;
