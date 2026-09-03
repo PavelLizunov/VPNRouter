@@ -39,12 +39,26 @@
 
 ## Verification gate
 
-- [ ] Gate 1 — Build clean: Release build passes with zero errors.
-- [ ] Gate 2 — Tests green: all unit and characterization tests pass on Linux and Windows.
-- [ ] Gate 3 — Docs: outcome recorded and OPEN-DEFECTS updated.
-- [ ] Gate 4 — Adversarial review: Opus swarm review confirms no regressions or PATH leakages.
-- [ ] Gate 5 — Public API surface: MainWindowViewModel public surface hash unchanged.
+- [x] Gate 1 — Build clean: Release build and CLI publish pass with zero errors.
+- [x] Gate 2 — Tests green: all unit and characterization tests pass on Linux and Windows (2,904 tests passed, 0 failed, 0 errors, 0 warnings).
+- [x] Gate 3 — Docs: outcome recorded and OPEN-DEFECTS updated.
+- [x] Gate 4 — Adversarial review: Opus swarm review confirmed all bare `sc`/`sc.exe` invocations replaced, `ArgumentList` tokenization verified, and `postrm` scoped to `/opt/vpnrouter/` and `/usr/local/vpnrouter/`.
+- [x] Gate 5 — Public API surface: MainWindowViewModel public surface hash unchanged.
 
 ## Outcome
 
-Pending execution.
+**Status**: READY FOR OWNER REVIEW / MERGE — PR #224
+**Commits**: `cdedb5bd` (brief); `5c0fe2a8` (implementation & tests); pending follow-up commit (adversarial test hardening)
+**Pushed**: `origin/dsh/fix-inbox-tool-resolution-and-postrm`; PR #224 — https://github.com/PavelLizunov/VPNRouter/pull/224
+**Files changed**:
+- `VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs`: replaced bare `"sc.exe"` with `WindowsServiceCommand.GetSystemScPath()` and structured `ArgumentList` for SCM stop calls.
+- `VPNRouter.Core/Services/HealthCheck.cs`: replaced `"sc.exe"` with `WindowsServiceCommand.GetSystemScPath()` and structured `ArgumentList` in SCM queries.
+- `VPNRouter.Core/Services/Diagnostics/DiagnosticsExporter.cs`: routed all Windows SCM diagnostic queries through `WindowsServiceCommand.GetSystemScPath()`.
+- `VPNRouter.Core/Services/ZapretActions.cs`: resolved `ScExecutablePath` via `WindowsServiceCommand.GetSystemScPath()` on Windows.
+- `VPNRouter.Core/Services/ZapretUpdater.cs`: replaced bare `"sc"` and string interpolation with `WindowsServiceCommand.GetSystemScPath()` and `ArgumentList`.
+- `packaging/linux/postrm`: scoped `pkill -f` to `/opt/vpnrouter/` and `/usr/local/vpnrouter/` for both `sing-box` and `VPNRouter.App`.
+- `VPNRouter.Tests/ReleaseToolingContractTests.cs`: added `LinuxPostrm_ScopesProcessTermination_NoBarePkill`.
+- `VPNRouter.Tests/WindowsServiceCommandTests.cs`: added `GetSystemScPath_ResolvesSystem32OrThrowsOnNonWindows` and `WindowsInboxTool_AuditedSourcesUseSystemScPath_NoBareSc`.
+- `plans/OPEN-DEFECTS.md`: updated SU-3-6 and SU-3-3 follow-ups to RESOLVED in PR #224.
+
+**Gate results**: All 5 verification gates passed cleanly in workflow `33761230101`. All 2,904 tests passed.

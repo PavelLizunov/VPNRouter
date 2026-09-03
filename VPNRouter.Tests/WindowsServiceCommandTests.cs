@@ -214,10 +214,12 @@ public sealed class WindowsServiceCommandTests
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretActions);
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretUpdater);
 
-        // Verify no bare "sc.exe" ProcessStartInfo constructors remain
+        // Verify no bare "sc.exe" / "sc" invocations remain
         Assert.DoesNotContain("new ProcessStartInfo(\"sc.exe\"", healthCheck);
         Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc.exe\"", vmConnection);
         Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc\"", zapretUpdater);
+        Assert.DoesNotContain("\"sc.exe\"", diagExporter);
+        Assert.DoesNotContain("ExecutablePath: \"sc\"", zapretActions);
     }
 
     private static string LoadSource(params string[] relativeParts)
