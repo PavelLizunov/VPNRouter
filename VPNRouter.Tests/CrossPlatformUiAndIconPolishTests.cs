@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using Avalonia.Styling;
-using VPNRouter.App;
+using AppClass = VPNRouter.App.App;
 using VPNRouter.Core.Localization;
 using Xunit;
 
@@ -15,8 +15,8 @@ public sealed class CrossPlatformUiAndIconPolishTests
         // On Linux, always white icon
         if (OperatingSystem.IsLinux())
         {
-            var uriLight = App.GetTrayIconUri(ThemeVariant.Light);
-            var uriDark = App.GetTrayIconUri(ThemeVariant.Dark);
+            var uriLight = AppClass.GetTrayIconUri(ThemeVariant.Light);
+            var uriDark = AppClass.GetTrayIconUri(ThemeVariant.Dark);
             Assert.Contains("penguin_mascot_white.ico", uriLight);
             Assert.Contains("penguin_mascot_white.ico", uriDark);
         }
@@ -24,8 +24,8 @@ public sealed class CrossPlatformUiAndIconPolishTests
         // On macOS: dark appearance uses white icon to avoid invisible dark-on-dark in Menu Bar
         if (OperatingSystem.IsMacOS())
         {
-            var uriDark = App.GetTrayIconUri(ThemeVariant.Dark);
-            var uriLight = App.GetTrayIconUri(ThemeVariant.Light);
+            var uriDark = AppClass.GetTrayIconUri(ThemeVariant.Dark);
+            var uriLight = AppClass.GetTrayIconUri(ThemeVariant.Light);
             Assert.Contains("penguin_mascot_white.ico", uriDark);
             Assert.Contains("penguin_mascot.ico", uriLight);
         }
@@ -81,9 +81,9 @@ public sealed class CrossPlatformUiAndIconPolishTests
         Assert.True(File.Exists(path), $"Missing round icon at: {path}");
 
         using var fs = File.OpenRead(path);
-        var header = new byte[24];
-        var read = fs.Read(header, 0, 24);
-        Assert.Equal(24, read);
+        var header = new byte[26];
+        var read = fs.Read(header, 0, 26);
+        Assert.Equal(26, read);
 
         // PNG signature
         Assert.Equal(0x89, header[0]);
@@ -97,6 +97,10 @@ public sealed class CrossPlatformUiAndIconPolishTests
 
         Assert.Equal(expectedW, w);
         Assert.Equal(expectedH, h);
+
+        // Bit depth (offset 24) and Color type (offset 25: 6 = RGBA)
+        Assert.Equal(8, header[24]);
+        Assert.Equal(6, header[25]);
     }
 
     private static string FindAndroidResourcesDir()
