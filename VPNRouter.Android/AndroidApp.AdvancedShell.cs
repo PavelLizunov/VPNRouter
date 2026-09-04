@@ -151,12 +151,18 @@ public partial class AndroidApp
             _advShellTabButtons[tab] = btn;
             tabPanel.Children.Add(btn);
         }
+        var tabScroll = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = tabPanel,
+        };
         var tabStripBorder = new Border
         {
             Background = Brushes.Transparent,
             BorderBrush = defaultB,
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = tabPanel,
+            Child = tabScroll,
         };
 
         // ── Content host — Grid with one child per tab. Built lazily as
@@ -660,6 +666,7 @@ public partial class AndroidApp
             // FontSize=11 to render in full.
             Padding = new Thickness(0, 8),
             MinHeight = 44,
+            MinWidth = 62,
             Margin = new Thickness(1, 0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(1),

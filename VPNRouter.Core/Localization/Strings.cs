@@ -59,7 +59,8 @@ public static partial class Strings
     // (those reference an actual Windows-only API surface).
     public static string OsDisplayName =>
         OperatingSystem.IsWindows() ? "Windows" :
-        OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+        OperatingSystem.IsMacOS() ? "macOS" :
+        OperatingSystem.IsAndroid() ? "Android" : "Linux";
 
     // ── Tabs ──
     public static string TabServers => Ru ? "Серверы" : "Servers";
@@ -88,7 +89,9 @@ public static partial class Strings
     public static string TabAdvServers => Ru ? "Серверы" : "Servers";
     public static string TabAdvSubscribe => Ru ? "Подписка" : "Subscribe";
     public static string TabAdvSettings => Ru ? "Настройки" : "Settings";
-    public static string TabAdvApplications => Ru ? "Приложения" : "Applications";
+    public static string TabAdvApplications => Ru
+        ? "Приложения"
+        : (OperatingSystem.IsAndroid() ? "Apps" : "Applications");
     public static string TabAdvTools => Ru ? "Инструменты" : "Tools";
     public static string TabAdvPublic => Ru ? "Публичные" : "Public";
     public static string AdvSimpleToggle => Ru ? "◂ Простой" : "◂ Simple";
@@ -623,11 +626,19 @@ public static partial class Strings
         ? "Автозапуск"
         : "Autostart";
     public static string SmpAutostartCardOn => Ru
-        ? "Служба установлена и запущена"
-        : "Service installed and running";
+        ? (OperatingSystem.IsAndroid()
+            ? "Служба VPN активна"
+            : "Служба установлена и запущена")
+        : (OperatingSystem.IsAndroid()
+            ? "VPN service active"
+            : "Service installed and running");
     public static string SmpAutostartCardOff => Ru
-        ? $"Настроить автозапуск VPN при старте {OsDisplayName}"
-        : $"Configure VPN autostart at {OsDisplayName} boot";
+        ? (OperatingSystem.IsAndroid()
+            ? "Настроить автозапуск VPN при загрузке устройства"
+            : $"Настроить автозапуск VPN при старте {OsDisplayName}")
+        : (OperatingSystem.IsAndroid()
+            ? "Configure VPN autostart on device boot"
+            : $"Configure VPN autostart at {OsDisplayName} boot");
     // Generic subtitle used on Android inline card (no Service-installed/stopped
     // distinction yet — Android lifecycle differs from Windows Service).
     // 2026-05-15 fix (Bug-AND-loc-001, brat live-test on KYOCERA A101BM):
