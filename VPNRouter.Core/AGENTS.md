@@ -19,7 +19,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 ## Directory & Subdirectory Map
 
 - `Models/`: Data transfer objects, settings schema, profile structures, engine settings, and sing-box JSON configuration models (`AppSettings`, `Profile`, `ProcessRule`, `VPNConfig`, `AppConfig`, `TunSettings`, etc.).
-- `Services/`: Core service implementations and orchestration logic:
+- `Services/`: Core service implementations and orchestration logic (see `Services/AGENTS.md` for the complete 123-service taxonomy and subsystem map):
   - `VpnEngine.cs`: Central VPN lifecycle orchestrator (`StartAsync`, `ApplyAsync`, `Stop`). Coordinates profile resolution, process scanning, config generation, firewall management, ETW monitoring, health checks, and true-split driver engagement.
   - `SingBoxManager.cs`: sing-box process lifecycle and Clash API hot-reloading manager.
   - `ConfigGenerator.cs`: JSON generator for sing-box routing, DNS, and outbounds.
@@ -43,7 +43,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - `Services/Diagnostics/`: Log export and diagnostic redaction helpers (`DiagnosticsExporter`, `DiagnosticsRedactor`).
 - `Services/UpdateSources/`: Update-source contracts and GitHub/sideload implementations.
 - `Interfaces/`: Core contracts (`IFirewallManager`, `IProcessScanner`, `IProcessMonitor`, `IProfileSource`). The Windows split-driver contract is declared with its manager in `Services/SplitTunnelDriverManager.cs`.
-- `Platform/`: OS-specific platform adapters:
+- `Platform/`: OS-specific platform adapters (see `Platform/AGENTS.md` for cross-platform firewall matrix and DNS hardening):
   - `Platform/Linux/`: `LinuxFirewallManager.cs` (nftables kill-switch) and Linux DNS hardening.
   - `Platform/macOS/`: `MacFirewallManager.cs` (pf kill-switch), macOS DNS hardening, process scanning, and monitoring.
   - `Platform/Android/`: `AndroidSingBoxRuntime.cs` and Android platform helpers.
