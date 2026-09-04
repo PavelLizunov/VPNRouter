@@ -216,6 +216,9 @@ public sealed class CrashReporterScrubberTests
     [InlineData("wss://example.com/api?sid=sid_998877", "sid=[REDACTED]")]
     [InlineData("ws://example.com/api?short_id=short123", "short_id=[REDACTED]")]
     [InlineData("wss://example.com/api?key=my_key_value", "key=[REDACTED]")]
+    [InlineData("ws://example.com/api?pbk=pubkey12345", "pbk=[REDACTED]")]
+    [InlineData("wss://example.com/api?public_key=pubkey67890", "public_key=[REDACTED]")]
+    [InlineData("ws://example.com/api?uuid=user_uuid_123", "uuid=[REDACTED]")]
     public void ScrubSecrets_RedactsSensitiveQueryParams(string input, string expectedSubstring)
     {
         var s = CrashReporter.ScrubSecrets(input);
@@ -236,6 +239,9 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain("sid_998877", s);
         Assert.DoesNotContain("short123", s);
         Assert.DoesNotContain("my_key_value", s);
+        Assert.DoesNotContain("pubkey12345", s);
+        Assert.DoesNotContain("pubkey67890", s);
+        Assert.DoesNotContain("user_uuid_123", s);
     }
 
     [Fact]
