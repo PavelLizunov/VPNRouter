@@ -52,11 +52,12 @@
 - [x] Gate 3 — ECH suppression verified: sing-box config JSON contains `{ "query_type": ["HTTPS", "SVCB"], "action": "reject" }`, pinned by `AntiCensorshipDnsTests`.
 - [x] Gate 4 — Asset and SHA256 integrity: All release archive URLs and SHA256 hashes match authoritative release `v1.14.0-vpnctl.2`.
 - [x] Gate 5 — WINBRAT remote verification: sing-box 1.14.0-vpnctl.2 binary passed `sing-box.exe check` on all 48 custom config injection test fixtures on WINBRAT.
-- [x] Gate 6 — PR and CI: pushed to task branch `dsh/upgrade-singbox-vpnctl-1.14` and verified in CI.
+- [x] Gate 6 — PR and CI: green GitHub Actions run across all 5 jobs in workflows `33910867465`, `33910867669`, `33910867841`.
 
 ## Outcome
 
-**Status**: READY FOR OWNER REVIEW / PR
+**Status**: READY FOR OWNER REVIEW / MERGE — PR #233
+**PR**: https://github.com/PavelLizunov/VPNRouter/pull/233
 **Pushed**: `origin/dsh/upgrade-singbox-vpnctl-1.14`
 **Files changed**:
 - `.github/workflows/build-android.yml`: pinned `libbox.aar` from `PavelLizunov/sing-box-vpnctl` `v1.14.0-vpnctl.2` with authoritative SHA256.
