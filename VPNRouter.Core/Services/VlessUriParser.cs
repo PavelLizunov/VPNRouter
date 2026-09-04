@@ -1,4 +1,3 @@
-using System.Web;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -23,35 +22,27 @@ public static class VlessUriParser
     /// </remarks>
     public static VlessServerEntry Parse(string uri)
     {
-        uri = uri.Trim();
+        var rawSpan = uri.AsSpan().Trim();
 
-        if (!uri.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
-            throw new FormatException($"Invalid VLESS URI: must start with vless://");
+        if (!rawSpan.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+            throw new FormatException("Invalid VLESS URI: must start with vless://");
 
-        // Strip vless:// prefix and parse as a pseudo-URI
-        // Replace vless:// with https:// so Uri class can parse authority + query + fragment
-        var fakeUri = "https://" + uri.Substring("vless://".Length);
+        ShareLinkHelper.ParseComponents(
+            rawSpan.Slice("vless://".Length),
+            out var userinfoSpan,
+            out var server,
+            out var port,
+            out var querySpan,
+            out var name);
 
-        if (!Uri.TryCreate(fakeUri, UriKind.Absolute, out var parsed))
-            throw new FormatException($"Invalid VLESS URI: cannot parse");
-
-        // UUID is in UserInfo (before @)
-        var uuid = Uri.UnescapeDataString(parsed.UserInfo);
+        var uuid = ShareLinkHelper.Unescape(userinfoSpan);
         if (string.IsNullOrEmpty(uuid))
             throw new FormatException("Invalid VLESS URI: UUID is missing (expected vless://UUID@server:port)");
-
-        // Server + Port
-        var server = NormalizeHost(parsed.Host);
-        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
 
         if (string.IsNullOrEmpty(server))
             throw new FormatException("Invalid VLESS URI: server is missing");
 
-        // Query parameters
-        var query = HttpUtility.ParseQueryString(parsed.Query);
-
-        // Fragment = display name
-        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+        var query = ShareLinkHelper.ParseQuery(querySpan);
 
         var entry = new VlessServerEntry
         {
