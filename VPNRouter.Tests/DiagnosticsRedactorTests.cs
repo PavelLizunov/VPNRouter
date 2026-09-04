@@ -280,6 +280,30 @@ app:
         Assert.Contains("refresh_token:", outp);
     }
 
+    [Fact]
+    public void Logs_RedactKeySecretVariants()
+    {
+        // Secret keys ending in _key like access_key, auth_key, client_key, app_key, user_key, enc_key, encryption_key
+        // must be redacted in key=value or key: value form.
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] access_key=mySecretAccessKey123\n" +
+            "[DBG] auth_key: mySecretAuthKey456\n" +
+            "[DBG] client_key=mySecretClientKey789\n" +
+            "[DBG] app_key=mySecretAppKeyABC\n" +
+            "[DBG] user_key=mySecretUserKeyDEF\n" +
+            "[DBG] enc_key=mySecretEncKeyGHI\n" +
+            "[DBG] encryption_key=mySecretEncryptionKeyJKL");
+        Assert.DoesNotContain("mySecretAccessKey123", outp);
+        Assert.DoesNotContain("mySecretAuthKey456", outp);
+        Assert.DoesNotContain("mySecretClientKey789", outp);
+        Assert.DoesNotContain("mySecretAppKeyABC", outp);
+        Assert.DoesNotContain("mySecretUserKeyDEF", outp);
+        Assert.DoesNotContain("mySecretEncKeyGHI", outp);
+        Assert.DoesNotContain("mySecretEncryptionKeyJKL", outp);
+        Assert.Contains("access_key=", outp);
+        Assert.Contains("auth_key:", outp);
+    }
+
     // AmneziaWG keys are credentials. The allowlist redacts them by default (not in
     // SafeKeys); these lock that in so a future SafeKeys change can't leak them.
     [Fact]
