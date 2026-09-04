@@ -42,12 +42,22 @@ Following the comprehensive OpenDesign multi-platform visual audit:
 
 ## Verification gate
 
-- [ ] Gate 1 — Build clean: Release solution build completes with zero errors.
-- [ ] Gate 2 — Tests green: all unit and characterization tests pass (0 failures).
-- [ ] Gate 3 — Docs: outcome recorded and plans updated.
-- [ ] Gate 4 — Adversarial review: Opus swarm review confirms no regressions, no surface drift, and clean cross-platform visuals.
-- [ ] Gate 5 — Public API surface: MainWindowViewModel and AndroidApp surface hashes unchanged.
+- [x] Gate 1 — Build clean: Release solution build completes with zero errors in CI workflow `33853122863`.
+- [x] Gate 2 — Tests green: all unit and characterization tests pass (2,947 passed, 0 failed, 0 errors, 0 warnings; Windows characterization 33/33 passed).
+- [x] Gate 3 — Docs: outcome recorded and plans updated.
+- [x] Gate 4 — Adversarial review: Opus swarm review confirmed Android OS checks, tab horizontal scrolling without ellipsis, RGBA round icon integrity, and zero surface drift on both AndroidApp and MainWindowViewModel.
+- [x] Gate 5 — Public API surface: MainWindowViewModel and AndroidApp surface hashes unchanged.
 
 ## Outcome
 
-Pending execution.
+**Status**: READY FOR OWNER REVIEW / MERGE — PR #231
+**Commits**: `bcf34e1a` (brief); `c395348e` (implementation); `621bac69` (review fixes & RGBA checks); pending docs commit
+**Pushed**: `origin/dsh/polish-cross-platform-ui-and-icons`; PR #231 — https://github.com/PavelLizunov/VPNRouter/pull/231
+**Files changed**:
+- `VPNRouter.Core/Localization/Strings.cs`: added explicit `OperatingSystem.IsAndroid()` branch in `OsDisplayName` and updated autostart strings so Android devices cleanly display "Запуск при загрузке устройства" / "Configure VPN autostart on device boot". English Android tabs use "Apps" to save horizontal space while keeping Russian "Приложения".
+- `VPNRouter.Android/AndroidApp.AdvancedShell.cs`: wrapped tab strip in horizontal `ScrollViewer` (with hidden scrollbars) and added `MinWidth = 62` per tab button, preventing text truncation into ellipsis on narrow screens while maintaining fluid uniform distribution on wider screens.
+- `VPNRouter.Android/Resources/mipmap-*/ic_launcher_round.png`: generated circular masked icons with antialiased borders and 72% centered mascot scaling to maintain safe padding across all Android densities (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi).
+- `VPNRouter.App/App.axaml.cs`: updated tray icon selection via `GetTrayIconUri(ActualThemeVariant)` to render `penguin_mascot_white.ico` on macOS in Dark Appearance and subscribed to `ActualThemeVariantChanged` for live theme adaptation.
+- `VPNRouter.Tests/CrossPlatformUiAndIconPolishTests.cs`: added unit tests validating tray icon theme selection, Android platform string integrity, tab ScrollViewer wrapping, and 8-bit RGBA dimensions/format across all 5 mipmap densities.
+
+**Gate results**: All 5 verification gates passed cleanly in workflow `33853122863`. Total executed tests: 2,947 passed with 0 failures.
