@@ -271,6 +271,11 @@ public class DnsRule
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? ProcessName { get; set; }
 
+    /// <summary>Match DNS query type(s) (e.g. "HTTPS", "SVCB") — used for ECH suppression.</summary>
+    [JsonPropertyName("query_type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? QueryType { get; set; }
+
     /// <summary>route | reject | pre-resolve — new action-based format in 1.12</summary>
     [JsonPropertyName("action")]
     public string Action { get; set; } = "route";

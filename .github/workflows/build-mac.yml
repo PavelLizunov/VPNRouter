@@ -35,13 +35,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      # v2.45.x: build-mac.sh now builds the sing-box-lx FORK (with_awg + with_xhttp)
-      # via tools/build-singbox-lx.sh, which needs Go >=1.24.7 (fork go.mod directive).
-      - name: Setup Go (for sing-box-lx fork build)
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
-        with:
-          go-version: "1.25"
-
       # Phase 1 Q9 — NuGet package cache. build-mac.sh calls `dotnet publish`
       # which restores packages from nuget.org; caching ~/.nuget/packages saves
       # 30–60s on warm runs. Q11 will pin actions/cache to a commit SHA.

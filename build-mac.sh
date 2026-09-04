@@ -46,22 +46,25 @@ cp -R "$PUBLISH_DIR/." "$APP/Contents/MacOS/"
 chmod +x "$APP/Contents/MacOS/VPNRouter.App"
 cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
-# v2.45.x: bundle the sing-box-lx FORK (with_awg + with_xhttp) so AmneziaWG and
-# XHTTP work on macOS too — SAME fork / pinned commits / patches as Windows (see
-# tools/build-singbox-lx.ps1), built natively for darwin via tools/build-singbox-lx.sh.
-# SingBoxFeatures tag-probes the bundled binary at runtime, so AWG/XHTTP auto-enable
-# once the core carries the tags — no app-code platform gate. Previously macOS shipped
-# GitHub's UPSTREAM sing-box 1.13.14 = NO AWG/XHTTP. Trade-off: macOS now rides the
-# custom fork (1.13.13-base), exactly as Windows already does. Still no libcronet on
-# Darwin (NaiveProxy stays gated off in ServerUriParser).
-# Requires Go >=1.24.7 + git + python3 on the builder (build-mac.yml pins Go via setup-go;
-# locally set GO=~/sdk/go1.25.x/bin/go if `go` on PATH is older).
-echo "    sing-box-lx: building darwin fork (with_awg + with_xhttp)..."
-bash "$REPO_DIR/tools/build-singbox-lx.sh" "$VERSION" "$APP/Contents/MacOS/sing-box"
+# Bundle official sing-box-vpnctl release (with_awg + with_xhttp + with_clash_api).
+echo "    sing-box-vpnctl: downloading darwin-universal release..."
+SB_DARWIN_VER="1.14.0-vpnctl.2"
+SB_DARWIN_SHA256="70aa907936c4760b88b8b263d75909a6062b161751a798f74372aff14b53c40b"
+SB_DARWIN_ZIP="/tmp/sing-box-${SB_DARWIN_VER}-darwin-universal.zip"
+curl -sSL -o "$SB_DARWIN_ZIP" \
+  "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SB_DARWIN_VER}/sing-box-${SB_DARWIN_VER}-darwin-universal.zip"
+if command -v sha256sum >/dev/null 2>&1; then
+  echo "${SB_DARWIN_SHA256}  ${SB_DARWIN_ZIP}" | sha256sum -c -
+elif command -v shasum >/dev/null 2>&1; then
+  echo "${SB_DARWIN_SHA256}  ${SB_DARWIN_ZIP}" | shasum -a 256 -c -
+fi
+unzip -q -o "$SB_DARWIN_ZIP" -d /tmp/
+cp "/tmp/sing-box-${SB_DARWIN_VER}-darwin-universal/sing-box" "$APP/Contents/MacOS/sing-box"
+rm -f "$SB_DARWIN_ZIP"
 chmod +x "$APP/Contents/MacOS/sing-box"
 # Strip the Gatekeeper quarantine xattr from the nested helper binary so it launches.
 xattr -d com.apple.quarantine "$APP/Contents/MacOS/sing-box" 2>/dev/null || true
-echo "    sing-box-lx bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
+echo "    sing-box-vpnctl bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
 
 # ── Bundle wgturn-cli (Phase 1 of emergency channel integration) ──
 # Built from PavelLizunov/wgturn-core. Provides the wgturn-cli binary

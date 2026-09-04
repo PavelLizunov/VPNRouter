@@ -43,11 +43,12 @@
 #>
 param(
     [string]$Version = "1.0",
-    # SingBoxVersion: upstream sing-box release used only for non-upload local builds
-    # when publish\sing-box-lx.exe is missing.
+    # SingBoxVersion: official sing-box-vpnctl release bundled for Windows desktop.
     # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
     # and build-mac.sh — all three platforms ship the same sing-box release.
-    [string]$SingBoxVersion = "1.13.14",
+    [string]$SingBoxVersion = "1.14.0-vpnctl.2",
+    # Authoritative SHA256 of the official sing-box-vpnctl Windows amd64 archive.
+    [string]$SingBoxSha256 = "58cc175a7f5accec33b922e33e50b129e1f623dc51b7b91d9f67eea5f14b34ea",
     # Optional override: pre-existing sing-box.exe to bundle.
     # Empty string means "prefer publish\sing-box-lx.exe; fallback to upstream only
     # for non-upload local builds".
@@ -320,28 +321,22 @@ if (-not $effectiveSingBoxPath) {
     $defaultLx = Join-Path $Root "publish\sing-box-lx.exe"
     if (Test-Path $defaultLx) {
         $effectiveSingBoxPath = $defaultLx
-        Write-Host "       Auto-selected sing-box-lx: $effectiveSingBoxPath" -ForegroundColor Gray
-    } elseif ($Upload) {
-        throw "Release upload requires sing-box-lx at publish\sing-box-lx.exe (or pass -SingBoxPath). Build it with tools\build-singbox-lx.ps1."
+        Write-Host "       Auto-selected local sing-box-lx: $effectiveSingBoxPath" -ForegroundColor Gray
     }
 }
 if ($effectiveSingBoxPath) {
     if ($Upload) {
         $versionText = & $effectiveSingBoxPath version 2>&1 | Out-String
         if ($versionText -notmatch 'with_awg' -or $versionText -notmatch 'with_xhttp') {
-            throw "Release upload requires sing-box-lx with with_awg and with_xhttp tags. Version output:`n$versionText"
+            throw "Release upload requires sing-box with with_awg and with_xhttp tags. Version output:`n$versionText"
         }
     }
     Copy-Item $effectiveSingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
-    # v2.41.1: also grab a sibling libcronet.dll if the override points into an
-    # extracted upstream archive — naive needs it next to sing-box.exe.
     $ovCronet = Join-Path (Split-Path $effectiveSingBoxPath -Parent) "libcronet.dll"
     if (Test-Path $ovCronet) { Copy-Item $ovCronet (Join-Path $DistDir "libcronet.dll") -Force }
-    Write-Host "       Copied from: $effectiveSingBoxPath (custom/lx)" -ForegroundColor Gray
+    Write-Host "       Copied from: $effectiveSingBoxPath" -ForegroundColor Gray
 } else {
-    # Auto-download upstream. Cache under tools\singbox-cache\ so repeat
-    # builds reuse the download — version-pinned, so this cache never
-    # needs manual invalidation.
+    # Auto-download official sing-box-vpnctl release with verified SHA256.
     $singBoxCache = Join-Path $Root "tools\singbox-cache"
     New-Item -ItemType Directory -Force -Path $singBoxCache | Out-Null
     $zipName = "sing-box-$SingBoxVersion-windows-amd64.zip"
@@ -351,15 +346,22 @@ if ($effectiveSingBoxPath) {
 
     if (-not (Test-Path $cachedExe)) {
         if (-not (Test-Path $zipPath)) {
-            $dlUrl = "https://github.com/SagerNet/sing-box/releases/download/v$SingBoxVersion/$zipName"
-            Write-Host "       Downloading upstream sing-box v$SingBoxVersion from $dlUrl..." -ForegroundColor Gray
+            $dlUrl = "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v$SingBoxVersion/$zipName"
+            Write-Host "       Downloading sing-box-vpnctl v$SingBoxVersion from $dlUrl..." -ForegroundColor Gray
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             try {
                 Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -UseBasicParsing
             } catch {
                 Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
                 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-                throw "sing-box download failed. Check https://github.com/SagerNet/sing-box/releases/tag/v$SingBoxVersion"
+                throw "sing-box-vpnctl download failed. Check https://github.com/PavelLizunov/sing-box-vpnctl/releases/tag/v$SingBoxVersion"
+            }
+        }
+        if ($SingBoxSha256) {
+            $actualHash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualHash -ne $SingBoxSha256.ToLowerInvariant()) {
+                Remove-Item $zipPath -Force
+                throw "sing-box-vpnctl SHA256 mismatch: expected $SingBoxSha256 but got $actualHash"
             }
         }
         if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
@@ -369,18 +371,13 @@ if ($effectiveSingBoxPath) {
         }
     }
 
-    # Bundle the ENTIRE upstream archive verbatim — no cherry-picking (v2.41.1).
-    # Brings sing-box.exe AND its sibling libcronet.dll (the Chromium Cronet
-    # runtime sing-box dlopen's for NaiveProxy outbounds). Pre-2.41.1 we copied
-    # only sing-box.exe, which left naive broken for end users. LICENSE ships as
-    # LICENSE.sing-box so it can't clobber the app's own LICENSE.
     Get-ChildItem -File $extractDir | ForEach-Object {
         $destName = if ($_.Name -ieq 'LICENSE') { 'LICENSE.sing-box' } else { $_.Name }
         Copy-Item $_.FullName (Join-Path $DistDir $destName) -Force
     }
     $sbSize = [math]::Round((Get-Item $cachedExe).Length / 1MB, 1)
     $cronetNote = if (Test-Path (Join-Path $extractDir 'libcronet.dll')) { ' + libcronet' } else { '' }
-    Write-Host "       Bundled upstream sing-box v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
+    Write-Host "       Bundled sing-box-vpnctl v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
 }
 
 # ── slipstream-client.exe — DNS-tunnel transport, BUNDLED (Windows-only MVP) ──

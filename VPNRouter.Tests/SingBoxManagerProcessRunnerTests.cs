@@ -398,7 +398,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         fake.OnStart(_ => true, _ =>
         {
             startCount++;
-            if (startCount > 1)
+            if (startCount == 2)
                 throw new InvalidOperationException("Simulated second launch failure inside Restart");
             return new FakeProcessHandle(pid: 7777);
         });
