@@ -33,6 +33,7 @@ Read the relevant zone document before changing that area:
 | Plans and outcomes | `plans/AGENTS.md` |
 | Design references | `design/AGENTS.md` |
 | Project DSH skills | `.dsh/AGENTS.md` |
+| Documentation and contracts | `docs/AGENTS.md` |
 
 ## Working model
 
