@@ -49,10 +49,12 @@
 - [x] Gate 2 — Tests green: all unit tests pass (78/78 tests in `ServerUriParserTests`, `VlessUriParserTests`, `AmneziaWgEndpointTests`, `ConfigGeneratorTests`, `PerformanceStreamAndSocketTests`, `PerformanceShareLinkTests` pass with 0 failures natively on Windows).
 - [x] Gate 3 — Windows-native benchmark: 56.88% speedup (Control median 9.96 ms -> Candidate median 4.56 ms, delta -5.67 ms, confidence 17.6x MAD) verified natively on WINBRAT (Windows 10 Enterprise LTSC).
 - [x] Gate 4 — Docs: phase brief and outcome recorded in `plans/`.
+- [x] Gate 5 — CI checks: all 4 jobs in workflow run `33906431454` passed cleanly.
 
 ## Outcome
 
-**Status**: READY FOR OWNER REVIEW / PR
+**Status**: READY FOR OWNER REVIEW / MERGE — PR #232
+**PR**: https://github.com/PavelLizunov/VPNRouter/pull/232
 **Pushed**: `origin/dsh/perf-sharelink-and-query-parsing`
 **Files changed**:
 - `VPNRouter.Core/Services/ShareLinkHelper.cs`: new span-based multi-protocol link parser and lightweight `QueryDictionary`.
