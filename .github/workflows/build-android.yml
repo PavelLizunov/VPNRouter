@@ -244,10 +244,10 @@ jobs:
           # expected SHA256 below. A stale hash is a HARD failure (see the
           # integrity gate in the run block), so they can't silently drift.
           # See block comment above for the full rotation procedure.
-          LIBBOX_RELEASE_TAG: "v1.14.0-vpnctl.2"
+          LIBBOX_RELEASE_TAG: "v1.14.0-vpnctl.3"
           LIBBOX_REPO: "PavelLizunov/sing-box-vpnctl"
           # Expected SHA256 of the pinned libbox.aar asset from PavelLizunov/sing-box-vpnctl.
-          LIBBOX_AAR_SHA256: "d451446c237266e101e71f309a7610949a8bdc9fb6a5d7af455e89b9ce746998"
+          LIBBOX_AAR_SHA256: "471908107fb68de65f50cc8898e193b832b2ae12f0dfe9ee93d73f0b27f1a991"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib

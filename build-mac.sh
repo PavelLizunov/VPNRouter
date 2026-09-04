@@ -48,8 +48,8 @@ cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIco
 
 # Bundle official sing-box-vpnctl release (with_awg + with_xhttp + with_clash_api).
 echo "    sing-box-vpnctl: downloading darwin-universal release..."
-SB_DARWIN_VER="1.14.0-vpnctl.2"
-SB_DARWIN_SHA256="70aa907936c4760b88b8b263d75909a6062b161751a798f74372aff14b53c40b"
+SB_DARWIN_VER="1.14.0-vpnctl.3"
+SB_DARWIN_SHA256="c71bf2fab29a00d70f8706eb2f71643e35438769cbbacdd566d7c0e6058be3b1"
 SB_DARWIN_ZIP="/tmp/sing-box-${SB_DARWIN_VER}-darwin-universal.zip"
 curl -sSL -o "$SB_DARWIN_ZIP" \
   "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SB_DARWIN_VER}/sing-box-${SB_DARWIN_VER}-darwin-universal.zip"

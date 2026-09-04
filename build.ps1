@@ -46,9 +46,9 @@ param(
     # SingBoxVersion: official sing-box-vpnctl release bundled for Windows desktop.
     # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
     # and build-mac.sh — all three platforms ship the same sing-box release.
-    [string]$SingBoxVersion = "1.14.0-vpnctl.2",
+    [string]$SingBoxVersion = "1.14.0-vpnctl.3",
     # Authoritative SHA256 of the official sing-box-vpnctl Windows amd64 archive.
-    [string]$SingBoxSha256 = "58cc175a7f5accec33b922e33e50b129e1f623dc51b7b91d9f67eea5f14b34ea",
+    [string]$SingBoxSha256 = "8094929df6c4b061dc9c360b1641474d41bdea16845d604a26d3721feefc6f74",
     # Optional override: pre-existing sing-box.exe to bundle.
     # Empty string means "prefer publish\sing-box-lx.exe; fallback to upstream only
     # for non-upload local builds".
