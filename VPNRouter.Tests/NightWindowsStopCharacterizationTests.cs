@@ -456,7 +456,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         EnsureConfigDir();
 
         var initialHandle = new StubbornWindowsProcessHandle(NewFakePid());
-        var replacementHandle = new StubbornWindowsProcessHandle(NewFakePid());
+        var replacementHandle = new FakeProcessHandle(NewFakePid());
 
         var runner = new FakeProcessRunner()
             .OnStart(_ => true, _ => replacementHandle);
