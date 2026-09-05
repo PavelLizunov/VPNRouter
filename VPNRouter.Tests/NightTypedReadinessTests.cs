@@ -39,6 +39,25 @@ public sealed class NightTypedReadinessTests
         return noLine;
     }
 
+    private static string ExtractBalancedBlock(string src, int startIdx)
+    {
+        var openBraceIdx = src.IndexOf('{', startIdx);
+        if (openBraceIdx < 0) return string.Empty;
+
+        var depth = 0;
+        for (var i = openBraceIdx; i < src.Length; i++)
+        {
+            if (src[i] == '{') depth++;
+            else if (src[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return src.Substring(openBraceIdx, i - openBraceIdx + 1);
+            }
+        }
+        return string.Empty;
+    }
+
     [Fact]
     public void OnEngineStatus_LegacyConnectedStrings_CannotSetIsConnectedFromFalse_SourceGuard()
     {
@@ -98,15 +117,17 @@ public sealed class NightTypedReadinessTests
 
         var clean = StripComments(source);
 
-        // Generic catch (Exception ex) in ToggleConnectionAsync
-        var catchIdx = clean.IndexOf("catch (Exception ex)", StringComparison.Ordinal);
-        Assert.True(catchIdx >= 0, "catch (Exception ex) must exist in ToggleConnectionAsync");
+        var loggerIdx = clean.IndexOf("_logger.Error(ex, \"Failed to start VPN\")", StringComparison.Ordinal);
+        Assert.True(loggerIdx >= 0, "_logger.Error(ex, 'Failed to start VPN') must exist in ToggleConnectionAsync");
 
-        var catchBody = clean.Substring(catchIdx, Math.Min(1200, clean.Length - catchIdx));
+        var catchIdx = clean.LastIndexOf("catch (Exception ex)", loggerIdx, StringComparison.Ordinal);
+        Assert.True(catchIdx >= 0, "catch (Exception ex) must precede failed start logger statement");
+
+        var catchBody = ExtractBalancedBlock(clean, catchIdx);
+        Assert.False(string.IsNullOrEmpty(catchBody), "catch block must not be empty");
 
         // 1. Must check IsConnected && _engine.IsRunning (never _engine.IsRunning alone)
-        var guardPattern = clean.IndexOf("if (IsConnected && _engine.IsRunning)", catchIdx, StringComparison.Ordinal);
-        Assert.True(guardPattern >= 0, "Catch must only preserve green if already typed ready IsConnected");
+        Assert.Contains("if (IsConnected && _engine.IsRunning)", catchBody, StringComparison.Ordinal);
 
         // 2. Must NOT contain unconditional IsConnected = true under engine.IsRunning
         Assert.DoesNotContain("if (_engine.IsRunning)\r\n                {\r\n                    IsConnected = true", clean, StringComparison.Ordinal);
