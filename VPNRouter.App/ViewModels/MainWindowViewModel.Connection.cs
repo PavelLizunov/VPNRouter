@@ -81,23 +81,16 @@ public partial class MainWindowViewModel
     {
         Dispatcher.UIThread.Post(() =>
         {
-            StatusText = status;
-
             if (status.StartsWith("Connected") || status.StartsWith("VPN Router is running"))
             {
-                IsConnected = true;
-                IsConnecting = false;
+                // NIGHT-07: legacy Connected*/VPN Router is running cannot SET IsConnected
+                // from false; only refresh display if already true from typed Connected event.
+                if (!IsConnected) return;
+
                 ConnectButtonText = Strings.StopVPN;
                 StartSubRefreshTimer();
                 RefreshActiveIndicator();
-                // Use engine's actual runtime state — not stale ViewModel cache.
-                // This prevents "status says 104 but actually running 194" mismatch.
-                // v2.44.1-r6: shared with RestoreConnectedStatus — also resolves
-                // the REAL urltest member when AutoSelectBestServer is on (the
-                // autostart "says Germany, exits Iceland" report 2026-06-23).
-                var (serverName, serverIp) = DeriveConnectedServerLabel();
-                var modeLabel = IsSplitTunnel ? "split" : "full";
-                StatusText = Strings.Connected(modeLabel, serverName, serverIp);
+                RestoreConnectedStatus();
             }
             else if (status == "Stopped")
             {
@@ -110,6 +103,10 @@ public partial class MainWindowViewModel
                 StopSubRefreshTimer();
                 RefreshActiveIndicator();
                 HasPendingAppChanges = false;
+            }
+            else
+            {
+                StatusText = status;
             }
         });
     }
@@ -397,6 +394,7 @@ public partial class MainWindowViewModel
                     ConnectButtonText = Strings.StopVPN;
                     StartSubRefreshTimer();
                     RefreshActiveIndicator();
+                    RestoreConnectedStatus();
                     // Bug-r9-E: clear any stale conflict banner after a
                     // successful start (e.g. user dismissed the other VPN
                     // and retried — pre-r9-E the banner would linger).
@@ -515,21 +513,17 @@ public partial class MainWindowViewModel
             {
                 _logger.Error(ex, "Failed to start VPN");
                 IsConnecting = false;
-                // v2.44.1-r2 (user report 2026-06-22): a late-phase throw
-                // (post-start probe / AutoFailover re-entry) AFTER sing-box
-                // already came up must NOT leave "Failed to start VPN" on screen
-                // while the tunnel is actually running. Trust the engine's real
-                // state: if it's running, keep the connected status (the 2 s
-                // runtime-status poll + any later OnEngineStatus("Connected")
-                // reconcile the rest); only show the failure when genuinely down.
-                if (_engine.IsRunning)
+                // NIGHT-07: preserve green ONLY if already typed ready IsConnected;
+                // otherwise take the stop/failed path so engine.IsRunning never fabricates connected.
+                if (IsConnected && _engine.IsRunning)
                 {
-                    IsConnected = true;
                     ConnectButtonText = Strings.StopVPN;
-                    _logger.Warning("[VM] start path threw but engine is running — keeping connected status instead of a stale 'Failed to start VPN'");
+                    _logger.Warning("[VM] start path threw but engine is running and already typed ready — keeping connected status instead of a stale 'Failed to start VPN'");
                 }
                 else
                 {
+                    try { await Task.Run(() => _engine.Stop()); } catch { }
+                    IsConnected = false;
                     StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
                     ConnectButtonText = Strings.StartVPN;
                 }

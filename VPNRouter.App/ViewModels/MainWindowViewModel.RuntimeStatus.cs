@@ -224,6 +224,17 @@ public partial class MainWindowViewModel
             (!IsConnected ||
              StatusText.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal)))
         {
+            // Process presence cannot establish owned readiness: if our owned
+            // engine has manager evidence, never promote from !IsConnected.
+            // When already IsConnected, restore the real connected status to
+            // avoid relabeling via service.
+            if (_engine.SingBoxPid != null || _engine.IsRunning)
+            {
+                if (!IsConnected) return;
+                RestoreConnectedStatus();
+                return;
+            }
+
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
             var configuredMode = _settings.App.ConfigMode ?? "generated";
@@ -260,11 +271,13 @@ public partial class MainWindowViewModel
             // Process.GetProcessesByName("sing-box") return 0 even when
             // sing-box is alive — process enumeration via sysctl/procfs
             // occasionally misses root-owned children depending on kernel
-            // state. _engine.IsRunning is authoritative: it pings the
-            // Clash API over HTTP, which only responds if sing-box is
-            // actually serving traffic. If the API says alive, don't
-            // demote — wait for a subsequent tick where both signals
-            // agree the tunnel is gone.
+            // state. _engine.IsRunning performs an actual own handle check
+            // (on Windows: State == Running and process handle has not exited;
+            // on Unix: Clash API probe). While process or handle presence
+            // cannot establish owned readiness from a disconnected state, if
+            // our own alive handle confirms the engine is still running for an
+            // already connected session, don't demote — wait for a subsequent
+            // tick where both signals agree the tunnel is gone.
             try
             {
                 if (_engine?.IsRunning == true)
