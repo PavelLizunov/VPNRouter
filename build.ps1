@@ -381,6 +381,58 @@ if ($SingBoxPath) {
     Write-Host "       Bundled sing-box-vpnctl v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
 }
 
+# ── Bundle libcronet.dll ──
+# Upstream sing-box-vpnctl Windows release packages only sing-box.exe (VPNCTL-05).
+# Fetch official SagerNet sing-box 1.13.14 archive to supply verified libcronet.dll
+# for NaiveProxy support.
+if (-not $SingBoxPath) {
+    $cronetCache = Join-Path $Root "tools\singbox-cache"
+    New-Item -ItemType Directory -Force -Path $cronetCache | Out-Null
+    $cronetZipName = "sing-box-1.13.14-windows-amd64.zip"
+    $cronetZipPath = Join-Path $cronetCache $cronetZipName
+    $cronetArchiveSha256 = "f580782c6dd10f7691c66cea1d7c421813c5fbf7e305d1ee7ce0c3a40d196341"
+    $cronetDllSha256 = "c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2"
+    $cronetExtractDir = Join-Path $cronetCache "sing-box-1.13.14-windows-amd64"
+    $cronetDll = Join-Path $cronetExtractDir "libcronet.dll"
+
+    if (-not (Test-Path $cronetZipPath)) {
+        $cronetUrl = "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/$cronetZipName"
+        Write-Host "       Downloading SagerNet sing-box v1.13.14 for libcronet.dll from $cronetUrl..." -ForegroundColor Gray
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        try {
+            Invoke-WebRequest -Uri $cronetUrl -OutFile $cronetZipPath -UseBasicParsing
+        } catch {
+            Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
+            if (Test-Path $cronetZipPath) { Remove-Item $cronetZipPath -Force }
+            throw "SagerNet sing-box download failed. Check https://github.com/SagerNet/sing-box/releases/tag/v1.13.14"
+        }
+    }
+
+    $actualArchiveHash = (Get-FileHash $cronetZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualArchiveHash -ne $cronetArchiveSha256.ToLowerInvariant()) {
+        Remove-Item $cronetZipPath -Force
+        throw "SagerNet sing-box SHA256 mismatch: expected $cronetArchiveSha256 but got $actualArchiveHash"
+    }
+
+    if (Test-Path $cronetExtractDir) { Remove-Item -Recurse -Force $cronetExtractDir }
+    Expand-Archive -Path $cronetZipPath -DestinationPath $cronetCache -Force
+    if (-not (Test-Path $cronetDll)) {
+        throw "libcronet.dll not found inside $cronetZipName after extraction"
+    }
+
+    $actualDllHash = (Get-FileHash $cronetDll -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualDllHash -ne $cronetDllSha256.ToLowerInvariant()) {
+        throw "libcronet.dll SHA256 mismatch: expected $cronetDllSha256 but got $actualDllHash"
+    }
+
+    Copy-Item $cronetDll (Join-Path $DistDir "libcronet.dll") -Force
+    $cronetLicense = Join-Path $cronetExtractDir "LICENSE"
+    if (Test-Path $cronetLicense) {
+        Copy-Item $cronetLicense (Join-Path $DistDir "LICENSE.libcronet") -Force
+    }
+    Write-Host "       Bundled libcronet.dll from SagerNet v1.13.14 (verified SHA256)" -ForegroundColor Green
+}
+
 # ── slipstream-client.exe — DNS-tunnel transport, BUNDLED (Windows-only MVP) ──
 # Unlike wgturn/zapret (on-demand pull), slipstream is BUNDLED because it's a
 # last-resort transport reached precisely when GitHub is blocked (circular dep:
