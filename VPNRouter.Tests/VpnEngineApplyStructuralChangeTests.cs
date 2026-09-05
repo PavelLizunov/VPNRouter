@@ -292,6 +292,14 @@ public sealed class VpnEngineApplyStructuralChangeTests
         f.SetValue(obj, value);
     }
 
+    private static object? GetField(object obj, string fieldName)
+    {
+        var f = obj.GetType().GetField(fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            ?? throw new InvalidOperationException($"Field '{fieldName}' not found on {obj.GetType()}");
+        return f.GetValue(obj);
+    }
+
     private static void SetProperty(object obj, string propertyName, object? value)
     {
         var p = obj.GetType().GetProperty(propertyName,
@@ -506,12 +514,24 @@ public sealed class VpnEngineApplyStructuralChangeTests
             SingBox = new SingBoxSettings { ExecutablePath = "sing-box.exe", ClashApi = "127.0.0.1:9090" },
         };
 
+        var baselineSettings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = baselineConfigMode, RoutingMode = baselineRoutingMode }
+        };
+        var baselineFailover = new AutoFailoverEngine(baselineSettings, new ConfigSanityCheck());
+        SetField(engine, "_failoverSettingsContext", baselineSettings);
+        SetField(engine, "_failover", baselineFailover);
+
         try
         {
             var result = await engine.ApplyAsync(settings);
             Assert.False(result);
             // ZERO capability calls on failed Apply exact branch
             Assert.Empty(firewall.UpdateCalls);
+
+            // NIGHT-06: failed actual Apply retains existing contextA and failoverA (no reset on failed Apply)
+            Assert.Same(baselineSettings, GetField(engine, "_failoverSettingsContext"));
+            Assert.Same(baselineFailover, GetField(engine, "_failover"));
         }
         finally
         {
@@ -643,10 +663,22 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         SetField(engine, "_singBox", singBox);
 
+        var baselineSettings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = baselineConfigMode, RoutingMode = baselineRoutingMode }
+        };
+        var baselineFailover = new AutoFailoverEngine(baselineSettings, new ConfigSanityCheck());
+        SetField(engine, "_failoverSettingsContext", baselineSettings);
+        SetField(engine, "_failover", baselineFailover);
+
         try
         {
             var result = await engine.ApplyAsync(settings);
             Assert.True(result, "ApplyAsync should succeed via hot reload.");
+
+            // NIGHT-06: successful actual Apply updates contextB and lazy resets _failover to null
+            Assert.Same(settings, GetField(engine, "_failoverSettingsContext"));
+            Assert.Null(GetField(engine, "_failover"));
 
             // Exactly ONE call with exact generated JSON and intent
             var call = Assert.Single(firewall.UpdateCalls);
@@ -708,5 +740,59 @@ public sealed class VpnEngineApplyStructuralChangeTests
         Assert.True(startIdx >= 0, "ExecuteAsync must await StartSingBoxPhaseAsync");
         Assert.True(commitIdx > startIdx, "Firewall capability commit must occur AFTER sing-box starts");
         Assert.True(monitorIdx > commitIdx, "Firewall capability commit must occur BEFORE monitors start");
+    }
+
+    [Fact]
+    public async Task StartAsync_SingBoxAlreadyRunning_NoOpStartDoesNotResetFailoverContext()
+    {
+        var scanner = new StubProcessScanner();
+        var firewall = new StubFirewallManager();
+        var monitor = new StubProcessMonitor();
+        var fakeDriver = new FakeSplitTunnelDriver();
+        var dnsHardening = new NullWindowsDnsHardening();
+        var engine = new VpnEngine(
+            scanner: scanner,
+            firewallFactory: () => firewall,
+            monitorFactory: () => monitor,
+            logger: null,
+            dnsHardening: dnsHardening,
+            splitDriver: fakeDriver);
+
+        var runner = new FakeProcessRunner();
+        var fakeHttp = new FakeHttpClient().Setup("/configs", "{}");
+        var singBox = new SingBoxManager(
+            new SingBoxSettings { ExecutablePath = "sing-box.exe", ClashApi = "127.0.0.1:9090" },
+            null, fakeHttp, runner);
+
+        var initialHandle = new FakeProcessHandle(pid: 34567);
+        SetField(singBox, "_handle", initialHandle);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(singBox, SingBoxState.Running);
+
+        SetField(engine, "_singBox", singBox);
+
+        var settingsA = new AppSettings { App = new AppConfig { ConfigMode = "generated" } };
+        var failoverA = new AutoFailoverEngine(settingsA, new ConfigSanityCheck());
+        SetField(engine, "_failoverSettingsContext", settingsA);
+        SetField(engine, "_failover", failoverA);
+
+        var settingsB = new AppSettings { App = new AppConfig { ConfigMode = "subscribe" } };
+
+        try
+        {
+            await engine.StartAsync(settingsB);
+
+            // NIGHT-06: No-op start ignored because sing-box is already running -> retain contextA and failoverA
+            Assert.Same(settingsA, GetField(engine, "_failoverSettingsContext"));
+            Assert.Same(failoverA, GetField(engine, "_failover"));
+        }
+        finally
+        {
+            SetField(engine, "_singBox", null);
+            SetField(singBox, "_handle", null);
+            initialHandle.Dispose();
+            singBox.Dispose();
+            engine.Dispose();
+        }
     }
 }

@@ -58,10 +58,10 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Verification Gates
 
-- [ ] **Gate 1 — Build clean**: **EVIDENCE PENDING** (Control plane lacks .NET SDK; exact workflow commands must be inspected before asserting full solution build; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08] green on CI; NIGHT-07 source-reviewed pending CI; NIGHT-06 not implemented yet; Batch 4 [09–12] pending; limits full solution/live/macOS unchanged).
-- [ ] **Gate 2 — Tests green**: **BLOCKED** on control plane (CI execution required; non-headless test suite; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration on `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped], and Batch 3 [NIGHT-08 `1ca812f4`, run 33951772995] PASS on CI; NIGHT-07 source-reviewed pending CI; NIGHT-06 not implemented yet; Batch 4 [09–12] pending).
+- [ ] **Gate 1 — Build clean**: **EVIDENCE PENDING** (Control plane lacks .NET SDK; exact workflow commands must be inspected before asserting full solution build; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08, NIGHT-07 `5ecbe4d2`] green on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending; limits full solution/live/macOS unchanged).
+- [ ] **Gate 2 — Tests green**: **BLOCKED** on control plane (CI execution required; non-headless test suite; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration on `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped], and Batch 3 [NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699: 3184 total / 3126 passed / 58 skipped] PASS on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending).
 - [ ] **Gate 3 — Docs**: **PASS** (Brief revised; `plans/OPEN-DEFECTS.md` active; report imported; NIGHT-FOLLOWUP-01 registered; ledger all still open pending closure evidence; no fake full gate).
-- [ ] **Gate 4 — Independent review**: **PENDING** (Adversarial review / bug-hunt per batch; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08] green on CI; NIGHT-07 current source-reviewed pending CI; NIGHT-06 not implemented yet; Batch 4 [09–12] pending; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
+- [ ] **Gate 4 — Independent review**: **PENDING** (Adversarial review / bug-hunt per batch; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08, NIGHT-07] green on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
 - [ ] **Gate 5 — UI verify**: **N/A / PENDING** (No visual redesign; ViewModel status/readiness verified via headless/characterization tests on CI; NIGHT-07 UI source guard only, coordinator behavioral fake events tests; no live run/fullsolution/native mac).
 - [ ] **Gate 6 — Characterization diff**: **PENDING** (Coordinator state transitions and error propagation baselined).
 
@@ -69,42 +69,43 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Outcome
 
-**Status**: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION) & NIGHT-08 VERIFIED ON CI / NIGHT-07 CURRENT SOURCE-REVIEWED PENDING CI / NIGHT-06 NOT IMPLEMENTED YET / BATCH 4 (09–12) PENDING / DEFECT LEDGER ALL STILL OPEN PENDING CLOSURE EVIDENCE
-**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. Batch 2 (NIGHT-05 endpoint substep) on `ef82aadc4389de08f3a67ef356e2f203d866c1bb`. Batch 3 (NIGHT-08) on `1ca812f4400c9e8d881532e0baf9277513fa4109` (preceded by `143d2adf`). Batch 2 (NIGHT-05 full integration) on `8ee89105635bc750932084c6dad09467cbe1d8b9` (preceded by `b7406456`, `ecb682ef`). NIGHT-07 current source-reviewed working tree changes pending CI.
+**Status**: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION) & BATCH 3 (NIGHT-08, NIGHT-07) VERIFIED ON CI / NIGHT-06 IMPLEMENTED PENDING CI / BATCH 4 (09–12) PENDING / DEFECT LEDGER ALL STILL OPEN PENDING CLOSURE EVIDENCE
+**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. Batch 2 (NIGHT-05 endpoint substep) on `ef82aadc4389de08f3a67ef356e2f203d866c1bb`. Batch 3 (NIGHT-08) on `1ca812f4400c9e8d881532e0baf9277513fa4109` (preceded by `143d2adf`). Batch 2 (NIGHT-05 full integration) on `8ee89105635bc750932084c6dad09467cbe1d8b9` (preceded by `b7406456`, `ecb682ef`). Batch 3 (NIGHT-07) on `5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`. NIGHT-06 working tree implementation pending CI.
 **Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240)
-**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint substep all 4 checks PASS on CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379: Ubuntu 3114 total / 3057 passed / 57 skipped, 12 new tests). NIGHT-08 all 4 checks PASS on CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995: 3121 total / 3063 passed / 58 skipped; actual Apply false branch + retainedStop retry + ack hotreload executed on Ubuntu, successful Windows restart test not selected by Windows filter; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550206811). NIGHT-05 full integration all 4 checks PASS on CI (`8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped on Ubuntu, 42 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550488707). NIGHT-07 unit and UI source-guard tests source-reviewed pending CI.
+**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint substep all 4 checks PASS on CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379: Ubuntu 3114 total / 3057 passed / 57 skipped, 12 new tests). NIGHT-08 all 4 checks PASS on CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995: 3121 total / 3063 passed / 58 skipped; actual Apply false branch + retainedStop retry + ack hotreload executed on Ubuntu, successful Windows restart test not selected by Windows filter; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550206811). NIGHT-05 full integration all 4 checks PASS on CI (`8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped on Ubuntu, 42 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550488707). NIGHT-07 all 4 checks PASS on CI (`5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`, run 33955634699: Ubuntu 3184 total / 3126 passed / 58 skipped, 21 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550638820). NIGHT-06 unit tests, same object reuse, and actualApply tests implemented pending CI.
 **Files changed**:
 - `plans/OPEN-DEFECTS.md` (active defect ledger; all still open pending closure evidence for whole task; no fake full gate; NIGHT-FOLLOWUP-01 registered)
 - `plans/overnight-audit-morning-report-2026-09-04.md` (audit report)
-- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-05 full integration CI pass, Windows netsh correction, NIGHT-07 source review outcome, and remaining status)
+- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-05 full integration CI pass, Windows netsh correction, NIGHT-07 CI pass evidence, NIGHT-06 implementation details, and remaining status)
 - `VPNRouter.Core/Interfaces/IFirewallManager.cs` (internal optional `ICommittedFirewallConfig` capability interface; committed `b7406456`, `8ee89105`)
 - `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`; NIGHT-05 committed-config atomic refresh, `_gate` synchronization, and disarm before DNS committed `b7406456`, `8ee89105`)
 - `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`; NIGHT-05 committed-config atomic refresh, `_gate` synchronization, and disarm before DNS committed `b7406456`, `ecb682ef`, `8ee89105`)
 - `VPNRouter.Core/Services/StartupPipeline.cs` (NIGHT-05 Phase 6 skips legacy capability; Phase 8 passes committed config after confirmed start before monitors; committed `b7406456`, `8ee89105`)
-- `VPNRouter.Core/Services/VpnEngine.cs` (NIGHT-08 `ApplyAsync` baseline restoration on reload/restart failure committed `143d2adf`; NIGHT-05 firewall committed config update on successful bool ack committed `b7406456`, `8ee89105`)
+- `VPNRouter.Core/Services/VpnEngine.cs` (NIGHT-08 `ApplyAsync` baseline restoration on reload/restart failure committed `143d2adf`; NIGHT-05 firewall committed config update on successful bool ack committed `b7406456`, `8ee89105`; NIGHT-06 failover settings context and generation reset on public Start and committed Apply, stale generation/identity guards before teardown; committed `5ecbe4d2` for NIGHT-07)
 - `VPNRouter.Core/Services/SingBoxManager.cs` (NIGHT-08 `ReloadConfigJsonWithResult` and `TryReloadConfigJson` lease guards committed `143d2adf`)
 - `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs` (NIGHT-08 `RestartCore` bool outcome and exact-stop failure handling committed `143d2adf`)
-- `VPNRouter.App/ViewModels/Internals/TwoPhaseStartCoordinator.cs` (NIGHT-07: Phase B awaits typed `Connected`, clean startTask completion never readiness, same A/B timer retained, late typedConnected succeeds, faults and cancellations observed immediately; source-reviewed)
-- `VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs` (NIGHT-07: legacy `Connected` status strings do not promote `IsConnected` from false; two-phase `outcome == Connected` refreshes status; generic catch preserves green only if already typed-ready; source-reviewed)
-- `VPNRouter.App/ViewModels/MainWindowViewModel.RuntimeStatus.cs` (NIGHT-07: `SyncConnectedWithVpnRuntime` requires `IsConnected` before restoring status for owned engine; owned poll presence never promotes to readiness; external service behavior retained; source-reviewed)
+- `VPNRouter.App/ViewModels/Internals/TwoPhaseStartCoordinator.cs` (NIGHT-07: Phase B awaits typed `Connected`, clean startTask completion never readiness, same A/B timer retained, late typedConnected succeeds, faults and cancellations observed immediately; committed `5ecbe4d2`)
+- `VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs` (NIGHT-07: legacy `Connected` status strings do not promote `IsConnected` from false; two-phase `outcome == Connected` refreshes status; generic catch preserves green only if already typed-ready; committed `5ecbe4d2`)
+- `VPNRouter.App/ViewModels/MainWindowViewModel.RuntimeStatus.cs` (NIGHT-07: `SyncConnectedWithVpnRuntime` requires `IsConnected` before restoring status for owned engine; owned poll presence never promotes to readiness; external service behavior retained; committed `5ecbe4d2`)
 - `VPNRouter.Tests/CommittedFirewallConfigTests.cs` (NIGHT-05 internal capability contract and isolation tests; committed `b7406456`, `8ee89105`)
 - `VPNRouter.Tests/LinuxFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint tests committed `ef82aadc`; NIGHT-05 committed config stale/no file, active refresh, failed refresh, malformed JSON, disarm tests; committed `b7406456`, `8ee89105`)
 - `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint tests committed `ef82aadc`; NIGHT-05 committed config stale/no file, active anchor/legacy refresh, failed refresh, malformed JSON, disarm tests; committed `b7406456`, `ecb682ef`, `8ee89105`)
 - `VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs` (NIGHT-08 restart result and guard regression tests committed `1ca812f4`)
 - `VPNRouter.Tests/VpnEngineApplyEscalationTests.cs` (NIGHT-08 source-pin without comment bypass committed `143d2adf`)
-- `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs` (NIGHT-08 Apply failure baseline preservation tests committed `143d2adf`, `1ca812f4`; NIGHT-05 failed Apply zero capability calls, hot-reload success exact JSON / one PUT, StartupPipeline cold ordering source guard; committed `b7406456`, `8ee89105`)
-- `VPNRouter.Tests/MvmTwoPhaseStartTimerTests.cs` (NIGHT-07 behavioral coordinator tests: clean startTask never readiness, same A/B timer retained, late typedConnected succeeds, faults/cancel immediate; source-reviewed)
-- `VPNRouter.Tests/NightTypedReadinessTests.cs` (NIGHT-07 UI source-guard tests: legacy status no promotion, owned poll presence no readiness, generic catch guard, external service retained; source-reviewed)
+- `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs` (NIGHT-08 Apply failure baseline preservation tests committed `143d2adf`, `1ca812f4`; NIGHT-05 failed Apply zero capability calls, hot-reload success exact JSON / one PUT, StartupPipeline cold ordering source guard; committed `b7406456`, `8ee89105`; NIGHT-06 failed/successful actual Apply failover context retention and lazy null reset, no-op start on already running engine)
+- `VPNRouter.Tests/MvmTwoPhaseStartTimerTests.cs` (NIGHT-07 behavioral coordinator tests: clean startTask never readiness, same A/B timer retained, late typedConnected succeeds, faults/cancel immediate; committed `5ecbe4d2`)
+- `VPNRouter.Tests/NightTypedReadinessTests.cs` (NIGHT-07 UI source-guard tests: legacy status no promotion, owned poll presence no readiness, generic catch guard, external service retained; committed `5ecbe4d2`)
+- `VPNRouter.Tests/NightFailoverIntentTests.cs` (NIGHT-06 failover lifecycle, settings context, same object reuse, stale generation/identity guards before teardown, and source order tests)
 
 **Gate results**:
-- [-] Gate 1: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530), and BATCH 3 (NIGHT-08 `1ca812f4`) PASS ON CI. Limits full solution/live/macOS unchanged. NIGHT-07 source-reviewed pending CI. NIGHT-06 not implemented yet; Batch 4 (09–12) pending.
-- [-] Gate 2: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped), and BATCH 3 (NIGHT-08 `1ca812f4`) PASS ON CI. NIGHT-07 source-reviewed pending CI. NIGHT-06 not implemented yet; Batch 4 (09–12) pending.
+- [-] Gate 1: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530), and BATCH 3 (NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699) PASS ON CI. Limits full solution/live/macOS unchanged. NIGHT-06 implemented pending CI. Batch 4 (09–12) pending.
+- [-] Gate 2: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped), and BATCH 3 (NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699: 3184 total / 3126 passed / 58 skipped) PASS ON CI. NIGHT-06 implemented pending CI. Batch 4 (09–12) pending.
 - [x] Gate 3: PASS (brief updated; ledger all still open pending closure evidence; no fake full gate; NIGHT-FOLLOWUP-01 registered).
-- [-] Gate 4: PARTIAL / PENDING (Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08] green on CI; NIGHT-07 current source-reviewed pending CI; NIGHT-06 not implemented yet; Batch 4 [09–12] pending; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
+- [-] Gate 4: PARTIAL / PENDING (Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08, NIGHT-07] green on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
 - [-] Gate 5: N/A / PENDING (no visual UI redesign; ViewModel status/readiness verified via headless/characterization tests on CI; NIGHT-07 UI source guard only, coordinator behavioral fake events tests; no live run/fullsolution/native mac).
 - [-] Gate 6: PENDING (characterization diff across batches).
 
-**Follow-ups**: Commit and push NIGHT-07 source-reviewed changes to PR #240 for CI verification; implement NIGHT-06 (Batch 3); proceed to Batch 4 (NIGHT-09..12); maintain `plans/OPEN-DEFECTS.md` (all defects still open pending closure evidence; no fake full gate); address preexisting P1 survivor NIGHT-FOLLOWUP-01 (outside approved 12 repair scope, deferred owner follow-up); track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
+**Follow-ups**: Commit and push NIGHT-06 implementation for CI verification; proceed to Batch 4 (NIGHT-09..12); final review; maintain `plans/OPEN-DEFECTS.md` (all defects still open pending closure evidence; no fake full gate); address preexisting P1 survivor NIGHT-FOLLOWUP-01 (outside approved 12 repair scope, deferred owner follow-up); track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
 
 ### Batch 1 Outcome
 
@@ -247,9 +248,12 @@ Twelve confirmed defects executed across four sequential batches with overlappin
   - Ubuntu runner executes Core unit tests including Unix firewall tests. Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
   - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
 
-### Batch 3 (NIGHT-07) Source Review Outcome
+### Batch 3 (NIGHT-07) Outcome
 
-- **Status**: Current source reviewed, pending CI.
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: All 4 checks PASS on commit `5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`, GitHub Actions run `33955634699`. Receipt: https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550638820.
+- **Test Metrics**: 3184 total / 3126 passed / 58 skipped on Ubuntu runner (21 new tests: 3184 vs prior 3163; coordinator behavioral tests and UI source guards executed on Ubuntu).
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` remains open with all defects open pending evidence for the whole task; do not close ledger or any gates prematurely.
 - **Batch 3 Scope & Implementation (NIGHT-07 Readiness Truthfulness)**:
   - **Clean StartTask Never Readiness**:
     - In `TwoPhaseStartCoordinator.RunAsync`, Phase B ignores clean completion of `startTask`. Successful completion of the startup task indicates only that the pipeline completed, not that the data plane or tunnel is ready.
@@ -293,8 +297,49 @@ Twelve confirmed defects executed across four sequential batches with overlappin
     - `PhaseA_PreCancelled_CancelsImmediately`
     - `PhaseB_LateConnectedAfterCleanStart_Success`
     - Preserves same A/B timer across clean startTask completion.
+- **CI Pipeline Scope & Gate Limits**:
+  - All 4 CI checks green on run 33955634699.
+  - Coordinator behavioral fake events tests (`MvmTwoPhaseStartTimerTests`) and UI source guards (`NightTypedReadinessTests`) executed on Ubuntu runner.
+  - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
+
+### Batch 3 (NIGHT-06) Implementation Outcome (Pending CI)
+
+- **Status**: Implemented, pending CI.
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` all still open pending closure evidence for whole task; no fake full gate.
+- **Batch 3 Scope & Implementation (NIGHT-06 Failover Settings Context & Lifecycle Synchronization)**:
+  - **Private Settings + Generation Reset on Public New Start / Committed Apply Only (Lazy Null)**:
+    - `VpnEngine` adds private fields `_failoverSettingsContext`, `_failoverGeneration`, and internal helper `ResetFailoverContext(AppSettings settings)`.
+    - `ResetFailoverContext` resets `_failover = null` (lazy null, avoiding unconditional instantiation), increments `_failoverGeneration++`, and updates `_failoverSettingsContext = settings`.
+    - Reset occurs ONLY on:
+      1. Public new `StartAsync` after the already-running guard (`HasLiveOrStartingSingBox()`), ensuring no-op starts on an already-running engine do not reset context or cycle state.
+      2. Successful committed `ApplyAsync` (both hot-reload success and restart success).
+    - Failed `ApplyAsync` (e.g. reload or restart unconfirmed) preserves active baseline settings context and prior `_failover` instance (no reset).
+  - **Engine Context Wires Settings + Generation in Same Closure**:
+    - `WireFailoverCore` reads `var settings = _engine._failoverSettingsContext ?? CapturedSettings();` and `var generation = _engine._failoverGeneration;`.
+    - Instantiates `_engine._failover ??= new AutoFailoverEngine(settings, sanityCheck, restart: (innerCt) => _engine.ExecuteFailoverRestartAsync(settings, innerCt, generation), logger: _engine._logger);`.
+    - Both constructor argument (`settings` pool) and restart delegate closure share the exact same `settings` object and captured `generation`.
+    - Routine wire calls (`WireFailover`, `WireFailoverWithStop`) preserve the lazy instance and tried cycle state (`_tried` set).
+  - **Stale Guards on Generation + Identity After Gate Before Teardown**:
+    - In `ExecuteProbeFailoverRestartAsync` (post-start): acquires `_lifecycleGate` first, then immediately checks:
+      `if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) || (_failoverSettingsContext is not null && !ReferenceEquals(_failoverSettingsContext, captured))) { ... return false; }`
+      BEFORE calling `TeardownInternal()`.
+      If generation or settings identity does not match active failover context, restart aborts truthfully without tearing down running tunnel, launching processes, or persisting state.
+    - In `ExecuteFailoverRestartAsync` (pre-start): checks generation and settings identity before calling `StartAsyncInternal`.
+  - **Test Suite & Verification**:
+    - `VPNRouter.Tests/NightFailoverIntentTests.cs`:
+      - `WireFailover_SameInternalWire_PreservesInstanceAndTriedCycle`: routine wire calls preserve same instance and tried cycle state across calls.
+      - `ResetFailoverContext_CommittedSettings_LazyNullUntilNewWireWithPoolBAndCapturedB`: verifies immediate lazy null on commit, pool B identity and closure settings/generation matching.
+      - `StaleAutoFailoverDelegate_InvocationAfterApplyOrReset_ReturnsFalseBeforeTeardown_RetainsManager_NoRunner_NoStore`: post-start stale failover delegate invocation returns false before teardown, retains manager, makes no runner calls, and does not save to settings store.
+      - `StaleAutoFailoverDelegate_PreStartRestart_ReturnsFalseBeforeStartAsyncInternal`: pre-start stale delegate aborts without starting pipeline.
+      - `WireFailover_ResetSameObjectNewIntent_OldRestartReturnsFalse_NoRunnerNoTeardown`: same object reuse with mutated intent aborts old restart closure via generation guard before teardown.
+      - `WireFailover_PreStart_ResetSameObjectNewIntent_OldRestartReturnsFalse_NoRunner`: same object reuse in pre-start phase aborts old restart closure via generation guard.
+      - `PublicStartBoundary_SourceOrder_ResetsFailoverContextAfterAlreadyRunningGuardAndBeforeStartAsyncInternal`: source order verification that `ResetFailoverContext` runs after already-running guard and before `StartAsyncInternal`.
+    - `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs`:
+      - `ApplyAsync_StructuralRestartFails_RestoresActiveBaselineAndDoesNotCommitCandidateMetadata`: failed actual Apply retains baseline settings context and failover instance.
+      - `ApplyAsync_HotReloadSucceeds_CallsFirewallCapabilityOnceWithExactGeneratedAndIntent`: successful actual Apply updates settings context and resets failover to lazy null.
+      - `StartAsync_SingBoxAlreadyRunning_NoOpStartDoesNotResetFailoverContext`: sing-box already running no-op start does not reset failover context.
 - **Pending Batches & Scope Limits**:
-  - **NIGHT-06**: Not implemented yet (pending implementation in Batch 3).
-  - **Batch 4 (NIGHT-09..12)**: Pending.
-  - **Defect Ledger & Gates**: `plans/OPEN-DEFECTS.md` remains open with all defects open pending evidence for the whole task; do not close ledger or any gates prematurely.
-  - **CI Scope & Gate Limits**: UI source guard only, coordinator behavioral fake events tests; no live run / full solution / native mac.
+  - Batch 3 implementation completed (NIGHT-08 and NIGHT-07 verified on CI; NIGHT-06 implemented pending CI).
+  - Batch 4 (NIGHT-09..12) and final review remain pending.
+  - Defect ledger `plans/OPEN-DEFECTS.md` remains open with all defects open pending evidence for the whole task; do not close ledger or any gates prematurely.
+  - Limits: no live run / full solution / native mac evidence.

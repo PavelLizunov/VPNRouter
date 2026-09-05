@@ -42,6 +42,8 @@ public class VpnEngine : IDisposable
     // failovers; reset on every successful start.
     private ConfigSanityCheck? _sanityCheck;
     private AutoFailoverEngine? _failover;
+    private long _failoverGeneration;
+    private AppSettings? _failoverSettingsContext;
     // Reconnect fix (2026-06-15): the user's "Ignore VPN conflict" decision,
     // remembered from the last StartAsync so the internal AutoFailover restart
     // delegates re-enter StartAsync with the SAME skip. Else a failover after an
@@ -319,6 +321,7 @@ public class VpnEngine : IDisposable
             // Fresh session: link caller token so Stop() or caller ct cancels bring-up.
             _sessionCts?.Dispose();
             _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            ResetFailoverContext(settings);
             try
             {
                 await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck).ConfigureAwait(false);
@@ -345,6 +348,20 @@ public class VpnEngine : IDisposable
         {
             _lifecycleGate.Release();
         }
+    }
+
+    /// <summary>
+    /// NIGHT-06: Assigns the active failover settings context and resets the lazy
+    /// AutoFailoverEngine instance so that subsequent failovers use the new settings
+    /// and pool rather than retaining a stale configuration from a prior intent.
+    /// Increments the engine failover generation to invalidate any queued closures.
+    /// Called on public StartAsync (after already-running guard) and on successful ApplyAsync.
+    /// </summary>
+    internal void ResetFailoverContext(AppSettings settings)
+    {
+        _failoverGeneration++;
+        _failoverSettingsContext = settings;
+        _failover = null;
     }
 
     private bool HasLiveOrStartingSingBox()
@@ -528,10 +545,21 @@ public class VpnEngine : IDisposable
     /// the safe gated path; pre-start (gate already held) re-enters
     /// StartAsyncInternal directly — re-taking the non-reentrant gate deadlocks.
     /// </summary>
-    internal async Task<bool> ExecuteFailoverRestartAsync(AppSettings captured, CancellationToken ct)
+    internal async Task<bool> ExecuteFailoverRestartAsync(
+        AppSettings captured,
+        CancellationToken ct,
+        long? expectedGeneration = null)
     {
         if (_postStartPhase)
-            return await ExecuteProbeFailoverRestartAsync(captured, ct).ConfigureAwait(false);
+            return await ExecuteProbeFailoverRestartAsync(captured, ct, expectedGeneration).ConfigureAwait(false);
+
+        if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
+            (_failoverSettingsContext is not null && !ReferenceEquals(_failoverSettingsContext, captured)))
+        {
+            _logger?.Information(
+                "[VpnEngine] Pre-start failover restart aborted — captured settings or generation do not match active failover context (stale failover intent)");
+            return false;
+        }
 
         try
         {
@@ -560,11 +588,22 @@ public class VpnEngine : IDisposable
     /// is the already-teardown-cancelled probe token; intentionally ignored for the
     /// bring-up. internal for the seam test.
     /// </summary>
-    internal async Task<bool> ExecuteProbeFailoverRestartAsync(AppSettings captured, CancellationToken probeCt)
+    internal async Task<bool> ExecuteProbeFailoverRestartAsync(
+        AppSettings captured,
+        CancellationToken probeCt,
+        long? expectedGeneration = null)
     {
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
+                (_failoverSettingsContext is not null && !ReferenceEquals(_failoverSettingsContext, captured)))
+            {
+                _logger?.Information(
+                    "[VpnEngine] Failover restart aborted — captured settings or generation do not match active failover context (stale failover intent)");
+                return false;
+            }
+
             TeardownInternal();
             var session = _sessionCts;
             if (session == null || session.IsCancellationRequested)
@@ -807,6 +846,7 @@ public class VpnEngine : IDisposable
                 TunFingerprint = newTunFingerprint;
                 ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
                 configCommitted = true;
+                ResetFailoverContext(settings);
                 UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
                 _logger?.Information("[VpnEngine] Applied via hot-reload");
@@ -836,6 +876,7 @@ public class VpnEngine : IDisposable
             TunFingerprint = newTunFingerprint;
             ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
             configCommitted = true;
+            ResetFailoverContext(settings);
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
@@ -1665,15 +1706,21 @@ public class VpnEngine : IDisposable
         public AutoFailoverEngine WireFailoverWithStop(ConfigSanityCheck sanityCheck)
             => WireFailoverCore(sanityCheck);
 
-        // P02 FAIL-1: both wire methods install the same phase-aware delegate;
+        // P02 FAIL-1 / NIGHT-06: both wire methods install the same phase-aware delegate;
         // the ??= slot collision is harmless because dispatch reads the live flag.
+        // Reads engine current settings context (falling back to host-captured settings only
+        // if needed for existing direct host seams). Captures a single settings local as
+        // both constructor argument and restart closure so pool and closure share the same object.
+        // Captures generation in a local so the delegate captures generation at creation time.
         private AutoFailoverEngine WireFailoverCore(ConfigSanityCheck sanityCheck)
         {
+            var settings = _engine._failoverSettingsContext ?? CapturedSettings();
+            var generation = _engine._failoverGeneration;
             _engine._failover ??= new AutoFailoverEngine(
-                CapturedSettings(),
+                settings,
                 sanityCheck,
                 restart: (innerCt) =>
-                    _engine.ExecuteFailoverRestartAsync(CapturedSettings(), innerCt),
+                    _engine.ExecuteFailoverRestartAsync(settings, innerCt, generation),
                 logger: _engine._logger);
             return _engine._failover;
         }
