@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net.NetworkInformation;
 
 namespace VPNRouter.Core.Services;
 
@@ -101,29 +100,12 @@ public static class RuntimeStatusDetector
     private static bool AnyProcessAlive(string processName) => ProcessQuery.AnyAlive(processName);
 
     /// <summary>
-    /// True if something is listening on the configured TgProxy port.
-    /// Port-based detection is used because TgProxy runs as python.exe which
-    /// we can't easily distinguish from other Python processes.
+    /// Port occupancy is not process ownership: foreign listeners are unknown, not owned.
+    /// Retained for signature compatibility; returns false to prevent port-only truth claims.
     /// </summary>
     /// <param name="port">Configured TgProxy port from AppSettings.</param>
     public static bool IsTgProxyRunning(int port)
     {
-        if (port <= 0) return false;
-
-        try
-        {
-            var properties = IPGlobalProperties.GetIPGlobalProperties();
-            var listeners = properties.GetActiveTcpListeners();
-            foreach (var ep in listeners)
-            {
-                if (ep.Port == port) return true;
-            }
-        }
-        catch
-        {
-            // Access denied, feature unsupported, etc. — treat as "unknown, assume idle"
-        }
-
         return false;
     }
 }

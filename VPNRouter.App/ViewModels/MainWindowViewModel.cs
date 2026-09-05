@@ -3198,10 +3198,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         TgProxyVersionText = TgProxyUpdater.IsInstalled()
             ? (TgProxyUpdater.GetLocalVersion() ?? "?")
             : (IsRussian ? "Не установлен" : "Not installed");
-        if (TgProxyManager.IsAnyRunning(TgProxyPort))
+        // Port is occupancy, never identity. Do not adopt foreign or unverified
+        // listeners merely because the port is in use. Only treat TgProxy as enabled if
+        // this process owns an active, running instance.
+        if (_tgProxy?.IsRunning == true)
         {
             TgProxyEnabled = true;
-            TgProxyStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
+            TgProxyStatus = $"{Strings.StatusRunning} (PID {_tgProxy.Pid})";
             if (!string.IsNullOrEmpty(TgProxySecret))
                 TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
         }
@@ -5871,9 +5874,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         var port = TgProxyPort;
         var secret = TgProxySecret;
-        var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(port);
         TgProxyManager? manager;
         lock (_tgProxyStateGate) manager = _tgProxy;
+        var wasRunning = manager?.IsRunning == true;
 
         try
         {
@@ -5884,11 +5887,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (wasRunning)
             {
                 manager?.Stop();
-                TgProxyManager.KillAll(port);
-                await Task.Delay(300, _tgProxyLifetimeCts.Token);
-                if (TgProxyManager.IsAnyRunning(port))
-                    throw new InvalidOperationException(
-                        $"Could not stop tg-ws-proxy on port {port} before update.");
+                if (manager?.IsRunning == true)
+                {
+                    TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;
+                    TgProxyStatus = VPNRouter.Core.Localization.Strings.TgProxyStopFailed;
+                    return;
+                }
                 TgProxyEnabled = false;
             }
 
@@ -5992,27 +5996,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
 #if PLATFORM_WINDOWS
         // If running → stop
-        if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
+        TgProxyManager? currentManager;
+        lock (_tgProxyStateGate) currentManager = _tgProxy;
+
+        var shouldStop = TgProxyEnabled || currentManager?.IsRunning == true;
+        if (shouldStop)
         {
-            TgProxyManager? currentManager;
-            lock (_tgProxyStateGate) currentManager = _tgProxy;
             currentManager?.Stop();
-            // v2.20.0: pass the port so KillByPort hits the actual
-            // python.exe running the proxy (process-name match never
-            // worked — see TgProxyManager.KillAll).
-            TgProxyManager.KillAll(TgProxyPort);
-            // Re-check a beat later; if the port is still bound
-            // something couldn't be killed (permissions? zombie?).
-            // We surface the truth instead of lying that we stopped.
-            await Task.Delay(300);
-            TgProxyRuntimeStatus = TgProxyManager.IsAnyRunning(TgProxyPort)
-                ? ComponentRuntimeStatus.Failed
-                : ComponentRuntimeStatus.Idle;
-            TgProxyEnabled = false;
-            TgProxyStatus = TgProxyRuntimeStatus == ComponentRuntimeStatus.Failed
-                ? (IsRussian ? "Не удалось остановить (проверьте права)" : "Couldn't stop (check permissions)")
-                : (IsRussian ? "Остановлен" : "Stopped");
-            TgProxyStats = "";
+
+            if (currentManager?.IsRunning == true)
+            {
+                TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;
+                TgProxyStatus = VPNRouter.Core.Localization.Strings.TgProxyStopFailed;
+            }
+            else
+            {
+                TgProxyRuntimeStatus = ComponentRuntimeStatus.Idle;
+                TgProxyEnabled = false;
+                TgProxyStatus = Strings.Stopped;
+                TgProxyStats = "";
+            }
             // v2.36.0-r7 (task #63 / MCP test r6 finding): wrap SaveSettings
             // in try/catch. Pre-r7 a concurrent reader of config.yaml (AV scan,
             // Dropbox sync, another shell briefly reading the file) would
@@ -6099,13 +6102,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // (defensive — don't show false-positive banner).
             IsTelegramSchemeWarningVisible = !TgProxyManager.IsTelegramSchemeRegistered();
 
-            if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))
+            if (manager.IsRunning)
             {
                 TgProxyEnabled = true;
                 TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", port, secret);
-                TgProxyStatus = IsRussian
-                    ? $"Работает (PID {manager.Pid})"
-                    : $"Running (PID {manager.Pid})";
+                TgProxyStatus = $"{Strings.StatusRunning} (PID {manager.Pid})";
 
                 // Preserve the old 2-4s failure-detection window without
                 // delaying the ready UI. A user Stop or manager replacement
@@ -6159,7 +6160,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         await Task.Delay(TgProxySettleDelayMs);
         if (_disposed || !ReferenceEquals(_tgProxy, manager) || !TgProxyEnabled)
             return;
-        if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))
+        if (manager.IsRunning)
             return;
 
         TgProxyEnabled = false;
@@ -6230,7 +6231,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // secret → start" already. Re-using it keeps the start path
         // single-sourced and avoids drift if the toggle logic
         // evolves later (port retry, secret rotation policy, etc.).
-        if (!TgProxyEnabled && !TgProxyManager.IsAnyRunning(TgProxyPort))
+        if (!TgProxyEnabled)
         {
             await ToggleTgProxyAsync();
         }
@@ -6288,7 +6289,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
         if (IsTgProxyDownloading) return;
 
-        if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
+        if (TgProxyEnabled)
         {
             await ToggleTgProxyAsync();
         }
@@ -6379,7 +6380,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void RegenerateTgProxySecret()
     {
-        var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort);
+#if PLATFORM_WINDOWS
+        TgProxyManager? manager;
+        lock (_tgProxyStateGate) manager = _tgProxy;
+        var wasRunning = TgProxyEnabled || manager?.IsRunning == true;
+#else
+        var wasRunning = TgProxyEnabled;
+#endif
 
         TgProxySecret = Convert.ToHexStringLower(
             System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
@@ -7023,11 +7030,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Kill zapret on app exit
         KillAllZapret();
 
-        // Kill tg-ws-proxy on app exit
+        // Stop tg-ws-proxy on app exit
 #if PLATFORM_WINDOWS
-        // v2.31.6-r12: Debug-log instead of swallowing silently.
-        try { _tgProxy?.Stop(); TgProxyManager.KillAll(TgProxyPort); }
-        catch (Exception ex) { _logger.Debug(ex, "[VM] Quit: _tgProxy.Stop / KillAll failed"); }
+        try { _tgProxy?.Stop(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Quit: _tgProxy.Stop failed"); }
 #endif
 
         SaveSettings();

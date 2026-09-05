@@ -151,10 +151,11 @@ public static class CustomConfigInjector
         {
             if (isExcludeMode)
             {
-                // Exclude: the listed apps BYPASS the VPN (→ direct). Their DNS
-                // resolves locally too, matching their direct traffic path.
+                // Exclude: the listed apps BYPASS the VPN (→ direct). Under StrictDns,
+                // the all-DNS-via-VPN guarantee routes their DNS queries through the proxy;
+                // otherwise their DNS resolves locally, matching their direct traffic path.
                 InjectRouteRules(config, processes, "direct", null, isActionBased);
-                InjectDnsRules(config, processes, isActionBased, useRemoteDns: false, proxyTag);
+                InjectDnsRules(config, processes, isActionBased, useRemoteDns: settings.App.StrictDns, proxyTag);
             }
             else
             {
@@ -245,7 +246,7 @@ public static class CustomConfigInjector
             // traffic legitimately egresses direct on the real NIC, v4 or v6.)
             if (isFullTunnel || isExcludeMode)
                 dnsForFinal["strategy"] = "ipv4_only";
-            var remoteTag = FindRemoteDnsTag(dnsServersForFinal, config["outbounds"] as JsonArray)
+            var remoteTag = FindRemoteDnsTag(dnsServersForFinal, config["outbounds"] as JsonArray, config["endpoints"] as JsonArray)
                             ?? EnsureSynthesizedRemoteDns(dnsServersForFinal, proxyTag);
             if (!string.IsNullOrEmpty(remoteTag))
                 dnsForFinal["final"] = remoteTag;
@@ -836,7 +837,7 @@ public static class CustomConfigInjector
         //   Exclude mode → a LOCAL server so the bypassed apps resolve direct,
         //     matching their direct traffic path (set by InjectRouteRules above).
         var targetTag = useRemoteDns
-            ? FindRemoteDnsTag(servers, config["outbounds"] as JsonArray)
+            ? FindRemoteDnsTag(servers, config["outbounds"] as JsonArray, config["endpoints"] as JsonArray)
             : FindLocalDnsTag(servers);
 
         // v2.40.0-r2 (regression review #2): include-split tunnels the listed apps,
@@ -890,49 +891,63 @@ public static class CustomConfigInjector
         rules.Insert(0, dnsRule);
     }
 
-    /// <summary>Returns the <c>type</c> of the outbound whose <c>tag</c> equals
-    /// <paramref name="tag"/>, or null when no such outbound exists.</summary>
-    private static string? OutboundTypeByTag(JsonArray? outbounds, string? tag)
+    /// <summary>Returns the <c>type</c> of the object whose <c>tag</c> equals
+    /// <paramref name="tag"/> in the given <paramref name="items"/> array, or null.</summary>
+    private static string? FindTypeByTag(JsonArray? items, string? tag)
     {
-        if (outbounds == null || string.IsNullOrEmpty(tag)) return null;
-        foreach (var o in outbounds)
-            if (o is JsonObject oo && StjNodeHelpers.AsString(oo["tag"]) == tag)
-                return StjNodeHelpers.AsString(oo["type"]);
+        if (items == null || string.IsNullOrEmpty(tag)) return null;
+        foreach (var item in items)
+            if (item is JsonObject obj && StjNodeHelpers.AsString(obj["tag"]) == tag)
+                return StjNodeHelpers.AsString(obj["type"]);
         return null;
     }
 
     /// <summary>
     /// True when <paramref name="detour"/> resolves to a LOCAL (real-NIC) path —
-    /// i.e. NOT through a proxy outbound. Centralises the detour→outbound-type
-    /// resolution that the old string-only <c>!= "direct"</c> checks missed.
+    /// i.e. NOT through a proxy outbound or supported wireguard endpoint.
+    /// Centralises the detour→outbound/endpoint-type resolution that the old string-only
+    /// <c>!= "direct"</c> checks missed.
     /// A detour is local when it is empty, the literal "direct"/"dns-direct"
     /// shims, OR points to an outbound whose type is direct/block/dns (a
     /// CUSTOM-NAMED direct outbound, e.g. detour:"myedge" -&gt; {type:direct}),
-    /// OR points to a tag with no matching outbound at all (unknown → fail-closed
+    /// OR points to an endpoint whose type is not supported wireguard,
+    /// OR points to a tag with no matching outbound/endpoint at all (unknown → fail-closed
     /// as local so the proxy-DNS synthesis still fires). Only a detour pointing
-    /// at a real proxy outbound counts as remote. v2.40.0-r8: closes a DNS leak
-    /// where a custom-named direct detour was classified as through-proxy →
-    /// route.final=proxy but dns.final resolved on the ISP-visible NIC.
+    /// at a real proxy outbound or supported wireguard endpoint counts as remote.
     /// </summary>
-    private static bool IsLocalDetour(JsonArray? outbounds, string? detour)
+    internal static bool IsLocalDetour(JsonArray? outbounds, JsonArray? endpoints, string? detour)
     {
         if (string.IsNullOrEmpty(detour)) return true;
         if (detour == "direct" || detour == "dns-direct") return true;
-        var type = OutboundTypeByTag(outbounds, detour);
-        return type == null || type == "direct" || type == "block" || type == "dns";
+
+        var outboundType = FindTypeByTag(outbounds, detour);
+        if (outboundType != null)
+        {
+            return outboundType == "direct" || outboundType == "block" || outboundType == "dns";
+        }
+
+        var endpointType = FindTypeByTag(endpoints, detour);
+        if (endpointType != null)
+        {
+            // Only known WG endpoint is remote; arbitrary/unknown endpoint types fail closed as local.
+            return endpointType != "wireguard";
+        }
+
+        return true;
     }
 
     /// <summary>First DNS server routed through the proxy. A server is remote
-    /// only when its detour resolves to a REAL proxy outbound (resolved via
-    /// <see cref="IsLocalDetour"/> against <paramref name="outbounds"/>), not by
+    /// only when its detour resolves to a REAL proxy outbound or supported
+    /// wireguard endpoint (resolved via <see cref="IsLocalDetour"/> against
+    /// <paramref name="outbounds"/> and <paramref name="endpoints"/>), not by
     /// a string compare of the detour name. Returns null when every server is
     /// local — so the fail-closed dns.final synthesis fires.</summary>
-    private static string? FindRemoteDnsTag(JsonArray servers, JsonArray? outbounds)
+    private static string? FindRemoteDnsTag(JsonArray servers, JsonArray? outbounds, JsonArray? endpoints)
     {
         foreach (var server in servers)
         {
             if (server is not JsonObject sObj) continue;
-            if (!IsLocalDetour(outbounds, StjNodeHelpers.AsString(sObj["detour"])))
+            if (!IsLocalDetour(outbounds, endpoints, StjNodeHelpers.AsString(sObj["detour"])))
                 return StjNodeHelpers.AsString(sObj["tag"]);
         }
         return null;
@@ -1133,7 +1148,7 @@ public static class CustomConfigInjector
             dns["servers"] = servers;
         }
 
-        return FindRemoteDnsTag(servers, config["outbounds"] as JsonArray)
+        return FindRemoteDnsTag(servers, config["outbounds"] as JsonArray, config["endpoints"] as JsonArray)
                ?? EnsureSynthesizedRemoteDns(servers, proxyTag);
     }
 
@@ -1498,6 +1513,7 @@ public static class CustomConfigInjector
         if (dnsServers != null)
         {
             var sbOutbounds = config["outbounds"] as JsonArray;
+            var sbEndpoints = config["endpoints"] as JsonArray;
             bool needsDnsDirect = false;
             foreach (var server in dnsServers)
             {
@@ -1511,8 +1527,8 @@ public static class CustomConfigInjector
                 // string-compare misclassified such a server as through-proxy, so the
                 // fail-closed dns.final synthesis never fired and DNS resolved on the
                 // ISP-visible NIC while route.final=proxy tunnelled everything = leak.
-                // Skip servers already on dns-direct and real proxy-detour servers.
-                if (detour != "dns-direct" && IsLocalDetour(sbOutbounds, detour))
+                // Skip servers already on dns-direct and real proxy-detour servers / wireguard endpoints.
+                if (detour != "dns-direct" && IsLocalDetour(sbOutbounds, sbEndpoints, detour))
                 {
                     obj["detour"] = "dns-direct";
                     needsDnsDirect = true;
@@ -1558,8 +1574,8 @@ public static class CustomConfigInjector
 
             // Find local DNS server tag (detour:"dns-direct" or "direct" = local, no proxy)
             string? localTag = null;
-            // Find proxy DNS server tag (detour pointing to a non-direct outbound)
-            string? proxyTag = null;
+            // Find proxy DNS server tag (detour pointing to a non-direct outbound or wireguard endpoint)
+            string? proxyTag = dnsServers != null ? FindRemoteDnsTag(dnsServers, sbOutbounds, sbEndpoints) : null;
             if (dnsServers != null)
             {
                 foreach (var s in dnsServers)
@@ -1569,10 +1585,6 @@ public static class CustomConfigInjector
                     if ((d == "dns-direct" || d == "direct") && localTag == null)
                     {
                         localTag = StjNodeHelpers.AsString(sObj["tag"]);
-                    }
-                    else if (!string.IsNullOrEmpty(d) && d != "dns-direct" && d != "direct" && proxyTag == null)
-                    {
-                        proxyTag = StjNodeHelpers.AsString(sObj["tag"]);
                     }
                 }
             }

@@ -280,7 +280,7 @@ public sealed class TgProxyOneButtonMvpTests
             "if (_disposed || !ReferenceEquals(_tgProxy, manager) || !TgProxyEnabled)",
             recheck);
         Assert.Contains(
-            "if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))",
+            "if (manager.IsRunning)",
             recheck);
         Assert.Contains("TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;", recheck);
         Assert.Contains("try { SaveSettings(); }", recheck);

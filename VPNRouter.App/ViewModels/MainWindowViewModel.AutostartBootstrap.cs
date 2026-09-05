@@ -134,15 +134,13 @@ public partial class MainWindowViewModel
                 return;
             }
 
+            // Port is occupancy, never identity. If the port is already in use,
+            // fail closed and skip spawn. Never claim ownership or set TgProxyEnabled = true.
             if (TgProxyManager.IsAnyRunning(TgProxyPort))
             {
                 _logger.Information(
-                    "[App-Autostart] TgProxy: already running on port {Port}, " +
-                    "skipping spawn (idempotent)", TgProxyPort);
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (!_disposed) TgProxyEnabled = true;
-                });
+                    "[App-Autostart] TgProxy: port {Port} already in use by another process, " +
+                    "skipping spawn (fail-closed, listener unknown not owned)", TgProxyPort);
                 return;
             }
 
@@ -202,14 +200,12 @@ public partial class MainWindowViewModel
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (_disposed || !ReferenceEquals(_tgProxy, manager)) return;
-                if (manager.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
+                if (manager.IsRunning)
                 {
                     TgProxyEnabled = true;
                     TgProxyLink = TgProxyManager.BuildProxyLink(
                         "127.0.0.1", TgProxyPort, TgProxySecret);
-                    TgProxyStatus = IsRussian
-                        ? $"Работает (PID {manager.Pid})"
-                        : $"Running (PID {manager.Pid})";
+                    TgProxyStatus = $"{Strings.StatusRunning} (PID {manager.Pid})";
                     _logger.Information(
                         "[App-Autostart] TgProxy: started successfully (PID {Pid})",
                         manager.Pid);

@@ -27,7 +27,7 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ### Batch 2 — Unix Firewall Reliability & Freshness (P1)
 - **NIGHT-04 (P1)**: `LinuxFirewallManager.cs:304–317`, `MacFirewallManager.cs:441–466`. Retain orphan recovery marker when `nft`/`pf` rule deletion fails; delete only upon confirmed clean deletion, preserving recovery trigger for subsequent runs.
-- **NIGHT-05 (P1)**: `StartupPipeline.cs:407–477`, `LinuxFirewallManager.cs:219–273`, `MacFirewallManager.cs:346–402`. Do not invent guaranteed resolved IP generator data or a new snapshot struct. Use minimum internal committed endpoint contract using actual available schema (outbound servers and WireGuard endpoint addresses, IPv4 and IPv6/AAAA with maintained DNS deadlines) instead of pre-reading stale or missing `current.json`. Refresh bypass on successful Apply.
+- **NIGHT-05 (P1)**: `StartupPipeline.cs:407–477`, `LinuxFirewallManager.cs:219–273`, `MacFirewallManager.cs:346–402`. Do not invent guaranteed resolved IP generator data or a new snapshot struct. Use minimum internal committed endpoint contract using actual available schema (outbound servers and WireGuard endpoint peer addresses (not local `endpoints.address`), IPv4 and IPv6/AAAA with maintained DNS deadlines) instead of pre-reading stale or missing `current.json`. Refresh bypass on successful Apply.
 
 ### Batch 3 — Lifecycle, Readiness & Commit Truthfulness (P1)
 - **NIGHT-06 (P1)**: `VpnEngine.cs:1651–1673`, `AutoFailoverEngine.cs:239–242`. Update failover state ONLY on public new intent and SUCCESSFUL Apply. Preserve lazy wiring and internal retry/tried caps; do not unconditionally instantiate on every Start/Apply; retain same snapshot pool and restart across routine calls.
@@ -86,3 +86,23 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 - [-] Gate 6: PENDING (characterization tests planned for Batches 1–4)
 
 **Follow-ups**: Inspect CI workflows for exact commands; coordinate with Lead to execute Batch 1; maintain `plans/OPEN-DEFECTS.md` until green CI evidence gathered; track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
+
+### Batch 1 Interim Outcome
+
+- **Status**: Gemini implementation awaiting CI; final review pending.
+- **Commit & CI**: Brief commit `c7bd9c48` has all 4 checks green on PR #240. Defect ledger (`plans/OPEN-DEFECTS.md`) remains open.
+- **Batch 1 Scope**:
+  - **NIGHT-01**: Process ownership verified; removed port-only kill; failed exact stop retains own handle; foreign listeners no longer cause false "Running" state.
+  - **NIGHT-02**: Endpoint-aware final DNS; unified destination classification across outbounds and endpoints so WireGuard endpoint destinations are not treated as local and synthesized `vpnrouter-vpn-dns` detours are not rewritten to `dns-direct`.
+  - **NIGHT-03**: Effective strict precedence; `StrictDns == true` overrides `DnsMode == "smart"` on generated and custom exclude rules, ensuring all matched DNS queries route through `vpn-dns`.
+- **Review & Corrections**: Lead caught unsafe regression tests (never executed), shared-path fixture, platform compile issue, and failure-state issues; workers corrected, final review pending.
+- **CI Pipeline Scope & Gate 1 Limitation**:
+  - Existing CI (`test.yml`) builds `VPNRouter.Tests` project (Core and App dependencies).
+  - Ubuntu runner excludes `HeadlessGuiTests`, `PageScreenshotTests`, and `VisualDiffTests`.
+  - Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
+  - It DOES NOT prove full solution, macOS, or live behavior; Gate 1 remains a full solution limitation.
+- **Test Selection & Execution Status**:
+  - New `TgProxyOwnershipCharacterizationTests` selected on Windows and Ubuntu.
+  - New `NightDnsPrivacyRegressionTests` selected on Ubuntu.
+  - No dotnet tests executed yet; zero false test counts reported; defect ledger remains open.
+  - Test coverage needs actual CI next.
