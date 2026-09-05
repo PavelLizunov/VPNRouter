@@ -107,15 +107,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void OpenLeakTest()
     {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "https://ipleak.net/",
-                UseShellExecute = true
-            });
-        }
-        catch { /* best-effort */ }
+        VPNRouter.App.Services.UrlLauncher.TryOpenUrl("https://ipleak.net/");
     }
 
     // ── Troubleshooting: health check (v2.24.1) ──

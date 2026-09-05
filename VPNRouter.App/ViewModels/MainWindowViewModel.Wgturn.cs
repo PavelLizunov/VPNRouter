@@ -454,14 +454,7 @@ public partial class MainWindowViewModel
         // walkthrough. The exact URL is centralised so a later move
         // doesn't have to touch the VM.
         const string detailsUrl = "https://github.com/PavelLizunov/VPNRouter#emergency-channel";
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = detailsUrl, UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[Wgturn] OpenWgturnDetails failed");
-        }
+        VPNRouter.App.Services.UrlLauncher.TryOpenUrl(detailsUrl);
     }
 
     /// <summary>
