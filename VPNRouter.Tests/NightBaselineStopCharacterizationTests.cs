@@ -82,7 +82,7 @@ public sealed class NightBaselineStopCharacterizationTests
         try
         {
             var fakeRunner = new FakeProcessRunner();
-            using var fakeHttp = new FakeHttpClient();
+            var fakeHttp = new FakeHttpClient();
             manager = new SingBoxManager(DefaultSettings(), logger: null, http: fakeHttp, runner: fakeRunner);
 
             var lockInstance = TunOwnershipLock.Instance(null);
