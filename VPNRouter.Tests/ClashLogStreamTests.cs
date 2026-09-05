@@ -1,7 +1,12 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -256,5 +261,184 @@ public sealed class ClashLogStreamTests
 
         var constructorArgs = commentsStripped.Substring(constructorIdx, closeParenIdx - constructorIdx + 1);
         Assert.Contains("secret: settings.SingBox.ClashApiSecret", constructorArgs);
+    }
+
+    // ---- NIGHT-12: Synthetic Serilog sink proof for LogStreamFailure ----
+
+    [Theory]
+    [InlineData("simpleSecret123")]
+    [InlineData("p@ss&word=123+456?#/:;,$%")]
+    [InlineData("секрет \U0001F511")]
+    public void LogStreamFailure_NestedExceptionContainingTokenOrUri_NeverLeaksIntoRenderPropertiesOrException(string secret)
+    {
+        var (logger, sink) = BuildCapturingLogger();
+        var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", secret);
+        var rawUri = uri.ToString();
+        var encodedSecret = Uri.EscapeDataString(secret);
+
+        // Nested exception chain simulating transport failure where raw URI and token are embedded
+        var innerException = new InvalidOperationException($"Transport connection failed for {rawUri} (token={secret})");
+        var outerException = new System.Net.WebSockets.WebSocketException(
+            $"WebSocket handshake failed on {rawUri} with secret {secret}",
+            innerException);
+
+        ClashLogStream.LogStreamFailure(logger, outerException, TimeSpan.FromSeconds(5));
+
+        var logEvent = Assert.Single(sink.Events);
+        Assert.Equal(LogEventLevel.Debug, logEvent.Level);
+
+        // Exception object MUST NOT be passed to logger (no stack trace or exception message leakage)
+        Assert.Null(logEvent.Exception);
+
+        // Structured properties verify safe type name only and retry seconds
+        Assert.True(logEvent.Properties.TryGetValue("ErrorType", out var errorTypeVal));
+        var errorType = Assert.IsType<ScalarValue>(errorTypeVal).Value?.ToString();
+        Assert.Equal(nameof(System.Net.WebSockets.WebSocketException), errorType);
+
+        Assert.True(logEvent.Properties.TryGetValue("Sec", out var secVal));
+        var sec = Convert.ToDouble(Assert.IsType<ScalarValue>(secVal).Value);
+        Assert.Equal(5.0, sec);
+
+        // Render proof: rendered message includes safe type name and retry seconds, never secrets or raw uri
+        var rendered = logEvent.RenderMessage();
+        Assert.Contains(nameof(System.Net.WebSockets.WebSocketException), rendered);
+        Assert.Contains("5", rendered);
+        Assert.DoesNotContain(secret, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(encodedSecret, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(rawUri, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("token=", rendered, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(outerException.Message, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(innerException.Message, rendered, StringComparison.Ordinal);
+
+        // Properties proof: no property value leaks token or raw uri
+        foreach (var kvp in logEvent.Properties)
+        {
+            var propText = kvp.Value.ToString();
+            Assert.DoesNotContain(secret, propText, StringComparison.Ordinal);
+            Assert.DoesNotContain(encodedSecret, propText, StringComparison.Ordinal);
+            Assert.DoesNotContain(rawUri, propText, StringComparison.Ordinal);
+        }
+    }
+
+    // ---- NIGHT-12: Source guard for RunAsync catch block and LogStreamFailure ----
+
+    [Fact]
+    public void RunAsync_CatchBlock_PinsSafeTypeNameAndNoExceptionLog_CommentsStripped()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "VPNRouter.Core")))
+            dir = dir.Parent;
+        if (dir == null)
+        {
+            dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "VPNRouter.Core")))
+                dir = dir.Parent;
+        }
+        Assert.NotNull(dir);
+
+        var streamPath = Path.Combine(
+            dir!.FullName, "VPNRouter.Core", "Services", "ClashLogStream.cs");
+        Assert.True(File.Exists(streamPath), $"ClashLogStream.cs not found at {streamPath}");
+
+        var fullSrc = File.ReadAllText(streamPath);
+
+        // 1. Bound to RunAsync method
+        const string runAsyncSig = "async Task RunAsync(CancellationToken ct)";
+        var runIdx = fullSrc.IndexOf(runAsyncSig, StringComparison.Ordinal);
+        Assert.True(runIdx >= 0, "RunAsync method not found in ClashLogStream.cs");
+
+        var openBraceIdx = fullSrc.IndexOf('{', runIdx);
+        var depth = 0;
+        var closeBraceIdx = -1;
+        for (int i = openBraceIdx; i < fullSrc.Length; i++)
+        {
+            if (fullSrc[i] == '{') depth++;
+            else if (fullSrc[i] == '}')
+            {
+                depth--;
+                if (depth == 0) { closeBraceIdx = i; break; }
+            }
+        }
+        Assert.True(closeBraceIdx > openBraceIdx, "Closing brace for RunAsync not found");
+        var runSrc = fullSrc.Substring(runIdx, closeBraceIdx - runIdx + 1);
+
+        var runStripped = Regex.Replace(
+            runSrc,
+            @"(@""(?:""""|[^""])*""|""(?:\\.|[^""\\])*"")|(/\*[\s\S]*?\*/|//.*$)",
+            m => m.Groups[1].Success ? m.Groups[1].Value : string.Empty,
+            RegexOptions.Multiline);
+
+        // Disallow exception-bearing logger overloads in RunAsync
+        Assert.DoesNotContain("Debug(ex,", runStripped);
+        Assert.DoesNotContain("_logger.Debug(ex,", runStripped);
+        Assert.DoesNotContain("_logger.Error(ex,", runStripped);
+        Assert.DoesNotContain("_logger.Warning(ex,", runStripped);
+
+        // Catch block must delegate to LogStreamFailure
+        Assert.Contains("LogStreamFailure(_logger, ex, backoff)", runStripped);
+
+        // 2. Bound to LogStreamFailure method
+        const string helperSig = "void LogStreamFailure(ILogger logger, Exception ex, TimeSpan backoff)";
+        var helperIdx = fullSrc.IndexOf(helperSig, StringComparison.Ordinal);
+        Assert.True(helperIdx >= 0, "LogStreamFailure method not found in ClashLogStream.cs");
+
+        var hOpenBraceIdx = fullSrc.IndexOf('{', helperIdx);
+        depth = 0;
+        var hCloseBraceIdx = -1;
+        for (int i = hOpenBraceIdx; i < fullSrc.Length; i++)
+        {
+            if (fullSrc[i] == '{') depth++;
+            else if (fullSrc[i] == '}')
+            {
+                depth--;
+                if (depth == 0) { hCloseBraceIdx = i; break; }
+            }
+        }
+        Assert.True(hCloseBraceIdx > hOpenBraceIdx, "Closing brace for LogStreamFailure not found");
+        var helperSrc = fullSrc.Substring(helperIdx, hCloseBraceIdx - helperIdx + 1);
+
+        var helperStripped = Regex.Replace(
+            helperSrc,
+            @"(@""(?:""""|[^""])*""|""(?:\\.|[^""\\])*"")|(/\*[\s\S]*?\*/|//.*$)",
+            m => m.Groups[1].Success ? m.Groups[1].Value : string.Empty,
+            RegexOptions.Multiline);
+
+        // Must pin safe type name only and structured ErrorType / Sec
+        Assert.Contains("ex.GetType().Name", helperStripped);
+        Assert.Contains("{ErrorType}", helperStripped);
+        Assert.Contains("{Sec}", helperStripped);
+        Assert.Contains("backoff.TotalSeconds", helperStripped);
+
+        // Must NOT log exception object, message, or ToString
+        Assert.DoesNotContain("Debug(ex,", helperStripped);
+        Assert.DoesNotContain("ex.Message", helperStripped);
+        Assert.DoesNotContain("ex.ToString", helperStripped);
+        Assert.DoesNotContain("_logsUri", helperStripped);
+    }
+
+    private static (ILogger logger, CapturingSink sink) BuildCapturingLogger()
+    {
+        var sink = new CapturingSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.Sink(sink)
+            .CreateLogger();
+        return (logger, sink);
+    }
+
+    private sealed class CapturingSink : ILogEventSink
+    {
+        private readonly List<LogEvent> _events = new();
+        private readonly object _gate = new();
+
+        public void Emit(LogEvent logEvent)
+        {
+            lock (_gate) _events.Add(logEvent);
+        }
+
+        public IReadOnlyList<LogEvent> Events
+        {
+            get { lock (_gate) return _events.ToList(); }
+        }
     }
 }
