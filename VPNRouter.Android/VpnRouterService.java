@@ -913,17 +913,11 @@ public final class VpnRouterService extends VpnService {
         options.setBasePath(filesDir.getAbsolutePath());
         options.setWorkingPath(workingDir.getAbsolutePath());
         options.setTempPath(cacheDir.getAbsolutePath());
+        options.setCrashReportSource("vpnrouter");
 
-        // Bug-AND-011 / Critical-1 follow-up (2026-05-16 code review):
-        // route Go-side stderr to the app's private sandbox FilesDir
-        // instead of getExternalFilesDir(). Pre-fix the sing-box
-        // stderr (which captures Go-runtime panics and Reality
-        // handshake traces) was world-readable via adb / file manager
-        // / USB. Now stays inside /data/data/com.ninitux.vpnrouter/files/
-        // (only this app's UID can read it). For diagnostics on a
-        // debug build, use `adb shell run-as com.ninitux.vpnrouter cat`.
-        File stderrFile = new File(filesDir, "singbox.stderr.log");
-        options.setStderrPath(stderrFile.getAbsolutePath());
+        // Libbox.setup redirects Go-side stderr to workingPath/CrashReport-vpnrouter.log
+        // inside the private sandbox (/data/data/<pkg>/files/data/).
+        File stderrFile = new File(workingDir, "CrashReport-vpnrouter.log");
         Log.i(LOG_TAG, "Bug-AND-011: stderr → " + stderrFile.getAbsolutePath()
                 + " (private sandbox)");
 

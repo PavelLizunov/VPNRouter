@@ -232,6 +232,7 @@ public final class AndroidDeepVerifyBox {
             options.setBasePath(filesDir.getAbsolutePath());
             options.setWorkingPath(workingDir.getAbsolutePath());
             options.setTempPath(cacheDir.getAbsolutePath());
+            options.setCrashReportSource("vpnrouter");
             Libbox.setup(options);
 
             libboxSetupDone.set(true);
