@@ -52,3 +52,22 @@
 - **`build-linux.yml:85-104`**: `libcronet.so` download block preserved upstream SagerNet sing-box 1.13.14 archive check (archive SHA256 `f4870346...` from commit `31e0cf68`, 2026-07-29); reorganized under `sing-box-vpnctl` bundling in commit `493e68fb` (2026-09-04).
 - **`ConfigGenerator.Dns.cs:76-85`**: Anti-censorship `HTTPS`/`SVCB` rejection rule introduced in commit `493e68fb` (2026-09-04).
 - **Android Restoration**: Commit `9fac7b58` (2026-09-05) restored 4 files byte-exact to `b7ce0e4f` (`origin/main`), retaining stable API 23 and 1.13.10 core while deferring Android vpnctl migration (VPNCTL-04).
+
+---
+
+## 9. Scoped Addendum: VPNCTL-05 Cronet Packaging Verification (Commit `99e113f0`)
+
+- **Target Head**: `99e113f0338c9ff1c920224b77ddd8d0d5fd41c9` (PR #233; all 5 PR checks green).
+- **Scope Note**: This section is an explicit, scoped addendum covering the remediation and verification of packaging defect VPNCTL-05; it does not represent an exhaustive security re-audit of the entire repository codebase.
+- **Remediation Details (`f76b5ff4` + fixture `99e113f0`)**:
+  - `build.ps1:381..435`: Implements isolated, verified retrieval of the upstream SagerNet sing-box 1.13.14 Windows amd64 archive pinned to SHA256 `f580782c6dd10f7691c66cea1d7c421813c5fbf7e305d1ee7ce0c3a40d196341`.
+  - Verifies extracted `libcronet.dll` against strict SHA256 pin `c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2`.
+  - Copies *only* `libcronet.dll` and `LICENSE.libcronet` into the distribution directory; retains the official release executable `sing-box.exe` from `PavelLizunov/sing-box-vpnctl` v1.14.0-vpnctl.3.
+- **Native CI Verification Evidence (Run 33994337036 / `/tmp/vpnctl-cronet-valid-native-success.log`)**:
+  - Exact DLL hash `c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2` verified inside both `VPNRouter-v2.49.3-win.zip` and `VPNRouter-update-v2.49.3-win.zip` (lines 742..749).
+  - Positive native probe: `sing-box check -c` with `libcronet.dll` present in the binary directory exits with return code 0 (confirming dynamic library load and outbound structure initialization).
+  - Negative control probe: execution without `libcronet.dll` exits with code 1 and outputs fatal error `cronet: library not found` (proving the check actively exercises the native DLL dependency).
+  - Update deployment verification: `libcronet.dll` verified present in the staged update directory (line 981, xcopy exit 0).
+- **Security & Operational Boundaries**:
+  - Verification proves DLL integrity, filesystem bundling, dynamic linker loading, and outbound configuration parsing.
+  - **Limitation**: This test does *not* prove or verify real TLS/QUIC network transport or end-to-end NaiveProxy data-plane traffic.

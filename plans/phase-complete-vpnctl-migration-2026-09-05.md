@@ -4,7 +4,7 @@
 **Author / Lead**: Gemini (sole code/test/doc author), Lead review Git
 **Branch / Base**: `dsh/upgrade-singbox-vpnctl-1.14` (PR #233) / `origin/main` at `b7ce0e4f`
 **Integration Note**: PR #240 (`ae352fdb`) contains approved NIGHT fixes not merged; compatibility integrated source verification required
-**Current Head**: verified snapshot `9fac7b58` (not pretend docs SHA known; commit `9fac7b58ad0506fb99f40fcdaacd3235d9618993` restores Android 4 files byte-exact to base `b7ce0e4`; Android not broken anymore, restored legacy green: run 33991832141 SUCCESS, artifact 9976917773, 86335107 bytes, tooling-libbox-singbox-1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6`, minSdk 23 preserved, no install; VPNCTL-04 remains DEFERRED, no resolved claim; full vpnctl desktop Windows/Linux/macOS remains goal; backup branch `dsh/deferred-android-vpnctl-api-2026-09-05` `f4d5265cd55e91fffefb1789cd2d445b4cd1f931` pushed)
+**Current Head**: actual product `99e113f0338c9ff1c920224b77ddd8d0d5fd41c9` (all 5 PR checks green; PR #233; commit `99e113f0` enables required TLS in offline Naive dependency witness, following `f76b5ff4` fix bundling pinned `libcronet.dll` into Windows install and update packages; Android legacy build green: run 33991832141 SUCCESS, artifact 9976917773, 86335107 bytes, tooling-libbox-singbox-1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6`, minSdk 23 preserved; VPNCTL-04 remains DEFERRED; full vpnctl desktop Windows/Linux/macOS remains goal; backup branch `dsh/deferred-android-vpnctl-api-2026-09-05` `f4d5265cd55e91fffefb1789cd2d445b4cd1f931` pushed)
 **Risk**: MEDIUM (packaging pipeline modernization; eliminating legacy third-party fork paths)
 **Rollback**: Safe task commit revert review (human/lead review of git revert, no automatic rollback)
 
@@ -120,14 +120,41 @@
     - Tests workflow: Run `33992003092` SUCCESS.
     - Linux build workflow: Run `33992005073` SUCCESS.
     - Mac build workflow: Run `33992007224` SUCCESS.
-    (All three workflows SUCCESS on exact same combined SHA).
-  - Precaution: Do not claim latest combined artifact identity until checked; no full solution / live VPN claim.
+    - Windows test-update workflow: Run `33993055286` SUCCESS (artifact `9977237378`, 661,829 bytes).
+  - Combined artifact identity confirmation: Earlier Linux and macOS sidecars and binary hashes matching official release binaries recorded; combined identities now confirmed on `c7e388a9`. Note that latest combined branch will need a refresh after the forthcoming FakeIP fix (VPNCTL-06) and Cronet fix.
 
 - **Packaging Characterization Witness Baseline (RED on `0f85cbfe` vs GREEN on `9fac7b58`)**:
   - Real RED witness baseline `0f85cbfeaf0d2030285c0ab44df1d64d13aefaef` based on `be0cf6f7` untouched product.
   - Run `33992362512` observed 3 Windows FAIL, 0 skip: tampered zip cache expected AUTHENTIC actual TAMPERED; corrupt cached zip exit 0; implicit LX output contains automatic selection.
   - Ubuntu: 4 source guard FAIL expected.
   - GREEN actual: Same fixture `9fac7b58` PR checks all 5 green actual; Windows 46 pass 0 skip on earlier `f88b7889` fixture before portable marker, also green on later `9fac7b58`.
+
+## Checkpoint exact `99e113f0` Status & Cronet Native CI Evidence (2026-09-05)
+
+- **VPNCTL-05 Packaging Fix (`f76b5ff4` + fixture `99e113f0`)**:
+  - Upstream `PavelLizunov/sing-box-vpnctl` Windows release packages only `sing-box.exe`, omitting `libcronet.dll` required by NaiveProxy.
+  - `build.ps1:381..435` downloads separately pinned upstream SagerNet sing-box 1.13.14 Windows amd64 archive (`f580782c6dd10f7691c66cea1d7c421813c5fbf7e305d1ee7ce0c3a40d196341`).
+  - Extracts and strictly validates `libcronet.dll` hash (`c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2`).
+  - Copies only `libcronet.dll` and `LICENSE.libcronet` to distribution roots, retaining `sing-box.exe` from official `sing-box-vpnctl`.
+- **Native Windows CI Evidence (Run 33994337036 / `/tmp/vpnctl-cronet-valid-native-success.log`)**:
+  - `libcronet.dll` verified with exact SHA256 pin `c7434cfa...` in both `VPNRouter-v2.49.3-win.zip` and `VPNRouter-update-v2.49.3-win.zip` (lines 742..749).
+  - Positive naive probe: `sing-box check -c` exits with code 0 (libcronet loaded and Naive outbound initialized).
+  - Negative control probe: execution without DLL exits with code 1 and fatal error `cronet: library not found`.
+  - Staged update check: `libcronet.dll` present in update directory (line 981, xcopy exit 0).
+  - Scope / boundary: Supports construction and outbound loading only; does not prove live TLS/QUIC network traffic.
+- **Defect Tracking**:
+  - VPNCTL-05 marked `[x] RESOLVED in PR #233 / 99e113f0 / native check evidence, no release claim (UNRELEASED)`.
+
+## Next Step: VPNCTL-06 Source Compatibility Defect (FakeIP)
+
+- **Status**: OPEN next.
+- **Correction in Defect Description**: The old defect line incorrectly stated `disabled: false`; corrected to `enabled: false` (legacy 1.13 accepted `enabled: false`, whereas 1.14 rejects any `dns.fakeip` object presence).
+- **Minimal Implementation Plan (per independent review)**:
+  1. **Ordering Invariant**: Recognize legacy address fakeip *before* generic UDP migration in `CustomConfigInjector`.
+  2. **Rule & Range Preservation**: Migrate enabled fakeip ranges to typed `fakeip` server, strictly preserving tags, rules, and cache; remove disabled fakeip objects only; reject conflicting/mixed configurations actionably (fail closed, never silently discard).
+  3. **Normalization**: Typed fakeip must skip detour normalization.
+  4. **Android Compatibility**: Legacy Android 1.13.10 already supports typed fakeip (typed fakeip schema supported since sing-box 1.12+), so shared migration logic is safe; verify via focused tests with an Android caller.
+  5. **Combined Branch Refresh**: After implementing and verifying the FakeIP fix, refresh the combined verification branch (`dsh/verify-vpnctl-night-combined-2026-09-05`) with both the Cronet and FakeIP fixes.
 
 ## Verification Gates (BLOCKED / PENDING - No Closure Until Verified)
 
