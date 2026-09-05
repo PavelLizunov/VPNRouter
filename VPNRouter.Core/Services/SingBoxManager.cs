@@ -383,7 +383,7 @@ public partial class SingBoxManager : IDisposable
         LastCrashWasTunOrphan = false;
         LastCrashWasLinuxTunPermissionFailure = false;
         Stop();
-        // A failed capability-mode stop keeps the exact IProcessHandle as its
+        // A failed exact stop keeps the exact IProcessHandle as its
         // only retry authority. Do not dispose that handle while its lease is
         // deliberately retained.
         if (!_ownsTunLock)
@@ -396,6 +396,8 @@ public partial class SingBoxManager : IDisposable
             _logger.Warning(
                 "[SingBoxManager] Dispose preserved TUN ownership because exact stop was not confirmed (state={State})",
                 State);
+            AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit;
+            Volatile.Write(ref _disposed, 0);
         }
     }
 }
