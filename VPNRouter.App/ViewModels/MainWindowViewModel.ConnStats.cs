@@ -25,7 +25,7 @@ namespace VPNRouter.App.ViewModels;
 /// <para>Cumulative totals → rate is the per-poll delta / elapsed; change-only
 /// property writes keep the UI quiet when idle. The poll is fire-and-forget with
 /// an in-flight guard so a slow clash_api never stacks ticks; failures are
-/// non-fatal (the line just stops updating).</para>
+/// non-fatal (cleared failure).</para>
 /// </summary>
 public partial class MainWindowViewModel
 {
@@ -33,6 +33,7 @@ public partial class MainWindowViewModel
     private long _statsPrevDown, _statsPrevUp;
     private DateTimeOffset? _statsPrevAt;
     private int _statsInFlight;
+    private long _statsGeneration;
 
     // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy" group, the
     // REAL member it routes through (resolved from clash_api /proxies/proxy ->
@@ -54,6 +55,14 @@ public partial class MainWindowViewModel
     /// </summary>
     partial void OnIsConnectedChanged(bool value)
     {
+        _statsGeneration++;
+        _statsPrevAt = null;
+        _statsPrevDown = 0;
+        _statsPrevUp = 0;
+        _autoSelectedServer = null;
+        _autoSelectPollTick = 0;
+        ConnectionStatsText = string.Empty;
+
         if (value)
         {
             try
@@ -63,7 +72,6 @@ public partial class MainWindowViewModel
                 _statsApi?.Dispose();
                 _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger,
                     secret: _settings?.SingBox?.ClashApiSecret);
-                _statsPrevAt = null; _statsPrevDown = 0; _statsPrevUp = 0;
             }
             catch (Exception ex)
             {
@@ -75,10 +83,6 @@ public partial class MainWindowViewModel
         {
             try { _statsApi?.Dispose(); } catch { /* best-effort */ }
             _statsApi = null;
-            _statsPrevAt = null;
-            _autoSelectedServer = null;
-            _autoSelectPollTick = 0;   // R5: next session's first tick polls immediately
-            ConnectionStatsText = string.Empty;
         }
     }
 
@@ -101,61 +105,95 @@ public partial class MainWindowViewModel
 
     private async Task PollConnStatsAsync()
     {
+        var api = _statsApi;
+        var generation = _statsGeneration;
+
         try
         {
-            var api = _statsApi;
-            if (api is null) return;
+            if (api is null || !IsConnected) return;
 
             // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy"
             // group, resolve which member it's actually routing through so the
             // status line + list highlight show the REAL server (not the stale
             // first-in-list). Independent of + before the traffic poll so it
             // runs even on an idle tunnel (which skips the traffic tick below).
-            await MaybeRefreshAutoSelectedAsync(api).ConfigureAwait(false);
+            await MaybeRefreshAutoSelectedAsync(api, generation).ConfigureAwait(false);
 
             var snap = await api.GetConnectionsAsync().ConfigureAwait(false);
             var now = snap.CapturedAt;
 
-            // GetConnectionsAsync returns an all-zero snapshot both on failure
-            // (timeout / non-2xx / parse error) and for a brand-new idle tunnel.
-            // Neither carries a real rate signal — skip the tick WITHOUT advancing
-            // the baseline. Otherwise a single dropped poll zeroes _statsPrev* and
-            // the next good poll renders a phantom multi-MB/s spike (delta computed
-            // against a zeroed baseline). Most visible during reconnect/hot-reload.
-            if (snap.ActiveCount == 0 && snap.TotalDownloadBytes == 0 && snap.TotalUploadBytes == 0)
-                return;
-
-            // Counter regression => sing-box restarted / counters reset (e.g. an
-            // in-place tunnel reconfigure while IsConnected stays true). Re-baseline
-            // silently so we don't emit a bogus spike (old large baseline vs new
-            // small counter); the next poll computes a correct delta.
-            if (snap.TotalDownloadBytes < _statsPrevDown || snap.TotalUploadBytes < _statsPrevUp)
+            Dispatcher.UIThread.Post(() =>
             {
+                if (generation != _statsGeneration || !ReferenceEquals(api, _statsApi) || !IsConnected)
+                    return;
+
+                if (!snap.IsValid)
+                {
+                    ClearStatsState();
+                    return;
+                }
+
+                // Counter regression => sing-box restarted / counters reset (e.g. an
+                // in-place tunnel reconfigure while IsConnected stays true). Re-baseline
+                // and clear text instead of keeping stale rate text.
+                if (_statsPrevAt is not null && (snap.TotalDownloadBytes < _statsPrevDown || snap.TotalUploadBytes < _statsPrevUp))
+                {
+                    _statsPrevDown = snap.TotalDownloadBytes;
+                    _statsPrevUp = snap.TotalUploadBytes;
+                    _statsPrevAt = now;
+                    ConnectionStatsText = string.Empty;
+                    return;
+                }
+
+                if (_statsPrevAt is { } prevAt)
+                {
+                    var dt = (now - prevAt).TotalSeconds;
+                    if (dt > 0.1)
+                    {
+                        var dRate = Math.Max(0, snap.TotalDownloadBytes - _statsPrevDown) / dt;
+                        var uRate = Math.Max(0, snap.TotalUploadBytes - _statsPrevUp) / dt;
+                        ConnectionStatsText = $"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {snap.ActiveCount} conn";
+                    }
+                }
+                else
+                {
+                    // Next good sample after failure/connect: baseline only, no spike.
+                    ConnectionStatsText = string.Empty;
+                }
+
                 _statsPrevDown = snap.TotalDownloadBytes;
                 _statsPrevUp = snap.TotalUploadBytes;
                 _statsPrevAt = now;
-                return;
-            }
-
-            string? text = null;
-            if (_statsPrevAt is { } prevAt)
-            {
-                var dt = (now - prevAt).TotalSeconds;
-                if (dt > 0.1)
-                {
-                    var dRate = Math.Max(0, snap.TotalDownloadBytes - _statsPrevDown) / dt;
-                    var uRate = Math.Max(0, snap.TotalUploadBytes - _statsPrevUp) / dt;
-                    text = $"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {snap.ActiveCount} conn";
-                }
-            }
-            _statsPrevDown = snap.TotalDownloadBytes;
-            _statsPrevUp = snap.TotalUploadBytes;
-            _statsPrevAt = now;
-            if (text is not null)
-                Dispatcher.UIThread.Post(() => { if (IsConnected) ConnectionStatsText = text!; });
+            });
         }
-        catch { /* poll failures non-fatal — line just stops updating */ }
-        finally { Interlocked.Exchange(ref _statsInFlight, 0); }
+        catch
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (generation != _statsGeneration || !ReferenceEquals(api, _statsApi) || !IsConnected)
+                    return;
+
+                ClearStatsState();
+            });
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _statsInFlight, 0);
+        }
+    }
+
+    private void ClearStatsState()
+    {
+        ConnectionStatsText = string.Empty;
+        _statsPrevAt = null;
+        _statsPrevDown = 0;
+        _statsPrevUp = 0;
+        if (_autoSelectedServer is not null)
+        {
+            _autoSelectedServer = null;
+            RestoreConnectedStatus();
+            RefreshActiveIndicator();
+        }
     }
 
     /// <summary>
@@ -163,16 +201,16 @@ public partial class MainWindowViewModel
     /// "proxy" group's current member (clash_api <c>/proxies/proxy</c> →
     /// <c>"now"</c>) when AutoSelectBestServer is on, then push a status + list
     /// highlight refresh on the UI thread if it changed. Best-effort: a null /
-    /// failed query keeps the prior pick (status falls back to a generic label).
+    /// failed query clears the prior pick (status falls back to a generic label).
     /// </summary>
     /// <summary>R5 / perf-hunt F3 follow-up: poll the group's "now" member only
     /// every 3rd stats tick (~6s at the 2s poll) — the auto-pick doesn't move
     /// faster than urltest's own 3m interval, so per-tick polling was waste.</summary>
     private int _autoSelectPollTick;
 
-    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
+    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api, long generation)
     {
-        if (!AutoSelectBestServer || !(_settings.App.ConfigMode ?? "generated")
+        if (!AutoSelectBestServer || !(_settings?.App?.ConfigMode ?? "generated")
                 .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -181,17 +219,28 @@ public partial class MainWindowViewModel
         if (Interlocked.Increment(ref _autoSelectPollTick) % 3 != 1)
             return;
 
-        var nowTag = await api.GetGroupNowAsync("proxy").ConfigureAwait(false);
-        var resolved = ResolveAutoSelectedServer(nowTag);
-        if (resolved is null) return; // unresolved → keep the prior pick
+        string? nowTag = null;
+        try
+        {
+            nowTag = await api.GetGroupNowAsync("proxy").ConfigureAwait(false);
+        }
+        catch
+        {
+            nowTag = null;
+        }
 
         Dispatcher.UIThread.Post(() =>
         {
-            if (!IsConnected) return;
-            if (ReferenceEquals(_autoSelectedServer, resolved)) return;
-            _autoSelectedServer = resolved;
-            RestoreConnectedStatus();
-            RefreshActiveIndicator();
+            if (generation != _statsGeneration || !ReferenceEquals(api, _statsApi) || !IsConnected)
+                return;
+
+            var resolved = ResolveAutoSelectedServer(nowTag);
+            if (!ReferenceEquals(_autoSelectedServer, resolved))
+            {
+                _autoSelectedServer = resolved;
+                RestoreConnectedStatus();
+                RefreshActiveIndicator();
+            }
         });
     }
 
@@ -203,10 +252,9 @@ public partial class MainWindowViewModel
     /// </summary>
     private ServerViewModel? ResolveAutoSelectedServer(string? nowTag)
     {
-        // F3 (v2.45.0): single-pass longest-suffix match instead of a per-poll
-        // LINQ Where + OrderByDescending allocation/sort over SubscriptionServers.
+        if (SubscriptionServers is null || string.IsNullOrEmpty(nowTag)) return null;
         var idx = SuffixMatch.LongestSuffixIndex(SubscriptionServers, static s => s.Name, nowTag);
-        return idx >= 0 ? SubscriptionServers[idx] : null;
+        return idx >= 0 && idx < SubscriptionServers.Count ? SubscriptionServers[idx] : null;
     }
 
     private static string HumanRate(double bytesPerSec)

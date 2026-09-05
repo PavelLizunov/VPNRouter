@@ -232,11 +232,11 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     /// <inheritdoc/>
     public async Task<ConnectionsSnapshot> GetConnectionsAsync(CancellationToken ct = default)
     {
-        // Return a zero-snapshot on any failure. Caller can distinguish
-        // "no connections" from "couldn't reach API" via the timestamp +
-        // surrounding context (a healthy tunnel almost always has >0
-        // connections, so 0 is itself a signal).
-        var failureSnapshot = new ConnectionsSnapshot(0, 0L, 0L, DateTimeOffset.UtcNow);
+        // Return a failure snapshot with IsValid = false on any failure.
+        // Timestamps alone do not distinguish success from failure because both
+        // record the current capture time; callers inspect IsValid to distinguish
+        // API failures from valid empty metrics.
+        var failureSnapshot = new ConnectionsSnapshot(0, 0L, 0L, DateTimeOffset.UtcNow) { IsValid = false };
 
         try
         {
@@ -542,9 +542,11 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     /// <summary>
     /// F2 (v2.45.0): read downloadTotal / uploadTotal + the connections array
     /// LENGTH from a /connections body via Utf8JsonReader, WITHOUT materializing
-    /// a List&lt;JsonElement&gt; per connection. Tolerant of property order and
-    /// missing fields; <c>reader.Skip()</c> walks past each connection element
-    /// without descending into it. Returns false only on a malformed body.
+    /// a List&lt;JsonElement&gt; per connection. Tolerant of property order;
+    /// <c>reader.Skip()</c> walks past each connection element without descending
+    /// into it. Rejects malformed JSON, non-object root, missing required fields
+    /// (<c>downloadTotal</c>, <c>uploadTotal</c>, <c>connections</c>), and
+    /// negative or overflowing counts.
     /// </summary>
     internal static bool ParseConnectionsSummary(
         ReadOnlySpan<byte> json, out long download, out long upload, out int activeCount)
@@ -553,41 +555,101 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         try
         {
             var reader = new Utf8JsonReader(json);
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return false;
+
+            var hasDownload = false;
+            var hasUpload = false;
+            var hasConnections = false;
+            var completedRootObject = false;
+
             while (reader.Read())
             {
-                if (reader.TokenType != JsonTokenType.PropertyName) continue;
+                if (reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == 0)
+                {
+                    completedRootObject = true;
+                    break;
+                }
+
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1)
+                    continue;
 
                 if (reader.ValueTextEquals("downloadTotal"))
                 {
-                    reader.Read();
-                    if (reader.TokenType == JsonTokenType.Number) download = reader.GetInt64();
+                    if (hasDownload || !reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        return false;
+                    if (!reader.TryGetInt64(out var downVal) || downVal < 0)
+                        return false;
+                    download = downVal;
+                    hasDownload = true;
                 }
                 else if (reader.ValueTextEquals("uploadTotal"))
                 {
-                    reader.Read();
-                    if (reader.TokenType == JsonTokenType.Number) upload = reader.GetInt64();
+                    if (hasUpload || !reader.Read() || reader.TokenType != JsonTokenType.Number)
+                        return false;
+                    if (!reader.TryGetInt64(out var upVal) || upVal < 0)
+                        return false;
+                    upload = upVal;
+                    hasUpload = true;
                 }
                 else if (reader.ValueTextEquals("connections"))
                 {
-                    reader.Read();
+                    if (hasConnections || !reader.Read())
+                        return false;
+
                     if (reader.TokenType == JsonTokenType.StartArray)
                     {
+                        hasConnections = true;
                         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                         {
+                            if (activeCount == int.MaxValue)
+                                return false;
                             activeCount++;
                             reader.Skip(); // past this element's whole subtree (no alloc)
                         }
+
+                        if (reader.TokenType != JsonTokenType.EndArray)
+                            return false;
+                    }
+                    else if (reader.TokenType == JsonTokenType.Null)
+                    {
+                        hasConnections = true;
+                        activeCount = 0;
+                    }
+                    else
+                    {
+                        return false;
                     }
                 }
+                else
+                {
+                    if (!reader.Read())
+                        return false;
+                    reader.Skip();
+                }
             }
+
+            if (!completedRootObject || !hasDownload || !hasUpload || !hasConnections)
+            {
+                download = 0; upload = 0; activeCount = 0;
+                return false;
+            }
+
+            // Reject any trailing non-comment tokens after the root object
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.Comment)
+                {
+                    download = 0; upload = 0; activeCount = 0;
+                    return false;
+                }
+            }
+
             return true;
         }
         catch
         {
-            // Malformed body OR a downloadTotal/uploadTotal that isn't an Int64
-            // (float / out-of-range -> GetInt64 throws FormatException) — honour
-            // the "false on bad body" contract; the caller maps that to a zeroed
-            // snapshot (one stale tick, no crash).
+            download = 0; upload = 0; activeCount = 0;
             return false;
         }
     }
