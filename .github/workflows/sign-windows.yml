@@ -101,9 +101,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          ./tools/build-singbox-lx.ps1
-          ./build.ps1 -Version $env:VERSION `
-            -SingBoxPath publish/sing-box-lx.exe -BundleSplitDriver
+          ./build.ps1 -Version $env:VERSION -BundleSplitDriver
           $expected = @(
             "VPNRouter-v$env:VERSION-win.zip",
             "VPNRouter-update-v$env:VERSION-win.zip"

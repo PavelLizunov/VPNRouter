@@ -18,8 +18,8 @@
 .PARAMETER Version
     Version string for the ZIP filename (default: "1.0")
 .PARAMETER SingBoxPath
-    Path to sing-box.exe to bundle. Empty uses publish\sing-box-lx.exe when present;
-    otherwise non-upload local builds fall back to upstream sing-box.
+    Optional path to a custom local sing-box.exe to bundle. For local builds only;
+    rejected when -Upload is specified.
 .PARAMETER Upload
     Upload the ZIPs to GitHub Releases using gh CLI
 .PARAMETER GitHubRepo
@@ -49,9 +49,7 @@ param(
     [string]$SingBoxVersion = "1.14.0-vpnctl.3",
     # Authoritative SHA256 of the official sing-box-vpnctl Windows amd64 archive.
     [string]$SingBoxSha256 = "8094929df6c4b061dc9c360b1641474d41bdea16845d604a26d3721feefc6f74",
-    # Optional override: pre-existing sing-box.exe to bundle.
-    # Empty string means "prefer publish\sing-box-lx.exe; fallback to upstream only
-    # for non-upload local builds".
+    # Optional override: pre-existing local sing-box.exe to bundle (local builds only; rejected with -Upload).
     [string]$SingBoxPath = "",
     # Optional override: pre-built slipstream-client.exe (DNS-tunnel transport)
     # to bundle. Empty = probe tools\slipstream-cache\slipstream-client.exe, else
@@ -120,6 +118,23 @@ Refusing to ship a binary whose AppVersion does not match the release tag.
 "@
 }
 Write-Host "[0/9] AppVersion match: $srcVersion = -Version $Version OK" -ForegroundColor Green
+
+# ── Sing-box supply-chain validation (fail early before publish/IO) ──
+if ($Upload -and $SingBoxPath) {
+    throw "SingBoxPath override is for local builds only and cannot be used with -Upload."
+}
+if ($SingBoxPath) {
+    if (-not (Test-Path $SingBoxPath)) {
+        throw "SingBoxPath not found: $SingBoxPath"
+    }
+} else {
+    if ($SingBoxVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+-vpnctl\.[0-9]+$') {
+        throw "SingBoxVersion must match pattern '^[0-9]+\.[0-9]+\.[0-9]+-vpnctl\.[0-9]+$': $SingBoxVersion"
+    }
+    if (-not $SingBoxSha256 -or $SingBoxSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "SingBoxSha256 must be a non-blank 64-character hex string: $SingBoxSha256"
+    }
+}
 
 $DistDir = Join-Path $Root "publish\dist"
 $FdDir = Join-Path $Root "publish\fd"
@@ -309,32 +324,20 @@ Write-Host "       Cleaned PDB, locale, debug, WPF, and unused files" -Foregroun
 Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives $([math]::Round($nativeRemoved/1MB,1)) MB + design $([math]::Round($designRemoved/1MB,1)) MB = $([math]::Round($totalSaved,1)) MB saved" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
-# v2.27.2: auto-download upstream sing-box prebuild by default. Pass
-# -SingBoxPath to bundle a custom build instead (e.g. the AmneziaWG/XHTTP
-# lx core from tools/build-singbox-lx.ps1 at publish/sing-box-lx.exe).
+# Bundles official sing-box-vpnctl release by default with verified SHA256.
+# Pass -SingBoxPath to bundle an explicit local build instead (local builds only).
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
-$effectiveSingBoxPath = $SingBoxPath
-if ($effectiveSingBoxPath -and -not (Test-Path $effectiveSingBoxPath)) {
-    throw "SingBoxPath not found: $effectiveSingBoxPath"
-}
-if (-not $effectiveSingBoxPath) {
-    $defaultLx = Join-Path $Root "publish\sing-box-lx.exe"
-    if (Test-Path $defaultLx) {
-        $effectiveSingBoxPath = $defaultLx
-        Write-Host "       Auto-selected local sing-box-lx: $effectiveSingBoxPath" -ForegroundColor Gray
-    }
-}
-if ($effectiveSingBoxPath) {
+if ($SingBoxPath) {
     if ($Upload) {
-        $versionText = & $effectiveSingBoxPath version 2>&1 | Out-String
-        if ($versionText -notmatch 'with_awg' -or $versionText -notmatch 'with_xhttp') {
-            throw "Release upload requires sing-box with with_awg and with_xhttp tags. Version output:`n$versionText"
-        }
+        throw "SingBoxPath override is for local builds only and cannot be used with -Upload."
     }
-    Copy-Item $effectiveSingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
-    $ovCronet = Join-Path (Split-Path $effectiveSingBoxPath -Parent) "libcronet.dll"
+    if (-not (Test-Path $SingBoxPath)) {
+        throw "SingBoxPath not found: $SingBoxPath"
+    }
+    Copy-Item $SingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
+    $ovCronet = Join-Path (Split-Path $SingBoxPath -Parent) "libcronet.dll"
     if (Test-Path $ovCronet) { Copy-Item $ovCronet (Join-Path $DistDir "libcronet.dll") -Force }
-    Write-Host "       Copied from: $effectiveSingBoxPath" -ForegroundColor Gray
+    Write-Host "       Copied from: $SingBoxPath" -ForegroundColor Gray
 } else {
     # Auto-download official sing-box-vpnctl release with verified SHA256.
     $singBoxCache = Join-Path $Root "tools\singbox-cache"
@@ -344,31 +347,29 @@ if ($effectiveSingBoxPath) {
     $extractDir = Join-Path $singBoxCache "sing-box-$SingBoxVersion-windows-amd64"
     $cachedExe = Join-Path $extractDir "sing-box.exe"
 
+    if (-not (Test-Path $zipPath)) {
+        $dlUrl = "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v$SingBoxVersion/$zipName"
+        Write-Host "       Downloading sing-box-vpnctl v$SingBoxVersion from $dlUrl..." -ForegroundColor Gray
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        try {
+            Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -UseBasicParsing
+        } catch {
+            Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
+            if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+            throw "sing-box-vpnctl download failed. Check https://github.com/PavelLizunov/sing-box-vpnctl/releases/tag/v$SingBoxVersion"
+        }
+    }
+
+    $actualHash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $SingBoxSha256.ToLowerInvariant()) {
+        Remove-Item $zipPath -Force
+        throw "sing-box-vpnctl SHA256 mismatch: expected $SingBoxSha256 but got $actualHash"
+    }
+
+    if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
+    Expand-Archive -Path $zipPath -DestinationPath $singBoxCache -Force
     if (-not (Test-Path $cachedExe)) {
-        if (-not (Test-Path $zipPath)) {
-            $dlUrl = "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v$SingBoxVersion/$zipName"
-            Write-Host "       Downloading sing-box-vpnctl v$SingBoxVersion from $dlUrl..." -ForegroundColor Gray
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            try {
-                Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -UseBasicParsing
-            } catch {
-                Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
-                if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-                throw "sing-box-vpnctl download failed. Check https://github.com/PavelLizunov/sing-box-vpnctl/releases/tag/v$SingBoxVersion"
-            }
-        }
-        if ($SingBoxSha256) {
-            $actualHash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actualHash -ne $SingBoxSha256.ToLowerInvariant()) {
-                Remove-Item $zipPath -Force
-                throw "sing-box-vpnctl SHA256 mismatch: expected $SingBoxSha256 but got $actualHash"
-            }
-        }
-        if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
-        Expand-Archive -Path $zipPath -DestinationPath $singBoxCache -Force
-        if (-not (Test-Path $cachedExe)) {
-            throw "sing-box.exe not found inside $zipName after extraction"
-        }
+        throw "sing-box.exe not found inside $zipName after extraction"
     }
 
     Get-ChildItem -File $extractDir | ForEach-Object {
