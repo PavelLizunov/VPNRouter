@@ -183,7 +183,7 @@ jobs:
           # Note: `sing-box check -c` calls NewNaiveClient during config validation,
           # loading Cronet to validate outbound construction (validation-only, not engine initialization).
           $naiveConfigPath = Join-Path $cleanDir "naive-check.json"
-          $naiveConfig = '{"outbounds":[{"type":"naive","tag":"naive-out","server":"127.0.0.1","server_port":9,"username":"fakeusername","password":"fakepassword"}]}'
+          $naiveConfig = '{"outbounds":[{"type":"naive","tag":"naive-out","server":"127.0.0.1","server_port":9,"username":"fakeusername","password":"fakepassword","tls":{"enabled":true,"server_name":"localhost"}}]}'
           Set-Content -Path $naiveConfigPath -Value $naiveConfig -Encoding utf8
 
           function Invoke-BoundedProcess([string]$exePath, [string]$argLine, [string]$workDir) {
