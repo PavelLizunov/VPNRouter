@@ -925,6 +925,8 @@ public class VpnEngine : IDisposable
         _lifecycleGate.Wait();
         try
         {
+            _failoverGeneration++;
+            _failover = null;
             TeardownInternal();
         }
         finally
@@ -1725,7 +1727,16 @@ public class VpnEngine : IDisposable
                 sanityCheck,
                 restart: (innerCt) =>
                     _engine.ExecuteFailoverRestartAsync(settings, innerCt, generation),
-                logger: _engine._logger);
+                logger: _engine._logger)
+            {
+                IsCurrentIntent = () =>
+                {
+                    var sessionCts = _engine._sessionCts;
+                    return !_engine._disposed
+                        && _engine._failoverGeneration == generation
+                        && (sessionCts == null || !sessionCts.IsCancellationRequested);
+                }
+            };
             return _engine._failover;
         }
 

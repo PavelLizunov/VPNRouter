@@ -433,6 +433,30 @@ public sealed class NightFailoverIntentTests
         Assert.True(internalIdx > resetIdx, "ResetFailoverContext must appear BEFORE StartAsyncInternal.");
     }
 
+    [Fact]
+    public void PublicStopBoundary_SourceOrder_IncrementsFailoverGenerationAndNullsFailoverUnderLifecycleGateBeforeTeardown()
+    {
+        var source = LoadVpnEngineSource();
+        Assert.True(source != null, "VpnEngine.cs source could not be loaded.");
+
+        var clean = StripComments(source);
+
+        var stopIdx = clean.IndexOf("public void Stop()", StringComparison.Ordinal);
+        Assert.True(stopIdx >= 0, "Public Stop method must exist.");
+
+        var gateWaitIdx = clean.IndexOf("_lifecycleGate.Wait();", stopIdx, StringComparison.Ordinal);
+        Assert.True(gateWaitIdx > stopIdx, "_lifecycleGate.Wait() must appear inside public Stop.");
+
+        var genIncIdx = clean.IndexOf("_failoverGeneration++;", gateWaitIdx, StringComparison.Ordinal);
+        var nullFailoverIdx = clean.IndexOf("_failover = null;", gateWaitIdx, StringComparison.Ordinal);
+        var teardownIdx = clean.IndexOf("TeardownInternal();", gateWaitIdx, StringComparison.Ordinal);
+
+        Assert.True(genIncIdx > gateWaitIdx, "_failoverGeneration++ must appear under _lifecycleGate in public Stop.");
+        Assert.True(nullFailoverIdx > gateWaitIdx, "_failover = null must appear under _lifecycleGate in public Stop.");
+        Assert.True(teardownIdx > genIncIdx, "_failoverGeneration++ must appear BEFORE TeardownInternal.");
+        Assert.True(teardownIdx > nullFailoverIdx, "_failover = null must appear BEFORE TeardownInternal.");
+    }
+
     private static string? LoadVpnEngineSource()
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
