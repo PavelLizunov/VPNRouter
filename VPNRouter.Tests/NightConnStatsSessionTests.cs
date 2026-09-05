@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -397,6 +398,7 @@ public sealed class NightConnStatsSessionTests
             "OnIsConnectedChanged", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(onIsConnectedChanged);
 
+        ClashSingBoxApi? createdApi = null;
         try
         {
             // Transition 1: false (disconnect) -> clears _statsApi and resets counters/text
@@ -409,13 +411,14 @@ public sealed class NightConnStatsSessionTests
 
             // Transition 2: true (reconnect) -> creates unique ClashSingBoxApi handle without sending requests
             onIsConnectedChanged!.Invoke(vm, new object[] { true });
-            var createdApi = GetField<ClashSingBoxApi>(vm, "_statsApi");
+            createdApi = GetField<ClashSingBoxApi>(vm, "_statsApi");
             Assert.NotNull(createdApi);
             Assert.NotSame(initialApi, createdApi);
 
             // Dispose the new client created by OnIsConnectedChanged(true) to prevent leaks,
             // then inject fake api afterward
             createdApi!.Dispose();
+            createdApi = null;
 
             var fakeHandler = new FakeClashHttpHandler();
             using var fakeHttp = new HttpClient(fakeHandler);
@@ -470,6 +473,7 @@ public sealed class NightConnStatsSessionTests
         }
         finally
         {
+            createdApi?.Dispose();
             deferred.TrySetCanceled();
             try
             {
@@ -604,5 +608,258 @@ public sealed class NightConnStatsSessionTests
             }
             await DrainUiQueueAsync();
         }
+    }
+
+    [AvaloniaFact]
+    public async Task OnEngineStatus_AppliedHotReload_WhileConnected_ReplacesApi_ClearsBaseline_AndDropsOldReply()
+    {
+        await AssertAppliedReplacesApiAndDropsOldReplyAsync("Applied (hot-reload, PID 1234)");
+    }
+
+    [AvaloniaFact]
+    public async Task OnEngineStatus_AppliedRestart_WhileConnected_ReplacesApi_ClearsBaseline_AndDropsOldReply()
+    {
+        await AssertAppliedReplacesApiAndDropsOldReplyAsync("Applied (restart, PID 5678)");
+    }
+
+    private static async Task AssertAppliedReplacesApiAndDropsOldReplyAsync(string status)
+    {
+        var deferred = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new FakeClashHttpHandler { DeferredResponse = deferred };
+        using var http = new HttpClient(handler);
+        using var initialApi = new ClashSingBoxApi(httpClient: http, baseUrl: "http://127.0.0.1:9090");
+
+        var vm = CreateIsolatedVm(initialApi);
+        SetField(vm, "_isConnected", true);
+        SetField(vm, "_statsPrevDown", 55555L);
+        SetField(vm, "_statsPrevUp", 33333L);
+        SetField(vm, "_statsPrevAt", DateTimeOffset.UtcNow);
+        SetField(vm, "_connectionStatsText", "pre-apply-stats");
+
+        var servers = GetField<ObservableCollection<ServerViewModel>>(vm, "SubscriptionServers")!;
+        var serverA = new ServerViewModel(new VlessServerEntry { Name = "ServerAlpha", Server = "1.1.1.1" });
+        servers.Add(serverA);
+        SetField(vm, "_autoSelectedServer", serverA);
+
+        var pollMethod = typeof(MainWindowViewModel).GetMethod(
+            "PollConnStatsAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(pollMethod);
+        var oldPollTask = (Task)pollMethod!.Invoke(vm, null)!;
+
+        var onEngineStatus = typeof(MainWindowViewModel).GetMethod(
+            "OnEngineStatus", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(onEngineStatus);
+
+        ClashSingBoxApi? createdApi = null;
+        try
+        {
+            onEngineStatus!.Invoke(vm, new object[] { status });
+            await DrainUiQueueAsync();
+
+            createdApi = GetField<ClashSingBoxApi>(vm, "_statsApi");
+            Assert.NotNull(createdApi);
+            Assert.NotSame(initialApi, createdApi);
+
+            Assert.Equal(0L, GetField<long>(vm, "_statsPrevDown"));
+            Assert.Equal(0L, GetField<long>(vm, "_statsPrevUp"));
+            Assert.Null(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+            Assert.Equal(string.Empty, vm.ConnectionStatsText);
+            Assert.Null(GetField<ServerViewModel>(vm, "_autoSelectedServer"));
+            Assert.Equal(status, vm.StatusText);
+
+            createdApi!.Dispose();
+            createdApi = null;
+
+            deferred.TrySetResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"downloadTotal\": 999999, \"uploadTotal\": 888888, \"connections\": [{}]}")
+            });
+
+            await oldPollTask;
+            await DrainUiQueueAsync();
+
+            Assert.Equal(0L, GetField<long>(vm, "_statsPrevDown"));
+            Assert.Equal(0L, GetField<long>(vm, "_statsPrevUp"));
+            Assert.Null(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+            Assert.Equal(string.Empty, vm.ConnectionStatsText);
+            Assert.Null(GetField<ServerViewModel>(vm, "_autoSelectedServer"));
+
+            var fakeHandler = new FakeClashHttpHandler();
+            using var fakeHttp = new HttpClient(fakeHandler);
+            using var fakeApi = new ClashSingBoxApi(httpClient: fakeHttp, baseUrl: "http://127.0.0.1:9090");
+            SetField(vm, "_statsApi", fakeApi);
+
+            fakeHandler.Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"downloadTotal\": 1000, \"uploadTotal\": 500, \"connections\": [{}]}")
+            };
+            await InvokePollAsync(vm);
+
+            Assert.Equal(1000L, GetField<long>(vm, "_statsPrevDown"));
+            Assert.Equal(500L, GetField<long>(vm, "_statsPrevUp"));
+            Assert.NotNull(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+            Assert.Equal(string.Empty, vm.ConnectionStatsText);
+        }
+        finally
+        {
+            createdApi?.Dispose();
+            deferred.TrySetCanceled();
+            try
+            {
+                await oldPollTask;
+            }
+            catch
+            {
+            }
+            await DrainUiQueueAsync();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task OnEngineStatus_FailedApplyOrNonCommitStatus_DoesNotResetApiOrBaseline()
+    {
+        var handler = new FakeClashHttpHandler();
+        using var http = new HttpClient(handler);
+        using var initialApi = new ClashSingBoxApi(httpClient: http, baseUrl: "http://127.0.0.1:9090");
+        var vm = CreateIsolatedVm(initialApi);
+
+        SetField(vm, "_isConnected", true);
+        SetField(vm, "_statsPrevDown", 5000L);
+        SetField(vm, "_statsPrevUp", 3000L);
+        SetField(vm, "_statsPrevAt", DateTimeOffset.UtcNow);
+        SetField(vm, "_connectionStatsText", "active-stats");
+
+        var onEngineStatus = typeof(MainWindowViewModel).GetMethod(
+            "OnEngineStatus", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(onEngineStatus);
+
+        onEngineStatus!.Invoke(vm, new object[] { "Apply failed: sing-box reload or restart was not confirmed" });
+        await DrainUiQueueAsync();
+
+        Assert.Same(initialApi, GetField<ClashSingBoxApi>(vm, "_statsApi"));
+        Assert.Equal(5000L, GetField<long>(vm, "_statsPrevDown"));
+        Assert.Equal(3000L, GetField<long>(vm, "_statsPrevUp"));
+        Assert.NotNull(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+        Assert.Equal("active-stats", vm.ConnectionStatsText);
+        Assert.Equal("Apply failed: sing-box reload or restart was not confirmed", vm.StatusText);
+
+        onEngineStatus!.Invoke(vm, new object[] { "Applying configuration..." });
+        await DrainUiQueueAsync();
+
+        Assert.Same(initialApi, GetField<ClashSingBoxApi>(vm, "_statsApi"));
+        Assert.Equal(5000L, GetField<long>(vm, "_statsPrevDown"));
+        Assert.Equal(3000L, GetField<long>(vm, "_statsPrevUp"));
+        Assert.NotNull(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+        Assert.Equal("active-stats", vm.ConnectionStatsText);
+        Assert.Equal("Applying configuration...", vm.StatusText);
+    }
+
+    [AvaloniaFact]
+    public async Task OnEngineStatus_AppliedWhileDisconnected_DoesNotInstantiateApiOrPromote()
+    {
+        var vm = CreateIsolatedVm(null);
+        SetField(vm, "_isConnected", false);
+
+        var onEngineStatus = typeof(MainWindowViewModel).GetMethod(
+            "OnEngineStatus", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(onEngineStatus);
+
+        onEngineStatus!.Invoke(vm, new object[] { "Applied (hot-reload, PID 1234)" });
+        await DrainUiQueueAsync();
+
+        Assert.False(vm.IsConnected);
+        Assert.Null(GetField<ClashSingBoxApi>(vm, "_statsApi"));
+        Assert.Equal("Applied (hot-reload, PID 1234)", vm.StatusText);
+    }
+
+    [AvaloniaFact]
+    public async Task OnEngineStatus_ConnectedBranch_WhileAlreadyConnected_ReplacesApiAndResetsBaseline()
+    {
+        var handler = new FakeClashHttpHandler();
+        using var http = new HttpClient(handler);
+        using var initialApi = new ClashSingBoxApi(httpClient: http, baseUrl: "http://127.0.0.1:9090");
+        var vm = CreateIsolatedVm(initialApi);
+
+        SetField(vm, "_isConnected", true);
+        SetField(vm, "_statsPrevDown", 55555L);
+        SetField(vm, "_statsPrevUp", 33333L);
+        SetField(vm, "_statsPrevAt", DateTimeOffset.UtcNow);
+        SetField(vm, "_connectionStatsText", "pre-connected-stats");
+
+        var onEngineStatus = typeof(MainWindowViewModel).GetMethod(
+            "OnEngineStatus", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(onEngineStatus);
+
+        ClashSingBoxApi? createdApi = null;
+        try
+        {
+            onEngineStatus!.Invoke(vm, new object[] { "Connected to server" });
+            await DrainUiQueueAsync();
+
+            createdApi = GetField<ClashSingBoxApi>(vm, "_statsApi");
+            Assert.NotNull(createdApi);
+            Assert.NotSame(initialApi, createdApi);
+
+            // Timer null means no-op: StartSubRefreshTimer bails without active subscriptions,
+            // leaving _subRefreshTimer null so no recurring background timer is started on the isolated VM.
+            Assert.Null(GetField<System.Threading.Timer>(vm, "_subRefreshTimer"));
+
+            Assert.Equal(0L, GetField<long>(vm, "_statsPrevDown"));
+            Assert.Equal(0L, GetField<long>(vm, "_statsPrevUp"));
+            Assert.Null(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+            Assert.Equal(string.Empty, vm.ConnectionStatsText);
+        }
+        finally
+        {
+            createdApi?.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task OnEngineStatus_ConnectedBranch_WhileDisconnected_DoesNotPromote()
+    {
+        var vm = CreateIsolatedVm(null);
+        SetField(vm, "_isConnected", false);
+
+        var onEngineStatus = typeof(MainWindowViewModel).GetMethod(
+            "OnEngineStatus", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(onEngineStatus);
+
+        onEngineStatus!.Invoke(vm, new object[] { "Connected to server" });
+        await DrainUiQueueAsync();
+
+        Assert.False(vm.IsConnected);
+        Assert.Null(GetField<ClashSingBoxApi>(vm, "_statsApi"));
+    }
+
+    [Fact]
+    public void OnEngineStatus_ConnectedBranch_CallsOnIsConnectedChangedBeforeRefreshAndRestore_SourceGuard()
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        string? source = null;
+        for (var depth = 0; depth < 8 && directory != null; depth++, directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, "VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
+            if (File.Exists(candidate))
+            {
+                source = File.ReadAllText(candidate);
+                break;
+            }
+        }
+        Assert.NotNull(source);
+
+        var connectedIdx = source!.IndexOf("status.StartsWith(\"Connected\")", StringComparison.Ordinal);
+        Assert.True(connectedIdx >= 0);
+
+        var onIsConnectedChangedIdx = source.IndexOf("OnIsConnectedChanged(true);", connectedIdx, StringComparison.Ordinal);
+        Assert.True(onIsConnectedChangedIdx >= 0);
+
+        var refreshIdx = source.IndexOf("RefreshActiveIndicator();", onIsConnectedChangedIdx, StringComparison.Ordinal);
+        Assert.True(refreshIdx > onIsConnectedChangedIdx);
+
+        var restoreIdx = source.IndexOf("RestoreConnectedStatus();", refreshIdx, StringComparison.Ordinal);
+        Assert.True(restoreIdx > refreshIdx);
     }
 }

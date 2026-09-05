@@ -89,6 +89,7 @@ public partial class MainWindowViewModel
 
                 ConnectButtonText = Strings.StopVPN;
                 StartSubRefreshTimer();
+                OnIsConnectedChanged(true);
                 RefreshActiveIndicator();
                 RestoreConnectedStatus();
             }
@@ -106,6 +107,10 @@ public partial class MainWindowViewModel
             }
             else
             {
+                if (IsConnected && status.StartsWith("Applied (", StringComparison.Ordinal))
+                {
+                    OnIsConnectedChanged(true);
+                }
                 StatusText = status;
             }
         });
