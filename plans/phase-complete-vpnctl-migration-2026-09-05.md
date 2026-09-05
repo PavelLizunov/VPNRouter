@@ -123,6 +123,12 @@
     (All three workflows SUCCESS on exact same combined SHA).
   - Precaution: Do not claim latest combined artifact identity until checked; no full solution / live VPN claim.
 
+- **Packaging Characterization Witness Baseline (RED on `0f85cbfe` vs GREEN on `9fac7b58`)**:
+  - Real RED witness baseline `0f85cbfeaf0d2030285c0ab44df1d64d13aefaef` based on `be0cf6f7` untouched product.
+  - Run `33992362512` observed 3 Windows FAIL, 0 skip: tampered zip cache expected AUTHENTIC actual TAMPERED; corrupt cached zip exit 0; implicit LX output contains automatic selection.
+  - Ubuntu: 4 source guard FAIL expected.
+  - GREEN actual: Same fixture `9fac7b58` PR checks all 5 green actual; Windows 46 pass 0 skip on earlier `f88b7889` fixture before portable marker, also green on later `9fac7b58`.
+
 ## Verification Gates (BLOCKED / PENDING - No Closure Until Verified)
 
 - [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android legacy build green (run 33991832141 SUCCESS via `dotnet publish`), 4 files restored byte-exact to `b7ce0e4`; combined branch `c7e388a9adeab209e8524825824c94793b294956` compiles green across Linux/Mac (runs 33992005073, 33992007224); no full solution / live VPN claim.
