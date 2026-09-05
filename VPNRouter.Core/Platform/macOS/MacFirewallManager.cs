@@ -17,15 +17,14 @@ namespace VPNRouter.Core.Platform.macOS;
 /// split tunnel stays a labelled no-op. Full design + rationale:
 /// <c>plans/phase3-macos-pf-killswitch-r6-design-2026-06-04.md</c>.</para>
 ///
-/// <para>Full-tunnel signal: <see cref="CreateBlockRules"/> is called with an
-/// EMPTY process list (the startup pipeline skips the process scan in full
-/// tunnel); a non-empty list means split tunnel → stay disarmed.</para>
+/// <para>Full-tunnel signal: <see cref="CreateBlockRules"/> is guided by the explicit
+/// <c>isFullTunnel</c> flag rather than process list emptiness; split tunnel remains
+/// disarmed even if process scan returns an empty list.</para>
 ///
 /// <para>CRITICAL — the ruleset blocks all outbound EXCEPT loopback, RFC1918 /
 /// link-local, and the VPN server IP(s) (read from <c>current.json</c>). The
-/// server pass is what lets sing-box reconnect during the block window; without
-/// it HealthMonitor would never see a healthy restart and the Mac would stay
-/// blocked forever (bricked). IPv6 stays fully blocked (no v6 leak).</para>
+/// server pass is what lets sing-box reconnect during the block window while
+/// blocking rules are active. IPv6 stays fully blocked (no v6 leak).</para>
 ///
 /// <para>Pure <see cref="IProcessRunner"/> orchestration (no macOS APIs) so the
 /// exact pfctl command shapes are unit-tested on the Windows build; the live
@@ -58,7 +57,7 @@ public sealed class MacFirewallManager : IFirewallManager
     /// </summary>
     internal const string Anchor = "com.vpnrouter/killswitch";
     internal const string AnchorMarker = "anchor-v1";  // marker content in anchor mode
-    private const string LegacyMarker = "engaged";      // pre-P0.3 broad-load mode
+    internal const string LegacyMarker = "engaged";    // pre-P0.3 broad-load mode
 
     private readonly IProcessRunner _runner;
     private readonly ILogger _logger;
@@ -155,9 +154,13 @@ public sealed class MacFirewallManager : IFirewallManager
         }
 
         // Enable pf (ref-counted) and capture the token so Disable can release
-        // OUR reference without disturbing other pf users.
-        var en = RunSudo(new[] { "-n", PfCtl, "-E" });
-        if (en.ok) _enableToken = ParsePfToken(en.stderr);
+        // OUR reference without disturbing other pf users. Do not acquire a second
+        // -E if we already retain a valid token from a prior engage/failed release.
+        if (string.IsNullOrEmpty(_enableToken))
+        {
+            var en = RunSudo(new[] { "-n", PfCtl, "-E" });
+            if (en.ok) _enableToken = ParsePfToken(en.stderr);
+        }
 
         // ── P0.3 anchor mode ──
         if (EnsureCarrier())
@@ -203,17 +206,26 @@ public sealed class MacFirewallManager : IFirewallManager
     /// <inheritdoc />
     public void DisableBlockRules()
     {
-        if (!_loaded) return;
-        if (_anchorMode)
-            FlushAnchor();          // touch ONLY our anchor; main ruleset (and other
-                                    // tools' runtime anchors, e.g. amn/*) stay intact
-        else
-            RestoreDefaultRuleset(); // legacy engage → legacy restore
+        if (!_loaded && string.IsNullOrEmpty(_enableToken)) return;
+
+        if (_loaded)
+        {
+            var rulesCleared = _anchorMode ? FlushAnchor() : RestoreDefaultRuleset();
+            if (!rulesCleared)
+            {
+                _logger.Warning(
+                    "[MacFirewall] failed to lift pf kill-switch ({Mode}) — retaining rules loaded state and marker for retry",
+                    _anchorMode ? "anchor flush" : "default ruleset restore");
+                return;
+            }
+
+            _loaded = false;
+            TryDeleteMarker();
+            _logger.Information("[MacFirewall] pf kill-switch lifted ({Mode})",
+                _anchorMode ? "anchor flushed" : "default ruleset restored");
+        }
+
         ReleaseEnable();
-        TryDeleteMarker();
-        _loaded = false;
-        _logger.Information("[MacFirewall] pf kill-switch lifted ({Mode})",
-            _anchorMode ? "anchor flushed" : "default ruleset restored");
     }
 
     /// <inheritdoc />
@@ -224,42 +236,89 @@ public sealed class MacFirewallManager : IFirewallManager
         // pre-P0.3 unconditional /etc/pf.conf reload, which stomped OTHER tools'
         // runtime pf state on every shutdown) this never touches the main
         // ruleset unless a LEGACY broad load is actually live.
-        if (_loaded && !_anchorMode)
-            RestoreDefaultRuleset();
+        bool isLegacy;
+        if (_loaded)
+        {
+            isLegacy = !_anchorMode;
+        }
         else
-            FlushAnchor();
+        {
+            var markerState = InspectMarker();
+            switch (markerState)
+            {
+                case MarkerState.Legacy:
+                    isLegacy = true;
+                    break;
+                case MarkerState.Anchor:
+                case MarkerState.Missing:
+                    isLegacy = false;
+                    break;
+                case MarkerState.Unknown:
+                default:
+                    _logger.Warning(
+                        "[MacFirewall] DeleteAllRules: unreadable or unknown kill-switch marker found ({Path}) — retaining marker without broad restore or flush-as-success",
+                        _markerPath);
+                    return;
+            }
+        }
+
+        var rulesCleared = isLegacy ? RestoreDefaultRuleset() : FlushAnchor();
+        if (rulesCleared)
+        {
+            _loaded = false;
+            TryDeleteMarker();
+            _armed = false;
+        }
+        else
+        {
+            _logger.Warning(
+                "[MacFirewall] DeleteAllRules: failed to clear rules ({Mode}) — retaining state and marker for retry",
+                isLegacy ? "default ruleset restore" : "anchor flush");
+            return;
+        }
+
         ReleaseEnable();
-        TryDeleteMarker();
-        _loaded = false;
-        _armed = false;
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        // Anti-brick backstop: if our blocking ruleset was ever loaded, make
-        // sure it's gone even on an abrupt shutdown.
-        if (_loaded)
+        if (_disposed && !_loaded && string.IsNullOrEmpty(_enableToken)) return;
+
+        // Anti-brick backstop: if our blocking ruleset was ever loaded or token retained,
+        // make sure it's gone even on an abrupt shutdown.
+        // Disable/DeleteAll/Dispose callable repeatedly and do not make cleanup unreachable via disposed flag.
+        try
         {
-            try
+            if (_loaded)
             {
-                if (_anchorMode) FlushAnchor(); else RestoreDefaultRuleset();
-                ReleaseEnable();
-                TryDeleteMarker();
+                var rulesCleared = _anchorMode ? FlushAnchor() : RestoreDefaultRuleset();
+                if (rulesCleared)
+                {
+                    _loaded = false;
+                    TryDeleteMarker();
+                }
             }
-            catch { /* never throw from Dispose */ }
-            _loaded = false;
+
+            if (!_loaded)
+            {
+                ReleaseEnable();
+            }
+        }
+        catch { /* never throw from Dispose */ }
+
+        if (!_loaded && string.IsNullOrEmpty(_enableToken))
+        {
+            _disposed = true;
         }
     }
 
     // ─── helpers ───────────────────────────────────────────────────────────
 
-    private void RestoreDefaultRuleset()
-        => RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }); // reload stock macOS ruleset
+    private bool RestoreDefaultRuleset()
+        => RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }).ok; // reload stock macOS ruleset
 
-    private void FlushAnchor()
-        => RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-F", "rules" });
+    private bool FlushAnchor()
+        => RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-F", "rules" }).ok;
 
     /// <summary>
     /// Make sure the main ruleset calls our anchor. Checks the live filter rules
@@ -309,11 +368,17 @@ public sealed class MacFirewallManager : IFirewallManager
         }
     }
 
-    private void ReleaseEnable()
+    private bool ReleaseEnable()
     {
-        if (_enableToken == null) return;
-        RunSudo(new[] { "-n", PfCtl, "-X", _enableToken });
-        _enableToken = null;
+        if (string.IsNullOrEmpty(_enableToken)) return true;
+        var r = RunSudo(new[] { "-n", PfCtl, "-X", _enableToken });
+        if (r.ok)
+        {
+            _enableToken = null;
+            return true;
+        }
+        _logger.Warning("[MacFirewall] failed to release pf enable token {Token} — retaining token for retry", _enableToken);
+        return false;
     }
 
     /// <summary>
@@ -427,13 +492,48 @@ public sealed class MacFirewallManager : IFirewallManager
         catch { /* swallow */ }
     }
 
+    internal enum MarkerState
+    {
+        Missing,
+        Anchor,
+        Legacy,
+        Unknown
+    }
+
+    internal MarkerState InspectMarker(ILogger? logger = null)
+    {
+        var log = logger ?? _logger;
+        try
+        {
+            if (!System.IO.File.Exists(_markerPath))
+                return MarkerState.Missing;
+
+            var content = System.IO.File.ReadAllText(_markerPath).Trim();
+            if (content == AnchorMarker)
+                return MarkerState.Anchor;
+            if (content == LegacyMarker)
+                return MarkerState.Legacy;
+
+            log.Warning(
+                "[MacFirewall] unknown kill-switch marker at {Path}",
+                _markerPath);
+            return MarkerState.Unknown;
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[MacFirewall] failed to read kill-switch marker at {Path}", _markerPath);
+            return MarkerState.Unknown;
+        }
+    }
+
     /// <summary>
     /// Orphan recovery: if our engaged-marker survived (a prior session was
     /// HARD-killed — kill -9 / crash / power loss — while the kill-switch was
     /// live, so Dispose never ran), unblock the Mac. Marker content picks the
     /// path: <c>anchor-v1</c> → flush ONLY our anchor (the main ruleset was
-    /// never ours to restore); legacy <c>engaged</c> / unknown → the pre-P0.3
-    /// stock-ruleset reload. A fresh process can't know the old <c>pfctl -E</c>
+    /// never ours to restore); legacy <c>engaged</c> → the pre-P0.3
+    /// stock-ruleset reload. Unreadable or unknown markers are retained without
+    /// broad restore. A fresh process can't know the old <c>pfctl -E</c>
     /// token, so the enable ref may leak (logged); an enabled pf with an empty
     /// anchor is harmless. No-op when the marker is absent — a normal launch
     /// never touches pf.
@@ -443,27 +543,49 @@ public sealed class MacFirewallManager : IFirewallManager
         var log = logger ?? _logger;
         try
         {
-            if (!System.IO.File.Exists(_markerPath)) return;
-            string content;
-            try { content = System.IO.File.ReadAllText(_markerPath).Trim(); }
-            catch { content = LegacyMarker; }
+            var markerState = InspectMarker(log);
+            switch (markerState)
+            {
+                case MarkerState.Missing:
+                    return;
 
-            bool ok;
-            if (content == AnchorMarker)
-            {
-                log.Warning("[MacFirewall] engaged kill-switch marker (anchor-v1) from a prior session found (hard kill?) — flushing anchor {Anchor}", Anchor);
-                ok = RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-F", "rules" }).ok;
+                case MarkerState.Anchor:
+                {
+                    log.Warning("[MacFirewall] engaged kill-switch marker (anchor-v1) from a prior session found (hard kill?) — flushing anchor {Anchor}", Anchor);
+                    var ok = FlushAnchor();
+                    if (ok)
+                    {
+                        TryDeleteMarker();
+                        log.Information("[MacFirewall] orphan cleanup: egress unblocked (a lost pfctl -E token cannot be released by a new process)");
+                    }
+                    else
+                    {
+                        log.Warning("[MacFirewall] orphan cleanup: pfctl failed (sudoers grant missing?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
+                    }
+                    break;
+                }
+
+                case MarkerState.Legacy:
+                {
+                    log.Warning("[MacFirewall] engaged kill-switch marker (legacy) from a prior session found (hard kill?) — restoring default pf ruleset");
+                    var ok = RestoreDefaultRuleset();
+                    if (ok)
+                    {
+                        TryDeleteMarker();
+                        log.Information("[MacFirewall] orphan cleanup: egress unblocked (a lost pfctl -E token cannot be released by a new process)");
+                    }
+                    else
+                    {
+                        log.Warning("[MacFirewall] orphan cleanup: pfctl failed (sudoers grant missing?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
+                    }
+                    break;
+                }
+
+                case MarkerState.Unknown:
+                default:
+                    log.Warning("[MacFirewall] orphan cleanup: kill-switch marker at {Path} is unreadable or has unknown content — retaining marker without broad pf restore or flush-as-success", _markerPath);
+                    break;
             }
-            else
-            {
-                log.Warning("[MacFirewall] engaged kill-switch marker (legacy) from a prior session found (hard kill?) — restoring default pf ruleset");
-                ok = RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }).ok;
-            }
-            TryDeleteMarker();
-            if (ok)
-                log.Information("[MacFirewall] orphan cleanup: egress unblocked (a lost pfctl -E token cannot be released by a new process)");
-            else
-                log.Warning("[MacFirewall] orphan cleanup: pfctl failed (sudoers grant missing?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
         }
         catch (Exception ex) { log.Warning(ex, "[MacFirewall] orphan cleanup failed"); }
     }
@@ -494,10 +616,11 @@ public sealed class MacFirewallManager : IFirewallManager
             var req = new ProcessRequest("/usr/bin/sudo", args, CaptureStdout: true, CaptureStderr: true);
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
             var r = _runner.RunAsync(req, cts.Token).GetAwaiter().GetResult();
-            if (r.ExitCode != 0)
-                _logger.Debug("[MacFirewall] sudo {Args} exited {Code}: {Err}",
-                    string.Join(' ', args), r.ExitCode, r.Stderr?.Trim());
-            return (r.ExitCode == 0, r.Stdout ?? string.Empty, r.Stderr ?? string.Empty);
+            var ok = r.ExitCode == 0 && !r.TimedOut;
+            if (!ok)
+                _logger.Debug("[MacFirewall] sudo {Args} failed (exit {Code}, timedOut {TimedOut}): {Err}",
+                    string.Join(' ', args), r.ExitCode, r.TimedOut, r.Stderr?.Trim());
+            return (ok, r.Stdout ?? string.Empty, r.Stderr ?? string.Empty);
         }
         catch (Exception ex)
         {

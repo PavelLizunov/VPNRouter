@@ -19,16 +19,16 @@ namespace VPNRouter.Core.Platform.Linux;
 /// blocking everything is correct); split tunnel stays a labelled no-op. See
 /// <c>plans/firewall-killswitch-linux-macos-2026-06-02.md</c>.</para>
 ///
-/// <para><strong>Full-tunnel signal</strong>: <see cref="CreateBlockRules"/> is
-/// called with an EMPTY process list (the startup pipeline skips the process scan
-/// in full tunnel); a non-empty list means split tunnel → stay disarmed.</para>
+/// <para><strong>Full-tunnel signal</strong>: arming is governed by the explicit
+/// <c>isFullTunnel</c> flag passed to <see cref="CreateBlockRules"/> (split tunnel
+/// stays disarmed even if a process scan returns an empty list).</para>
 ///
 /// <para><strong>The ruleset</strong> (loaded only while blocking) is a dedicated
 /// <c>inet vpnrouter_ks</c> table with an output chain at <c>policy drop</c> that
 /// passes loopback, RFC1918 / link-local LAN, and the VPN server IP(s) read from
 /// <c>current.json</c>. The server pass is what lets sing-box reconnect during the
-/// block window; without it HealthMonitor would never see a healthy restart and
-/// the host would stay blocked forever. IPv6 stays fully blocked (no v6 leak)
+/// block window while the ruleset is active (local monitors or fallback can still
+/// disengage the block). IPv6 stays fully blocked (no v6 leak)
 /// except loopback. The table exists ONLY while blocking — Disable/Delete remove
 /// it entirely, so a disabled kill-switch leaves zero nft state.</para>
 ///
@@ -37,12 +37,12 @@ namespace VPNRouter.Core.Platform.Linux;
 /// <c>sudo -n nft</c> exactly like macOS shells <c>sudo -n pfctl</c> — relying on
 /// a NOPASSWD sudoers grant for nft. <strong>Fail-safe</strong>: if the grant is
 /// missing, <c>sudo -n</c> fails, we log and DO NOT block (traffic follows normal
-/// routing) — never a brick. Every Disable/Delete/Dispose path always tries to
+/// routing). Every Disable/Delete/Dispose path always tries to
 /// remove the table.</para>
 ///
 /// <para>Pure <see cref="IProcessRunner"/> orchestration (no Linux APIs) so the
 /// exact nft command shapes are unit-tested on the Windows build; live
-/// block / reconnect / no-brick behaviour is verified on a real Linux host.
+/// block / reconnect / teardown behaviour is verified on a real Linux host.
 /// Default-OFF (only constructed + armed when a profile sets block_on_vpn_fail).</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
@@ -155,7 +155,11 @@ public sealed class LinuxFirewallManager : IFirewallManager
     public void DisableBlockRules()
     {
         if (!_loaded) return;
-        DeleteTable();
+        if (!DeleteTable())
+        {
+            _logger.Warning("[LinuxFirewall] failed to remove nft table — retaining kill-switch state for retry");
+            return;
+        }
         TryDeleteMarker();
         _loaded = false;
         _logger.Information("[LinuxFirewall] nft kill-switch lifted (table removed)");
@@ -166,7 +170,11 @@ public sealed class LinuxFirewallManager : IFirewallManager
     {
         // Fail-safe full teardown regardless of tracked state — used on clean
         // shutdown and orphan cleanup.
-        DeleteTable();
+        if (!DeleteTable())
+        {
+            _logger.Warning("[LinuxFirewall] DeleteAllRules: failed to remove nft table — retaining state for retry");
+            return;
+        }
         TryDeleteMarker();
         _loaded = false;
         _armed = false;
@@ -175,20 +183,128 @@ public sealed class LinuxFirewallManager : IFirewallManager
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true;
-        // Anti-brick backstop: if our blocking table was ever loaded, make sure
+        // Teardown backstop: if our blocking table was ever loaded, make sure
         // it's gone even on an abrupt shutdown.
         if (_loaded)
         {
-            try { DeleteTable(); TryDeleteMarker(); } catch { /* never throw from Dispose */ }
-            _loaded = false;
+            try
+            {
+                if (DeleteTable())
+                {
+                    TryDeleteMarker();
+                    _loaded = false;
+                    _disposed = true;
+                }
+            }
+            catch
+            {
+                /* never throw from Dispose */
+            }
+        }
+        else
+        {
+            _disposed = true;
         }
     }
 
     // ─── helpers ───────────────────────────────────────────────────────────
 
-    private void DeleteTable()
-        => RunSudo(new[] { "-n", Nft, "delete", "table", "inet", TableName }); // ignore "No such file" when absent
+    /// <summary>
+    /// Delete the dedicated nft table. Returns true on confirmed exit 0 without timeout,
+    /// or when a failed delete is followed by a successful `nft -j list tables` inventory
+    /// confirming the table is already absent.
+    /// We NEVER guess absence from arbitrary exit codes or stderr error text.
+    /// </summary>
+    private bool DeleteTable()
+    {
+        if (RunSudo(new[] { "-n", Nft, "delete", "table", "inet", TableName }).ok)
+            return true;
+
+        return IsTableAbsent();
+    }
+
+    private bool IsTableAbsent()
+    {
+        var (ok, stdout, _) = RunSudo(new[] { "-n", Nft, "-j", "list", "tables" });
+        if (!ok || string.IsNullOrWhiteSpace(stdout))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(stdout);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.TryGetProperty("nftables", out var nftables) ||
+                nftables.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var elem in nftables.EnumerateArray())
+            {
+                if (elem.ValueKind != JsonValueKind.Object)
+                    return false;
+
+                var propCount = 0;
+                JsonProperty singleProp = default;
+                foreach (var prop in elem.EnumerateObject())
+                {
+                    propCount++;
+                    if (propCount > 1)
+                        return false;
+                    singleProp = prop;
+                }
+
+                if (propCount == 0)
+                    return false;
+
+                if (singleProp.NameEquals("table"))
+                {
+                    var tbl = singleProp.Value;
+                    if (tbl.ValueKind != JsonValueKind.Object)
+                        return false;
+
+                    if (!tbl.TryGetProperty("family", out var fam) ||
+                        fam.ValueKind != JsonValueKind.String ||
+                        string.IsNullOrWhiteSpace(fam.GetString()))
+                    {
+                        return false;
+                    }
+
+                    if (!tbl.TryGetProperty("name", out var name) ||
+                        name.ValueKind != JsonValueKind.String ||
+                        string.IsNullOrWhiteSpace(name.GetString()))
+                    {
+                        return false;
+                    }
+
+                    if (fam.ValueEquals("inet") && name.ValueEquals(TableName))
+                    {
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                if (singleProp.NameEquals("metainfo"))
+                {
+                    if (singleProp.Value.ValueKind != JsonValueKind.Object)
+                        return false;
+
+                    continue;
+                }
+
+                return false;
+            }
+
+            _logger.Debug("[LinuxFirewall] nft table {Table} confirmed absent via table inventory", TableName);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[LinuxFirewall] failed to parse nft table inventory JSON");
+            return false;
+        }
+    }
 
     /// <summary>
     /// Build the nft ruleset (atomic add+flush+rules in one -f file): a dedicated
@@ -240,7 +356,7 @@ public sealed class LinuxFirewallManager : IFirewallManager
                             // Hostname server — nft rules take literal IPs only, so
                             // resolve NOW (while the VPN is healthy) and pass-list the
                             // resolved IP(s). Without this the kill-switch would block
-                            // the crash-reconnect to a hostname server → bricked host.
+                            // the crash-reconnect to a hostname server.
                             foreach (var rip in _resolveHost(s!))
                                 if (!ips.Contains(rip)) ips.Add(rip);
                         }
@@ -308,12 +424,17 @@ public sealed class LinuxFirewallManager : IFirewallManager
         {
             if (!System.IO.File.Exists(_markerPath)) return;
             log.Warning("[LinuxFirewall] engaged kill-switch marker from a prior session found (hard kill?) — removing leftover nft table");
-            var ok = RunSudo(new[] { "-n", Nft, "delete", "table", "inet", TableName }).ok;
-            TryDeleteMarker();
+            var ok = DeleteTable();
             if (ok)
+            {
+                TryDeleteMarker();
+                _loaded = false;
                 log.Information("[LinuxFirewall] orphan cleanup: nft table removed — egress restored");
+            }
             else
+            {
                 log.Warning("[LinuxFirewall] orphan cleanup: nft delete table failed (already gone, or no sudoers grant) — if the internet is blocked, run: sudo nft delete table inet {Table}", TableName);
+            }
         }
         catch (Exception ex) { log.Warning(ex, "[LinuxFirewall] orphan cleanup failed"); }
     }
@@ -336,10 +457,11 @@ public sealed class LinuxFirewallManager : IFirewallManager
             var req = new ProcessRequest("/usr/bin/sudo", args, CaptureStdout: true, CaptureStderr: true);
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
             var r = _runner.RunAsync(req, cts.Token).GetAwaiter().GetResult();
-            if (r.ExitCode != 0)
-                _logger.Debug("[LinuxFirewall] sudo {Args} exited {Code}: {Err}",
-                    string.Join(' ', args), r.ExitCode, r.Stderr?.Trim());
-            return (r.ExitCode == 0, r.Stdout ?? string.Empty, r.Stderr ?? string.Empty);
+            var ok = r.ExitCode == 0 && !r.TimedOut;
+            if (!ok)
+                _logger.Debug("[LinuxFirewall] sudo {Args} exited {Code} (timedOut={TimedOut}): {Err}",
+                    string.Join(' ', args), r.ExitCode, r.TimedOut, r.Stderr?.Trim());
+            return (ok, r.Stdout ?? string.Empty, r.Stderr ?? string.Empty);
         }
         catch (Exception ex)
         {

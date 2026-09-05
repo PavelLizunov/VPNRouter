@@ -68,41 +68,63 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Outcome
 
-**Status**: PLANNING COMPLETE / READY FOR BATCH 1 EXECUTION
-**Commits**: None (planning phase; no commits created on task branch yet)
-**Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (based on accepted `main` `b7ce0e4f`, will track task origin branch, not `origin/main`)
-**Test deltas**: 0 executed locally (control plane lacks .NET SDK; CI inspection pending)
+**Status**: BATCH 1 VERIFIED ON CI / BATCH 2 (NIGHT-04) SOURCE-REVIEWED PENDING CI
+**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) source-reviewed working tree changes pending CI commit.
+**Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240)
+**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). 0 executed new tests yet for NIGHT-04 (control plane lacks .NET SDK; CI execution required).
 **Files changed**:
-- `plans/OPEN-DEFECTS.md` (restored from audit commit `7678e6ef`, 12 findings open)
-- `plans/overnight-audit-morning-report-2026-09-04.md` (restored from audit commit `7678e6ef`)
-- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (repair brief revised per lead review)
+- `plans/OPEN-DEFECTS.md` (active defect ledger; stays open pending evidence for whole task)
+- `plans/overnight-audit-morning-report-2026-09-04.md` (audit report)
+- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with Batch 1 CI pass and NIGHT-04 source review outcome)
+- `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 source-reviewed)
+- `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 source-reviewed)
+- `VPNRouter.Tests/LinuxFirewallManagerTests.cs` (NIGHT-04 unit tests, pending CI)
+- `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 unit tests, pending CI)
 
 **Gate results**:
-- [-] Gate 1: EVIDENCE PENDING (CI workflow command inspection required)
-- [-] Gate 2: BLOCKED on control plane (CI execution required)
-- [x] Gate 3: PASS (brief updated, open defect ledger restored, report imported)
-- [-] Gate 4: PENDING (to be executed per batch)
-- [-] Gate 5: N/A for planning phase (no visual changes)
-- [-] Gate 6: PENDING (characterization tests planned for Batches 1–4)
+- [-] Gate 1: BATCH 1 PASS ON CI (`4d029a54`, run 33947035219). Limits full solution/live/macOS unchanged. Batch 2 pending CI.
+- [-] Gate 2: BATCH 1 PASS ON CI (`4d029a54`, run 33947035219). No executed new tests yet locally. Batch 2 pending CI.
+- [x] Gate 3: PASS (brief updated; ledger stays open pending evidence for whole task).
+- [x] Gate 4: PASS (Batch 1 reviewed and green; NIGHT-04 source-reviewed with multiple lead corrections applied).
+- [-] Gate 5: N/A (no visual UI redesign).
+- [-] Gate 6: PENDING (characterization diff across batches).
 
-**Follow-ups**: Inspect CI workflows for exact commands; coordinate with Lead to execute Batch 1; maintain `plans/OPEN-DEFECTS.md` until green CI evidence gathered; track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
+**Follow-ups**: Commit NIGHT-04 changes and push to PR #240 for CI verification; implement NIGHT-05 next after green CI on NIGHT-04; maintain `plans/OPEN-DEFECTS.md` until green CI evidence gathered for whole task; track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
 
-### Batch 1 Interim Outcome
+### Batch 1 Outcome
 
-- **Status**: Gemini implementation awaiting CI; final review pending.
-- **Commit & CI**: Brief commit `c7bd9c48` has all 4 checks green on PR #240. Defect ledger (`plans/OPEN-DEFECTS.md`) remains open.
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: All 4 checks PASS on commit `4d029a54`, GitHub Actions run `33947035219`. Receipt: https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5549652101.
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` remains open pending evidence for the whole task.
 - **Batch 1 Scope**:
   - **NIGHT-01**: Process ownership verified; removed port-only kill; failed exact stop retains own handle; foreign listeners no longer cause false "Running" state.
   - **NIGHT-02**: Endpoint-aware final DNS; unified destination classification across outbounds and endpoints so WireGuard endpoint destinations are not treated as local and synthesized `vpnrouter-vpn-dns` detours are not rewritten to `dns-direct`.
   - **NIGHT-03**: Effective strict precedence; `StrictDns == true` overrides `DnsMode == "smart"` on generated and custom exclude rules, ensuring all matched DNS queries route through `vpn-dns`.
-- **Review & Corrections**: Lead caught unsafe regression tests (never executed), shared-path fixture, platform compile issue, and failure-state issues; workers corrected, final review pending.
+- **Review & Corrections**: Lead caught unsafe regression tests (never executed), shared-path fixture, platform compile issue, and failure-state issues; workers corrected; CI verified green.
 - **CI Pipeline Scope & Gate 1 Limitation**:
   - Existing CI (`test.yml`) builds `VPNRouter.Tests` project (Core and App dependencies).
   - Ubuntu runner excludes `HeadlessGuiTests`, `PageScreenshotTests`, and `VisualDiffTests`.
   - Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
-  - It DOES NOT prove full solution, macOS, or live behavior; Gate 1 remains a full solution limitation.
+  - It DOES NOT prove full solution, macOS, or live behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
 - **Test Selection & Execution Status**:
-  - New `TgProxyOwnershipCharacterizationTests` selected on Windows and Ubuntu.
-  - New `NightDnsPrivacyRegressionTests` selected on Ubuntu.
-  - No dotnet tests executed yet; zero false test counts reported; defect ledger remains open.
-  - Test coverage needs actual CI next.
+  - `TgProxyOwnershipCharacterizationTests` and `NightDnsPrivacyRegressionTests` executed and passed on CI.
+
+### Batch 2 (NIGHT-04 Sub-batch) Interim Outcome
+
+- **Status**: Source-reviewed, pending CI.
+- **Batch 2 Scope (NIGHT-04)**:
+  - **LinuxFirewallManager**: Linux marker cleared only confirmed cleanup. When `nft` table delete fails, verifies absence through successful structured `nft -j list tables` (not stderr guess).
+  - **MacFirewallManager**: macOS marker cleared only confirmed cleanup. Retained pf token retry and unknown marker conservative no broad restore.
+  - **Test Isolation**: Tests fully isolated temp config/rules.
+- **Lead Corrections**: Multiple lead corrections applied during source review:
+  1. Unguarded Mac cold DeleteAll marker.
+  2. Internal-enum public-test compile hazard.
+  3. Malformed nft inventory.
+  4. Unsafe raw marker content logging.
+- **Test Execution Status**:
+  - No executed new tests yet (control plane lacks .NET SDK; CI execution required).
+- **Subsequent Batches**:
+  - **NIGHT-05**: Not implemented; next after green CI on NIGHT-04.
+- **Ledger & Constraints**:
+  - Defect ledger (`plans/OPEN-DEFECTS.md`) stays open pending evidence whole task.
+  - Limits full solution/live/macOS unchanged.

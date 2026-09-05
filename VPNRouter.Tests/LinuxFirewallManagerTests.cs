@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using VPNRouter.Core.Platform.Linux;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -19,21 +20,38 @@ namespace VPNRouter.Tests;
 /// </summary>
 public class LinuxFirewallManagerTests : IDisposable
 {
-    private readonly string _cfg =
-        Path.Combine(Path.GetTempPath(), "vpnrouter-lfw-cfg-" + Guid.NewGuid().ToString("N") + ".json");
-    private readonly string _marker =
-        Path.Combine(Path.GetTempPath(), "vpnrouter-lfw-marker-" + Guid.NewGuid().ToString("N") + ".marker");
+    private readonly string _testDir =
+        Path.Combine(Path.GetTempPath(), "vpnrouter-lfw-test-" + Guid.NewGuid().ToString("N"));
+    private readonly string _cfg;
+    private readonly string _marker;
+    private readonly string _ruleset;
+
+    public LinuxFirewallManagerTests()
+    {
+        Directory.CreateDirectory(_testDir);
+        _cfg = Path.Combine(_testDir, "current.json");
+        _marker = Path.Combine(_testDir, "engaged.marker");
+        _ruleset = Path.Combine(_testDir, "ruleset.conf");
+    }
 
     public void Dispose()
     {
         try { if (File.Exists(_cfg)) File.Delete(_cfg); } catch { }
         try { if (File.Exists(_marker)) File.Delete(_marker); } catch { }
+        try { if (File.Exists(_ruleset)) File.Delete(_ruleset); } catch { }
+        try { if (Directory.Exists(_testDir)) Directory.Delete(_testDir, true); } catch { }
     }
 
     private static ProcessResult Ok(string stdout = "", string stderr = "") =>
         new ProcessResult(0, stdout, stderr, TimeSpan.Zero, false);
     private static ProcessResult Fail(string stderr = "sudo: a password is required") =>
         new ProcessResult(1, "", stderr, TimeSpan.Zero, false);
+
+    private static ProcessResult NftTablesPresent() =>
+        Ok(@"{""nftables"":[{""metainfo"":{""version"":""1.0.2""}},{""table"":{""family"":""inet"",""name"":""vpnrouter_ks""}}]}");
+
+    private static ProcessResult NftTablesAbsent() =>
+        Ok(@"{""nftables"":[{""metainfo"":{""version"":""1.0.2""}},{""table"":{""family"":""ip"",""name"":""filter""}}]}");
 
     private void WriteConfig(string serverIp) =>
         File.WriteAllText(_cfg, $@"{{ ""outbounds"": [
@@ -47,6 +65,12 @@ public class LinuxFirewallManagerTests : IDisposable
         return f;
     }
 
+    private LinuxFirewallManager CreateSut(
+        FakeProcessRunner runner,
+        Func<string, IReadOnlyList<string>>? hostResolver = null,
+        string? rulesetPath = null) =>
+        new(null, runner, _cfg, _marker, hostResolver, rulesetPath ?? _ruleset);
+
     private static string LoadedRulesetFile(FakeProcessRunner f) =>
         f.RunCalls.First(c => c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("-f")).Arguments.Last();
 
@@ -55,7 +79,7 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
 
         sut.CreateBlockRules(new[] { "Discord", "chrome" }, isFullTunnel: false);
         sut.EnableBlockRules();
@@ -72,7 +96,7 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
 
         sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: false); // split scan returned nothing
         sut.EnableBlockRules();
@@ -85,7 +109,7 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         WriteConfig("104.194.156.93");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
 
         sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
         sut.EnableBlockRules();
@@ -105,7 +129,7 @@ public class LinuxFirewallManagerTests : IDisposable
         var fake = new FakeProcessRunner();
         fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Fail());
         fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules(); // fail-safe: load failed → NOT blocking, no brick
@@ -122,7 +146,7 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
@@ -137,7 +161,7 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
@@ -152,10 +176,23 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
         sut.CreateBlockRules(Array.Empty<string>()); // armed but never enabled
 
         sut.DisableBlockRules();
+
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("delete"));
+    }
+
+    [Fact]
+    public void Dispose_without_load_does_not_delete_and_is_noop()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+        sut.CreateBlockRules(Array.Empty<string>()); // armed but never enabled
+
+        sut.Dispose();
 
         Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("delete"));
     }
@@ -202,8 +239,7 @@ public class LinuxFirewallManagerTests : IDisposable
             { ""type"": ""vless"", ""server"": ""5.6.7.8"" } ] }");
         var fake = OkRunner();
         // resolver returns nothing for the hostname → only the literal IP survives
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker,
-            hostResolver: _ => Array.Empty<string>());
+        var sut = CreateSut(fake, hostResolver: _ => Array.Empty<string>());
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -221,7 +257,7 @@ public class LinuxFirewallManagerTests : IDisposable
         File.WriteAllText(_cfg, @"{ ""outbounds"": [
             { ""type"": ""vless"", ""server"": ""proxy.example.com"" } ] }");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker,
+        var sut = CreateSut(fake,
             hostResolver: h => h == "proxy.example.com"
                 ? new[] { "203.0.113.10" }
                 : (IReadOnlyList<string>)Array.Empty<string>());
@@ -238,7 +274,7 @@ public class LinuxFirewallManagerTests : IDisposable
     public void Enable_writes_engaged_marker_Disable_clears_it()
     {
         WriteConfig("9.9.9.9");
-        var sut = new LinuxFirewallManager(null, OkRunner(), _cfg, _marker);
+        var sut = CreateSut(OkRunner());
         sut.CreateBlockRules(Array.Empty<string>());
 
         sut.EnableBlockRules();
@@ -253,7 +289,7 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         File.WriteAllText(_marker, "engaged"); // simulate a prior hard kill while engaged
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker);
+        var sut = CreateSut(fake);
 
         sut.CleanupOrphanedRules(null);
 
@@ -266,7 +302,7 @@ public class LinuxFirewallManagerTests : IDisposable
     public void CleanupOrphanedRules_without_marker_is_noop()
     {
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker); // no marker file
+        var sut = CreateSut(fake); // no marker file
 
         sut.CleanupOrphanedRules(null);
 
@@ -279,9 +315,9 @@ public class LinuxFirewallManagerTests : IDisposable
         // FW-02: verify that LinuxFirewallManager writes rulesets into private AppPaths.DataDir
         // or the explicitly configured ruleset path, never world-writable /tmp.
         WriteConfig("9.9.9.9");
-        var customRuleset = Path.Combine(Path.GetTempPath(), "custom-ruleset-" + Guid.NewGuid().ToString("N") + ".conf");
+        var customRuleset = Path.Combine(_testDir, "custom-ruleset-" + Guid.NewGuid().ToString("N") + ".conf");
         var fake = OkRunner();
-        var sut = new LinuxFirewallManager(null, fake, _cfg, _marker, rulesetPath: customRuleset);
+        var sut = CreateSut(fake, rulesetPath: customRuleset);
 
         try
         {
@@ -296,5 +332,393 @@ public class LinuxFirewallManagerTests : IDisposable
         {
             try { if (File.Exists(customRuleset)) File.Delete(customRuleset); } catch { }
         }
+    }
+
+    [Fact]
+    public void Successful_engage_failed_Disable_keeps_marker_and_allows_retry()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        var allowDelete = false;
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"),
+            _ => Task.FromResult(allowDelete ? Ok() : Fail("sudoers denied")));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Fail("sudoers denied"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Failed Disable must retain marker and loaded recovery state
+        sut.DisableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Retry after recovery successfully removes table and marker
+        allowDelete = true;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
+    }
+
+    [Fact]
+    public void Orphan_hard_crash_marker_failed_delete_keeps_marker_and_later_same_instance_recovered_command_removes()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var fake = new FakeProcessRunner();
+        var allowDelete = false;
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"),
+            _ => Task.FromResult(allowDelete ? Ok() : Fail("sudoers denied")));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Fail("sudoers denied"));
+        var sut = CreateSut(fake);
+
+        // Failed delete during orphan cleanup must not delete marker
+        sut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker));
+
+        // Later recovered command on the same instance succeeds and clears marker
+        allowDelete = true;
+        sut.CleanupOrphanedRules(null);
+        Assert.False(File.Exists(_marker));
+        Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
+    }
+
+    [Fact]
+    public void DeleteAll_failure_retains_marker_and_state()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        var allowDelete = false;
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"),
+            _ => Task.FromResult(allowDelete ? Ok() : Fail("permission denied")));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Fail("permission denied"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Failed DeleteAllRules keeps marker for future recovery
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+
+        // Repeat DeleteAllRules succeeds and clears marker
+        allowDelete = true;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
+    }
+
+    [Fact]
+    public void Dispose_retry_on_prior_failure_cleans_up_when_recovered()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        var allowDelete = false;
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"),
+            _ => Task.FromResult(allowDelete ? Ok() : Fail("permission denied")));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Fail("permission denied"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // First Dispose fails delete → retains marker and _loaded
+        sut.Dispose();
+        Assert.True(File.Exists(_marker));
+
+        // Repeat Dispose with recovered command cleans up and clears marker
+        allowDelete = true;
+        sut.Dispose();
+        Assert.False(File.Exists(_marker));
+        Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
+
+        // Subsequent Dispose is idempotent no-op
+        sut.Dispose();
+        Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
+    }
+
+    [Fact]
+    public void TimedOut_exit0_not_success()
+    {
+        WriteConfig("9.9.9.9");
+        var timedOutOk = new ProcessResult(0, "", "", TimeSpan.FromSeconds(10), TimedOut: true);
+        var fake = new FakeProcessRunner();
+        var loadShouldTimeout = true;
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"),
+            _ => Task.FromResult(loadShouldTimeout ? timedOutOk : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), timedOutOk);
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), timedOutOk);
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+
+        // 1. Enable with timed-out exit 0 must not engage or write marker
+        sut.EnableBlockRules();
+        Assert.False(File.Exists(_marker));
+
+        // 2. Successful Enable followed by timed-out exit 0 on Disable must retain marker
+        loadShouldTimeout = false;
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // 3. Orphan cleanup with timed-out exit 0 must retain marker
+        sut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_but_inventory_absent_proves_absent_and_succeeds()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("table not found"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), NftTablesAbsent());
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Proved absent via inventory -> success, marker deleted
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete"));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-j") && c.Arguments.Contains("list") && c.Arguments.Contains("tables"));
+    }
+
+    [Fact]
+    public void DeleteAll_delete_fails_but_inventory_absent_clears_marker()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("table not found"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), NftTablesAbsent());
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DeleteAllRules();
+
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void OrphanCleanup_delete_fails_but_inventory_absent_clears_marker()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("table not found"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), NftTablesAbsent());
+        var sut = CreateSut(fake);
+
+        sut.CleanupOrphanedRules(null);
+
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_but_inventory_empty_nftables_array_proves_absent_and_succeeds()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("table not found"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Ok(@"{""nftables"":[]}"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_and_inventory_target_present_retains_failure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("delete failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), NftTablesPresent());
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Target table is present -> failure retained, marker kept
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_and_inventory_error_retains_failure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("delete failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Fail("sudo: command failed"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Inventory command error -> failure retained, marker kept
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_and_inventory_malformed_json_retains_failure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("delete failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Ok("{ invalid json"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Malformed JSON -> failure retained, marker kept
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_and_inventory_missing_nftables_array_retains_failure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("delete failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Ok(@"{""tables"":[]}"));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Missing nftables array -> failure retained, marker kept
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Delete_fails_and_inventory_timedout_retains_failure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        var timedOut = new ProcessResult(0, "", "", TimeSpan.FromSeconds(10), TimedOut: true);
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("delete failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), timedOut);
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Timed out inventory -> failure retained, marker kept
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Theory]
+    // Missing family (e.g. {nftables:[{table:{name:'vpnrouter_ks'}}]})
+    [InlineData(@"{""nftables"":[{""table"":{""name"":""vpnrouter_ks""}}]}")]
+    // Missing name
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""inet""}}]}")]
+    // Wrong family type (number)
+    [InlineData(@"{""nftables"":[{""table"":{""family"":123,""name"":""vpnrouter_ks""}}]}")]
+    // Wrong name type (number)
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":456}}]}")]
+    // Wrong family type (null)
+    [InlineData(@"{""nftables"":[{""table"":{""family"":null,""name"":""vpnrouter_ks""}}]}")]
+    // Wrong name type (null)
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":null}}]}")]
+    // Empty family string
+    [InlineData(@"{""nftables"":[{""table"":{""family"":"""",""name"":""vpnrouter_ks""}}]}")]
+    // Whitespace family string
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""   "",""name"":""vpnrouter_ks""}}]}")]
+    // Empty name string
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":""""}}]}")]
+    // Whitespace name string
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":""   ""}}]}")]
+    // Wrong table type (string instead of object)
+    [InlineData(@"{""nftables"":[{""table"":""not_an_object""}]}")]
+    // Wrong table type (null instead of object)
+    [InlineData(@"{""nftables"":[{""table"":null}]}")]
+    // Wrong table type (array instead of object)
+    [InlineData(@"{""nftables"":[{""table"":[]}]}")]
+    // Unknown node type
+    [InlineData(@"{""nftables"":[{""unknown"":{}}]}")]
+    // Non-object entry in nftables array
+    [InlineData(@"{""nftables"":[123]}")]
+    // Non-object metainfo
+    [InlineData(@"{""nftables"":[{""metainfo"":""not_an_object""}]}")]
+    public void Delete_fails_and_inventory_malformed_entry_retains_failure(string malformedInventoryJson)
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("delete failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Ok(malformedInventoryJson));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        // Malformed inventory entry -> failure retained, marker kept
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Theory]
+    [InlineData(@"{""nftables"":[{""table"":{""family"":""ip"",""name"":""filter""}}]}")]
+    [InlineData(@"{""nftables"":[{""metainfo"":{""version"":""1.0.2""}}]}")]
+    [InlineData(@"{""nftables"":[{""metainfo"":{""version"":""1.0.2""}},{""table"":{""family"":""ip"",""name"":""filter""}}]}")]
+    public void Delete_fails_but_inventory_valid_other_tables_or_metainfo_proves_absent_and_succeeds(string validInventoryJson)
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Ok());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("delete"), Fail("table not found"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Ok(validInventoryJson));
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        sut.DisableBlockRules();
+
+        Assert.False(File.Exists(_marker));
     }
 }

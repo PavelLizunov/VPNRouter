@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using VPNRouter.Core.Platform.macOS;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -39,6 +40,10 @@ public class MacFirewallManagerTests : IDisposable
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-marker-" + Guid.NewGuid().ToString("N") + ".marker");
     private readonly string _pfconf =
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-pfconf-" + Guid.NewGuid().ToString("N") + ".conf");
+    private readonly string _rules =
+        Path.Combine(Path.GetTempPath(), "vpnrouter-fw-rules-" + Guid.NewGuid().ToString("N") + ".conf");
+    private readonly string _mainConf =
+        Path.Combine(Path.GetTempPath(), "vpnrouter-fw-main-" + Guid.NewGuid().ToString("N") + ".conf");
 
     private const string StockPfConf =
         "scrub-anchor \"com.apple/*\"\n" +
@@ -55,6 +60,8 @@ public class MacFirewallManagerTests : IDisposable
         try { if (File.Exists(_cfg)) File.Delete(_cfg); } catch { }
         try { if (File.Exists(_marker)) File.Delete(_marker); } catch { }
         try { if (File.Exists(_pfconf)) File.Delete(_pfconf); } catch { }
+        try { if (File.Exists(_rules)) File.Delete(_rules); } catch { }
+        try { if (File.Exists(_mainConf)) File.Delete(_mainConf); } catch { }
     }
 
     private static ProcessResult Ok(string stdout = "", string stderr = "") =>
@@ -82,8 +89,14 @@ public class MacFirewallManagerTests : IDisposable
         return f;
     }
 
-    private MacFirewallManager Sut(FakeProcessRunner fake, string? pfconf = null) =>
-        new MacFirewallManager(null, fake, _cfg, _marker, pfConfPath: pfconf ?? _pfconf);
+    private MacFirewallManager Sut(FakeProcessRunner fake, string? pfconf = null, string? rulesPath = null, string? mainConfPath = null) =>
+        new MacFirewallManager(null, fake, _cfg, _marker, pfConfPath: pfconf ?? _pfconf, rulesPath: rulesPath ?? _rules, mainConfPath: mainConfPath ?? _mainConf);
+
+    private static bool GetArmed(MacFirewallManager sut) =>
+        (bool)typeof(MacFirewallManager).GetField("_armed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(sut)!;
+
+    private static bool GetLoaded(MacFirewallManager sut) =>
+        (bool)typeof(MacFirewallManager).GetField("_loaded", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(sut)!;
 
     // Helpers to classify pfctl calls.
     private static bool IsAnchorLoad(ProcessRequest c) =>
@@ -362,7 +375,8 @@ public class MacFirewallManagerTests : IDisposable
             { ""type"": ""vless"", ""server"": ""5.6.7.8"" } ] }");
         var fake = OkRunner();
         var sut = new MacFirewallManager(null, fake, _cfg, _marker,
-            hostResolver: _ => Array.Empty<string>(), pfConfPath: _pfconf);
+            hostResolver: _ => Array.Empty<string>(), pfConfPath: _pfconf,
+            rulesPath: _rules, mainConfPath: _mainConf);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -385,7 +399,7 @@ public class MacFirewallManagerTests : IDisposable
             hostResolver: h => h == "proxy.example.com"
                 ? new[] { "203.0.113.10" }
                 : (IReadOnlyList<string>)Array.Empty<string>(),
-            pfConfPath: _pfconf);
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -484,5 +498,495 @@ public class MacFirewallManagerTests : IDisposable
             try { if (File.Exists(customRules)) File.Delete(customRules); } catch { }
             try { if (File.Exists(customMain)) File.Delete(customMain); } catch { }
         }
+    }
+
+    // ── NIGHT04: failure retention, retry, and token preservation ──────────
+
+    [Fact]
+    public void Disable_WhenFlushAnchorFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Flush fails: marker and loaded state must be preserved for retry.
+        flushFails = true;
+        sut.DisableBlockRules();
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+
+        // Retry succeeds: rules cleared, marker deleted, token released.
+        flushFails = false;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_WhenFlushAnchorFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        flushFails = true;
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+
+        flushFails = false;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedAnchorMarker_WhenFlushAnchorFails_RetainsMarker_AndSubsequentRetryClears()
+    {
+        File.WriteAllText(_marker, MacFirewallManager.AnchorMarker);
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("anchor flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        // Fresh instance: never armed, never enabled (_loaded == false)
+        var sut = Sut(fake);
+        Assert.False(GetLoaded(sut));
+        Assert.False(GetArmed(sut));
+
+        // Attempt 1: anchor flush fails -> marker must be retained
+        flushFails = true;
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.AnchorMarker, File.ReadAllText(_marker));
+        Assert.Contains(fake.RunCalls, IsAnchorFlush);
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("/etc/pf.conf"));
+
+        // Attempt 2: retry succeeds -> marker deleted
+        flushFails = false;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedLegacyMarker_RoutesToDefaultRulesetRestore_AndRetainsMarkerOnFailure_AndClearsOnRetry()
+    {
+        File.WriteAllText(_marker, MacFirewallManager.LegacyMarker);
+        var restoreFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"),
+            _ => Task.FromResult(restoreFails ? Fail("legacy restore failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        // Fresh instance: never armed, never enabled (_loaded == false)
+        var sut = Sut(fake);
+        Assert.False(GetLoaded(sut));
+        Assert.False(GetArmed(sut));
+
+        // Attempt 1: restore fails -> marker must be retained, anchor must NOT be flushed
+        restoreFails = true;
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.LegacyMarker, File.ReadAllText(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+        Assert.DoesNotContain(fake.RunCalls, IsAnchorFlush);
+
+        // Attempt 2: retry succeeds -> legacy marker cleared
+        restoreFails = false;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedLegacyMarker_DoesNotClearLegacyMarkerAfterOnlyFlushingAnchor()
+    {
+        File.WriteAllText(_marker, MacFirewallManager.LegacyMarker);
+        var fake = new FakeProcessRunner();
+        // Allow anchor flush to succeed, but fail default ruleset restore
+        fake.OnRun(IsAnchorFlush, Ok());
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"), Fail("restore failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        var sut = Sut(fake);
+
+        sut.DeleteAllRules();
+
+        // Fresh instance must route to legacy cleanup, NOT just flush anchor and clear marker
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.LegacyMarker, File.ReadAllText(_marker));
+        Assert.DoesNotContain(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_WhenArmedButUnloaded_FailedFlushAnchorRetainsArmedState_AndRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        var sut = Sut(fake);
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.True(GetArmed(sut));
+        Assert.False(GetLoaded(sut));
+
+        // Attempt 1: Flush fails -> armed state must be retained!
+        flushFails = true;
+        sut.DeleteAllRules();
+        Assert.True(GetArmed(sut));
+
+        // Attempt 2: Flush succeeds -> armed state cleared
+        flushFails = false;
+        sut.DeleteAllRules();
+        Assert.False(GetArmed(sut));
+
+        // Disarmed -> EnableBlockRules is a no-op (no pfctl -E)
+        sut.EnableBlockRules();
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-E"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_WhenLegacyLoaded_RestoresDefaultRuleset_AndReleasesToken()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = OkRunner();
+        var missingPfConf = Path.Combine(Path.GetTempPath(), "missing-" + Guid.NewGuid().ToString("N") + ".conf");
+        var sut = Sut(fake, pfconf: missingPfConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(GetLoaded(sut));
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.LegacyMarker, File.ReadAllText(_marker));
+
+        sut.DeleteAllRules();
+
+        Assert.False(GetLoaded(sut));
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+        Assert.DoesNotContain(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WhenAnchorFlushFails_PreservesMarker_AndSubsequentRetryClears()
+    {
+        File.WriteAllText(_marker, "anchor-v1");
+        var flushFails = true;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        // Attempt 1: anchor flush fails -> marker MUST NOT be deleted.
+        sut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker));
+
+        // Attempt 2: retry succeeds -> marker deleted.
+        flushFails = false;
+        sut.CleanupOrphanedRules(null);
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WhenLegacyRestoreFails_PreservesMarker_AndSubsequentRetryClears()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var restoreFails = true;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"),
+            _ => Task.FromResult(restoreFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        // Attempt 1: stock restore fails -> marker preserved.
+        sut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker));
+
+        // Attempt 2: retry succeeds -> marker cleared.
+        restoreFails = false;
+        sut.CleanupOrphanedRules(null);
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Disable_WhenLegacyRestoreFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var restoreFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"),
+            _ => Task.FromResult(restoreFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        var missingPfConf = Path.Combine(Path.GetTempPath(), "missing-" + Guid.NewGuid().ToString("N") + ".conf");
+        var sut = Sut(fake, pfconf: missingPfConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+        Assert.Equal("engaged", File.ReadAllText(_marker));
+
+        // Disable with failing restore
+        restoreFails = true;
+        sut.DisableBlockRules();
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+
+        // Retry with succeeding restore
+        restoreFails = false;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void TokenRelease_WhenReleaseFails_PreservesTokenForRetry_AndDoesNotAcquireDoubleEnable()
+    {
+        WriteConfig("9.9.9.9");
+        var releaseFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(r => r.Arguments.Contains("-X"), _ => Task.FromResult(releaseFails ? Fail("token release failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Flush rules succeeds, but token release fails:
+        // marker is cleared (no block rules remaining), but token is preserved.
+        releaseFails = true;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+
+        // Re-enable must reuse retained token and NOT acquire a second -E.
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+        var enableCalls = fake.RunCalls.Count(c => c.Arguments.Contains("-E"));
+        Assert.Equal(1, enableCalls); // only the initial -E, no second -E
+
+        // Disable with token release now succeeding.
+        releaseFails = false;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+
+        // Subsequent disable is a no-op because token was successfully released.
+        var countBefore = fake.RunCalls.Count;
+        sut.DisableBlockRules();
+        Assert.Equal(countBefore, fake.RunCalls.Count);
+    }
+
+    [Fact]
+    public void Dispose_WhenFlushOrTokenReleaseFails_RetriesOnSubsequentDispose()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var releaseFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail() : Ok()));
+        fake.OnRun(r => r.Arguments.Contains("-X"), _ => Task.FromResult(releaseFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Call 1: flush fails -> marker kept, token kept.
+        flushFails = true;
+        releaseFails = true;
+        sut.Dispose();
+        Assert.True(File.Exists(_marker));
+
+        // Call 2: flush succeeds, but release fails -> marker deleted, token kept.
+        flushFails = false;
+        sut.Dispose();
+        Assert.False(File.Exists(_marker));
+
+        // Call 3: release succeeds -> token released, disposed flag finalized.
+        releaseFails = false;
+        sut.Dispose();
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+
+        // Call 4: already clean -> no-op.
+        var countBefore = fake.RunCalls.Count;
+        sut.Dispose();
+        Assert.Equal(countBefore, fake.RunCalls.Count);
+    }
+
+    [Fact]
+    public void RunSudo_WhenExit0ButTimedOut_IsTreatedAsFailure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        // Anchor load returns ExitCode 0 but TimedOut = true:
+        fake.OnRun(IsAnchorLoad, new ProcessResult(0, "", "timed out", TimeSpan.FromSeconds(10), TimedOut: true));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        // Must NOT treat timed out command as success: rules not loaded, marker not written, token released.
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+
+        // Also test orphan cleanup:
+        File.WriteAllText(_marker, "anchor-v1");
+        var orphanFake = new FakeProcessRunner();
+        orphanFake.OnRun(IsAnchorFlush, new ProcessResult(0, "", "", TimeSpan.FromSeconds(10), TimedOut: true));
+        orphanFake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var orphanSut = Sut(orphanFake);
+
+        orphanSut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker)); // marker retained because flush timed out!
+    }
+
+    [Fact]
+    public void Disable_WhenTokenReleaseFails_DirectRetryReleasesTokenWithoutTouchingRules()
+    {
+        WriteConfig("9.9.9.9");
+        var releaseFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(r => r.Arguments.Contains("-X"), _ => Task.FromResult(releaseFails ? Fail("token release failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Call 1: rules flush succeeds, but token release fails -> marker deleted, token retained
+        releaseFails = true;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+
+        // Call 2: direct Disable retry without intermediate re-enable -> releases token, rules untouched
+        var flushCountBefore = fake.RunCalls.Count(IsAnchorFlush);
+        releaseFails = false;
+        sut.DisableBlockRules();
+        var flushCountAfter = fake.RunCalls.Count(IsAnchorFlush);
+        Assert.Equal(flushCountBefore, flushCountAfter);
+
+        // Call 3: subsequent Disable is a complete no-op
+        var totalCallsBefore = fake.RunCalls.Count;
+        sut.DisableBlockRules();
+        Assert.Equal(totalCallsBefore, fake.RunCalls.Count);
+    }
+
+    [Theory]
+    [InlineData("anchor-v1", "Anchor")]
+    [InlineData("  anchor-v1 \n", "Anchor")]
+    [InlineData("engaged", "Legacy")]
+    [InlineData(" engaged \r\n", "Legacy")]
+    [InlineData("unknown", "Unknown")]
+    [InlineData("engaged-v2", "Unknown")]
+    [InlineData("", "Unknown")]
+    public void InspectMarker_ClassifiesKnownAndUnknownMarkers(string content, string expected)
+    {
+        File.WriteAllText(_marker, content);
+        var sut = Sut(OkRunner());
+        Assert.Equal(expected, sut.InspectMarker().ToString());
+    }
+
+    [Fact]
+    public void InspectMarker_WhenMarkerMissing_ReturnsMissing()
+    {
+        var sut = Sut(OkRunner());
+        Assert.False(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.MarkerState.Missing, sut.InspectMarker());
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WithUnknownMarker_RetainsMarker_AndDoesNotBroadRestoreOrFlushAsSuccess()
+    {
+        File.WriteAllText(_marker, "arbitrary-unknown-content");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CleanupOrphanedRules(null);
+
+        // Marker must be retained and no broad restore or flush-as-success executed
+        Assert.True(File.Exists(_marker));
+        Assert.Equal("arbitrary-unknown-content", File.ReadAllText(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedUnknownMarker_RetainsMarker_AndDoesNotBroadRestoreOrFlushAsSuccess()
+    {
+        File.WriteAllText(_marker, "arbitrary-unknown-content");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.DeleteAllRules();
+
+        // Marker must be retained, no broad restore (/etc/pf.conf), and no token release
+        Assert.True(File.Exists(_marker));
+        Assert.Equal("arbitrary-unknown-content", File.ReadAllText(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WhenMarkerUnreadable_RetainsMarker_AndDoesNotBroadRestore()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        using (new FileStream(_marker, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            sut.CleanupOrphanedRules(null);
+        }
+
+        Assert.True(File.Exists(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WhenMarkerUnreadable_RetainsMarker_AndDoesNotBroadRestore()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        using (new FileStream(_marker, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            sut.DeleteAllRules();
+        }
+
+        Assert.True(File.Exists(_marker));
+        Assert.Empty(fake.RunCalls);
     }
 }
