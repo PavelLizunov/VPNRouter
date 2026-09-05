@@ -637,7 +637,7 @@ public class VpnctlFakeIpMigrationTests
     [InlineData("legacy")]
     public void Inject_LegacyFakeIp_TypeVariants_AllMigrate(string? typeValue)
     {
-        var typeField = typeValue == null ? "\"type\": null," : $"\"type\": \"{typeValue}\",";
+        var typeField = typeValue == null ? "\"type\": null" : $"\"type\": \"{typeValue}\"";
         var json = """
         {
           "dns": {
@@ -701,14 +701,58 @@ public class VpnctlFakeIpMigrationTests
         Assert.Contains(fieldName, ex.Message);
     }
 
-    [Fact]
-    public void Inject_LegacyFakeIp_ExplicitNullOption_MigratesWithoutError()
+    [Theory]
+    [InlineData("strategy")]
+    [InlineData("address_resolver")]
+    [InlineData("address_strategy")]
+    [InlineData("client_subnet")]
+    public void Inject_LegacyFakeIp_ExplicitNullOption_MigratesWithoutError(string fieldName)
     {
         var json = """
         {
           "dns": {
             "servers": [
-              { "tag": "fakeip-dns", "address": "fakeip", "strategy": null },
+              { "tag": "fakeip-dns", "address": "fakeip", "__KEY__": null },
+              { "tag": "local-dns", "type": "udp", "server": "8.8.8.8" }
+            ],
+            "fakeip": {
+              "enabled": true,
+              "inet4_range": "198.18.0.0/15"
+            }
+          },
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "1.2.3.4", "server_port": 443, "uuid": "test" },
+            { "type": "direct", "tag": "direct" }
+          ]
+        }
+        """.Replace("__KEY__", fieldName);
+
+        var root = InjectConfig(json);
+        Assert.Null(root["dns"]?["fakeip"]);
+        var servers = root["dns"]?["servers"]?.AsArray();
+        Assert.NotNull(servers);
+        var fakeip = servers!.OfType<JsonObject>().FirstOrDefault(s => (string?)s["tag"] == "fakeip-dns");
+        Assert.NotNull(fakeip);
+        Assert.Equal("fakeip", (string?)fakeip!["type"]);
+        Assert.False(fakeip.ContainsKey(fieldName));
+        Assert.False(fakeip.ContainsKey("strategy"));
+    }
+
+    [Fact]
+    public void Inject_LegacyFakeIp_AllExplicitNullOptions_RemovesAllLegacyKeys()
+    {
+        var json = """
+        {
+          "dns": {
+            "servers": [
+              {
+                "tag": "fakeip-dns",
+                "address": "fakeip",
+                "strategy": null,
+                "address_resolver": null,
+                "address_strategy": null,
+                "client_subnet": null
+              },
               { "tag": "local-dns", "type": "udp", "server": "8.8.8.8" }
             ],
             "fakeip": {
@@ -727,9 +771,13 @@ public class VpnctlFakeIpMigrationTests
         Assert.Null(root["dns"]?["fakeip"]);
         var servers = root["dns"]?["servers"]?.AsArray();
         Assert.NotNull(servers);
-        var fakeipServer = servers!.OfType<JsonObject>().FirstOrDefault(s => (string?)s["tag"] == "fakeip-dns");
-        Assert.NotNull(fakeipServer);
-        Assert.Equal("fakeip", (string?)fakeipServer!["type"]);
+        var fakeip = servers!.OfType<JsonObject>().FirstOrDefault(s => (string?)s["tag"] == "fakeip-dns");
+        Assert.NotNull(fakeip);
+        Assert.Equal("fakeip", (string?)fakeip!["type"]);
+        Assert.False(fakeip.ContainsKey("strategy"));
+        Assert.False(fakeip.ContainsKey("address_resolver"));
+        Assert.False(fakeip.ContainsKey("address_strategy"));
+        Assert.False(fakeip.ContainsKey("client_subnet"));
     }
 
     // ── edge 2: full-mode vpnrouter-vpn-dns collision ────────────────────────

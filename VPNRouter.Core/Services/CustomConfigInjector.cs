@@ -1551,6 +1551,11 @@ public static class CustomConfigInjector
         if (unsupported.Count > 0)
             throw new InvalidOperationException($"Legacy FakeIP DNS server uses options requiring manual migration: {string.Join(", ", unsupported)}.");
 
+        legacyServer!.Remove("strategy");
+        legacyServer.Remove("address_resolver");
+        legacyServer.Remove("address_strategy");
+        legacyServer.Remove("client_subnet");
+
         // Convert existing legacy server: {address:'fakeip',tag:...} -> {type:'fakeip',tag:same,...}
         legacyServer!.Remove("address");
         legacyServer["type"] = "fakeip";
