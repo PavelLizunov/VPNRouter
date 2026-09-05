@@ -166,10 +166,10 @@ public sealed class VpnEngineApplyStructuralChangeTests
         const string baselineTunFingerprint = "tun-baseline-1234";
         const string baselineAppRoutingFingerprint = "app-routing-baseline-5678";
 
-        engine.ActiveConfigMode = baselineConfigMode;
-        engine.ActiveRoutingMode = baselineRoutingMode;
-        engine.TunFingerprint = baselineTunFingerprint;
-        engine.ActiveAppRoutingFingerprint = baselineAppRoutingFingerprint;
+        SetProperty(engine, "ActiveConfigMode", baselineConfigMode);
+        SetProperty(engine, "ActiveRoutingMode", baselineRoutingMode);
+        SetProperty(engine, "TunFingerprint", baselineTunFingerprint);
+        SetProperty(engine, "ActiveAppRoutingFingerprint", baselineAppRoutingFingerprint);
 
         using var sessionCts = new CancellationTokenSource();
         SetField(engine, "_sessionCts", sessionCts);
@@ -290,6 +290,14 @@ public sealed class VpnEngineApplyStructuralChangeTests
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
             ?? throw new InvalidOperationException($"Field '{fieldName}' not found on {obj.GetType()}");
         f.SetValue(obj, value);
+    }
+
+    private static void SetProperty(object obj, string propertyName, object? value)
+    {
+        var p = obj.GetType().GetProperty(propertyName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"Property '{propertyName}' not found on {obj.GetType()}");
+        p.SetValue(obj, value);
     }
 
     private static string? GetAppPathsDataDir()
