@@ -37,7 +37,7 @@ public sealed class AndroidVpnctlApiContractTests
     public void BothBridges_ConstructorRegion_NoStartOnCommandServerListener(string bridgeFile)
     {
         var source = ReadJava(bridgeFile);
-        var codeWithoutComments = Regex.Replace(source, @"//.*$", "", RegexOptions.Multiline);
+        var codeWithoutComments = source;
 
         Assert.False(
             Regex.IsMatch(codeWithoutComments, @"\b(boxService|commandServer)\.start\s*\("),
@@ -92,7 +92,7 @@ public sealed class AndroidVpnctlApiContractTests
         var source = ReadJava(bridgeFile);
 
         Assert.Contains("public void writeDebugMessage(String message)", source);
-        Assert.Contains("if (message != null && !message.isEmpty())", source);
+        Assert.Matches(@"writeDebugMessage\(String message\)\s*\{\s*\}", source);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class AndroidVpnctlApiContractTests
     {
         var source = ReadJava(MainBridge);
 
-        Assert.Contains("Log.d(LOG_TAG, scrubSecrets(message));", source);
+        Assert.Matches(@"writeDebugMessage\(String message\)\s*\{\s*\}", source);
         Assert.DoesNotContain("public void writeLog(String message)", source);
 
         Assert.Contains("public SystemProxyStatus getSystemProxyStatus()", source);
@@ -114,11 +114,19 @@ public sealed class AndroidVpnctlApiContractTests
         var source = ReadJava(DeepVerifyBridge);
 
         Assert.Contains("public SystemProxyStatus getSystemProxyStatus()", source);
-        Assert.Contains("throw new Exception(\"unsupported\");", source);
+        Assert.Contains("status.setAvailable(false);", source);
+        Assert.Contains("status.setEnabled(false);", source);
     }
 
     private static string ReadJava(string filename) =>
-        File.ReadAllText(Path.Combine(FindRoot(), "VPNRouter.Android", filename));
+        StripComments(File.ReadAllText(Path.Combine(FindRoot(), "VPNRouter.Android", filename)));
+
+    private static string StripComments(string source) =>
+        Regex.Replace(
+            source,
+            @"(""(?:\\.|[^""\\])*""|'(?:\\.|[^'\\])*')|//.*$|/\*[\s\S]*?\*/",
+            m => m.Groups[1].Success ? m.Groups[1].Value : "",
+            RegexOptions.Multiline);
 
     private static string FindRoot()
     {
