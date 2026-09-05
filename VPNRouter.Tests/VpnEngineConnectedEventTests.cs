@@ -164,9 +164,6 @@ public sealed class VpnEngineConnectedEventTests
         fakeRunner.OnStart(_ => true, _ => fakeHandle);
 
         var fakeHttp = new FakeHttpClient();
-        fakeHttp.Register(
-            req => req.RequestUri?.AbsolutePath.Contains("configs") == true,
-            new HttpResponse(HttpStatusCode.OK, "{}"));
 
         var singBoxSettings = new SingBoxSettings { ClashApi = "127.0.0.1:9090" };
         var manager = new SingBoxManager(singBoxSettings, logger: null, http: fakeHttp, runner: fakeRunner);

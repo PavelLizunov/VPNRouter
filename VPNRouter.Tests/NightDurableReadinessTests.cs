@@ -70,9 +70,6 @@ public sealed class NightDurableReadinessTests
         fakeRunner.OnStart(_ => true, _ => fakeHandle);
 
         var fakeHttp = new FakeHttpClient();
-        fakeHttp.Register(
-            req => req.RequestUri?.AbsolutePath.Contains("configs") == true,
-            new HttpResponse(HttpStatusCode.OK, "{}"));
 
         var singBoxSettings = new SingBoxSettings { ClashApi = "127.0.0.1:9090" };
         var manager = new SingBoxManager(singBoxSettings, logger: null, http: fakeHttp, runner: fakeRunner);
@@ -377,9 +374,6 @@ public sealed class NightDurableReadinessTests
         fakeRunner2.OnStart(_ => true, _ => fakeHandle2);
 
         var fakeHttp2 = new FakeHttpClient();
-        fakeHttp2.Register(
-            req => req.RequestUri?.AbsolutePath.Contains("configs") == true,
-            new HttpResponse(HttpStatusCode.OK, "{}"));
 
         var manager2 = new SingBoxManager(new SingBoxSettings { ClashApi = "127.0.0.1:9090" }, logger: null, http: fakeHttp2, runner: fakeRunner2);
         SetField(manager2, "_handle", fakeHandle2);
