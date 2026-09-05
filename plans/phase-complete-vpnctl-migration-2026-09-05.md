@@ -4,7 +4,7 @@
 **Author / Lead**: Gemini (sole code/test/doc author), Lead review Git
 **Branch / Base**: `dsh/upgrade-singbox-vpnctl-1.14` (PR #233) / `origin/main` at `b7ce0e4f`
 **Integration Note**: PR #240 (`ae352fdb`) contains approved NIGHT fixes not merged; compatibility integrated source verification required
-**Current Head**: `947682558ed0b1c769649fc2f5235393869ffdd6` (checkpoint exact `947682558ed0b1c769649fc2f5235393869ffdd6`; owner answer in ask android-vpnctl-minsdk: keep legacy Android, deprioritize/defer migration, Android API 23 unchanged; full vpnctl desktop Windows/Linux/macOS remains goal; backup branch dsh/deferred-android-vpnctl-api-2026-09-05 f4d5265cd55e91fffefb1789cd2d445b4cd1f931 pushed; VPNCTL-04 remains DEFERRED, not resolved and not desktop-blocking; Android expected legacy build verification not new core)
+**Current Head**: verified snapshot `9fac7b58` (not pretend docs SHA known; commit `9fac7b58ad0506fb99f40fcdaacd3235d9618993` restores Android 4 files byte-exact to base `b7ce0e4`; Android not broken anymore, restored legacy green: run 33991832141 SUCCESS, artifact 9976917773, 86335107 bytes, tooling-libbox-singbox-1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6`, minSdk 23 preserved, no install; VPNCTL-04 remains DEFERRED, no resolved claim; full vpnctl desktop Windows/Linux/macOS remains goal; backup branch `dsh/deferred-android-vpnctl-api-2026-09-05` `f4d5265cd55e91fffefb1789cd2d445b4cd1f931` pushed)
 **Risk**: MEDIUM (packaging pipeline modernization; eliminating legacy third-party fork paths)
 **Rollback**: Safe task commit revert review (human/lead review of git revert, no automatic rollback)
 
@@ -43,7 +43,7 @@
 | Windows | `sing-box-1.14.0-vpnctl.3-windows-amd64.zip` | `build.ps1` bundling official SHA256 archive | Runs 33986314066, 33986314069, 33986314080 (ALL 5 GREEN; 46 pass 0 skip) | None |
 | Linux | `sing-box-1.14.0-vpnctl.3-linux-amd64.tar.gz` | `build-linux.yml` safe non-publishing run | Run 33988031442 (SUCCESS; artifacts need inspection) | None |
 | macOS | `sing-box-1.14.0-vpnctl.3-darwin-universal.zip` | `build-mac.sh` / `build-mac.yml` (`upload_to_release=false`) | Run 33988033773 (SUCCESS; artifacts need inspection) | None |
-| Android | Legacy AAR / API 23 | `build-android.yml` Gradle build (legacy verification) | DEFERRED (owner answer in ask android-vpnctl-minsdk: keep legacy Android, API 23 unchanged, deprioritize/defer migration; expected legacy build verification not new core; not desktop-blocking; backup branch dsh/deferred-android-vpnctl-api-2026-09-05 f4d5265cd55e91fffefb1789cd2d445b4cd1f931 pushed; preserved failure evidence: Run 33988035788 23 javac errors, Run 33990807363 minSdk 23 < libbox 24) | None |
+| Android | Legacy AAR / API 23 | `build-android.yml` dotnet publish (legacy verification) | Run 33991832141 SUCCESS (artifact 9976917773, 86335107 bytes, tooling-libbox-singbox-1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6`, minSdk 23 preserved, no install; restored legacy green, Android not broken anymore; VPNCTL-04 DEFERRED, no resolved claim) | None |
 
 ## Checkpoint exact `f88b7889` Status & Multi-Platform CI Evidence (2026-09-05)
 
@@ -51,8 +51,9 @@
   - Windows test-update passed: 46 pass, 0 skip.
   - Bundled core verified: `sing-box-vpnctl` v1.14.0-vpnctl.3 (evidence: `/tmp/vpnrouter-vpnctl-windows-fixed-update.log`).
   - Security / test review: No fresh blockers on Windows; baseline tests need portable marker fallback.
-- **Linux**: Run `33988031442` success on source `f88b7889` (non-publishing mode `upload_to_release=false`; artifacts need identity inspection).
-- **macOS**: Run `33988033773` success on source `f88b7889` (non-publishing mode `upload_to_release=false`; artifacts need identity inspection).
+- **Linux**: Run `33988031442` success on source `f88b7889` (non-publishing mode `upload_to_release=false`; sidecar checks PASS; embedded Linux core `973e453dc835ec07b53e950c97eb956fedb436434619e178c5dace0568cde0f6` matches official release binary).
+- **macOS**: Run `33988033773` success on source `f88b7889` (non-publishing mode `upload_to_release=false`; sidecar checks PASS; embedded Mac core `f5a931da2c0a9f841decc25e9efe61bf052e5dfd706350210d17dae46324f507` matches official release binary).
+- **Desktop Artifact Verification**: Earlier `f88b7889` artifact sidecar checks: all 5 PASS; embedded Linux core `973e453dc835ec07b53e950c97eb956fedb436434619e178c5dace0568cde0f6` matches official; Mac core `f5a931da2c0a9f841decc25e9efe61bf052e5dfd706350210d17dae46324f507` matches official verified archive pins.
 - **Android**: Run `33988035788` actual FAIL with 23 javac errors (evidence: `/tmp/vpnrouter-vpnctl-android-failure.log`):
   - Missing `BoxService` / `newService`, `PlatformInterface` / `ConnectionOwner` return/API changes in v1.14.0-vpnctl.3 `libbox.aar`.
   - Defect registered: **VPNCTL-04 (P1)** Android AAR wrong API for current bridge compilation.
@@ -90,14 +91,46 @@
   - Desktop artifact identity verification (Linux / macOS).
   - Independent security review.
 
+## Verified Snapshot `9fac7b58` Status & Multi-Platform CI Evidence (2026-09-05)
+
+- **Android Legacy Restoration (Byte-Exact to Base `b7ce0e4`)**:
+  - Verified snapshot `9fac7b58ad0506fb99f40fcdaacd3235d9618993` restores 4 Android files byte-exact to base `b7ce0e4`:
+    - `.github/workflows/build-android.yml`
+    - `VPNRouter.Android/AndroidDeepVerifyBox.java`
+    - `VPNRouter.Android/AndroidDiagnosticsExporter.cs`
+    - `VPNRouter.Android/VpnRouterService.java`
+    (`VPNRouter.Tests/AndroidVpnctlApiContractTests.cs` deleted).
+  - Android is not broken anymore; restored legacy build is green.
+  - Legacy Android APK workflow (`build-android.yml` runs `dotnet publish`, not Gradle build): CI run `33991832141` SUCCESS.
+  - Produced artifact `9976917773` (86,335,107 bytes).
+  - Bundled tooling `libbox-singbox-1.13.10` SHA256 hash: `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6`.
+  - MinSDK 23 preserved. No install on real device.
+  - Defect **VPNCTL-04** remains DEFERRED (no resolved claim; not desktop-blocking).
+
+- **Desktop Artifact Verification (Checkpoint `f88b7889` Artifacts)**:
+  - Desktop earlier `f88b7889` artifact sidecar checks: all 5 PASS.
+  - Embedded Linux core SHA256 `973e453dc835ec07b53e950c97eb956fedb436434619e178c5dace0568cde0f6` matches official release binary.
+  - Embedded macOS core SHA256 `f5a931da2c0a9f841decc25e9efe61bf052e5dfd706350210d17dae46324f507` matches official release binary.
+  - Verified archive pins match official `PavelLizunov/sing-box-vpnctl` v1.14.0-vpnctl.3.
+
+- **Combined SOURCEONLY Branch (`dsh/verify-vpnctl-night-combined-2026-09-05`)**:
+  - Combined SHA: `c7e388a9adeab209e8524825824c94793b294956` (`9fac7b58` + NIGHT `ae352fdb` from PR #240).
+  - Integrates code and tests across 58 files; no docs changes, no PR merge to main.
+  - Multi-platform CI workflows on exact same combined SHA `c7e388a9adeab209e8524825824c94793b294956`:
+    - Tests workflow: Run `33992003092` SUCCESS.
+    - Linux build workflow: Run `33992005073` SUCCESS.
+    - Mac build workflow: Run `33992007224` SUCCESS.
+    (All three workflows SUCCESS on exact same combined SHA).
+  - Precaution: Do not claim latest combined artifact identity until checked; no full solution / live VPN claim.
+
 ## Verification Gates (BLOCKED / PENDING - No Closure Until Verified)
 
-- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android marked for expected legacy build verification not new core (API 23 unchanged; migration deferred per owner answer, not desktop-blocking).
-- [ ] Gate 2 — Test suite: Unit and packaging contract tests pass on Windows (46 passed, 0 skipped); baseline tests need portable marker fallback.
+- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android legacy build green (run 33991832141 SUCCESS via `dotnet publish`), 4 files restored byte-exact to `b7ce0e4`; combined branch `c7e388a9adeab209e8524825824c94793b294956` compiles green across Linux/Mac (runs 33992005073, 33992007224); no full solution / live VPN claim.
+- [ ] Gate 2 — Test suite: Unit and packaging contract tests pass on Windows (46 passed, 0 skipped); combined branch test run 33992003092 SUCCESS across 58 code/test files.
 - [ ] Gate 3 — Pipeline elimination: `.github/workflows/sign-windows.yml` no longer invokes Leadaxe `build-singbox-lx.ps1` (PASSED on `f88b7889`).
 - [ ] Gate 4 — Autoselect elimination: `build.ps1` no longer auto-selects `publish\sing-box-lx.exe` without explicit argument (PASSED on `f88b7889`).
-- [ ] Gate 5 — Hash integrity: Desktop platform release artifacts (Windows, Linux, macOS) match official `v1.14.0-vpnctl.3` SHA256 pins; Android vpnctl migration deferred per owner decision.
-- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` (All 5 PR checks green; Android expected legacy build verification).
+- [ ] Gate 5 — Hash integrity: Desktop earlier `f88b7889` artifact sidecar checks all 5 PASS (Linux embedded core `973e453dc835ec07b53e950c97eb956fedb436434619e178c5dace0568cde0f6` and macOS embedded core `f5a931da2c0a9f841decc25e9efe61bf052e5dfd706350210d17dae46324f507` match official release pins); Android tooling libbox singbox 1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6` in legacy artifact 9976917773; do not claim latest combined artifact identity until checked.
+- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` (Android legacy run 33991832141 SUCCESS; combined branch runs 33992003092, 33992005073, 33992007224 all SUCCESS; no PR merge).
 
 ## Checklist: Rollback & Regression Failure Criteria
 
