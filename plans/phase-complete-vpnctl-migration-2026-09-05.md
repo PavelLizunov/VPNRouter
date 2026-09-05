@@ -4,7 +4,7 @@
 **Author / Lead**: Gemini (sole code/test/doc author), Lead review Git
 **Branch / Base**: `dsh/upgrade-singbox-vpnctl-1.14` (PR #233) / `origin/main` at `b7ce0e4f`
 **Integration Note**: PR #240 (`ae352fdb`) contains approved NIGHT fixes not merged; compatibility integrated source verification required
-**Current Head**: actual product `99e113f0338c9ff1c920224b77ddd8d0d5fd41c9` (all 5 PR checks green; PR #233; commit `99e113f0` enables required TLS in offline Naive dependency witness, following `f76b5ff4` fix bundling pinned `libcronet.dll` into Windows install and update packages; Android legacy build green: run 33991832141 SUCCESS, artifact 9976917773, 86335107 bytes, tooling-libbox-singbox-1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6`, minSdk 23 preserved; VPNCTL-04 remains DEFERRED; full vpnctl desktop Windows/Linux/macOS remains goal; backup branch `dsh/deferred-android-vpnctl-api-2026-09-05` `f4d5265cd55e91fffefb1789cd2d445b4cd1f931` pushed)
+**Current Head**: actual product `318a8bdb3b621052f701649abfe881d5838897ab` (all 5 PR checks green; PR #233; commit `318a8bdb` validates migrated custom FakeIP JSON with packaged vpnctl core; native Windows CI run 33996818797 four PASSED checking actual injected JSON disabled:false/V4/both/typed with packaged sing-box check, no external traffic; baseline c36e5034 run 33996098211 real RED on original 631 line tests with product 17004bc4 unchanged; corrections 1900c96c -> 4a5b967c: null keys removed, legacy type variants valid JSON, reserved tags rejected actionably not mutated, meaningful legacy strategy requires manual migration limitation, pools/families preserved with no defaults; VPNCTL-06 resolved; Android deferred stays legacy API 23, updated Core needs new APK build verify pending; final combined refresh in progress, do NOT green until results; full vpnctl desktop Windows/Linux/macOS remains goal)
 **Risk**: MEDIUM (packaging pipeline modernization; eliminating legacy third-party fork paths)
 **Rollback**: Safe task commit revert review (human/lead review of git revert, no automatic rollback)
 
@@ -145,25 +145,40 @@
 - **Defect Tracking**:
   - VPNCTL-05 marked `[x] RESOLVED in PR #233 / 99e113f0 / native check evidence, no release claim (UNRELEASED)`.
 
-## Next Step: VPNCTL-06 Source Compatibility Defect (FakeIP)
+## Checkpoint exact `318a8bdb` Status & FakeIP Native CI Evidence (2026-09-05)
 
-- **Status**: OPEN next.
-- **Correction in Defect Description**: The old defect line incorrectly stated `disabled: false`; corrected to `enabled: false` (legacy 1.13 accepted `enabled: false`, whereas 1.14 rejects any `dns.fakeip` object presence).
-- **Minimal Implementation Plan (per independent review)**:
-  1. **Ordering Invariant**: Recognize legacy address fakeip *before* generic UDP migration in `CustomConfigInjector`.
-  2. **Rule & Range Preservation**: Migrate enabled fakeip ranges to typed `fakeip` server, strictly preserving tags, rules, and cache; remove disabled fakeip objects only; reject conflicting/mixed configurations actionably (fail closed, never silently discard).
-  3. **Normalization**: Typed fakeip must skip detour normalization.
-  4. **Android Compatibility**: Legacy Android 1.13.10 already supports typed fakeip (typed fakeip schema supported since sing-box 1.12+), so shared migration logic is safe; verify via focused tests with an Android caller.
-  5. **Combined Branch Refresh**: After implementing and verifying the FakeIP fix, refresh the combined verification branch (`dsh/verify-vpnctl-night-combined-2026-09-05`) with both the Cronet and FakeIP fixes.
+- **FakeIP Defect Remediation (`3980a278` -> `1900c96c` -> `4a5b967c` -> `318a8bdb`)**:
+  - `CustomConfigInjector.cs`: Strips legacy `dns.fakeip` object when disabled; migrates enabled legacy FakeIP configurations into typed `fakeip` servers preserving ranges, tag rules, and cache.
+  - Corrections from independent review (`1900c96c` -> `4a5b967c`):
+    - `4a5b967c`: Null keys removed from legacy FakeIP options before typed decoding to prevent null reference / deserialization errors.
+    - `1900c96c`: Legacy type variants correctly handled and output verified as valid JSON.
+    - `1900c96c`: Reserved tags (`vpnrouter-vpn-dns`, `vpnrouter-dns-direct`) actionably rejected rather than mutated or coerced.
+    - Pool & family preservation: Preserves user-defined address pools and IP families without injecting unwanted defaults.
+    - Clear architectural limitation: Meaningful legacy strategy/options (`strategy`, `address_resolver`, `address_strategy`, `client_subnet`) require manual migration; no accepted unsupported semantic conversion claim.
+- **Baseline RED Characterization (Commit `c36e5034` / CI Run 33996098211)**:
+  - Real RED baseline against unchanged previous product `17004bc4`.
+  - Ran original 631-line test suite (`VpnctlFakeIpMigrationTests.cs`); multiple assertions failed (no exceptions etc; no need to guess count).
+- **PR #233 CI & Native Windows Verification (Commit `318a8bdb`)**:
+  - All 5 PR checks GREEN on commit `318a8bdb3b621052f701649abfe881d5838897ab`.
+  - Windows native CI run `33996818797` four PASSED in `Native_MigratedFakeIp_Check`:
+    - Checks actual injected JSON across 4 configurations: `disabled:false`, `V4`, `both`, `typed`.
+    - Executed using packaged `vpnctl` (`sing-box.exe check -c`).
+    - Operational boundary: Configuration parsing and outbound structure validation only; no external traffic.
+- **Defect Tracking**:
+  - VPNCTL-06 marked `[x] RESOLVED IN PR233 / 318a8bdb native 4 pass + unit green UNRELEASED` (no accepted unsupported semantic conversion claim).
+- **Android & Downstream State**:
+  - User Android deferred: Stays on legacy API 23 with 1.13.10 core (VPNCTL-04 deferred).
+  - Updated Core (`CustomConfigInjector.cs`) needs new APK build verification pending (`build-android.yml`).
+  - Final combined branch refresh (`dsh/verify-vpnctl-night-combined-2026-09-05`) in progress: Do NOT mark combined gates green until results settle.
 
 ## Verification Gates (BLOCKED / PENDING - No Closure Until Verified)
 
-- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android legacy build green (run 33991832141 SUCCESS via `dotnet publish`), 4 files restored byte-exact to `b7ce0e4`; combined branch `c7e388a9adeab209e8524825824c94793b294956` compiles green across Linux/Mac (runs 33992005073, 33992007224); no full solution / live VPN claim.
-- [ ] Gate 2 — Test suite: Unit and packaging contract tests pass on Windows (46 passed, 0 skipped); combined branch test run 33992003092 SUCCESS across 58 code/test files.
+- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android legacy build green (run 33991832141 SUCCESS via `dotnet publish`), 4 files restored byte-exact to `b7ce0e4`; combined branch refresh in progress (do NOT green until results); updated Core needs new Android APK build verify pending; no full solution / live VPN claim.
+- [ ] Gate 2 — Test suite: Unit and packaging contract tests pass on Windows (46 passed, 0 skipped; 4/4 native FakeIP checks passed in run 33996818797); combined branch test run pending refresh results.
 - [ ] Gate 3 — Pipeline elimination: `.github/workflows/sign-windows.yml` no longer invokes Leadaxe `build-singbox-lx.ps1` (PASSED on `f88b7889`).
 - [ ] Gate 4 — Autoselect elimination: `build.ps1` no longer auto-selects `publish\sing-box-lx.exe` without explicit argument (PASSED on `f88b7889`).
-- [ ] Gate 5 — Hash integrity: Desktop earlier `f88b7889` artifact sidecar checks all 5 PASS (Linux embedded core `973e453dc835ec07b53e950c97eb956fedb436434619e178c5dace0568cde0f6` and macOS embedded core `f5a931da2c0a9f841decc25e9efe61bf052e5dfd706350210d17dae46324f507` match official release pins); Android tooling libbox singbox 1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6` in legacy artifact 9976917773; do not claim latest combined artifact identity until checked.
-- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` (Android legacy run 33991832141 SUCCESS; combined branch runs 33992003092, 33992005073, 33992007224 all SUCCESS; no PR merge).
+- [ ] Gate 5 — Hash integrity: Desktop earlier `f88b7889` artifact sidecar checks all 5 PASS; native Cronet verified in run 33994337036; Android tooling libbox singbox 1.13.10 hash `239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6` in legacy artifact 9976917773; do not claim latest combined artifact identity until checked.
+- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false`; all 5 PR checks green on `318a8bdb`; combined branch refresh in progress (do NOT green until results); no PR merge.
 
 ## Checklist: Rollback & Regression Failure Criteria
 

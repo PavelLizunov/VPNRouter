@@ -71,3 +71,30 @@
 - **Security & Operational Boundaries**:
   - Verification proves DLL integrity, filesystem bundling, dynamic linker loading, and outbound configuration parsing.
   - **Limitation**: This test does *not* prove or verify real TLS/QUIC network transport or end-to-end NaiveProxy data-plane traffic.
+
+---
+
+## 10. Scoped Addendum: VPNCTL-06 FakeIP Migration Security Review & Native CI Verification (Commit `318a8bdb`)
+
+- **Target Head**: `318a8bdb3b621052f701649abfe881d5838897ab` (PR #233; all 5 PR checks green).
+- **Scope Note**: Explicit, scoped review covering FakeIP migration logic in `CustomConfigInjector.cs`, contract/regression coverage in `VpnctlFakeIpMigrationTests.cs`, and native Windows validation with packaged `vpnctl`.
+- **Baseline RED Witness (Commit `c36e5034` / CI Run 33996098211)**:
+  - Validated against unchanged previous product baseline `17004bc4`.
+  - Executed original 631-line test suite (`VpnctlFakeIpMigrationTests.cs`); confirmed real RED with multiple failing assertions across migration tests (e.g. no exceptions, migration presence; no count guessing required).
+- **Corrections from Independent Review (`1900c96c` -> `4a5b967c`)**:
+  - `4a5b967c`: Null keys removed from legacy FakeIP options prior to typed decoding, preventing null reference and parser exceptions.
+  - `1900c96c`: Legacy type variants correctly decoded, normalized, and emitted as valid JSON.
+  - `1900c96c`: Injection targeting reserved system tags (`vpnrouter-vpn-dns`, `vpnrouter-dns-direct`) actionably rejected rather than silently mutated or coerced into invalid configurations.
+  - Pool & family preservation: User-specified address pools and IP families are preserved without injecting unrequested defaults.
+  - Clear architectural limitation: Meaningful legacy strategy and resolver fields (`strategy`, `address_resolver`, `address_strategy`, `client_subnet`) require manual user migration; no unsupported semantic conversion claim accepted.
+- **Native Windows CI Verification Evidence (Run 33996818797)**:
+  - 4/4 test cases PASSED in `Native_MigratedFakeIp_Check`:
+    - Validated actual injected JSON across 4 configurations: `disabled:false` (legacy `enabled:false` removed), `V4` (IPv4 range migrated), `both` (IPv4 + IPv6 ranges migrated), and `typed` (already typed fakeip server preserved).
+    - Driven by packaged `vpnctl` (`sing-box.exe check -c`) in clean temp directories.
+    - Operational boundary: Configuration check and structure parsing only; no external network traffic.
+- **Defect Tracking**:
+  - VPNCTL-06 marked `[x] RESOLVED IN PR233 / 318a8bdb native 4 pass + unit green UNRELEASED` (no accepted unsupported semantic conversion claim).
+- **Downstream & Android Status**:
+  - User Android deferred: Stays on legacy API 23 with 1.13.10 core (VPNCTL-04 remains deferred).
+  - Updated Core (`CustomConfigInjector.cs`) needs a new Android APK build verification (`build-android.yml`) pending.
+  - Final combined branch refresh (`dsh/verify-vpnctl-night-combined-2026-09-05` combining PR #233 and PR #240) in progress; do NOT mark combined gates green until results settle.
