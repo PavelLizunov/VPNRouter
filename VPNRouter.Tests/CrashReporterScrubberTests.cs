@@ -165,6 +165,24 @@ public sealed class CrashReporterScrubberTests
         Assert.Equal(input, s);
     }
 
+    [Fact]
+    public void ScrubSecrets_RedactsKeyValueSecretsInLogText()
+    {
+        const string input =
+            "[DBG] auth password=hunter2 ok\n" +
+            "[DBG] access_token: secretAccess123\n" +
+            "[DBG] client_secret=secretClient456\n" +
+            "[DBG] private_key: secretPrivKey789";
+        var s = CrashReporter.ScrubSecrets(input);
+        Assert.DoesNotContain("hunter2", s);
+        Assert.DoesNotContain("secretAccess123", s);
+        Assert.DoesNotContain("secretClient456", s);
+        Assert.DoesNotContain("secretPrivKey789", s);
+        Assert.Contains("password=", s);
+        Assert.Contains("access_token:", s);
+        Assert.Contains("***", s);
+    }
+
     // ── OBS-1: token= query-param scrubbing (ws/wss clash_api secret) ────
 
     [Fact]
