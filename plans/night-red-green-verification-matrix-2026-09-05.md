@@ -1,7 +1,7 @@
 # Night Audit RED-GREEN Verification Matrix (2026-09-05)
 
-**Baseline SHA**: `b7ce0e4f` | **Fixed SHA**: `23cc4e52` / `c217389b` | **Task Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240) | **Isolated Baseline Branch**: `dsh/fix-night-audit-red-verification-2026-09-05` (Commit `0a876da6`)
-**Policy Rule**: Pre-fix RED states for NIGHT-02, 03, 07, 09, 10 verified on isolated baseline run 33969048431; remaining 7 defects explicitly labeled **NOT EXECUTED** (no retro-fabrication). All post-fix GREEN states mapped to actual CI runs (witness run 33968752449). Whole 12 closure remains pending; no promise of full solution/native; isolated baseline branch, no PR, no workflow edit, no release.
+**Baseline SHA**: `b7ce0e4f` | **Fixed SHA**: `23cc4e52` / `c217389b` / `77b96a1b` | **Task Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240) | **Isolated Baseline Branch**: `dsh/fix-night-audit-red-verification-2026-09-05` (Commits `0a876da6`, `5f718912`)
+**Policy Rule**: Pre-fix RED states for 6 of 12 defects across seven tests (NIGHT-02, 03, 04 [Linux & Mac], 07, 09, 10) verified on isolated baseline runs 33969048431 and 33970137690; remaining 6 defects (NIGHT-01, 05, 06, 08, 11, 12) explicitly labeled **NOT EXECUTED** (no retro-fabrication). All post-fix GREEN states mapped to actual CI runs (witness runs 33968752449 and 33969900698). Whole 12 closure remains pending; no promise of full solution/native; isolated baseline branch, no PR, no workflow edit, no release.
 
 ---
 
@@ -40,7 +40,7 @@ The lead rejected the initial review and previous document assertions on the fol
 | **NIGHT-01** (P1): TgProxy port-only kill terminates foreign process | `ff4bf3d4`, `4d029a54` (Run 33947035219) | `TgProxyOwnershipCharacterizationTests.cs` | **NOT EXECUTED** | **Statically Incompatible**: Relies on refactored `TgProxyManager` lifecycle and ownership models from `ff4bf3d4` | **Feasible via Fake Runner / Sink**: Process mock can adapt to baseline API; unsafe on OS if calling live PID kill |
 | **NIGHT-02** (P1): Custom WG detour rewritten to dns-direct | `ff4bf3d4`, `4d029a54` (Run 33947035219); Witness: `c217389b` (Run [33968752449](https://github.com/PavelLizunov/VPNRouter/actions/runs/33968752449), 5 passed) | `NightDnsPrivacyRegressionTests.cs`, `NightBaselineRegressionTests.cs` | **OBSERVED RED** (Run [33969048431](https://github.com/PavelLizunov/VPNRouter/actions/runs/33969048431), commit `0a876da6`): Expected `"wg"`, Actual `"dns-direct"` (`/tmp/vpnrouter-baseline-red-failures.log:1368–1376`) | **Compatible**: Executed and verified on baseline `0a876da6` | **Verified RED & Safe**: In-memory JSON unit test fails (outputs `dns-direct`); zero network or VPN required |
 | **NIGHT-03** (P1): StrictDns overridden by smart-DNS rule | `ff4bf3d4`, `4d029a54` (Run 33947035219); Witness: `c217389b` (Run [33968752449](https://github.com/PavelLizunov/VPNRouter/actions/runs/33968752449), 5 passed) | `NightDnsPrivacyRegressionTests.cs`, `NightBaselineRegressionTests.cs` | **OBSERVED RED** (Run [33969048431](https://github.com/PavelLizunov/VPNRouter/actions/runs/33969048431), commit `0a876da6`): Expected `"vpn-dns"`, Actual `"local-dns"` (`/tmp/vpnrouter-baseline-red-failures.log:1397–1405`) | **Compatible**: Executed and verified on baseline `0a876da6` | **Verified RED & Safe**: In-memory JSON unit test fails (matches local-dns rule); zero network or VPN required |
-| **NIGHT-04** (P1): Failed nft/pf delete removes recovery marker | `4ce2fc30` (Run 33948404811) | `LinuxFirewallManagerTests.cs`, `MacFirewallManagerTests.cs` | **NOT EXECUTED** | **Statically Incompatible**: Test relies on internal runner seams and JSON parsing signatures added in `4ce2fc30` | **Feasible via Mock Runner**: Baseline-compatible test can adapt to baseline runner seams; no live firewall or VPN needed |
+| **NIGHT-04** (P1): Failed nft/pf delete removes recovery marker | `4ce2fc30` (Run 33948404811); Witness: `77b96a1b` (Run [33969900698](https://github.com/PavelLizunov/VPNRouter/actions/runs/33969900698), all 4 green, 2 passed) | `LinuxFirewallManagerTests.cs`, `MacFirewallManagerTests.cs`, `NightBaselineFirewallTests.cs` | **OBSERVED RED** (Run [33970137690](https://github.com/PavelLizunov/VPNRouter/actions/runs/33970137690), commit `5f718912`): `File.Exists` marker `Assert.False` after failure counterpositive on both Linux & Mac (`/tmp/vpnrouter-firewall-baseline-red.log:3143–3160`) | **Compatible**: Executed and verified on baseline `5f718912` via adapted baseline runner seams | **Verified RED & Safe**: Linux & Mac tests fail on baseline (marker wrongly deleted on failure); pass on fixed `77b96a1b`; receipt [5552295438](https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5552295438); zero live firewall/VPN needed |
 | **NIGHT-05** (P1): Unix firewall stale config, no Apply refresh | `b7406456`, `8ee89105` (Run 33954240530) | `CommittedFirewallConfigTests.cs`, `LinuxFirewallManagerTests.cs`, `MacFirewallManagerTests.cs`, `VpnEngineApplyStructuralChangeTests.cs` | **NOT EXECUTED** | **Statically Incompatible**: `ICommittedFirewallConfig` interface, `UpdateCommittedConfig`, and Apply wiring absent | **Feasible via Adapted Test**: Baseline-compatible tests can adapt to baseline firewall API to demonstrate lack of refresh; does not mandate source-only |
 | **NIGHT-06** (P1): Failover stale pool & await-window rollback | `da3c21e7` (Run 33956946168), `6b140a69` (Run 33964403103) | `NightFailoverIntentTests.cs`, `NightFailoverRollbackTests.cs`, `VpnEngineApplyStructuralChangeTests.cs` | **NOT EXECUTED** | **Statically Incompatible**: `ResetFailoverContext`, `_failoverGeneration`, and rollback guards absent | **Feasible via Adapted Test**: Baseline-compatible test can adapt using baseline failover/Apply invocations; does not mandate source-only |
 | **NIGHT-07** (P1): StartTask clean completion cancels Phase B | `5ecbe4d2` (Run 33955634699), `23cc4e52` (Run 33967483426); Witness: `c217389b` (Run [33968752449](https://github.com/PavelLizunov/VPNRouter/actions/runs/33968752449), 5 passed) | `MvmTwoPhaseStartTimerTests.cs`, `NightTypedReadinessTests.cs`, `NightBaselineRegressionTests.cs` | **OBSERVED RED** (Run [33969048431](https://github.com/PavelLizunov/VPNRouter/actions/runs/33969048431), commit `0a876da6`): Expected `Connected`, Actual `StartTaskCompleted` (`/tmp/vpnrouter-baseline-red-failures.log:1360–1367`) | **Compatible**: Executed and verified on baseline `0a876da6` | **Verified RED via Fake Coordinator**: Decoupled synthetic event lambdas fail; zero live VPN or process required |
@@ -67,7 +67,7 @@ The lead rejected the initial review and previous document assertions on the fol
 
 ## 5. Observed Baseline RED/GREEN Verification Checkpoint (2026-09-05)
 
-- **Baseline RED Verification**:
+- **Baseline RED Verification (Batch A — NIGHT-02, 03, 07, 09, 10)**:
   - **CI Run**: [33969048431](https://github.com/PavelLizunov/VPNRouter/actions/runs/33969048431)
   - **Exact Commit**: `0a876da62ec3a753ebef393f3d6d066fd6b32c68` on isolated baseline branch `dsh/fix-night-audit-red-verification-2026-09-05`
   - **Composition**: Parent `b7ce0e4f` plus ONLY same `NightBaselineRegressionTests.cs` (SHA256: `4905d9e6be76d3192865dd0b9726003c7171a6c34c331f1b2d142702d207cdd3`)
@@ -77,11 +77,24 @@ The lead rejected the initial review and previous document assertions on the fol
     - **NIGHT-07**: Expected `Connected`, Actual `StartTaskCompleted`
     - **NIGHT-09**: Expected `8`, Actual `20` (peak concurrency 8 vs 20)
     - **NIGHT-10**: `Assert.ThrowsAny<OperationCanceledException>()` — no exception was thrown
-- **Fixed GREEN Witness**:
+- **Fixed GREEN Witness (Batch A)**:
   - **CI Run**: [33968752449](https://github.com/PavelLizunov/VPNRouter/actions/runs/33968752449)
   - **Commit**: `c217389b80af91b697a9f62f841a101000b6705e`
   - **Suite Outcome**: All 4 CI checks green; explicitly all 5 baseline tests passed (`/tmp/vpnrouter-baseline-witness-green.log:4246–4250`).
-- **Unexecuted Defects**: Pre-fix RED for remaining 7 defects (NIGHT-01, 04, 05, 06, 08, 11, 12) remains **NOT EXECUTED**.
+- **Baseline RED Verification (Batch B — NIGHT-04 Unix Firewall Recovery Marker)**:
+  - **CI Run**: [33970137690](https://github.com/PavelLizunov/VPNRouter/actions/runs/33970137690)
+  - **Exact Commit**: `5f718912e266c9eb9d901ca3f23433189b9b25e7` on isolated baseline branch `dsh/fix-night-audit-red-verification-2026-09-05`
+  - **Composition**: Parent `b7ce0e4f` plus ONLY `NightBaselineFirewallTests.cs` (SHA256: `bf12cfe2c226f794380c4719798ed80dc9eca7910c3b3422d7d8995d70fdb713`)
+  - **Build & Suite Outcome**: Built successfully; both tests failed assertions with `File.Exists` marker `Assert.False` after failure counterpositive (`/tmp/vpnrouter-firewall-baseline-red.log:3143–3160`):
+    - `Night04_Linux_CleanupOrphanedRules_FailedDelete_RetainsMarker_AndRecoveredSuccess_ClearsMarker`: `Engaged marker must be retained when Linux table cleanup fails (baseline shouldfail)` (line 78)
+    - `Night04_Mac_CleanupOrphanedRules_FailedAnchorFlush_RetainsMarker_AndRecoveredSuccess_ClearsMarker`: `Engaged marker must be retained when Mac anchor flush fails (baseline shouldfail)` (line 154)
+- **Fixed GREEN Witness (Batch B — NIGHT-04)**:
+  - **CI Run**: [33969900698](https://github.com/PavelLizunov/VPNRouter/actions/runs/33969900698)
+  - **Exact Commit**: `77b96a1be72e57908f8a6a0df82e6f8bc0593b62`
+  - **Composition**: Fixed tree with identical test file `NightBaselineFirewallTests.cs` (identical SHA256: `bf12cfe2c226f794380c4719798ed80dc9eca7910c3b3422d7d8995d70fdb713`)
+  - **Suite Outcome**: All 4 CI checks green; two explicit passes (`/tmp/vpnrouter-firewall-witness-green.log:4298–4299`). Receipt [5552295438](https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5552295438).
+- **Current Defect Count**: 6 of 12 defects across seven tests verified RED/GREEN (NIGHT-02, 03, 04 [2 tests: Linux & Mac], 07, 09, 10).
+- **Unexecuted Defects**: Pre-fix RED for remaining 6 defects (NIGHT-01, 05, 06, 08, 11, 12) remains **NOT EXECUTED**.
 - **Governance & Process Invariants**:
   - Whole 12 defect closure remains **PENDING**; no promise of full solution or native testing.
   - Isolated baseline branch `dsh/fix-night-audit-red-verification-2026-09-05`; no PR, no workflow edit, no release.
