@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Serilog;
@@ -24,7 +26,7 @@ namespace VPNRouter.Core.Platform.macOS;
 /// <para>CRITICAL — the ruleset blocks all outbound EXCEPT loopback, RFC1918 /
 /// link-local, and the VPN server IP(s) (read from <c>current.json</c>). The
 /// server pass is what lets sing-box reconnect during the block window while
-/// blocking rules are active. IPv6 stays fully blocked (no v6 leak).</para>
+/// blocking rules are active. Non-server IPv6 stays fully blocked (no v6 leak).</para>
 ///
 /// <para>Pure <see cref="IProcessRunner"/> orchestration (no macOS APIs) so the
 /// exact pfctl command shapes are unit-tested on the Windows build; the live
@@ -408,35 +410,101 @@ public sealed class MacFirewallManager : IFirewallManager
         return sb.ToString();
     }
 
-    private List<string> ReadServerIps()
+    internal List<string> ReadServerIps()
     {
         var ips = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddCandidate(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            var candidate = raw.Trim();
+            if (IPAddress.TryParse(candidate, out var parsedIp))
+            {
+                var canonical = parsedIp.ToString();
+                if (seen.Add(canonical))
+                {
+                    ips.Add(canonical);
+                }
+                return;
+            }
+
+            // Hostname server (Reality usually uses IPs, but a subscription or
+            // peer can hand out hostnames). pf rules take literal IPs only, so
+            // resolve NOW — while the VPN is healthy — and add the resolved IP(s)
+            // to the pass-list. Reject any non-IP or injected pf strings.
+            try
+            {
+                var resolved = _resolveHost(candidate);
+                if (resolved != null)
+                {
+                    foreach (var rip in resolved)
+                    {
+                        if (string.IsNullOrWhiteSpace(rip)) continue;
+                        var ripTrimmed = rip.Trim();
+                        if (IPAddress.TryParse(ripTrimmed, out var resolvedIp))
+                        {
+                            var canonical = resolvedIp.ToString();
+                            if (seen.Add(canonical))
+                            {
+                                ips.Add(canonical);
+                            }
+                        }
+                        else
+                        {
+                            _logger.Debug("[MacFirewall] ignored invalid resolver literal for {Host}", candidate);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[MacFirewall] could not resolve server hostname {Host} — kill-switch reconnect may need manual cleanup", candidate);
+            }
+        }
+
         try
         {
             if (!System.IO.File.Exists(_currentConfigPath)) return ips;
             using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(_currentConfigPath));
-            if (doc.RootElement.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return ips;
+
+            if (root.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var ob in obs.EnumerateArray())
                 {
-                    if (ob.TryGetProperty("server", out var srv) && srv.ValueKind == JsonValueKind.String)
+                    if (ob.ValueKind == JsonValueKind.Object &&
+                        ob.TryGetProperty("server", out var srv) &&
+                        srv.ValueKind == JsonValueKind.String)
                     {
-                        var s = srv.GetString();
-                        if (string.IsNullOrWhiteSpace(s)) continue;
-                        if (System.Net.IPAddress.TryParse(s, out _))
+                        AddCandidate(srv.GetString());
+                    }
+                }
+            }
+
+            if (root.TryGetProperty("endpoints", out var eps) && eps.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var ep in eps.EnumerateArray())
+                {
+                    if (ep.ValueKind != JsonValueKind.Object) continue;
+                    if (!ep.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String) continue;
+
+                    var endpointType = typeProp.GetString();
+                    if (!string.Equals(endpointType, "wireguard", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    // CRITICAL: NEVER read ep["address"] (local tunnel addresses) or peer["allowed_ips"].
+                    // Only read known type wireguard endpoints[].peers[].address.
+                    if (!ep.TryGetProperty("peers", out var peersProp) || peersProp.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var peer in peersProp.EnumerateArray())
+                    {
+                        if (peer.ValueKind == JsonValueKind.Object &&
+                            peer.TryGetProperty("address", out var addrProp) &&
+                            addrProp.ValueKind == JsonValueKind.String)
                         {
-                            if (!ips.Contains(s!)) ips.Add(s!);
-                        }
-                        else
-                        {
-                            // Hostname server (Reality usually uses IPs, but a
-                            // subscription can hand out hostnames). pf rules take
-                            // literal IPs only, so resolve NOW — while the VPN is
-                            // healthy — and add the resolved IP(s) to the pass-list.
-                            // Without this the kill-switch would block the
-                            // crash-reconnect to a hostname server → bricked Mac.
-                            foreach (var rip in _resolveHost(s!))
-                                if (!ips.Contains(rip)) ips.Add(rip);
+                            AddCandidate(addrProp.GetString());
                         }
                     }
                 }
@@ -449,21 +517,22 @@ public sealed class MacFirewallManager : IFirewallManager
         return ips;
     }
 
-    /// <summary>Bounded DNS resolve → IPv4 literals. Best-effort; empty on failure.</summary>
+    /// <summary>Bounded DNS resolve → IPv4 and IPv6 literals. Best-effort; empty on failure.</summary>
     private IReadOnlyList<string> DefaultResolveHost(string host)
     {
         try
         {
-            var task = System.Net.Dns.GetHostAddressesAsync(host);
+            var task = Dns.GetHostAddressesAsync(host);
             if (!task.Wait(TimeSpan.FromSeconds(3)))
             {
                 _logger.Warning("[MacFirewall] DNS resolve of {Host} timed out — kill-switch reconnect may need manual cleanup", host);
                 return Array.Empty<string>();
             }
             return task.Result
-                .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Where(a => a.AddressFamily == AddressFamily.InterNetwork ||
+                            a.AddressFamily == AddressFamily.InterNetworkV6)
                 .Select(a => a.ToString())
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
         catch (Exception ex)

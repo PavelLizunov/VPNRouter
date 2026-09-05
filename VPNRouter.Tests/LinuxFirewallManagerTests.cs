@@ -721,4 +721,251 @@ public class LinuxFirewallManagerTests : IDisposable
 
         Assert.False(File.Exists(_marker));
     }
+
+    [Fact]
+    public void ReadServerIps_PeerOnlyWireGuard_LiteralIpv4AndIpv6_PresentInRules()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""tag"": ""proxy"",
+                    ""address"": [ ""10.13.13.2/32"" ],
+                    ""peers"": [
+                        { ""address"": ""198.51.100.1"", ""port"": 51820 },
+                        { ""address"": ""2001:db8::10"", ""port"": 51820 }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("add rule inet vpnrouter_ks output ip daddr { 198.51.100.1 } accept", rules);
+        Assert.Contains("add rule inet vpnrouter_ks output ip6 daddr { 2001:db8::10 } accept", rules);
+        Assert.DoesNotContain("10.13.13.2", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Contains("198.51.100.1", extracted);
+        Assert.Contains("2001:db8::10", extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_HostnameResolver_GivesAAndAaaaCanonicalDedupe()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""outbounds"": [
+                { ""type"": ""vless"", ""server"": ""wg.example.com"" }
+            ],
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": ""wg.example.com"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = CreateSut(fake, hostResolver: h => h == "wg.example.com"
+            ? new[] { "198.51.100.2", "2001:0db8::1", "198.51.100.2", "2001:DB8::1" }
+            : Array.Empty<string>());
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("add rule inet vpnrouter_ks output ip daddr { 198.51.100.2 } accept", rules);
+        Assert.Contains("add rule inet vpnrouter_ks output ip6 daddr { 2001:db8::1 } accept", rules);
+        Assert.DoesNotContain("2001:0db8::1", rules);
+        Assert.DoesNotContain("2001:DB8::1", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.2", "2001:db8::1" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_LocalInterfaceCidrAndAllowedIps_AbsentFromRules()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""address"": [ ""10.13.13.2/32"", ""192.168.200.5/24"", ""fd00::2/128"" ],
+                    ""peers"": [
+                        {
+                            ""address"": ""198.51.100.3"",
+                            ""allowed_ips"": [ ""0.0.0.0/0"", ""::/0"", ""10.0.0.0/8"" ]
+                        }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("198.51.100.3", rules);
+        Assert.DoesNotContain("10.13.13.2", rules);
+        Assert.DoesNotContain("192.168.200.5", rules);
+        Assert.DoesNotContain("fd00::2", rules);
+        Assert.DoesNotContain("0.0.0.0/0", rules);
+        Assert.DoesNotContain("::/0", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.3" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_UnknownEndpointType_ExcludedFromRules()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""tailscale"",
+                    ""peers"": [
+                        { ""address"": ""203.0.113.99"" }
+                    ]
+                },
+                {
+                    ""type"": ""unknown_type"",
+                    ""peers"": [
+                        { ""address"": ""203.0.113.100"" }
+                    ]
+                },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": ""198.51.100.4"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("198.51.100.4", rules);
+        Assert.DoesNotContain("203.0.113.99", rules);
+        Assert.DoesNotContain("203.0.113.100", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.4" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_MalformedSiblingsAndThrowingResolver_DoNotLoseLaterPeers()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""outbounds"": [
+                { ""type"": ""vless"", ""server"": 123 },
+                { ""type"": ""vless"" }
+            ],
+            ""endpoints"": [
+                { ""type"": ""wireguard"", ""peers"": ""not-an-array"" },
+                { ""not_an_object"": 42 },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        null,
+                        123,
+                        { ""address"": null },
+                        { ""address"": """" },
+                        { ""address"": ""throws.example.com"" },
+                        { ""address"": ""198.51.100.5"" }
+                    ]
+                },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": ""2001:db8::5"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = CreateSut(fake, hostResolver: h =>
+        {
+            if (h == "throws.example.com")
+                throw new InvalidOperationException("DNS resolve failure simulated");
+            return Array.Empty<string>();
+        });
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("198.51.100.5", rules);
+        Assert.Contains("2001:db8::5", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.5", "2001:db8::5" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_InvalidInjectedResolverResult_AbsentFromRules()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""outbounds"": [
+                { ""type"": ""vless"", ""server"": ""injection-test.example.com"" }
+            ],
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": ""wg-injection.example.com"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = CreateSut(fake, hostResolver: h =>
+        {
+            if (h == "injection-test.example.com")
+            {
+                return new[]
+                {
+                    "198.51.100.6",
+                    "10.0.0.1 } accept; add rule inet vpnrouter_ks output drop #",
+                    "not-an-ip-literal",
+                    "192.168.1.1/24"
+                };
+            }
+            if (h == "wg-injection.example.com")
+            {
+                return new[]
+                {
+                    "2001:db8::6",
+                    "malformed::ipv6::extra",
+                    "'; drop table inet vpnrouter_ks; --"
+                };
+            }
+            return Array.Empty<string>();
+        });
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("add rule inet vpnrouter_ks output ip daddr { 198.51.100.6 } accept", rules);
+        Assert.Contains("add rule inet vpnrouter_ks output ip6 daddr { 2001:db8::6 } accept", rules);
+        Assert.DoesNotContain("add rule inet vpnrouter_ks output drop", rules);
+        Assert.DoesNotContain("not-an-ip-literal", rules);
+        Assert.DoesNotContain("192.168.1.1/24", rules);
+        Assert.DoesNotContain("malformed::ipv6::extra", rules);
+        Assert.DoesNotContain("drop table inet", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.6", "2001:db8::6" }, extracted);
+    }
 }

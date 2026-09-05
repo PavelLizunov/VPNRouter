@@ -68,28 +68,28 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Outcome
 
-**Status**: BATCH 1 VERIFIED ON CI / BATCH 2 (NIGHT-04) SOURCE-REVIEWED PENDING CI
-**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) source-reviewed working tree changes pending CI commit.
+**Status**: BATCH 1 & NIGHT-04 VERIFIED ON CI / NIGHT-05 ENDPOINT-ONLY SUBSTEP SOURCE-REVIEWED PENDING CI
+**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. NIGHT-05 endpoint-only substep source-reviewed working tree changes pending CI commit.
 **Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240)
-**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). 0 executed new tests yet for NIGHT-04 (control plane lacks .NET SDK; CI execution required).
+**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint tests pending CI.
 **Files changed**:
 - `plans/OPEN-DEFECTS.md` (active defect ledger; stays open pending evidence for whole task)
 - `plans/overnight-audit-morning-report-2026-09-04.md` (audit report)
-- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with Batch 1 CI pass and NIGHT-04 source review outcome)
-- `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 source-reviewed)
-- `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 source-reviewed)
-- `VPNRouter.Tests/LinuxFirewallManagerTests.cs` (NIGHT-04 unit tests, pending CI)
-- `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 unit tests, pending CI)
+- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-04 CI pass and NIGHT-05 endpoint substep outcome)
+- `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing source-reviewed)
+- `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing source-reviewed)
+- `VPNRouter.Tests/LinuxFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint unit tests source-reviewed, pending CI)
+- `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint unit tests source-reviewed, pending CI)
 
 **Gate results**:
-- [-] Gate 1: BATCH 1 PASS ON CI (`4d029a54`, run 33947035219). Limits full solution/live/macOS unchanged. Batch 2 pending CI.
-- [-] Gate 2: BATCH 1 PASS ON CI (`4d029a54`, run 33947035219). No executed new tests yet locally. Batch 2 pending CI.
+- [-] Gate 1: BATCH 1 & NIGHT-04 PASS ON CI (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811). Limits full solution/live/macOS unchanged. NIGHT-05 pending CI.
+- [-] Gate 2: BATCH 1 & NIGHT-04 PASS ON CI (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811). NIGHT-05 pending CI.
 - [x] Gate 3: PASS (brief updated; ledger stays open pending evidence for whole task).
-- [x] Gate 4: PASS (Batch 1 reviewed and green; NIGHT-04 source-reviewed with multiple lead corrections applied).
+- [x] Gate 4: PASS (Batch 1 & NIGHT-04 reviewed and green on CI; NIGHT-05 endpoint-only substep source-reviewed).
 - [-] Gate 5: N/A (no visual UI redesign).
 - [-] Gate 6: PENDING (characterization diff across batches).
 
-**Follow-ups**: Commit NIGHT-04 changes and push to PR #240 for CI verification; implement NIGHT-05 next after green CI on NIGHT-04; maintain `plans/OPEN-DEFECTS.md` until green CI evidence gathered for whole task; track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
+**Follow-ups**: Commit NIGHT-05 endpoint-only substep changes and push to PR #240 for CI verification; implement NIGHT-05 freshness/commit integration (freshness/commit integration still pending and NIGHT-05 NOT resolved; depends on truthful restart commit NIGHT-08); maintain `plans/OPEN-DEFECTS.md` until green CI evidence gathered for whole task; track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
 
 ### Batch 1 Outcome
 
@@ -109,22 +109,43 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 - **Test Selection & Execution Status**:
   - `TgProxyOwnershipCharacterizationTests` and `NightDnsPrivacyRegressionTests` executed and passed on CI.
 
-### Batch 2 (NIGHT-04 Sub-batch) Interim Outcome
+### Batch 2 (NIGHT-04 Sub-batch) Outcome
 
-- **Status**: Source-reviewed, pending CI.
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: All 4 checks PASS on commit `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, GitHub Actions run `33948404811`. Receipt: https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5549823631.
+- **Test Metrics**: 3102 total / 3045 passed / 57 skipped on Ubuntu runner. Unix classes (`LinuxFirewallManagerTests`, `MacFirewallManagerTests`) explicitly ran on Ubuntu; Windows filter did not select Unix tests.
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` remains open pending evidence for the whole task.
 - **Batch 2 Scope (NIGHT-04)**:
-  - **LinuxFirewallManager**: Linux marker cleared only confirmed cleanup. When `nft` table delete fails, verifies absence through successful structured `nft -j list tables` (not stderr guess).
-  - **MacFirewallManager**: macOS marker cleared only confirmed cleanup. Retained pf token retry and unknown marker conservative no broad restore.
-  - **Test Isolation**: Tests fully isolated temp config/rules.
-- **Lead Corrections**: Multiple lead corrections applied during source review:
+  - **LinuxFirewallManager**: Linux marker cleared only upon confirmed cleanup. When `nft` table delete fails, verifies absence through successful structured `nft -j list tables` (not stderr guess), preserving recovery trigger for subsequent runs.
+  - **MacFirewallManager**: macOS marker cleared only upon confirmed cleanup. Retained pf token retry and unknown marker conservative no broad restore.
+  - **Test Isolation**: Unit tests fully isolate temp config/rules with no side effects on host firewall state.
+- **Lead Corrections**: Multiple lead corrections applied during source review prior to commit:
   1. Unguarded Mac cold DeleteAll marker.
   2. Internal-enum public-test compile hazard.
   3. Malformed nft inventory.
   4. Unsafe raw marker content logging.
+- **CI Pipeline Scope & Gate 1 Limitation**:
+  - All 4 CI checks green on run 33948404811.
+  - Existing CI (`test.yml`) builds `VPNRouter.Tests` project (Core and App dependencies).
+  - Ubuntu runner executes Core unit tests including Unix firewall tests; Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
+  - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
+
+### Batch 2 (NIGHT-05 Endpoint-Only Substep) Interim Outcome
+
+- **Status**: Source-reviewed, pending CI.
+- **Batch 2 Scope (NIGHT-05 Endpoint-Only Substep)**:
+  - **Endpoint Extraction**: `ReadServerIps` in `LinuxFirewallManager` and `MacFirewallManager` parses both `outbounds` server addresses and WireGuard peer addresses from `endpoints` (accepted endpoint type ONLY wireguard including AmneziaWG obfuscation fields (not type amneziawireguard), with `peers[].address`), supporting both IPv4 and IPv6 (AAAA) addresses.
+  - **Canonical Literal Validation**: Uses `IPAddress.TryParse` to validate and normalize IP literals into canonical form, filtering duplicates case-insensitively and ignoring non-IP domain strings.
+  - **Malformed Sibling Handling**: Robust against malformed JSON siblings or invalid elements; valid endpoints are still extracted even if sibling nodes are missing, malformed, or invalid.
+  - **No Local Tunnel / Allowed_IPs**: Explicitly extracts only server and remote peer addresses; does not extract local tunnel interfaces or client `allowed_ips`/addresses (which are not bypass candidates).
+  - **Test Isolation**: Comprehensive unit tests added in `LinuxFirewallManagerTests` and `MacFirewallManagerTests` covering IPv4, IPv6, Amnezia WireGuard, malformed siblings, and duplicate filtering with isolated temp paths.
+- **Lead Corrections & Review**: Endpoint extraction implementation verified against source constraints; no invalid allowed_ips or local tunnel endpoints included.
+- **Pending Integration & Resolution**:
+  - Freshness/commit integration still pending and NIGHT-05 NOT resolved.
+  - Full resolution requires runtime freshness, bypass refresh on successful Apply, and `StartupPipeline` integration.
+  - Depends on truthful restart commit NIGHT-08 (`SingBoxManager.ReloadConfigJson`/`Restart` result consumed by `VpnEngine.ApplyAsync`) to prevent bypass updates on declined or failed restarts.
 - **Test Execution Status**:
-  - No executed new tests yet (control plane lacks .NET SDK; CI execution required).
-- **Subsequent Batches**:
-  - **NIGHT-05**: Not implemented; next after green CI on NIGHT-04.
+  - 0 executed new tests locally (control plane lacks .NET SDK; CI execution required).
 - **Ledger & Constraints**:
-  - Defect ledger (`plans/OPEN-DEFECTS.md`) stays open pending evidence whole task.
-  - Limits full solution/live/macOS unchanged.
+  - Defect ledger (`plans/OPEN-DEFECTS.md`) stays open pending evidence for whole task.
+  - No fake complete or full gate claims; limits on full solution / live / macOS unchanged.

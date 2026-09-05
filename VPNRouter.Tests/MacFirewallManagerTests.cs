@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using VPNRouter.Core.Platform.macOS;
 using VPNRouter.Core.Services;
@@ -408,6 +409,235 @@ public class MacFirewallManagerTests : IDisposable
         var rules = File.ReadAllText(load.Arguments.Last());
         Assert.Contains("203.0.113.10", rules);            // resolved IP allowed
         Assert.DoesNotContain("proxy.example.com", rules); // hostname never in pf
+    }
+
+    [Fact]
+    public void ReadServerIps_WireGuardEndpoint_PeerLiteralIPv4AndIPv6_PresentInGeneratedRules()
+    {
+        // WireGuard endpoint with literal IPv4 and IPv6 peer addresses (including AmneziaWG obfuscation fields)
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""tag"": ""proxy"",
+                    ""jc"": 4,
+                    ""jmin"": 10,
+                    ""jmax"": 20,
+                    ""s1"": 50,
+                    ""s2"": 100,
+                    ""h1"": ""123456"",
+                    ""address"": [ ""10.0.0.2/32"" ],
+                    ""peers"": [
+                        { ""address"": ""198.51.100.1"", ""port"": 51820, ""allowed_ips"": [ ""0.0.0.0/0"" ] },
+                        { ""address"": ""2001:db8::cafe"", ""port"": 51820, ""allowed_ips"": [ ""::/0"" ] }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.1", rules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::cafe", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Contains("198.51.100.1", extracted);
+        Assert.Contains("2001:db8::cafe", extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_HostnameResolver_GivesAAndAaaaCanonicalDedupe()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": ""wg.example.com"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h => h == "wg.example.com"
+                ? new[] { "198.51.100.20", "2001:0db8:0000:0000:0000:0000:0000:0001", "2001:db8::1", "198.51.100.20" }
+                : (IReadOnlyList<string>)Array.Empty<string>(),
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.20", rules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::1", rules);
+        Assert.DoesNotContain("2001:0db8", rules);
+
+        var lines = rules.Split('\n').Select(l => l.Trim()).ToList();
+        Assert.Equal(1, lines.Count(l => l == "pass out quick inet from any to 198.51.100.20"));
+        Assert.Equal(1, lines.Count(l => l == "pass out quick inet6 from any to 2001:db8::1"));
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.20", "2001:db8::1" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_WireGuardEndpoint_LocalInterfaceCidrAndAllowedIps_Absent()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""address"": [ ""172.31.254.2/32"", ""fd00:abcd::2/128"" ],
+                    ""peers"": [
+                        {
+                            ""address"": ""198.51.100.55"",
+                            ""port"": 51820,
+                            ""allowed_ips"": [ ""0.0.0.0/0"", ""198.18.0.0/15"", ""2001:db8:ffff::/48"" ]
+                        }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.55", rules);
+
+        // Local interface CIDR and tunnel addresses must never be allowlisted
+        Assert.DoesNotContain("172.31.254.2", rules);
+        Assert.DoesNotContain("fd00:abcd::2", rules);
+        Assert.DoesNotContain("/32", rules);
+        Assert.DoesNotContain("/128", rules);
+
+        // Allowed IPs CIDR ranges must never be allowlisted
+        Assert.DoesNotContain("198.18.0.0", rules);
+        Assert.DoesNotContain("2001:db8:ffff", rules);
+        Assert.DoesNotContain("0.0.0.0/0", rules);
+    }
+
+    [Fact]
+    public void ReadServerIps_UnknownEndpointType_Excluded()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""unknown-proto"",
+                    ""peers"": [ { ""address"": ""198.51.100.99"" } ]
+                },
+                {
+                    ""type"": ""tun"",
+                    ""peers"": [ { ""address"": ""198.51.100.88"" } ]
+                },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [ { ""address"": ""198.51.100.77"" } ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.77", rules);
+        Assert.DoesNotContain("198.51.100.99", rules);
+        Assert.DoesNotContain("198.51.100.88", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.77" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_MalformedSiblingsAndThrowingResolver_DoNotLoseValidLaterPeers()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                null,
+                123,
+                { ""type"": null },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": 12345 },
+                        {},
+                        { ""address"": ""throwing.example.com"" },
+                        { ""address"": null },
+                        { ""address"": ""198.51.100.66"" },
+                        { ""address"": ""valid.example.com"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h =>
+            {
+                if (h == "throwing.example.com") throw new SocketException(11001);
+                if (h == "valid.example.com") return new[] { "198.51.100.77" };
+                return Array.Empty<string>();
+            },
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.66", rules);
+        Assert.Contains("pass out quick inet from any to 198.51.100.77", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.66", "198.51.100.77" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_InvalidInjectedResolverResult_AbsentFromGeneratedRules()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""outbounds"": [
+                { ""type"": ""vless"", ""server"": ""injected.example.com"" }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h => new[]
+            {
+                "1.2.3.4\npass out quick any",
+                "not-an-ip-address",
+                "10.0.0.1; rm -rf",
+                "2001:db8::1 } accept",
+                "93.184.216.34"
+            },
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 93.184.216.34", rules);
+        Assert.DoesNotContain("pass out quick any", rules);
+        Assert.DoesNotContain("rm -rf", rules);
+        Assert.DoesNotContain("accept", rules);
+        Assert.DoesNotContain("not-an-ip-address", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "93.184.216.34" }, extracted);
     }
 
     // ── marker + orphan cleanup (D5/D6/D7) ──────────────────────────────────

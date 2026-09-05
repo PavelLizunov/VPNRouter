@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
@@ -28,7 +30,8 @@ namespace VPNRouter.Core.Platform.Linux;
 /// passes loopback, RFC1918 / link-local LAN, and the VPN server IP(s) read from
 /// <c>current.json</c>. The server pass is what lets sing-box reconnect during the
 /// block window while the ruleset is active (local monitors or fallback can still
-/// disengage the block). IPv6 stays fully blocked (no v6 leak)
+/// disengage the block). Server IPv4 and IPv6 addresses are passed so sing-box
+/// can reconnect; all other IPv6 stays fully blocked (no v6 leak)
 /// except loopback. The table exists ONLY while blocking — Disable/Delete remove
 /// it entirely, so a disabled kill-switch leaves zero nft state.</para>
 ///
@@ -332,33 +335,103 @@ public sealed class LinuxFirewallManager : IFirewallManager
         return sb.ToString();
     }
 
-    private List<string> ReadServerIps()
+    internal List<string> ReadServerIps()
     {
         var ips = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddCandidate(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return;
+            var candidate = raw.Trim();
+
+            if (IPAddress.TryParse(candidate, out var parsedIp))
+            {
+                var canonical = parsedIp.ToString();
+                if (seen.Add(canonical))
+                {
+                    ips.Add(canonical);
+                }
+                return;
+            }
+
+            // Hostname server — nft rules take literal IPs only, so resolve NOW
+            // (while the VPN is healthy) and pass-list the resolved IP(s).
+            // Without this the kill-switch would block the crash-reconnect to a hostname server.
+            try
+            {
+                var resolved = _resolveHost(candidate);
+                if (resolved == null) return;
+                foreach (var rip in resolved)
+                {
+                    if (string.IsNullOrWhiteSpace(rip)) continue;
+                    var trimmedRip = rip.Trim();
+                    if (IPAddress.TryParse(trimmedRip, out var parsedResolvedIp))
+                    {
+                        var canonical = parsedResolvedIp.ToString();
+                        if (seen.Add(canonical))
+                        {
+                            ips.Add(canonical);
+                        }
+                    }
+                    else
+                    {
+                        _logger.Debug("[LinuxFirewall] ignored invalid resolver literal for {Host}", candidate);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[LinuxFirewall] could not resolve server hostname {Host} — kill-switch reconnect may need manual cleanup", candidate);
+            }
+        }
+
         try
         {
             if (!System.IO.File.Exists(_currentConfigPath)) return ips;
             using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(_currentConfigPath));
-            if (doc.RootElement.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return ips;
+
+            if (root.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var ob in obs.EnumerateArray())
                 {
-                    if (ob.TryGetProperty("server", out var srv) && srv.ValueKind == JsonValueKind.String)
+                    if (ob.ValueKind == JsonValueKind.Object &&
+                        ob.TryGetProperty("server", out var srv) &&
+                        srv.ValueKind == JsonValueKind.String)
                     {
-                        var s = srv.GetString();
-                        if (string.IsNullOrWhiteSpace(s)) continue;
-                        if (System.Net.IPAddress.TryParse(s, out _))
+                        AddCandidate(srv.GetString());
+                    }
+                }
+            }
+
+            if (root.TryGetProperty("endpoints", out var eps) && eps.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var ep in eps.EnumerateArray())
+                {
+                    if (ep.ValueKind != JsonValueKind.Object) continue;
+
+                    if (!ep.TryGetProperty("type", out var typeProp) ||
+                        typeProp.ValueKind != JsonValueKind.String ||
+                        !string.Equals(typeProp.GetString(), "wireguard", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Unknown or non-wireguard endpoint type ignored
+                        continue;
+                    }
+
+                    // CRITICAL: NEVER read ep["address"] (local tunnel addresses) or peer["allowed_ips"].
+                    // Only read known type wireguard endpoints[].peers[].address.
+                    if (!ep.TryGetProperty("peers", out var peers) || peers.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var peer in peers.EnumerateArray())
+                    {
+                        if (peer.ValueKind == JsonValueKind.Object &&
+                            peer.TryGetProperty("address", out var addrProp) &&
+                            addrProp.ValueKind == JsonValueKind.String)
                         {
-                            if (!ips.Contains(s!)) ips.Add(s!);
-                        }
-                        else
-                        {
-                            // Hostname server — nft rules take literal IPs only, so
-                            // resolve NOW (while the VPN is healthy) and pass-list the
-                            // resolved IP(s). Without this the kill-switch would block
-                            // the crash-reconnect to a hostname server.
-                            foreach (var rip in _resolveHost(s!))
-                                if (!ips.Contains(rip)) ips.Add(rip);
+                            AddCandidate(addrProp.GetString());
                         }
                     }
                 }
@@ -371,7 +444,7 @@ public sealed class LinuxFirewallManager : IFirewallManager
         return ips;
     }
 
-    /// <summary>Bounded DNS resolve → IPv4 literals. Best-effort; empty on failure.</summary>
+    /// <summary>Bounded DNS resolve → IPv4 and IPv6 literals. Best-effort; empty on failure.</summary>
     private IReadOnlyList<string> DefaultResolveHost(string host)
     {
         try
@@ -383,9 +456,10 @@ public sealed class LinuxFirewallManager : IFirewallManager
                 return Array.Empty<string>();
             }
             return task.Result
-                .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Where(a => a.AddressFamily == AddressFamily.InterNetwork ||
+                            a.AddressFamily == AddressFamily.InterNetworkV6)
                 .Select(a => a.ToString())
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
         catch (Exception ex)
