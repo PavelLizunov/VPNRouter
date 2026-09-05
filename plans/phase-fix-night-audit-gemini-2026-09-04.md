@@ -59,12 +59,24 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Verification Gates
 
-- [ ] **Gate 1 — Build clean**: Scoped CI green; full solution NOT EXECUTED.
-- [ ] **Gate 2 — Tests green**: Filtered Ubuntu + Windows green; unfiltered NOT EXECUTED.
-- [ ] **Gate 3 — Docs**: Final report in progress; ledger pending lead review.
-- [ ] **Gate 4 — Independent review**: 3 independent reviewers reported no introduced blockers; lead reference validation in progress.
-- [ ] **Gate 5 — UI verify**: Behavior seams green; no live/headless screenshots.
-- [ ] **Gate 6 — Characterization diff**: Scoped Windows green.
+- [-] **Gate 1 — Build clean**: Scoped CI green (HEAD `489a529b`, runs 33974410438 + 33974410445; docs commit `a027dad9`, all 4 green); full solution NOT EXECUTED.
+- [-] **Gate 2 — Tests green**: Filtered Ubuntu + Windows characterization green (3277 passed Ubuntu run 33974410438; 69 passed Windows characterization run 33963417688); unfiltered NOT EXECUTED.
+- [x] **Gate 3 — Docs completed**: Final acceptance report completed (`plans/night-final-acceptance-2026-09-05.md`); defect ledger 12 resolved in PR #240 in `plans/OPEN-DEFECTS.md` (unreleased; target version TBD); 2 P1 follow-ups (NIGHT-FOLLOWUP-01, NIGHT-FOLLOWUP-02) remain OPEN.
+- [x] **Gate 4 — Independent review completed within mock scope**: 3-slice independent review completed; lead accepted approved 12 implementation + mock CI scope and verified scoped RED/GREEN matrix; full solution, unfiltered, and native/live NOT EXECUTED.
+- [-] **Gate 5 — UI verify**: Behavioral seams and reflection fixtures green; native/live UI and headless screenshots NOT EXECUTED.
+- [x] **Gate 6 — Characterization diff**: Scoped Windows characterization green (69/69 passed).
+
+---
+
+## Final Outcome (Current)
+
+**Current Checkpoint**: [`plans/night-final-acceptance-2026-09-05.md`](night-final-acceptance-2026-09-05.md) (reviewed/tested HEAD `489a529b`, docs commit `a027dad9` all 4 green, CI runs 33974410438 + grep 33974410445).
+
+**Status**: Implementation task complete within approved non-live constraints (PR #240; commit `489a529b`, docs commit `a027dad9`). Lead accepts approved 12 implementation + mock CI scope on tested `489a529b` (runs 33974410438 + grep 33974410445), 3 independent review slices, and scoped RED/GREEN matrix. This constitutes implementation task completion within approved non-live constraints — explicitly NOT merge or release acceptance.
+
+- **Defect Ledger**: EXACT NIGHT-01..12 entries resolved in PR #240 in `plans/OPEN-DEFECTS.md` (unreleased; target version TBD). Two preexisting P1 follow-ups (`NIGHT-FOLLOWUP-01` and `NIGHT-FOLLOWUP-02`) and documentation/measurement items remain OPEN.
+- **Verification Gates**: Docs completed, independent review completed within mock scope, ledger 12 resolved. Full solution, unfiltered suite, native/live packet filters (`nft`/`pf`), and live TUN/Wintun drivers NOT EXECUTED.
+- **Product Code Stability**: Product code was last tested at `489a529b` and is unaffected by docs-only updates.
 
 ---
 

@@ -1,9 +1,9 @@
 # Night Audit Final Independent Criteria Report (2026-09-05)
 
-**Base Commit**: `b7ce0e4f140b7ed4257673aa67a2b359c535ef7f` | **Fixed HEAD**: `489a529b16efec978908964c8c74e5f6bf2c785f` | **Product Changes**: No product changes since reviewed/tested HEAD; documentation-only follow-up
+**Base Commit**: `b7ce0e4f140b7ed4257673aa67a2b359c535ef7f` | **Fixed HEAD**: `489a529b16efec978908964c8c74e5f6bf2c785f` | **Product Changes**: No product changes since reviewed/tested HEAD `489a529b`; documentation-only follow-up (docs commit `a027dad9`, all 4 CI checks green; product code last tested at `489a529b` unaffected by docs-only changes)
 **Final HEAD CI**: Run [33974410438](https://github.com/PavelLizunov/VPNRouter/actions/runs/33974410438) (3 jobs) + separate Run [33974410445](https://github.com/PavelLizunov/VPNRouter/actions/runs/33974410445) (grep) (All 4 checks GREEN, not all 4 jobs in run 33974410438) | **Overall Verdict**: `implementation+mockCIverified` for all 12 IDs
 **Scope & Witness Tally**: 12/12 IDs verified (11 behavioral + 1 source wiring; 14 witness cases: 02/03/07/09/10 [5], 04 [2], 11 [1], 01 [1], 12 [1], 08 [1], 05 [2], 06 [1] + 2 GREEN/GREEN controls for 05).
-**Preexisting Follow-ups**: `NIGHT-FOLLOWUP-01` and `NIGHT-FOLLOWUP-02` remain **OPEN P1**; release semantics unchanged; open ledger NOT closed.
+**Ledger Status & Follow-ups**: Only the 12 approved night audit defects (NIGHT-01..12) are resolved in PR #240 in `plans/OPEN-DEFECTS.md`; two preexisting follow-ups (`NIGHT-FOLLOWUP-01` and `NIGHT-FOLLOWUP-02`) remain **OPEN P1**; release semantics unchanged; product code last tested at `489a529b` unaffected by docs-only changes.
 
 ---
 
@@ -42,7 +42,7 @@ From `.github/workflows/grep-placeholder-fingerprints.yml` (separate HEAD CI Run
 
 ## 3. Independent Reviewer Synthesis & Lead Corrections
 
-Three reviewers reported no introduced blockers; lead spot-checked source and corrected citations; ledger closure pending final acceptance:
+Three reviewers reported no introduced blockers; lead spot-checked source and corrected citations; lead accepts approved 12 implementation + mock CI scope on tested `489a529b` (runs 33974410438 + grep 33974410445) and scoped RED/GREEN matrix (only the 12 defects are resolved in PR #240; 2 P1 follow-ups remain OPEN):
 - **Slice 01/07/08**: Reviewer cited non-existent test names (`Constructor_WiresDurableConnectedHandler...`, `AutoFailover_Recreation...`). Lead corrected citations to actual methods: `Stopped_LegacyStrings_CannotSetIsConnected_TypedCurrentConnected_SetsIsConnectedTrue` (uninitialized reflection fixture) and `Subscription_And_Unsubscription_SourceGuard`.
 - **Slice 02/03/04/05**: Reviewer cited invented test name `ApplyAsync_HotReloadSucceeds_OnePutAndFirewallCapabilityCalled`. Lead corrected citation to real test name: `ApplyAsync_HotReloadSucceeds_CallsFirewallCapabilityOnceWithExactGeneratedAndIntent`. Cold startup verified via source guard only.
 - **Slice 06/09/10/11/12**: Reviewer evaluated NIGHT-06 prior to matrix update. Lead confirmed NIGHT-06 executed on baseline run `33974662105` (`Assert.Null` failed on captured old failover pool after Stop, receipt `5552819799`), and passed on HEAD run `33974410438`. Clarified that selector atomicity tests only cover await-window rollback, and NIGHT-12 is source wiring/logging, not live handshake.
@@ -131,4 +131,4 @@ The following registered baseline defects remain **OPEN P1** in `plans/OPEN-DEFE
 - **NIGHT-FOLLOWUP-01**: `SingBoxManager.Lifecycle.cs:88, 587, 905`: catch ~88 and ~590 unconditionally invoke `ReleaseTunOwnership` after `Started` throws with a retained live handle.
 - **NIGHT-FOLLOWUP-02**: `StartupPipeline.cs:699–716`: SafeMode split routing mismatch (forces `activeProfile` to `"FullTunnel"`, but `ConfigGenerator` reads `settings.App.RoutingMode` `"split"`, emitting `route.final = "direct"`; naive `profile.Name == "FullTunnel"` fix rejected as unsafe due to arbitrary profile names).
 
-**Release Semantics**: Unchanged. Defect ledger remains **OPEN**. Implementation and mock/seam CI verification are complete for all 12 night audit defects; full live solution acceptance, native TUN testing, and production cut remain subject to follow-up triage and explicit owner authorization.
+**Release Semantics**: Unchanged. Defect ledger in `plans/OPEN-DEFECTS.md` records only the 12 night audit defects resolved in PR #240 (unreleased; target version TBD); 2 P1 follow-ups (`NIGHT-FOLLOWUP-01` and `NIGHT-FOLLOWUP-02`) remain **OPEN**. Implementation and mock/seam CI verification are complete for all 12 night audit defects within approved non-live constraints; product code last tested at `489a529b` is unaffected by docs-only updates; full live solution acceptance, native TUN testing, and production cut remain subject to follow-up triage and explicit owner authorization.
