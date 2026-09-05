@@ -244,10 +244,14 @@ jobs:
           # expected SHA256 below. A stale hash is a HARD failure (see the
           # integrity gate in the run block), so they can't silently drift.
           # See block comment above for the full rotation procedure.
-          LIBBOX_RELEASE_TAG: "v1.14.0-vpnctl.3"
-          LIBBOX_REPO: "PavelLizunov/sing-box-vpnctl"
-          # Expected SHA256 of the pinned libbox.aar asset from PavelLizunov/sing-box-vpnctl.
-          LIBBOX_AAR_SHA256: "471908107fb68de65f50cc8898e193b832b2ae12f0dfe9ee93d73f0b27f1a991"
+          LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
+          # Expected SHA256 of the pinned libbox.aar asset. Authoritative
+          # source: `sha256sum` of the asset attached to LIBBOX_RELEASE_TAG
+          # (tools/build-libbox-aar.sh also emits it as `aar_sha256` in its
+          # version.json fingerprint). That script is the committed build
+          # recipe — sing-box version, build tags, Go + sagernet/gomobile +
+          # NDK pins — for reproducing this exact artifact.
+          LIBBOX_AAR_SHA256: "239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib
@@ -256,7 +260,7 @@ jobs:
           # defensive in case future assets get added (e.g., debug
           # variants, sha256 sidecars).
           if ! gh release download "$LIBBOX_RELEASE_TAG" \
-               --repo "$LIBBOX_REPO" \
+               --repo "$GITHUB_REPOSITORY" \
                --pattern "libbox.aar" \
                --output VPNRouter.Android/Lib/libbox.aar 2>&1; then
             echo "::warning::Failed to fetch libbox.aar from tooling release $LIBBOX_RELEASE_TAG — skipping Android APK build. See .github/SECRETS.md for tooling-release provisioning."
