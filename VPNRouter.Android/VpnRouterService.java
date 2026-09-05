@@ -38,9 +38,8 @@
 // timeout.
 //
 // Phase 5 changes:
-//   1. Direct Libbox.newService(json, platformInterface) — matches
-//      reference. CommandServer is now optional / removed (we don't
-//      use Clash API on Android).
+//   1. Direct service lifecycle management via CommandServer — matches
+//      reference.
 //   2. Keep ParcelFileDescriptor reference, return pfd.getFd() peek
 //      (NOT detachFd) so libbox can close the fd via its own
 //      lifecycle without us double-closing.
@@ -110,7 +109,6 @@ import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.LocalDNSTransport;
 import io.nekohasekai.libbox.NeighborUpdateListener;
 import io.nekohasekai.libbox.NetworkInterfaceIterator;
-import io.nekohasekai.libbox.Notification;
 import io.nekohasekai.libbox.OverrideOptions;
 import io.nekohasekai.libbox.PlatformInterface;
 import io.nekohasekai.libbox.PlatformUser;
@@ -915,7 +913,6 @@ public final class VpnRouterService extends VpnService {
         options.setBasePath(filesDir.getAbsolutePath());
         options.setWorkingPath(workingDir.getAbsolutePath());
         options.setTempPath(cacheDir.getAbsolutePath());
-        Libbox.setup(options);
 
         // Bug-AND-011 / Critical-1 follow-up (2026-05-16 code review):
         // route Go-side stderr to the app's private sandbox FilesDir
@@ -925,14 +922,12 @@ public final class VpnRouterService extends VpnService {
         // / USB. Now stays inside /data/data/com.ninitux.vpnrouter/files/
         // (only this app's UID can read it). For diagnostics on a
         // debug build, use `adb shell run-as com.ninitux.vpnrouter cat`.
-        try {
-            File stderrFile = new File(filesDir, "singbox.stderr.log");
-            Libbox.redirectStderr(stderrFile.getAbsolutePath());
-            Log.i(LOG_TAG, "Bug-AND-011: stderr → " + stderrFile.getAbsolutePath()
-                    + " (private sandbox)");
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "redirectStderr failed: " + e.getMessage());
-        }
+        File stderrFile = new File(filesDir, "singbox.stderr.log");
+        options.setStderrPath(stderrFile.getAbsolutePath());
+        Log.i(LOG_TAG, "Bug-AND-011: stderr → " + stderrFile.getAbsolutePath()
+                + " (private sandbox)");
+
+        Libbox.setup(options);
 
         libboxSetupDone = true;
         Log.i(LOG_TAG, "libbox setup OK (base=" + filesDir.getAbsolutePath() + ")");
@@ -2081,7 +2076,7 @@ public final class VpnRouterService extends VpnService {
         }
 
         @Override
-        public void sendNotification(Notification notification) throws Exception {
+        public void sendNotification(io.nekohasekai.libbox.Notification notification) throws Exception {
             String type = notification != null ? notification.getTypeName() : "null";
             String title = notification != null ? notification.getTitle() : "null";
             Log.i("Libbox", "notification: type=" + type + " title=" + title);
