@@ -4,7 +4,7 @@
 **Author / Lead**: Gemini (sole code/test/doc author), Lead review Git
 **Branch / Base**: `dsh/upgrade-singbox-vpnctl-1.14` (PR #233) / `origin/main` at `b7ce0e4f`
 **Integration Note**: PR #240 (`ae352fdb`) contains approved NIGHT fixes not merged; compatibility integrated source verification required
-**Current Head**: `f88b7889` (checkpoint exact `f88b7889`; Windows green, Linux/macOS non-publishing success, Android FAIL; no closure until verified)
+**Current Head**: `947682558ed0b1c769649fc2f5235393869ffdd6` (checkpoint exact `947682558ed0b1c769649fc2f5235393869ffdd6`; Android javac resolved, APK blocked on minSdk 23 < libbox 24 manifest merge in run 33990807363; VPNCTL-04 stays OPEN)
 **Risk**: MEDIUM (packaging pipeline modernization; eliminating legacy third-party fork paths)
 **Rollback**: Safe task commit revert review (human/lead review of git revert, no automatic rollback)
 
@@ -43,7 +43,7 @@
 | Windows | `sing-box-1.14.0-vpnctl.3-windows-amd64.zip` | `build.ps1` bundling official SHA256 archive | Runs 33986314066, 33986314069, 33986314080 (ALL 5 GREEN; 46 pass 0 skip) | None |
 | Linux | `sing-box-1.14.0-vpnctl.3-linux-amd64.tar.gz` | `build-linux.yml` safe non-publishing run | Run 33988031442 (SUCCESS; artifacts need inspection) | None |
 | macOS | `sing-box-1.14.0-vpnctl.3-darwin-universal.zip` | `build-mac.sh` / `build-mac.yml` (`upload_to_release=false`) | Run 33988033773 (SUCCESS; artifacts need inspection) | None |
-| Android | `libbox.aar` (v1.14.0-vpnctl.3) | `build-android.yml` Gradle build (`upload_to_release=false`) | Run 33988035788 (ACTUAL FAIL; 23 javac errors) | None |
+| Android | `libbox.aar` (v1.14.0-vpnctl.3) | `build-android.yml` Gradle build (`upload_to_release=false`) | Run 33988035788 (FAIL; 23 javac errors); Run 33990807363 (passed javac; FAIL minSdk 23 < libbox 24 manifest merge) | None |
 
 ## Checkpoint exact `f88b7889` Status & Multi-Platform CI Evidence (2026-09-05)
 
@@ -60,14 +60,38 @@
   - Simplistic fallback rejected: `/tmp/vpnrouter-customcore-build-libbox.go` lines 178–188 (`libbox-legacy.aar`) shares the same v1.14 API (SDK 21, no Naive outbound) and lacks the old `BoxService`.
 - **Status**: No closure until verified. Verification gates remain open/blocked.
 
+## Checkpoint exact `947682558ed0b1c769649fc2f5235393869ffdd6` Status & Multi-Platform CI Evidence (2026-09-05)
+
+- **Android to Java API Migration (Javac Fixes)**:
+  - Adapted `CommandServer`: no IPC start; parallel verify does not bind global `command.sock`.
+  - `ConnectionOwner`: implemented returning actual UID and package names.
+  - Debug dropped: removed debug interfaces.
+  - Preserved stderr via `CrashReportSource("vpnrouter")` writing to private working data (`filesDir/data/CrashReport-vpnrouter.log`); legacy `singbox-stderr-tail.log` exporter retained for backcompat.
+  - Compiler correction: old agent invented `setStderrPath` rejected by compiler; corrected to `setCrashReportSource`.
+  - Contract testing: added `AndroidVpnctlApiContractTests` with SOURCEONLY guard (validates source contracts, not native runtime behavior).
+- **CI / Build Verification**:
+  - All 5 PR checks green (observed via bash 78).
+  - APK build in run `33990807363`: passed javac compilation completely (23 javac errors resolved), then FAIL on manifest merge: `uses-sdk:minSdkVersion 23 cannot be smaller than version 24 declared in library ... libbox.aar` (actual `/tmp/vpnrouter-android-final-api-failure.log` lines 570..581).
+  - No fabricated supported API 26 per build scripts; uses actual published library manifest minSdk 24.
+- **Defect & Goal Tracking**:
+  - **VPNCTL-04** stays OPEN pending APK / runtime limitation resolution; annotated that 23 javac errors were corrected, followed by the manifest blocker; do not mark blocked goal.
+- **Artifact Verification**:
+  - Origin / hash: `/tmp/libbox.aar` SHA256 matches pinned hash `471908107fb68de65f50cc8898e193b832b2ae12f0dfe9ee93d73f0b27f1a991`; class structures confirmed.
+- **Next Steps**:
+  - Android API 23 compatibility decision required (new legacy AAR or remove Naive outbound; not automatic).
+  - PR #233 + PR #240 combined compatibility verification.
+  - Address Windows baseline RED.
+  - Desktop artifact identity verification (Linux / macOS).
+  - Independent security review.
+
 ## Verification Gates (BLOCKED / PENDING - No Closure Until Verified)
 
-- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android FAILED with 23 javac errors in run 33988035788.
+- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android passed javac but FAILED manifest merge (minSdk 23 < libbox 24 in run 33990807363).
 - [ ] Gate 2 — Test suite: Unit and packaging contract tests pass on Windows (46 passed, 0 skipped); baseline tests need portable marker fallback.
 - [ ] Gate 3 — Pipeline elimination: `.github/workflows/sign-windows.yml` no longer invokes Leadaxe `build-singbox-lx.ps1` (PASSED on `f88b7889`).
 - [ ] Gate 4 — Autoselect elimination: `build.ps1` no longer auto-selects `publish\sing-box-lx.exe` without explicit argument (PASSED on `f88b7889`).
-- [ ] Gate 5 — Hash integrity: All 4 platform release artifacts match official `v1.14.0-vpnctl.3` SHA256 pins (PENDING: Linux/macOS artifacts need identity inspection; Android unbuilt).
-- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` on exact head `f88b7889` (Linux and macOS succeeded; Android failed in run 33988035788).
+- [ ] Gate 5 — Hash integrity: All 4 platform release artifacts match official `v1.14.0-vpnctl.3` SHA256 pins (PENDING: Linux/macOS artifacts need identity inspection; Android AAR matches pin 471908..., APK packaging blocked).
+- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` (All 5 PR checks green; APK run 33990807363 passed javac but blocked on minSdk 24 manifest merge).
 
 ## Checklist: Rollback & Regression Failure Criteria
 
