@@ -14,8 +14,12 @@ namespace VPNRouter.Tests;
 
 /// <summary>
 /// Baseline-compatible behavioral witness for NIGHT-05 IPv6 endpoint kill-switch bypass.
-/// Verifies that dual-stack server endpoints allow IPv6 reconnect traffic in generated firewall rules.
-/// Old public API only: CreateBlockRules + EnableBlockRules. Expected RED unexecuted on pre-fix baseline.
+/// Verifies that server endpoints allow IPv6 reconnect traffic in generated firewall rules.
+/// Dual-stack outbound (wireGuardPeer = false) is GREEN/GREEN on baseline 6e789f11 (not a witness
+/// because injected resolver already bypassed DefaultResolveHost).
+/// WireGuard peer endpoint (wireGuardPeer = true) is the expected RED unexecuted witness on baseline
+/// where endpoints[].peers[].address was unparsed and produced empty server lists.
+/// Old public API only: CreateBlockRules + EnableBlockRules.
 /// </summary>
 public sealed class NightBaselineEndpointTests
 {
@@ -34,8 +38,40 @@ public sealed class NightBaselineEndpointTests
         }
         """;
 
-    [Fact]
-    public void Night05_Linux_DualStackHostname_IncludesIpv6InRuleset()
+    private const string WireGuardEndpointConfigJson = """
+        {
+          "outbounds": [
+            {
+              "type": "direct",
+              "tag": "direct"
+            }
+          ],
+          "endpoints": [
+            {
+              "type": "wireguard",
+              "tag": "wg",
+              "address": [
+                "10.77.0.2/32"
+              ],
+              "peers": [
+                {
+                  "address": "relay.example.test",
+                  "port": 51820,
+                  "allowed_ips": [
+                    "0.0.0.0/0",
+                    "::/0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Night05_Linux_EndpointHostname_IncludesIpv6InRuleset(bool wireGuardPeer)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "night05-linux-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -44,7 +80,8 @@ public sealed class NightBaselineEndpointTests
         var markerPath = Path.Combine(tempDir, "nft-killswitch-engaged.marker");
         var rulesetPath = Path.Combine(tempDir, "vpnrouter-nft-killswitch.conf");
 
-        File.WriteAllText(configPath, OutboundConfigJson);
+        var configJson = wireGuardPeer ? WireGuardEndpointConfigJson : OutboundConfigJson;
+        File.WriteAllText(configPath, configJson);
 
         var dnsCallCount = 0;
         IReadOnlyList<string> FakeResolver(string host)
@@ -70,13 +107,12 @@ public sealed class NightBaselineEndpointTests
             sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
             sut.EnableBlockRules();
 
-            Assert.True(dnsCallCount > 0, "Fake DNS resolver call count must be positive.");
             Assert.NotEmpty(fakeRunner.RunCalls);
-
             Assert.True(File.Exists(rulesetPath), "Generated ruleset file must exist before dispose.");
             var generatedRules = File.ReadAllText(rulesetPath);
 
             Assert.Contains("2001:db8::8", generatedRules, StringComparison.OrdinalIgnoreCase);
+            Assert.True(dnsCallCount > 0, "Fake DNS resolver call count must be positive.");
         }
         finally
         {
@@ -85,8 +121,10 @@ public sealed class NightBaselineEndpointTests
         }
     }
 
-    [Fact]
-    public void Night05_Mac_DualStackHostname_IncludesIpv6InRuleset()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Night05_Mac_EndpointHostname_IncludesIpv6InRuleset(bool wireGuardPeer)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "night05-mac-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
@@ -97,7 +135,8 @@ public sealed class NightBaselineEndpointTests
         var rulesPath = Path.Combine(tempDir, "vpnrouter-pf-killswitch.conf");
         var mainConfPath = Path.Combine(tempDir, "vpnrouter-pf-main.conf");
 
-        File.WriteAllText(configPath, OutboundConfigJson);
+        var configJson = wireGuardPeer ? WireGuardEndpointConfigJson : OutboundConfigJson;
+        File.WriteAllText(configPath, configJson);
         File.WriteAllText(pfConfPath, $"anchor \"{MacFirewallManager.Anchor}\"\n");
 
         var dnsCallCount = 0;
@@ -132,13 +171,12 @@ public sealed class NightBaselineEndpointTests
             sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
             sut.EnableBlockRules();
 
-            Assert.True(dnsCallCount > 0, "Fake DNS resolver call count must be positive.");
             Assert.NotEmpty(fakeRunner.RunCalls);
-
             Assert.True(File.Exists(rulesPath), "Generated rules file must exist before dispose.");
             var generatedRules = File.ReadAllText(rulesPath);
 
             Assert.Contains("2001:db8::8", generatedRules, StringComparison.OrdinalIgnoreCase);
+            Assert.True(dnsCallCount > 0, "Fake DNS resolver call count must be positive.");
         }
         finally
         {
