@@ -169,7 +169,10 @@ public partial class SingBoxManager
         _stopInProgress = true;
         try
         {
-        _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
+            _logger.Information(
+                "[SingBoxManager] Stopping sing-box (state={State}, releaseLock={ReleaseLock})",
+                State,
+                releaseLock);
 
         if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
         {
@@ -349,8 +352,7 @@ public partial class SingBoxManager
             _exactStopUnconfirmed = true;
             State = SingBoxState.Failed;
             _logger.Warning(
-                "[SingBoxManager] Stop unconfirmed: failed to probe process exit state (PID {Pid})",
-                winTargetHandle.Pid);
+                "[SingBoxManager] Stop unconfirmed: failed to probe process exit state");
             return;
         }
 
@@ -487,8 +489,7 @@ public partial class SingBoxManager
             else
             {
                 _logger.Warning(
-                    "[SingBoxManager] Windows exact stop was not confirmed (PID {Pid}) — preserving handle and TUN lease",
-                    winTargetHandle.Pid);
+                    "[SingBoxManager] Windows exact stop was not confirmed — preserving handle and TUN lease");
             }
         }
         }

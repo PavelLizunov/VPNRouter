@@ -54,6 +54,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
     private readonly TunOwnershipLock? _savedTunOwnershipLockInstance;
     private readonly Func<string, NativePnpLookupResult> _savedResolveNativePnpDeviceIds;
+    private int _nativeLookupCount;
     private readonly object? _savedPendingTunRemoval;
     private readonly object? _savedRemoveNetAdapterMissing;
     private readonly object? _savedActionableModuleMissingLogged;
@@ -93,10 +94,15 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         // Save diagnostics Native resolver delegate exact actual property, replace returns emptyIDs explicitly
         _savedResolveNativePnpDeviceIds = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
-        TunAdapterDiagnostics.ResolveNativePnpDeviceIds = static _ => new NativePnpLookupResult(
-            Success: true,
-            InstanceIds: Array.Empty<string>(),
-            Error: null);
+        _nativeLookupCount = 0;
+        TunAdapterDiagnostics.ResolveNativePnpDeviceIds = _ =>
+        {
+            Interlocked.Increment(ref _nativeLookupCount);
+            return new NativePnpLookupResult(
+                Success: true,
+                InstanceIds: Array.Empty<string>(),
+                Error: null);
+        };
 
         // Save and replace static TunAdapterDiagnostics.Runner
         _savedTunDiagRunner = TunAdapterDiagnostics.Runner;
@@ -117,14 +123,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
     public void Dispose()
     {
         // Await static SingBoxManager pendingremoval task before restoring fakeRunner/resolver/paths
-        try
-        {
-            if (s_pendingTunRemovalField?.GetValue(null) is Task pendingTask)
-            {
-                pendingTask.GetAwaiter().GetResult();
-            }
-        }
-        catch { /* best-effort */ }
+        WaitForPendingTunRemoval();
 
         // Restore original task/latches field values not reset other's
         s_pendingTunRemovalField?.SetValue(null, _savedPendingTunRemoval);
@@ -189,6 +188,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         try
         {
             InvokeStopInternal(manager, releaseLock);
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             // Verify unconfirmed failure state
             Assert.Equal(SingBoxState.Failed, manager.State);
@@ -197,11 +198,15 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_ownsTunLock")!, "_ownsTunLock must be retained.");
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!, "_exactStopUnconfirmed must be set to true.");
             Assert.True(IsLockOwned(lockInstance), "TUN ownership lock must remain owned on failed stop.");
+            Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Later retry: process signals exit
+            var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             // Verify confirmed stop state
             Assert.Equal(SingBoxState.Stopped, manager.State);
@@ -210,7 +215,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False((bool)GetField(manager, "_ownsTunLock")!, "_ownsTunLock must be cleared.");
             Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!, "_exactStopUnconfirmed must be cleared.");
             Assert.False(IsLockOwned(lockInstance), "TUN ownership lock must be released on confirmed Stop.");
-            Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -247,6 +253,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         try
         {
             InvokeStopInternal(manager, releaseLock);
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Same(handle, GetField(manager, "_handle"));
@@ -254,11 +262,15 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_ownsTunLock")!);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
+            Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Later retry: process signals exit
+            var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Stopped, manager.State);
             Assert.Null(GetField(manager, "_handle"));
@@ -266,7 +278,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False((bool)GetField(manager, "_ownsTunLock")!);
             Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.False(IsLockOwned(lockInstance));
-            Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -303,6 +316,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         try
         {
             InvokeStopInternal(manager, releaseLock);
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Same(handle, GetField(manager, "_handle"));
@@ -310,11 +325,15 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_ownsTunLock")!);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
+            Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Later retry: process signals exit
+            var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Stopped, manager.State);
             Assert.Null(GetField(manager, "_handle"));
@@ -322,7 +341,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False((bool)GetField(manager, "_ownsTunLock")!);
             Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.False(IsLockOwned(lockInstance));
-            Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -360,6 +380,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         {
             // Early safe probe must catch exception and treat as unconfirmed, never bubble up
             InvokeStopInternal(manager, releaseLock);
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Same(handle, GetField(manager, "_handle"));
@@ -367,11 +389,15 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_ownsTunLock")!);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
+            Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Later retry: process recovers probe and signals exit
+            var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Stopped, manager.State);
             Assert.Null(GetField(manager, "_handle"));
@@ -379,7 +405,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False((bool)GetField(manager, "_ownsTunLock")!);
             Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.False(IsLockOwned(lockInstance));
-            Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -414,6 +441,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         try
         {
             InvokeStopInternal(manager, releaseLock);
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Same(handle, GetField(manager, "_handle"));
@@ -421,11 +450,15 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_ownsTunLock")!);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
+            Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Later retry
+            var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
+            if (!releaseLock)
+                WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Stopped, manager.State);
             Assert.Null(GetField(manager, "_handle"));
@@ -433,7 +466,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False((bool)GetField(manager, "_ownsTunLock")!);
             Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.False(IsLockOwned(lockInstance));
-            Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -479,10 +513,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         // Ensure all adapter lookups are faked
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
-        TunAdapterDiagnostics.ResolveNativePnpDeviceIds = static _ => new NativePnpLookupResult(
-            Success: true,
-            InstanceIds: Array.Empty<string>(),
-            Error: null);
 
         var lockInstance = TunOwnershipLock.Instance(null);
         SetLockOwnedForTest(lockInstance, manager);
@@ -508,6 +538,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 "_exactStopUnconfirmed must be false after successful restart.");
             Assert.True(IsLockOwned(lockInstance),
                 "TUN ownership lock must remain owned across successful Windows restart.");
+            Assert.True(_nativeLookupCount > 0);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -547,6 +579,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         try
         {
             manager.Restart();
+            WaitForPendingTunRemoval();
 
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Same(handle, GetField(manager, "_handle"));
@@ -554,6 +587,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
             Assert.Empty(runner.StartCalls);
+            Assert.Equal(0, _nativeLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -594,7 +629,10 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         {
             // Initial failed stop sets unconfirmed
             InvokeStopInternal(manager, releaseLock: false);
+            WaitForPendingTunRemoval();
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
+            Assert.Equal(0, _nativeLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Act: attempt reload with candidate config
             var result = manager.ReloadConfigJsonWithResult("{\"candidate\":\"forbidden-write\"}", forceRestart: true);
@@ -605,6 +643,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True((bool)GetField(manager, "_ownsTunLock")!);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
+            Assert.Equal(0, _nativeLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Disk verification: candidate config was NEVER written to disk
             var onDisk = File.ReadAllText(configPath);
@@ -654,8 +694,11 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False(handle.DisposeCalled, "Handle must NOT be disposed when exact stop is unconfirmed.");
             Assert.True(IsLockOwned(lockInstance), "TUN ownership lock must remain owned when stop is unconfirmed.");
             Assert.Equal(0, (int)GetField(manager, "_disposed")!);
+            Assert.Equal(0, _nativeLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Second Dispose attempt: process has exited, retry succeeds
+            var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Dispose();
 
@@ -666,6 +709,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True(handle.DisposeCalled, "Handle must be disposed on confirmed stop.");
             Assert.False(IsLockOwned(lockInstance), "TUN ownership lock must be released on confirmed stop.");
             Assert.Equal(1, (int)GetField(manager, "_disposed")!);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
 
             // Third Dispose attempt: terminal no-op
             manager.Dispose();
@@ -705,6 +750,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         try
         {
+            var previousLookupCount = _nativeLookupCount;
             manager.Stop();
 
             Assert.Equal(SingBoxState.Stopped, manager.State);
@@ -713,7 +759,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!, "Early already-exited must clear unconfirmed guard.");
             Assert.False((bool)GetField(manager, "_ownsTunLock")!);
             Assert.False(IsLockOwned(lockInstance), "Lock must be released.");
-            Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+            Assert.True(_nativeLookupCount > previousLookupCount);
+            Assert.Empty(_fakeDiagRunner.RunCalls);
         }
         finally
         {
@@ -741,11 +788,13 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         Assert.Null(GetField(manager, "_handle"));
 
+        var previousLookupCount = _nativeLookupCount;
         manager.Stop();
 
         Assert.Equal(SingBoxState.Stopped, manager.State);
         Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!);
-        Assert.NotEmpty(_fakeDiagRunner.RunCalls);
+        Assert.True(_nativeLookupCount > previousLookupCount);
+        Assert.Empty(_fakeDiagRunner.RunCalls);
     }
 
     // ─── Test Infrastructure Helpers ────────────────────────────────────
@@ -799,6 +848,18 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
         method.Invoke(manager, new object[] { releaseLock });
+    }
+
+    private static void WaitForPendingTunRemoval()
+    {
+        try
+        {
+            if (s_pendingTunRemovalField?.GetValue(null) is Task pendingTask)
+            {
+                pendingTask.GetAwaiter().GetResult();
+            }
+        }
+        catch { /* best-effort */ }
     }
 
     private static bool IsLockOwned(TunOwnershipLock lockInstance)
