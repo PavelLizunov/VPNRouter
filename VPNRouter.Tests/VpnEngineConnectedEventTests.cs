@@ -70,11 +70,17 @@
 
 #nullable enable
 
+using System.Collections.Generic;
 using System.IO;
+using System.Net;
+using System.Net.Http;
 using System.Reflection;
+using System.Threading;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
+using Xunit;
 
 namespace VPNRouter.Tests;
 
@@ -120,6 +126,19 @@ public sealed class VpnEngineConnectedEventTests
         }
     }
 
+    private static void SetField(object target, string name, object? value)
+    {
+        var type = target.GetType();
+        var field = type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            ?? type.GetField($"<{name}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            ?? (name.StartsWith('_') && name.Length > 1
+                ? type.GetField($"<{char.ToUpperInvariant(name[1])}{name[2..]}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                : null);
+        if (field is null)
+            throw new InvalidOperationException($"Field '{name}' not found on {type.FullName}.");
+        field.SetValue(target, value);
+    }
+
     /// <summary>
     /// Construct an idle VpnEngine wired to no-op stubs. Suppresses the
     /// CS0618 Obsolete warning on the constructor — direct construction
@@ -133,8 +152,62 @@ public sealed class VpnEngineConnectedEventTests
             scanner: new StubProcessScanner(),
             firewallFactory: () => new StubFirewallManager(),
             monitorFactory: () => new StubProcessMonitor(),
-            logger: null);
+            logger: null,
+            dnsHardening: new NullWindowsDnsHardening(),
+            splitDriver: new FakeSplitTunnelDriver());
 #pragma warning restore CS0618
+
+    private static (SingBoxManager manager, FakeProcessHandle handle) CreateFakeManager(int pid)
+    {
+        var fakeRunner = new FakeProcessRunner();
+        var fakeHandle = new FakeProcessHandle(pid);
+        fakeRunner.OnStart(_ => true, _ => fakeHandle);
+
+        var fakeHttp = new FakeHttpClient();
+
+        var singBoxSettings = new SingBoxSettings { ClashApi = "127.0.0.1:9090" };
+        var manager = new SingBoxManager(singBoxSettings, logger: null, http: fakeHttp, runner: fakeRunner);
+        SetField(manager, "_handle", fakeHandle);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager, SingBoxState.Running);
+        SetField(manager, "State", SingBoxState.Running);
+        return (manager, fakeHandle);
+    }
+
+    private static FakeHttpClient GetFakeHttp(SingBoxManager manager)
+    {
+        var field = typeof(SingBoxManager).GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic);
+        return (FakeHttpClient)field!.GetValue(manager)!;
+    }
+
+    private static void InvokeSetSingBoxManager(object host, SingBoxManager manager)
+    {
+        var method = host.GetType().GetMethod("SetSingBoxManager",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(SingBoxManager) },
+            modifiers: null)
+            ?? throw new InvalidOperationException(
+                "VpnEngineStartupHost.SetSingBoxManager(SingBoxManager) not found.");
+        method.Invoke(host, new object?[] { manager });
+    }
+
+    private static void InvokeOnSingBoxStarted(object host, int pid)
+    {
+        var method = host.GetType().GetMethod("OnSingBoxStarted",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(int) },
+            modifiers: null)
+            ?? throw new InvalidOperationException(
+                "VpnEngineStartupHost.OnSingBoxStarted(int) not found.");
+        method.Invoke(host, new object?[] { pid });
+    }
+
+    private static void SafeDetach(VpnEngine engine)
+    {
+        SetField(engine, "_singBox", null);
+    }
 
     /// <summary>
     /// Construct VpnEngine's nested <c>VpnEngineStartupHost</c> adapter via
@@ -186,15 +259,25 @@ public sealed class VpnEngineConnectedEventTests
         // VpnEngineStartupHost.OnConnected raises the engine's public
         // Connected event. Drive that adapter call directly and pin the
         // event fires once with the supplied PID.
+        using var sessionCts = new CancellationTokenSource();
         using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
         var captured = new List<int>();
         engine.Connected += pid => captured.Add(pid);
 
         var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(31415);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 31415);
+
         InvokeOnConnected(host, pid: 31415);
 
         Assert.Single(captured);
         Assert.Equal(31415, captured[0]);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
+
+        SafeDetach(engine);
     }
 
     // ─── Test 2: Failure branch is silent (source-string defence pin) ───
@@ -273,25 +356,41 @@ public sealed class VpnEngineConnectedEventTests
     [Fact]
     public void Connected_FiresOncePerLifecycle_TwoCallsTwoEvents()
     {
-        // The host adapter does NOT de-duplicate Connected invocations:
-        // each call to OnConnected raises the event. Stage 2's App-side
+        // The host adapter does NOT de-duplicate Connected invocations across lifecycles:
+        // each lifecycle's call to OnConnected raises the event. Stage 2's App-side
         // VM is responsible for any per-lifecycle gating (e.g. unsubscribe
         // after first fire) — Stage 1 just wires the raw signal.
         //
-        // Pin this by calling OnConnected twice on the SAME host adapter
-        // and asserting the event fires twice. Two different PIDs (matching
-        // a hypothetical Start → Stop → Start sequence in production).
+        // Pin this with two distinct lifecycles (distinct host and manager refs)
+        // and assert the event fires twice with matching PIDs.
+        using var sessionCts = new CancellationTokenSource();
         using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
         var captured = new List<int>();
         engine.Connected += pid => captured.Add(pid);
 
-        var host = BuildHostAdapter(engine);
-        InvokeOnConnected(host, pid: 11111);
-        InvokeOnConnected(host, pid: 22222);
+        // Lifecycle 1
+        var host1 = BuildHostAdapter(engine);
+        var (manager1, handle1) = CreateFakeManager(11111);
+        InvokeSetSingBoxManager(host1, manager1);
+        InvokeOnSingBoxStarted(host1, 11111);
+        InvokeOnConnected(host1, pid: 11111);
+
+        // Lifecycle 2
+        var host2 = BuildHostAdapter(engine);
+        var (manager2, handle2) = CreateFakeManager(22222);
+        InvokeSetSingBoxManager(host2, manager2);
+        InvokeOnSingBoxStarted(host2, 22222);
+        InvokeOnConnected(host2, pid: 22222);
 
         Assert.Equal(2, captured.Count);
         Assert.Equal(11111, captured[0]);
         Assert.Equal(22222, captured[1]);
+        Assert.Empty(GetFakeHttp(manager1).SentRequests);
+        Assert.Empty(GetFakeHttp(manager2).SentRequests);
+
+        SafeDetach(engine);
     }
 
     // ─── Test 4: Null subscription tolerated (no NRE) ───────────────────
@@ -307,13 +406,117 @@ public sealed class VpnEngineConnectedEventTests
         // .NET 8 default unless TaskScheduler.UnobservedTaskException is
         // wired). The defensive pin: with NO subscriber, invoking
         // OnConnected on the host must NOT throw.
+        using var sessionCts = new CancellationTokenSource();
         using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
         // Explicitly do NOT subscribe.
         var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(99999);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 99999);
 
         // Should be a clean no-op.
         var ex = Record.Exception(() => InvokeOnConnected(host, pid: 99999));
         Assert.Null(ex);
+
+        SafeDetach(engine);
+    }
+
+    // ─── Test 5: Same manager same PID handle replacement suppressed ───
+
+    [Fact]
+    public void Connected_SameManagerSamePid_HandleReplacement_Suppressed()
+    {
+        using var sessionCts = new CancellationTokenSource();
+        using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
+        var captured = new List<int>();
+        engine.Connected += pid => captured.Add(pid);
+
+        var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(44444);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 44444);
+
+        // Replace handle on same manager with a new handle having same PID
+        var replacementHandle = new FakeProcessHandle(44444);
+        SetField(manager, "_handle", replacementHandle);
+
+        InvokeOnConnected(host, pid: 44444);
+
+        Assert.Empty(captured);
+
+        SafeDetach(engine);
+    }
+
+    // ─── Test 6: Failstop via actual engine.Stop uses fake/seams and suppresses event without networking ─
+
+    [Fact]
+    public void Connected_FailStop_ActualEngineStop_UsesFakeSeams_SuppressedWithoutNetworking()
+    {
+        using var sessionCts = new CancellationTokenSource();
+        using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
+        var captured = new List<int>();
+        engine.Connected += pid => captured.Add(pid);
+
+        var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(55555);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 55555);
+
+        // Fail-stop: invoke actual engine.Stop() which uses fake/seams
+        engine.Stop();
+
+        InvokeOnConnected(host, pid: 55555);
+
+        Assert.Empty(captured);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
+
+        SafeDetach(engine);
+    }
+
+    // ─── Test 7: Failstop via exited handle or non-running state suppresses event without networking ─
+
+    [Fact]
+    public void Connected_FailStop_HandleExitedOrStateNotRunning_SuppressedWithoutNetworking()
+    {
+        using var sessionCts = new CancellationTokenSource();
+        using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
+        var captured = new List<int>();
+        engine.Connected += pid => captured.Add(pid);
+
+        var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(66666);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 66666);
+
+        // Case A: Handle exited
+        handle.Kill();
+        Assert.True(handle.HasExited);
+
+        InvokeOnConnected(host, pid: 66666);
+        Assert.Empty(captured);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
+
+        // Case B: State is not Running
+        var (manager2, handle2) = CreateFakeManager(77777);
+        InvokeSetSingBoxManager(host, manager2);
+        InvokeOnSingBoxStarted(host, 77777);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager2, SingBoxState.Stopped);
+        SetField(manager2, "State", SingBoxState.Stopped);
+
+        InvokeOnConnected(host, pid: 77777);
+        Assert.Empty(captured);
+        Assert.Empty(GetFakeHttp(manager2).SentRequests);
+
+        SafeDetach(engine);
     }
 
     // ─── Test helpers ────────────────────────────────────────────────────

@@ -95,6 +95,7 @@ public partial class SingBoxManager : IDisposable
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _handle != null && !_handle.HasExited ? _handle.Pid : null;
+    internal IProcessHandle? OwnedProcessHandle => _handle;
     public event EventHandler? Crashed;
     /// <summary>Fires after every successful LaunchProcess — initial start
     /// AND restart after crash. Listeners (e.g. CLI StateFile writer) use
@@ -291,33 +292,66 @@ public partial class SingBoxManager : IDisposable
     /// because <c>ReloadConfigJson</c> ran <c>TryHotReload</c> first
     /// regardless of caller intent.</para>
     /// </summary>
-    public void ReloadConfigJson(string configJson, bool forceRestart = false)
+    public void ReloadConfigJson(string configJson, bool forceRestart = false) =>
+        ReloadConfigJsonWithResult(configJson, forceRestart);
+
+    internal bool ReloadConfigJsonWithResult(string configJson, bool forceRestart = false)
     {
-        // v2.44.3-r2 (concurrency audit): same disposed-manager guard as
-        // Restart() — a post-teardown HealthMonitor continuation must not write
-        // config or relaunch sing-box on a disposed manager.
-        if (Volatile.Read(ref _disposed) != 0)
+        lock (_lifecycleGate)
         {
-            _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
-            return;
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
+                return false;
+            }
+            if (!_ownsTunLock)
+            {
+                _logger.Warning("[SingBoxManager] ReloadConfigJson ignored — manager does not own valid TUN lease");
+                return false;
+            }
+
+            if (_exactStopUnconfirmed)
+            {
+                StopInternal(releaseLock: false);
+                if (State != SingBoxState.Stopped)
+                    return false;
+
+                forceRestart = true;
+            }
+
+            _logger.Information("[SingBoxManager] Reloading config{Mode}",
+                forceRestart ? " (force restart, no hot-reload attempt)" : "");
+            _currentConfigPath = WriteJsonToDisk(configJson);
+
+            if (!forceRestart && TryHotReload())
+                return true;
+
+            if (!forceRestart)
+                _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
+
+            return RestartCore();
         }
-        _logger.Information("[SingBoxManager] Reloading config{Mode}",
-            forceRestart ? " (force restart, no hot-reload attempt)" : "");
-        _currentConfigPath = WriteJsonToDisk(configJson);
-
-        if (!forceRestart && TryHotReload())
-            return;
-
-        if (!forceRestart)
-            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-        Restart();
     }
 
     public bool TryReloadConfigJson(string configJson)
     {
-        _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
-        _currentConfigPath = WriteJsonToDisk(configJson);
-        return TryHotReload();
+        lock (_lifecycleGate)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _logger.Debug("[SingBoxManager] TryReloadConfigJson ignored — manager already disposed");
+                return false;
+            }
+            if (!_ownsTunLock || _exactStopUnconfirmed)
+            {
+                _logger.Warning("[SingBoxManager] TryReloadConfigJson ignored — manager does not own valid TUN lease");
+                return false;
+            }
+
+            _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
+            _currentConfigPath = WriteJsonToDisk(configJson);
+            return TryHotReload();
+        }
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────
@@ -350,7 +384,7 @@ public partial class SingBoxManager : IDisposable
         LastCrashWasTunOrphan = false;
         LastCrashWasLinuxTunPermissionFailure = false;
         Stop();
-        // A failed capability-mode stop keeps the exact IProcessHandle as its
+        // A failed exact stop keeps the exact IProcessHandle as its
         // only retry authority. Do not dispose that handle while its lease is
         // deliberately retained.
         if (!_ownsTunLock)
@@ -363,6 +397,8 @@ public partial class SingBoxManager : IDisposable
             _logger.Warning(
                 "[SingBoxManager] Dispose preserved TUN ownership because exact stop was not confirmed (state={State})",
                 State);
+            AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit;
+            Volatile.Write(ref _disposed, 0);
         }
     }
 }

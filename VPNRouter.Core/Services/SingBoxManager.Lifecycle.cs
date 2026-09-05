@@ -169,7 +169,10 @@ public partial class SingBoxManager
         _stopInProgress = true;
         try
         {
-        _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
+            _logger.Information(
+                "[SingBoxManager] Stopping sing-box (state={State}, releaseLock={ReleaseLock})",
+                State,
+                releaseLock);
 
         if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
         {
@@ -287,15 +290,16 @@ public partial class SingBoxManager
             return;
         }
 
-        if (_handle == null || _handle.HasExited)
+        var winTargetHandle = _handle;
+        if (winTargetHandle == null)
         {
             // v2.30.1-r5: log this branch — pre-r5 it was silent, which
             // made the user-reported "Stop pressed but no log lines and
             // adapter remained" problem hard to diagnose. Explicitly
             // mark that we're in the post-crash cleanup path.
             _logger.Information(
-                "[SingBoxManager] Stop called but sing-box already exited (process={ProcState}) — running cleanup-only path",
-                _handle == null ? "null" : "HasExited");
+                "[SingBoxManager] Stop called but sing-box already exited (process=null) — running cleanup-only path");
+            _exactStopUnconfirmed = false;
             State = SingBoxState.Stopped;
 
             // v2.30.1-r5 + hotfix 2026-05-19: belt-and-braces orphan
@@ -331,62 +335,42 @@ public partial class SingBoxManager
             return;
         }
 
-        // Phase 3+ (2026-05-21): EnableRaisingEvents=false-before-Kill
-        // pattern moved to ProcessHandle.Dispose (ProcessRunner.cs:288-290).
-        // The ordering is now an implicit invariant of the seam — the
-        // dispose chain sets the flag, then Kill, then Process.Dispose,
-        // so the Exited callback is suppressed for an intentional Stop.
+        var alreadyExited = false;
+        var probeFailed = false;
         try
         {
-            // v2.36.0-r4 (brat 2026-05-24 — intentional-stop regression fix):
-            // explicitly suppress Exited event BEFORE Kill so the OS
-            // notification doesn't bubble up as a false "sing-box
-            // crashed" event to HealthMonitor's Crashed handler. The
-            // Phase 3+ refactor (2026-05-21) moved EnableRaisingEvents=
-            // false into ProcessHandle.Dispose — but Dispose runs in
-            // the finally block AFTER WaitForExit completes, by which
-            // time the Exited callback has already fired. Brat's
-            // 12:11:49 log showed 14ms between intentional Stop and
-            // false "sing-box crashed (exit code: -1)" entry.
-            // SuppressExitedEvent breaks the OS-event subscription so
-            // the bubble-up never happens.
-            _handle!.SuppressExitedEvent();
-            _handle.Kill(entireProcessTree: true);
-            try
-            {
-                using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                _handle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
-            }
-            catch (OperationCanceledException) { /* 5s elapsed; Dispose finalises */ }
+            alreadyExited = winTargetHandle.HasExited;
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[SingBoxManager] Error while stopping process");
+            _logger.Warning(ex, "[SingBoxManager] Error probing sing-box process exit state");
+            probeFailed = true;
         }
-        finally
-        {
-            _handle?.Dispose();
-            _handle = null;
-            State = SingBoxState.Stopped;
-            _logger.Information("[SingBoxManager] sing-box stopped");
 
-            // Hotfix 2026-05-19: also clean up the wintun adapter on
-            // graceful Stop. The graceful path above sets
-            // EnableRaisingEvents=false before Kill(), which intentionally
-            // suppresses the Exited callback (and its
-            // OnProcessExited-driven cleanup). Without an explicit
-            // call here, every graceful Stop leaves the VPNRouter-TUN
-            // device record alive, and the next Start hits ERROR_FILE_EXISTS
-            // when WintunCreateAdapter runs. LaunchProcess's
-            // PreStartCleanupAsync would catch it, but doing it here
-            // starts removal moments after Stop returns. Restart() gives it a
-            // short head start, then LaunchProcess joins the queue and verifies
-            // exact PnP absence before spawning sing-box.
+        if (probeFailed)
+        {
+            _exactStopUnconfirmed = true;
+            State = SingBoxState.Failed;
+            _logger.Warning(
+                "[SingBoxManager] Stop unconfirmed: failed to probe process exit state");
+            return;
+        }
+
+        if (alreadyExited)
+        {
+            _logger.Information(
+                "[SingBoxManager] Stop called but sing-box already exited (process=HasExited) — running cleanup-only path");
+            winTargetHandle.Dispose();
+            if (ReferenceEquals(_handle, winTargetHandle))
+                _handle = null;
+            _exactStopUnconfirmed = false;
+            State = SingBoxState.Stopped;
+
             if (OperatingSystem.IsWindows())
             {
                 try
                 {
-                    QueueTunAdapterRemoval("SingBoxManager.StopInternal.killed.async");
+                    QueueTunAdapterRemoval("SingBoxManager.StopInternal.early.async");
                     if (releaseLock)
                         WaitForQueuedTunAdapterRemoval();
                 }
@@ -395,12 +379,118 @@ public partial class SingBoxManager
                     _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
                 }
             }
-
-            // Task #53 (2026-05-21): Restart keeps the ownership lock. A final
-            // Windows Stop releases it only after the PnP removal queue above
-            // has settled, preventing another process from launching into our
-            // outstanding cleanup.
             if (releaseLock) ReleaseTunOwnership();
+            return;
+        }
+
+        var winStopped = false;
+        try
+        {
+            // Phase 3+ (2026-05-21): EnableRaisingEvents=false-before-Kill
+            // pattern moved to ProcessHandle.Dispose (ProcessRunner.cs:288-290).
+            // The ordering is now an implicit invariant of the seam — the
+            // dispose chain sets the flag, then Kill, then Process.Dispose,
+            // so the Exited callback is suppressed for an intentional Stop.
+            try
+            {
+                // v2.36.0-r4 (brat 2026-05-24 — intentional-stop regression fix):
+                // explicitly suppress Exited event BEFORE Kill so the OS
+                // notification doesn't bubble up as a false "sing-box
+                // crashed" event to HealthMonitor's Crashed handler. The
+                // Phase 3+ refactor (2026-05-21) moved EnableRaisingEvents=
+                // false into ProcessHandle.Dispose — but Dispose runs in
+                // the finally block AFTER WaitForExit completes, by which
+                // time the Exited callback has already fired. Brat's
+                // 12:11:49 log showed 14ms between intentional Stop and
+                // false "sing-box crashed (exit code: -1)" entry.
+                // SuppressExitedEvent breaks the OS-event subscription so
+                // the bubble-up never happens.
+                winTargetHandle.SuppressExitedEvent();
+                winTargetHandle.Kill(entireProcessTree: true);
+                try
+                {
+                    using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    winTargetHandle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    // 5s elapsed; inspect exit state below
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[SingBoxManager] Error while stopping process");
+            }
+
+            // Best-effort inspection of winTargetHandle.HasExited even if Kill threw;
+            // conservative: any failure or alive state leaves winStopped = false.
+            try
+            {
+                winStopped = winTargetHandle.HasExited;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[SingBoxManager] Error inspecting process exit status after stop");
+                winStopped = false;
+            }
+        }
+        finally
+        {
+            if (!ReferenceEquals(_handle, winTargetHandle))
+            {
+                _logger.Error("[SingBoxManager] Windows stop lost exact-handle ownership");
+                winStopped = false;
+            }
+            else if (winStopped)
+            {
+                winTargetHandle.Dispose();
+                _handle = null;
+            }
+
+            _exactStopUnconfirmed = !winStopped;
+            State = winStopped ? SingBoxState.Stopped : SingBoxState.Failed;
+
+            if (winStopped)
+            {
+                _logger.Information("[SingBoxManager] sing-box stopped");
+
+                // Hotfix 2026-05-19: also clean up the wintun adapter on
+                // graceful Stop. The graceful path above sets
+                // EnableRaisingEvents=false before Kill(), which intentionally
+                // suppresses the Exited callback (and its
+                // OnProcessExited-driven cleanup). Without an explicit
+                // call here, every graceful Stop leaves the VPNRouter-TUN
+                // device record alive, and the next Start hits ERROR_FILE_EXISTS
+                // when WintunCreateAdapter runs. LaunchProcess's
+                // PreStartCleanupAsync would catch it, but doing it here
+                // starts removal moments after Stop returns. Restart() gives it a
+                // short head start, then LaunchProcess joins the queue and verifies
+                // exact PnP absence before spawning sing-box.
+                if (OperatingSystem.IsWindows())
+                {
+                    try
+                    {
+                        QueueTunAdapterRemoval("SingBoxManager.StopInternal.killed.async");
+                        if (releaseLock)
+                            WaitForQueuedTunAdapterRemoval();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
+                    }
+                }
+
+                // Task #53 (2026-05-21): Restart keeps the ownership lock. A final
+                // Windows Stop releases it only after the PnP removal queue above
+                // has settled, preventing another process from launching into our
+                // outstanding cleanup.
+                if (releaseLock) ReleaseTunOwnership();
+            }
+            else
+            {
+                _logger.Warning(
+                    "[SingBoxManager] Windows exact stop was not confirmed — preserving handle and TUN lease");
+            }
         }
         }
         finally
@@ -501,7 +591,7 @@ public partial class SingBoxManager
             RestartCore();
     }
 
-    private void RestartCore()
+    private bool RestartCore()
     {
         // v2.44.3-r2 (concurrency audit): a HealthMonitor AttemptRestart
         // continuation can reach Restart() AFTER TeardownInternal disposed this
@@ -513,12 +603,12 @@ public partial class SingBoxManager
         if (Volatile.Read(ref _disposed) != 0)
         {
             _logger.Debug("[SingBoxManager] Restart ignored — manager already disposed");
-            return;
+            return false;
         }
         if (!_ownsTunLock)
         {
             _logger.Warning("[SingBoxManager] Restart ignored — manager does not own the TUN lease");
-            return;
+            return false;
         }
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
@@ -530,17 +620,18 @@ public partial class SingBoxManager
         // it in finally so genuine crashes during LaunchProcess (e.g. TUN
         // init FATAL) still surface normally.
         _restartInProgress = true;
+        var oldHandle = _handle;
         try
         {
             // Keep the TUN lock across restart so another instance can't slip in
             // during the brief window between Stop and LaunchProcess.
             StopInternal(releaseLock: false);
-            if (State != SingBoxState.Stopped)
+            if (State != SingBoxState.Stopped || _exactStopUnconfirmed)
             {
                 _logger.Error(
                     "[SingBoxManager] Restart aborted: exact stop was not confirmed (state={State})",
                     State);
-                return;
+                return false;
             }
             State = SingBoxState.Restarting;
 
@@ -571,7 +662,14 @@ public partial class SingBoxManager
             {
                 State = SingBoxState.Failed;
                 ReleaseTunOwnership();
+                return false;
             }
+
+            var newHandle = _handle;
+            return newHandle != null
+                && !ReferenceEquals(newHandle, oldHandle)
+                && State == SingBoxState.Running
+                && !newHandle.HasExited;
         }
         catch
         {

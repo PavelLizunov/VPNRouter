@@ -45,6 +45,15 @@ public sealed class AutoFailoverEngine
     private readonly HashSet<string> _tried = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// NIGHT-06: Optional metadata callback checking whether this failover engine represents
+    /// the currently active user intent. Default null means legacy true, preserving the public
+    /// constructor signature and backward compatibility.
+    /// </summary>
+    internal Func<bool>? IsCurrentIntent { get; init; }
+
+    private bool IsIntentCurrent() => IsCurrentIntent?.Invoke() ?? true;
+
+    /// <summary>
     /// Construct the engine. <paramref name="restart"/> is a delegate that
     /// stops + restarts the VPN with the now-current <paramref name="settings"/>
     /// (typically <c>vpnEngine.StartAsync</c>). Returns true if the new
@@ -80,6 +89,12 @@ public sealed class AutoFailoverEngine
         CancellationToken ct = default)
     {
         _logger?.Warning("[AutoFailover] Dead config: {Reason}", reason);
+
+        if (!IsIntentCurrent())
+        {
+            _logger?.Information("[AutoFailover] Stale failover intent at entry — aborting without changes");
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
+        }
 
         // 1. Custom-mode escape — we never silently swap a user's JSON.
         var configMode = (_settings.App.ConfigMode ?? "generated").Trim().ToLowerInvariant();
@@ -179,8 +194,6 @@ public sealed class AutoFailoverEngine
         // because the NEW one is what we're about to test.
         var oldActive = _settings.Vless.ActiveServer ?? "";
         var oldActiveSub = _settings.App.ActiveSubscriptionServer;
-        if (!string.IsNullOrWhiteSpace(oldActive))
-            _tried.Add(oldActive);
 
         // 5. Mutate settings.
         var newName = candidate.Name;
@@ -190,6 +203,17 @@ public sealed class AutoFailoverEngine
             // so ActiveServer matching still works downstream.
             newName = $"{candidate.Server}:{candidate.Port}";
         }
+
+        if (!IsIntentCurrent())
+        {
+            _logger?.Information(
+                "[AutoFailover] Stale failover intent before selector mutation — aborting without changes");
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(oldActive))
+            _tried.Add(oldActive);
+
         // 5. Mutate ONLY in memory. The restart delegate consumes the mutated
         // _settings to bring the replacement up, so the swap must be visible to it —
         // but disk persistence is delayed to step 7 (see P1.5 below).
@@ -206,9 +230,24 @@ public sealed class AutoFailoverEngine
         if (_restart != null)
         {
             try { committed = await _restart(ct); }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException)
+            {
+                if (IsIntentCurrent())
+                {
+                    _settings.Vless.ActiveServer = oldActive;
+                    _settings.App.ActiveSubscriptionServer = oldActiveSub;
+                }
+                throw;
+            }
             catch (Exception ex) { _logger?.Warning(ex, "[AutoFailover] Restart delegate threw"); committed = false; }
             _logger?.Information("[AutoFailover] Restart delegate returned {Ok}", committed);
+        }
+
+        if (!IsIntentCurrent())
+        {
+            _logger?.Information(
+                "[AutoFailover] Stale failover intent after restart — aborting without rollback or persist");
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
         }
 
         if (!committed)
