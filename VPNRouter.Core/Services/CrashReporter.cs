@@ -189,6 +189,10 @@ public static class CrashReporter
         @"([?&])((?:[a-z0-9_]*[_-])?(?:token|secret|api[_-]?key|auth|pass(?:word|wd)?|private[_-]?key|psk|session|session[_-]?id|sig|signature|credential|sid|short[_-]?id|key))=[^&\s]+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex _keyValueSecretPattern = new(
+        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password))\b([""']?\s*[=:]\s*)([""']?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Best-effort secret scrubbing on a single line of text. Public so
     /// callers serialising their own context (e.g. an Android Java
@@ -207,6 +211,10 @@ public static class CrashReporter
         s = _uuidPattern.Replace(s, "<uuid>");
         s = _longBase64Pattern.Replace(s, "<key>");
         s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}{m.Groups[2].Value}=[REDACTED]");
+        s = _keyValueSecretPattern.Replace(s, m =>
+            m.Groups[4].Value.StartsWith("[REDACTED]") || m.Groups[4].Value == "***" || m.Groups[4].Value.StartsWith("[redacted]")
+                ? m.Value
+                : $"{m.Groups[1].Value}{m.Groups[2].Value}{m.Groups[3].Value}***");
         return s;
     }
 }
