@@ -245,6 +245,16 @@ jobs:
           }
           Write-Host "OK: Negative control verified dependency exercised (exit $($negResult.ExitCode), 'libcronet' in output)"
 
+          $env:VPNCTL_TEST_CORE = $sbExe
+          try {
+            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter FullyQualifiedName~Native_MigratedFakeIp --logger 'console;verbosity=normal'
+            if ($LASTEXITCODE -ne 0) {
+              throw "dotnet test Native_MigratedFakeIp failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            $env:VPNCTL_TEST_CORE = $null
+          }
+
           Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $negDir   -ErrorAction SilentlyContinue
 

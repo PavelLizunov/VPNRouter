@@ -1,8 +1,13 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -856,5 +861,151 @@ public class VpnctlFakeIpMigrationTests
         var fakeipServer = servers!.OfType<JsonObject>().FirstOrDefault(s => (string?)s["tag"] == "vpnrouter-dns-direct");
         Assert.NotNull(fakeipServer);
         Assert.Equal("fakeip", (string?)fakeipServer!["type"]);
+    }
+
+    // ── Native sing-box check: VPNCTL_TEST_CORE integration ─────────────────
+
+    public static IEnumerable<object[]> Native_MigratedFakeIp_Cases => new[]
+    {
+        new object[]
+        {
+            "Native_MigratedFakeIp_DisabledFalse_OldDnsObject",
+            """
+            {
+              "dns": {
+                "servers": [
+                  { "tag": "local-dns", "type": "udp", "server": "8.8.8.8" }
+                ],
+                "fakeip": {
+                  "enabled": false
+                }
+              },
+              "outbounds": [
+                { "type": "socks", "tag": "proxy", "server": "127.0.0.1", "server_port": 9 },
+                { "type": "direct", "tag": "direct" }
+              ]
+            }
+            """
+        },
+        new object[]
+        {
+            "Native_MigratedFakeIp_EnabledV4_Legacy",
+            """
+            {
+              "dns": {
+                "servers": [
+                  { "tag": "fakeip-dns", "address": "fakeip" },
+                  { "tag": "local-dns", "type": "udp", "server": "8.8.8.8" }
+                ],
+                "fakeip": {
+                  "enabled": true,
+                  "inet4_range": "198.18.0.0/15"
+                }
+              },
+              "outbounds": [
+                { "type": "socks", "tag": "proxy", "server": "127.0.0.1", "server_port": 9 },
+                { "type": "direct", "tag": "direct" }
+              ]
+            }
+            """
+        },
+        new object[]
+        {
+            "Native_MigratedFakeIp_EnabledBoth_Legacy",
+            """
+            {
+              "dns": {
+                "servers": [
+                  { "tag": "fakeip-dns", "address": "fakeip" },
+                  { "tag": "local-dns", "type": "udp", "server": "8.8.8.8" }
+                ],
+                "fakeip": {
+                  "enabled": true,
+                  "inet4_range": "198.18.0.0/15",
+                  "inet6_range": "fc00::/18"
+                }
+              },
+              "outbounds": [
+                { "type": "socks", "tag": "proxy", "server": "127.0.0.1", "server_port": 9 },
+                { "type": "direct", "tag": "direct" }
+              ]
+            }
+            """
+        },
+        new object[]
+        {
+            "Native_MigratedFakeIp_TypedAlready",
+            """
+            {
+              "dns": {
+                "servers": [
+                  { "tag": "fakeip-dns", "type": "fakeip", "inet4_range": "198.18.0.0/15", "inet6_range": "fc00::/18" },
+                  { "tag": "local-dns", "type": "udp", "server": "8.8.8.8" }
+                ]
+              },
+              "outbounds": [
+                { "type": "socks", "tag": "proxy", "server": "127.0.0.1", "server_port": 9 },
+                { "type": "direct", "tag": "direct" }
+              ]
+            }
+            """
+        }
+    };
+
+    [Theory]
+    [MemberData(nameof(Native_MigratedFakeIp_Cases))]
+    public async Task Native_MigratedFakeIp_Check(string caseName, string rawJson)
+    {
+        _ = caseName;
+        var coreExe = Environment.GetEnvironmentVariable("VPNCTL_TEST_CORE");
+        Assert.SkipWhen(string.IsNullOrEmpty(coreExe), "VPNCTL_TEST_CORE environment variable not provided");
+        Assert.True(File.Exists(coreExe), $"VPNCTL_TEST_CORE executable does not exist at {coreExe}");
+
+        var injectedJson = CustomConfigInjector.Inject(rawJson, Array.Empty<string>(), CreateSettings());
+        var tempConfig = Path.Combine(Path.GetTempPath(), $"vpnrouter-native-fakeip-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            await File.WriteAllTextAsync(tempConfig, injectedJson);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = coreExe,
+                Arguments = $"check -c \"{tempConfig}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            Assert.NotNull(proc);
+
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            try
+            {
+                await proc.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                throw new TimeoutException($"sing-box check timed out after 15s for: {coreExe}");
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            Assert.True(proc.ExitCode == 0, $"sing-box check failed with exit code {proc.ExitCode}:\nStdout:\n{stdout}\nStderr:\n{stderr}");
+        }
+        finally
+        {
+            if (File.Exists(tempConfig))
+            {
+                try { File.Delete(tempConfig); } catch { }
+            }
+        }
     }
 }
