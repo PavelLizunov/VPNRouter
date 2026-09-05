@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using VPNRouter.App.Localization;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
