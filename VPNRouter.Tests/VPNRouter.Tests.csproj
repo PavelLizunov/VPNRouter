@@ -49,8 +49,8 @@
          drive them from xUnit without a display. Required for dev-loop GUI
          testing on CI and in the VM shell. Bumped to 12.0.3 in lockstep
          with App + Android. -->
-    <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.2" />
   </ItemGroup>
 
   <ItemGroup>
