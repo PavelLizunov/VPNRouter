@@ -1159,7 +1159,11 @@ public class VpnEngine : IDisposable
             // relay-open failure-rate signal doesn't need it (ProxyStreamError
             // attribution is a later enrichment).
             _connHealthStream = new ClashLogStream(
-                $"http://127.0.0.1:{clashPort}", _connHealth, proxyEndpoints: null, logger: _logger);
+                $"http://127.0.0.1:{clashPort}",
+                _connHealth,
+                proxyEndpoints: null,
+                logger: _logger,
+                secret: settings.SingBox.ClashApiSecret);
             _connHealthStream.Start();
             _logger?.Information(
                 "[VpnEngine] Connection-health telemetry started (observe-only, Clash port {Port})", clashPort);

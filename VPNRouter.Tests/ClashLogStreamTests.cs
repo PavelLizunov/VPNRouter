@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -44,6 +45,43 @@ public sealed class ClashLogStreamTests
     [InlineData("127.0.0.1:9090")] // missing scheme
     public void BuildLogsUri_RejectsInvalid(string baseUrl)
         => Assert.Throws<System.ArgumentException>(() => ClashLogStream.BuildLogsUri(baseUrl));
+
+    // ---- BuildLogsUri token parameter encoding & empty handling ----
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void BuildLogsUri_NullOrEmptySecret_ProducesNoToken(string? secret)
+    {
+        var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", secret);
+        Assert.Equal("ws://127.0.0.1:9090/logs?level=info", uri.ToString());
+        Assert.DoesNotContain("token", uri.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("p@ss&word=123+456?#/:;,$%")]
+    [InlineData("!*'();:@&=+$,/?#[] ")]
+    public void BuildLogsUri_EncodesReservedCharacters(string secret)
+    {
+        var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", secret);
+        var expectedEscaped = Uri.EscapeDataString(secret);
+        Assert.Equal($"ws://127.0.0.1:9090/logs?level=info&token={expectedEscaped}", uri.AbsoluteUri);
+        Assert.Contains($"&token={expectedEscaped}", uri.AbsoluteUri);
+        // Unencoded reserved query delimiter '&' from within secret must not split queries
+        Assert.DoesNotContain("&word=", uri.AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData("секрет \U0001F511")]
+    [InlineData("токен-123-слово")]
+    [InlineData("パスワード\U0001F512")]
+    public void BuildLogsUri_EncodesNonAsciiCharacters(string secret)
+    {
+        var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", secret);
+        var expectedEscaped = Uri.EscapeDataString(secret);
+        Assert.Equal($"ws://127.0.0.1:9090/logs?level=info&token={expectedEscaped}", uri.AbsoluteUri);
+        Assert.DoesNotContain(secret, uri.AbsoluteUri); // Raw non-ASCII characters are percent-encoded
+    }
 
     // ---- TryExtractPayload ----
 
@@ -121,6 +159,22 @@ public sealed class ClashLogStreamTests
         Assert.DoesNotContain("s3cret", redacted, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("p@ss&word=123+456?#/:;,$%")]
+    [InlineData("секрет \U0001F511")]
+    [InlineData("simpleSecret123")]
+    public void RedactLogsUri_ExcludesOriginalAndEncodedToken(string secret)
+    {
+        var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", secret);
+        var redacted = ClashLogStream.RedactLogsUri(uri);
+        var encoded = Uri.EscapeDataString(secret);
+
+        Assert.Equal("ws://127.0.0.1:9090/logs", redacted);
+        Assert.DoesNotContain(secret, redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain(encoded, redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("token", redacted, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void RunAsync_InformationCall_UsesRedactLogsUri()
     {
@@ -133,5 +187,74 @@ public sealed class ClashLogStreamTests
             dir!.FullName, "VPNRouter.Core", "Services", "ClashLogStream.cs"));
         Assert.Contains("RedactLogsUri(_logsUri)", src);
         Assert.DoesNotContain("Information(\"[ConnHealth] Clash /logs stream connected ({Uri})\", _logsUri)", src);
+    }
+
+    // ---- NIGHT-12: Source guard for TryStartConnectionHealthStream ----
+
+    [Fact]
+    public void TryStartConnectionHealthStream_PassesClashApiSecret_CommentsStripped()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "VPNRouter.Core")))
+            dir = dir.Parent;
+
+        if (dir == null)
+        {
+            dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "VPNRouter.Core")))
+                dir = dir.Parent;
+        }
+        Assert.NotNull(dir);
+
+        var vpnEnginePath = Path.Combine(
+            dir!.FullName, "VPNRouter.Core", "Services", "VpnEngine.cs");
+        Assert.True(File.Exists(vpnEnginePath), $"VpnEngine.cs not found at {vpnEnginePath}");
+
+        var fullSrc = File.ReadAllText(vpnEnginePath);
+
+        // Bound to the actual TryStartConnectionHealthStream method
+        const string methodSignature = "void TryStartConnectionHealthStream(AppSettings settings)";
+        var methodIdx = fullSrc.IndexOf(methodSignature, StringComparison.Ordinal);
+        Assert.True(methodIdx >= 0, "TryStartConnectionHealthStream method not found in VpnEngine.cs");
+
+        var openBraceIdx = fullSrc.IndexOf('{', methodIdx);
+        Assert.True(openBraceIdx > methodIdx, "Opening brace for TryStartConnectionHealthStream not found");
+
+        var depth = 0;
+        var closeBraceIdx = -1;
+        for (int i = openBraceIdx; i < fullSrc.Length; i++)
+        {
+            if (fullSrc[i] == '{') depth++;
+            else if (fullSrc[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    closeBraceIdx = i;
+                    break;
+                }
+            }
+        }
+        Assert.True(closeBraceIdx > openBraceIdx, "Closing brace for TryStartConnectionHealthStream not found");
+
+        var methodSrc = fullSrc.Substring(methodIdx, closeBraceIdx - methodIdx + 1);
+
+        // Strip comments (block and line) while preserving quoted string literals (e.g. "http://...")
+        // to ensure dummy comments cannot satisfy the guard and URLs aren't truncated.
+        var commentsStripped = Regex.Replace(
+            methodSrc,
+            @"(@""(?:""""|[^""])*""|""(?:\\.|[^""\\])*"")|(/\*[\s\S]*?\*/|//.*$)",
+            m => m.Groups[1].Success ? m.Groups[1].Value : string.Empty,
+            RegexOptions.Multiline);
+
+        // Bounded actual constructor instantiation requiring real secret argument (not dummy comment)
+        var constructorIdx = commentsStripped.IndexOf("new ClashLogStream(", StringComparison.Ordinal);
+        Assert.True(constructorIdx >= 0, "new ClashLogStream constructor call not found in stripped method body");
+
+        var closeParenIdx = commentsStripped.IndexOf(')', constructorIdx);
+        Assert.True(closeParenIdx > constructorIdx, "Closing parenthesis for constructor call not found");
+
+        var constructorArgs = commentsStripped.Substring(constructorIdx, closeParenIdx - constructorIdx + 1);
+        Assert.Contains("secret: settings.SingBox.ClashApiSecret", constructorArgs);
     }
 }

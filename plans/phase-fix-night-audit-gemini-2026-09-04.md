@@ -58,10 +58,10 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Verification Gates
 
-- [ ] **Gate 1 — Build clean**: **EVIDENCE PENDING** (Control plane lacks .NET SDK; exact workflow commands must be inspected before asserting full solution build; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08, NIGHT-07 `5ecbe4d2`] green on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending; limits full solution/live/macOS unchanged).
-- [ ] **Gate 2 — Tests green**: **BLOCKED** on control plane (CI execution required; non-headless test suite; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration on `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped], and Batch 3 [NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699: 3184 total / 3126 passed / 58 skipped] PASS on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending).
-- [ ] **Gate 3 — Docs**: **PASS** (Brief revised; `plans/OPEN-DEFECTS.md` active; report imported; NIGHT-FOLLOWUP-01 registered; ledger all still open pending closure evidence; no fake full gate).
-- [ ] **Gate 4 — Independent review**: **PENDING** (Adversarial review / bug-hunt per batch; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08, NIGHT-07] green on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
+- [ ] **Gate 1 — Build clean**: **EVIDENCE PENDING** (Control plane lacks .NET SDK; exact workflow commands must be inspected before asserting full solution build; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], Batch 3 [NIGHT-08, NIGHT-07, NIGHT-06 `da3c21e7`], and Batch 4 [NIGHT-09/10 `530ca9e7`] green on CI; NIGHT-12 minimal secret wiring pending CI; NIGHT-11 pending; limits full solution/live/macOS unchanged; red witnesses/full solution/native gaps remain; no live VPN/infra).
+- [ ] **Gate 2 — Tests green**: **BLOCKED** on control plane (CI execution required; non-headless test suite; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration on `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped], Batch 3 [NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699: 3184 total / 3126 passed / 58 skipped; NIGHT-06 `da3c21e7`, run 33956946168: 3194 total / 3136 passed / 58 skipped], and Batch 4 [NIGHT-09/10 `530ca9e7`, run 33957757306: 3221 total / 3163 passed / 58 skipped] PASS on CI; NIGHT-12 minimal secret wiring pending CI; NIGHT-11 pending; red witnesses/full solution/native gaps remain; no live VPN/infra).
+- [ ] **Gate 3 — Docs**: **PASS** (Brief revised; `plans/OPEN-DEFECTS.md` active; report imported; NIGHT-FOLLOWUP-01 registered; ledger all still open pending closure evidence; no fake full gate; no closure claim for all 12).
+- [ ] **Gate 4 — Independent review**: **PENDING** (Adversarial review / bug-hunt per batch; Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], Batch 3 [NIGHT-08, NIGHT-07, NIGHT-06], and Batch 4 [NIGHT-09/10] green on CI; NIGHT-12 minimal secret wiring pending CI; NIGHT-11 pending; red witnesses/full solution/native gaps remain; no live VPN/infra; full review gate remains open; ledger all still open pending closure evidence; no fake full gate; no closure claim for all 12).
 - [ ] **Gate 5 — UI verify**: **N/A / PENDING** (No visual redesign; ViewModel status/readiness verified via headless/characterization tests on CI; NIGHT-07 UI source guard only, coordinator behavioral fake events tests; no live run/fullsolution/native mac).
 - [ ] **Gate 6 — Characterization diff**: **PENDING** (Coordinator state transitions and error propagation baselined).
 
@@ -69,21 +69,24 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Outcome
 
-**Status**: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION) & BATCH 3 (NIGHT-08, NIGHT-07) VERIFIED ON CI / NIGHT-06 IMPLEMENTED PENDING CI / BATCH 4 (09–12) PENDING / DEFECT LEDGER ALL STILL OPEN PENDING CLOSURE EVIDENCE
-**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. Batch 2 (NIGHT-05 endpoint substep) on `ef82aadc4389de08f3a67ef356e2f203d866c1bb`. Batch 3 (NIGHT-08) on `1ca812f4400c9e8d881532e0baf9277513fa4109` (preceded by `143d2adf`). Batch 2 (NIGHT-05 full integration) on `8ee89105635bc750932084c6dad09467cbe1d8b9` (preceded by `b7406456`, `ecb682ef`). Batch 3 (NIGHT-07) on `5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`. NIGHT-06 working tree implementation pending CI.
+**Status**: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION), BATCH 3 (NIGHT-08, NIGHT-07, NIGHT-06) & BATCH 4 (NIGHT-09, NIGHT-10) VERIFIED ON CI / NIGHT-12 MINIMAL SECRET WIRING PENDING CI / NIGHT-11 PENDING / DEFECT LEDGER ALL STILL OPEN PENDING CLOSURE EVIDENCE / NO CLOSURE CLAIM ALL 12 (RED WITNESSES / FULL SOLUTION / NATIVE GAPS REMAIN; NO LIVE VPN/INFRA)
+**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. Batch 2 (NIGHT-05 endpoint substep) on `ef82aadc4389de08f3a67ef356e2f203d866c1bb`. Batch 3 (NIGHT-08) on `1ca812f4400c9e8d881532e0baf9277513fa4109` (preceded by `143d2adf`). Batch 2 (NIGHT-05 full integration) on `8ee89105635bc750932084c6dad09467cbe1d8b9` (preceded by `b7406456`, `ecb682ef`). Batch 3 (NIGHT-07) on `5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`. Batch 3 (NIGHT-06) on `da3c21e740c7b5905158cbf6d4b568d922ff8bf7`. Batch 4 (NIGHT-09 & NIGHT-10) on `530ca9e7c8c8074267b67398d80d67f2022ff4df`. NIGHT-12 minimal secret wiring working tree pending CI.
 **Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240)
-**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint substep all 4 checks PASS on CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379: Ubuntu 3114 total / 3057 passed / 57 skipped, 12 new tests). NIGHT-08 all 4 checks PASS on CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995: 3121 total / 3063 passed / 58 skipped; actual Apply false branch + retainedStop retry + ack hotreload executed on Ubuntu, successful Windows restart test not selected by Windows filter; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550206811). NIGHT-05 full integration all 4 checks PASS on CI (`8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped on Ubuntu, 42 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550488707). NIGHT-07 all 4 checks PASS on CI (`5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`, run 33955634699: Ubuntu 3184 total / 3126 passed / 58 skipped, 21 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550638820). NIGHT-06 unit tests, same object reuse, and actualApply tests implemented pending CI.
+**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint substep all 4 checks PASS on CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379: Ubuntu 3114 total / 3057 passed / 57 skipped, 12 new tests). NIGHT-08 all 4 checks PASS on CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995: 3121 total / 3063 passed / 58 skipped; actual Apply false branch + retainedStop retry + ack hotreload executed on Ubuntu, successful Windows restart test not selected by Windows filter; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550206811). NIGHT-05 full integration all 4 checks PASS on CI (`8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped on Ubuntu, 42 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550488707). NIGHT-07 all 4 checks PASS on CI (`5ecbe4d2ad275766d3c52f9589ad94b0be4b53b3`, run 33955634699: Ubuntu 3184 total / 3126 passed / 58 skipped, 21 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550638820). NIGHT-06 all 4 checks PASS on CI (`da3c21e740c7b5905158cbf6d4b568d922ff8bf7`, run 33956946168: Ubuntu 3194 total / 3136 passed / 58 skipped, 10 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550780691). NIGHT-09/10 all 4 checks PASS on CI (`530ca9e7c8c8074267b67398d80d67f2022ff4df`, run 33957757306: Ubuntu 3221 total / 3163 passed / 58 skipped, 27 new tests; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550872851). Actual loopback UDP reply/afterdatagramcancel/silent2s proved; bounded8 and tailbest. NIGHT-12 minimal secret wiring pending CI; NIGHT-11 pending.
 **Files changed**:
-- `plans/OPEN-DEFECTS.md` (active defect ledger; all still open pending closure evidence for whole task; no fake full gate; NIGHT-FOLLOWUP-01 registered)
+- `plans/OPEN-DEFECTS.md` (active defect ledger; all still open pending closure evidence for whole task; no fake full gate; NIGHT-FOLLOWUP-01 registered; no closure claim for all 12)
 - `plans/overnight-audit-morning-report-2026-09-04.md` (audit report)
-- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-05 full integration CI pass, Windows netsh correction, NIGHT-07 CI pass evidence, NIGHT-06 implementation details, and remaining status)
+- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-06 CI pass, NIGHT-09/10 CI pass, NIGHT-12 minimal secret wiring pending CI, and NIGHT-11 status)
 - `VPNRouter.Core/Interfaces/IFirewallManager.cs` (internal optional `ICommittedFirewallConfig` capability interface; committed `b7406456`, `8ee89105`)
 - `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`; NIGHT-05 committed-config atomic refresh, `_gate` synchronization, and disarm before DNS committed `b7406456`, `8ee89105`)
 - `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`; NIGHT-05 committed-config atomic refresh, `_gate` synchronization, and disarm before DNS committed `b7406456`, `ecb682ef`, `8ee89105`)
 - `VPNRouter.Core/Services/StartupPipeline.cs` (NIGHT-05 Phase 6 skips legacy capability; Phase 8 passes committed config after confirmed start before monitors; committed `b7406456`, `8ee89105`)
-- `VPNRouter.Core/Services/VpnEngine.cs` (NIGHT-08 `ApplyAsync` baseline restoration on reload/restart failure committed `143d2adf`; NIGHT-05 firewall committed config update on successful bool ack committed `b7406456`, `8ee89105`; NIGHT-06 failover settings context and generation reset on public Start and committed Apply, stale generation/identity guards before teardown; committed `5ecbe4d2` for NIGHT-07)
+- `VPNRouter.Core/Services/VpnEngine.cs` (NIGHT-08 `ApplyAsync` baseline restoration on reload/restart failure committed `143d2adf`; NIGHT-05 firewall committed config update on successful bool ack committed `b7406456`, `8ee89105`; NIGHT-06 failover settings context and generation reset on public Start and committed Apply, stale generation/identity guards before teardown committed `da3c21e7`; NIGHT-12 ClashLogStream constructor passes ClashApiSecret)
 - `VPNRouter.Core/Services/SingBoxManager.cs` (NIGHT-08 `ReloadConfigJsonWithResult` and `TryReloadConfigJson` lease guards committed `143d2adf`)
 - `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs` (NIGHT-08 `RestartCore` bool outcome and exact-stop failure handling committed `143d2adf`)
+- `VPNRouter.Core/Services/ServerHealthProbe.cs` (NIGHT-09: bounded concurrency with worker limit 8, caller best-server tail selection preserved, early-exit removed; committed `530ca9e7`)
+- `VPNRouter.Core/Services/TcpTlsProbe.cs` (NIGHT-10: UDP probe receiveTask await, OperationCanceledException propagation, cancelled probes never reporting alive or slow; committed `530ca9e7`)
+- `VPNRouter.Core/Services/ClashLogStream.cs` (NIGHT-12: minimal secret wiring, WebSocket Bearer secret auth)
 - `VPNRouter.App/ViewModels/Internals/TwoPhaseStartCoordinator.cs` (NIGHT-07: Phase B awaits typed `Connected`, clean startTask completion never readiness, same A/B timer retained, late typedConnected succeeds, faults and cancellations observed immediately; committed `5ecbe4d2`)
 - `VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs` (NIGHT-07: legacy `Connected` status strings do not promote `IsConnected` from false; two-phase `outcome == Connected` refreshes status; generic catch preserves green only if already typed-ready; committed `5ecbe4d2`)
 - `VPNRouter.App/ViewModels/MainWindowViewModel.RuntimeStatus.cs` (NIGHT-07: `SyncConnectedWithVpnRuntime` requires `IsConnected` before restoring status for owned engine; owned poll presence never promotes to readiness; external service behavior retained; committed `5ecbe4d2`)
@@ -92,20 +95,21 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 - `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint tests committed `ef82aadc`; NIGHT-05 committed config stale/no file, active anchor/legacy refresh, failed refresh, malformed JSON, disarm tests; committed `b7406456`, `ecb682ef`, `8ee89105`)
 - `VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs` (NIGHT-08 restart result and guard regression tests committed `1ca812f4`)
 - `VPNRouter.Tests/VpnEngineApplyEscalationTests.cs` (NIGHT-08 source-pin without comment bypass committed `143d2adf`)
-- `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs` (NIGHT-08 Apply failure baseline preservation tests committed `143d2adf`, `1ca812f4`; NIGHT-05 failed Apply zero capability calls, hot-reload success exact JSON / one PUT, StartupPipeline cold ordering source guard; committed `b7406456`, `8ee89105`; NIGHT-06 failed/successful actual Apply failover context retention and lazy null reset, no-op start on already running engine)
+- `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs` (NIGHT-08 Apply failure baseline preservation tests committed `143d2adf`, `1ca812f4`; NIGHT-05 failed Apply zero capability calls, hot-reload success exact JSON / one PUT, StartupPipeline cold ordering source guard committed `b7406456`, `8ee89105`; NIGHT-06 failed/successful actual Apply failover context retention and lazy null reset, no-op start on already running engine committed `da3c21e7`)
 - `VPNRouter.Tests/MvmTwoPhaseStartTimerTests.cs` (NIGHT-07 behavioral coordinator tests: clean startTask never readiness, same A/B timer retained, late typedConnected succeeds, faults/cancel immediate; committed `5ecbe4d2`)
 - `VPNRouter.Tests/NightTypedReadinessTests.cs` (NIGHT-07 UI source-guard tests: legacy status no promotion, owned poll presence no readiness, generic catch guard, external service retained; committed `5ecbe4d2`)
-- `VPNRouter.Tests/NightFailoverIntentTests.cs` (NIGHT-06 failover lifecycle, settings context, same object reuse, stale generation/identity guards before teardown, and source order tests)
+- `VPNRouter.Tests/NightFailoverIntentTests.cs` (NIGHT-06 failover lifecycle, settings context, same object reuse, stale generation/identity guards before teardown, and source order tests; committed `da3c21e7`)
+- `VPNRouter.Tests/NightProbeConcurrencyCancellationTests.cs` (NIGHT-09/10 tests: peak concurrency bounded to 8, caller best-server tail preserved, actual loopback UDP reply, afterdatagramcancel, silent2s timeout; committed `530ca9e7`)
 
 **Gate results**:
-- [-] Gate 1: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530), and BATCH 3 (NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699) PASS ON CI. Limits full solution/live/macOS unchanged. NIGHT-06 implemented pending CI. Batch 4 (09–12) pending.
-- [-] Gate 2: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped), and BATCH 3 (NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699: 3184 total / 3126 passed / 58 skipped) PASS ON CI. NIGHT-06 implemented pending CI. Batch 4 (09–12) pending.
-- [x] Gate 3: PASS (brief updated; ledger all still open pending closure evidence; no fake full gate; NIGHT-FOLLOWUP-01 registered).
-- [-] Gate 4: PARTIAL / PENDING (Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], and Batch 3 [NIGHT-08, NIGHT-07] green on CI; NIGHT-06 implemented pending CI; Batch 4 [09–12] pending; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
+- [-] Gate 1: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530), BATCH 3 (NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699; NIGHT-06 `da3c21e740c7b5905158cbf6d4b568d922ff8bf7`, run 33956946168), and BATCH 4 (NIGHT-09/10 `530ca9e7c8c8074267b67398d80d67f2022ff4df`, run 33957757306) PASS ON CI. Limits full solution/live/macOS unchanged; red witnesses/full solution/native gaps remain; no live VPN/infra. NIGHT-12 minimal secret wiring pending CI. NIGHT-11 pending.
+- [-] Gate 2: BATCH 1, BATCH 2 (NIGHT-04, NIGHT-05 FULL INTEGRATION `8ee89105635bc750932084c6dad09467cbe1d8b9`, run 33954240530: 3163 total / 3105 passed / 58 skipped), BATCH 3 (NIGHT-08 `1ca812f4`, run 33951772995; NIGHT-07 `5ecbe4d2`, run 33955634699: 3184 total / 3126 passed / 58 skipped; NIGHT-06 `da3c21e740c7b5905158cbf6d4b568d922ff8bf7`, run 33956946168: 3194 total / 3136 passed / 58 skipped), and BATCH 4 (NIGHT-09/10 `530ca9e7c8c8074267b67398d80d67f2022ff4df`, run 33957757306: 3221 total / 3163 passed / 58 skipped) PASS ON CI. NIGHT-12 minimal secret wiring pending CI. NIGHT-11 pending.
+- [x] Gate 3: PASS (brief updated; ledger all still open pending closure evidence; no fake full gate; NIGHT-FOLLOWUP-01 registered; no closure claim for all 12).
+- [-] Gate 4: PARTIAL / PENDING (Batch 1, Batch 2 [NIGHT-04, NIGHT-05 full integration], Batch 3 [NIGHT-08, NIGHT-07, NIGHT-06], and Batch 4 [NIGHT-09/10] green on CI; NIGHT-12 minimal secret wiring pending CI; NIGHT-11 pending; red witnesses/full solution/native gaps remain; no live VPN/infra; full review gate remains open; ledger all still open pending closure evidence; no fake full gate; no closure claim for all 12).
 - [-] Gate 5: N/A / PENDING (no visual UI redesign; ViewModel status/readiness verified via headless/characterization tests on CI; NIGHT-07 UI source guard only, coordinator behavioral fake events tests; no live run/fullsolution/native mac).
 - [-] Gate 6: PENDING (characterization diff across batches).
 
-**Follow-ups**: Commit and push NIGHT-06 implementation for CI verification; proceed to Batch 4 (NIGHT-09..12); final review; maintain `plans/OPEN-DEFECTS.md` (all defects still open pending closure evidence; no fake full gate); address preexisting P1 survivor NIGHT-FOLLOWUP-01 (outside approved 12 repair scope, deferred owner follow-up); track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
+**Follow-ups**: Verify NIGHT-12 minimal secret wiring on CI; implement and verify NIGHT-11 (ConnStats stale indicator / generation binding); final review; maintain `plans/OPEN-DEFECTS.md` (all defects still open pending closure evidence; no fake full gate; no closure claim for all 12; red witnesses/full solution/native gaps remain; no live VPN/infra); address preexisting P1 survivor NIGHT-FOLLOWUP-01 (outside approved 12 repair scope, deferred owner follow-up); track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
 
 ### Batch 1 Outcome
 
@@ -302,10 +306,12 @@ Twelve confirmed defects executed across four sequential batches with overlappin
   - Coordinator behavioral fake events tests (`MvmTwoPhaseStartTimerTests`) and UI source guards (`NightTypedReadinessTests`) executed on Ubuntu runner.
   - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
 
-### Batch 3 (NIGHT-06) Implementation Outcome (Pending CI)
+### Batch 3 (NIGHT-06) Outcome
 
-- **Status**: Implemented, pending CI.
-- **Defect Ledger**: `plans/OPEN-DEFECTS.md` all still open pending closure evidence for whole task; no fake full gate.
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: All 4 checks PASS on commit `da3c21e740c7b5905158cbf6d4b568d922ff8bf7`, GitHub Actions run `33956946168`. Receipt: https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550780691.
+- **Test Metrics**: 3194 total / 3136 passed / 58 skipped on Ubuntu runner (10 new tests: 3194 vs prior 3184; failover lifecycle, settings context, same object reuse, and stale generation guard suites executed on Ubuntu).
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` remains open with all defects open pending evidence for the whole task; do not close ledger or any gates prematurely; no closure claim for all 12. Red witnesses, full solution, and native gaps remain; no live VPN/infra.
 - **Batch 3 Scope & Implementation (NIGHT-06 Failover Settings Context & Lifecycle Synchronization)**:
   - **Private Settings + Generation Reset on Public New Start / Committed Apply Only (Lazy Null)**:
     - `VpnEngine` adds private fields `_failoverSettingsContext`, `_failoverGeneration`, and internal helper `ResetFailoverContext(AppSettings settings)`.
@@ -338,8 +344,50 @@ Twelve confirmed defects executed across four sequential batches with overlappin
       - `ApplyAsync_StructuralRestartFails_RestoresActiveBaselineAndDoesNotCommitCandidateMetadata`: failed actual Apply retains baseline settings context and failover instance.
       - `ApplyAsync_HotReloadSucceeds_CallsFirewallCapabilityOnceWithExactGeneratedAndIntent`: successful actual Apply updates settings context and resets failover to lazy null.
       - `StartAsync_SingBoxAlreadyRunning_NoOpStartDoesNotResetFailoverContext`: sing-box already running no-op start does not reset failover context.
+- **CI Pipeline Scope & Gate 1 Limitation**:
+  - All 4 CI checks green on run 33956946168.
+  - Existing CI (`test.yml`) builds `VPNRouter.Tests` project (Core and App dependencies).
+  - Ubuntu runner executes Core unit tests including failover lifecycle and generation guard tests. Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
+  - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged; red witnesses/full solution/native gaps remain; no live VPN/infra.
+
+### Batch 4 (NIGHT-09 & NIGHT-10) Outcome
+
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: All 4 checks PASS on commit `530ca9e7c8c8074267b67398d80d67f2022ff4df`, GitHub Actions run `33957757306`. Receipt: https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550872851.
+- **Test Metrics**: 3221 total / 3163 passed / 58 skipped on Ubuntu runner (27 new tests: 3221 vs prior 3194; concurrency bounds, best-server preservation, UDP probe cancellation, and loopback verification suites executed on Ubuntu).
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` remains open with all defects open pending evidence for the whole task; do not close ledger or any gates prematurely; no closure claim for all 12. Red witnesses, full solution, and native gaps remain; no live VPN/infra.
+- **Batch 4 Scope & Implementation (NIGHT-09 & NIGHT-10)**:
+  - **NIGHT-09 — Bounded Concurrency & Tail Best Preservation (`ServerHealthProbe`)**:
+    - Bounded concurrency in `ServerHealthProbe.ProbeAllAsync` using constant worker limit of 8 (`bounded8`, `SemaphoreSlim(8)`).
+    - Preserves caller best-server selection semantics (`tailbest`): probes all eligible servers up to concurrency limit without unrequested early-exit first-server, ensuring caller retains full visibility of all probe results and selects optimal server based on latency/metrics.
+    - No unrequested config knob, benchmark claims, or caller semantic drift.
+  - **NIGHT-10 — UDP Probe Receive Await & Cancellation Propagation (`TcpTlsProbe`)**:
+    - Fixed unhandled cancelled UDP probe receive in `TcpTlsProbe.ProbeUdpAsync`.
+    - Explicitly awaits `receiveTask` on UDP probes, handling cancellation tokens truthfully.
+    - Catches and propagates `OperationCanceledException` so cancelled UDP probes throw or settle as cancelled and never falsely report alive, zero latency, or slow.
+    - Actual loopback UDP reply, `afterdatagramcancel`, and `silent2s` behavior proved with rigorous characterization tests.
+- **Test Suite & Verification (`VPNRouter.Tests/NightProbeConcurrencyCancellationTests.cs`)**:
+  - `ProbeAllAsync_ConcurrencyBoundedTo8`: asserts peak concurrent probes never exceed 8 across large server batches.
+  - `ProbeAllAsync_TailBestPreserved_ProbesAllWithoutEarlyExit`: verifies all servers probed and best server correctly identified by caller without premature termination.
+  - `ProbeUdpAsync_ActualLoopbackReply_ReturnsSuccess`: verifies successful UDP probe round-trip when loopback listener replies.
+  - `ProbeUdpAsync_AfterDatagramCancel_PropagatesCancellation`: verifies cancellation triggered after initial datagram sends propagates `OperationCanceledException` and does not report alive.
+  - `ProbeUdpAsync_Silent2s_TimesOutOrCancelsTruthfully`: verifies silent endpoint with 2-second timeout settles without false alive reporting.
+- **CI Pipeline Scope & Gate 1 Limitation**:
+  - All 4 CI checks green on run 33957757306.
+  - Existing CI (`test.yml`) builds `VPNRouter.Tests` project (Core and App dependencies).
+  - Ubuntu runner executes Core unit tests including probe concurrency and UDP cancellation tests. Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
+  - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged; red witnesses/full solution/native gaps remain; no live VPN/infra.
+
+### Batch 4 (NIGHT-12) Implementation Outcome (Pending CI) & NIGHT-11 Status
+
+- **Status**: NIGHT-12 minimal secret wiring implemented in working tree pending CI; NIGHT-11 pending.
+- **NIGHT-12 Minimal Secret Wiring**:
+  - `ClashLogStream`: constructor updated to accept `secret` parameter and authenticate WebSocket connection via Bearer authorization header or query token.
+  - `VpnEngine`: supplies `settings.SingBox.ClashApiSecret` to `ClashLogStream` constructor to authenticate WebSocket connection without leaking secrets in logs.
+  - Pending CI verification.
+- **NIGHT-11 Pending**:
+  - `MainWindowViewModel.ConnStats.cs` & `ClashSingBoxApi.cs`: distinguish API error from zero metrics, show stale indicator or clear stats on failure, bind updates to active session generation.
 - **Pending Batches & Scope Limits**:
-  - Batch 3 implementation completed (NIGHT-08 and NIGHT-07 verified on CI; NIGHT-06 implemented pending CI).
-  - Batch 4 (NIGHT-09..12) and final review remain pending.
+  - Batch 4 (NIGHT-09 and NIGHT-10 verified on CI; NIGHT-12 minimal secret wiring implemented pending CI; NIGHT-11 pending).
   - Defect ledger `plans/OPEN-DEFECTS.md` remains open with all defects open pending evidence for the whole task; do not close ledger or any gates prematurely.
-  - Limits: no live run / full solution / native mac evidence.
+  - No closure claim for all 12 defects; red witnesses, full solution, and native macOS/Windows gaps remain; no live VPN/infra.
