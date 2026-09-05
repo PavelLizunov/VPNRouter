@@ -291,33 +291,66 @@ public partial class SingBoxManager : IDisposable
     /// because <c>ReloadConfigJson</c> ran <c>TryHotReload</c> first
     /// regardless of caller intent.</para>
     /// </summary>
-    public void ReloadConfigJson(string configJson, bool forceRestart = false)
+    public void ReloadConfigJson(string configJson, bool forceRestart = false) =>
+        ReloadConfigJsonWithResult(configJson, forceRestart);
+
+    internal bool ReloadConfigJsonWithResult(string configJson, bool forceRestart = false)
     {
-        // v2.44.3-r2 (concurrency audit): same disposed-manager guard as
-        // Restart() — a post-teardown HealthMonitor continuation must not write
-        // config or relaunch sing-box on a disposed manager.
-        if (Volatile.Read(ref _disposed) != 0)
+        lock (_lifecycleGate)
         {
-            _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
-            return;
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
+                return false;
+            }
+            if (!_ownsTunLock)
+            {
+                _logger.Warning("[SingBoxManager] ReloadConfigJson ignored — manager does not own valid TUN lease");
+                return false;
+            }
+
+            if (_exactStopUnconfirmed)
+            {
+                StopInternal(releaseLock: false);
+                if (State != SingBoxState.Stopped)
+                    return false;
+
+                forceRestart = true;
+            }
+
+            _logger.Information("[SingBoxManager] Reloading config{Mode}",
+                forceRestart ? " (force restart, no hot-reload attempt)" : "");
+            _currentConfigPath = WriteJsonToDisk(configJson);
+
+            if (!forceRestart && TryHotReload())
+                return true;
+
+            if (!forceRestart)
+                _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
+
+            return RestartCore();
         }
-        _logger.Information("[SingBoxManager] Reloading config{Mode}",
-            forceRestart ? " (force restart, no hot-reload attempt)" : "");
-        _currentConfigPath = WriteJsonToDisk(configJson);
-
-        if (!forceRestart && TryHotReload())
-            return;
-
-        if (!forceRestart)
-            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-        Restart();
     }
 
     public bool TryReloadConfigJson(string configJson)
     {
-        _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
-        _currentConfigPath = WriteJsonToDisk(configJson);
-        return TryHotReload();
+        lock (_lifecycleGate)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _logger.Debug("[SingBoxManager] TryReloadConfigJson ignored — manager already disposed");
+                return false;
+            }
+            if (!_ownsTunLock || _exactStopUnconfirmed)
+            {
+                _logger.Warning("[SingBoxManager] TryReloadConfigJson ignored — manager does not own valid TUN lease");
+                return false;
+            }
+
+            _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
+            _currentConfigPath = WriteJsonToDisk(configJson);
+            return TryHotReload();
+        }
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────

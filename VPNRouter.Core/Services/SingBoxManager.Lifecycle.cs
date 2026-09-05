@@ -501,7 +501,7 @@ public partial class SingBoxManager
             RestartCore();
     }
 
-    private void RestartCore()
+    private bool RestartCore()
     {
         // v2.44.3-r2 (concurrency audit): a HealthMonitor AttemptRestart
         // continuation can reach Restart() AFTER TeardownInternal disposed this
@@ -513,12 +513,12 @@ public partial class SingBoxManager
         if (Volatile.Read(ref _disposed) != 0)
         {
             _logger.Debug("[SingBoxManager] Restart ignored — manager already disposed");
-            return;
+            return false;
         }
         if (!_ownsTunLock)
         {
             _logger.Warning("[SingBoxManager] Restart ignored — manager does not own the TUN lease");
-            return;
+            return false;
         }
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
@@ -530,6 +530,7 @@ public partial class SingBoxManager
         // it in finally so genuine crashes during LaunchProcess (e.g. TUN
         // init FATAL) still surface normally.
         _restartInProgress = true;
+        var oldHandle = _handle;
         try
         {
             // Keep the TUN lock across restart so another instance can't slip in
@@ -540,7 +541,7 @@ public partial class SingBoxManager
                 _logger.Error(
                     "[SingBoxManager] Restart aborted: exact stop was not confirmed (state={State})",
                     State);
-                return;
+                return false;
             }
             State = SingBoxState.Restarting;
 
@@ -571,7 +572,14 @@ public partial class SingBoxManager
             {
                 State = SingBoxState.Failed;
                 ReleaseTunOwnership();
+                return false;
             }
+
+            var newHandle = _handle;
+            return newHandle != null
+                && !ReferenceEquals(newHandle, oldHandle)
+                && State == SingBoxState.Running
+                && !newHandle.HasExited;
         }
         catch
         {

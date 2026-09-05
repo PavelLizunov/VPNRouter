@@ -822,7 +822,14 @@ public class VpnEngine : IDisposable
 
             // v2.31.7-r1: pass through forceRestart so the structural-
             // change intent reaches sing-box.
-            _singBox.ReloadConfigJson(configJson, forceRestart);
+            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart))
+            {
+                RestoreActiveBaseline();
+                _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
+                OnStatus("Apply failed: sing-box reload or restart was not confirmed");
+                return false;
+            }
+
             ActiveConfigMode = newConfigMode;
             ActiveRoutingMode = newRoutingMode;
             TunFingerprint = newTunFingerprint;
