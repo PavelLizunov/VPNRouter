@@ -401,6 +401,8 @@ public static class TcpTlsProbe
         VlessServerEntry server,
         CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (server is null)
             return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "server is null");
 
@@ -520,6 +522,8 @@ public static class TcpTlsProbe
     public static async Task<ServerProbeResult> ProbeUdpAsync(
         string host, int port, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (string.IsNullOrWhiteSpace(host) || port <= 0 || port > 65535)
             return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "invalid host/port");
 
@@ -535,8 +539,13 @@ public static class TcpTlsProbe
             {
                 addrs = await Dns.GetHostAddressesAsync(host, cts.Token);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception dnsEx)
             {
+                ct.ThrowIfCancellationRequested();
                 return new ServerProbeResult(
                     ServerProbeStatus.Unreachable, 0,
                     $"dns: {Short(dnsEx.Message)}");
@@ -544,6 +553,8 @@ public static class TcpTlsProbe
             var ipv4 = Array.Find(addrs, a => a.AddressFamily == AddressFamily.InterNetwork);
             if (ipv4 is null)
                 return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "no ipv4");
+
+            ct.ThrowIfCancellationRequested();
 
             using var udp = new UdpClient(AddressFamily.InterNetwork);
             udp.Client.SendTimeout = (int)UdpProbeTimeout.TotalMilliseconds;
@@ -556,7 +567,7 @@ public static class TcpTlsProbe
             var endpoint = new IPEndPoint(ipv4, port);
             try
             {
-                await udp.SendAsync(probe, probe.Length, endpoint);
+                await udp.SendAsync(probe, endpoint, cts.Token);
             }
             catch (SocketException sx) when (sx.SocketErrorCode is
                 SocketError.HostUnreachable or
@@ -571,40 +582,27 @@ public static class TcpTlsProbe
             // ConnectionReset on the next op. QUIC servers that ignore
             // garbage will simply not reply → we reach the timeout
             // branch and mark Ok.
-            var receiveTask = udp.ReceiveAsync(cts.Token).AsTask();
-            var timeoutTask = Task.Delay(UdpProbeTimeout, CancellationToken.None);
-            var completed = await Task.WhenAny(receiveTask, timeoutTask);
+            await udp.ReceiveAsync(cts.Token);
             sw.Stop();
+            ct.ThrowIfCancellationRequested();
 
-            if (completed == receiveTask)
-            {
-                if (receiveTask.IsFaulted)
-                {
-                    var inner = receiveTask.Exception?.GetBaseException();
-                    if (inner is SocketException sx2 && sx2.SocketErrorCode is SocketError.ConnectionReset)
-                        return new ServerProbeResult(
-                            ServerProbeStatus.Unreachable, 0, "ICMP port unreachable");
-                    return new ServerProbeResult(
-                        ServerProbeStatus.Unreachable, 0, inner?.GetType().Name ?? "udp recv error");
-                }
-                // Got a reply — rare for QUIC INITIAL with garbage payload.
-                var latencyMs = (int)sw.ElapsedMilliseconds;
-                if (latencyMs < ImplausibleThresholdMs)
-                    return new ServerProbeResult(ServerProbeStatus.Implausible, latencyMs, "udp <5ms");
-                var status = latencyMs > SlowThresholdMs ? ServerProbeStatus.Slow : ServerProbeStatus.Ok;
-                return new ServerProbeResult(status, latencyMs, null);
-            }
-
-            // Timeout branch: no ICMP back → port is probably open.
+            // Got a reply — rare for QUIC INITIAL with garbage payload.
+            var latencyMs = (int)sw.ElapsedMilliseconds;
+            if (latencyMs < ImplausibleThresholdMs)
+                return new ServerProbeResult(ServerProbeStatus.Implausible, latencyMs, "udp <5ms");
+            var status = latencyMs > SlowThresholdMs ? ServerProbeStatus.Slow : ServerProbeStatus.Ok;
+            return new ServerProbeResult(status, latencyMs, null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // Internal timeout — probably open.
             // Report ~timeout as latency (cosmetic — UDP doesn't have RTT).
             var elapsedMs = Math.Min((int)sw.ElapsedMilliseconds, (int)UdpProbeTimeout.TotalMilliseconds);
             return new ServerProbeResult(ServerProbeStatus.Ok, elapsedMs, "udp open (no reply)");
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            // Outer timeout — same semantics: probably open.
-            var elapsedMs = Math.Min((int)sw.ElapsedMilliseconds, (int)UdpProbeTimeout.TotalMilliseconds);
-            return new ServerProbeResult(ServerProbeStatus.Ok, elapsedMs, "udp timeout (no reply)");
         }
         catch (SocketException sx) when (
             sx.SocketErrorCode is SocketError.ConnectionRefused
@@ -613,11 +611,15 @@ public static class TcpTlsProbe
                              or SocketError.NetworkUnreachable
                              or SocketError.HostNotFound)
         {
+            var err = sx.SocketErrorCode == SocketError.ConnectionReset
+                ? "ICMP port unreachable"
+                : sx.SocketErrorCode.ToString();
             return new ServerProbeResult(
-                ServerProbeStatus.Unreachable, 0, sx.SocketErrorCode.ToString());
+                ServerProbeStatus.Unreachable, 0, err);
         }
         catch (Exception ex)
         {
+            ct.ThrowIfCancellationRequested();
             return new ServerProbeResult(
                 ServerProbeStatus.Unreachable, 0, ex.GetType().Name);
         }
