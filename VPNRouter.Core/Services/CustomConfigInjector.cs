@@ -1575,7 +1575,7 @@ public static class CustomConfigInjector
             // Find local DNS server tag (detour:"dns-direct" or "direct" = local, no proxy)
             string? localTag = null;
             // Find proxy DNS server tag (detour pointing to a non-direct outbound or wireguard endpoint)
-            string? proxyTag = dnsServers != null ? FindRemoteDnsTag(dnsServers, sbOutbounds, sbEndpoints) : null;
+            string? proxyTag = dnsServers != null ? FindRemoteDnsTag(dnsServers, config["outbounds"] as JsonArray, config["endpoints"] as JsonArray) : null;
             if (dnsServers != null)
             {
                 foreach (var s in dnsServers)
