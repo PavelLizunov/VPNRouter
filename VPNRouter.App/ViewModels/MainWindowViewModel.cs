@@ -2757,6 +2757,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         _engine = PlatformServices.CreateVpnEngine(_logger);
         _engine.StatusChanged += OnEngineStatus;
+        _engine.Connected += OnEngineConnected;
         // 2026-06-09 (rectuspc report): surface AutoFailover messages — the
         // post-start probe finding the active server dead / no failover
         // candidate. This event had NO subscriber in the GUI, so a
@@ -7094,6 +7095,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             _engine.StatusChanged -= OnEngineStatus;
+            _engine.Connected -= OnEngineConnected;
             _engine.AutoFailoverTriggered -= OnAutoFailoverMessage;
             _engine.TrueSplitEngagedChanged -= OnTrueSplitEngagedChanged;   // W1.3 (bug-hunt): don't leak a recreated VM
             _engine.TrueSplitStateChanged -= OnTrueSplitStateChanged;

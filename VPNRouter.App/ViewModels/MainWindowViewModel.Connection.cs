@@ -116,6 +116,25 @@ public partial class MainWindowViewModel
         });
     }
 
+    private void OnEngineConnected(int pid)
+    {
+        if (_disposed) return;
+        var readinessGuard = _engine.CaptureReadinessGuard(pid);
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed) return;
+            if (!readinessGuard()) return;
+            if (IsConnecting || _isReconnecting) return;
+
+            IsConnected = true;
+            ConnectButtonText = Strings.StopVPN;
+            StartSubRefreshTimer();
+            RefreshActiveIndicator();
+            RestoreConnectedStatus();
+        });
+    }
+
     // ── Commands ──
 
     [RelayCommand]

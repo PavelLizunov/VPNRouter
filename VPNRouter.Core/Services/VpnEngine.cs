@@ -193,6 +193,43 @@ public class VpnEngine : IDisposable
     /// </summary>
     public event Action<int>? Connected;
 
+    /// <summary>
+    /// Captures an engine-scoped readiness guard for UI consumers handling <see cref="Connected"/>.
+    /// Captures current <see cref="_singBox"/>, <see cref="_sessionCts"/>, and <see cref="_failoverGeneration"/>
+    /// at event-time. The returned predicate returns false unless !_disposed, _warmupConfirmed,
+    /// current _singBox matches the captured non-null instance, current session CTS matches the
+    /// captured non-null instance and is not canceled, generation is unchanged, and manager PID matches
+    /// and is running. Handles lookup exceptions fail-closed.
+    /// </summary>
+    internal Func<bool> CaptureReadinessGuard(int pid)
+    {
+        if (_disposed) return () => false;
+        var capturedSingBox = _singBox;
+        var capturedSessionCts = _sessionCts;
+        var capturedGeneration = _failoverGeneration;
+        var capturedHandle = capturedSingBox?.OwnedProcessHandle;
+
+        return () =>
+        {
+            try
+            {
+                if (_disposed) return false;
+                if (!_warmupConfirmed) return false;
+                if (capturedSingBox == null || !ReferenceEquals(_singBox, capturedSingBox)) return false;
+                if (capturedSessionCts == null || !ReferenceEquals(_sessionCts, capturedSessionCts) || capturedSessionCts.IsCancellationRequested) return false;
+                if (_failoverGeneration != capturedGeneration) return false;
+                if (capturedHandle == null || !ReferenceEquals(_singBox.OwnedProcessHandle, capturedHandle)) return false;
+                if (capturedSingBox.Pid != pid) return false;
+                if (!capturedSingBox.IsRunning()) return false;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        };
+    }
+
     /// <summary>F-E (2026-05-11): fired when <see cref="AutoFailoverEngine"/>
     /// switches to a different server after the pre-start sanity check or
     /// post-start Clash API probe flagged the active one as dead. Carries
@@ -1557,10 +1594,16 @@ public class VpnEngine : IDisposable
     private sealed class VpnEngineStartupHost : StartupHostInternal
     {
         private readonly VpnEngine _engine;
+        private readonly long _generation;
+        private readonly CancellationTokenSource? _sessionCts;
+        private SingBoxManager? _singBoxManager;
+        private IProcessHandle? _startedHandle;
 
         public VpnEngineStartupHost(VpnEngine engine)
         {
             _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+            _generation = engine._failoverGeneration;
+            _sessionCts = engine._sessionCts;
         }
 
         public ILogger? Logger => _engine._logger;
@@ -1577,6 +1620,7 @@ public class VpnEngine : IDisposable
 
         public void OnSingBoxStarted(int pid)
         {
+            _startedHandle = _singBoxManager?.OwnedProcessHandle;
             _engine.EnterPostStartPhase(); // P02 FAIL-1
             _engine.SingBoxStarted?.Invoke(pid);
         }
@@ -1590,6 +1634,24 @@ public class VpnEngine : IDisposable
         // App-side two-phase timer depends on).
         public void OnConnected(int pid)
         {
+            try
+            {
+                if (_engine._disposed) return;
+                if (_generation != _engine._failoverGeneration) return;
+                if (_sessionCts == null || _sessionCts.IsCancellationRequested || !ReferenceEquals(_engine._sessionCts, _sessionCts))
+                    return;
+
+                if (_singBoxManager == null || !ReferenceEquals(_engine._singBox, _singBoxManager) || _singBoxManager.Pid != pid || !_singBoxManager.IsRunning())
+                    return;
+
+                if (_startedHandle == null || !ReferenceEquals(_singBoxManager.OwnedProcessHandle, _startedHandle))
+                    return;
+            }
+            catch
+            {
+                return;
+            }
+
             // v2.44.2 (P0): warmup fetched gstatic THROUGH the tunnel — the
             // outbound is provably reachable. Record it so the post-start
             // delay-test probe won't false-positive-failover a working link.
@@ -1654,7 +1716,11 @@ public class VpnEngine : IDisposable
 
         public void SetScanResult(ScanResult result) => _engine._scanResult = result;
 
-        public void SetSingBoxManager(SingBoxManager manager) => _engine._singBox = manager;
+        public void SetSingBoxManager(SingBoxManager manager)
+        {
+            _singBoxManager = manager;
+            _engine._singBox = manager;
+        }
 
         public void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings)
         {

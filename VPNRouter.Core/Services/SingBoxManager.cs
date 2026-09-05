@@ -95,6 +95,7 @@ public partial class SingBoxManager : IDisposable
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _handle != null && !_handle.HasExited ? _handle.Pid : null;
+    internal IProcessHandle? OwnedProcessHandle => _handle;
     public event EventHandler? Crashed;
     /// <summary>Fires after every successful LaunchProcess — initial start
     /// AND restart after crash. Listeners (e.g. CLI StateFile writer) use
