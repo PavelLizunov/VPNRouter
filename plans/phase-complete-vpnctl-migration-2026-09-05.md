@@ -4,7 +4,7 @@
 **Author / Lead**: Gemini (sole code/test/doc author), Lead review Git
 **Branch / Base**: `dsh/upgrade-singbox-vpnctl-1.14` (PR #233) / `origin/main` at `b7ce0e4f`
 **Integration Note**: PR #240 (`ae352fdb`) contains approved NIGHT fixes not merged; compatibility integrated source verification required
-**Current Head**: `be0cf6f7` (last 5 CI checks green; no full platform claim without real device execution)
+**Current Head**: `f88b7889` (checkpoint exact `f88b7889`; Windows green, Linux/macOS non-publishing success, Android FAIL; no closure until verified)
 **Risk**: MEDIUM (packaging pipeline modernization; eliminating legacy third-party fork paths)
 **Rollback**: Safe task commit revert review (human/lead review of git revert, no automatic rollback)
 
@@ -24,13 +24,13 @@
    - Linux amd64: `3d7fdbbf68f75b74f2bb4451eb2a1ed3421ee3ab6bccfea93f16c0d3eca91e8e` (`sing-box-1.14.0-vpnctl.3-linux-amd64.tar.gz`)
    - macOS universal: `c71bf2fab29a00d70f8706eb2f71643e35438769cbbacdd566d7c0e6058be3b1` (`sing-box-1.14.0-vpnctl.3-darwin-universal.zip`)
    - Android AAR: `471908107fb68de65f50cc8898e193b832b2ae12f0dfe9ee93d73f0b27f1a991` (`libbox.aar`)
-4. Register P1 defects VPNCTL-01 and VPNCTL-02 in `plans/OPEN-DEFECTS.md`.
+4. Register P1 defects VPNCTL-01, VPNCTL-02, and VPNCTL-04 in `plans/OPEN-DEFECTS.md`.
 5. Run in safe non-publishing mode (`upload_to_release=false`) on existing CI (`build-mac`, `build-linux`, `build-android`). Future agent must inspect gates.
 6. Guardrails: no merging protected main, no PR merge, no release publication, no git tags, no real device install, no SDK control plane or infrastructure edits.
 
 ## How
 
-1. Register VPNCTL-01 and VPNCTL-02 under `## Open` in `plans/OPEN-DEFECTS.md` with exact source evidence.
+1. Register VPNCTL-01 and VPNCTL-02 under `## Open` in `plans/OPEN-DEFECTS.md` with exact source evidence, and record VPNCTL-04 following CI findings.
 2. Refactor `.github/workflows/sign-windows.yml` to package and sign official `sing-box-vpnctl` v1.14.0-vpnctl.3 archive.
 3. Refactor `build.ps1` bundling logic to drop automatic `publish\sing-box-lx.exe` fallback while preserving explicit `-SingBoxPath`.
 4. Run compatibility integrated source verification against `b7ce0e4f` and PR #240 (`ae352fdb`).
@@ -38,21 +38,36 @@
 
 ## Device Platform Matrix (Packaging & Verification, No Real Device Install)
 
-| Platform | Target Asset | Packaging Mechanism | Real Device Install |
-|---|---|---|---|
-| Windows | `sing-box-1.14.0-vpnctl.3-windows-amd64.zip` | `build.ps1` bundling official SHA256 archive | None (no real device install) |
-| Linux | `sing-box-1.14.0-vpnctl.3-linux-amd64.tar.gz` | `build-linux.yml` safe non-publishing run | None (no real device install) |
-| macOS | `sing-box-1.14.0-vpnctl.3-darwin-universal.zip` | `build-mac.sh` / `build-mac.yml` (`upload_to_release=false`) | None (no real device install) |
-| Android | `libbox.aar` (v1.14.0-vpnctl.3) | `build-android.yml` Gradle build (`upload_to_release=false`) | None (no real device install) |
+| Platform | Target Asset | Packaging Mechanism | CI Run & Status | Real Device Install |
+|---|---|---|---|---|
+| Windows | `sing-box-1.14.0-vpnctl.3-windows-amd64.zip` | `build.ps1` bundling official SHA256 archive | Runs 33986314066, 33986314069, 33986314080 (ALL 5 GREEN; 46 pass 0 skip) | None |
+| Linux | `sing-box-1.14.0-vpnctl.3-linux-amd64.tar.gz` | `build-linux.yml` safe non-publishing run | Run 33988031442 (SUCCESS; artifacts need inspection) | None |
+| macOS | `sing-box-1.14.0-vpnctl.3-darwin-universal.zip` | `build-mac.sh` / `build-mac.yml` (`upload_to_release=false`) | Run 33988033773 (SUCCESS; artifacts need inspection) | None |
+| Android | `libbox.aar` (v1.14.0-vpnctl.3) | `build-android.yml` Gradle build (`upload_to_release=false`) | Run 33988035788 (ACTUAL FAIL; 23 javac errors) | None |
 
-## Verification Gates (PENDING - Future Agent Inspection Required)
+## Checkpoint exact `f88b7889` Status & Multi-Platform CI Evidence (2026-09-05)
 
-- [ ] Gate 1 — Clean build: Windows/Linux/macOS/Android builds compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3.
-- [ ] Gate 2 — Test suite: Unit and packaging contract tests pass with zero failures.
-- [ ] Gate 3 — Pipeline elimination: `.github/workflows/sign-windows.yml` no longer invokes Leadaxe `build-singbox-lx.ps1`.
-- [ ] Gate 4 — Autoselect elimination: `build.ps1` no longer auto-selects `publish\sing-box-lx.exe` without explicit argument.
-- [ ] Gate 5 — Hash integrity: All 4 platform release artifacts match official `v1.14.0-vpnctl.3` SHA256 pins.
-- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` on exact head `be0cf6f7` (last 5 checks green).
+- **Windows**: All 5 CI checks green across runs `33986314066`, `33986314069`, `33986314080`.
+  - Windows test-update passed: 46 pass, 0 skip.
+  - Bundled core verified: `sing-box-vpnctl` v1.14.0-vpnctl.3 (evidence: `/tmp/vpnrouter-vpnctl-windows-fixed-update.log`).
+  - Security / test review: No fresh blockers on Windows; baseline tests need portable marker fallback.
+- **Linux**: Run `33988031442` success on source `f88b7889` (non-publishing mode `upload_to_release=false`; artifacts need identity inspection).
+- **macOS**: Run `33988033773` success on source `f88b7889` (non-publishing mode `upload_to_release=false`; artifacts need identity inspection).
+- **Android**: Run `33988035788` actual FAIL with 23 javac errors (evidence: `/tmp/vpnrouter-vpnctl-android-failure.log`):
+  - Missing `BoxService` / `newService`, `PlatformInterface` / `ConnectionOwner` return/API changes in v1.14.0-vpnctl.3 `libbox.aar`.
+  - Defect registered: **VPNCTL-04 (P1)** Android AAR wrong API for current bridge compilation.
+  - Root cause note: NOT a secret missing (`ANDROID_KEYSTORE_PASSWORD` shell printed message was not the actual error; javac compilation failure is the actual root cause).
+  - Simplistic fallback rejected: `/tmp/vpnrouter-customcore-build-libbox.go` lines 178–188 (`libbox-legacy.aar`) shares the same v1.14 API (SDK 21, no Naive outbound) and lacks the old `BoxService`.
+- **Status**: No closure until verified. Verification gates remain open/blocked.
+
+## Verification Gates (BLOCKED / PENDING - No Closure Until Verified)
+
+- [ ] Gate 1 — Clean build: Windows, Linux, and macOS compile clean against official `sing-box-vpnctl` v1.14.0-vpnctl.3; Android FAILED with 23 javac errors in run 33988035788.
+- [ ] Gate 2 — Test suite: Unit and packaging contract tests pass on Windows (46 passed, 0 skipped); baseline tests need portable marker fallback.
+- [ ] Gate 3 — Pipeline elimination: `.github/workflows/sign-windows.yml` no longer invokes Leadaxe `build-singbox-lx.ps1` (PASSED on `f88b7889`).
+- [ ] Gate 4 — Autoselect elimination: `build.ps1` no longer auto-selects `publish\sing-box-lx.exe` without explicit argument (PASSED on `f88b7889`).
+- [ ] Gate 5 — Hash integrity: All 4 platform release artifacts match official `v1.14.0-vpnctl.3` SHA256 pins (PENDING: Linux/macOS artifacts need identity inspection; Android unbuilt).
+- [ ] Gate 6 — Safe CI: Non-publishing CI runs succeed with `upload_to_release=false` on exact head `f88b7889` (Linux and macOS succeeded; Android failed in run 33988035788).
 
 ## Checklist: Rollback & Regression Failure Criteria
 
