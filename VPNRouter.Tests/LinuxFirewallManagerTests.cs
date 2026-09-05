@@ -1082,16 +1082,24 @@ public class LinuxFirewallManagerTests : IDisposable
     public void UpdateCommittedConfig_FailedRefresh_RetainsAForRetry()
     {
         WriteConfig("198.51.100.1");
-        var fake = OkRunner();
+        var failRefresh = false;
+        var injections = 0;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(
+            r => failRefresh && r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"),
+            _ =>
+            {
+                injections++;
+                return Task.FromResult(Fail("nft failed"));
+            });
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
         var sut = CreateSut(fake);
 
         sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
         sut.EnableBlockRules();
         Assert.True(sut.IsLoaded);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
-
-        // Fail subsequent nft load
-        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Fail("nft failed"));
+        Assert.True(File.Exists(_marker));
 
         var committedJsonB = """
         {
@@ -1101,12 +1109,27 @@ public class LinuxFirewallManagerTests : IDisposable
         }
         """;
 
+        failRefresh = true;
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
-        // Failed refresh keeps old cache/loaded/marker
+        // Failed refresh keeps old cache/loaded/marker and proves fail executed
+        Assert.Equal(1, injections);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
         Assert.True(sut.IsLoaded);
         Assert.True(File.Exists(_marker));
+
+        int callsBeforeRetry = fake.RunCalls.Count;
+        failRefresh = false;
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        // Retry succeeds: cacheB updated, one reload, no unblock/delete, marker stays
+        Assert.Equal(1, injections);
+        Assert.Equal(new[] { "203.0.113.99" }, sut.ServerIps);
+        Assert.True(sut.IsLoaded);
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBeforeRetry), c => c.Arguments.Contains("delete"));
+        Assert.Single(fake.RunCalls.Skip(callsBeforeRetry), c =>
+            c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("nft") && c.Arguments.Contains("-f"));
     }
 
     [Fact]
