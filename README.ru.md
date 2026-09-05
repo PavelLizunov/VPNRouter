@@ -233,6 +233,8 @@ VPNRouter.sln (~159k LOC C# в 616 файлах / 7 проектах)
 
 Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box 1.13 JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderGuard` (v2.32.3 — фильтр known-bad credentials), плюс подсистемы для Zapret, Telegram proxy, подписок, free configs.
 
+> **Примечание**: Desktop-сборки (Windows, macOS, Linux) по умолчанию используют официальные релизные артефакты `PavelLizunov/sing-box-vpnctl` `v1.14.0-vpnctl.3`. Android по решению владельца сохраняет legacy-тулинг sing-box 1.13.10 (`libbox.aar`, Android 6.0+ / API 23+), а не мигрирует целиком на vpnctl.
+
 См. [`CURRENT_STATE.md`](CURRENT_STATE.md) для актуальной матрицы платформ и
 сборок, [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md)
 для feature-flow справочника и

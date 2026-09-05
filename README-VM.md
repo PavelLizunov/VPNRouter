@@ -178,9 +178,10 @@ if (-not $version) { throw 'Cannot resolve AppVersion.Version' }
 .\build.ps1 -Version $version -Upload
 ```
 
-Release builds use the pinned sing-box-lx build helper for the required feature tags. Rebuild only when the task explicitly changes or verifies that core:
+Standard desktop builds (`build.ps1`, `build-mac.sh`, and CI workflows) automatically download and bundle official `sing-box-vpnctl` `v1.14.0-vpnctl.3` release archives with verified SHA256 integrity pins from `PavelLizunov/sing-box-vpnctl`. Historical source helpers (`tools\build-singbox-lx.ps1`, `tools/build-singbox-lx.sh`) remain optional development tools, not default release paths. On Windows, explicit `-SingBoxPath <path>` is for local builds only (rejected with `-Upload`), while `build-mac.sh` takes positional `<version>` without PowerShell flags:
 
 ```powershell
+# Optional local development helper only (not used for default release builds):
 powershell -ExecutionPolicy Bypass -File tools\build-singbox-lx.ps1
 ```
 
@@ -229,4 +230,4 @@ powershell -ExecutionPolicy Bypass -File tools\build-singbox-lx.ps1
 - `docs/test-workers.md` — test worker node architecture and facts
 - `README.md` — end-user documentation
 - `build.ps1` — release build pipeline
-- `tools/build-singbox-lx.ps1` — pinned custom sing-box rebuild
+- `tools/build-singbox-lx.ps1` — historical custom sing-box development build helper
