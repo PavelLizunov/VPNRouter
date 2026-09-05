@@ -49,11 +49,12 @@ namespace VPNRouter.Core.Platform.Linux;
 /// Default-OFF (only constructed + armed when a profile sets block_on_vpn_fail).</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
-public sealed class LinuxFirewallManager : IFirewallManager
+public sealed class LinuxFirewallManager : IFirewallManager, ICommittedFirewallConfig
 {
     private const string Nft = "nft";
     private const string TableName = "vpnrouter_ks";
 
+    private readonly object _gate = new();
     private readonly IProcessRunner _runner;
     private readonly ILogger _logger;
     private readonly string _currentConfigPath;
@@ -65,6 +66,10 @@ public sealed class LinuxFirewallManager : IFirewallManager
     private bool _loaded;    // our blocking table is live
     private List<string> _serverIps = new();
     private bool _disposed;
+
+    internal IReadOnlyList<string> ServerIps { get { lock (_gate) { return _serverIps.ToArray(); } } }
+    internal bool IsArmed { get { lock (_gate) { return _armed; } } }
+    internal bool IsLoaded { get { lock (_gate) { return _loaded; } } }
 
     public LinuxFirewallManager(
         ILogger? logger = null,
@@ -88,125 +93,206 @@ public sealed class LinuxFirewallManager : IFirewallManager
     /// <inheritdoc />
     public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
     {
-        var names = (processNames ?? Enumerable.Empty<string>())
-            .Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
-
-        // P1 (2026-07-10): arm on the EXPLICIT routing intent, NEVER on list
-        // emptiness. Pre-fix `names.Count == 0` meant "full tunnel" — so a
-        // SPLIT-tunnel user whose process scan timed out (an empty list) had the
-        // WHOLE host's egress dropped on a crash. nft can't block per-process, so
-        // split stays a labelled no-op no matter what the scan returned.
-        if (!isFullTunnel)
+        lock (_gate)
         {
-            _armed = false;
-            _logger.Information(
-                "[LinuxFirewall] split tunnel ({N} routed app(s)) → nft kill-switch is full-tunnel-only " +
-                "on Linux (per-process blocking impossible with nft) — staying disarmed", names.Count);
-            return;
-        }
+            var names = (processNames ?? Enumerable.Empty<string>())
+                .Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
 
-        _serverIps = ReadServerIps();
-        _armed = true;
-        _logger.Information(
-            "[LinuxFirewall] Armed full-tunnel nft kill-switch (disabled until VPN failure). " +
-            "Allow-list: lo + RFC1918/link-local + {Count} server IP(s)", _serverIps.Count);
+            // P1 (2026-07-10): arm on the EXPLICIT routing intent, NEVER on list
+            // emptiness. Pre-fix `names.Count == 0` meant "full tunnel" — so a
+            // SPLIT-tunnel user whose process scan timed out (an empty list) had the
+            // WHOLE host's egress dropped on a crash. nft can't block per-process, so
+            // split stays a labelled no-op no matter what the scan returned.
+            if (!isFullTunnel)
+            {
+                _armed = false;
+                _logger.Information(
+                    "[LinuxFirewall] split tunnel ({N} routed app(s)) → nft kill-switch is full-tunnel-only " +
+                    "on Linux (per-process blocking impossible with nft) — staying disarmed", names.Count);
+                return;
+            }
+
+            _serverIps = ReadServerIps();
+            _armed = true;
+            _logger.Information(
+                "[LinuxFirewall] Armed full-tunnel nft kill-switch (disabled until VPN failure). " +
+                "Allow-list: lo + RFC1918/link-local + {Count} server IP(s)", _serverIps.Count);
+        }
     }
 
     /// <inheritdoc />
     public void EnableBlockRules()
     {
-        if (_disposed) return;
-        if (!_armed)
+        lock (_gate)
         {
-            _logger.Warning(
-                "[LinuxFirewall] EnableBlockRules: not armed (split tunnel / no block_on_vpn_fail) — " +
-                "NOT blocking; traffic follows normal routing");
-            return;
-        }
-        if (_loaded) return; // idempotent
+            if (_disposed) return;
+            if (!_armed)
+            {
+                _logger.Warning(
+                    "[LinuxFirewall] EnableBlockRules: not armed (split tunnel / no block_on_vpn_fail) — " +
+                    "NOT blocking; traffic follows normal routing");
+                return;
+            }
+            if (_loaded) return; // idempotent
 
-        var ruleset = BuildRuleset(_serverIps);
-        try
-        {
-            var dir = System.IO.Path.GetDirectoryName(_rulesetPath);
-            if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
-                System.IO.Directory.CreateDirectory(dir);
-            AppPaths.WritePrivateText(_rulesetPath, ruleset);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[LinuxFirewall] failed to write nft ruleset file — NOT blocking");
-            return;
-        }
+            var ruleset = BuildRuleset(_serverIps);
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(_rulesetPath);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+                AppPaths.WritePrivateText(_rulesetPath, ruleset);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[LinuxFirewall] failed to write nft ruleset file — NOT blocking");
+                return;
+            }
 
-        var load = RunSudo(new[] { "-n", Nft, "-f", _rulesetPath });
-        if (load.ok)
-        {
-            _loaded = true;
-            WriteMarker(); // sentinel so a hard kill is recoverable on next launch
-            _logger.Information("[LinuxFirewall] nft kill-switch ENGAGED — blocking all egress except lo/LAN/server");
-        }
-        else
-        {
-            _logger.Warning(
-                "[LinuxFirewall] FAILED to load nft ruleset (nft missing, or no NOPASSWD sudoers grant for nft? {Err}) — " +
-                "NOT blocking; traffic follows normal routing", load.stderr?.Trim());
+            var load = RunSudo(new[] { "-n", Nft, "-f", _rulesetPath });
+            if (load.ok)
+            {
+                _loaded = true;
+                WriteMarker(); // sentinel so a hard kill is recoverable on next launch
+                _logger.Information("[LinuxFirewall] nft kill-switch ENGAGED — blocking all egress except lo/LAN/server");
+            }
+            else
+            {
+                _logger.Warning(
+                    "[LinuxFirewall] FAILED to load nft ruleset (nft missing, or no NOPASSWD sudoers grant for nft? {Err}) — " +
+                    "NOT blocking; traffic follows normal routing", load.stderr?.Trim());
+            }
         }
     }
 
     /// <inheritdoc />
     public void DisableBlockRules()
     {
-        if (!_loaded) return;
-        if (!DeleteTable())
+        lock (_gate)
         {
-            _logger.Warning("[LinuxFirewall] failed to remove nft table — retaining kill-switch state for retry");
-            return;
+            if (!_loaded) return;
+            if (!DeleteTable())
+            {
+                _logger.Warning("[LinuxFirewall] failed to remove nft table — retaining kill-switch state for retry");
+                return;
+            }
+            TryDeleteMarker();
+            _loaded = false;
+            _logger.Information("[LinuxFirewall] nft kill-switch lifted (table removed)");
         }
-        TryDeleteMarker();
-        _loaded = false;
-        _logger.Information("[LinuxFirewall] nft kill-switch lifted (table removed)");
     }
 
     /// <inheritdoc />
     public void DeleteAllRules()
     {
-        // Fail-safe full teardown regardless of tracked state — used on clean
-        // shutdown and orphan cleanup.
-        if (!DeleteTable())
+        lock (_gate)
         {
-            _logger.Warning("[LinuxFirewall] DeleteAllRules: failed to remove nft table — retaining state for retry");
-            return;
+            // Fail-safe full teardown regardless of tracked state — used on clean
+            // shutdown and orphan cleanup.
+            if (!DeleteTable())
+            {
+                _logger.Warning("[LinuxFirewall] DeleteAllRules: failed to remove nft table — retaining state for retry");
+                return;
+            }
+            TryDeleteMarker();
+            _loaded = false;
+            _armed = false;
         }
-        TryDeleteMarker();
-        _loaded = false;
-        _armed = false;
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        // Teardown backstop: if our blocking table was ever loaded, make sure
-        // it's gone even on an abrupt shutdown.
-        if (_loaded)
+        lock (_gate)
         {
-            try
+            if (_disposed) return;
+            // Teardown backstop: if our blocking table was ever loaded, make sure
+            // it's gone even on an abrupt shutdown.
+            if (_loaded)
             {
-                if (DeleteTable())
+                try
                 {
-                    TryDeleteMarker();
-                    _loaded = false;
-                    _disposed = true;
+                    if (DeleteTable())
+                    {
+                        TryDeleteMarker();
+                        _loaded = false;
+                        _disposed = true;
+                    }
+                }
+                catch
+                {
+                    /* never throw from Dispose */
                 }
             }
-            catch
+            else
             {
-                /* never throw from Dispose */
+                _disposed = true;
             }
         }
-        else
+    }
+
+    /// <inheritdoc />
+    void ICommittedFirewallConfig.UpdateCommittedConfig(string configJson, bool enabledForFullTunnel)
+        => UpdateCommittedConfig(configJson, enabledForFullTunnel);
+
+    internal void UpdateCommittedConfig(string configJson, bool enabledForFullTunnel)
+    {
+        lock (_gate)
         {
-            _disposed = true;
+            if (_disposed) return;
+
+            if (!enabledForFullTunnel)
+            {
+                _armed = false;
+                DisableBlockRules();
+                return;
+            }
+
+            List<string> candidateIps;
+            try
+            {
+                candidateIps = ParseServerIps(configJson);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[LinuxFirewall] Failed to parse committed config JSON — retaining prior server IP list");
+                return;
+            }
+
+            _armed = true;
+
+            if (!_loaded)
+            {
+                _serverIps = candidateIps;
+                _logger.Information("[LinuxFirewall] Updated committed server IP cache ({Count} IPs; ruleset not loaded)", _serverIps.Count);
+                return;
+            }
+
+            var newRuleset = BuildRuleset(candidateIps);
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(_rulesetPath);
+                if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+                AppPaths.WritePrivateText(_rulesetPath, newRuleset);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[LinuxFirewall] Failed to write nft ruleset file during refresh — retaining prior configuration");
+                return;
+            }
+
+            var load = RunSudo(new[] { "-n", Nft, "-f", _rulesetPath });
+            if (load.ok)
+            {
+                _serverIps = candidateIps;
+                _logger.Information("[LinuxFirewall] Refreshed live nft kill-switch ruleset with {Count} server IP(s)", _serverIps.Count);
+            }
+            else
+            {
+                _logger.Warning(
+                    "[LinuxFirewall] Failed to refresh live nft ruleset ({Err}) — retaining prior firewall pass-list; live config already committed, cannot rollback",
+                    load.stderr?.Trim());
+            }
         }
     }
 
@@ -335,7 +421,7 @@ public sealed class LinuxFirewallManager : IFirewallManager
         return sb.ToString();
     }
 
-    internal List<string> ReadServerIps()
+    internal List<string> ParseServerIps(string configJson)
     {
         var ips = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -386,62 +472,70 @@ public sealed class LinuxFirewallManager : IFirewallManager
             }
         }
 
+        using var doc = JsonDocument.Parse(configJson);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new JsonException($"Expected JSON object root, got {root.ValueKind}.");
+
+        if (root.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ob in obs.EnumerateArray())
+            {
+                if (ob.ValueKind == JsonValueKind.Object &&
+                    ob.TryGetProperty("server", out var srv) &&
+                    srv.ValueKind == JsonValueKind.String)
+                {
+                    AddCandidate(srv.GetString());
+                }
+            }
+        }
+
+        if (root.TryGetProperty("endpoints", out var eps) && eps.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ep in eps.EnumerateArray())
+            {
+                if (ep.ValueKind != JsonValueKind.Object) continue;
+
+                if (!ep.TryGetProperty("type", out var typeProp) ||
+                    typeProp.ValueKind != JsonValueKind.String ||
+                    !string.Equals(typeProp.GetString(), "wireguard", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Unknown or non-wireguard endpoint type ignored
+                    continue;
+                }
+
+                // CRITICAL: NEVER read ep["address"] (local tunnel addresses) or peer["allowed_ips"].
+                // Only read known type wireguard endpoints[].peers[].address.
+                if (!ep.TryGetProperty("peers", out var peers) || peers.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                foreach (var peer in peers.EnumerateArray())
+                {
+                    if (peer.ValueKind == JsonValueKind.Object &&
+                        peer.TryGetProperty("address", out var addrProp) &&
+                        addrProp.ValueKind == JsonValueKind.String)
+                    {
+                        AddCandidate(addrProp.GetString());
+                    }
+                }
+            }
+        }
+
+        return ips;
+    }
+
+    internal List<string> ReadServerIps()
+    {
         try
         {
-            if (!System.IO.File.Exists(_currentConfigPath)) return ips;
-            using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(_currentConfigPath));
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return ips;
-
-            if (root.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var ob in obs.EnumerateArray())
-                {
-                    if (ob.ValueKind == JsonValueKind.Object &&
-                        ob.TryGetProperty("server", out var srv) &&
-                        srv.ValueKind == JsonValueKind.String)
-                    {
-                        AddCandidate(srv.GetString());
-                    }
-                }
-            }
-
-            if (root.TryGetProperty("endpoints", out var eps) && eps.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var ep in eps.EnumerateArray())
-                {
-                    if (ep.ValueKind != JsonValueKind.Object) continue;
-
-                    if (!ep.TryGetProperty("type", out var typeProp) ||
-                        typeProp.ValueKind != JsonValueKind.String ||
-                        !string.Equals(typeProp.GetString(), "wireguard", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Unknown or non-wireguard endpoint type ignored
-                        continue;
-                    }
-
-                    // CRITICAL: NEVER read ep["address"] (local tunnel addresses) or peer["allowed_ips"].
-                    // Only read known type wireguard endpoints[].peers[].address.
-                    if (!ep.TryGetProperty("peers", out var peers) || peers.ValueKind != JsonValueKind.Array)
-                        continue;
-
-                    foreach (var peer in peers.EnumerateArray())
-                    {
-                        if (peer.ValueKind == JsonValueKind.Object &&
-                            peer.TryGetProperty("address", out var addrProp) &&
-                            addrProp.ValueKind == JsonValueKind.String)
-                        {
-                            AddCandidate(addrProp.GetString());
-                        }
-                    }
-                }
-            }
+            if (!System.IO.File.Exists(_currentConfigPath)) return new List<string>();
+            return ParseServerIps(System.IO.File.ReadAllText(_currentConfigPath));
         }
         catch (Exception ex)
         {
             _logger.Debug(ex, "[LinuxFirewall] could not read server IPs from {Path}", _currentConfigPath);
+            return new List<string>();
         }
-        return ips;
     }
 
     /// <summary>Bounded DNS resolve → IPv4 and IPv6 literals. Best-effort; empty on failure.</summary>
@@ -493,24 +587,27 @@ public sealed class LinuxFirewallManager : IFirewallManager
     /// </summary>
     internal void CleanupOrphanedRules(ILogger? logger)
     {
-        var log = logger ?? _logger;
-        try
+        lock (_gate)
         {
-            if (!System.IO.File.Exists(_markerPath)) return;
-            log.Warning("[LinuxFirewall] engaged kill-switch marker from a prior session found (hard kill?) — removing leftover nft table");
-            var ok = DeleteTable();
-            if (ok)
+            var log = logger ?? _logger;
+            try
             {
-                TryDeleteMarker();
-                _loaded = false;
-                log.Information("[LinuxFirewall] orphan cleanup: nft table removed — egress restored");
+                if (!System.IO.File.Exists(_markerPath)) return;
+                log.Warning("[LinuxFirewall] engaged kill-switch marker from a prior session found (hard kill?) — removing leftover nft table");
+                var ok = DeleteTable();
+                if (ok)
+                {
+                    TryDeleteMarker();
+                    _loaded = false;
+                    log.Information("[LinuxFirewall] orphan cleanup: nft table removed — egress restored");
+                }
+                else
+                {
+                    log.Warning("[LinuxFirewall] orphan cleanup: nft delete table failed (already gone, or no sudoers grant) — if the internet is blocked, run: sudo nft delete table inet {Table}", TableName);
+                }
             }
-            else
-            {
-                log.Warning("[LinuxFirewall] orphan cleanup: nft delete table failed (already gone, or no sudoers grant) — if the internet is blocked, run: sudo nft delete table inet {Table}", TableName);
-            }
+            catch (Exception ex) { log.Warning(ex, "[LinuxFirewall] orphan cleanup failed"); }
         }
-        catch (Exception ex) { log.Warning(ex, "[LinuxFirewall] orphan cleanup failed"); }
     }
 
     /// <summary>

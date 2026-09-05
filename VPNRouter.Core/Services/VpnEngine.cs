@@ -807,6 +807,7 @@ public class VpnEngine : IDisposable
                 TunFingerprint = newTunFingerprint;
                 ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
                 configCommitted = true;
+                UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
                 _logger?.Information("[VpnEngine] Applied via hot-reload");
                 // The sing-box commit is irreversible here; finish driver
@@ -835,6 +836,7 @@ public class VpnEngine : IDisposable
             TunFingerprint = newTunFingerprint;
             ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
             configCommitted = true;
+            UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
             // W1.2 hook 2 — re-engage the true-split driver after a structural hot-apply. forceRestart
@@ -852,6 +854,16 @@ public class VpnEngine : IDisposable
             _logger?.Error(ex, "[VpnEngine] Apply failed");
             OnStatus($"Apply failed: {ex.Message}");
             return false;
+        }
+    }
+
+    private void UpdateFirewallCommittedConfig(string configJson, string routingMode, Profile? profile)
+    {
+        if (_firewall is ICommittedFirewallConfig committed)
+        {
+            var isFullTunnel = routingMode.Equals("full", StringComparison.OrdinalIgnoreCase);
+            var enabledForFullTunnel = (profile?.BlockOnVpnFail == true) && isFullTunnel;
+            committed.UpdateCommittedConfig(configJson, enabledForFullTunnel);
         }
     }
 

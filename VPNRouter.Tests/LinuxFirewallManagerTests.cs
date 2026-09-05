@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
+using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Platform.Linux;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -967,5 +969,305 @@ public class LinuxFirewallManagerTests : IDisposable
 
         var extracted = sut.ReadServerIps();
         Assert.Equal(new[] { "198.51.100.6", "2001:db8::6" }, extracted);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_StaleFileOrNoFile_EmitsOnlyCommittedPeersV4V6()
+    {
+        // Stale fileA on disk with 198.51.100.1
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        // Committed config B with different v4 outbound and v6 wireguard peer
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.10" }
+          ],
+          "endpoints": [
+            {
+              "type": "wireguard",
+              "peers": [
+                { "address": "2001:db8::10" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        // Call capability via interface forwarding to internal method
+        ((ICommittedFirewallConfig)sut).UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        Assert.True(sut.IsArmed);
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("add rule inet vpnrouter_ks output ip daddr { 203.0.113.10 } accept", rules);
+        Assert.Contains("add rule inet vpnrouter_ks output ip6 daddr { 2001:db8::10 } accept", rules);
+        Assert.DoesNotContain("198.51.100.1", rules);
+
+        Assert.Equal(new[] { "203.0.113.10", "2001:db8::10" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_NoConfigFileAtAll_EmitsOnlyCommittedPeers()
+    {
+        if (File.Exists(_cfg)) File.Delete(_cfg);
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.11" }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+        sut.EnableBlockRules();
+
+        var rules = File.ReadAllText(LoadedRulesetFile(fake));
+        Assert.Contains("203.0.113.11", rules);
+        Assert.Equal(new[] { "203.0.113.11" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_ActiveLoaded_RefreshesRulesetWithB_WithoutDeleteTableOrFlushUnblock()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+
+        fake.RunCalls.Clear();
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.20" }
+          ],
+          "endpoints": [
+            {
+              "type": "wireguard",
+              "peers": [
+                { "address": "2001:db8::20" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        // Active refresh MUST NOT delete table or disable/unblock first
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("delete"));
+        var refreshCall = Assert.Single(fake.RunCalls, c =>
+            c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("nft") && c.Arguments.Contains("-f"));
+
+        var refreshedRules = File.ReadAllText(refreshCall.Arguments.Last());
+        Assert.Contains("203.0.113.20", refreshedRules);
+        Assert.Contains("2001:db8::20", refreshedRules);
+        Assert.DoesNotContain("198.51.100.1", refreshedRules);
+
+        Assert.True(sut.IsLoaded);
+        Assert.Equal(new[] { "203.0.113.20", "2001:db8::20" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_FailedRefresh_RetainsAForRetry()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        // Fail subsequent nft load
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f"), Fail("nft failed"));
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.99" }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        // Failed refresh keeps old cache/loaded/marker
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+        Assert.True(sut.IsLoaded);
+        Assert.True(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_MalformedJson_RetainsPriorList()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        // Malformed committed JSON
+        sut.UpdateCommittedConfig("{ invalid json content", enabledForFullTunnel: true);
+
+        // Retains prior list, does not turn parse exception into empty cache
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_Disabled_LiftsRulesAndDisarms()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsArmed);
+
+        fake.RunCalls.Clear();
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.50" }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: false);
+
+        // Disabled mode disarms, deletes table, lifts rules, deletes marker, retains prior unused cache
+        Assert.False(sut.IsArmed);
+        Assert.False(sut.IsLoaded);
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_MalformedJson_Disabled_RemovesRuleAndDisarms()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsArmed);
+
+        fake.RunCalls.Clear();
+
+        // Malformed JSON with disabled branch must still lift rules and disarm without throwing
+        sut.UpdateCommittedConfig("{ not valid json content", enabledForFullTunnel: false);
+
+        Assert.False(sut.IsArmed);
+        Assert.False(sut.IsLoaded);
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_Disabled_HostnameResolverThrows_InvokesZeroResolverAndDisarms()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake, hostResolver: _ => throw new InvalidOperationException("Hostname resolver must not be invoked when disabled"));
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsArmed);
+
+        fake.RunCalls.Clear();
+
+        var committedJsonWithHost = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "dns-lookup-will-throw.example.com" }
+          ]
+        }
+        """;
+
+        // Must not throw, zero DNS queries invoked when disabled
+        sut.UpdateCommittedConfig(committedJsonWithHost, enabledForFullTunnel: false);
+
+        Assert.False(sut.IsArmed);
+        Assert.False(sut.IsLoaded);
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("\"string\"")]
+    [InlineData("123")]
+    public void ParseServerIps_NonObjectRoot_ThrowsJsonException(string malformedRoot)
+    {
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        Assert.Throws<JsonException>(() => sut.ParseServerIps(malformedRoot));
+    }
+
+    [Fact]
+    public void ParseServerIps_EmptyObject_ReturnsEmptyList()
+    {
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        var ips = sut.ParseServerIps("{}");
+        Assert.Empty(ips);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void UpdateCommittedConfig_MalformedRootShape_RetainsPriorList(string malformedRoot)
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        sut.UpdateCommittedConfig(malformedRoot, enabledForFullTunnel: true);
+
+        // Retains prior list on non-object root shape
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_EmptyObject_EmptiesList()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = CreateSut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        // Empty JSON object is valid committed config, clears server IPs without leak policy regression
+        sut.UpdateCommittedConfig("{}", enabledForFullTunnel: true);
+
+        Assert.Empty(sut.ServerIps);
     }
 }

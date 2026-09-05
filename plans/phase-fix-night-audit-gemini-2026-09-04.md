@@ -58,10 +58,10 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Verification Gates
 
-- [ ] **Gate 1 — Build clean**: **EVIDENCE PENDING** (Control plane lacks .NET SDK; exact workflow commands must be inspected before asserting full solution build).
-- [ ] **Gate 2 — Tests green**: **BLOCKED** on control plane (CI execution required; non-headless test suite).
-- [ ] **Gate 3 — Docs**: **PASS** (Brief revised; `plans/OPEN-DEFECTS.md` restored and active; report imported; NIGHT-FOLLOWUP-01 registered).
-- [ ] **Gate 4 — Independent review**: **PENDING** (Adversarial review / bug-hunt per batch; Batch 1, NIGHT-04, and NIGHT-05 endpoint substep green on CI; NIGHT-08 source reviewed pending CI; full review gate remains open).
+- [ ] **Gate 1 — Build clean**: **EVIDENCE PENDING** (Control plane lacks .NET SDK; exact workflow commands must be inspected before asserting full solution build; Batch 1, NIGHT-04, NIGHT-05 endpoint substep, and NIGHT-08 green on CI; NIGHT-05 committed-config final integration pending CI; limits full solution/live/macOS unchanged).
+- [ ] **Gate 2 — Tests green**: **BLOCKED** on control plane (CI execution required; non-headless test suite; Batch 1, NIGHT-04, NIGHT-05 endpoint substep, and NIGHT-08 PASS on CI run 33951772995: 3121 total / 3063 passed / 58 skipped; NIGHT-05 committed-config final integration pending CI).
+- [ ] **Gate 3 — Docs**: **PASS** (Brief revised; `plans/OPEN-DEFECTS.md` active; report imported; NIGHT-FOLLOWUP-01 registered; ledger all still open pending closure evidence; no fake full gate).
+- [ ] **Gate 4 — Independent review**: **PENDING** (Adversarial review / bug-hunt per batch; Batch 1, NIGHT-04, NIGHT-05 endpoint substep, and NIGHT-08 green on CI; NIGHT-05 committed-config final integration current source-reviewed pending CI; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
 - [ ] **Gate 5 — UI verify**: **N/A / PENDING** (No visual redesign; ViewModel status/readiness verified via headless/characterization tests on CI).
 - [ ] **Gate 6 — Characterization diff**: **PENDING** (Coordinator state transitions and error propagation baselined).
 
@@ -69,34 +69,37 @@ Twelve confirmed defects executed across four sequential batches with overlappin
 
 ## Outcome
 
-**Status**: BATCH 1, NIGHT-04 & NIGHT-05 ENDPOINT SUBSTEP VERIFIED ON CI / NIGHT-08 CURRENT SOURCE REVIEWED PENDING CI / NIGHT-05 FRESHNESS REMAINS UNRESOLVED
-**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. Batch 2 (NIGHT-05 endpoint substep) on `ef82aadc4389de08f3a67ef356e2f203d866c1bb`. NIGHT-08 current source reviewed working tree changes pending CI.
+**Status**: BATCH 1, NIGHT-04, NIGHT-05 ENDPOINT SUBSTEP & NIGHT-08 VERIFIED ON CI / NIGHT-05 COMMITTED-CONFIG FINAL INTEGRATION CURRENT SOURCE-REVIEWED PENDING CI / DEFECT LEDGER ALL STILL OPEN PENDING CLOSURE EVIDENCE
+**Commits**: Batch 1 on `4d029a54` (prior commits: `c7bd9c48`, `ff4bf3d4`, `389963cc`). Batch 2 (NIGHT-04) on `4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`. Batch 2 (NIGHT-05 endpoint substep) on `ef82aadc4389de08f3a67ef356e2f203d866c1bb`. Batch 3 (NIGHT-08) on `1ca812f4400c9e8d881532e0baf9277513fa4109` (preceded by `143d2adf`). NIGHT-05 committed-config final integration current source-reviewed working tree changes pending CI.
 **Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (PR #240)
-**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint substep all 4 checks PASS on CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379: Ubuntu 3114 total / 3057 passed / 57 skipped, 12 new tests). NIGHT-08 unit tests source-reviewed pending CI.
+**Test deltas**: Batch 1 all 4 checks PASS on CI (`4d029a54`, run 33947035219). NIGHT-04 all 4 CI checks PASS (`4ce2fc309c0bf96ff8734d3cd783639ec83d97a7`, run 33948404811: 3102 total / 3045 passed / 57 skipped on Ubuntu; Unix classes explicitly ran on Ubuntu; Windows filter does not select Unix tests). NIGHT-05 endpoint substep all 4 checks PASS on CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379: Ubuntu 3114 total / 3057 passed / 57 skipped, 12 new tests). NIGHT-08 all 4 checks PASS on CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995: 3121 total / 3063 passed / 58 skipped; actual Apply false branch + retainedStop retry + ack hotreload executed on Ubuntu, successful Windows restart test not selected by Windows filter; receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550206811). NIGHT-05 committed-config final integration unit tests source-reviewed pending CI.
 **Files changed**:
-- `plans/OPEN-DEFECTS.md` (active defect ledger; stays open pending evidence for whole task; NIGHT-FOLLOWUP-01 registered)
+- `plans/OPEN-DEFECTS.md` (active defect ledger; all still open pending closure evidence for whole task; no fake full gate; NIGHT-FOLLOWUP-01 registered)
 - `plans/overnight-audit-morning-report-2026-09-04.md` (audit report)
-- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-05 endpoint substep CI pass and NIGHT-08 source review outcome)
-- `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`)
-- `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`)
-- `VPNRouter.Tests/LinuxFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint unit tests committed `ef82aadc`)
-- `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint unit tests committed `ef82aadc`)
-- `VPNRouter.Core/Services/SingBoxManager.cs` (NIGHT-08 `ReloadConfigJsonWithResult` and `TryReloadConfigJson` lease guards source-reviewed)
-- `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs` (NIGHT-08 `RestartCore` bool outcome and exact-stop failure handling source-reviewed)
-- `VPNRouter.Core/Services/VpnEngine.cs` (NIGHT-08 `ApplyAsync` baseline restoration on reload/restart failure source-reviewed)
-- `VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs` (NIGHT-08 restart result and guard regression tests source-reviewed)
-- `VPNRouter.Tests/VpnEngineApplyEscalationTests.cs` (NIGHT-08 source-pin without comment bypass source-reviewed)
-- `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs` (NIGHT-08 Apply failure baseline preservation tests source-reviewed)
+- `plans/phase-fix-night-audit-gemini-2026-09-04.md` (brief updated with NIGHT-08 CI pass and NIGHT-05 committed-config source review outcome)
+- `VPNRouter.Core/Interfaces/IFirewallManager.cs` (internal optional `ICommittedFirewallConfig` capability interface)
+- `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`; NIGHT-05 committed-config atomic refresh, `_gate` synchronization, and disarm before DNS source-reviewed)
+- `VPNRouter.Core/Platform/macOS/MacFirewallManager.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint parsing committed `ef82aadc`; NIGHT-05 committed-config atomic refresh, `_gate` synchronization, and disarm before DNS source-reviewed)
+- `VPNRouter.Core/Services/StartupPipeline.cs` (NIGHT-05 Phase 6 skips legacy capability; Phase 8 passes committed config after confirmed start before monitors source-reviewed)
+- `VPNRouter.Core/Services/VpnEngine.cs` (NIGHT-08 `ApplyAsync` baseline restoration on reload/restart failure committed `143d2adf`; NIGHT-05 firewall committed config update on successful bool ack source-reviewed)
+- `VPNRouter.Core/Services/SingBoxManager.cs` (NIGHT-08 `ReloadConfigJsonWithResult` and `TryReloadConfigJson` lease guards committed `143d2adf`)
+- `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs` (NIGHT-08 `RestartCore` bool outcome and exact-stop failure handling committed `143d2adf`)
+- `VPNRouter.Tests/CommittedFirewallConfigTests.cs` (NIGHT-05 internal capability contract and isolation tests source-reviewed)
+- `VPNRouter.Tests/LinuxFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint tests committed `ef82aadc`; NIGHT-05 committed config stale/no file, active refresh, failed refresh, malformed JSON, disarm tests source-reviewed)
+- `VPNRouter.Tests/MacFirewallManagerTests.cs` (NIGHT-04 committed `4ce2fc30`; NIGHT-05 endpoint tests committed `ef82aadc`; NIGHT-05 committed config stale/no file, active anchor/legacy refresh, failed refresh, malformed JSON, disarm tests source-reviewed)
+- `VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs` (NIGHT-08 restart result and guard regression tests committed `1ca812f4`)
+- `VPNRouter.Tests/VpnEngineApplyEscalationTests.cs` (NIGHT-08 source-pin without comment bypass committed `143d2adf`)
+- `VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs` (NIGHT-08 Apply failure baseline preservation tests committed `143d2adf`, `1ca812f4`; NIGHT-05 failed Apply zero capability calls, hot-reload success exact JSON / one PUT, StartupPipeline cold ordering source guard source-reviewed)
 
 **Gate results**:
-- [-] Gate 1: BATCH 1, NIGHT-04, and NIGHT-05 ENDPOINT SUBSTEP PASS ON CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379). Limits full solution/live/macOS unchanged. NIGHT-05 freshness and NIGHT-08 pending CI.
-- [-] Gate 2: BATCH 1, NIGHT-04, and NIGHT-05 ENDPOINT SUBSTEP PASS ON CI (`ef82aadc4389de08f3a67ef356e2f203d866c1bb`, run 33949288379). NIGHT-05 freshness and NIGHT-08 pending CI.
-- [x] Gate 3: PASS (brief updated; ledger stays open pending evidence for whole task; NIGHT-FOLLOWUP-01 registered).
-- [-] Gate 4: PARTIAL / PENDING (Batch 1, NIGHT-04, and NIGHT-05 endpoint substep reviewed and green on CI; NIGHT-08 current source reviewed pending CI; full review gate remains open pending CI and whole-task completion).
+- [-] Gate 1: BATCH 1, NIGHT-04, NIGHT-05 ENDPOINT SUBSTEP, and NIGHT-08 PASS ON CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995). Limits full solution/live/macOS unchanged. NIGHT-05 committed-config final integration pending CI.
+- [-] Gate 2: BATCH 1, NIGHT-04, NIGHT-05 ENDPOINT SUBSTEP, and NIGHT-08 PASS ON CI (`1ca812f4400c9e8d881532e0baf9277513fa4109`, run 33951772995: 3121 total / 3063 passed / 58 skipped). NIGHT-05 committed-config final integration pending CI.
+- [x] Gate 3: PASS (brief updated; ledger all still open pending closure evidence; no fake full gate; NIGHT-FOLLOWUP-01 registered).
+- [-] Gate 4: PARTIAL / PENDING (Batch 1, NIGHT-04, NIGHT-05 endpoint substep, and NIGHT-08 green on CI; NIGHT-05 committed-config final integration current source-reviewed pending CI; full review gate remains open; ledger all still open pending closure evidence; no fake full gate).
 - [-] Gate 5: N/A (no visual UI redesign).
 - [-] Gate 6: PENDING (characterization diff across batches).
 
-**Follow-ups**: Commit and push NIGHT-08 changes to PR #240 for CI verification; implement NIGHT-05 freshness/commit integration (freshness/commit integration still pending and NIGHT-05 NOT resolved; depends on truthful restart commit NIGHT-08); address preexisting P1 survivor NIGHT-FOLLOWUP-01 (outside approved 12 repair scope, deferred owner follow-up); maintain `plans/OPEN-DEFECTS.md` until green CI evidence gathered for whole task; track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
+**Follow-ups**: Commit and push NIGHT-05 committed-config final integration changes to PR #240 for CI verification; maintain `plans/OPEN-DEFECTS.md` (all defects still open pending closure evidence; no fake full gate); address preexisting P1 survivor NIGHT-FOLLOWUP-01 (outside approved 12 repair scope, deferred owner follow-up); proceed to Batch 3 remaining (NIGHT-06, NIGHT-07) and Batch 4 (NIGHT-09..12); track NIGHT-DOC in PR #235 review; profile owner monitor (NIGHT-MEASURE).
 
 ### Batch 1 Outcome
 
@@ -159,24 +162,77 @@ Twelve confirmed defects executed across four sequential batches with overlappin
   - Ubuntu runner executes Core unit tests including Unix firewall endpoint tests.
   - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
 
-### Batch 3 (NIGHT-08) Source Review Outcome
+### Batch 3 (NIGHT-08) Outcome
 
-- **Status**: Current source reviewed, pending CI.
-- **Batch 3 Scope & Implementation (NIGHT-08)**:
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: All 4 checks PASS on commit `1ca812f4400c9e8d881532e0baf9277513fa4109` (preceded by `143d2adf`), GitHub Actions run `33951772995`. Receipt: https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5550206811.
+- **Test Metrics**: 3121 total / 3063 passed / 58 skipped on Ubuntu runner.
+- **Test Selection & Execution Details**:
+  - Actual Apply false branch + retainedStop retry + ack hotreload executed on Ubuntu runner.
+  - Successful Windows restart test not selected by Windows filter (Windows runner filter explicitly selects `Category=Characterization`, `Category=PostShipVerifierContractTests`, and `Category=BratVerifierContractTests`).
+- **Defect Ledger**: `plans/OPEN-DEFECTS.md` all still open pending closure evidence; no fake full gate.
+- **Batch 3 Scope (NIGHT-08)**:
   - **Boolean Outcome Guards Actual Apply Baseline**: `SingBoxManager.ReloadConfigJsonWithResult` returns an explicit boolean indicating whether hot-reload or restart succeeded. In `VpnEngine.ApplyAsync`, this boolean outcome guards the actual Apply baseline (`ActiveConfigMode`, `ActiveRoutingMode`, `TunFingerprint`, `ActiveAppRoutingFingerprint`). If reload/restart returns `false`, `RestoreActiveBaseline()` is invoked, an error status is emitted, and `ApplyAsync` returns `false` without committing candidate metadata or claiming success.
   - **Exact-Stop Retry Retained**: When `_exactStopUnconfirmed` is true, `SingBoxManager` retains the retry path to attempt `StopInternal(releaseLock: false)` before deciding whether restart can safely proceed, returning `false` if the unconfirmed stop cannot be settled.
   - **Public Void Signatures Preserved**: Public `void ReloadConfigJson(string configJson, bool forceRestart = false)` forwards to `ReloadConfigJsonWithResult` without altering public method signatures, preserving backwards compatibility across callers. Public `Restart()` and `Stop()` signatures are likewise preserved.
   - **TUN Ownership & Lease Guards**: `ReloadConfigJsonWithResult` and `TryReloadConfigJson` explicitly check `_ownsTunLock` and `_disposed`, refusing reload or restart without a valid TUN lease.
 - **Lead Review & Corrections**:
   - **Source-Pin Pass Rejected & Corrected**: Lead rejected a naive comment-based source-pin pass in `VpnEngineApplyEscalationTests` where source comments could satisfy pin assertions. Corrected via Gemini by stripping comment lines before validating that `ReloadConfigJsonWithResult` receives `forceRestart` and aggregates structural changes before consumption.
+  - **Baseline Seeding via Private Property Reflection**: Applied in commit `1ca812f4` so Apply baseline properties are safely seeded through reflection without fragile state side effects.
   - **Fixture Safety Scrutinized**: Test classes (`SingBoxManagerRestartTunLockTests`, `VpnEngineApplyStructuralChangeTests`) serialized under `[Collection(SafeModeStateCollection.Name)]`, temp data directories isolated with `AppPaths.OverrideDataDir`, mock HTTP and process runner dependencies cleaned up in `finally` blocks, and lease states safely restored before test execution.
 - **Preexisting Survivor Identified (NIGHT-FOLLOWUP-01)**:
   - During review of `SingBoxManager.Lifecycle.cs`, a separate preexisting P1 defect was identified: `StartWithJsonCore` catch (~line 88) and `RestartCore` catch (~line 590) unconditionally call `ReleaseTunOwnership()` even after `LaunchProcess` can throw from the `Started` callback with a retained live handle (`startedHandle`/`Started` invoke near line 905).
   - Evidence: `_runner.Start(request)` succeeds, sets `_handle`, and invokes `Started?.Invoke(startedHandle.Pid)`; an exception thrown from the `Started` event handler bubbles to the catch block which calls `ReleaseTunOwnership()`, orphaning the running sing-box process while releasing the TUN lock.
   - Preexisting condition, not introduced by NIGHT-08. Outside the approved 12-repair scope; registered in `plans/OPEN-DEFECTS.md` as `NIGHT-FOLLOWUP-01` and deferred for owner follow-up, not fixed here.
-- **Pending CI**:
-  - Working tree changes reviewed and ready for commit and push to PR #240 for CI verification.
-  - Defect ledger (`plans/OPEN-DEFECTS.md`) remains open pending CI evidence and whole-task completion.
-- **Ledger & Constraints**:
-  - Defect ledger (`plans/OPEN-DEFECTS.md`) stays open pending evidence for whole task.
-  - No fake complete or full gate claims; limits on full solution / live / macOS unchanged.
+- **CI Pipeline Scope & Gate 1 Limitation**:
+  - All 4 CI checks green on run 33951772995.
+  - Existing CI (`test.yml`) builds `VPNRouter.Tests` project (Core and App dependencies).
+  - Ubuntu runner executes Core unit tests; Windows runner tests `Characterization`, `PostShipVerifierContractTests`, and `BratVerifierContractTests`, and publishes CLI.
+  - Does NOT prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
+
+### Batch 2 (NIGHT-05 Committed-Config Final Integration) Source Review Outcome
+
+- **Status**: Current source reviewed, pending CI.
+- **Batch 2 Scope & Implementation (NIGHT-05 Committed-Config Final Integration)**:
+  - **Internal Optional Capability Interface**:
+    - Introduced `internal interface ICommittedFirewallConfig` (`void UpdateCommittedConfig(string configJson, bool enabledForFullTunnel)`) in `VPNRouter.Core/Interfaces/IFirewallManager.cs`.
+    - Narrow internal capability; implemented explicitly by `LinuxFirewallManager` and `MacFirewallManager`. Windows `FirewallManager` and `NullFirewallManager` remain unchanged and do not implement this capability.
+  - **StartupPipeline Lifecycle Ordering**:
+    - Phase 6 (`CreateFirewallPhase`): skips legacy `CreateBlockRules` when firewall implements `ICommittedFirewallConfig` (`profile.BlockOnVpnFail && firewall is not ICommittedFirewallConfig`), eliminating the startup read of stale or missing on-disk `current.json`.
+    - Phase 8 (`StartMonitorsPhase`): passes committed configuration directly to `committedFirewall.UpdateCommittedConfig(configJson, profile.BlockOnVpnFail && isFullTunnel)` only AFTER confirmed sing-box startup (`await StartSingBoxPhaseAsync`) and BEFORE background monitors start (`StartMonitorsPhase`).
+  - **Truthful Commit on Apply (Bool Ack Guard)**:
+    - In `VpnEngine.ApplyAsync`, `UpdateFirewallCommittedConfig` is invoked ONLY after confirmed boolean acknowledgment of successful hot-reload or restart (`ReloadConfigJsonWithResult` returning `true`).
+    - If hot-reload or restart returns `false`, `ApplyAsync` invokes `RestoreActiveBaseline()`, emits an error status, returns `false`, and executes ZERO calls to `ICommittedFirewallConfig.UpdateCommittedConfig`.
+  - **Unix Loaded Atomic Refresh (No Unblock / No -E)**:
+    - `LinuxFirewallManager`: when ruleset is already loaded (`_loaded == true`), atomic refresh writes the updated ruleset to disk and executes `nft -f` in-place without invoking `DeleteTable()` or disabling/unblocking first, eliminating the egress leak window during config updates.
+    - `MacFirewallManager`: when ruleset is already loaded (`_loaded == true`), atomic refresh writes the updated rules to disk and loads them into anchor (`pfctl -a Anchor -f`) or main ruleset (`pfctl -f` in legacy mode) in-place without re-invoking `EnsureCarrier()` (`pfctl -sr`), without acquiring an additional ref-counted `-E` token, and without flushing rules or unblocking first.
+  - **Disarm Before DNS / Parse**:
+    - In `UpdateCommittedConfig`, if `!enabledForFullTunnel` (disabled branch), the manager sets `_armed = false` and calls `DisableBlockRules()` immediately BEFORE any hostname DNS resolution or JSON parsing occurs. This avoids unnecessary DNS resolution queries or exceptions when the kill-switch is disarmed.
+  - **Invalid JSON Preserves Prior Cache**:
+    - In `ParseServerIps`, root elements that are not JSON objects (`[]`, `null`, strings, numbers) throw `JsonException`.
+    - In `UpdateCommittedConfig`, any parse failure logs a warning and retains the prior `_serverIps` allowlist cache instead of wiping it or turning it into an empty cache.
+    - An empty JSON object `{}` is treated as valid committed config with an empty server list.
+  - **Windows Unchanged**:
+    - Windows `FirewallManager` does not implement `ICommittedFirewallConfig`; Windows per-process WFP firewall rules and behavior remain completely unchanged.
+  - **Thread Safety**:
+    - Both `LinuxFirewallManager` and `MacFirewallManager` serialize internal state access (`_serverIps`, `_armed`, `_loaded`, `_anchorMode`) behind private `_gate` lock.
+- **Test Suite & Verification**:
+  - `CommittedFirewallConfigTests.cs`:
+    - Tests narrow internal contract and explicit interface implementation by Unix managers.
+    - Asserts Windows `FirewallManager` and `NullFirewallManager` do not implement the capability.
+    - Asserts `UpdateCommittedConfig` never accesses `_currentConfigPath` on disk (stale/no current file).
+    - Asserts `ParseServerIps` extracts outbounds and WireGuard peers for both IPv4 and IPv6 (AAAA).
+  - Fake/temp tests in `LinuxFirewallManagerTests.cs` and `MacFirewallManagerTests.cs`:
+    - Stale on-disk file ignored in favor of committed string; missing config file succeeds without error.
+    - Active refresh failure retains prior allowlist, loaded flag, and marker without unblocking.
+    - Active refresh succeeds atomically without delete table / carrier / -E / flush unblock.
+    - Malformed JSON retains prior cache.
+    - Disabled mode disarms and lifts rules without invoking DNS resolver.
+  - `VpnEngineApplyStructuralChangeTests.cs`:
+    - Failed Apply on exact branch results in zero firewall capability calls and restores active baseline.
+    - Successful hot-reload triggers exactly one capability call with exact generated JSON and intent, exactly one HTTP PUT, and rejects zero calls.
+    - StartupPipeline cold ordering verified via stripped-comment source inspection (Phase 6 skips legacy capability; StartSingBoxPhaseAsync -> UpdateCommittedConfig -> StartMonitorsPhase).
+    - Cold ordering is source-only, not live run (real sing-box process and OS monitors require network stack / privileges).
+- **Defect Ledger & Limits**:
+  - Defect ledger (`plans/OPEN-DEFECTS.md`): all defects still open pending closure evidence; no fake full gate.
+  - Existing CI pipeline limits maintained: does not prove full solution, macOS runner, or live system behavior; Gate 1 remains a full solution limitation; limits full solution/live/macOS unchanged.
