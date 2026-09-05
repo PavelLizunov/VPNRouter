@@ -316,61 +316,7 @@ public sealed class NightConnStatsSessionTests
     }
 
     [AvaloniaFact]
-    public async Task StaleQueuedUpdates_GenerationMismatchOnly_DiscardsStaleResponse()
-    {
-        var deferred = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var handler = new FakeClashHttpHandler { DeferredResponse = deferred };
-        using var http = new HttpClient(handler);
-        using var api = new ClashSingBoxApi(httpClient: http, baseUrl: "http://127.0.0.1:9090");
-
-        var vm = CreateIsolatedVm(api);
-        SetField(vm, "_isConnected", true);
-        SetField(vm, "_statsPrevDown", 999999L);
-        SetField(vm, "_connectionStatsText", "current-generation-text");
-
-        var initialGen = GetField<long>(vm, "_statsGeneration");
-
-        var pollMethod = typeof(MainWindowViewModel).GetMethod(
-            "PollConnStatsAsync", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(pollMethod);
-        var pollTask = (Task)pollMethod!.Invoke(vm, null)!;
-
-        try
-        {
-            // Bump generation ONLY — preserve the exact same _statsApi instance
-            SetField(vm, "_statsGeneration", initialGen + 1);
-
-            // Release deferred HTTP response from the old poll
-            deferred.TrySetResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(
-                    "{\"downloadTotal\": 12345, \"uploadTotal\": 67890, \"connections\": [{}, {}]}")
-            });
-
-            await pollTask;
-            await DrainUiQueueAsync();
-
-            // Stale update from generation mismatch must be discarded
-            Assert.Equal(999999L, GetField<long>(vm, "_statsPrevDown"));
-            Assert.Equal("current-generation-text", vm.ConnectionStatsText);
-            Assert.Same(api, GetField<ClashSingBoxApi>(vm, "_statsApi"));
-        }
-        finally
-        {
-            deferred.TrySetCanceled();
-            try
-            {
-                await pollTask;
-            }
-            catch
-            {
-            }
-            await DrainUiQueueAsync();
-        }
-    }
-
-    [AvaloniaFact]
-    public async Task StaleQueuedUpdates_ApiMismatchOnly_DiscardsStaleResponse()
+    public async Task StaleQueuedUpdates_ApiMismatch_DiscardsStaleResponse()
     {
         var deferred = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var handler1 = new FakeClashHttpHandler { DeferredResponse = deferred };
@@ -381,8 +327,6 @@ public sealed class NightConnStatsSessionTests
         SetField(vm, "_isConnected", true);
         SetField(vm, "_statsPrevDown", 888888L);
         SetField(vm, "_connectionStatsText", "current-api-text");
-
-        var fixedGen = GetField<long>(vm, "_statsGeneration");
 
         var pollMethod = typeof(MainWindowViewModel).GetMethod(
             "PollConnStatsAsync", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -395,9 +339,8 @@ public sealed class NightConnStatsSessionTests
 
         try
         {
-            // Swap _statsApi to api2 ONLY — keep _statsGeneration identical to fixedGen
+            // Swap _statsApi to api2 (new session client instance)
             SetField(vm, "_statsApi", api2);
-            SetField(vm, "_statsGeneration", fixedGen);
 
             // Release deferred HTTP response from the old api1 poll
             deferred.TrySetResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -412,7 +355,7 @@ public sealed class NightConnStatsSessionTests
             // Stale update from API mismatch must be discarded
             Assert.Equal(888888L, GetField<long>(vm, "_statsPrevDown"));
             Assert.Equal("current-api-text", vm.ConnectionStatsText);
-            Assert.Equal(fixedGen, GetField<long>(vm, "_statsGeneration"));
+            Assert.Same(api2, GetField<ClashSingBoxApi>(vm, "_statsApi"));
         }
         finally
         {
@@ -429,7 +372,7 @@ public sealed class NightConnStatsSessionTests
     }
 
     [AvaloniaFact]
-    public async Task OnIsConnectedChanged_FalseTrueTransition_CreatesHttpClientWithoutRequests_BumpsGen_ResetsCounters_AndDropsOldReply()
+    public async Task OnIsConnectedChanged_FalseTrueTransition_ClearsClient_GeneratesUniqueHandle_AndDropsOldReply()
     {
         var deferred = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var handler = new FakeClashHttpHandler { DeferredResponse = deferred };
@@ -443,9 +386,7 @@ public sealed class NightConnStatsSessionTests
         SetField(vm, "_statsPrevAt", DateTimeOffset.UtcNow);
         SetField(vm, "_connectionStatsText", "pre-transition-stats");
 
-        var genBefore = GetField<long>(vm, "_statsGeneration");
-
-        // Start in-flight poll on old generation/api that is deferred
+        // Start in-flight poll on old client that is deferred
         var pollMethod = typeof(MainWindowViewModel).GetMethod(
             "PollConnStatsAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(pollMethod);
@@ -458,25 +399,22 @@ public sealed class NightConnStatsSessionTests
 
         try
         {
-            // Transition 1: false (disconnect)
+            // Transition 1: false (disconnect) -> clears _statsApi and resets counters/text
             onIsConnectedChanged!.Invoke(vm, new object[] { false });
-            var genAfterFalse = GetField<long>(vm, "_statsGeneration");
-            Assert.True(genAfterFalse > genBefore);
             Assert.Null(GetField<ClashSingBoxApi>(vm, "_statsApi"));
             Assert.Equal(0L, GetField<long>(vm, "_statsPrevDown"));
             Assert.Equal(0L, GetField<long>(vm, "_statsPrevUp"));
             Assert.Null(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
             Assert.Equal(string.Empty, vm.ConnectionStatsText);
 
-            // Transition 2: true (reconnect) -> creates new ClashSingBoxApi with owned HttpClient, but sends no requests
+            // Transition 2: true (reconnect) -> creates unique ClashSingBoxApi handle without sending requests
             onIsConnectedChanged!.Invoke(vm, new object[] { true });
-            var genAfterTrue = GetField<long>(vm, "_statsGeneration");
-            Assert.True(genAfterTrue > genAfterFalse);
-
-            // Dispose the new HttpClient/api created by OnIsConnectedChanged(true) to prevent leaks,
-            // then inject fake api afterward
             var createdApi = GetField<ClashSingBoxApi>(vm, "_statsApi");
             Assert.NotNull(createdApi);
+            Assert.NotSame(initialApi, createdApi);
+
+            // Dispose the new client created by OnIsConnectedChanged(true) to prevent leaks,
+            // then inject fake api afterward
             createdApi!.Dispose();
 
             var fakeHandler = new FakeClashHttpHandler();
@@ -485,7 +423,7 @@ public sealed class NightConnStatsSessionTests
             SetField(vm, "_statsApi", fakeApi);
             SetField(vm, "_isConnected", true);
 
-            // Verify counters remain reset and generation increased
+            // Verify counters remain reset
             Assert.Equal(0L, GetField<long>(vm, "_statsPrevDown"));
             Assert.Equal(0L, GetField<long>(vm, "_statsPrevUp"));
             Assert.Null(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
@@ -501,11 +439,34 @@ public sealed class NightConnStatsSessionTests
             await oldPollTask;
             await DrainUiQueueAsync();
 
-            // Verify old reply was dropped: counters and text remain reset, not overwritten by old reply
+            // Verify old reply was dropped: counters, text, and auto-selected node remain reset
             Assert.Equal(0L, GetField<long>(vm, "_statsPrevDown"));
             Assert.Equal(0L, GetField<long>(vm, "_statsPrevUp"));
             Assert.Null(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
             Assert.Equal(string.Empty, vm.ConnectionStatsText);
+            Assert.Null(GetField<ServerViewModel>(vm, "_autoSelectedServer"));
+
+            // Same-client current response works
+            fakeHandler.Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"downloadTotal\": 1200, \"uploadTotal\": 800, \"connections\": [{}]}")
+            };
+            await InvokePollAsync(vm);
+            Assert.Equal(1200L, GetField<long>(vm, "_statsPrevDown"));
+            Assert.Equal(800L, GetField<long>(vm, "_statsPrevUp"));
+            Assert.NotNull(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
+
+            // Disconnected same-client (IsConnected == false) is rejected
+            SetField(vm, "_isConnected", false);
+            fakeHandler.Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"downloadTotal\": 5000, \"uploadTotal\": 4000, \"connections\": [{}]}")
+            };
+            await InvokePollAsync(vm);
+            Assert.Equal(1200L, GetField<long>(vm, "_statsPrevDown"));
+            Assert.Equal(800L, GetField<long>(vm, "_statsPrevUp"));
         }
         finally
         {
@@ -561,8 +522,7 @@ public sealed class NightConnStatsSessionTests
             "MaybeRefreshAutoSelectedAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(refreshMethod);
 
-        var gen = GetField<long>(vm, "_statsGeneration");
-        await (Task)refreshMethod!.Invoke(vm, new object[] { api, gen })!;
+        await (Task)refreshMethod!.Invoke(vm, new object[] { api })!;
         await DrainUiQueueAsync();
 
         // Unresolved group must CLEAR previous selection, not retain it
@@ -594,30 +554,32 @@ public sealed class NightConnStatsSessionTests
     }
 
     [AvaloniaFact]
-    public async Task CatchPollExceptions_DoesNotClearState_WhenGenerationMismatch()
+    public async Task CatchPollExceptions_DoesNotClearState_WhenApiMismatch()
     {
         var deferred = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var handler = new FakeClashHttpHandler { DeferredResponse = deferred };
-        using var http = new HttpClient(handler);
-        using var api = new ClashSingBoxApi(httpClient: http, baseUrl: "http://127.0.0.1:9090");
-        var vm = CreateIsolatedVm(api);
+        var handler1 = new FakeClashHttpHandler { DeferredResponse = deferred };
+        using var http1 = new HttpClient(handler1);
+        using var api1 = new ClashSingBoxApi(httpClient: http1, baseUrl: "http://127.0.0.1:9090");
+        var vm = CreateIsolatedVm(api1);
 
         // Establish initial state
         SetField(vm, "_connectionStatsText", "persisted-stats");
         SetField(vm, "_statsPrevDown", 5000L);
         SetField(vm, "_statsPrevAt", DateTimeOffset.UtcNow);
 
-        var initialGen = GetField<long>(vm, "_statsGeneration");
-
         var pollMethod = typeof(MainWindowViewModel).GetMethod(
             "PollConnStatsAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(pollMethod);
         var pollTask = (Task)pollMethod!.Invoke(vm, null)!;
 
+        var handler2 = new FakeClashHttpHandler();
+        using var http2 = new HttpClient(handler2);
+        using var api2 = new ClashSingBoxApi(httpClient: http2, baseUrl: "http://127.0.0.1:9090");
+
         try
         {
-            // Bump generation while poll is waiting
-            SetField(vm, "_statsGeneration", initialGen + 1);
+            // Swap client identity to api2
+            SetField(vm, "_statsApi", api2);
 
             // Fault the deferred task
             deferred.TrySetException(new HttpRequestException("Network failure"));
@@ -625,7 +587,7 @@ public sealed class NightConnStatsSessionTests
             await pollTask;
             await DrainUiQueueAsync();
 
-            // Exception caught must NOT clear state because generation is stale
+            // Exception caught must NOT clear state because API client is stale
             Assert.Equal("persisted-stats", vm.ConnectionStatsText);
             Assert.NotNull(GetField<DateTimeOffset?>(vm, "_statsPrevAt"));
             Assert.Equal(5000L, GetField<long>(vm, "_statsPrevDown"));

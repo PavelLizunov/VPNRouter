@@ -33,7 +33,6 @@ public partial class MainWindowViewModel
     private long _statsPrevDown, _statsPrevUp;
     private DateTimeOffset? _statsPrevAt;
     private int _statsInFlight;
-    private long _statsGeneration;
 
     // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy" group, the
     // REAL member it routes through (resolved from clash_api /proxies/proxy ->
@@ -55,7 +54,10 @@ public partial class MainWindowViewModel
     /// </summary>
     partial void OnIsConnectedChanged(bool value)
     {
-        _statsGeneration++;
+        var oldApi = _statsApi;
+        _statsApi = null;
+        try { oldApi?.Dispose(); } catch { /* best-effort */ }
+
         _statsPrevAt = null;
         _statsPrevDown = 0;
         _statsPrevUp = 0;
@@ -69,7 +71,6 @@ public partial class MainWindowViewModel
             {
                 var hostPort = string.IsNullOrWhiteSpace(_settings?.SingBox?.ClashApi)
                     ? "127.0.0.1:9090" : _settings!.SingBox.ClashApi;
-                _statsApi?.Dispose();
                 _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger,
                     secret: _settings?.SingBox?.ClashApiSecret);
             }
@@ -78,11 +79,6 @@ public partial class MainWindowViewModel
                 _logger?.Debug(ex, "[ConnStats] clash_api init failed — live stats disabled this session");
                 _statsApi = null;
             }
-        }
-        else
-        {
-            try { _statsApi?.Dispose(); } catch { /* best-effort */ }
-            _statsApi = null;
         }
     }
 
@@ -106,7 +102,6 @@ public partial class MainWindowViewModel
     private async Task PollConnStatsAsync()
     {
         var api = _statsApi;
-        var generation = _statsGeneration;
 
         try
         {
@@ -117,14 +112,14 @@ public partial class MainWindowViewModel
             // status line + list highlight show the REAL server (not the stale
             // first-in-list). Independent of + before the traffic poll so it
             // runs even on an idle tunnel (which skips the traffic tick below).
-            await MaybeRefreshAutoSelectedAsync(api, generation).ConfigureAwait(false);
+            await MaybeRefreshAutoSelectedAsync(api).ConfigureAwait(false);
 
             var snap = await api.GetConnectionsAsync().ConfigureAwait(false);
             var now = snap.CapturedAt;
 
             Dispatcher.UIThread.Post(() =>
             {
-                if (generation != _statsGeneration || !ReferenceEquals(api, _statsApi) || !IsConnected)
+                if (!ReferenceEquals(api, _statsApi) || !IsConnected)
                     return;
 
                 if (!snap.IsValid)
@@ -170,7 +165,7 @@ public partial class MainWindowViewModel
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (generation != _statsGeneration || !ReferenceEquals(api, _statsApi) || !IsConnected)
+                if (!ReferenceEquals(api, _statsApi) || !IsConnected)
                     return;
 
                 ClearStatsState();
@@ -180,19 +175,19 @@ public partial class MainWindowViewModel
         {
             Interlocked.Exchange(ref _statsInFlight, 0);
         }
-    }
 
-    private void ClearStatsState()
-    {
-        ConnectionStatsText = string.Empty;
-        _statsPrevAt = null;
-        _statsPrevDown = 0;
-        _statsPrevUp = 0;
-        if (_autoSelectedServer is not null)
+        void ClearStatsState()
         {
-            _autoSelectedServer = null;
-            RestoreConnectedStatus();
-            RefreshActiveIndicator();
+            ConnectionStatsText = string.Empty;
+            _statsPrevAt = null;
+            _statsPrevDown = 0;
+            _statsPrevUp = 0;
+            if (_autoSelectedServer is not null)
+            {
+                _autoSelectedServer = null;
+                RestoreConnectedStatus();
+                RefreshActiveIndicator();
+            }
         }
     }
 
@@ -208,9 +203,9 @@ public partial class MainWindowViewModel
     /// faster than urltest's own 3m interval, so per-tick polling was waste.</summary>
     private int _autoSelectPollTick;
 
-    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api, long generation)
+    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
     {
-        if (!AutoSelectBestServer || !(_settings?.App?.ConfigMode ?? "generated")
+        if (!AutoSelectBestServer || !(_settings.App.ConfigMode ?? "generated")
                 .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -231,7 +226,7 @@ public partial class MainWindowViewModel
 
         Dispatcher.UIThread.Post(() =>
         {
-            if (generation != _statsGeneration || !ReferenceEquals(api, _statsApi) || !IsConnected)
+            if (!ReferenceEquals(api, _statsApi) || !IsConnected)
                 return;
 
             var resolved = ResolveAutoSelectedServer(nowTag);
