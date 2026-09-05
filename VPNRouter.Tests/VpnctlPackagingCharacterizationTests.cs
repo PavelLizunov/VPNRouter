@@ -62,7 +62,13 @@ public sealed class VpnctlPackagingCharacterizationTests
     {
         var script = Read("build.ps1");
         var idx1 = script.IndexOf("# ── Bundle sing-box.exe ──", StringComparison.Ordinal);
-        var idx2 = script.IndexOf("# ── slipstream-client.exe", idx1, StringComparison.Ordinal);
+        var cronetMarker = "# ── Bundle libcronet.dll ──";
+        var slipstreamMarker = "# ── slipstream-client.exe";
+        var idx2 = script.IndexOf(cronetMarker, idx1, StringComparison.Ordinal);
+        if (idx2 < 0)
+        {
+            idx2 = script.IndexOf(slipstreamMarker, idx1, StringComparison.Ordinal);
+        }
         Assert.True(idx1 >= 0 && idx2 > idx1, "Could not locate sing-box bundling section.");
 
         var bundling = StripComments(script.Substring(idx1, idx2 - idx1));
@@ -70,6 +76,30 @@ public sealed class VpnctlPackagingCharacterizationTests
         var expandIndex = bundling.IndexOf("Expand-Archive", StringComparison.Ordinal);
         Assert.True(hashIndex >= 0 && expandIndex > hashIndex, "Get-FileHash must execute before Expand-Archive.");
         Assert.DoesNotContain("if (-not (Test-Path $cachedExe))", bundling[..hashIndex]);
+    }
+
+    [Fact]
+    [Trait("Category", "PackagingCharacterization")]
+    [Trait("Baseline", "LegacyDefectGuards")]
+    public void BuildScript_LibcronetBundling_SourceContract()
+    {
+        var script = Read("build.ps1");
+        var idx1 = script.IndexOf("# ── Bundle libcronet.dll ──", StringComparison.Ordinal);
+        var idx2 = script.IndexOf("# ── slipstream-client.exe", idx1 >= 0 ? idx1 : 0, StringComparison.Ordinal);
+        Assert.True(idx1 >= 0 && idx2 > idx1, "Could not locate libcronet bundling section in build.ps1.");
+
+        var section = StripComments(script.Substring(idx1, idx2 - idx1));
+        var archiveHashIndex = section.IndexOf("Get-FileHash", StringComparison.Ordinal);
+        var expandIndex = section.IndexOf("Expand-Archive", StringComparison.Ordinal);
+        Assert.True(archiveHashIndex >= 0 && expandIndex > archiveHashIndex,
+            "Archive hash verification (Get-FileHash) must execute before Expand-Archive.");
+
+        var dllHashIndex = section.IndexOf("Get-FileHash", expandIndex, StringComparison.Ordinal);
+        Assert.True(dllHashIndex > expandIndex || section.Contains("c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2"),
+            "libcronet.dll hash must be checked.");
+
+        Assert.Contains("libcronet.dll", section);
+        Assert.DoesNotContain("sing-box.exe", section);
     }
 
     [Fact]
@@ -267,7 +297,13 @@ public sealed class VpnctlPackagingCharacterizationTests
         }
 
         var idx2 = buildPs1.IndexOf("# ── Bundle sing-box.exe ──", StringComparison.Ordinal);
-        var idx2End = buildPs1.IndexOf("# ── slipstream-client.exe", idx2, StringComparison.Ordinal);
+        var cronetMarker = "# ── Bundle libcronet.dll ──";
+        var slipstreamMarker = "# ── slipstream-client.exe";
+        var idx2End = buildPs1.IndexOf(cronetMarker, idx2, StringComparison.Ordinal);
+        if (idx2End < 0)
+        {
+            idx2End = buildPs1.IndexOf(slipstreamMarker, idx2, StringComparison.Ordinal);
+        }
         Assert.True(idx2 >= 0 && idx2End > idx2, "Could not locate sing-box bundling section in build.ps1.");
         var sec2 = buildPs1.Substring(idx2, idx2End - idx2);
 

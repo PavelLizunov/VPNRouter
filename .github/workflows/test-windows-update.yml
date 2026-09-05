@@ -125,6 +125,129 @@ jobs:
           #   VPNRouter-update-v<ver>-win.zip   (bootstrap layout)
           ./build.ps1 -Version "${{ steps.ver.outputs.version }}"
 
+      - name: Validate libcronet.dll and sing-box naive check
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          $expectedCronetHash = "c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2"
+          $installZipPath = (Resolve-Path "VPNRouter-v$ver-win.zip").Path
+          $updateZipPath  = (Resolve-Path "VPNRouter-update-v$ver-win.zip").Path
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $sha256 = [System.Security.Cryptography.SHA256]::Create()
+
+          # Validate libcronet.dll in BOTH install and update ZIPs in memory (no external tools)
+          foreach ($zipPath in @($installZipPath, $updateZipPath)) {
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+            try {
+              $entry = $zip.Entries | Where-Object { $_.Name -ieq "libcronet.dll" } | Select-Object -First 1
+              if (-not $entry) {
+                throw "libcronet.dll not found in $(Split-Path $zipPath -Leaf)"
+              }
+              $stream = $entry.Open()
+              try {
+                $hash = [Convert]::ToHexString($sha256.ComputeHash($stream)).ToLowerInvariant()
+                if ($hash -ne $expectedCronetHash) {
+                  throw "libcronet.dll SHA256 mismatch in $(Split-Path $zipPath -Leaf): expected $expectedCronetHash, got $hash"
+                }
+                Write-Host "OK: libcronet.dll verified in $(Split-Path $zipPath -Leaf) ($hash)"
+              } finally {
+                $stream.Dispose()
+              }
+            } finally {
+              $zip.Dispose()
+            }
+          }
+          $sha256.Dispose()
+
+          # Clean temp directory containing ONLY sing-box.exe and libcronet.dll from install payload
+          $cleanDir = "C:\TestVPNRouter\cronet-validation"
+          Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $cleanDir | Out-Null
+
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($installZipPath)
+          try {
+            $sbEntry = $zip.Entries | Where-Object { $_.Name -ieq "sing-box.exe" } | Select-Object -First 1
+            if (-not $sbEntry) { throw "sing-box.exe not found in $(Split-Path $installZipPath -Leaf)" }
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($sbEntry, (Join-Path $cleanDir "sing-box.exe"), $true)
+
+            $crEntry = $zip.Entries | Where-Object { $_.Name -ieq "libcronet.dll" } | Select-Object -First 1
+            if (-not $crEntry) { throw "libcronet.dll not found in $(Split-Path $installZipPath -Leaf)" }
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($crEntry, (Join-Path $cleanDir "libcronet.dll"), $true)
+          } finally {
+            $zip.Dispose()
+          }
+
+          # Naive outbound config with loopback 127.0.0.1:9 and fake credentials constant.
+          # No real traffic, listeners, TUN, or credentials.
+          # Note: `sing-box check -c` calls NewNaiveClient during config validation,
+          # loading Cronet to validate outbound construction (validation-only, not engine initialization).
+          $naiveConfigPath = Join-Path $cleanDir "naive-check.json"
+          $naiveConfig = '{"outbounds":[{"type":"naive","tag":"naive-out","server":"127.0.0.1","server_port":9,"username":"fakeusername","password":"fakepassword"}]}'
+          Set-Content -Path $naiveConfigPath -Value $naiveConfig -Encoding utf8
+
+          function Invoke-BoundedProcess([string]$exePath, [string]$argLine, [string]$workDir) {
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = $exePath
+            $psi.Arguments = $argLine
+            $psi.WorkingDirectory = $workDir
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $psi.UseShellExecute = $false
+            $psi.CreateNoWindow = $true
+
+            $proc = [System.Diagnostics.Process]::Start($psi)
+            if (-not $proc) { throw "Failed to start process: $exePath" }
+
+            $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+            $stderrTask = $proc.StandardError.ReadToEndAsync()
+
+            if (-not $proc.WaitForExit(30000)) {
+              try { $proc.Kill($true) } catch {}
+              $proc.WaitForExit(5000)
+              throw "Process $exePath timed out after 30 seconds"
+            }
+            $stdout = $stdoutTask.GetAwaiter().GetResult()
+            $stderr = $stderrTask.GetAwaiter().GetResult()
+            return [PSCustomObject]@{
+              ExitCode = $proc.ExitCode
+              Output   = ($stdout + "`n" + $stderr).Trim()
+            }
+          }
+
+          # Positive check: sing-box check -c with co-located libcronet.dll in clean owned cwd
+          $sbExe = Join-Path $cleanDir "sing-box.exe"
+          $posResult = Invoke-BoundedProcess $sbExe "check -c naive-check.json" $cleanDir
+          Write-Host "sing-box check output (with libcronet.dll):`n$($posResult.Output)"
+          if ($posResult.ExitCode -ne 0) {
+            throw "sing-box check failed unexpectedly with exit code $($posResult.ExitCode): $($posResult.Output)"
+          }
+          Write-Host "OK: sing-box check -c exited with code 0 (libcronet loaded)"
+
+          # Negative control: clean folder with only sing-box.exe and same config (missing libcronet.dll).
+          # Avoid PATH library fallback by clean owned cwd and only copies.
+          # Fail-closed: missing DLL must result in non-zero exit code and 'libcronet' in error output.
+          $negDir = "C:\TestVPNRouter\cronet-negative-control"
+          Remove-Item -Recurse -Force $negDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $negDir | Out-Null
+
+          Copy-Item $sbExe (Join-Path $negDir "sing-box.exe") -Force
+          Copy-Item $naiveConfigPath (Join-Path $negDir "naive-check.json") -Force
+
+          $negSbExe = Join-Path $negDir "sing-box.exe"
+          $negResult = Invoke-BoundedProcess $negSbExe "check -c naive-check.json" $negDir
+          Write-Host "sing-box check output (missing libcronet.dll negative control):`n$($negResult.Output)"
+          if ($negResult.ExitCode -eq 0) {
+            throw "Negative control FAIL: sing-box check succeeded without libcronet.dll (expected non-zero exit)"
+          }
+          if ($negResult.Output -notmatch 'libcronet') {
+            throw "Negative control FAIL: expected 'libcronet' in output, got:`n$($negResult.Output)"
+          }
+          Write-Host "OK: Negative control verified dependency exercised (exit $($negResult.ExitCode), 'libcronet' in output)"
+
+          Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $negDir   -ErrorAction SilentlyContinue
+
       - name: Lay out TEST install (not Program Files)
         id: layout
         shell: pwsh
@@ -311,6 +434,12 @@ jobs:
             throw "sing-box.exe missing post-update at $sb"
           }
           Write-Host "OK: sing-box.exe present"
+
+          $cronet = Join-Path "${{ steps.layout.outputs.appDir }}" "libcronet.dll"
+          if (-not (Test-Path $cronet)) {
+            throw "libcronet.dll missing post-update at $cronet"
+          }
+          Write-Host "OK: libcronet.dll present"
 
       - name: Assert install receipt was written
         shell: pwsh
