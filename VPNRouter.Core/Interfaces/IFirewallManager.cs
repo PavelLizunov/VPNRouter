@@ -20,3 +20,12 @@ public interface IFirewallManager : IDisposable
     void DisableBlockRules();
     void DeleteAllRules();
 }
+
+/// <summary>
+/// Optional capability interface for firewall managers that support runtime
+/// configuration updates from committed sing-box JSON (Linux nftables, macOS pf).
+/// </summary>
+internal interface ICommittedFirewallConfig
+{
+    void UpdateCommittedConfig(string configJson, bool enabledForFullTunnel);
+}

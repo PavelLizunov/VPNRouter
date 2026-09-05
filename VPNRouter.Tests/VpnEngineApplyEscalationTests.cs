@@ -1,5 +1,8 @@
+using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using Xunit;
 
 namespace VPNRouter.Tests;
 
@@ -84,25 +87,36 @@ public sealed class VpnEngineApplyEscalationTests
     [Fact]
     public void ApplyAsync_PassesForceRestartToReloadConfigJson()
     {
-        // Pin the v2.31.7-r1 fix: ReloadConfigJson MUST receive the
+        // Pin the v2.31.7-r1 fix: ReloadConfigJsonWithResult MUST receive the
         // forceRestart parameter, otherwise the structural-change intent
         // gets lost and TryHotReload runs first regardless. brat-2026-05-04
         // 16:17:32 logs: PID stayed the same despite "Forced full restart".
         var src = LoadVpnEngineSource();
-        if (src == null) return;
-        // Either ReloadConfigJson(configJson, forceRestart) or
-        // ReloadConfigJson(configJson, true) — both honour the contract.
+        Assert.True(src != null, "VpnEngine.cs source file could not be loaded.");
+
+        // Ignore line comments so comments cannot satisfy the pin
+        var lines = src.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var nonCommentLines = lines.Select(line =>
+        {
+            var commentIdx = line.IndexOf("//", StringComparison.Ordinal);
+            return commentIdx >= 0 ? line.Substring(0, commentIdx) : line;
+        });
+        var effectiveSrc = string.Join("\n", nonCommentLines);
+
+        // Either ReloadConfigJsonWithResult(configJson, forceRestart) or
+        // ReloadConfigJsonWithResult(configJson, true) — both honour the contract.
         var hasForceRestartArg =
-            src.Contains("ReloadConfigJson(configJson, forceRestart)") ||
-            src.Contains("ReloadConfigJson(configJson, true)");
+            effectiveSrc.Contains("ReloadConfigJsonWithResult(configJson, forceRestart)", StringComparison.Ordinal) ||
+            effectiveSrc.Contains("ReloadConfigJsonWithResult(configJson, true)", StringComparison.Ordinal);
         Assert.True(hasForceRestartArg,
-            "VpnEngine.ApplyAsync must pass forceRestart through to SingBoxManager.ReloadConfigJson — see v2.31.7-r1 brat fix.");
-        var aggregationIndex = src.IndexOf(StructuralAggregation, StringComparison.Ordinal);
-        var reloadIndex = src.IndexOf(
-            "ReloadConfigJson(configJson, forceRestart)",
+            "VpnEngine.ApplyAsync must pass forceRestart through to SingBoxManager.ReloadConfigJsonWithResult — see v2.31.7-r1 brat fix.");
+
+        var aggregationIndex = effectiveSrc.IndexOf(StructuralAggregation, StringComparison.Ordinal);
+        var reloadIndex = effectiveSrc.IndexOf(
+            "ReloadConfigJsonWithResult(configJson, forceRestart)",
             StringComparison.Ordinal);
         Assert.True(aggregationIndex >= 0 && reloadIndex > aggregationIndex,
-            "Structural changes must aggregate before ReloadConfigJson consumes forceRestart.");
+            "Structural changes must aggregate before ReloadConfigJsonWithResult consumes forceRestart.");
     }
 
     private static string? LoadVpnEngineSource()

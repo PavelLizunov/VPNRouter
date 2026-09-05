@@ -115,19 +115,14 @@ public partial class MainWindowViewModel
             var vpnRunning = RuntimeStatusDetector.IsVpnRunning();
             var zapretRunning = RuntimeStatusDetector.IsZapretRunning();
 
-            // F1 (v2.45.0): only probe the TgProxy listener when TgProxy is
-            // actually configured. IsTgProxyRunning calls GetActiveTcpListeners
-            // (a full OS TCP-table snapshot + IPEndPoint[] alloc); it previously
-            // ran on EVERY 2s tick even for users who never used TgProxy, because
-            // a connected VPN keeps the poll hot and tgPort defaulted to 1443.
-            // No secret => TgProxy can't be running => skip the probe entirely.
+            // Only treat TgProxy as running when this instance holds an active,
+            // verified running manager handle. Probing TCP listeners by port
+            // falsely attributes foreign or service listeners.
             var tgProxyRunning = false;
-            if (!string.IsNullOrEmpty(TgProxySecret))
-            {
-                var tgPort = _settings?.App?.TgProxyPort ?? 0;
-                if (tgPort <= 0) tgPort = 1443;
-                tgProxyRunning = RuntimeStatusDetector.IsTgProxyRunning(tgPort);
-            }
+#if PLATFORM_WINDOWS
+            var proxy = Volatile.Read(ref _tgProxy);
+            tgProxyRunning = proxy?.IsRunning == true;
+#endif
 
             if (isHidden)
             {
@@ -229,6 +224,17 @@ public partial class MainWindowViewModel
             (!IsConnected ||
              StatusText.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal)))
         {
+            // Process presence cannot establish owned readiness: if our owned
+            // engine has manager evidence, never promote from !IsConnected.
+            // When already IsConnected, restore the real connected status to
+            // avoid relabeling via service.
+            if (_engine.SingBoxPid != null || _engine.IsRunning)
+            {
+                if (!IsConnected) return;
+                RestoreConnectedStatus();
+                return;
+            }
+
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
             var configuredMode = _settings.App.ConfigMode ?? "generated";
@@ -265,11 +271,13 @@ public partial class MainWindowViewModel
             // Process.GetProcessesByName("sing-box") return 0 even when
             // sing-box is alive — process enumeration via sysctl/procfs
             // occasionally misses root-owned children depending on kernel
-            // state. _engine.IsRunning is authoritative: it pings the
-            // Clash API over HTTP, which only responds if sing-box is
-            // actually serving traffic. If the API says alive, don't
-            // demote — wait for a subsequent tick where both signals
-            // agree the tunnel is gone.
+            // state. _engine.IsRunning performs an actual own handle check
+            // (on Windows: State == Running and process handle has not exited;
+            // on Unix: Clash API probe). While process or handle presence
+            // cannot establish owned readiness from a disconnected state, if
+            // our own alive handle confirms the engine is still running for an
+            // already connected session, don't demote — wait for a subsequent
+            // tick where both signals agree the tunnel is gone.
             try
             {
                 if (_engine?.IsRunning == true)

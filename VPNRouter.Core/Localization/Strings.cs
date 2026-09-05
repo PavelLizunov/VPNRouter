@@ -209,6 +209,9 @@ public static partial class Strings
     // but the textual prefixes were English-only. Now localized.
     public static string TgProxyStatsActive => Ru ? "Активных" : "Active";
     public static string TgProxyStatsTotal => Ru ? "Всего" : "Total";
+    public static string TgProxyStopFailed => Ru
+        ? "Не удалось остановить (проверьте права)"
+        : "Couldn't stop (check permissions)";
 
     // v2.37.0-r14 — short status / toast strings still inline in MVM.
     // Sites swept: "нет value" (rule validation), "✓ Удалено все правила"

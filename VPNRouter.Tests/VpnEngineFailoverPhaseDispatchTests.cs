@@ -129,6 +129,40 @@ public sealed class VpnEngineFailoverPhaseDispatchTests
             $"Actual RestoreCount: {dns.RestoreCount}");
     }
 
+    [Fact]
+    public async Task ExecuteProbeFailoverRestart_StaleCapturedSettings_ReturnsFalseWithoutTeardown()
+    {
+        var dns = new NullWindowsDnsHardening();
+        using var engine = BuildEngine(dns);
+        var settingsA = BuildEmptyServersSettings();
+        var settingsB = BuildEmptyServersSettings();
+
+        engine.EnterPostStartPhase();
+        engine.ResetFailoverContext(settingsB);
+
+        var result = await engine.ExecuteProbeFailoverRestartAsync(settingsA, CancellationToken.None);
+
+        Assert.False(result, "stale captured settings must be rejected when active failover context differs");
+        Assert.Equal(0, dns.RestoreCount);
+    }
+
+    [Fact]
+    public async Task ExecuteFailoverRestart_PreStart_StaleCapturedSettings_ReturnsFalseBeforeStartAsyncInternal()
+    {
+        var dns = new NullWindowsDnsHardening();
+        using var engine = BuildEngine(dns);
+        var settingsA = BuildEmptyServersSettings();
+        var settingsB = BuildEmptyServersSettings();
+
+        // pre-start phase: _postStartPhase is false
+        engine.ResetFailoverContext(settingsB);
+
+        var result = await engine.ExecuteFailoverRestartAsync(settingsA, CancellationToken.None);
+
+        Assert.False(result, "pre-start failover restart must be rejected when captured settings do not match active context");
+        Assert.False(engine.IsRunning);
+    }
+
     // ─── 2. Source-shape pin: both wire methods install the same delegate ─
 
     /// <summary>
@@ -175,11 +209,34 @@ public sealed class VpnEngineFailoverPhaseDispatchTests
         //    the core, this fails — that lambda bypasses the phase dispatch and
         //    re-introduces the no-teardown post-start failover.
         var core = ExtractWireFailoverCore(src);
-        Assert.Contains("ExecuteFailoverRestartAsync", core);
-        Assert.DoesNotContain("StartAsyncInternal", core);
+        var cleanCore = StripComments(core);
+        Assert.Contains("ExecuteFailoverRestartAsync", cleanCore);
+        Assert.DoesNotContain("StartAsyncInternal", cleanCore);
+
+        // 3. NIGHT-06: The restart closure and AutoFailoverEngine constructor must share ONE
+        //    captured settings local variable (e.g. `settings`) rather than re-evaluating or calling CapturedSettings()
+        //    inside the closure. Stripped of comments so dummy comments cannot satisfy the pin.
+        var match = Regex.Match(cleanCore, @"new\s+AutoFailoverEngine\s*\(\s*(?<settingsVar>[A-Za-z0-9_]+)\s*,");
+        Assert.True(match.Success, "WireFailoverCore must construct AutoFailoverEngine with a settings local variable.");
+        var settingsVarName = match.Groups["settingsVar"].Value;
+        Assert.False(string.IsNullOrWhiteSpace(settingsVarName), "Settings variable name must not be empty.");
+        Assert.DoesNotContain("CapturedSettings()", match.Value);
+
+        Assert.True(
+            Regex.IsMatch(cleanCore,
+                $@"\bExecuteFailoverRestartAsync\s*\(\s*{Regex.Escape(settingsVarName)}\s*,\s*[A-Za-z0-9_]+(?:\s*,\s*[A-Za-z0-9_]+)?\s*\)"),
+            $"Restart delegate must pass the same '{settingsVarName}' local instance to ExecuteFailoverRestartAsync " +
+            "so pool and restart closure share the exact same object reference.");
     }
 
     // ─── source-shape helpers (mirrors CoreAuditPhaseCTests) ─────────────
+
+    private static string StripComments(string source)
+    {
+        var noBlock = Regex.Replace(source, @"/\*.*?\*/", "", RegexOptions.Singleline);
+        var noLine = Regex.Replace(noBlock, @"//.*", "");
+        return noLine;
+    }
 
     private static string LoadVpnEngineSource()
     {

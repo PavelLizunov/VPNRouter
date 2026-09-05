@@ -97,6 +97,17 @@ public sealed class ClashLogStream : IDisposable
     internal static string RedactLogsUri(Uri uri) =>
         $"{uri.Scheme}://{uri.Host}:{uri.Port}{uri.AbsolutePath}";
 
+    /// <summary>Log stream connection/receive failure without the exception object or
+    /// raw URI, ensuring sensitive tokens embedded in the URI cannot leak into the log
+    /// via exception messages, inner exceptions, or stack traces.</summary>
+    internal static void LogStreamFailure(ILogger logger, Exception ex, TimeSpan backoff)
+    {
+        logger.Debug(
+            "[ConnHealth] Clash /logs stream dropped ({ErrorType}); retry in {Sec}s",
+            ex.GetType().Name,
+            backoff.TotalSeconds);
+    }
+
     /// <summary>Start the background subscribe/reconnect loop. A second call while
     /// already running is ignored.</summary>
     public void Start()
@@ -144,7 +155,7 @@ public sealed class ClashLogStream : IDisposable
             }
             catch (Exception ex)
             {
-                _logger.Debug(ex, "[ConnHealth] Clash /logs stream dropped; retry in {Sec}s", backoff.TotalSeconds);
+                LogStreamFailure(_logger, ex, backoff);
             }
 
             try { await Task.Delay(backoff, ct).ConfigureAwait(false); }

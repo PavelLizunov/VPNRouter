@@ -149,6 +149,13 @@ public sealed class AppAutostartTgProxyTests
         Assert.Contains("Convert.ToHexStringLower", stripped);
     }
 
+    /// <summary>
+    /// If the configured port is already occupied / busy by an unknown listener,
+    /// or a second App instance holds it, the bootstrap fails closed and skips
+    /// spawn (busy unknown skip) without claiming ownership or adopting foreign
+    /// listeners. TgProxyManager.IsAnyRunning and ZapretManager.IsWinwsRunning
+    /// are the canonical occupancy / idempotency checks.
+    /// </summary>
     [Fact]
     public void Bootstrap_IsIdempotent_SkipsSpawnWhenAlreadyRunning()
     {
@@ -158,12 +165,9 @@ public sealed class AppAutostartTgProxyTests
 
         var stripped = StripLineComments(src);
 
-        // If a previous-session daemon is still running (LoadSettingsIntoUI
-        // already detected this case at MainWindowViewModel.cs:2468), or a
-        // second App instance launches via HKCU\Run during a slow login,
-        // the bootstrap must NOT double-spawn. TgProxyManager.IsAnyRunning
-        // and ZapretManager.IsWinwsRunning are the canonical idempotency
-        // checks.
+        // If the configured port is already occupied/busy, fail closed and skip spawn
+        // (busy unknown skip; never adopt foreign listeners). TgProxyManager.IsAnyRunning
+        // and ZapretManager.IsWinwsRunning are the canonical idempotency / occupancy checks.
         Assert.Contains("TgProxyManager.IsAnyRunning(TgProxyPort)", stripped);
         Assert.Contains("ZapretManager.IsWinwsRunning()", stripped);
     }
