@@ -539,7 +539,9 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True(IsLockOwned(lockInstance),
                 "TUN ownership lock must remain owned across successful Windows restart.");
             Assert.True(_nativeLookupCount > 0);
-            Assert.Empty(_fakeDiagRunner.RunCalls);
+            var request = Assert.Single(_fakeDiagRunner.RunCalls);
+            Assert.Equal("netsh", request.ExecutablePath);
+            Assert.Equal(new[] { "interface", "show", "interface" }, request.Arguments);
         }
         finally
         {
