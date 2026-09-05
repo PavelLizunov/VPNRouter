@@ -42,19 +42,7 @@ public partial class AboutWindow : Window
 
     private void OnOpenRepoClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://github.com/PavelLizunov/VPNRouter",
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
-            // Default browser unavailable / denied — no-op, this is just a
-            // convenience link, the user can paste the URL manually.
-        }
+        VPNRouter.App.Services.UrlLauncher.TryOpenUrl("https://github.com/PavelLizunov/VPNRouter");
     }
 
     /// <summary>

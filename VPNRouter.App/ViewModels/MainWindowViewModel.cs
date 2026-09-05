@@ -6357,14 +6357,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static void OpenUrl(string url)
     {
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", url);
-        }
+        VPNRouter.App.Services.UrlLauncher.TryOpenUrl(url);
     }
 
     [RelayCommand]
