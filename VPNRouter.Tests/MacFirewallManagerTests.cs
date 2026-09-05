@@ -1250,8 +1250,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.True(sut.IsArmed);
         sut.EnableBlockRules();
 
-        var load = fake.RunCalls.FirstOrDefault(c =>
-            c.ExecutablePath == "/sbin/pfctl" && c.Arguments.Contains("-a") && c.Arguments.Contains("-f"));
+        var load = fake.RunCalls.FirstOrDefault(IsAnchorLoad);
         Assert.NotNull(load);
         var rules = File.ReadAllText(load!.Arguments.Last());
 
@@ -1280,8 +1279,7 @@ public class MacFirewallManagerTests : IDisposable
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
         sut.EnableBlockRules();
 
-        var load = fake.RunCalls.FirstOrDefault(c =>
-            c.ExecutablePath == "/sbin/pfctl" && c.Arguments.Contains("-f"));
+        var load = fake.RunCalls.FirstOrDefault(IsAnchorLoad);
         Assert.NotNull(load);
         var rules = File.ReadAllText(load!.Arguments.Last());
 
@@ -1301,7 +1299,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsAnchorMode);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonB = """
         {
@@ -1322,14 +1320,13 @@ public class MacFirewallManagerTests : IDisposable
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
         // MUST NOT call EnsureCarrier (pfctl -sr), pfctl -E, pfctl -F rules, or DisableBlockRules
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-sr"));
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-E"));
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-F"));
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-sr"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-E"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-F"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-X"));
 
         // Exactly one anchor reload call: pfctl -a Anchor -f <rulesPath>
-        var refreshCall = Assert.Single(fake.RunCalls, c =>
-            c.ExecutablePath == "/sbin/pfctl" && c.Arguments.Contains("-a") && c.Arguments.Contains("-f"));
+        var refreshCall = Assert.Single(fake.RunCalls.Skip(callsBefore), IsAnchorLoad);
 
         var refreshedRules = File.ReadAllText(refreshCall.Arguments.Last());
         Assert.Contains("pass out quick inet from any to 203.0.113.20", refreshedRules);
@@ -1346,7 +1343,7 @@ public class MacFirewallManagerTests : IDisposable
     {
         WriteConfig("198.51.100.1");
         // Make /etc/pf.conf missing so EnsureCarrier fails and it falls back to legacy broad load
-        if (File.Exists(_pfConf)) File.Delete(_pfConf);
+        if (File.Exists(_pfconf)) File.Delete(_pfconf);
 
         var fake = OkRunner();
         var sut = Sut(fake);
@@ -1356,7 +1353,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.False(sut.IsAnchorMode);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonB = """
         {
@@ -1368,11 +1365,10 @@ public class MacFirewallManagerTests : IDisposable
 
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-a"));
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-E"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-a"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-E"));
 
-        var refreshCall = Assert.Single(fake.RunCalls, c =>
-            c.ExecutablePath == "/sbin/pfctl" && c.Arguments.Contains("-f") && !c.Arguments.Contains("-a"));
+        var refreshCall = Assert.Single(fake.RunCalls.Skip(callsBefore), IsMainLoad);
 
         var refreshedRules = File.ReadAllText(refreshCall.Arguments.Last());
         Assert.Contains("pass out quick inet from any to 203.0.113.30", refreshedRules);
@@ -1396,7 +1392,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
 
         // Fail subsequent pfctl load
-        fake.OnRun(r => r.ExecutablePath == "/sbin/pfctl" && r.Arguments.Contains("-f"), Fail("pfctl error"));
+        fake.OnRun(IsAnchorLoad, Fail("pfctl error"));
 
         var committedJsonB = """
         {
@@ -1443,7 +1439,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsArmed);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonB = """
         {
@@ -1459,7 +1455,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), IsAnchorFlush);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
@@ -1475,7 +1471,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsArmed);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         // Malformed JSON with disabled branch must still lift rules and disarm without throwing
         sut.UpdateCommittedConfig("{ not valid json content", enabledForFullTunnel: false);
@@ -1483,7 +1479,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), IsAnchorFlush);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
@@ -1499,7 +1495,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsArmed);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonWithHost = """
         {
@@ -1515,7 +1511,7 @@ public class MacFirewallManagerTests : IDisposable
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), IsAnchorFlush);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 

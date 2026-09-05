@@ -1044,7 +1044,7 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.EnableBlockRules();
         Assert.True(sut.IsLoaded);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonB = """
         {
@@ -1065,8 +1065,8 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
         // Active refresh MUST NOT delete table or disable/unblock first
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("delete"));
-        var refreshCall = Assert.Single(fake.RunCalls, c =>
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("delete"));
+        var refreshCall = Assert.Single(fake.RunCalls.Skip(callsBefore), c =>
             c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("nft") && c.Arguments.Contains("-f"));
 
         var refreshedRules = File.ReadAllText(refreshCall.Arguments.Last());
@@ -1138,7 +1138,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsArmed);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonB = """
         {
@@ -1154,7 +1154,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
@@ -1170,7 +1170,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsArmed);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         // Malformed JSON with disabled branch must still lift rules and disarm without throwing
         sut.UpdateCommittedConfig("{ not valid json content", enabledForFullTunnel: false);
@@ -1178,7 +1178,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
@@ -1194,7 +1194,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.True(sut.IsLoaded);
         Assert.True(sut.IsArmed);
 
-        fake.RunCalls.Clear();
+        int callsBefore = fake.RunCalls.Count;
 
         var committedJsonWithHost = """
         {
@@ -1210,7 +1210,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("delete") && c.Arguments.Contains("table"));
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
