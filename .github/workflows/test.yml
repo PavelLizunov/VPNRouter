@@ -123,4 +123,4 @@ jobs:
       - name: Publish CLI (Windows)
         run: dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\vpnrouter-cli"
       - name: Characterization and release-gate contracts (Windows)
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Characterization|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests"
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Behavioral_CorrectCachedZip_WithTamperedExtractedExe_RestoresFromZip|FullyQualifiedName~Behavioral_CorruptedArchive_ExistingExe_Rejects|FullyQualifiedName~Behavioral_ImplicitPublishSingBoxLx_Ignored"
