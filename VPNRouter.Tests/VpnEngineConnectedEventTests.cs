@@ -168,8 +168,16 @@ public sealed class VpnEngineConnectedEventTests
         var singBoxSettings = new SingBoxSettings { ClashApi = "127.0.0.1:9090" };
         var manager = new SingBoxManager(singBoxSettings, logger: null, http: fakeHttp, runner: fakeRunner);
         SetField(manager, "_handle", fakeHandle);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager, SingBoxState.Running);
         SetField(manager, "State", SingBoxState.Running);
         return (manager, fakeHandle);
+    }
+
+    private static FakeHttpClient GetFakeHttp(SingBoxManager manager)
+    {
+        var field = typeof(SingBoxManager).GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic);
+        return (FakeHttpClient)field!.GetValue(manager)!;
     }
 
     private static void InvokeSetSingBoxManager(object host, SingBoxManager manager)
@@ -267,6 +275,7 @@ public sealed class VpnEngineConnectedEventTests
 
         Assert.Single(captured);
         Assert.Equal(31415, captured[0]);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
 
         SafeDetach(engine);
     }
@@ -378,6 +387,8 @@ public sealed class VpnEngineConnectedEventTests
         Assert.Equal(2, captured.Count);
         Assert.Equal(11111, captured[0]);
         Assert.Equal(22222, captured[1]);
+        Assert.Empty(GetFakeHttp(manager1).SentRequests);
+        Assert.Empty(GetFakeHttp(manager2).SentRequests);
 
         SafeDetach(engine);
     }
@@ -436,6 +447,74 @@ public sealed class VpnEngineConnectedEventTests
         InvokeOnConnected(host, pid: 44444);
 
         Assert.Empty(captured);
+
+        SafeDetach(engine);
+    }
+
+    // ─── Test 6: Failstop via actual engine.Stop uses fake/seams and suppresses event without networking ─
+
+    [Fact]
+    public void Connected_FailStop_ActualEngineStop_UsesFakeSeams_SuppressedWithoutNetworking()
+    {
+        using var sessionCts = new CancellationTokenSource();
+        using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
+        var captured = new List<int>();
+        engine.Connected += pid => captured.Add(pid);
+
+        var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(55555);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 55555);
+
+        // Fail-stop: invoke actual engine.Stop() which uses fake/seams
+        engine.Stop();
+
+        InvokeOnConnected(host, pid: 55555);
+
+        Assert.Empty(captured);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
+
+        SafeDetach(engine);
+    }
+
+    // ─── Test 7: Failstop via exited handle or non-running state suppresses event without networking ─
+
+    [Fact]
+    public void Connected_FailStop_HandleExitedOrStateNotRunning_SuppressedWithoutNetworking()
+    {
+        using var sessionCts = new CancellationTokenSource();
+        using var engine = BuildIdleEngine();
+        SetField(engine, "_sessionCts", sessionCts);
+
+        var captured = new List<int>();
+        engine.Connected += pid => captured.Add(pid);
+
+        var host = BuildHostAdapter(engine);
+        var (manager, handle) = CreateFakeManager(66666);
+        InvokeSetSingBoxManager(host, manager);
+        InvokeOnSingBoxStarted(host, 66666);
+
+        // Case A: Handle exited
+        handle.Kill();
+        Assert.True(handle.HasExited);
+
+        InvokeOnConnected(host, pid: 66666);
+        Assert.Empty(captured);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
+
+        // Case B: State is not Running
+        var (manager2, handle2) = CreateFakeManager(77777);
+        InvokeSetSingBoxManager(host, manager2);
+        InvokeOnSingBoxStarted(host, 77777);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager2, SingBoxState.Stopped);
+        SetField(manager2, "State", SingBoxState.Stopped);
+
+        InvokeOnConnected(host, pid: 77777);
+        Assert.Empty(captured);
+        Assert.Empty(GetFakeHttp(manager2).SentRequests);
 
         SafeDetach(engine);
     }

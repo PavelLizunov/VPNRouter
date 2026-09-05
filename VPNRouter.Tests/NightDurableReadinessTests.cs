@@ -12,6 +12,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Serilog;
 using VPNRouter.App.ViewModels;
+using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -36,14 +37,22 @@ public sealed class NightDurableReadinessTests
     private static void SetField(object target, string name, object? value)
     {
         var type = target.GetType();
+        var prop = type.GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            ?? (name.StartsWith('_') && name.Length > 1
+                ? type.GetProperty($"{char.ToUpperInvariant(name[1])}{name[2..]}", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                : null);
+        if (prop != null && prop.CanWrite)
+        {
+            prop.SetValue(target, value);
+        }
         var field = type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
             ?? type.GetField($"<{name}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
             ?? (name.StartsWith('_') && name.Length > 1
                 ? type.GetField($"<{char.ToUpperInvariant(name[1])}{name[2..]}>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                 : null);
-        if (field is null)
+        if (field is null && prop is null)
             throw new InvalidOperationException($"Field '{name}' not found on {type.FullName}.");
-        field.SetValue(target, value);
+        field?.SetValue(target, value);
     }
 
     private static T? GetField<T>(object target, string name)
@@ -54,6 +63,12 @@ public sealed class NightDurableReadinessTests
         if (field is null)
             throw new InvalidOperationException($"Field '{name}' not found on {type.FullName}.");
         return (T?)field.GetValue(target);
+    }
+
+    private static FakeHttpClient GetFakeHttp(SingBoxManager manager)
+    {
+        var field = typeof(SingBoxManager).GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic);
+        return (FakeHttpClient)field!.GetValue(manager)!;
     }
 
     private static async Task DrainUiQueueAsync()
@@ -74,7 +89,10 @@ public sealed class NightDurableReadinessTests
         var singBoxSettings = new SingBoxSettings { ClashApi = "127.0.0.1:9090" };
         var manager = new SingBoxManager(singBoxSettings, logger: null, http: fakeHttp, runner: fakeRunner);
         SetField(manager, "_handle", fakeHandle);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager, SingBoxState.Running);
         SetField(manager, "_state", SingBoxState.Running);
+        SetField(manager, "State", SingBoxState.Running);
 
         var sessionCts = new CancellationTokenSource();
 
@@ -87,6 +105,40 @@ public sealed class NightDurableReadinessTests
 
         return (engine, manager, fakeHandle, sessionCts);
     }
+
+    private sealed class StubProcessScanner : IProcessScanner
+    {
+        public ScanResult ScanForProfile(Profile profile) => new();
+    }
+
+    private sealed class StubFirewallManager : IFirewallManager
+    {
+        public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
+        public void EnableBlockRules() { }
+        public void DisableBlockRules() { }
+        public void DeleteAllRules() { }
+        public void Dispose() { }
+    }
+
+    private sealed class StubProcessMonitor : IProcessMonitor
+    {
+        public event EventHandler<ProcessEventArgs>? ProcessStarted;
+        public event EventHandler<ProcessEventArgs>? ProcessStopped;
+        public void Start() { }
+        public void Stop() { }
+        public void Dispose() { }
+    }
+
+#pragma warning disable CS0618
+    private static VpnEngine BuildSeamEngine() =>
+        new VpnEngine(
+            scanner: new StubProcessScanner(),
+            firewallFactory: () => new StubFirewallManager(),
+            monitorFactory: () => new StubProcessMonitor(),
+            logger: null,
+            dnsHardening: new NullWindowsDnsHardening(),
+            splitDriver: new FakeSplitTunnelDriver());
+#pragma warning restore CS0618
 
     private static MainWindowViewModel CreateIsolatedVm(VpnEngine engine)
     {
@@ -174,6 +226,7 @@ public sealed class NightDurableReadinessTests
 
         Assert.True(vm.IsConnected);
         Assert.Equal(Strings.StopVPN, vm.ConnectButtonText);
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
     }
 
     [AvaloniaFact]
@@ -377,7 +430,10 @@ public sealed class NightDurableReadinessTests
 
         var manager2 = new SingBoxManager(new SingBoxSettings { ClashApi = "127.0.0.1:9090" }, logger: null, http: fakeHttp2, runner: fakeRunner2);
         SetField(manager2, "_handle", fakeHandle2);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager2, SingBoxState.Running);
         SetField(manager2, "_state", SingBoxState.Running);
+        SetField(manager2, "State", SingBoxState.Running);
 
         SetField(engine, "_singBox", manager2);
         SetField(engine, "_warmupConfirmed", false);
@@ -397,12 +453,14 @@ public sealed class NightDurableReadinessTests
         var (engine, manager, handle, sessionCts) = CreateFakeEngine(12345);
         var guard = engine.CaptureReadinessGuard(12345);
         Assert.True(guard());
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
 
         // Replace handle on the SAME manager with a new handle having the SAME PID
         var replacementHandle = new FakeProcessHandle(12345);
         SetField(manager, "_handle", replacementHandle);
 
         Assert.False(guard(), "CaptureReadinessGuard must reject when handle identity changes on the same manager with the same PID.");
+        Assert.Empty(GetFakeHttp(manager).SentRequests);
     }
 
     [AvaloniaFact]
@@ -492,5 +550,66 @@ public sealed class NightDurableReadinessTests
 
         Assert.True(Math.Abs(connectedUnsubIdx - statusUnsubIdx) < 200,
             "Connected unsubscription must be placed directly alongside StatusChanged in Dispose");
+    }
+
+    [Fact]
+    public void CaptureReadinessGuard_FailStop_ActualEngineStop_UsesFakeSeams_RejectsGuardWithoutNetworking()
+    {
+        using var engine = BuildSeamEngine();
+
+        var fakeRunner = new FakeProcessRunner();
+        var fakeHandle = new FakeProcessHandle(12345);
+        fakeRunner.OnStart(_ => true, _ => fakeHandle);
+
+        var fakeHttp = new FakeHttpClient();
+        var manager = new SingBoxManager(new SingBoxSettings { ClashApi = "127.0.0.1:9090" }, logger: null, http: fakeHttp, runner: fakeRunner);
+        SetField(manager, "_handle", fakeHandle);
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager, SingBoxState.Running);
+        SetField(manager, "State", SingBoxState.Running);
+
+        using var sessionCts = new CancellationTokenSource();
+        SetField(engine, "_singBox", manager);
+        SetField(engine, "_sessionCts", sessionCts);
+        SetField(engine, "_failoverGeneration", 1L);
+        SetField(engine, "_warmupConfirmed", true);
+
+        var guard = engine.CaptureReadinessGuard(12345);
+        Assert.True(guard());
+        Assert.Empty(fakeHttp.SentRequests);
+
+        // Fail-stop: invoke actual engine.Stop() which executes TeardownInternal using fake/seams
+        engine.Stop();
+
+        Assert.False(guard(), "CaptureReadinessGuard must reject after actual engine.Stop().");
+        Assert.Empty(fakeHttp.SentRequests);
+
+        SetField(engine, "_singBox", null);
+    }
+
+    [Fact]
+    public void CaptureReadinessGuard_FailStop_HandleExitedOrStateNotRunning_RejectsWithoutNetworking()
+    {
+        var (engine, manager, handle, sessionCts) = CreateFakeEngine(12345);
+        var guard = engine.CaptureReadinessGuard(12345);
+        Assert.True(guard());
+        var fakeHttp = GetFakeHttp(manager);
+        Assert.Empty(fakeHttp.SentRequests);
+
+        // 1. Handle exited (killed or process exited)
+        handle.Kill();
+        Assert.True(handle.HasExited);
+        Assert.False(guard(), "CaptureReadinessGuard must reject when handle has exited.");
+        Assert.Empty(fakeHttp.SentRequests);
+
+        // 2. Manager state is not Running
+        var (engine2, manager2, handle2, sessionCts2) = CreateFakeEngine(23456);
+        var guard2 = engine2.CaptureReadinessGuard(23456);
+        Assert.True(guard2());
+        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?.SetValue(manager2, SingBoxState.Stopped);
+        SetField(manager2, "State", SingBoxState.Stopped);
+        Assert.False(guard2(), "CaptureReadinessGuard must reject when manager state is not Running.");
+        Assert.Empty(GetFakeHttp(manager2).SentRequests);
     }
 }

@@ -220,7 +220,8 @@ public class VpnEngine : IDisposable
                 if (_failoverGeneration != capturedGeneration) return false;
                 if (capturedHandle == null || !ReferenceEquals(_singBox.OwnedProcessHandle, capturedHandle)) return false;
                 if (capturedSingBox.Pid != pid) return false;
-                if (!capturedSingBox.IsRunning()) return false;
+                if (capturedHandle.HasExited) return false;
+                if (capturedSingBox.State != SingBoxState.Running) return false;
                 return true;
             }
             catch
@@ -1641,10 +1642,10 @@ public class VpnEngine : IDisposable
                 if (_sessionCts == null || _sessionCts.IsCancellationRequested || !ReferenceEquals(_engine._sessionCts, _sessionCts))
                     return;
 
-                if (_singBoxManager == null || !ReferenceEquals(_engine._singBox, _singBoxManager) || _singBoxManager.Pid != pid || !_singBoxManager.IsRunning())
+                if (_singBoxManager == null || !ReferenceEquals(_engine._singBox, _singBoxManager) || _singBoxManager.Pid != pid || _singBoxManager.State != SingBoxState.Running)
                     return;
 
-                if (_startedHandle == null || !ReferenceEquals(_singBoxManager.OwnedProcessHandle, _startedHandle))
+                if (_startedHandle == null || _startedHandle.HasExited || !ReferenceEquals(_singBoxManager.OwnedProcessHandle, _startedHandle))
                     return;
             }
             catch
