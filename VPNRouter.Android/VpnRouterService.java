@@ -100,16 +100,26 @@ import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 
-import io.nekohasekai.libbox.BoxService;
+import io.nekohasekai.libbox.BridgeOptions;
+import io.nekohasekai.libbox.BridgeSession;
+import io.nekohasekai.libbox.CommandServer;
+import io.nekohasekai.libbox.CommandServerHandler;
+import io.nekohasekai.libbox.ConnectionOwner;
 import io.nekohasekai.libbox.InterfaceUpdateListener;
 import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.LocalDNSTransport;
+import io.nekohasekai.libbox.NeighborUpdateListener;
 import io.nekohasekai.libbox.NetworkInterfaceIterator;
+import io.nekohasekai.libbox.Notification;
+import io.nekohasekai.libbox.OverrideOptions;
 import io.nekohasekai.libbox.PlatformInterface;
+import io.nekohasekai.libbox.PlatformUser;
 import io.nekohasekai.libbox.RoutePrefix;
 import io.nekohasekai.libbox.RoutePrefixIterator;
 import io.nekohasekai.libbox.SetupOptions;
+import io.nekohasekai.libbox.ShellSession;
 import io.nekohasekai.libbox.StringIterator;
+import io.nekohasekai.libbox.SystemProxyStatus;
 import io.nekohasekai.libbox.TunOptions;
 import io.nekohasekai.libbox.WIFIState;
 
@@ -203,14 +213,6 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
     private static boolean libboxSetupDone = false;
-    // A10 (2026-06-15): process-lifetime cache of the system CA store as PEM
-    // strings. The AndroidCAStore is effectively immutable for a process run, but
-    // libbox can call systemCertificates() on every TLS-using connection — re-
-    // enumerating + Base64-PEM-encoding ~150 certs each time is needless work. A CA
-    // change requires Settings and is picked up on the next app launch. Held on the
-    // outer service (Java forbids static fields in the non-static PlatformInterface
-    // inner class); volatile for the cross-thread publish.
-    private static volatile List<String> sCachedSystemCertificatePems;
 
     private String pendingConfigJson;
     private String[] pendingAllowedPackages;
@@ -229,7 +231,7 @@ public final class VpnRouterService extends VpnService {
     // B1 (v2.42.0-r14): volatile — written on the lifecycle worker, read on the
     // main/binder thread (onTaskRemoved, the restore-branch hint).
     private volatile boolean slipstreamRunning;
-    private volatile BoxService boxService;
+    private volatile CommandServer boxService;
     private volatile ParcelFileDescriptor currentPfd;
     // v2.32.0 AND-NETRES — wake-lock held during connect-init so the
     // box service can finish its first dial even on a screen-off / Doze
@@ -913,7 +915,6 @@ public final class VpnRouterService extends VpnService {
         options.setBasePath(filesDir.getAbsolutePath());
         options.setWorkingPath(workingDir.getAbsolutePath());
         options.setTempPath(cacheDir.getAbsolutePath());
-        options.setFixAndroidStack(false);
         Libbox.setup(options);
 
         // Bug-AND-011 / Critical-1 follow-up (2026-05-16 code review):
@@ -944,20 +945,13 @@ public final class VpnRouterService extends VpnService {
 
         Libbox.checkConfig(pendingConfigJson);
 
-        // v2.32.0 (2026-05-07) — libbox API migration. The 1.13.x AAR
-        // dropped OverrideOptions + CommandServer.startOrReloadService;
-        // service creation now goes directly through Libbox.newService.
-        // CommandServer remains in libbox but is purely a Clash-API RPC
-        // gateway (Connections / Groups / URLTest / Stats). VPNRouter on
-        // Android drives lifecycle from the Java side via Intent
-        // broadcasts and never exposes a Clash dashboard, so we drop the
-        // CommandServer entirely. Reference: BoxService.kt in
-        // sagernet/sing-box-for-android — minimal flow is identical.
         VpnRouterPlatformInterface platformInterface = new VpnRouterPlatformInterface(this);
-        boxService = Libbox.newService(pendingConfigJson, platformInterface);
-        boxService.start();
+        VpnRouterCommandHandler handler = new VpnRouterCommandHandler(this);
+        CommandServer server = Libbox.newCommandServer(handler, platformInterface);
+        boxService = server;
+        server.startOrReloadService(pendingConfigJson, new OverrideOptions());
 
-        Log.i(LOG_TAG, "libbox service started successfully (v2.32.0)");
+        Log.i(LOG_TAG, "libbox service started successfully");
     }
 
     /**
@@ -1271,7 +1265,7 @@ public final class VpnRouterService extends VpnService {
 
     private boolean teardownTunnelResources() {
         stopStatsPoller();   // P1: stop the stats poll on every teardown
-        final BoxService bs = boxService;
+        final CommandServer bs = boxService;
         boxService = null;
         // LOW (double-broadcast guard): record whether anything was actually live
         // BEFORE tearing it down, so stopTunnel can drop the foreground
@@ -1288,9 +1282,15 @@ public final class VpnRouterService extends VpnService {
                 @Override
                 public void run() {
                     try {
-                        bs.close();
+                        bs.closeService();
                     } catch (Exception e) {
-                        Log.w(LOG_TAG, "boxService.close threw: " + e.getMessage());
+                        Log.w(LOG_TAG, "boxService.closeService threw: " + e.getMessage());
+                    } finally {
+                        try {
+                            bs.close();
+                        } catch (Exception e) {
+                            Log.w(LOG_TAG, "boxService.close threw: " + e.getMessage());
+                        }
                     }
                 }
             });
@@ -1529,11 +1529,15 @@ public final class VpnRouterService extends VpnService {
 
         boolean dnsAdded = false;
         try {
-            String dns = options.getDNSServerAddress() != null
-                    ? options.getDNSServerAddress().getValue() : null;
-            if (dns != null && !dns.isEmpty()) {
-                builder.addDnsServer(dns);
-                dnsAdded = true;
+            StringIterator dnsIter = options.getDNSServerAddress();
+            if (dnsIter != null) {
+                while (dnsIter.hasNext()) {
+                    String dns = dnsIter.next();
+                    if (dns != null && !dns.isEmpty()) {
+                        builder.addDnsServer(dns);
+                        dnsAdded = true;
+                    }
+                }
             }
         } catch (Exception ignored) {}
         if (!dnsAdded) builder.addDnsServer("1.1.1.1");
@@ -1645,6 +1649,66 @@ public final class VpnRouterService extends VpnService {
                 if (allow) builder.addAllowedApplication(pkg);
                 else builder.addDisallowedApplication(pkg);
             } catch (PackageManager.NameNotFoundException ignored) {}
+        }
+    }
+
+    private static final class VpnRouterCommandHandler implements CommandServerHandler {
+        private final VpnRouterService service;
+
+        VpnRouterCommandHandler(VpnRouterService service) {
+            this.service = service;
+        }
+
+        @Override
+        public void serviceStop() throws Exception {
+            service.cancelScheduledRestart();
+            service.submitLifecycle(new Runnable() {
+                @Override
+                public void run() {
+                    service.stopTunnel();
+                    service.stopSelf();
+                }
+            });
+        }
+
+        @Override
+        public void serviceReload() throws Exception {
+            service.submitLifecycle(new Runnable() {
+                @Override
+                public void run() {
+                    service.startTunnel();
+                }
+            });
+        }
+
+        @Override
+        public SystemProxyStatus getSystemProxyStatus() throws Exception {
+            SystemProxyStatus status = new SystemProxyStatus();
+            status.setAvailable(false);
+            status.setEnabled(false);
+            return status;
+        }
+
+        @Override
+        public void setSystemProxyEnabled(boolean enabled) throws Exception {
+            if (enabled) {
+                throw new UnsupportedOperationException("System proxy not supported");
+            }
+        }
+
+        @Override
+        public void triggerNativeCrash() throws Exception {
+            throw new UnsupportedOperationException("Native crash not supported");
+        }
+
+        @Override
+        public void writeDebugMessage(String message) {
+            // Drop payload entirely to prevent leaking core debug config secrets/URIs.
+        }
+
+        @Override
+        public int connectSSHAgent() throws Exception {
+            throw new UnsupportedOperationException("SSH agent not supported");
         }
     }
 
@@ -1814,41 +1878,6 @@ public final class VpnRouterService extends VpnService {
             } catch (Exception e) {
                 Log.w(LOG_TAG, "getInterfaces failed: " + e.getMessage());
                 return null;
-            }
-        }
-
-        /**
-         * v3.0 Phase 5 — system trust anchors. Pre-5 returned null;
-         * sing-box had NO CAs and every TLS handshake failed.
-         */
-        @Override
-        public StringIterator systemCertificates() {
-            // A10: serve the process-lifetime cache when warm. Hand out a fresh
-            // copy so the iterator can never disturb the shared (immutable) list.
-            List<String> cached = sCachedSystemCertificatePems;
-            if (cached != null) {
-                return new SimpleStringIterator(new ArrayList<>(cached));
-            }
-            try {
-                List<String> certs = new ArrayList<>();
-                KeyStore ks = KeyStore.getInstance("AndroidCAStore");
-                ks.load(null, null);
-                Enumeration<String> aliases = ks.aliases();
-                while (aliases.hasMoreElements()) {
-                    Certificate cert = ks.getCertificate(aliases.nextElement());
-                    if (cert == null) continue;
-                    String pem = "-----BEGIN CERTIFICATE-----\n"
-                            + Base64.encodeToString(cert.getEncoded(), Base64.DEFAULT)
-                            + "-----END CERTIFICATE-----";
-                    certs.add(pem);
-                }
-                // Publish an immutable snapshot. A benign race just recomputes the
-                // same set — no lock needed.
-                sCachedSystemCertificatePems = Collections.unmodifiableList(certs);
-                return new SimpleStringIterator(new ArrayList<>(certs));
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "systemCertificates failed: " + e.getMessage());
-                return new SimpleStringIterator(new ArrayList<>());
             }
         }
 
@@ -2052,67 +2081,111 @@ public final class VpnRouterService extends VpnService {
         }
 
         @Override
-        public void sendNotification(io.nekohasekai.libbox.Notification notification) {
+        public void sendNotification(Notification notification) throws Exception {
             String type = notification != null ? notification.getTypeName() : "null";
             String title = notification != null ? notification.getTitle() : "null";
             Log.i("Libbox", "notification: type=" + type + " title=" + title);
         }
 
         @Override
-        public int findConnectionOwner(
+        public void cancelNotification(String identifier, int typeID) throws Exception {
+            // no-op matching existing notifications supported scope
+        }
+
+        @Override
+        public ConnectionOwner findConnectionOwner(
                 int ipProtocol,
                 String sourceAddress, int sourcePort,
                 String destinationAddress, int destinationPort) throws Exception {
-            // v2.32.0 (2026-05-07) — libbox API drift: return type
-            // changed from ConnectionOwner (a struct) to a raw int uid,
-            // with -1 meaning "owner unknown / unsupported". sing-box
-            // treats -1 as a fallback that disables per-uid rules for
-            // the connection. We filter at the VpnService.Builder layer
-            // (addAllowed/DisallowedApplication) and don't enable
-            // sing-box per-uid rules in our generated config, so a
-            // stub return is fine and saves the JNI round-trip into
-            // ConnectivityManager.getConnectionOwnerUid that the
-            // sagernet reference does on Android Q+.
-            return -1;
-        }
-
-        // ── v2.32.0 (2026-05-07) libbox API drift: PlatformInterface gained
-        // three new abstract methods. Stub implementations follow:
-        //
-        //   writeLog(String)    — replaces CommandServerHandler.writeDebugMessage,
-        //                          libbox now logs through PlatformInterface
-        //   packageNameByUid(int) — used for human-readable per-uid logs
-        //   uidByPackageName(String) — inverse of above
-        //
-        // All three are best-effort log-side helpers; functional VPN does
-        // not require them to return real data. We log the writeLog
-        // calls so libbox-internal diagnostics still surface, and use
-        // PackageManager for the uid↔package mapping when convenient.
-
-        @Override
-        public void writeLog(String message) {
-            if (message != null && !message.isEmpty()) {
-                Log.d("Libbox", message);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ConnectivityManager cm = (ConnectivityManager)
+                        service.getSystemService(CONNECTIVITY_SERVICE);
+                if (cm != null) {
+                    int uid = cm.getConnectionOwnerUid(
+                            ipProtocol,
+                            new InetSocketAddress(sourceAddress, sourcePort),
+                            new InetSocketAddress(destinationAddress, destinationPort));
+                    if (uid >= 0) {
+                        ConnectionOwner owner = new ConnectionOwner();
+                        owner.setUserId(uid);
+                        List<String> pkgList = new ArrayList<>();
+                        try {
+                            String[] packages = service.getPackageManager().getPackagesForUid(uid);
+                            if (packages != null) {
+                                Collections.addAll(pkgList, packages);
+                            }
+                        } catch (Exception ignored) {}
+                        owner.setAndroidPackageNames(new SimpleStringIterator(pkgList));
+                        return owner;
+                    }
+                }
             }
+            throw new Exception("unknown connection owner");
         }
 
         @Override
-        public String packageNameByUid(int uid) throws Exception {
-            try {
-                String[] packages = service.getPackageManager().getPackagesForUid(uid);
-                if (packages != null && packages.length > 0) return packages[0];
-            } catch (Exception ignore) { /* best-effort */ }
-            return "uid=" + uid;
+        public void startNeighborMonitor(NeighborUpdateListener listener) throws Exception {
+            throw new UnsupportedOperationException("Neighbor monitor not supported");
         }
 
         @Override
-        public int uidByPackageName(String packageName) throws Exception {
-            try {
-                return service.getPackageManager()
-                        .getApplicationInfo(packageName, 0).uid;
-            } catch (Exception ignore) {
-                return -1;
-            }
+        public void closeNeighborMonitor(NeighborUpdateListener listener) throws Exception {
+            throw new UnsupportedOperationException("Neighbor monitor not supported");
+        }
+
+        @Override
+        public void registerMyInterface(String name) {
+        }
+
+        @Override
+        public boolean usePlatformShell() {
+            return false;
+        }
+
+        @Override
+        public void checkPlatformShell() throws Exception {
+            throw new UnsupportedOperationException("Platform shell not supported");
+        }
+
+        @Override
+        public ShellSession openShellSession(
+                PlatformUser user,
+                String command,
+                StringIterator environ,
+                String term,
+                int rows,
+                int cols) throws Exception {
+            throw new UnsupportedOperationException("Platform shell not supported");
+        }
+
+        @Override
+        public PlatformUser lookupUser(String username) throws Exception {
+            throw new UnsupportedOperationException("Lookup user not supported");
+        }
+
+        @Override
+        public String lookupSFTPServer() throws Exception {
+            throw new UnsupportedOperationException("SFTP server not supported");
+        }
+
+        @Override
+        public String readSystemSSHHostKey() throws Exception {
+            throw new UnsupportedOperationException("System SSH host key not supported");
+        }
+
+        @Override
+        public String tailscaleHostname() {
+            return "";
+        }
+
+        @Override
+        public boolean usePlatformBridge() {
+            return false;
+        }
+
+        @Override
+        public BridgeSession createBridge(BridgeOptions options) throws Exception {
+            throw new UnsupportedOperationException("Platform bridge not supported");
         }
     }
 

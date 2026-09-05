@@ -8,7 +8,7 @@
 // traffic came back. Without that on Android, users couldn't tell which
 // configs the TCP+TLS check had upgraded vs the ones that just sat there.
 //
-// This Java helper wraps a transient libbox BoxService (no TUN, just SOCKS
+// This Java helper wraps a transient libbox CommandServer (no TUN, just SOCKS
 // + the VLESS outbound from the config under test) and a Java HTTP probe
 // through that SOCKS proxy. The C# side
 // (VPNRouter.Android/AndroidFreeConfigDeepVerifier.cs) builds the config
@@ -54,14 +54,24 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.nekohasekai.libbox.BoxService;
+import io.nekohasekai.libbox.BridgeOptions;
+import io.nekohasekai.libbox.BridgeSession;
+import io.nekohasekai.libbox.CommandServer;
+import io.nekohasekai.libbox.CommandServerHandler;
+import io.nekohasekai.libbox.ConnectionOwner;
 import io.nekohasekai.libbox.InterfaceUpdateListener;
 import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.LocalDNSTransport;
+import io.nekohasekai.libbox.NeighborUpdateListener;
 import io.nekohasekai.libbox.NetworkInterfaceIterator;
+import io.nekohasekai.libbox.Notification;
+import io.nekohasekai.libbox.OverrideOptions;
 import io.nekohasekai.libbox.PlatformInterface;
+import io.nekohasekai.libbox.PlatformUser;
 import io.nekohasekai.libbox.SetupOptions;
+import io.nekohasekai.libbox.ShellSession;
 import io.nekohasekai.libbox.StringIterator;
+import io.nekohasekai.libbox.SystemProxyStatus;
 import io.nekohasekai.libbox.TunOptions;
 import io.nekohasekai.libbox.WIFIState;
 
@@ -74,7 +84,7 @@ public final class AndroidDeepVerifyBox {
 
     /**
      * Synchronously verify a single config by spinning up a transient
-     * libbox BoxService, then HTTP-GETting <code>probeUrl</code> through
+     * libbox CommandServer, then HTTP-GETting <code>probeUrl</code> through
      * its local SOCKS inbound on <code>socksPort</code>.
      *
      * <p>Returns a JSON object as a string:
@@ -112,7 +122,7 @@ public final class AndroidDeepVerifyBox {
             int timeoutMs,
             String probeUrl) {
         long start = System.currentTimeMillis();
-        BoxService boxService = null;
+        CommandServer commandServer = null;
         try {
             ensureLibboxSetup(ctx);
 
@@ -122,8 +132,9 @@ public final class AndroidDeepVerifyBox {
             Libbox.checkConfig(configJson);
 
             VerifyPlatformInterface platform = new VerifyPlatformInterface(ctx);
-            boxService = Libbox.newService(configJson, platform);
-            boxService.start();
+            VerifyCommandServerHandler handler = new VerifyCommandServerHandler();
+            commandServer = Libbox.newCommandServer(handler, platform);
+            commandServer.startOrReloadService(configJson, new OverrideOptions());
 
             // Wait for SOCKS to bind. We do this by attempting to TCP-connect
             // to 127.0.0.1:socksPort in a loop. libbox's start() is async on
@@ -153,11 +164,16 @@ public final class AndroidDeepVerifyBox {
             return jsonError(0, t.getClass().getSimpleName() + ": "
                     + (t.getMessage() != null ? t.getMessage() : "(no message)"));
         } finally {
-            if (boxService != null) {
+            if (commandServer != null) {
                 try {
-                    boxService.close();
+                    commandServer.closeService();
                 } catch (Throwable t) {
-                    Log.w(LOG_TAG, "boxService.close threw: " + t.getMessage());
+                    Log.w(LOG_TAG, "commandServer.closeService threw: " + t.getMessage());
+                }
+                try {
+                    commandServer.close();
+                } catch (Throwable t) {
+                    Log.w(LOG_TAG, "commandServer.close threw: " + t.getMessage());
                 }
             }
         }
@@ -216,7 +232,6 @@ public final class AndroidDeepVerifyBox {
             options.setBasePath(filesDir.getAbsolutePath());
             options.setWorkingPath(workingDir.getAbsolutePath());
             options.setTempPath(cacheDir.getAbsolutePath());
-            options.setFixAndroidStack(false);
             Libbox.setup(options);
 
             libboxSetupDone.set(true);
@@ -351,6 +366,46 @@ public final class AndroidDeepVerifyBox {
         }
     }
 
+    private static final class VerifyCommandServerHandler implements CommandServerHandler {
+        @Override
+        public void serviceStop() throws Exception {
+            throw new Exception("unsupported");
+        }
+
+        @Override
+        public void serviceReload() throws Exception {
+            throw new Exception("unsupported");
+        }
+
+        @Override
+        public SystemProxyStatus getSystemProxyStatus() throws Exception {
+            SystemProxyStatus status = new SystemProxyStatus();
+            status.setAvailable(false);
+            status.setEnabled(false);
+            return status;
+        }
+
+        @Override
+        public void setSystemProxyEnabled(boolean enabled) throws Exception {
+            throw new Exception("unsupported");
+        }
+
+        @Override
+        public void triggerNativeCrash() throws Exception {
+            throw new Exception("unsupported");
+        }
+
+        @Override
+        public void writeDebugMessage(String message) {
+            // Drop payload entirely to prevent leaking core debug config secrets/URIs.
+        }
+
+        @Override
+        public int connectSSHAgent() throws Exception {
+            throw new Exception("unsupported");
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Verify-box PlatformInterface — minimal subset of what
     // VpnRouterPlatformInterface (in VpnRouterService) provides. The verify
@@ -366,10 +421,6 @@ public final class AndroidDeepVerifyBox {
     //     pick a binding target. Without it, every outbound dial fails
     //     with "no available network interface" (we learned this the
     //     hard way during VpnRouterService Phase 5).
-    //   • systemCertificates — sing-box validates the probe target's TLS
-    //     cert against the system CAs. Reality outbounds bypass standard
-    //     TLS, but the cloudflare.com endpoint we probe is plain HTTPS
-    //     terminated at sing-box's outbound side, so CAs matter.
     //   • startDefaultInterfaceMonitor — sing-box's outbound dial path
     //     uses the "default interface" hint to decide which interface to
     //     bind to. Without it, dials fail (we learned this during
@@ -377,9 +428,6 @@ public final class AndroidDeepVerifyBox {
     //     initial update with the current active network — no callback
     //     wiring since the verify box's lifetime is seconds, not the
     //     network-change-sensitive minutes/hours of a real VPN session.
-    //   • writeLog — surface libbox-internal diagnostics if a verify
-    //     fails strangely. logcat tag "VpnRouter.DV.Libbox" so they're
-    //     greppable separately from the main service's "Libbox" tag.
     // ────────────────────────────────────────────────────────────────────
     private static final class VerifyPlatformInterface implements PlatformInterface {
 
@@ -400,11 +448,11 @@ public final class AndroidDeepVerifyBox {
 
         @Override public boolean useProcFS() { return false; }
         @Override public boolean usePlatformAutoDetectInterfaceControl() { return false; }
-        @Override public void autoDetectInterfaceControl(int fd) { /* no-op */ }
+        @Override public void autoDetectInterfaceControl(int fd) throws Exception { /* no-op */ }
         @Override public void clearDNSCache() { /* no-op */ }
 
         @Override
-        public NetworkInterfaceIterator getInterfaces() {
+        public NetworkInterfaceIterator getInterfaces() throws Exception {
             // Reuse the same enumeration VpnRouterService.Phase 5 does —
             // ConnectivityManager + NetworkInterface walk. Without it,
             // sing-box can't pick an upstream interface and dial fails.
@@ -497,35 +545,13 @@ public final class AndroidDeepVerifyBox {
             }
         }
 
-        @Override
-        public StringIterator systemCertificates() {
-            try {
-                List<String> certs = new ArrayList<>();
-                KeyStore ks = KeyStore.getInstance("AndroidCAStore");
-                ks.load(null, null);
-                Enumeration<String> aliases = ks.aliases();
-                while (aliases.hasMoreElements()) {
-                    Certificate cert = ks.getCertificate(aliases.nextElement());
-                    if (cert == null) continue;
-                    String pem = "-----BEGIN CERTIFICATE-----\n"
-                            + Base64.encodeToString(cert.getEncoded(), Base64.DEFAULT)
-                            + "-----END CERTIFICATE-----";
-                    certs.add(pem);
-                }
-                return new SimpleStringIterator(certs);
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "systemCertificates failed: " + e.getMessage());
-                return new SimpleStringIterator(new ArrayList<String>());
-            }
-        }
-
         @Override public LocalDNSTransport localDNSTransport() { return null; }
         @Override public WIFIState readWIFIState() { return null; }
         @Override public boolean includeAllNetworks() { return false; }
         @Override public boolean underNetworkExtension() { return false; }
 
         @Override
-        public void startDefaultInterfaceMonitor(InterfaceUpdateListener listener) {
+        public void startDefaultInterfaceMonitor(InterfaceUpdateListener listener) throws Exception {
             // Fire an initial update so sing-box knows which interface to
             // bind upstream dials to. We don't subscribe to network-change
             // callbacks — the verify box lives for ~3-5 s, not long enough
@@ -552,29 +578,91 @@ public final class AndroidDeepVerifyBox {
         }
 
         @Override
-        public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) { /* no-op */ }
+        public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) throws Exception { /* no-op */ }
 
         @Override
-        public void sendNotification(io.nekohasekai.libbox.Notification notification) { /* no-op */ }
+        public void sendNotification(Notification notification) throws Exception { /* no-op */ }
 
         @Override
-        public int findConnectionOwner(int ipProtocol, String sa, int sp, String da, int dp) {
-            return -1;
+        public void cancelNotification(String identifier, int typeID) throws Exception { /* no-op */ }
+
+        @Override
+        public ConnectionOwner findConnectionOwner(
+                int ipProtocol,
+                String sourceAddress, int sourcePort,
+                String destinationAddress, int destinationPort) throws Exception {
+            throw new Exception("unsupported");
         }
 
         @Override
+        public void startNeighborMonitor(NeighborUpdateListener listener) throws Exception {
+            throw new Exception("unsupported");
+        }
+
+        @Override
+        public void closeNeighborMonitor(NeighborUpdateListener listener) throws Exception { /* no-op */ }
+
+        @Override
+        public void registerMyInterface(String name) { /* no-op */ }
+
+        @Override public boolean usePlatformShell() { return false; }
+        @Override public void checkPlatformShell() throws Exception { throw new Exception("unsupported"); }
+        @Override
+        public ShellSession openShellSession(
+                PlatformUser user,
+                String command,
+                StringIterator environ,
+                String term,
+                int rows,
+                int cols) throws Exception {
+            throw new Exception("unsupported");
+        }
+        @Override public PlatformUser lookupUser(String username) throws Exception { throw new Exception("unsupported"); }
+        @Override public String lookupSFTPServer() throws Exception { throw new Exception("unsupported"); }
+        @Override public String readSystemSSHHostKey() throws Exception { throw new Exception("unsupported"); }
+        @Override public String tailscaleHostname() { return ""; }
+
+        @Override public boolean usePlatformBridge() { return false; }
+        @Override
+        public BridgeSession createBridge(BridgeOptions options) throws Exception {
+            throw new Exception("unsupported");
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Retained helpers (removed from PlatformInterface in libbox 1.14).
+        // Preserved without @Override annotation.
+        // ────────────────────────────────────────────────────────────────
+        public StringIterator systemCertificates() {
+            try {
+                List<String> certs = new ArrayList<>();
+                KeyStore ks = KeyStore.getInstance("AndroidCAStore");
+                ks.load(null, null);
+                Enumeration<String> aliases = ks.aliases();
+                while (aliases.hasMoreElements()) {
+                    Certificate cert = ks.getCertificate(aliases.nextElement());
+                    if (cert == null) continue;
+                    String pem = "-----BEGIN CERTIFICATE-----\n"
+                            + Base64.encodeToString(cert.getEncoded(), Base64.DEFAULT)
+                            + "-----END CERTIFICATE-----";
+                    certs.add(pem);
+                }
+                return new SimpleStringIterator(certs);
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "systemCertificates failed: " + e.getMessage());
+                return new SimpleStringIterator(new ArrayList<String>());
+            }
+        }
+
         public void writeLog(String message) {
             if (message != null && !message.isEmpty()) {
                 Log.d("VpnRouter.DV.Libbox", message);
             }
         }
 
-        @Override
         public String packageNameByUid(int uid) {
             return "uid=" + uid;
         }
 
-        @Override
         public int uidByPackageName(String packageName) {
             return -1;
         }

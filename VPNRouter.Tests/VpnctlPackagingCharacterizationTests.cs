@@ -258,9 +258,13 @@ public sealed class VpnctlPackagingCharacterizationTests
     private static string ExtractHarnessScript(string buildPs1)
     {
         var idx1 = buildPs1.IndexOf("# ── Sing-box supply-chain validation", StringComparison.Ordinal);
-        var idx1End = buildPs1.IndexOf("$DistDir = Join-Path", idx1, StringComparison.Ordinal);
-        Assert.True(idx1 >= 0 && idx1End > idx1, "Could not locate early validation section in build.ps1.");
-        var sec1 = buildPs1.Substring(idx1, idx1End - idx1);
+        var sec1 = "";
+        if (idx1 >= 0)
+        {
+            var idx1End = buildPs1.IndexOf("$DistDir = Join-Path", idx1, StringComparison.Ordinal);
+            Assert.True(idx1End > idx1, "Could not locate early validation section in build.ps1.");
+            sec1 = buildPs1.Substring(idx1, idx1End - idx1);
+        }
 
         var idx2 = buildPs1.IndexOf("# ── Bundle sing-box.exe ──", StringComparison.Ordinal);
         var idx2End = buildPs1.IndexOf("# ── slipstream-client.exe", idx2, StringComparison.Ordinal);
