@@ -492,3 +492,21 @@ A rigorous adversarial review and final bug-hunt across all 12 implemented fixes
    - **Baseline follow-ups preserved**: `NIGHT-FOLLOWUP-01` and `NIGHT-FOLLOWUP-02` remain tracked and intact.
    - **No live VPN / infrastructure**: Red witnesses, full solution, and native gaps remain; no live VPN/infra.
    - **No other files, agents, build, or Git operations**: Changes strictly restricted to `plans/phase-fix-night-audit-gemini-2026-09-04.md` and `plans/OPEN-DEFECTS.md`.
+
+### Latest Checkpoint — NIGHT-07 Durable Typed Readiness & Matrix Status (Commit 23cc4e52)
+
+- **Status**: PASS on CI (all 4 checks green).
+- **Commit & CI**: Commit `23cc4e5281debdcf3afc047a418994382a9eb6e5`, all 4 CI checks PASS on GitHub Actions run `33967483426`, receipt https://github.com/PavelLizunov/VPNRouter/pull/240#issuecomment-5551992150.
+- **NIGHT-07 Durable Typed Readiness**:
+  - 17 tests: 16 behavioral + 1 sourceguard (`NightTypedReadinessTests`).
+  - Durable typed readiness event subscriber: local handle state, no HTTP warmup query, permanent handler.
+  - Controlled characterization compatibility excludes EXACT single private `OnEngineConnected` (`void`, `int`), asserts shape, then validates baseline hash strict Windows; not blanket hash unchanged.
+- **Baseline Fixtures**:
+  - New baseline fixture 5 cases (NIGHT-02, NIGHT-03, NIGHT-07, NIGHT-09, NIGHT-10) pending GREEN then isolated RED; no claim executed.
+- **TgProxy Review**:
+  - Remaining possible `TgProxyPid` throw review is not source-confirmed; do not record as defect yet.
+- **Defect Ledger & Invariants**:
+  - All original 12 defects remain OPEN in `plans/OPEN-DEFECTS.md`; final matrix pending.
+  - Baseline follow-ups `NIGHT-FOLLOWUP-01` and `NIGHT-FOLLOWUP-02` remain tracked and intact.
+  - No live VPN/infra; red witnesses, full solution, and native gaps remain.
+  - Scope strictly restricted to `plans/phase-fix-night-audit-gemini-2026-09-04.md` and `plans/OPEN-DEFECTS.md`.
