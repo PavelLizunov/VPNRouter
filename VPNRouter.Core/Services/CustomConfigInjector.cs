@@ -972,6 +972,9 @@ public static class CustomConfigInjector
             if (server is not JsonObject so || StjNodeHelpers.AsString(so["tag"]) != synthTag)
                 continue;
 
+            if (StjNodeHelpers.AsString(so["type"]) == "fakeip" || StjNodeHelpers.AsString(so["address"]) == "fakeip")
+                throw new InvalidOperationException($"DNS server tag '{synthTag}' collides with reserved synthesis tag. Choose another FakeIP server tag.");
+
             if (StjNodeHelpers.AsString(so["detour"]) == proxyTag)
                 return synthTag; // our own prior injection — truly idempotent
 
@@ -1325,7 +1328,11 @@ public static class CustomConfigInjector
         const string tag = "vpnrouter-dns-direct";
         foreach (var s in servers)
             if (s is JsonObject so && StjNodeHelpers.AsString(so["tag"]) == tag)
+            {
+                if (StjNodeHelpers.AsString(so["type"]) == "fakeip" || StjNodeHelpers.AsString(so["address"]) == "fakeip")
+                    throw new InvalidOperationException($"DNS server tag '{tag}' collides with reserved bootstrap DNS tag. Choose another FakeIP server tag.");
                 return tag;
+            }
         servers.Add((JsonNode?)new JsonObject
         {
             ["tag"] = tag,
@@ -1410,7 +1417,7 @@ public static class CustomConfigInjector
                 if (s is not JsonObject sObj) continue;
                 var addr = StjNodeHelpers.AsString(sObj["address"]);
                 var type = StjNodeHelpers.AsString(sObj["type"]);
-                if (addr == "fakeip" && type == null)
+                if (addr == "fakeip" && (string.IsNullOrEmpty(type) || type == "legacy"))
                 {
                     legacyServer = sObj;
                     legacyCount++;
@@ -1538,6 +1545,11 @@ public static class CustomConfigInjector
 
         if (globalV4 == null && globalV6 == null)
             throw new InvalidOperationException("Legacy fakeip configuration requires at least one of 'inet4_range' or 'inet6_range'.");
+
+        var unsupported = new[] { "strategy", "address_resolver", "address_strategy", "client_subnet" }
+            .Where(f => legacyServer![f] != null).ToList();
+        if (unsupported.Count > 0)
+            throw new InvalidOperationException($"Legacy FakeIP DNS server uses options requiring manual migration: {string.Join(", ", unsupported)}.");
 
         // Convert existing legacy server: {address:'fakeip',tag:...} -> {type:'fakeip',tag:same,...}
         legacyServer!.Remove("address");
