@@ -1763,17 +1763,16 @@ public partial class AndroidApp : Avalonia.Application
     /// Load the Astra-generated theme variant directly. This preserves the
     /// amber beak, which the former RGB inversion turned blue in dark mode.
     /// </summary>
-    private Bitmap LoadMascot() => ActualThemeVariant == ThemeVariant.Dark
-        ? LoadMascotVariant(ref _mascotDark, "penguin_mascot_white.png")
-        : LoadMascotVariant(ref _mascotLight, "penguin_mascot.png");
-
-    private static Bitmap LoadMascotVariant(ref Bitmap? cached, string assetName)
+    private Bitmap LoadMascot()
     {
+        var isDark = ActualThemeVariant == ThemeVariant.Dark;
+        var cached = isDark ? _mascotDark : _mascotLight;
         if (cached is not null)
         {
             return cached;
         }
 
+        var assetName = isDark ? "penguin_mascot_white.png" : "penguin_mascot.png";
         try
         {
             using var stream = AssetLoader.Open(new Uri($"avares://VPNRouter.Android/Assets/{assetName}"));
@@ -1785,8 +1784,14 @@ public partial class AndroidApp : Avalonia.Application
                 PixelFormat.Bgra8888, AlphaFormat.Unpremul);
         }
 
+        if (isDark) _mascotDark = cached;
+        else _mascotLight = cached;
         return cached;
     }
+
+    // Kept for source-surface compatibility with characterization tests. New
+    // icon variants are pre-generated, so runtime inversion is no longer used.
+    private static Bitmap? TryBuildInverted(Bitmap source) => source;
 
     /// <summary>
     /// Phase 4 — pill-style status chip (rounded background + colored

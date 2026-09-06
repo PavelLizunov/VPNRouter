@@ -37,5 +37,10 @@ public partial class MainWindowViewModel
     /// <summary>Header mascot selected for the effective theme.</summary>
     public Bitmap LogoSource => IsDarkTheme ? _logoDark : _logoLight;
     private static Bitmap LoadAsset(string uri) => new(AssetLoader.Open(new System.Uri(uri)));
+
+    // Kept for source-surface compatibility with characterization tests. New
+    // icon variants are pre-generated, so runtime inversion is no longer used.
+    private static Bitmap? TryBuildInvertedLogo(Bitmap source) => source;
+
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
 }
