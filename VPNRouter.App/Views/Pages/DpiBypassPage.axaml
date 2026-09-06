@@ -203,7 +203,7 @@
                                               StrokeJoin="Round"
                                               HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
-                                              Data="M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 z M13,7 L9,13 L12,13 L11,17 L15,11 L12,11 z"/>
+                                              Data="M12,2.5 L4.5,5.4 L4.5,10.8 C4.5,16 7.7,19.8 12,21.8 C16.3,19.8 19.5,16 19.5,10.8 L19.5,5.4 Z M13.5,6.8 L9.2,12.8 L12,12.8 L10.8,17.3 L15.2,11.2 L12.4,11.2 Z"/>
                                     </Border>
 
                                     <TextBlock Grid.Column="1" Grid.Row="0"
@@ -246,7 +246,7 @@
                                               Fill="{DynamicResource AccentOnSolidBrush}"
                                               VerticalAlignment="Center"
                                               IsVisible="{Binding !ZapretEnabled}"
-                                              Data="M8,5 L8,19 L19,12 z"/>
+                                              Data="M8.5,5.5 L8.5,18.5 L18.5,12 Z"/>
                                         <Border Width="10" Height="10"
                                                 CornerRadius="2"
                                                 Background="{DynamicResource AccentOnSolidBrush}"

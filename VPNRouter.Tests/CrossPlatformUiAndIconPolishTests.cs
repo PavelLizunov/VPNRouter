@@ -75,32 +75,55 @@ public sealed class CrossPlatformUiAndIconPolishTests
     [InlineData("mipmap-xhdpi", 96, 96)]
     [InlineData("mipmap-xxhdpi", 144, 144)]
     [InlineData("mipmap-xxxhdpi", 192, 192)]
-    public void Android_RoundIcons_ExistAndHaveCorrectDimensions(string density, int expectedW, int expectedH)
+    public void Android_LauncherIcons_ExistAsRgbaAtCorrectDimensions(string density, int expectedW, int expectedH)
     {
-        var path = Path.Combine(FindAndroidResourcesDir(), density, "ic_launcher_round.png");
-        Assert.True(File.Exists(path), $"Missing round icon at: {path}");
+        foreach (var fileName in new[] { "ic_launcher.png", "ic_launcher_round.png" })
+        {
+            var path = Path.Combine(FindAndroidResourcesDir(), density, fileName);
+            Assert.True(File.Exists(path), $"Missing launcher icon at: {path}");
 
-        using var fs = File.OpenRead(path);
-        var header = new byte[26];
-        var read = fs.Read(header, 0, 26);
-        Assert.Equal(26, read);
+            using var fs = File.OpenRead(path);
+            var header = new byte[26];
+            var read = fs.Read(header, 0, 26);
+            Assert.Equal(26, read);
 
-        // PNG signature
-        Assert.Equal(0x89, header[0]);
-        Assert.Equal((byte)'P', header[1]);
-        Assert.Equal((byte)'N', header[2]);
-        Assert.Equal((byte)'G', header[3]);
+            // PNG signature
+            Assert.Equal(0x89, header[0]);
+            Assert.Equal((byte)'P', header[1]);
+            Assert.Equal((byte)'N', header[2]);
+            Assert.Equal((byte)'G', header[3]);
 
-        // Width and height in IHDR chunk (bytes 16..23)
-        var w = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
-        var h = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
+            // Width and height in IHDR chunk (bytes 16..23)
+            var w = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
+            var h = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
 
-        Assert.Equal(expectedW, w);
-        Assert.Equal(expectedH, h);
+            Assert.Equal(expectedW, w);
+            Assert.Equal(expectedH, h);
 
-        // Bit depth (offset 24) and Color type (offset 25: 6 = RGBA)
-        Assert.Equal(8, header[24]);
-        Assert.Equal(6, header[25]);
+            // Bit depth (offset 24) and color type (offset 25: 6 = RGBA).
+            Assert.Equal(8, header[24]);
+            Assert.Equal(6, header[25]);
+        }
+    }
+
+    [Fact]
+    public void IconSystem_HasFlatAccessibleSvgMasters()
+    {
+        var assetsDir = FindDesignAssetsDir();
+        foreach (var fileName in new[] { "mascot-master.svg", "mascot-master-dark.svg", "penguin.svg", "logo-lockup.svg" })
+        {
+            var path = Path.Combine(assetsDir, fileName);
+            Assert.True(File.Exists(path), $"Missing SVG master at: {path}");
+            var svg = File.ReadAllText(path);
+
+            Assert.Contains("<title", svg, StringComparison.Ordinal);
+            Assert.Contains("<desc", svg, StringComparison.Ordinal);
+            Assert.DoesNotContain("linearGradient", svg, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("radialGradient", svg, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<image", svg, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("xlink:href", svg, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=", svg, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static string FindAndroidResourcesDir()
@@ -112,6 +135,17 @@ public sealed class CrossPlatformUiAndIconPolishTests
             if (Directory.Exists(candidate)) return candidate;
         }
         throw new DirectoryNotFoundException("Could not locate VPNRouter.Android/Resources directory");
+    }
+
+    private static string FindDesignAssetsDir()
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        for (var i = 0; i < 8 && directory != null; i++, directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, "design", "project", "assets");
+            if (Directory.Exists(candidate)) return candidate;
+        }
+        throw new DirectoryNotFoundException("Could not locate design/project/assets directory");
     }
 
     private static string LoadSource(params string[] relativeParts)

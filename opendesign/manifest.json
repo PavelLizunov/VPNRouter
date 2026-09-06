@@ -1,0 +1,59 @@
+{
+  "generated": "2026-09-06T16:08:55.287378Z",
+  "sections": [
+    {
+      "id": "mockups",
+      "label": "Mockups",
+      "groups": [
+        {
+          "slug": "astra-icon-refresh",
+          "files": [
+            {
+              "label": "icon-catalog.html",
+              "path": "mockups/astra-icon-refresh/icon-catalog.html"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "design-systems",
+      "label": "Design Systems",
+      "groups": [
+        {
+          "slug": "vpnrouter",
+          "files": [
+            {
+              "label": "README.md",
+              "path": "design-systems/vpnrouter/README.md"
+            },
+            {
+              "label": "SKILL.md",
+              "path": "design-systems/vpnrouter/SKILL.md"
+            },
+            {
+              "label": "logo-lockup.svg",
+              "path": "design-systems/vpnrouter/assets/logo-lockup.svg"
+            },
+            {
+              "label": "mascot-master-dark.svg",
+              "path": "design-systems/vpnrouter/assets/mascot-master-dark.svg"
+            },
+            {
+              "label": "mascot-master.svg",
+              "path": "design-systems/vpnrouter/assets/mascot-master.svg"
+            },
+            {
+              "label": "penguin.svg",
+              "path": "design-systems/vpnrouter/assets/penguin.svg"
+            },
+            {
+              "label": "colors_and_type.css",
+              "path": "design-systems/vpnrouter/colors_and_type.css"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

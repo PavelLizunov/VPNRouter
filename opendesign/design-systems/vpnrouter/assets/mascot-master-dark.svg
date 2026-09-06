@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Virtual Penguin Network mascot for dark surfaces</title>
+  <desc id="desc">A light Inked Companion mascot for dark themes and system trays.</desc>
+  <g fill="none" stroke="#EEF1F6" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16.5 22.5C17.8 11.8 24.9 6 33.7 6c8.7 0 15.8 5.9 17.3 16.5"/>
+    <path d="M16.8 23.1c-3.1.4-5.1 3.1-5.1 7s2 6.7 5.1 7.1M50.8 23.1c3.1.4 5.1 3.1 5.1 7s-2 6.7-5.1 7.1" stroke-width="3.2"/>
+    <path d="M18.5 21.4c1.6-6 7-10.1 14.6-10.1 7.8 0 13.4 4.3 15 10.6v9.8c-1.6 7.6-7.1 12.5-14.3 12.5-7.4 0-13.2-5.2-14.8-13.2z"/>
+    <path d="M22 18.2l3.2-3.3 1.4 4.5 3.4-5 2.2 5.1 3.8-4.8 2.2 5 3.7-3.4"/>
+    <path d="M26.8 27.2h.1M40.7 27.2h.1M28.6 34.4c3.3 2.8 7.3 2.8 10.4 0"/>
+    <path d="M39.7 43.1c5.8 2.4 9.2 7.1 10.2 14.9M44.2 48.5c-.3 5.5-2.8 8.7-7.1 10.7"/>
+    <path d="M14.3 43.9c1.7-4.5 5.5-7.2 10.1-7.2 5.2 0 9.1 3.4 10.4 8.6l.7 8.2c0 4.6-3.9 7.7-10.7 7.7-6.6 0-10.8-3.2-10.8-7.9z"/>
+    <path d="M17.7 43.1c2.2-2.5 4.4-3.4 6.8-3.4 2.7 0 5 1.1 7.1 3.7-2.4-.9-4.2-.2-5.5 1.7-1.4-1.9-3.6-2.6-8.4-2z" fill="#EEF1F6" stroke="none"/>
+    <circle cx="20.5" cy="47.4" r="1.1" fill="#EEF1F6" stroke="none"/>
+    <circle cx="29.5" cy="47.4" r="1.1" fill="#EEF1F6" stroke="none"/>
+    <path d="M22.1 50.4l3.1-2 3.1 2-3.1 2.2z" fill="#F59E0B" stroke="#F59E0B" stroke-width=".7"/>
+    <path d="M18.4 56.4c1.2-2.3 3.4-3.7 6.5-3.7s5.4 1.5 6.6 3.9"/>
+  </g>
+</svg>

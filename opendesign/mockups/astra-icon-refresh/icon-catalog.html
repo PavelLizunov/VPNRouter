@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VPNRouter — Astra Icon Refresh</title>
+  <style>
+    :root { color-scheme: light dark; --ice:#ecfeff; --cyan:#67e8f9; --sky:#0ea5e9; --ink:#0f1320; --muted:#475067; --paper:#f5f7fa; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:"Segoe UI Variable","Segoe UI",sans-serif; background:#f5f7fa; color:#0f1320; }
+    main { width:min(1120px, calc(100% - 40px)); margin:0 auto; padding:52px 0 72px; }
+    header { display:grid; grid-template-columns:1fr auto; align-items:end; gap:24px; border-bottom:1px solid #dce1e9; padding-bottom:24px; }
+    h1 { font-size:38px; letter-spacing:-1.2px; margin:0 0 8px; }
+    header p, .note { color:#475067; margin:0; line-height:1.55; }
+    .stamp { font:600 12px ui-monospace,monospace; color:#0369a1; padding:8px 10px; border:1px solid #67e8f9; border-radius:6px; background:#ecfeff; }
+    section { margin-top:44px; }
+    h2 { margin:0 0 16px; font-size:22px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .card { background:#fff; border:1px solid #dce1e9; border-radius:10px; padding:20px; }
+    .card.dark { background:#0f1320; color:#eef1f6; border-color:#2b3347; }
+    .label { font:600 11px ui-monospace,monospace; text-transform:uppercase; letter-spacing:.1em; color:#0369a1; margin-bottom:16px; }
+    .dark .label { color:#67e8f9; }
+    .art { min-height:240px; display:grid; place-items:center; background:#f5f7fa; border-radius:8px; overflow:hidden; }
+    .dark .art { background:#070a14; }
+    .art img { max-width:78%; max-height:220px; }
+    .old img { image-rendering:auto; }
+    .sizes { display:flex; align-items:end; justify-content:center; gap:22px; min-height:140px; }
+    .sample { display:grid; justify-items:center; gap:8px; color:#94a0b2; font:11px ui-monospace,monospace; }
+    .sample img { display:block; background:#ecfeff; border-radius:22%; }
+    .glyphs { display:flex; gap:20px; justify-content:center; align-items:center; min-height:140px; }
+    .glyph { width:52px; height:52px; display:grid; place-items:center; border-radius:14px; border:1px solid #67e8f9; background:#fff; color:#0369a1; }
+    .dark .glyph { background:#1c2231; color:#67e8f9; border-color:rgba(56,189,248,.4); }
+    svg { width:26px; height:26px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    ul { margin:0; padding-left:20px; line-height:1.7; color:#475067; }
+    .dark ul { color:#a6b0c2; }
+    @media(max-width:760px){ .grid{grid-template-columns:1fr} header{grid-template-columns:1fr} main{width:min(100% - 24px,1120px)} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Inked Companion — Arctic Edition</h1><p>Astra-selected production direction. The recognizable listener and penguin remain; noisy raster detail becomes controlled, warm linework.</p></div>
+    <div class="stamp">ASTRA · 2026-09-06</div>
+  </header>
+
+  <section>
+    <h2>Identity: before and after</h2>
+    <div class="grid">
+      <article class="card old"><div class="label">Before · raster-only</div><div class="art"><img src="../../../assets/penguin_mascot.png" alt="Original raster mascot" /></div></article>
+      <article class="card"><div class="label">After · vector master</div><div class="art"><img src="../../../../design/project/assets/penguin.svg" alt="New Arctic framed mascot" /></div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Light and dark contexts</h2>
+    <div class="grid">
+      <article class="card"><div class="label">Light surface</div><div class="sizes">
+        <span class="sample"><img src="../../../../design/project/assets/penguin.svg" width="32" height="32" alt="32 pixel icon" /><span>32</span></span>
+        <span class="sample"><img src="../../../../design/project/assets/penguin.svg" width="64" height="64" alt="64 pixel icon" /><span>64</span></span>
+        <span class="sample"><img src="../../../../design/project/assets/penguin.svg" width="128" height="128" alt="128 pixel icon" /><span>128</span></span>
+      </div></article>
+      <article class="card dark"><div class="label">Dark surface</div><div class="sizes">
+        <span class="sample"><img src="../../../../design/project/assets/penguin.svg" width="32" height="32" alt="32 pixel icon" /><span>32</span></span>
+        <span class="sample"><img src="../../../../design/project/assets/penguin.svg" width="64" height="64" alt="64 pixel icon" /><span>64</span></span>
+        <span class="sample"><img src="../../../../design/project/assets/penguin.svg" width="128" height="128" alt="128 pixel icon" /><span>128</span></span>
+      </div></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Unified UI glyph language</h2>
+    <div class="grid">
+      <article class="card"><div class="label">Light · 1.8 stroke</div><div class="glyphs">
+        <span class="glyph"><svg viewBox="0 0 24 24"><path d="M12 2.5 4.5 5.4v5.4C4.5 16 7.7 19.8 12 21.8c4.3-2 7.5-5.8 7.5-11V5.4Z"/><path d="m13.5 6.8-4.3 6h2.8l-1.2 4.5 4.4-6.1h-2.8Z"/></svg></span>
+        <span class="glyph"><svg viewBox="0 0 24 24"><path d="M21 3.2 3.2 9.8l7.5 2.9M21 3.2l-6.2 17.6-4.1-8.1M10.7 12.7l3.7 3.7"/></svg></span>
+        <span class="glyph"><svg viewBox="0 0 24 24"><path d="m8.5 5.5 10 6.5-10 6.5Z"/></svg></span>
+      </div></article>
+      <article class="card dark"><div class="label">Dark · same geometry</div><div class="glyphs">
+        <span class="glyph"><svg viewBox="0 0 24 24"><path d="M12 2.5 4.5 5.4v5.4C4.5 16 7.7 19.8 12 21.8c4.3-2 7.5-5.8 7.5-11V5.4Z"/><path d="m13.5 6.8-4.3 6h2.8l-1.2 4.5 4.4-6.1h-2.8Z"/></svg></span>
+        <span class="glyph"><svg viewBox="0 0 24 24"><path d="M21 3.2 3.2 9.8l7.5 2.9M21 3.2l-6.2 17.6-4.1-8.1M10.7 12.7l3.7 3.7"/></svg></span>
+        <span class="glyph"><svg viewBox="0 0 24 24"><path d="m8.5 5.5 10 6.5-10 6.5Z"/></svg></span>
+      </div></article>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="label">Why Astra selected this</div>
+    <ul>
+      <li>It preserves the product's distinctive human-with-headphones and penguin relationship.</li>
+      <li>Flat Arctic framing connects the mascot to the existing design tokens without gradient noise.</li>
+      <li>Round terminals and controlled stroke weights align mascot and UI glyphs.</li>
+      <li>A committed SVG master makes every future PNG, ICO, ICNS and Android density export reproducible.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
