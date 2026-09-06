@@ -258,7 +258,8 @@ public class MainWindowViewModelCharacterizationTests
         // v2.49 transition latency: + Windows-only TgProxy background recheck
         // task field and helper; no public command/property signature changed.
         // v2.49.2 app apply/connection serialization: + CanToggleConnection.
-        "2e2bb662ea621d8796834971ad518cfb6620e9bbce2edf3dd1d38abba3291931";
+        // Sentinel URL launch hardening: + TryOpenUrl method for safe URL launching.
+        "31d5d51276b1665e1c10a8126f73c5cdb6d6e97ac0e3245a6b17f6d1d096b13b";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
