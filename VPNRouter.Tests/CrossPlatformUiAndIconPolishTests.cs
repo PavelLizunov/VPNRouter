@@ -110,7 +110,7 @@ public sealed class CrossPlatformUiAndIconPolishTests
     public void IconSystem_HasFlatAccessibleSvgMasters()
     {
         var assetsDir = FindDesignAssetsDir();
-        foreach (var fileName in new[] { "mascot-master.svg", "mascot-master-dark.svg", "penguin.svg", "logo-lockup.svg" })
+        foreach (var fileName in new[] { "mascot-master.svg", "mascot-master-dark.svg", "penguin.svg", "penguin-round.svg", "logo-lockup.svg" })
         {
             var path = Path.Combine(assetsDir, fileName);
             Assert.True(File.Exists(path), $"Missing SVG master at: {path}");
@@ -124,6 +124,9 @@ public sealed class CrossPlatformUiAndIconPolishTests
             Assert.DoesNotContain("xlink:href", svg, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("href=", svg, StringComparison.OrdinalIgnoreCase);
         }
+
+        Assert.DoesNotContain("<text", File.ReadAllText(Path.Combine(assetsDir, "logo-lockup.svg")),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static string FindAndroidResourcesDir()

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-06T16:08:55.287378Z",
+  "generated": "2026-09-06T16:26:23.225528Z",
   "sections": [
     {
       "id": "mockups",
@@ -32,6 +32,10 @@
               "path": "design-systems/vpnrouter/SKILL.md"
             },
             {
+              "label": "generate-icons.sh",
+              "path": "design-systems/vpnrouter/assets/generate-icons.sh"
+            },
+            {
               "label": "logo-lockup.svg",
               "path": "design-systems/vpnrouter/assets/logo-lockup.svg"
             },
@@ -42,6 +46,10 @@
             {
               "label": "mascot-master.svg",
               "path": "design-systems/vpnrouter/assets/mascot-master.svg"
+            },
+            {
+              "label": "penguin-round.svg",
+              "path": "design-systems/vpnrouter/assets/penguin-round.svg"
             },
             {
               "label": "penguin.svg",

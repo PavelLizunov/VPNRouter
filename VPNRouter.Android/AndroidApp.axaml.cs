@@ -1754,73 +1754,38 @@ public partial class AndroidApp : Avalonia.Application
     // MakeCheckboxCard / MakeLabeledCheckboxRow / MakeAutostartRow
     // moved to AndroidApp.UiBindings.cs (Phase 2C Wave 9, 2026-05-18).
 
-    // ── Mascot loading + theme-aware inversion ──────────────────────────
+    // ── Mascot loading + theme variant ──────────────────────────────────
 
     private static Bitmap? _mascotLight;
     private static Bitmap? _mascotDark;
 
     /// <summary>
-    /// v3.0 Phase 5 — load + cache mascot bitmap, RGB-inverted on dark
-    /// theme. Lifted from desktop's MainWindowViewModel.TryBuildInvertedLogo:
-    /// Bgra8888/Unpremul preserves alpha so edges stay anti-aliased
-    /// after the channel flip.
+    /// Load the Astra-generated theme variant directly. This preserves the
+    /// amber beak, which the former RGB inversion turned blue in dark mode.
     /// </summary>
-    private Bitmap LoadMascot()
-    {
-        if (_mascotLight is null)
-        {
-            try
-            {
-                // Bug-AND-011 / Medium-4 (2026-05-16 code review) —
-                // dispose the asset stream after Bitmap copies the
-                // bytes internally. Pre-fix leaked one stream per
-                // process; minor on its own but a copy-paste hazard
-                // for the icon-loader pattern reused across this file.
-                using var stream = AssetLoader.Open(new Uri("avares://VPNRouter.Android/Assets/penguin_mascot.png"));
-                _mascotLight = new Bitmap(stream);
-            }
-            catch
-            {
-                // Fallback transparent 1x1 — won't be visible but keeps
-                // the layout from crashing.
-                var wb = new WriteableBitmap(new PixelSize(1, 1), new Vector(96, 96),
-                    PixelFormat.Bgra8888, AlphaFormat.Unpremul);
-                _mascotLight = wb;
-            }
-        }
-        if (ActualThemeVariant == ThemeVariant.Dark)
-        {
-            _mascotDark ??= TryBuildInverted(_mascotLight) ?? _mascotLight;
-            return _mascotDark;
-        }
-        return _mascotLight;
-    }
+    private Bitmap LoadMascot() => ActualThemeVariant == ThemeVariant.Dark
+        ? LoadMascotVariant(ref _mascotDark, "penguin_mascot_white.png")
+        : LoadMascotVariant(ref _mascotLight, "penguin_mascot.png");
 
-    private static Bitmap? TryBuildInverted(Bitmap source)
+    private static Bitmap LoadMascotVariant(ref Bitmap? cached, string assetName)
     {
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         try
         {
-            var size = source.PixelSize;
-            var wb = new WriteableBitmap(size, source.Dpi, PixelFormat.Bgra8888, AlphaFormat.Unpremul);
-            using var fb = wb.Lock();
-            int byteCount = fb.RowBytes * size.Height;
-            source.CopyPixels(new PixelRect(size), fb.Address, byteCount, fb.RowBytes);
-            var bytes = new byte[byteCount];
-            System.Runtime.InteropServices.Marshal.Copy(fb.Address, bytes, 0, byteCount);
-            // BGRA pixels — invert B, G, R; leave A alone
-            for (int i = 0; i + 3 < bytes.Length; i += 4)
-            {
-                bytes[i + 0] = (byte)(255 - bytes[i + 0]); // B
-                bytes[i + 1] = (byte)(255 - bytes[i + 1]); // G
-                bytes[i + 2] = (byte)(255 - bytes[i + 2]); // R
-            }
-            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, fb.Address, byteCount);
-            return wb;
+            using var stream = AssetLoader.Open(new Uri($"avares://VPNRouter.Android/Assets/{assetName}"));
+            cached = new Bitmap(stream);
         }
         catch
         {
-            return null;
+            cached = new WriteableBitmap(new PixelSize(1, 1), new Vector(96, 96),
+                PixelFormat.Bgra8888, AlphaFormat.Unpremul);
         }
+
+        return cached;
     }
 
     /// <summary>

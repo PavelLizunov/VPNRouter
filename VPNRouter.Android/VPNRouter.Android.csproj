@@ -66,6 +66,8 @@
          🐧 emoji which doesn't match desktop's branded penguin. -->
     <AvaloniaResource Include="..\VPNRouter.App\Assets\penguin_mascot.png"
                       Link="Assets\penguin_mascot.png" />
+    <AvaloniaResource Include="..\VPNRouter.App\Assets\penguin_mascot_white.png"
+                      Link="Assets\penguin_mascot_white.png" />
   </ItemGroup>
 
   <ItemGroup>
