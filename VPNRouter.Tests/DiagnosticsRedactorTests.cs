@@ -262,22 +262,37 @@ app:
     public void Logs_RedactPrefixedSecretKeys()
     {
         // Prefixed secret keys like access_token, refresh_token, client_secret, auth_token,
-        // secret_key, and tg_proxy_secret must be redacted in key=value or key: value form.
+        // secret_key, access_key, enc_key, encryption_key, auth_key, client_key, user_key,
+        // and tg_proxy_secret must be redacted in key=value or key: value form.
         var outp = DiagnosticsRedactor.RedactLogText(
             "[DBG] access_token=mySecretAccess123\n" +
             "[DBG] refresh_token: mySecretRefresh456\n" +
             "[DBG] client_secret=mySecretClient789\n" +
             "[DBG] auth_token=mySecretAuthABC\n" +
             "[DBG] secret_key=mySecretKeyDEF\n" +
+            "[DBG] access_key=mySecretAccessKeyGHI\n" +
+            "[DBG] enc_key: mySecretEncKeyJKL\n" +
+            "[DBG] encryption_key=mySecretEncryptionKeyMNO\n" +
+            "[DBG] auth_key=mySecretAuthKeyPQR\n" +
+            "[DBG] client_key=mySecretClientKeySTU\n" +
+            "[DBG] user_key: mySecretUserKeyVWX\n" +
             "[DBG] tg_proxy_secret=myTelegramProxySecret987");
         Assert.DoesNotContain("mySecretAccess123", outp);
         Assert.DoesNotContain("mySecretRefresh456", outp);
         Assert.DoesNotContain("mySecretClient789", outp);
         Assert.DoesNotContain("mySecretAuthABC", outp);
         Assert.DoesNotContain("mySecretKeyDEF", outp);
+        Assert.DoesNotContain("mySecretAccessKeyGHI", outp);
+        Assert.DoesNotContain("mySecretEncKeyJKL", outp);
+        Assert.DoesNotContain("mySecretEncryptionKeyMNO", outp);
+        Assert.DoesNotContain("mySecretAuthKeyPQR", outp);
+        Assert.DoesNotContain("mySecretClientKeySTU", outp);
+        Assert.DoesNotContain("mySecretUserKeyVWX", outp);
         Assert.DoesNotContain("myTelegramProxySecret987", outp);
         Assert.Contains("access_token=", outp);
         Assert.Contains("refresh_token:", outp);
+        Assert.Contains("access_key=", outp);
+        Assert.Contains("enc_key:", outp);
     }
 
     // AmneziaWG keys are credentials. The allowlist redacts them by default (not in
