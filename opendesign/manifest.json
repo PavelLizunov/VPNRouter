@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-06T16:26:23.225528Z",
+  "generated": "2026-09-06T16:44:30.405609Z",
   "sections": [
     {
       "id": "mockups",
@@ -30,10 +30,6 @@
             {
               "label": "SKILL.md",
               "path": "design-systems/vpnrouter/SKILL.md"
-            },
-            {
-              "label": "generate-icons.sh",
-              "path": "design-systems/vpnrouter/assets/generate-icons.sh"
             },
             {
               "label": "logo-lockup.svg",
