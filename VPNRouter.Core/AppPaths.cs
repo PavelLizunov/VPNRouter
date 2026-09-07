@@ -99,7 +99,6 @@ public static class AppPaths
             EnsurePrivateUnixDirectory(LogsDir);
             EnsurePrivateUnixDirectory(CacheDir);
             EnsurePrivateUnixDirectory(BinDir);
-            EnsurePrivateUnixDirectory(WgturnBinDir);
             EnsurePrivateUnixDirectory(SlipstreamBinDir);
             EnsurePrivateUnixDirectory(ProfilesDir);
             EnsurePrivateUnixDirectory(GeoDir);
@@ -112,7 +111,6 @@ public static class AppPaths
         Directory.CreateDirectory(LogsDir);
         Directory.CreateDirectory(CacheDir);
         Directory.CreateDirectory(BinDir);
-        Directory.CreateDirectory(WgturnBinDir);
         Directory.CreateDirectory(SlipstreamBinDir);
         Directory.CreateDirectory(ProfilesDir);
         Directory.CreateDirectory(GeoDir);
