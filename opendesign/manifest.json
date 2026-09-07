@@ -1,0 +1,7 @@
+{
+  "generated": "2026-09-07T16:03:21Z",
+  "sections": [
+    {"id":"mockups","label":"Mockups","groups":[{"slug":"ui-icon-catalog","files":[{"label":"icon-catalog.html","path":"mockups/ui-icon-catalog/icon-catalog.html"}]}]},
+    {"id":"design-systems","label":"Design Systems","groups":[]}
+  ]
+}

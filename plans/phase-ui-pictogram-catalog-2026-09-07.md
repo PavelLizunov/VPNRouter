@@ -30,4 +30,17 @@ Low production blast radius: only preview artifacts and task documentation may c
 - Characterization: empty product/brand/platform diff against base; no API change.
 
 ## Outcome
-IN PROGRESS. No completion or visual verification claimed yet.
+Catalog prepared for owner review; no product integration. 48 proposed SVGs, 481 exact source references in active groups, and four appendix groups for preserved/dynamic/source-only cases.
+
+Executed evidence:
+- `python3 opendesign/mockups/ui-icon-catalog/verify-catalog.py`: PASS (safe monochrome SVGs, exact source excerpts, source locations, local links, original primitive representations, screen mappings, empty product diff).
+- `node opendesign/mockups/ui-icon-catalog/browser-check.mjs`: PASS in isolated Chromium 151 for all 32 combinations (two themes, four sizes, four states), filters/reset/empty results and widths 360/768/1440.
+- Independent visual review inspected all 48 proposals and size strips plus dark hover/active/disabled. Original-geometry/resource-label overflow and screen-metadata findings corrected; final split-metadata readback PASS; no remaining blocking review findings.
+- `git diff b7ce0e4f --exit-code -- VPNRouter.App VPNRouter.Android VPNRouter.Core VPNRouter.CLI VPNRouter.GUI design/project/assets`: PASS, no changes.
+- Brief PR #246 CI: test, Windows characterization, Go and grep passed. Implementation-head CI recorded in final handoff.
+
+Six gates: catalog syntax/build PASS; targeted browser/source tests PASS; documentation PASS; independent review PASS after final metadata readback; catalog visual checks PASS with limits; product/brand characterization PASS (empty diff). Native solution/APK/WINBRAT tests N/A: no production source or asset changes, no ship.
+
+Limits: existing Unicode appearance depends on installed font; dependency-owned notification/widget originals use honest descriptions. Country flags remain country metadata. Source audit does not enumerate arbitrary user-provided text or third-party widget internals. No claim of native Avalonia raster equivalence or formal usability certification.
+
+Review fixes and source-coordinate correction are recorded in task-worktree OPEN-DEFECTS.md. Original dirty checkout remains untouched. Owner must approve the visual proposals before a separate integration task.
