@@ -1,6 +1,5 @@
 ﻿using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 /// <summary>v2.29.0-r2: shape and idempotency tests for the new

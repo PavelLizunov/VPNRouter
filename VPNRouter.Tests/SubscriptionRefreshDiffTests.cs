@@ -70,4 +70,27 @@ public class SubscriptionRefreshDiffTests
     {
         Assert.Null(SubscriptionRefreshDiff.ActiveServerSignature(null, "DE"));
     }
+
+    [Fact]
+    public void ActiveServerSignature_FindsByUuid_EvenIfNameChanged()
+    {
+        var before = new[] { S("DE-Fast", "1.1.1.1", 443, "u1") };
+        // Provider renamed server from "DE-Fast" to "Germany #1", but host/port/uuid identical
+        var after = new[] { S("Germany #1", "1.1.1.1", 443, "u1") };
+
+        var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "DE-Fast", "u1");
+        var sigAfter = SubscriptionRefreshDiff.ActiveServerSignature(after, "DE-Fast", "u1");
+
+        Assert.NotNull(sigAfter);
+        Assert.Equal(sigBefore, sigAfter);
+    }
+
+    [Fact]
+    public void ActiveServerSignature_FallsBackToName_WhenUuidNull()
+    {
+        var servers = new[] { S("NL", "3.3.3.3", 443, "u3") };
+        var sig = SubscriptionRefreshDiff.ActiveServerSignature(servers, "NL", null);
+
+        Assert.Equal(SubscriptionRefreshDiff.SignatureOf("3.3.3.3", 443, "u3"), sig);
+    }
 }

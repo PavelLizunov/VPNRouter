@@ -55,21 +55,8 @@ public static class AppPaths
     public static string SingBoxExePath => Path.Combine(BinDir,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
-    // v2.32.2 W-2 (2026-05-12) — wgturn-cli on-demand download via
-    // WgturnUpdater. Moved out of shared bin/ into dedicated wgturn/
-    // directory (parallel to zapret/, tg-proxy/). v2.32.1 had path in
-    // shared bin/ — see SettingsMigrator.Migrate_3_to_4 for one-shot
-    // move of any pre-existing binary.
-    public static string WgturnDir => Path.Combine(DataDir, "wgturn");
-    public static string WgturnBinDir => Path.Combine(WgturnDir, "bin");
-    public static string WgturnCliExePath => Path.Combine(WgturnBinDir,
-        OperatingSystem.IsWindows() ? "wgturn-cli.exe" : "wgturn-cli");
-    public static string WgturnVersionPath => Path.Combine(WgturnDir, "version.txt");
-    public static string WgturnVariantPath => Path.Combine(WgturnDir, "variant.txt");
-    public static string WgturnCliLogPath => Path.Combine(LogsDir, "wgturn-cli.log");
-
     // DNS-tunnel (slipstream) — last-resort transport sidecar. Dedicated dir
-    // parallel to wgturn/, zapret/, tg-proxy/. The binary is BUNDLED in the
+    // parallel to zapret/, tg-proxy/. The binary is BUNDLED in the
     // installer (app/, like sing-box) — NOT pulled from GitHub, because
     // slipstream is reached precisely when GitHub is blocked (circular dep).
     // SlipstreamManager promotes the bundled copy to SlipstreamExePath on first
