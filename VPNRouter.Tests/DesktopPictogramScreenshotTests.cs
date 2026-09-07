@@ -22,8 +22,15 @@ public class DesktopPictogramScreenshotTests
         var previous = app.RequestedThemeVariant;
         try
         {
-            app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
             using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+            // The real VM applies its saved theme during construction.
+            app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+            Assert.IsType<VPNRouter.App.App>(app);
+            Assert.NotEmpty(app.Styles);
+            Assert.Equal(app.RequestedThemeVariant, app.ActualThemeVariant);
+            Assert.True(app.TryGetResource("AccentFgBrush", app.ActualThemeVariant, out var accent));
+            Assert.Equal(Avalonia.Media.Color.Parse(dark ? "#FF67E8F9" : "#FF0369A1"),
+                Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(accent).Color);
             var theme = dark ? "dark" : "light";
             UserControl[] pages = [new DpiBypassPage(), new TelegramPage()];
             foreach (var page in pages)
