@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:VPNRouter.App.ViewModels"
         xmlns:conv="using:VPNRouter.App"
+        xmlns:icons="using:VPNRouter.App.Controls"
         xmlns:loc="using:VPNRouter.App.Localization"
         xmlns:pages="using:VPNRouter.App.Views.Pages"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -166,7 +167,7 @@
              user a clear "something needs attention" signal without
              shouting. Not attached to the success or off states because
              those are stable, not transient. -->
-        <Style Selector="Ellipse.pulse">
+        <Style Selector="icons|Pictogram.pulse">
             <Style.Animations>
                 <Animation Duration="0:0:1.2" IterationCount="INFINITE">
                     <KeyFrame Cue="0%">
@@ -208,7 +209,7 @@
                     Padding="12,8">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                     <TextBlock Grid.Column="0"
-                               Text="⚠"
+                               icons:PictogramText.Icons="warning" icons:PictogramText.Text="⚠"
                                FontSize="14"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource WarningFgBrush}"/>
@@ -219,12 +220,12 @@
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource WarningFgBrush}"/>
                     <Button Grid.Column="2"
-                            Content="✕"
+                            icons:PictogramText.Icons="close" icons:PictogramText.Content="✕"
                             Command="{Binding DismissSettingsRecoveryNoticeCommand}"
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource WarningFgBrush}"
-                            ToolTip.Tip="{Binding L_TipDismiss}"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}" AutomationProperties.Name="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
 
@@ -241,7 +242,7 @@
                     Padding="12,8">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                     <TextBlock Grid.Column="0"
-                               Text="🛡"
+                               icons:PictogramText.Icons="shield" icons:PictogramText.Text="🛡"
                                FontSize="14"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource WarningFgBrush}"/>
@@ -252,12 +253,12 @@
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource WarningFgBrush}"/>
                     <Button Grid.Column="2"
-                            Content="✕"
+                            icons:PictogramText.Icons="close" icons:PictogramText.Content="✕"
                             Command="{Binding DismissPlaceholderPruneNoticeCommand}"
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource WarningFgBrush}"
-                            ToolTip.Tip="{Binding L_TipDismiss}"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}" AutomationProperties.Name="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
 
@@ -274,7 +275,7 @@
                     Padding="12,8">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                     <TextBlock Grid.Column="0"
-                               Text="⚠"
+                               icons:PictogramText.Icons="warning" icons:PictogramText.Text="⚠"
                                FontSize="14"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource WarningFgBrush}"/>
@@ -285,12 +286,12 @@
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource WarningFgBrush}"/>
                     <Button Grid.Column="2"
-                            Content="✕"
+                            icons:PictogramText.Icons="close" icons:PictogramText.Content="✕"
                             Command="{Binding DismissUpdateWarningCommand}"
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource WarningFgBrush}"
-                            ToolTip.Tip="{Binding L_TipDismiss}"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}" AutomationProperties.Name="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
 
@@ -311,7 +312,7 @@
                      когда AmneziaVPN.exe в трее не держит wintun). -->
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                     <TextBlock Grid.Column="0"
-                               Text="⛔"
+                               icons:PictogramText.Icons="blocked" icons:PictogramText.Text="⛔"
                                FontSize="14"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource DangerFgBrush}"/>
@@ -355,12 +356,12 @@
                             BorderThickness="1"
                             Foreground="{DynamicResource DangerFgBrush}"/>
                     <Button Grid.Column="5"
-                            Content="✕"
+                            icons:PictogramText.Icons="close" icons:PictogramText.Content="✕"
                             Command="{Binding DismissConflictingVpnWarningCommand}"
                             Padding="8,2" MinHeight="0" FontSize="11"
                             Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource DangerFgBrush}"
-                            ToolTip.Tip="{Binding L_TipDismiss}"/>
+                            ToolTip.Tip="{Binding L_TipDismiss}" AutomationProperties.Name="{Binding L_TipDismiss}"/>
                 </Grid>
             </Border>
         </StackPanel>
@@ -416,8 +417,8 @@
                                 Cursor="Hand"
                                 IsVisible="{Binding SimpleStatusIsOn}">
                             <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                                <Ellipse Width="4" Height="4" VerticalAlignment="Center"
-                                         Fill="{DynamicResource SuccessSolidBrush}"/>
+                                <icons:Pictogram Id="status" Width="8" Height="8" VerticalAlignment="Center"
+                                         Foreground="{DynamicResource SuccessSolidBrush}"/>
                                 <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
                                            Foreground="{DynamicResource SuccessFgBrush}"/>
                             </StackPanel>
@@ -435,9 +436,9 @@
                                      over 1.2s continuously while the VPN is in the
                                      "warn" state. See Window.Styles for the animation
                                      definition. -->
-                                <Ellipse Classes="pulse"
-                                         Width="4" Height="4" VerticalAlignment="Center"
-                                         Fill="{DynamicResource WarningSolidBrush}"/>
+                                <icons:Pictogram Id="status" Classes="pulse"
+                                         Width="8" Height="8" VerticalAlignment="Center"
+                                         Foreground="{DynamicResource WarningSolidBrush}"/>
                                 <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
                                            Foreground="{DynamicResource WarningFgBrush}"/>
                             </StackPanel>
@@ -451,8 +452,8 @@
                                 Cursor="Hand"
                                 IsVisible="{Binding SimpleStatusIsOff}">
                             <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                                <Ellipse Width="4" Height="4" VerticalAlignment="Center"
-                                         Fill="{DynamicResource TextMutedBrush}"/>
+                                <icons:Pictogram Id="status" Width="8" Height="8" VerticalAlignment="Center"
+                                         Foreground="{DynamicResource TextMutedBrush}"/>
                                 <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
                                            Foreground="{DynamicResource TextMutedBrush}"/>
                             </StackPanel>
@@ -497,7 +498,7 @@
                      the opposite direction, so this slot stays hidden. -->
                 <Button Grid.Column="2"
                         Command="{Binding ToggleUiModeCommand}"
-                        Content="{Binding UiModeToggleText}"
+                        icons:PictogramText.Icons="chevron-left,chevron-right" icons:PictogramText.Content="{Binding UiModeToggleText}"
                         ToolTip.Tip="{Binding UiModeToggleTooltip}"
                         IsVisible="{Binding !IsSimpleMode}"
                         Padding="8,4" MinHeight="0"
@@ -552,7 +553,7 @@
                         VerticalAlignment="Center"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center">
-                    <Button.Content>⋯</Button.Content>
+                    <Button.Content><icons:Pictogram Id="more-horizontal" Width="18" Height="18"/></Button.Content>
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight"
                                 ShowMode="TransientWithDismissOnPointerMoveAway"
@@ -698,7 +699,7 @@
                                     <!-- Advanced / Simple toggle — arctic primary CTA -->
                                     <Button Classes="primary-cta"
                                             Command="{Binding ToggleUiModeCommand}"
-                                            Content="{Binding UiModeToggleText}"/>
+                                            icons:PictogramText.Icons="chevron-left,chevron-right" icons:PictogramText.Content="{Binding UiModeToggleText}"/>
                                 </StackPanel>
                             </Border>
                         </Flyout>
@@ -823,11 +824,11 @@
                       ColumnSpacing="7"
                       VerticalAlignment="Center"
                       MinWidth="0">
-                    <Ellipse Width="8" Height="8"
-                             Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"
+                    <icons:Pictogram Id="status" Width="16" Height="16"
+                             Foreground="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"
                              VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="1"
-                               Text="{Binding StatusText}" FontSize="11"
+                               icons:PictogramText.Icons="warning,arrow-right" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding StatusText}" FontSize="11"
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
@@ -849,7 +850,7 @@
                      (Start / Stop / Starting / Stopping). Same command as the
                      big button v2.24.4 exposed; only styling is reduced. -->
                 <Button Grid.Column="1"
-                        Content="{Binding ConnectButtonText}"
+                        icons:PictogramText.Icons="play,stop" icons:PictogramText.Content="{Binding ConnectButtonText}"
                         Command="{Binding ToggleConnectionCommand}"
                         IsEnabled="{Binding CanToggleConnection}"
                         FontSize="11" FontWeight="Bold"
@@ -882,7 +883,7 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
                 ZIndex="100">
-            <TextBlock Text="{Binding RulesToastText}"
+            <TextBlock icons:PictogramText.Icons="check,warning,error" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding RulesToastText}"
                        FontSize="11" FontWeight="SemiBold"
                        Foreground="{DynamicResource SuccessFgBrush}"/>
         </Border>

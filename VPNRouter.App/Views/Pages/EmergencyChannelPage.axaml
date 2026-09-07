@@ -3,6 +3,7 @@
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:models="using:VPNRouter.Core.Models"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -66,9 +67,9 @@
 
                             <!-- Status badge: Not installed -->
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Ellipse Width="8" Height="8"
+                                <icons:Pictogram Id="status" Width="16" Height="16"
                                          VerticalAlignment="Center"
-                                         Fill="{DynamicResource TextMutedBrush}"/>
+                                         Foreground="{DynamicResource TextMutedBrush}"/>
                                 <TextBlock Text="{Binding L_EmergencyChannelStatusNotInstalled}"
                                            FontSize="11"
                                            VerticalAlignment="Center"
@@ -126,9 +127,9 @@
                                            FontSize="11"
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                <Ellipse Width="8" Height="8"
+                                <icons:Pictogram Id="status" Width="16" Height="16"
                                          VerticalAlignment="Center"
-                                         Fill="{DynamicResource TextMutedBrush}"/>
+                                         Foreground="{DynamicResource TextMutedBrush}"/>
                                 <TextBlock Text="{Binding WgturnStatusText}"
                                            FontSize="11"
                                            VerticalAlignment="Center"/>
@@ -157,11 +158,11 @@
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
                                 <Button Grid.Column="2"
-                                        Content="✕"
+                                        icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                                         Command="{Binding RemoveSelectedWgturnConfigCommand}"
                                         IsEnabled="{Binding SelectedWgturnConfig, Converter={x:Static ObjectConverters.IsNotNull}}"
                                         FontSize="11" Padding="8,4"
-                                        ToolTip.Tip="{Binding L_EmergencyChannelRemove}"
+                                        ToolTip.Tip="{Binding L_EmergencyChannelRemove}" AutomationProperties.Name="{Binding L_EmergencyChannelRemove}"
                                         CornerRadius="{StaticResource RadiusSm}"
                                         Foreground="{DynamicResource DangerSolidBrush}"/>
                             </Grid>
@@ -215,7 +216,7 @@
                             </Grid>
 
                             <!-- VK link hint -->
-                            <TextBlock Text="{Binding L_EmergencyChannelVkLinkHint}"
+                            <TextBlock icons:PictogramText.Icons="arrow-right" icons:PictogramText.Text="{Binding L_EmergencyChannelVkLinkHint}"
                                        TextWrapping="Wrap"
                                        FontSize="9" Opacity="0.6"
                                        Foreground="{DynamicResource TextMutedBrush}"/>
@@ -278,9 +279,9 @@
                                            FontSize="11"
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                <Ellipse Width="8" Height="8"
+                                <icons:Pictogram Id="status" Width="16" Height="16"
                                          VerticalAlignment="Center"
-                                         Fill="{DynamicResource SuccessSolidBrush}"/>
+                                         Foreground="{DynamicResource SuccessSolidBrush}"/>
                                 <TextBlock Text="{Binding WgturnStatusText}"
                                            FontSize="11"
                                            VerticalAlignment="Center"/>
@@ -331,9 +332,9 @@
                             Orientation="Horizontal"
                             Spacing="6"
                             VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8"
+                    <icons:Pictogram Id="status" Width="16" Height="16"
                              VerticalAlignment="Center"
-                             Fill="{Binding IsWgturnConnected, Converter={StaticResource StatusColorConverter}}"/>
+                             Foreground="{Binding IsWgturnConnected, Converter={StaticResource StatusColorConverter}}"/>
                     <TextBlock Text="{Binding WgturnStatusText}"
                                FontSize="10"
                                FontWeight="SemiBold"
