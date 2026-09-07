@@ -99,7 +99,8 @@ try {
 } finally { $zip.Dispose() }
 if ((Get-FileHash -LiteralPath $core -Algorithm SHA256).Hash -cne $archiveCoreHash) { throw 'Extracted core differs from verified archive member.' }
 $original = Get-Manifest $installed
-$publishRoots = @("$taskRoot\preview-VPNRouter.Service-e6b85a1a", "$taskRoot\preview-VPNRouter.CLI-e6b85a1a", $published)
+# Match build.ps1's canonical App -> CLI -> Service shared-runtime precedence.
+$publishRoots = @($published, "$taskRoot\preview-VPNRouter.CLI-e6b85a1a", "$taskRoot\preview-VPNRouter.Service-e6b85a1a")
 $publishMaps = @{}
 $overlay = @{}
 foreach ($root in $publishRoots) {
@@ -107,7 +108,12 @@ foreach ($root in $publishRoots) {
     $publishMaps[$root] = $map
     foreach ($key in $map.Keys) {
         if ($overlay.ContainsKey($key) -and $overlay[$key] -cne $map[$key]) {
-            throw 'Shared publish file differs between same-revision outputs.'
+            # App transitively uses Extensions 6; Service ships the newer compatible
+            # assemblies, exactly as the repository's shared-output build does.
+            $sharedRuntime = @('Microsoft.Extensions.DependencyInjection.Abstractions.dll',
+                'Microsoft.Extensions.DependencyInjection.dll', 'Microsoft.Extensions.Logging.Abstractions.dll',
+                'Microsoft.Extensions.Logging.dll', 'Microsoft.Extensions.Options.dll', 'Microsoft.Extensions.Primitives.dll')
+            if ($key -notin $sharedRuntime) { throw 'Unexpected shared publish mismatch.' }
         }
         $overlay[$key] = $map[$key]
     }
