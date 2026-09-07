@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** — Desktop pictogram screenshot theme was assigned before ViewModel initialization, which resets application theme; light/dark PNG pairs were identical and cannot establish theme coverage. Move assignment after initialization and assert actual theme/resources; recapture before acceptance — `VPNRouter.Tests/DesktopPictogramScreenshotTests.cs`, PR #247.
+- [ ] **P2** — NetworkPage narrow-delete source contract assumes literal Button.Content placement rather than accepted semantic pictogram; CI 34159551596 fails one test although command and Auto-column preserved. Update semantic assertions retaining six deletes/three narrow placements — `VPNRouter.Tests/NetworkPageLayoutTests.cs`, PR #247.
+- [ ] **P2** — Generic deployment cleanup enumerates other runs' extraction directories and launch evidence accepts arbitrary process by name; scoped cleanup/unique task/path+SID+session evidence implemented but Windows runtime verification pending — `deploy-to-testpc.ps1`, PR #247.
+
 - [x] **P2 RESOLVED in catalog PR #246 (2026-09-07)** — splitting shared glyphs into search/apply/action semantics inherited unrelated screen tags, making filters misleading; assigned actual consumer screens and added exact screen-set regressions — `opendesign/mockups/ui-icon-catalog/merge-inventory.py` / `verify-catalog.py`.
 
 - [x] **P2 RESOLVED in catalog PR #246 (2026-09-07)** — preview represented locally owned play/stop/radio/switch primitives as text and squeezed resource descriptions into icon-sized boxes; source geometry and auto-height resource labels now used — `opendesign/mockups/ui-icon-catalog/merge-inventory.py` / `icon-catalog.html`; no product change.
