@@ -6355,17 +6355,31 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private static void OpenUrl(string url)
+    public static bool TryOpenUrl(string? url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            Serilog.Log.Logger.Warning("[VM] TryOpenUrl blocked invalid or non-HTTP(S) URL: {Url}", CanaryPolicy.RedactUrl(url));
+            return false;
+        }
+
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            Process.Start(new ProcessStartInfo { FileName = uri.AbsoluteUri, UseShellExecute = true });
+            return true;
         }
         catch (Exception ex)
         {
-            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", url);
+            Serilog.Log.Logger.Debug(ex, "[VM] TryOpenUrl failed: {Url}", CanaryPolicy.RedactUrl(url));
+            return false;
         }
     }
+
+    private static void OpenUrl(string url) => TryOpenUrl(url);
 
     [RelayCommand]
     private void CopyTgProxySecret()
