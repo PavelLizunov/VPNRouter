@@ -367,7 +367,6 @@
                                 Foreground="{DynamicResource DangerFgBrush}"/>
                     </WrapPanel>
                 </Grid>
-                </Grid>
             </Border>
         </StackPanel>
 
