@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -130,15 +131,10 @@
                                             BoxShadow="0 2 6 0 #14000000"
                                             VerticalAlignment="Top"
                                             Margin="0,2,12,0">
-                                        <Path Width="20" Height="20"
-                                              Stretch="Uniform"
-                                              Stroke="{DynamicResource AccentFgBrush}"
-                                              StrokeThickness="1.8"
-                                              StrokeLineCap="Round"
-                                              StrokeJoin="Round"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Data="M21,3 L11,13 M21,3 L14.5,21 L11,13 L3,9.5 z"/>
+                                        <icons:Pictogram Id="telegram" Width="20" Height="20"
+                                                         Foreground="{DynamicResource AccentFgBrush}"
+                                                         HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
                                     </Border>
 
                                     <TextBlock Grid.Column="1" Grid.Row="0"
@@ -180,17 +176,14 @@
                                              triangle; we keep it lean with
                                              just the triangle so the button
                                              stays compact at narrow widths. -->
-                                        <Path Width="11" Height="11"
-                                              Stretch="Uniform"
-                                              Fill="{DynamicResource AccentOnSolidBrush}"
-                                              VerticalAlignment="Center"
-                                              IsVisible="{Binding !TgProxyEnabled}"
-                                              Data="M8,5 L8,19 L19,12 z"/>
-                                        <Border Width="10" Height="10"
-                                                CornerRadius="2"
-                                                Background="{DynamicResource AccentOnSolidBrush}"
-                                                VerticalAlignment="Center"
-                                                IsVisible="{Binding TgProxyEnabled}"/>
+                                        <icons:Pictogram Id="play" Width="14" Height="14"
+                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
+                                                         VerticalAlignment="Center"
+                                                         IsVisible="{Binding !TgProxyEnabled}"/>
+                                        <icons:Pictogram Id="stop" Width="14" Height="14"
+                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
+                                                         VerticalAlignment="Center"
+                                                         IsVisible="{Binding TgProxyEnabled}"/>
                                         <TextBlock Text="{Binding LblTgProxyMainAction}"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
@@ -214,8 +207,8 @@
                                             BorderThickness="1"
                                             Padding="10,5">
                                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Ellipse Width="6" Height="6"
-                                                     Fill="{DynamicResource SuccessSolidBrush}"
+                                            <icons:Pictogram Id="status" Width="12" Height="12"
+                                                     Foreground="{DynamicResource SuccessSolidBrush}"
                                                      VerticalAlignment="Center"/>
                                             <TextBlock Text="{Binding LblTgProxyAirPill}"
                                                        FontSize="10"
@@ -228,7 +221,7 @@
                                                  the StatsUpdated event from TgProxyManager
                                                  and refreshed on each parse cycle. Hidden
                                                  until first stats arrive. -->
-                                            <TextBlock Text="{Binding TgProxyStats}"
+                                            <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding TgProxyStats}"
                                                        IsVisible="{Binding HasTgProxyStats}"
                                                        FontSize="10"
                                                        Opacity="0.85"
@@ -426,10 +419,10 @@
                                     BorderThickness="1"
                                     BorderBrush="{DynamicResource BorderSubtleBrush}">
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                    <Ellipse Grid.Column="0"
-                                             Width="8" Height="8"
+                                    <icons:Pictogram Id="status" Grid.Column="0"
+                                             Width="16" Height="16"
                                              VerticalAlignment="Center"
-                                             Fill="{Binding TgProxyBadgeBrush}"/>
+                                             Foreground="{Binding TgProxyBadgeBrush}"/>
                                     <StackPanel Grid.Column="1"
                                                 Orientation="Horizontal"
                                                 Spacing="6"
@@ -488,7 +481,7 @@
                                     Background="{DynamicResource SurfaceSunkenBrush}">
                                 <StackPanel Spacing="3">
                                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
-                                               Text="{Binding LblTgProxySetupHint}"/>
+                                               icons:PictogramText.Icons="arrow-right" icons:PictogramText.Text="{Binding LblTgProxySetupHint}"/>
                                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5"
                                                FontStyle="Italic"
                                                Text="{Binding L_TgProxySetupOnce}"/>
@@ -535,9 +528,9 @@
                             Orientation="Horizontal"
                             Spacing="6"
                             VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8"
+                    <icons:Pictogram Id="status" Width="16" Height="16"
                              VerticalAlignment="Center"
-                             Fill="{Binding TgProxyBadgeBrush}"/>
+                             Foreground="{Binding TgProxyBadgeBrush}"/>
                     <TextBlock Text="{Binding TgProxyStatus}"
                                FontSize="10"
                                FontWeight="SemiBold"
