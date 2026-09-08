@@ -6369,11 +6369,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            // Security: validate absolute URI with http or https scheme only
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                Process.Start(new ProcessStartInfo { FileName = uri.AbsoluteUri, UseShellExecute = true });
+            }
+            else
+            {
+                Serilog.Log.Logger.Warning("[VM] OpenUrl blocked non-http(s) URL: {Url}", CanaryPolicy.RedactUrl(url));
+            }
         }
         catch (Exception ex)
         {
-            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", url);
+            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", CanaryPolicy.RedactUrl(url));
         }
     }
 
