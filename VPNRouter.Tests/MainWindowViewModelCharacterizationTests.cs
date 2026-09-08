@@ -260,7 +260,8 @@ public class MainWindowViewModelCharacterizationTests
         // v2.49.2 app apply/connection serialization: + CanToggleConnection.
         // 2026-09-08: removed dead EmergencyChannel/wgturn surface (IsEmergencyChannelAvailable,
         // IsEmergencyChannelToolSelected, MainWindowViewModel.Wgturn.cs).
-        "1e0f558ea7d4ca94ddebf1515e97958dcb28ca9d04108603ffb3a7f09e656308";
+        // 2026-09-08: added BeginBatchUpdate() / IsBatchUpdating batch persistence guard.
+        "dd8d24e1576f9427ef96d6981e7d5d3a2c4611937574884d3720ed96309945c6";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
