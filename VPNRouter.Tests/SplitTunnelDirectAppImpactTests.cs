@@ -117,11 +117,11 @@ public class SplitTunnelDirectAppImpactTests
 
         var localDns = cfg.Dns.Servers.Single(s => s.Tag == "local-dns");
 
-        // It is Cloudflare DNS-over-HTTPS via the direct outbound — NOT a
+        // It is Google DNS-over-HTTPS via the direct outbound — NOT a
         // type:"local" (getaddrinfo/system) server. So the direct app's DNS
         // never reaches its configured/ISP/LAN resolver.
         Assert.Equal("https", localDns.Type);
-        Assert.Equal("1.1.1.1", localDns.Server);
+        Assert.Equal("8.8.8.8", localDns.Server);
         Assert.Equal("dns-direct", localDns.Detour);
         Assert.NotEqual("local", localDns.Type);
     }

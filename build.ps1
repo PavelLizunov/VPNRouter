@@ -384,7 +384,7 @@ if ($effectiveSingBoxPath) {
 }
 
 # ── slipstream-client.exe — DNS-tunnel transport, BUNDLED (Windows-only MVP) ──
-# Unlike wgturn/zapret (on-demand pull), slipstream is BUNDLED because it's a
+# Unlike zapret (on-demand pull), slipstream is BUNDLED because it's a
 # last-resort transport reached precisely when GitHub is blocked (circular dep:
 # can't pull the binary from GitHub at the moment you need it to reach GitHub).
 # Built from source locally (Mygod/slipstream-rust + picoquic), fully static /MT
@@ -457,17 +457,6 @@ if ($bundleSplitDriver) {
 } else {
     Write-Host "       split-tunnel driver: NOT bundled (local build without -BundleSplitDriver)" -ForegroundColor Gray
 }
-
-# ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──
-# Pre-r3 the build step here cloned PavelLizunov/wgturn-core and
-# cross-compiled wgturn-cli.exe into app/bin/. This caused:
-#   - Inconsistency between Win and Mac/Linux installers (CI couldn't clone
-#     the previously-private repo; Windows local-build had it).
-#   - ~10 MB bundled artifact that no UI surface used in r10.
-# The bundle step is removed; the Phase 2 on-demand WgturnUpdater (see
-# plans/wgturn-on-demand-download.md) handles delivery instead, in line
-# with how Zapret + Telegram-proxy are already shipped on-demand.
-Write-Host "       wgturn-cli: downloaded on demand (not bundled)" -ForegroundColor Gray
 
 # ── Zapret (DPI bypass) — downloaded on demand from Flowseal/zapret-discord-youtube ──
 Write-Host "       Zapret: downloaded on demand (not bundled)" -ForegroundColor Gray
@@ -639,7 +628,6 @@ if (Test-Path $driverInDist) {
     if (Test-Path $stLicInDist) { Copy-Item $stLicInDist $BootstrapDir -Force }
     Write-Host "       split-tunnel driver/ included in update (under _bootstrap/)" -ForegroundColor Gray
 }
-# wgturn-cli: downloaded on demand (v2.32.1-r3+, see plans/wgturn-on-demand-download.md)
 # Zapret: downloaded on demand, not in update package
 # Also include profiles and README under _bootstrap/.
 $UpdateProfilesDst = Join-Path $BootstrapDir "profiles"

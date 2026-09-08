@@ -19,12 +19,20 @@ internal static class SubscriptionRefreshDiff
         => $"{server}|{port}|{uuid}";
 
     /// <summary>
-    /// Signature of the ACTIVE server (matched by name) within a server set,
+    /// Signature of the ACTIVE server (matched by uuid or name) within a server set,
     /// or null if it isn't present.
     /// </summary>
-    public static string? ActiveServerSignature(IEnumerable<VlessServerEntry>? servers, string? activeName)
-        => servers?
+    public static string? ActiveServerSignature(IEnumerable<VlessServerEntry>? servers, string? activeName, string? activeUuid = null)
+    {
+        if (servers == null) return null;
+        if (!string.IsNullOrEmpty(activeUuid))
+        {
+            var byUuid = servers.FirstOrDefault(s => s != null && string.Equals(s.Uuid, activeUuid, System.StringComparison.Ordinal));
+            if (byUuid != null) return SignatureOf(byUuid.Server, byUuid.Port, byUuid.Uuid);
+        }
+        return servers
             .Where(s => s != null && string.Equals(s.Name, activeName, System.StringComparison.Ordinal))
             .Select(s => SignatureOf(s.Server, s.Port, s.Uuid))
             .FirstOrDefault();
+    }
 }

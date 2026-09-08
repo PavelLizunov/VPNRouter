@@ -39,7 +39,6 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
   - `SettingsLoader.cs`, `SettingsMigrator.cs`: YAML settings loading/saving (YamlDotNet) and schema migrations.
   - `ZapretProbeCache.cs`: Zapret probe cache persistence (`%ProgramData%\VPNRouter\cache\zapret_probe.json`).
 - `Services/FreeConfigs/`: Free config aggregator pipeline (`FreeConfigAggregator`, `FreeConfigCache`, `FreeConfigTester`, `FreeConfigDeepVerifier`, `FreeConfigGeoIp`, `FreeConfigPoolFetcher`, `FreeConfigSources`).
-- `Services/EmergencyChannel/`: Fail-safe backup connectivity channel manager (`EmergencyChannelManager`, `EmergencyChannelEngine`).
 - `Services/Diagnostics/`: Log export and diagnostic redaction helpers (`DiagnosticsExporter`, `DiagnosticsRedactor`).
 - `Services/UpdateSources/`: Update-source contracts and GitHub/sideload implementations.
 - `Interfaces/`: Core contracts (`IFirewallManager`, `IProcessScanner`, `IProcessMonitor`, `IProfileSource`). The Windows split-driver contract is declared with its manager in `Services/SplitTunnelDriverManager.cs`.

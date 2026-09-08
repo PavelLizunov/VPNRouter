@@ -1,6 +1,5 @@
 ﻿using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 /// <summary>v2.29.0-r7+ Phase 3C: persistent deep-verify checkpoint

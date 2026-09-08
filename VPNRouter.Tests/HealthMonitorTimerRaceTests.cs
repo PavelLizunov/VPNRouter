@@ -1,6 +1,5 @@
 ﻿using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 /// <summary>v2.31.0-r1 (CO-1 audit fix): debounce timer swap uses

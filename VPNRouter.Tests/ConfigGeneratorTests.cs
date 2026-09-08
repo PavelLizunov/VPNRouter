@@ -1,7 +1,6 @@
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -286,7 +285,7 @@ public class ConfigGeneratorTests
 
         var local = config.Dns.Servers.Single(s => s.Tag == "local-dns");
         Assert.Equal("https", local.Type);
-        Assert.Equal("1.1.1.1", local.Server);
+        Assert.Equal("8.8.8.8", local.Server);
         Assert.Equal("/dns-query", local.Path);
         Assert.Equal("dns-direct", local.Detour);
 
