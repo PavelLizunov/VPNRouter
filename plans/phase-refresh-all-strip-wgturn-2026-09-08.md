@@ -50,3 +50,23 @@
 4. Clean excision gate: no references to `wgturn` or `EmergencyChannel` remain in production code.
 5. Swarm audit gate: all 6 UI workers complete and a comprehensive synthesized report is generated.
 6. Git gate: committed cleanly on task branch, pushed to origin, PR opened.
+
+## Outcome
+
+- **PR**: https://github.com/PavelLizunov/VPNRouter/pull/250
+- **CI Verification**: GitHub Actions workflow `dotnet test` [Run 34211463024](https://github.com/PavelLizunov/VPNRouter/actions/runs/34211463024) **3/3 GREEN**:
+  - `go-test-windows`: pass
+  - `characterization-windows`: pass (re-pinned `dd8d24e1576f9427ef96d6981e7d5d3a2c4611937574884d3720ed96309945c6`)
+  - `test`: pass (2883 passed, 0 failed, 57 skipped)
+- **Delivered Deliverables**:
+  1. `RefreshAllSubscriptionsAsync` & `RefreshSubscriptionAsync` tunnel preservation when active server is unchanged.
+  2. Complete removal of `wgturn` / `EmergencyChannel` across Core, App, Tests, and Build scripts.
+  3. Batch update guard (`BeginBatchUpdate`) in `MainWindowViewModel` & `AppGroupViewModel` preventing disk I/O freezes on bulk app selection.
+  4. Safe bootstrap DNS: replaced `1.1.1.1` with `8.8.8.8` across Core generators, injectors, and verifiers.
+  5. QUIC reject: added unconditional `{ network: "udp", port: [443], action: "reject" }` rule preventing WinDivert QUIC `ERR_SSL_PROTOCOL_ERROR`.
+  6. `HealthMonitor.WedgeKillThreshold` increased to 4.
+  7. `NetworkPage.axaml` Read Mode rule lists virtualized with `VirtualizingStackPanel`.
+  8. `DeferredPage` control implemented and wired to `MainWindow.axaml` and `ToolsPage.axaml`.
+  9. Conflicting VPN warning banner redesigned into responsive 2-row layout with wrapping button panel.
+  10. Gemini Swarm audit synthesized and recorded in `plans/ui-audit/`.
+
