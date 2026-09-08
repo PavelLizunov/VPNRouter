@@ -23,6 +23,9 @@ public sealed class AppUrlRedactionSourceTests
     [InlineData("MainWindowViewModel.cs",
         "_logger.Warning(ex, \"Failed to parse server URI: {Line}\", CrashReporter.ScrubSecrets(line));",
         "\"Failed to parse server URI: {Line}\", line);")]
+    [InlineData("MainWindowViewModel.cs",
+        "Serilog.Log.Logger.Debug(ex, \"[VM] OpenUrl failed: {Url}\", CanaryPolicy.RedactUrl(url));",
+        "\"[VM] OpenUrl failed: {Url}\", url);")]
     public void LogSink_RedactsUrlArgument(string file, string wrapped, string raw)
     {
         var src = File.ReadAllText(FindRepoFile("VPNRouter.App", "ViewModels", file));
