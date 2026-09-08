@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+<title id="title">Найти рабочие конфигурации</title>
+<desc id="desc">Запускает глубокую проверку публичных серверов</desc>
+<circle cx="10" cy="10" r="7"/><path d="m15 15 6 6M6 10l3 3 5-6"/>
+</svg>

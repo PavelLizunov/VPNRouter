@@ -1,6 +1,5 @@
 ﻿using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 /// <summary>v2.30.0-r3: tests for the 3-format import/export of

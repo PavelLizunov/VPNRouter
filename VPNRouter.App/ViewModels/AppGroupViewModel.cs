@@ -46,15 +46,11 @@ public partial class AppGroupViewModel : ViewModelBase
         IsChecked = isChecked;
     }
 
+    public System.Func<System.IDisposable>? BeginBatchUpdate { get; set; }
+
     partial void OnIsCheckedChanged(bool value)
     {
-        // Cascade to every app in the group. Each AppItem.IsChecked
-        // setter is now mode-aware (AM-3) — it writes to the active
-        // RoutingAppsInclude / RoutingAppsExclude list via the bridge
-        // callbacks wired by MainWindowViewModel.LoadApps. N writes in
-        // a row is acceptable: SaveSettings is sub-millisecond and the
-        // host VM debounces nothing here, matching the legacy cascade
-        // behaviour that Bug-r9-I's auto-save piggybacks on.
+        using var _ = BeginBatchUpdate?.Invoke();
         foreach (var app in Apps)
             app.IsChecked = value;
     }
@@ -62,12 +58,16 @@ public partial class AppGroupViewModel : ViewModelBase
     [RelayCommand]
     private void SelectAll()
     {
+        IsChecked = true;
+        using var _ = BeginBatchUpdate?.Invoke();
         foreach (var app in Apps) app.IsChecked = true;
     }
 
     [RelayCommand]
     private void ClearAll()
     {
+        IsChecked = false;
+        using var _ = BeginBatchUpdate?.Invoke();
         foreach (var app in Apps) app.IsChecked = false;
     }
 

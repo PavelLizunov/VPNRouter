@@ -3,6 +3,7 @@
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
@@ -47,25 +48,24 @@
       <Setter Property="VerticalContentAlignment" Value="Stretch"/>
       <Setter Property="Template">
         <ControlTemplate>
-          <Border Name="Track"
-                  Width="32" Height="18"
-                  CornerRadius="9"
-                  Background="{TemplateBinding Background}">
-            <Border Name="Thumb"
-                    Width="14" Height="14"
-                    CornerRadius="7"
-                    Background="White"
-                    BoxShadow="0 1 2 0 #33000000"
-                    HorizontalAlignment="Left"
-                    Margin="2,0"/>
-          </Border>
+          <icons:Pictogram Name="SwitchIcon" Id="switch"
+                           Width="32" Height="24"
+                           Foreground="{TemplateBinding Background}"
+                           RenderTransformOrigin="50%,50%"/>
         </ControlTemplate>
       </Setter>
       <Style Selector="^:checked">
         <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
       </Style>
-      <Style Selector="^:checked /template/ Border#Thumb">
-        <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Style Selector="^ /template/ icons|Pictogram#SwitchIcon">
+        <Setter Property="RenderTransform">
+          <ScaleTransform ScaleX="-1"/>
+        </Setter>
+      </Style>
+      <Style Selector="^:checked /template/ icons|Pictogram#SwitchIcon">
+        <Setter Property="RenderTransform">
+          <ScaleTransform ScaleX="1"/>
+        </Setter>
       </Style>
     </ControlTheme>
 
@@ -417,7 +417,7 @@
                   BorderThickness="1">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
               <TextBlock Grid.Column="0"
-                         Text="ⓘ"
+                         icons:PictogramText.Icons="info" icons:PictogramText.Text="ⓘ"
                          FontSize="14" FontWeight="Bold"
                          Foreground="{DynamicResource InfoFgBrush}"
                          VerticalAlignment="Top" Margin="0,1,0,0"/>
@@ -473,8 +473,8 @@
                 </TextBlock>
               </StackPanel>
               <Button Grid.Column="2"
-                      Content="✕"
-                      Command="{Binding DismissRulesHelpBannerCommand}"
+                      icons:PictogramText.Icons="close" icons:PictogramText.Content="✕"
+                      Command="{Binding DismissRulesHelpBannerCommand}" AutomationProperties.Name="{Binding L_TipDismiss}"
                       FontSize="11"
                       Padding="4,1" MinHeight="0"
                       Background="Transparent"
@@ -606,7 +606,7 @@
                            BorderBrush="{Binding NewRuleValueBorderColor,
                                          Converter={x:Static conv:BoolToBrushConverter.Instance},
                                          ConverterParameter=DangerBorderBrush|SuccessBorderBrush}"/>
-                  <TextBlock Text="{Binding NewRuleValueHint}"
+                  <TextBlock icons:PictogramText.Icons="check,error" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding NewRuleValueHint}"
                              FontSize="9"
                              FontFamily="Consolas, 'SF Mono', monospace"
                              MinHeight="11" TextTrimming="CharacterEllipsis"
@@ -637,7 +637,7 @@
                      content fits in 100 px even with the slightly wider
                      RU label. -->
                 <Button Grid.Column="4"
-                        Content="{Binding L_CustomRulesAddBtn}"
+                        icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                         Command="{Binding AddCustomRuleFromFormCommand}"
                         FontSize="11" FontWeight="SemiBold"
                         Padding="8,5" MinHeight="0"
@@ -704,7 +704,7 @@
                        BorderBrush="{Binding NewRuleValueBorderColor,
                                      Converter={x:Static conv:BoolToBrushConverter.Instance},
                                      ConverterParameter=DangerBorderBrush|SuccessBorderBrush}"/>
-              <TextBlock Text="{Binding NewRuleValueHint}"
+              <TextBlock icons:PictogramText.Icons="check,error" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding NewRuleValueHint}"
                          FontSize="9"
                          FontFamily="Consolas, 'SF Mono', monospace"
                          MinHeight="11" TextTrimming="CharacterEllipsis"
@@ -716,7 +716,7 @@
                        PlaceholderText="{Binding L_CustomRulesCommentLabel}"
                        FontSize="11" Padding="6,3" MinHeight="0"/>
               <!-- Row 4: + Add (full width) -->
-              <Button Content="{Binding L_CustomRulesAddBtn}"
+              <Button icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                       Command="{Binding AddCustomRuleFromFormCommand}"
                       FontSize="11" FontWeight="SemiBold"
                       Padding="14,5" MinHeight="0"
@@ -895,7 +895,7 @@
                    TextBlock with TextAlignment=Center + VerticalAlignment
                    =Center + LineHeight tied to FontSize anchors the
                    glyph to the button's geometric center. -->
-              <TextBlock Text="⋯"
+              <TextBlock icons:PictogramText.Icons="more-horizontal" icons:PictogramText.Text="⋯"
                          FontSize="16"
                          FontWeight="Bold"
                          LineHeight="16"
@@ -921,7 +921,7 @@
                               Command="{Binding EnableAllCustomRulesCommand}"
                               Click="OnBulkItemClick">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <TextBlock Text="⊕" Width="14"
+                          <TextBlock icons:PictogramText.Icons="add-circle" icons:PictogramText.Text="⊕" Width="14"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"/>
                           <TextBlock Text="{Binding L_CustomRulesEnableAll}"
@@ -932,7 +932,7 @@
                               Command="{Binding DisableAllCustomRulesCommand}"
                               Click="OnBulkItemClick">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <TextBlock Text="⊝" Width="14"
+                          <TextBlock icons:PictogramText.Icons="remove-circle" icons:PictogramText.Text="⊝" Width="14"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"/>
                           <TextBlock Text="{Binding L_CustomRulesDisableAll}"
@@ -943,7 +943,7 @@
                               Command="{Binding SortCustomRulesByTypeCommand}"
                               Click="OnBulkItemClick">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <TextBlock Text="↕" Width="14"
+                          <TextBlock icons:PictogramText.Icons="sort" icons:PictogramText.Text="↕" Width="14"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"/>
                           <TextBlock Text="{Binding L_RulesSortByType}"
@@ -958,7 +958,7 @@
                               Command="{Binding ClearAllCustomRulesCommand}"
                               Click="OnBulkItemClick">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <TextBlock Text="✕" Width="14"
+                          <TextBlock icons:PictogramText.Icons="delete" icons:PictogramText.Text="✕" Width="14"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"/>
                           <TextBlock Text="{Binding L_CustomRulesClearAll}"
@@ -1055,7 +1055,7 @@
                       Background="{DynamicResource SurfaceBaseBrush}"
                       CornerRadius="{StaticResource RadiusSm}"
                       ToolTip.Tip="{Binding L_RulesBulkActions}">
-                <TextBlock Text="⋯"
+                <TextBlock icons:PictogramText.Icons="more-horizontal" icons:PictogramText.Text="⋯"
                            FontSize="16"
                            FontWeight="Bold"
                            LineHeight="16"
@@ -1081,7 +1081,7 @@
                                 Command="{Binding EnableAllCustomRulesCommand}"
                                 Click="OnBulkItemClick">
                           <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="⊕" Width="14"
+                            <TextBlock icons:PictogramText.Icons="add-circle" icons:PictogramText.Text="⊕" Width="14"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding L_CustomRulesEnableAll}"
@@ -1092,7 +1092,7 @@
                                 Command="{Binding DisableAllCustomRulesCommand}"
                                 Click="OnBulkItemClick">
                           <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="⊝" Width="14"
+                            <TextBlock icons:PictogramText.Icons="remove-circle" icons:PictogramText.Text="⊝" Width="14"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding L_CustomRulesDisableAll}"
@@ -1103,7 +1103,7 @@
                                 Command="{Binding SortCustomRulesByTypeCommand}"
                                 Click="OnBulkItemClick">
                           <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="↕" Width="14"
+                            <TextBlock icons:PictogramText.Icons="sort" icons:PictogramText.Text="↕" Width="14"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding L_RulesSortByType}"
@@ -1117,7 +1117,7 @@
                                 Command="{Binding ClearAllCustomRulesCommand}"
                                 Click="OnBulkItemClick">
                           <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="✕" Width="14"
+                            <TextBlock icons:PictogramText.Icons="delete" icons:PictogramText.Text="✕" Width="14"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding L_CustomRulesClearAll}"
@@ -1303,7 +1303,7 @@
                             Background="Transparent"
                             BorderThickness="0"
                             ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_RulesBulkActions}">
-                      <TextBlock Text="⋯"
+                      <TextBlock icons:PictogramText.Icons="more-horizontal" icons:PictogramText.Text="⋯"
                                  FontSize="14"
                                  FontWeight="Bold"
                                  LineHeight="14"
@@ -1314,7 +1314,7 @@
                       <Button.Flyout>
                         <MenuFlyout>
                           <MenuItem Header="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"
-                                    Command="{Binding RemoveCommand}"
+                                    Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}"
                                     Foreground="{DynamicResource DangerFgBrush}"/>
                         </MenuFlyout>
                       </Button.Flyout>
@@ -1396,7 +1396,7 @@
                             Background="Transparent"
                             BorderThickness="0"
                             ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_RulesBulkActions}">
-                      <TextBlock Text="⋯"
+                      <TextBlock icons:PictogramText.Icons="more-horizontal" icons:PictogramText.Text="⋯"
                                  FontSize="14"
                                  FontWeight="Bold"
                                  LineHeight="14"
@@ -1407,7 +1407,7 @@
                       <Button.Flyout>
                         <MenuFlyout>
                           <MenuItem Header="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"
-                                    Command="{Binding RemoveCommand}"
+                                    Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}"
                                     Foreground="{DynamicResource DangerFgBrush}"/>
                         </MenuFlyout>
                       </Button.Flyout>
@@ -1475,6 +1475,11 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              Padding="14,6,14,4"/>
                   <ItemsControl ItemsSource="{Binding ReadModeDirectRules}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
                         <StackPanel Spacing="0">
@@ -1484,7 +1489,7 @@
                               Opacity="{Binding RowOpacity}"
                               IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <TextBlock Grid.Column="0"
-                                     Text="●"
+                                     icons:PictogramText.Icons="status" icons:PictogramText.Text="●"
                                      FontFamily="Consolas, 'SF Mono', monospace"
                                      FontSize="11"
                                      Foreground="{DynamicResource SuccessFgBrush}"
@@ -1511,8 +1516,8 @@
                                      VerticalAlignment="Center"
                                      ToolTip.Tip="{Binding Comment}"/>
                           <Button Grid.Column="4"
-                                  Content="✕"
-                                  Command="{Binding RemoveCommand}"
+                                  icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
+                                  Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}"
                                   FontSize="11"
                                   Padding="6,0" MinHeight="0"
                                   Background="Transparent"
@@ -1525,7 +1530,7 @@
                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <StackPanel Grid.Column="0" Spacing="1">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                              <TextBlock Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                              <TextBlock icons:PictogramText.Icons="status" icons:PictogramText.Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
                                          Foreground="{DynamicResource SuccessFgBrush}" VerticalAlignment="Center"/>
                               <TextBlock Text="{Binding Action}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
                                          FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
@@ -1535,7 +1540,7 @@
                             <TextBlock Text="{Binding Value}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"/>
                           </StackPanel>
-                          <Button Grid.Column="1" Content="✕" Command="{Binding RemoveCommand}" FontSize="11" Padding="6,0" MinHeight="0"
+                          <Button Grid.Column="1" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕" Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}" FontSize="11" Padding="6,0" MinHeight="0"
                                   Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                         </Grid>
                         </StackPanel>
@@ -1553,6 +1558,11 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              Padding="14,8,14,4"/>
                   <ItemsControl ItemsSource="{Binding ReadModeProxyRules}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
                         <StackPanel Spacing="0">
@@ -1561,7 +1571,7 @@
                               Margin="14,1"
                               Opacity="{Binding RowOpacity}"
                               IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
-                          <TextBlock Grid.Column="0" Text="●"
+                          <TextBlock Grid.Column="0" icons:PictogramText.Icons="status" icons:PictogramText.Text="●"
                                      FontFamily="Consolas, 'SF Mono', monospace"
                                      FontSize="11"
                                      Foreground="{DynamicResource SuccessFgBrush}"
@@ -1582,8 +1592,8 @@
                                      TextTrimming="CharacterEllipsis"
                                      VerticalAlignment="Center"
                                      ToolTip.Tip="{Binding Comment}"/>
-                          <Button Grid.Column="4" Content="✕"
-                                  Command="{Binding RemoveCommand}"
+                          <Button Grid.Column="4" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
+                                  Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}"
                                   FontSize="11" Padding="6,0" MinHeight="0"
                                   Background="Transparent" BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
@@ -1593,7 +1603,7 @@
                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <StackPanel Grid.Column="0" Spacing="1">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                              <TextBlock Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                              <TextBlock icons:PictogramText.Icons="status" icons:PictogramText.Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
                                          Foreground="{DynamicResource SuccessFgBrush}" VerticalAlignment="Center"/>
                               <TextBlock Text="{Binding Action}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
                                          FontWeight="Bold" Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
@@ -1603,7 +1613,7 @@
                             <TextBlock Text="{Binding Value}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"/>
                           </StackPanel>
-                          <Button Grid.Column="1" Content="✕" Command="{Binding RemoveCommand}" FontSize="11" Padding="6,0" MinHeight="0"
+                          <Button Grid.Column="1" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕" Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}" FontSize="11" Padding="6,0" MinHeight="0"
                                   Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                         </Grid>
                         </StackPanel>
@@ -1621,6 +1631,11 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              Padding="14,8,14,4"/>
                   <ItemsControl ItemsSource="{Binding ReadModeBlockRules}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
                         <StackPanel Spacing="0">
@@ -1629,7 +1644,7 @@
                               Margin="14,1"
                               Opacity="{Binding RowOpacity}"
                               IsVisible="{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
-                          <TextBlock Grid.Column="0" Text="●"
+                          <TextBlock Grid.Column="0" icons:PictogramText.Icons="status" icons:PictogramText.Text="●"
                                      FontFamily="Consolas, 'SF Mono', monospace"
                                      FontSize="11"
                                      Foreground="{DynamicResource SuccessFgBrush}"
@@ -1650,8 +1665,8 @@
                                      TextTrimming="CharacterEllipsis"
                                      VerticalAlignment="Center"
                                      ToolTip.Tip="{Binding Comment}"/>
-                          <Button Grid.Column="4" Content="✕"
-                                  Command="{Binding RemoveCommand}"
+                          <Button Grid.Column="4" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
+                                  Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}"
                                   FontSize="11" Padding="6,0" MinHeight="0"
                                   Background="Transparent" BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
@@ -1661,7 +1676,7 @@
                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <StackPanel Grid.Column="0" Spacing="1">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                              <TextBlock Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
+                              <TextBlock icons:PictogramText.Icons="status" icons:PictogramText.Text="●" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
                                          Foreground="{DynamicResource SuccessFgBrush}" VerticalAlignment="Center"/>
                               <TextBlock Text="{Binding Action}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11"
                                          FontWeight="Bold" Foreground="{DynamicResource DangerFgBrush}" VerticalAlignment="Center"/>
@@ -1671,7 +1686,7 @@
                             <TextBlock Text="{Binding Value}" FontFamily="Consolas, 'SF Mono', monospace" FontSize="11" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Comment}"/>
                           </StackPanel>
-                          <Button Grid.Column="1" Content="✕" Command="{Binding RemoveCommand}" FontSize="11" Padding="6,0" MinHeight="0"
+                          <Button Grid.Column="1" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕" Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).LblRemove}" FontSize="11" Padding="6,0" MinHeight="0"
                                   Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                         </Grid>
                         </StackPanel>
@@ -1766,7 +1781,7 @@
                          Foreground="{DynamicResource TextMutedBrush}"
                          VerticalAlignment="Center"/>
               <TextBlock Grid.Column="1"
-                         Text="{Binding L_RulesEditorDirty}"
+                         icons:PictogramText.Icons="status" icons:PictogramText.Text="{Binding L_RulesEditorDirty}"
                          FontSize="10"
                          FontWeight="SemiBold"
                          Foreground="{DynamicResource WarningFgBrush}"
@@ -2230,13 +2245,13 @@
                   <WrapPanel Orientation="Horizontal"
                              Margin="0,6,0,0"
                              IsVisible="{Binding ServiceVm.IsInstalled}">
-                    <TextBlock Text="{Binding L_ServiceRunningLine}"
+                    <TextBlock icons:PictogramText.Icons="status" icons:PictogramText.Text="{Binding L_ServiceRunningLine}"
                                IsVisible="{Binding ServiceVm.IsRunning}"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{DynamicResource SuccessFgBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,8,4"/>
-                    <TextBlock Text="{Binding L_ServiceStoppedLine}"
+                    <TextBlock icons:PictogramText.Icons="status-off" icons:PictogramText.Text="{Binding L_ServiceStoppedLine}"
                                IsVisible="{Binding !ServiceVm.IsRunning}"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextMutedBrush}"
@@ -2309,19 +2324,19 @@
                               MinHeight="0" Padding="4,0">
                       <TextBlock Text="{Binding LblAutostartVpn}" TextWrapping="Wrap"/>
                     </CheckBox>
-                    <TextBlock Text="{Binding LblAutostartVpnStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartVpnStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
                                IsVisible="{Binding IsAutostartVpnStatusGood}"
                                Foreground="{DynamicResource SuccessFgBrush}"/>
-                    <TextBlock Text="{Binding LblAutostartVpnStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartVpnStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
                                IsVisible="{Binding IsAutostartVpnStatusWarn}"
                                Foreground="{DynamicResource WarningFgBrush}"/>
-                    <TextBlock Text="{Binding LblAutostartVpnStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartVpnStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
@@ -2335,19 +2350,19 @@
                               MinHeight="0" Padding="4,0">
                       <TextBlock Text="{Binding LblAutostartZapret}" TextWrapping="Wrap"/>
                     </CheckBox>
-                    <TextBlock Text="{Binding LblAutostartZapretStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartZapretStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
                                IsVisible="{Binding IsAutostartZapretStatusGood}"
                                Foreground="{DynamicResource SuccessFgBrush}"/>
-                    <TextBlock Text="{Binding LblAutostartZapretStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartZapretStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
                                IsVisible="{Binding IsAutostartZapretStatusWarn}"
                                Foreground="{DynamicResource WarningFgBrush}"/>
-                    <TextBlock Text="{Binding LblAutostartZapretStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartZapretStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
@@ -2361,19 +2376,19 @@
                               MinHeight="0" Padding="4,0">
                       <TextBlock Text="{Binding LblAutostartTgProxy}" TextWrapping="Wrap"/>
                     </CheckBox>
-                    <TextBlock Text="{Binding LblAutostartTgProxyStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartTgProxyStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
                                IsVisible="{Binding IsAutostartTgProxyStatusGood}"
                                Foreground="{DynamicResource SuccessFgBrush}"/>
-                    <TextBlock Text="{Binding LblAutostartTgProxyStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartTgProxyStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
                                IsVisible="{Binding IsAutostartTgProxyStatusWarn}"
                                Foreground="{DynamicResource WarningFgBrush}"/>
-                    <TextBlock Text="{Binding LblAutostartTgProxyStatus}"
+                    <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding LblAutostartTgProxyStatus}"
                                TextWrapping="Wrap"
                                FontSize="9"
                                Margin="22,0,0,0"
@@ -2454,7 +2469,7 @@
            cleanly instead of being painted over by the Apply button. -->
       <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" ColumnSpacing="8">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-          <TextBlock Text="✓" FontSize="11"
+          <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.Text="✓" FontSize="11"
                      Foreground="{DynamicResource SuccessSolidBrush}"
                      VerticalAlignment="Center"/>
           <TextBlock Text="{Binding L_SettingsAutosaved}"
@@ -2465,7 +2480,7 @@
         </StackPanel>
         <!-- v2.31.6-r14 A11y: explicit Name on the canonical Apply CTA. -->
         <Button Grid.Column="1"
-                Content="{Binding L_ApplyNowReloadVpn}"
+                icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding L_ApplyNowReloadVpn}"
                 Command="{Binding ApplyPendingChangesCommand}"
                 IsEnabled="{Binding IsConnected}"
                 Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"

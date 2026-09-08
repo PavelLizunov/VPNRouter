@@ -112,8 +112,6 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.NotNull(roundTripped.CustomGroupApps);
         Assert.NotNull(roundTripped.CustomCategories);
         Assert.NotNull(roundTripped.ExcludedApps);
-        Assert.NotNull(roundTripped.EmergencyChannel);
-        Assert.NotNull(roundTripped.EmergencyChannel.Configs);
 
         // Spot-check scalar default values to pin that none of the
         // [YamlMember(Alias="...")] mappings drifted.
@@ -291,19 +289,7 @@ app:
                 new() { Name = "Work", Apps = new List<string> { "outlook.exe", "teams.exe" }, Enabled = true }
             },
             ExcludedApps = new List<string> { "firefox.exe" },
-            Update = new UpdateSettings { GitHubRepo = "Test/Repo", AutoCheck = false, Channel = "experimental" },
-            EmergencyChannel = new EmergencyChannelSettings
-            {
-                Enabled = true,
-                WgturnUrl = "wgturn://example",
-                VkLink = "https://vk.com/call/123",
-                LastVkLink = "https://vk.com/call/456",
-                ActiveConfig = "Operator-A",
-                Configs = new List<WgturnEntry>
-                {
-                    new() { Name = "Operator-A", Url = "wgturn://op-a", AddedAt = new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero) }
-                }
-            }
+            Update = new UpdateSettings { GitHubRepo = "Test/Repo", AutoCheck = false, Channel = "experimental" }
         };
 
         var path = TempYamlPath();
@@ -435,19 +421,6 @@ app:
         Assert.Equal("Test/Repo", roundTripped.Update.GitHubRepo);
         Assert.False(roundTripped.Update.AutoCheck);
         Assert.Equal("experimental", roundTripped.Update.Channel);
-
-        // ── EmergencyChannel ──
-        Assert.True(roundTripped.EmergencyChannel.Enabled);
-        Assert.Equal("wgturn://example", roundTripped.EmergencyChannel.WgturnUrl);
-        Assert.Equal("https://vk.com/call/123", roundTripped.EmergencyChannel.VkLink);
-        Assert.Equal("https://vk.com/call/456", roundTripped.EmergencyChannel.LastVkLink);
-        Assert.Equal("Operator-A", roundTripped.EmergencyChannel.ActiveConfig);
-        Assert.Single(roundTripped.EmergencyChannel.Configs);
-        Assert.Equal("Operator-A", roundTripped.EmergencyChannel.Configs[0].Name);
-        Assert.Equal("wgturn://op-a", roundTripped.EmergencyChannel.Configs[0].Url);
-        // Non-nullable DateTimeOffset branch (AddedAt); nullable covered by LastRefreshedAt above.
-        Assert.Equal(original.EmergencyChannel.Configs[0].AddedAt.UtcDateTime,
-                     roundTripped.EmergencyChannel.Configs[0].AddedAt.UtcDateTime);
 
         // ── UserFreeSources + DateTime ──
         Assert.Single(roundTripped.App.UserFreeSources);

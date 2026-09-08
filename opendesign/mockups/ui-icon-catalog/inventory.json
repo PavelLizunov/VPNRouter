@@ -1,0 +1,4536 @@
+{
+  "base": "b7ce0e4f",
+  "status": "proposal-only-no-product-integration",
+  "coverage": [
+    "Реестр охватывает явные пиктограммы исходников Desktop и Android, включая символы в локализованных подписях и XAML-фигуры.",
+    "Логотип, маскот, app/tray icons, launcher и сторонние значки приложений исключены и не изменены.",
+    "Флаги стран сохраняются как метаданные страны. Глобус относится только к неизвестной стране, не заменяет флаги.",
+    "Нативные шаблоны контролов и ресурсы Android не выданы за собственные SVG: указаны отдельно. Текстовая навигация не получает выдуманных значков.",
+    "Исходные варианты могут отличаться между платформами; все найденные места использования перечислены в карточках. Динамический пользовательский текст не имеет конечного набора символов.",
+    "CLI-символы описаны отдельно в plans/ui-pictogram-cli-appendix-2026-09-07.md; терминал не переводится на SVG."
+  ],
+  "entries": [
+    {
+      "id": "add",
+      "name": "Добавить",
+      "purpose": "Создать категорию, добавить приложение, подписку или правило.",
+      "category": "Действия",
+      "screens": [
+        "Android / Подписки",
+        "Android / Приложения",
+        "Android / Серверы",
+        "Desktop / Подписки",
+        "Desktop / Приложения",
+        "Desktop / Сеть — форма правила, широкая и узкая компоновки"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "+",
+        "variants": [
+          "+ Новая категория",
+          "+ New category",
+          "+ Добавить",
+          "+ Add",
+          "+ Add Server(s)"
+        ]
+      },
+      "proposed": "proposed/add.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.PerAppFilter.cs",
+          "line": 643,
+          "context": "Content = Localization.AdvAppsAddCategoryButton",
+          "excerpt": "Content = Localization.AdvAppsAddCategoryButton,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 563,
+          "context": "Content = Localization.AdvServersAddServers",
+          "excerpt": "Content = Localization.AdvServersAddServers,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1539,
+          "context": "Повторная локализация AdvServersAddServers",
+          "excerpt": "if (_srvAddBtn is not null) _srvAddBtn.Content = Localization.AdvServersAddServers;"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 233,
+          "context": "Content = Localization.AddSubscription",
+          "excerpt": "Content = Localization.AddSubscription,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 1365,
+          "context": "Повторная локализация AddSubscription",
+          "excerpt": "if (_subsAddBtn is not null) _subsAddBtn.Content = Localization.AddSubscription;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 78,
+          "context": "AddCustomAppBtn wrapper",
+          "excerpt": "public static string AddCustomAppBtn => global::VPNRouter.Core.Localization.Strings.AddCustomAppBtn;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 572,
+          "context": "AddSubscription wrapper",
+          "excerpt": "public static string AddSubscription => global::VPNRouter.Core.Localization.Strings.AddSubscription;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 642,
+          "context": "AddCategory wrapper",
+          "excerpt": "public static string AddCategory => global::VPNRouter.Core.Localization.Strings.AddCategory;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 957,
+          "context": "CustomRulesAddBtn wrapper",
+          "excerpt": "public static string CustomRulesAddBtn => global::VPNRouter.Core.Localization.Strings.CustomRulesAddBtn;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 32,
+          "context": "L_AddCategory",
+          "excerpt": "public string L_AddCategory => Strings.AddCategory;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 33,
+          "context": "L_AddCustomAppBtn",
+          "excerpt": "public string L_AddCustomAppBtn => Strings.AddCustomAppBtn;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 35,
+          "context": "L_AddSubscription",
+          "excerpt": "public string L_AddSubscription => Strings.AddSubscription;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 68,
+          "context": "L_CustomRulesAddBtn",
+          "excerpt": "public string L_CustomRulesAddBtn => Strings.CustomRulesAddBtn;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ApplicationsPage.axaml",
+          "line": 256,
+          "context": "L_AddCategory Content",
+          "excerpt": "Content=\"{Binding L_AddCategory}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ApplicationsPage.axaml",
+          "line": 384,
+          "context": "L_AddCustomAppBtn Content",
+          "excerpt": "Content=\"{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 640,
+          "context": "Добавить правило, широкая форма",
+          "excerpt": "Content=\"{Binding L_CustomRulesAddBtn}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 719,
+          "context": "Добавить правило, узкая форма",
+          "excerpt": "<Button Content=\"{Binding L_CustomRulesAddBtn}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 411,
+          "context": "L_AddSubscription Content",
+          "excerpt": "Content=\"{Binding L_AddSubscription}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 379,
+          "context": "AdvServersAddServers содержит +",
+          "excerpt": "public static string AdvServersAddServers => Ru ? \"+ Добавить\" : \"+ Add Server(s)\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Zapret.cs",
+          "line": 84,
+          "context": "AddCategory",
+          "excerpt": "public static string AddCategory => Ru ? \"+ Новая категория\" : \"+ New category\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 143,
+          "context": "AddCustomAppBtn",
+          "excerpt": "public static string AddCustomAppBtn => Ru ? \"+ Добавить\" : \"+ Add\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 853,
+          "context": "AddSubscription",
+          "excerpt": "public static string AddSubscription => Ru ? \"+ Добавить\" : \"+ Add\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 853,
+          "context": "AddSubscription содержит +",
+          "excerpt": "public static string AddSubscription => Ru ? \"+ Добавить\" : \"+ Add\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 988,
+          "context": "CustomRulesAddBtn",
+          "excerpt": "public static string CustomRulesAddBtn => Ru ? \"+ Добавить\" : \"+ Add\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1180,
+          "context": "Русское добавление категории с +",
+          "excerpt": "? \"+ Новая категория\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1181,
+          "context": "Английское добавление категории с +",
+          "excerpt": ": \"+ New category\";"
+        }
+      ],
+      "note": "ASCII плюс — часть локализованного текста, не XAML Path.\nНе включены неиспользуемые Android-обёртки FcUserSrcAdd, AddCustomAppBtn и другие локализованные плюсы без потребителя."
+    },
+    {
+      "id": "add-circle",
+      "name": "Включить все правила",
+      "purpose": "Включить все пользовательские правила.",
+      "category": "Действия",
+      "screens": [
+        "Desktop / Сеть — правила, массовые действия"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⊕",
+        "variants": []
+      },
+      "proposed": "proposed/add-circle.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 924,
+          "context": "EnableAllCustomRulesCommand, широкое меню",
+          "excerpt": "<TextBlock Text=\"⊕\" Width=\"14\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1084,
+          "context": "EnableAllCustomRulesCommand, узкое меню",
+          "excerpt": "<TextBlock Text=\"⊕\" Width=\"14\""
+        }
+      ],
+      "note": "Смысл — включить, не создать правило."
+    },
+    {
+      "id": "apply",
+      "name": "Применить настройки",
+      "purpose": "Применяет изменённые настройки; поведение зависит от платформы",
+      "category": "Действия",
+      "screens": [
+        "Android / Настройки",
+        "Desktop / Приложения",
+        "Desktop / Сеть — нижняя панель"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "↻",
+        "variants": [
+          "↻ Применить",
+          "↻ Apply"
+        ]
+      },
+      "proposed": "proposed/apply.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 781,
+          "context": "Обновление подписи ApplyNowReloadVpn",
+          "excerpt": "_settingsApplyButton.Content = Localization.ApplyNowReloadVpn;"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SettingsHandlers.cs",
+          "line": 251,
+          "context": "Реальное действие Android Apply: activity.RequestDisconnect(), не hot-reload",
+          "excerpt": "activity.RequestDisconnect();"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.UiBindings.cs",
+          "line": 343,
+          "context": "Content = Localization.ApplyNowReloadVpn",
+          "excerpt": "Content = Localization.ApplyNowReloadVpn,"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 463,
+          "context": "ApplyNowReloadVpn wrapper",
+          "excerpt": "public static string ApplyNowReloadVpn => global::VPNRouter.Core.Localization.Strings.ApplyNowReloadVpn;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 638,
+          "context": "ApplyChanges wrapper",
+          "excerpt": "public static string ApplyChanges => global::VPNRouter.Core.Localization.Strings.ApplyChanges;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 36,
+          "context": "L_ApplyChanges",
+          "excerpt": "public string L_ApplyChanges => Strings.ApplyChanges;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 38,
+          "context": "L_ApplyNowReloadVpn",
+          "excerpt": "public string L_ApplyNowReloadVpn => Strings.ApplyNowReloadVpn;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ApplicationsPage.axaml",
+          "line": 362,
+          "context": "Content L_ApplyChanges",
+          "excerpt": "<Button Content=\"{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2468,
+          "context": "ApplyPendingChangesCommand Content",
+          "excerpt": "Content=\"{Binding L_ApplyNowReloadVpn}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Zapret.cs",
+          "line": 80,
+          "context": "ApplyChanges RU/EN",
+          "excerpt": "public static string ApplyChanges => Ru ? \"↻  Применить изменения\" : \"↻  Apply changes\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 840,
+          "context": "ApplyNowReloadVpn RU",
+          "excerpt": "? \"↻ Применить\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 840,
+          "context": "Русский ApplyNowReloadVpn",
+          "excerpt": "? \"↻ Применить\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 841,
+          "context": "ApplyNowReloadVpn EN",
+          "excerpt": ": \"↻ Apply\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 841,
+          "context": "Английский ApplyNowReloadVpn",
+          "excerpt": ": \"↻ Apply\";"
+        }
+      ],
+      "note": "Выделено по назначению и реальным потребителям, независимо от совпадения исходного символа.\nСамостоятельный семантический id; вектор создаёт ведущий агент. В Android обработчик снимает признак изменений и отключает активный туннель через RequestDisconnect; автоматического повторного подключения нет. Общий Core ApplyNowHint описывает hot-reload, но это не поведение проверенного Android-обработчика."
+    },
+    {
+      "id": "arrow-down",
+      "name": "Получение трафика",
+      "purpose": "Обозначить входящий сетевой трафик.",
+      "category": "Направления",
+      "screens": [
+        "Android / Простой режим: состояние VPN",
+        "Desktop / Telegram-прокси — статистика",
+        "Desktop / Простой режим — статистика"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "↓",
+        "variants": [
+          "↓ {HumanRate(dRate)}"
+        ]
+      },
+      "proposed": "proposed/arrow-down.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.VpnLifecycle.cs",
+          "line": 157,
+          "context": "subtitle входящей и исходящей скорости",
+          "excerpt": "subtitle = $\"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {conn} conn\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.ConnStats.cs",
+          "line": 148,
+          "context": "ConnectionStatsText: ↓ HumanRate(dRate)",
+          "excerpt": "text = $\"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {snap.ActiveCount} conn\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 6476,
+          "context": "ParseStatsShort: escaped U+2193",
+          "excerpt": "if (down != null) sb.Append($\" \\u2193{down}\");"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 73,
+          "context": "Text ConnectionStatsText",
+          "excerpt": "<TextBlock Text=\"{Binding ConnectionStatsText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 231,
+          "context": "Text TgProxyStats",
+          "excerpt": "<TextBlock Text=\"{Binding TgProxyStats}\""
+        }
+      ],
+      "note": "Старый комментарий о ↓ Update не доказывает текущую иконку обновления.\nНе обычная пунктуация: направление метрики трафика."
+    },
+    {
+      "id": "arrow-left",
+      "name": "Указатель выбора категории",
+      "purpose": "Направить пользователя к списку категорий.",
+      "category": "Направления",
+      "screens": [
+        "Desktop / Приложения — пустая область выбора"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "←",
+        "variants": [
+          "← Выберите категорию",
+          "← Select a category"
+        ]
+      },
+      "proposed": "proposed/arrow-left.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 1080,
+          "context": "SelectCategoryHint wrapper",
+          "excerpt": "public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 218,
+          "context": "L_SelectCategoryHint",
+          "excerpt": "public string L_SelectCategoryHint => Strings.SelectCategoryHint;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ApplicationsPage.axaml",
+          "line": 398,
+          "context": "Text L_SelectCategoryHint",
+          "excerpt": "Text=\"{Binding L_SelectCategoryHint}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1166,
+          "context": "SelectCategoryHint RU",
+          "excerpt": "? \"← Выберите категорию\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1167,
+          "context": "SelectCategoryHint EN",
+          "excerpt": ": \"← Select a category\";"
+        }
+      ],
+      "note": "Не кнопка назад."
+    },
+    {
+      "id": "arrow-right",
+      "name": "Направление маршрута и шагов",
+      "purpose": "Показать выбранный сервер и последовательность действий в справке.",
+      "category": "Направления",
+      "screens": [
+        "Desktop / Telegram-прокси — справка",
+        "Desktop / Аварийный канал — подсказка VK",
+        "Desktop / Главное окно — статус"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "→",
+        "variants": [
+          "->"
+        ]
+      },
+      "proposed": "proposed/arrow-right.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 87,
+          "context": "Connected wrapper",
+          "excerpt": "global::VPNRouter.Core.Localization.Strings.Connected(mode, serverName, serverIp);"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 472,
+          "context": "TgProxySetupHint wrapper",
+          "excerpt": "public static string TgProxySetupHint => global::VPNRouter.Core.Localization.Strings.TgProxySetupHint;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 1436,
+          "context": "EmergencyChannelVkLinkHint RU",
+          "excerpt": "? \"Получите из VK Calls → Поделиться ссылкой\""
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 1437,
+          "context": "EmergencyChannelVkLinkHint EN",
+          "excerpt": ": \"Get from VK Calls → Share link\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 338,
+          "context": "L_EmergencyChannelVkLinkHint",
+          "excerpt": "public string L_EmergencyChannelVkLinkHint => Strings.EmergencyChannelVkLinkHint;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 182,
+          "context": "LblTgProxySetupHint",
+          "excerpt": "public string LblTgProxySetupHint => Strings.TgProxySetupHint;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.SimpleMode.cs",
+          "line": 566,
+          "context": "StatusText: ASCII -> выбранного сервера",
+          "excerpt": "StatusText = $\"{ConnectionIntentStatusText} -> {chosen.Name}\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 3443,
+          "context": "StatusText = Strings.Connected(...)",
+          "excerpt": "StatusText = Strings.Connected(modeLabel, serverName, serverIp);"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 830,
+          "context": "Text StatusText",
+          "excerpt": "Text=\"{Binding StatusText}\" FontSize=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml",
+          "line": 218,
+          "context": "Text L_EmergencyChannelVkLinkHint",
+          "excerpt": "<TextBlock Text=\"{Binding L_EmergencyChannelVkLinkHint}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 491,
+          "context": "Text LblTgProxySetupHint",
+          "excerpt": "Text=\"{Binding LblTgProxySetupHint}\"/>"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Telegram.cs",
+          "line": 11,
+          "context": "TgProxySetupHint RU, четыре escaped U+2192",
+          "excerpt": "? \"Настройка: Telegram \\u2192 Настройки \\u2192 Продвинутые \\u2192 Тип соединения \\u2192 MTProto Proxy\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Telegram.cs",
+          "line": 12,
+          "context": "TgProxySetupHint EN, четыре escaped U+2192",
+          "excerpt": ": \"Setup: Telegram \\u2192 Settings \\u2192 Advanced \\u2192 Connection type \\u2192 MTProto Proxy\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 158,
+          "context": "Connected добавляет стрелку перед сервером",
+          "excerpt": "return $\"{prefix} → {name}{ip}\";"
+        }
+      ],
+      "note": "Стрелки в обычной справке могут остаться текстом; ASCII -> не отдельный action icon."
+    },
+    {
+      "id": "arrow-up",
+      "name": "Вверх и отправка",
+      "purpose": "Показать исходящий трафик и направление к выбору строки.",
+      "category": "Направления",
+      "screens": [
+        "Android / Простой режим: состояние VPN",
+        "Android / Публичные конфигурации",
+        "Desktop / Telegram-прокси — статистика",
+        "Desktop / Простой режим — статистика",
+        "Desktop / Публичные — подсказка выбора"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "↑",
+        "variants": [
+          "↑ {HumanRate(uRate)}",
+          "Выберите строку ↑ / Select a row ↑"
+        ]
+      },
+      "proposed": "proposed/arrow-up.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 418,
+          "context": "Text = Localization.FcConnectHint",
+          "excerpt": "Text = Localization.FcConnectHint,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.VpnLifecycle.cs",
+          "line": 157,
+          "context": "subtitle исходящей скорости",
+          "excerpt": "subtitle = $\"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {conn} conn\";"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 715,
+          "context": "FcConnectHint wrapper",
+          "excerpt": "public static string FcConnectHint => global::VPNRouter.Core.Localization.Strings.FcConnectHint;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.ConnStats.cs",
+          "line": 148,
+          "context": "ConnectionStatsText: ↑ HumanRate(uRate)",
+          "excerpt": "text = $\"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {snap.ActiveCount} conn\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 160,
+          "context": "L_FcConnectHint",
+          "excerpt": "public string L_FcConnectHint => Strings.FcConnectHint;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 6475,
+          "context": "ParseStatsShort: escaped U+2191",
+          "excerpt": "if (up != null) sb.Append($\" | \\u2191{up}\");"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 438,
+          "context": "Text L_FcConnectHint",
+          "excerpt": "<TextBlock Text=\"{Binding L_FcConnectHint}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 73,
+          "context": "Text ConnectionStatsText",
+          "excerpt": "<TextBlock Text=\"{Binding ConnectionStatsText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 231,
+          "context": "Text TgProxyStats",
+          "excerpt": "<TextBlock Text=\"{Binding TgProxyStats}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 87,
+          "context": "FcConnectHint RU",
+          "excerpt": "public static string FcConnectHint        => Ru ? \"Выберите строку ↑ и нажмите «Подключить» (или двойной клик)\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 87,
+          "context": "Русский FcConnectHint со стрелкой к строке",
+          "excerpt": "public static string FcConnectHint        => Ru ? \"Выберите строку ↑ и нажмите «Подключить» (или двойной клик)\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 88,
+          "context": "FcConnectHint EN",
+          "excerpt": ": \"Select a row ↑ and click Connect (or double-click)\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 88,
+          "context": "Английский FcConnectHint со стрелкой к строке",
+          "excerpt": ": \"Select a row ↑ and click Connect (or double-click)\";"
+        }
+      ],
+      "note": "Текстовые указатели, не кнопки перемещения.\nСохранены оба пассивных смысловых применения; сортировка — отдельное интерактивное действие."
+    },
+    {
+      "id": "blocked",
+      "name": "Конфликт VPN",
+      "purpose": "Обозначить конфликт с другим VPN.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Главное окно — конфликт VPN"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "⛔",
+        "variants": []
+      },
+      "proposed": "proposed/blocked.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 314,
+          "context": "HasConflictingVpnWarning",
+          "excerpt": "Text=\"⛔\""
+        }
+      ],
+      "note": "Не значок стороннего VPN; это общий знак ошибки."
+    },
+    {
+      "id": "bolt",
+      "name": "Публичный сервер без имени",
+      "purpose": "Обозначить fallback имени импортированного публичного сервера.",
+      "category": "Метаданные",
+      "screens": [
+        "Android / Публичные конфигурации",
+        "Android / Серверы",
+        "Desktop / Серверы — импортированный публичный сервер"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "⚡",
+        "variants": [
+          "⚡ free",
+          "⚡ free #N",
+          "⚡ free с суффиксом уникальности"
+        ]
+      },
+      "proposed": "proposed/bolt.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 1128,
+          "context": "baseName при отсутствии vless.Name",
+          "excerpt": "var baseName = string.IsNullOrWhiteSpace(vless.Name) ? \"⚡ free\" : vless.Name!;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs",
+          "line": 91,
+          "context": "Fallback baseName при пустом имени",
+          "excerpt": "var baseName = string.IsNullOrWhiteSpace(displayName) ? \"⚡ free\" : displayName;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs",
+          "line": 96,
+          "context": "newEntry.Name = displayName",
+          "excerpt": "newEntry.Name = displayName;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs",
+          "line": 98,
+          "context": "new ServerViewModel(newEntry)",
+          "excerpt": "target = new ServerViewModel(newEntry);"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 211,
+          "context": "Text DisplayName серверной строки",
+          "excerpt": "<TextBlock Classes=\"srv-name\" Text=\"{Binding DisplayName}\"/>"
+        }
+      ],
+      "note": "Символ хранится внутри имени; при замене нельзя изменять пользовательские имена или чужие emoji в имени сервера.\nПиктограмма входит в генерируемое имя данных, а не в отдельный UI-контрол. Произвольные пользовательские символы имён не инвентаризируются."
+    },
+    {
+      "id": "camera",
+      "name": "Сканировать QR-код",
+      "purpose": "Запускает камеру для добавления конфигурации или подписки",
+      "category": "Действия",
+      "screens": [
+        "Android / Подписки",
+        "Android / Простой режим"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "📷",
+        "variants": [
+          "Конфигурация",
+          "Подписка"
+        ]
+      },
+      "proposed": "proposed/camera.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 250,
+          "context": "subsQrBtn.Content",
+          "excerpt": "Content = \"📷\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 1127,
+          "context": "smpQrButton.Content",
+          "excerpt": "Content = \"📷\","
+        }
+      ],
+      "note": "Системный экран сканера предоставляется ZXing; его внутренние ресурсы не представлены собственными векторными исходниками проекта.",
+      "geometry": "scan"
+    },
+    {
+      "id": "check",
+      "name": "Проверка пройдена",
+      "purpose": "Обозначить валидное правило, сохранение, успешную стратегию, службу автозапуска и допустимые сценарии публичного прокси.",
+      "category": "Состояния",
+      "screens": [
+        "Android / Настройки",
+        "Android / Простой режим: диагностика",
+        "Android / Профили",
+        "Android / Публичные конфигурации",
+        "Android / Серверы: JSON",
+        "Desktop / Встроенная инструкция установки",
+        "Desktop / Главное окно — уведомления",
+        "Desktop / Обход DPI",
+        "Desktop / Публичные",
+        "Desktop / Сеть — правила и автозапуск"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "✓",
+        "variants": [
+          "✓ корректно",
+          "✓ valid",
+          "✓ N/N",
+          "— ✓",
+          "N ms ✓",
+          "{latency} ms ✓",
+          "✓ Активный / Active",
+          "✓ JSON корректен / JSON is valid",
+          "✓ Проверка / Last check",
+          "✓ Исключение из энергосбережения"
+        ]
+      },
+      "proposed": "proposed/check.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.CustomConfig.cs",
+          "line": 88,
+          "context": "Старый обработчик _ccCustomStatus: CcValidationOk, source-only",
+          "excerpt": "_ccCustomStatus.Text = string.Format(Localization.CcValidationOk, protocols, server);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 770,
+          "context": "Статус Ok без задержки",
+          "excerpt": "FreeConfigStatus.Ok       when entry.LatencyMs <= 0 => \"— ✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 771,
+          "context": "Статус Ok с задержкой",
+          "excerpt": "FreeConfigStatus.Ok                                  => $\"{entry.LatencyMs} ms ✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.Permissions.cs",
+          "line": 250,
+          "context": "Localization.ReliabilityBatteryOptStatusExempt",
+          "excerpt": "? Localization.ReliabilityBatteryOptStatusExempt"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.Profiles.cs",
+          "line": 187,
+          "context": "Localization.ProfilesActiveBadge",
+          "excerpt": "Text = Localization.ProfilesActiveBadge,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 682,
+          "context": "Вывод CcValidationOk в текущем JSON-редакторе",
+          "excerpt": "_srvCustomJsonStatus.Text = string.Format(Localization.CcValidationOk, protocols, server);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.UiBindings.cs",
+          "line": 310,
+          "context": "Галочка автосохранения",
+          "excerpt": "Text = \"✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.VpnLifecycle.cs",
+          "line": 707,
+          "context": "Localization.DiagHealthCheckOk",
+          "excerpt": "_statusHealthCheck.Text = string.Format(Localization.DiagHealthCheckOk, ago);"
+        },
+        {
+          "file": "VPNRouter.App/Assets/InstallGuide.html",
+          "line": 67,
+          "context": "copyCmd заменяет подпись кнопки на ✓ после копирования",
+          "excerpt": "function copyCmd(){var c=document.getElementById(\"cmd\").textContent;navigator.clipboard.writeText(c).then(()=>{event.target.textContent=\"✓\";setTimeout(()=>event.target.textContent=document.getElementById(\"ru\").classList.contains(\"active\")?\"Копировать\":\"Copy\",1500)})}"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 157,
+          "context": "RulesAllDeleted wrapper",
+          "excerpt": "public static string RulesAllDeleted => global::VPNRouter.Core.Localization.Strings.RulesAllDeleted;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 335,
+          "context": "AutostartStatusBoot wrapper",
+          "excerpt": "public static string AutostartStatusBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusBoot;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 828,
+          "context": "FcSecWarnGoodFor wrapper",
+          "excerpt": "public static string FcSecWarnGoodFor => global::VPNRouter.Core.Localization.Strings.FcSecWarnGoodFor;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 71,
+          "context": "Ok без положительного пинга: — ✓",
+          "excerpt": "FreeConfigStatus.Ok when Entry.LatencyMs <= 0       => \"— ✓\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 72,
+          "context": "Ok: N ms ✓",
+          "excerpt": "FreeConfigStatus.Ok          => $\"{Entry.LatencyMs} ms ✓\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs",
+          "line": 297,
+          "context": "Программный TextBlock диалога безопасности",
+          "excerpt": "Text = Strings.FcSecWarnGoodFor,"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 116,
+          "context": "LblAutostartVpnStatus",
+          "excerpt": "public string LblAutostartVpnStatus =>"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 118,
+          "context": "LblAutostartZapretStatus",
+          "excerpt": "public string LblAutostartZapretStatus =>"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 120,
+          "context": "LblAutostartTgProxyStatus",
+          "excerpt": "public string LblAutostartTgProxyStatus =>"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 143,
+          "context": "ComputeAutostartStatus возвращает AutostartStatusBoot",
+          "excerpt": "if (isServiceInstalled) return Strings.AutostartStatusBoot;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1150,
+          "context": "NewRuleValueHint валидного значения",
+          "excerpt": "? (IsRussian ? \"✓ корректно\" : \"✓ valid\")"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1455,
+          "context": "LblStrategyBadgeLegend RU",
+          "excerpt": "? \"✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1456,
+          "context": "LblStrategyBadgeLegend EN",
+          "excerpt": ": \"✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 2124,
+          "context": "ShowRulesToast(Strings.RulesAllDeleted)",
+          "excerpt": "ShowRulesToast(Strings.RulesAllDeleted);"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 2201,
+          "context": "RU toast успешной сортировки",
+          "excerpt": "? (IsRussian ? $\"✓ Отсортировано по типу ({sorted.Count})\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 2202,
+          "context": "EN toast успешной сортировки",
+          "excerpt": ": $\"✓ Sorted by type ({sorted.Count})\")"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4265,
+          "context": "Glyph победителя ✓ или ✓ N/N",
+          "excerpt": "Glyph = hasScore ? $\"✓ {passed}/{total}\" : \"✓\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4299,
+          "context": "Glyph полностью успешной стратегии",
+          "excerpt": "glyph = $\"✓ {result.Passed}/{result.Total}\";"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 885,
+          "context": "RulesToastText",
+          "excerpt": "<TextBlock Text=\"{Binding RulesToastText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 287,
+          "context": "Tooltip легенды",
+          "excerpt": "ToolTip.Tip=\"{Binding LblStrategyBadgeLegend}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 291,
+          "context": "Glyph быстрого выбора",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 338,
+          "context": "Легенда рабочей стратегии",
+          "excerpt": "<TextBlock Text=\"✓\" FontSize=\"8\" Classes=\"zglyph-success\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 570,
+          "context": "Glyph тонкой настройки",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 227,
+          "context": "LatencyDisplay, поиск",
+          "excerpt": "<TextBlock Text=\"{Binding LatencyDisplay}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 365,
+          "context": "LatencyDisplay, сохранённые",
+          "excerpt": "<TextBlock Text=\"{Binding LatencyDisplay}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 609,
+          "context": "NewRuleValueHint, широкая форма",
+          "excerpt": "<TextBlock Text=\"{Binding NewRuleValueHint}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 707,
+          "context": "NewRuleValueHint, узкая форма",
+          "excerpt": "<TextBlock Text=\"{Binding NewRuleValueHint}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2312,
+          "context": "VPN, успешный статус службы",
+          "excerpt": "<TextBlock Text=\"{Binding LblAutostartVpnStatus}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2338,
+          "context": "Zapret, успешный статус службы",
+          "excerpt": "<TextBlock Text=\"{Binding LblAutostartZapretStatus}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2364,
+          "context": "Telegram, успешный статус службы",
+          "excerpt": "<TextBlock Text=\"{Binding LblAutostartTgProxyStatus}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2457,
+          "context": "Автосохранение",
+          "excerpt": "<TextBlock Text=\"✓\" FontSize=\"11\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 37,
+          "context": "Русское подтверждение исключения из энергосбережения",
+          "excerpt": "? \"✓ VPNRouter исключён из энергосбережения\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 38,
+          "context": "Английское подтверждение исключения из энергосбережения",
+          "excerpt": ": \"✓ VPNRouter is excluded from battery optimization\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 169,
+          "context": "Русская строка успешной проверки JSON",
+          "excerpt": "? \"✓ JSON корректен. Найдено протоколов: {0}. Сервер: {1}.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 170,
+          "context": "Английская строка успешной проверки JSON",
+          "excerpt": ": \"✓ JSON is valid. Protocols: {0}. Server: {1}.\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 245,
+          "context": "ProfilesActiveBadge содержит ✓",
+          "excerpt": "public static string ProfilesActiveBadge => Ru ? \"✓ Активный\" : \"✓ Active\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 264,
+          "context": "FcSecWarnGoodFor RU",
+          "excerpt": "? \"✓ Подходит для: YouTube, новостей, Wikipedia, Discord, Telegram, публичного веба\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 265,
+          "context": "FcSecWarnGoodFor EN",
+          "excerpt": ": \"✓ Good for: YouTube, news, Wikipedia, Discord, Telegram, public web browsing\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 221,
+          "context": "RulesAllDeleted",
+          "excerpt": "public static string RulesAllDeleted => Ru ? \"✓ Удалено все правила\" : \"✓ All rules deleted\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 553,
+          "context": "AutostartStatusBoot RU",
+          "excerpt": "? \"✓ Через службу Windows (на старте ОС)\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 554,
+          "context": "AutostartStatusBoot EN",
+          "excerpt": ": \"✓ Via Windows Service (at boot)\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1399,
+          "context": "Русский DiagHealthCheckOk с ✓",
+          "excerpt": "? \"✓ Проверка {0} с назад\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1400,
+          "context": "Английский DiagHealthCheckOk с ✓",
+          "excerpt": ": \"✓ Last check {0}s ago\";"
+        }
+      ],
+      "note": "Одинарная галочка публичных конфигов означает TCP/TLS-кандидата, не глубокую проверку. Успешные ветки автозапуска показывают ✓; warning/bad TextBlock того же свойства не могут показывать эту ветку одновременно.\nСтарое поле _ccCustomStatus не имеет найденного присваивания построителем: его обработчик сохранён как source-only. Основной JSON-редактор использует _srvCustomJsonStatus."
+    },
+    {
+      "id": "chevron-down",
+      "name": "Развернуть настройки",
+      "purpose": "Обозначить раскрытую конфигурационную карточку или дополнительные настройки поиска.",
+      "category": "Навигация",
+      "screens": [
+        "Android / Простой режим",
+        "Android / Публичные конфигурации",
+        "Desktop / Простой режим — конфигурация",
+        "Desktop / Публичные — дополнительные настройки"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "▽",
+        "variants": [
+          "▾ Настройки",
+          "▾ Settings",
+          "⌄"
+        ]
+      },
+      "proposed": "proposed/chevron-down.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 188,
+          "context": "Content = Localization.FcAdvancedSettings",
+          "excerpt": "Content = Localization.FcAdvancedSettings,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 1041,
+          "context": "Раскрытая строка конфигурации: ⌄",
+          "excerpt": "Text = _formExpanded ? \"⌄\" : \"›\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 1878,
+          "context": "Обновление раскрытой стрелки",
+          "excerpt": "if (_configRowChevron is not null) _configRowChevron.Text = _formExpanded ? \"⌄\" : \"›\";"
+        },
+        {
+          "file": "VPNRouter.App/Converters.cs",
+          "line": 56,
+          "context": "Разбор параметра конвертера",
+          "excerpt": "var glyphs = (parameter as string)?.Split('|', 2) ?? new[] { \"▲\", \"▼\" };"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 759,
+          "context": "FcAdvancedSettings wrapper",
+          "excerpt": "public static string FcAdvancedSettings => global::VPNRouter.Core.Localization.Strings.FcAdvancedSettings;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 151,
+          "context": "L_FcAdvancedSettings",
+          "excerpt": "public string L_FcAdvancedSettings => Strings.FcAdvancedSettings;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 97,
+          "context": "Expander Header L_FcAdvancedSettings",
+          "excerpt": "<Expander Header=\"{Binding L_FcAdvancedSettings}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 191,
+          "context": "ConverterParameter ▽|›, SmpFormExpanded",
+          "excerpt": "ConverterParameter=▽|›}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 154,
+          "context": "FcAdvancedSettings",
+          "excerpt": "public static string FcAdvancedSettings => Ru ? \"▾ Настройки\" : \"▾ Settings\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 154,
+          "context": "FcAdvancedSettings содержит ▾",
+          "excerpt": "public static string FcAdvancedSettings => Ru ? \"▾ Настройки\" : \"▾ Settings\";"
+        }
+      ],
+      "note": "Стандартный Expander может также рисовать собственный chevron темы; он не объявлен отдельной геометрией в приложении. Default ▲/▼ конвертера не используется этим вызовом.\nУ публичных конфигураций подпись остаётся со стрелкой вниз; альтернативная стрелка вверх в этом потребителе не найдена."
+    },
+    {
+      "id": "chevron-left",
+      "name": "Вернуться в простой режим",
+      "purpose": "Переключить расширенный интерфейс на простой.",
+      "category": "Навигация",
+      "screens": [
+        "Android / Расширенный режим",
+        "Desktop / Главное окно — заголовок и меню"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "◂",
+        "variants": [
+          "◂ Простой",
+          "◂ Simple"
+        ]
+      },
+      "proposed": "proposed/chevron-left.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 296,
+          "context": "Content = Localization.AdvSimpleToggle",
+          "excerpt": "Content = Localization.AdvSimpleToggle,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 751,
+          "context": "Повторная локализация AdvSimpleToggle",
+          "excerpt": "_advSimpleToggleBtn.Content = Localization.AdvSimpleToggle;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 1107,
+          "context": "SmpToggleToSimple wrapper",
+          "excerpt": "public static string SmpToggleToSimple => global::VPNRouter.Core.Localization.Strings.SmpToggleToSimple;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 450,
+          "context": "UiModeToggleText",
+          "excerpt": "public string UiModeToggleText   => IsSimpleMode ? Strings.SmpToggleToAdvanced : Strings.SmpToggleToSimple;"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 500,
+          "context": "UiModeToggleText в заголовке Advanced",
+          "excerpt": "Content=\"{Binding UiModeToggleText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 701,
+          "context": "UiModeToggleText в меню",
+          "excerpt": "Content=\"{Binding UiModeToggleText}\"/>"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 14,
+          "context": "SmpToggleToSimple",
+          "excerpt": "public static string SmpToggleToSimple   => Ru ? \"◂ Простой\"     : \"◂ Simple\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 97,
+          "context": "Локализованный AdvSimpleToggle",
+          "excerpt": "public static string AdvSimpleToggle => Ru ? \"◂ Простой\" : \"◂ Simple\";"
+        }
+      ],
+      "note": "Навигация назад, не добавление режима.\nНе использует неактивную обёртку SmpToggleToSimple."
+    },
+    {
+      "id": "chevron-right",
+      "name": "Перейти или раскрыть",
+      "purpose": "Открыть конфигурацию, автозапуск или расширенный режим.",
+      "category": "Навигация",
+      "screens": [
+        "Android / Меню",
+        "Android / Простой режим",
+        "Desktop / Главное окно — меню режима",
+        "Desktop / Простой режим"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "›",
+        "variants": [
+          "▸"
+        ]
+      },
+      "proposed": "proposed/chevron-right.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.CustomConfig.cs",
+          "line": 302,
+          "context": "Стрелка карточки автозапуска",
+          "excerpt": "Text = \"›\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 846,
+          "context": "Content = Localization.SmpToggleToAdvanced",
+          "excerpt": "Content = Localization.SmpToggleToAdvanced,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 1041,
+          "context": "Закрытая строка конфигурации: ›",
+          "excerpt": "Text = _formExpanded ? \"⌄\" : \"›\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 1429,
+          "context": "Стрелка карточки расширенных настроек",
+          "excerpt": "Text = \"›\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 1878,
+          "context": "Обновление стрелки строки после раскрытия",
+          "excerpt": "if (_configRowChevron is not null) _configRowChevron.Text = _formExpanded ? \"⌄\" : \"›\";"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 2242,
+          "context": "Повторная локализация SmpToggleToAdvanced",
+          "excerpt": "_menuAdvancedToggleBtn.Content = Localization.SmpToggleToAdvanced;"
+        },
+        {
+          "file": "VPNRouter.App/Converters.cs",
+          "line": 56,
+          "context": "BoolToChevronConverter разбирает заданную пару",
+          "excerpt": "var glyphs = (parameter as string)?.Split('|', 2) ?? new[] { \"▲\", \"▼\" };"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 1105,
+          "context": "SmpToggleToAdvanced wrapper",
+          "excerpt": "public static string SmpToggleToAdvanced => global::VPNRouter.Core.Localization.Strings.SmpToggleToAdvanced;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 450,
+          "context": "UiModeToggleText",
+          "excerpt": "public string UiModeToggleText   => IsSimpleMode ? Strings.SmpToggleToAdvanced : Strings.SmpToggleToSimple;"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 701,
+          "context": "Меню переключения режима, UiModeToggleText",
+          "excerpt": "Content=\"{Binding UiModeToggleText}\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 191,
+          "context": "ConverterParameter ▽|›: свернутая карточка",
+          "excerpt": "ConverterParameter=▽|›}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 289,
+          "context": "Chevron ссылки автозапуска",
+          "excerpt": "<TextBlock Grid.Column=\"1\" Text=\"›\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 375,
+          "context": "Карточка расширенных настроек",
+          "excerpt": "<TextBlock Text=\"›\" FontSize=\"15\" FontWeight=\"Bold\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 12,
+          "context": "SmpToggleToAdvanced RU/EN ▸",
+          "excerpt": "public static string SmpToggleToAdvanced => Ru ? \"Расширенный ▸\" : \"Advanced ▸\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 12,
+          "context": "SmpToggleToAdvanced: Расширенный ▸ / Advanced ▸",
+          "excerpt": "public static string SmpToggleToAdvanced => Ru ? \"Расширенный ▸\" : \"Advanced ▸\";"
+        }
+      ],
+      "note": "Header UiModeToggleText строка 500 скрыт в Simple, поэтому вариант ▸ там не утверждается как достижимый; ◂ представлен отдельно.\nСамостоятельного обработчика у TextBlock нет; действие принадлежит окружающей карточке или кнопке."
+    },
+    {
+      "id": "close",
+      "name": "Закрыть",
+      "purpose": "Скрыть уведомление, справку или редактор без удаления данных.",
+      "category": "Действия",
+      "screens": [
+        "Android / Импорт конфигурации",
+        "Android / Просмотр журнала",
+        "Android / Профили",
+        "Android / Экспорт конфигурации",
+        "Desktop / Главное окно — баннеры",
+        "Desktop / Обход DPI — уведомление",
+        "Desktop / Серверы — редактор",
+        "Desktop / Сеть — справка"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "✕",
+        "variants": [
+          "X",
+          "Профили",
+          "Экспорт",
+          "Импорт",
+          "Журнал"
+        ]
+      },
+      "proposed": "proposed/close.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ConfigShare.cs",
+          "line": 135,
+          "context": "Кнопка закрытия экспорта",
+          "excerpt": "Content = \"✕\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ConfigShare.cs",
+          "line": 314,
+          "context": "Кнопка закрытия импорта",
+          "excerpt": "Content = \"✕\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.Notifications.cs",
+          "line": 117,
+          "context": "Кнопка закрытия журнала",
+          "excerpt": "Content = \"✕\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.Profiles.cs",
+          "line": 57,
+          "context": "Кнопка закрытия панели профилей",
+          "excerpt": "Content = \"✕\","
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 222,
+          "context": "DismissSettingsRecoveryNoticeCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 255,
+          "context": "DismissPlaceholderPruneNoticeCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 288,
+          "context": "DismissUpdateWarningCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 358,
+          "context": "DismissConflictingVpnWarningCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 141,
+          "context": "ASCII X, DismissZapretAvBlockToastCommand",
+          "excerpt": "<Button Grid.Column=\"3\" Content=\"X\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 476,
+          "context": "DismissRulesHelpBannerCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 298,
+          "context": "ASCII X, CloseServerDetailCommand",
+          "excerpt": "<Button DockPanel.Dock=\"Top\" HorizontalAlignment=\"Right\" Content=\"X\""
+        }
+      ],
+      "note": "Отделено от удаления: одинаковый исходный крест имеет разные последствия.\nНе объединять с удалением подписки и остановкой поиска. Наличие построителя панели не доказывает доступность каждого пункта входа в текущем меню."
+    },
+    {
+      "id": "delete",
+      "name": "Удалить",
+      "purpose": "Удалить сервер, подписку, правило, приложение, категорию или сохранённый конфиг.",
+      "category": "Действия",
+      "screens": [
+        "Android / Подписки",
+        "Android / Приложения",
+        "Android / Публичные конфигурации",
+        "Desktop / Аварийный канал",
+        "Desktop / Подписки",
+        "Desktop / Приложения",
+        "Desktop / Публичные — сохранённые",
+        "Desktop / Серверы",
+        "Desktop / Сеть — правила, широкая и узкая компоновки"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "✕",
+        "variants": [
+          "✕ Удалить всё",
+          "✕ Clear all",
+          "✕?",
+          "✗ Подтверждение удаления категории"
+        ]
+      },
+      "proposed": "proposed/delete.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 296,
+          "context": "Content = Localization.FcSavedClearAll",
+          "excerpt": "Content = Localization.FcSavedClearAll,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 842,
+          "context": "Content = Localization.FcSavedRemoveOne",
+          "excerpt": "Content = Localization.FcSavedRemoveOne,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.PerAppFilter.cs",
+          "line": 1104,
+          "context": "✗ + AndroidDeleteCategoryConfirm при подтверждении удаления",
+          "excerpt": "tb.Text = \"✗ \" + Localization.AndroidDeleteCategoryConfirm;"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 1024,
+          "context": "Удаление подписки",
+          "excerpt": "var deleteBtn = StyledRowActionButton(\"✕\", Localization.TipRemoveSubscription);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 1027,
+          "context": "Состояние подтверждения ✕?",
+          "excerpt": "deleteBtn.Content = \"✕?\";"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 768,
+          "context": "Обёртка FcSavedClearAllBtn",
+          "excerpt": "public static string FcSavedClearAllBtn => global::VPNRouter.Core.Localization.Strings.FcSavedClearAllBtn;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 175,
+          "context": "L_FcSavedClearAllBtn",
+          "excerpt": "public string L_FcSavedClearAllBtn       => Strings.FcSavedClearAllBtn;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ApplicationsPage.axaml",
+          "line": 277,
+          "context": "RemoveCategoryCommand",
+          "excerpt": "<Button Grid.Column=\"1\" Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ApplicationsPage.axaml",
+          "line": 336,
+          "context": "RemoveCustomAppCommand",
+          "excerpt": "<Button Grid.Column=\"3\" Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml",
+          "line": 160,
+          "context": "RemoveSelectedWgturnConfigCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 301,
+          "context": "Content L_FcSavedClearAllBtn, ClearAllSavedCommand",
+          "excerpt": "Content=\"{Binding L_FcSavedClearAllBtn}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 387,
+          "context": "RemoveFromSavedCommand",
+          "excerpt": "<Button Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 961,
+          "context": "Широкое меню: ClearAllCustomRulesCommand",
+          "excerpt": "<TextBlock Text=\"✕\" Width=\"14\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1120,
+          "context": "Узкое меню: ClearAllCustomRulesCommand",
+          "excerpt": "<TextBlock Text=\"✕\" Width=\"14\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1514,
+          "context": "Чтение direct, широкая строка, RemoveCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1538,
+          "context": "Чтение direct, узкая строка, RemoveCommand",
+          "excerpt": "<Button Grid.Column=\"1\" Content=\"✕\" Command=\"{Binding RemoveCommand}\" FontSize=\"11\" Padding=\"6,0\" MinHeight=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1585,
+          "context": "Чтение proxy, широкая строка, RemoveCommand",
+          "excerpt": "<Button Grid.Column=\"4\" Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1606,
+          "context": "Чтение proxy, узкая строка, RemoveCommand",
+          "excerpt": "<Button Grid.Column=\"1\" Content=\"✕\" Command=\"{Binding RemoveCommand}\" FontSize=\"11\" Padding=\"6,0\" MinHeight=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1653,
+          "context": "Чтение block, широкая строка, RemoveCommand",
+          "excerpt": "<Button Grid.Column=\"4\" Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1674,
+          "context": "Чтение block, узкая строка, RemoveCommand",
+          "excerpt": "<Button Grid.Column=\"1\" Content=\"✕\" Command=\"{Binding RemoveCommand}\" FontSize=\"11\" Padding=\"6,0\" MinHeight=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 273,
+          "context": "RemoveServerByEntryCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 379,
+          "context": "RemoveSubscriptionCommand",
+          "excerpt": "Content=\"✕\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 167,
+          "context": "FcSavedClearAllBtn RU/EN с ✕",
+          "excerpt": "public static string FcSavedClearAllBtn          => Ru ? \"✕ Удалить всё\"     : \"✕ Clear all\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1886,
+          "context": "Локализованное удаление всех сохранённых конфигов",
+          "excerpt": "public static string FcSavedClearAll => Ru ? \"✕ Удалить всё\" : \"✕ Clear all\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1888,
+          "context": "Символ удаления одного конфига",
+          "excerpt": "public static string FcSavedRemoveOne => \"✕\";"
+        }
+      ],
+      "note": "Все повторные шаблоны чтения сохранены отдельно; удаление в карточках открывается через меню ⋯, а не отдельный исходный значок корзины.\nНе объединять с close/stop. Удаление категории отображается в тексте строки, а не в отдельной кнопке-иконке."
+    },
+    {
+      "id": "edit",
+      "name": "Изменить подписку",
+      "purpose": "Открывает редактирование подписки",
+      "category": "Действия",
+      "screens": [
+        "Android / Подписки"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "✎",
+        "variants": [
+          "✎"
+        ]
+      },
+      "proposed": "proposed/edit.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 1015,
+          "context": "StyledRowActionButton с TipEditSubscription",
+          "excerpt": "var editBtn = StyledRowActionButton(\"✎\", Localization.TipEditSubscription);"
+        }
+      ],
+      "note": "Отдельное действие строки подписки."
+    },
+    {
+      "id": "error",
+      "name": "Проверка не пройдена",
+      "purpose": "Показать неправильное значение правила, неработающую стратегию и запрещённые сценарии использования публичного прокси.",
+      "category": "Состояния",
+      "screens": [
+        "Android / Подписки",
+        "Android / Серверы",
+        "Android / Серверы: JSON",
+        "Desktop / Обход DPI",
+        "Desktop / Публичные — диалог безопасности",
+        "Desktop / Сеть — форма правила"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "✗",
+        "variants": [
+          "✗ 0/N",
+          "×",
+          "TLS ×",
+          "✗ Некорректно / Invalid",
+          "✗ Не удалось разобрать JSON / Could not parse JSON"
+        ]
+      },
+      "proposed": "proposed/error.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.CustomConfig.cs",
+          "line": 82,
+          "context": "Старый обработчик CcValidationFailed, source-only",
+          "excerpt": "Localization.CcValidationFailed,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.CustomConfig.cs",
+          "line": 93,
+          "context": "Старый обработчик CcValidationParseError, source-only",
+          "excerpt": "_ccCustomStatus.Text = string.Format(Localization.CcValidationParseError, ex.Message);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 676,
+          "context": "Вывод CcValidationFailed",
+          "excerpt": "Localization.CcValidationFailed,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 687,
+          "context": "Вывод CcValidationParseError",
+          "excerpt": "_srvCustomJsonStatus.Text = string.Format(Localization.CcValidationParseError, ex.Message);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1099,
+          "context": "Потребитель ResolveLatencyDisplay в строке сервера",
+          "excerpt": "var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1252,
+          "context": "TlsFailed → TLS ×",
+          "excerpt": "ServerProbeStatus.TlsFailed            => (\"TLS ×\", GetBrush(\"DangerSolidBrush\")),"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1253,
+          "context": "Unreachable → ×",
+          "excerpt": "ServerProbeStatus.Unreachable          => (\"×\", GetBrush(\"DangerSolidBrush\")),"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1254,
+          "context": "Timeout → ×",
+          "excerpt": "ServerProbeStatus.Timeout              => (\"×\", GetBrush(\"DangerSolidBrush\")),"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 632,
+          "context": "Потребитель ResolveLatencyDisplay в агрегированной строке",
+          "excerpt": "var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 827,
+          "context": "FcSecWarnDontUseList wrapper",
+          "excerpt": "public static string FcSecWarnDontUseList => global::VPNRouter.Core.Localization.Strings.FcSecWarnDontUseList;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs",
+          "line": 282,
+          "context": "TextBlock списка запрещённых сценариев",
+          "excerpt": "Text = Strings.FcSecWarnDontUseList,"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1151,
+          "context": "NewRuleValueHint при ошибке RU/EN",
+          "excerpt": ": (IsRussian ? $\"✗ не подходит формату {NewRuleType}\" : $\"✗ wrong format for {NewRuleType}\");"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1455,
+          "context": "Легенда RU",
+          "excerpt": "? \"✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1456,
+          "context": "Легенда EN",
+          "excerpt": ": \"✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4304,
+          "context": "Glyph провала стратегии",
+          "excerpt": "glyph = $\"✗ 0/{result.Total}\";"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 287,
+          "context": "Tooltip легенды",
+          "excerpt": "ToolTip.Tip=\"{Binding LblStrategyBadgeLegend}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 291,
+          "context": "Glyph быстрого выбора",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 346,
+          "context": "Легенда неработающей стратегии",
+          "excerpt": "<TextBlock Text=\"✗\" FontSize=\"8\" Classes=\"zglyph-danger\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 570,
+          "context": "Glyph тонкой настройки",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 609,
+          "context": "Широкая форма NewRuleValueHint",
+          "excerpt": "<TextBlock Text=\"{Binding NewRuleValueHint}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 707,
+          "context": "Узкая форма NewRuleValueHint",
+          "excerpt": "<TextBlock Text=\"{Binding NewRuleValueHint}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 173,
+          "context": "Русский CcValidationFailed с ✗",
+          "excerpt": "? \"✗ Некорректно: {0}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 174,
+          "context": "Английский CcValidationFailed с ✗",
+          "excerpt": ": \"✗ Invalid: {0}\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 177,
+          "context": "Русский CcValidationParseError с ✗",
+          "excerpt": "? \"✗ Не удалось разобрать JSON: {0}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.Android.cs",
+          "line": 178,
+          "context": "Английский CcValidationParseError с ✗",
+          "excerpt": ": \"✗ Could not parse JSON: {0}\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 261,
+          "context": "FcSecWarnDontUseList RU",
+          "excerpt": "? \"✗ НЕ используйте для:\\n  • банковских приложений / онлайн-банков\\n  • входа в почту (Gmail, Яндекс.Почта, Mail.ru)\\n  • Госуслуги, налоговая, банки\\n  • 2FA / SMS-коды / криптокошельки\\n  • любых паролей, которые вы цените\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 262,
+          "context": "FcSecWarnDontUseList EN",
+          "excerpt": ": \"✗ DO NOT use for:\\n  • banking apps / online banking\\n  • email logins (Gmail, Outlook, etc.)\\n  • government services, tax sites\\n  • 2FA / SMS codes / crypto wallets\\n  • any passwords you care about\";"
+        }
+      ],
+      "note": "Не крест закрытия и не действие удаления.\nЛоговые сообщения deep verifier с ✗ не являются самостоятельными UI-пиктограммами. Старый _ccCustomStatus — source-only."
+    },
+    {
+      "id": "find-working",
+      "name": "Найти рабочие конфигурации",
+      "purpose": "Запускает глубокую проверку публичных серверов",
+      "category": "Проверка",
+      "screens": [
+        "Android / Публичные конфигурации",
+        "Desktop / Публичные — поиск"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "✓✓",
+        "variants": [
+          "✓✓ Найти рабочие конфиги",
+          "✓✓ Find working configs"
+        ]
+      },
+      "proposed": "proposed/find-working.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 152,
+          "context": "Content = Localization.FcFindButton",
+          "excerpt": "Content = Localization.FcFindButton,"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 679,
+          "context": "FcDeepVerify wrapper",
+          "excerpt": "public static string FcDeepVerify => global::VPNRouter.Core.Localization.Strings.FcDeepVerify;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 165,
+          "context": "L_FcDeepVerify",
+          "excerpt": "public string L_FcDeepVerify => Strings.FcDeepVerify;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 75,
+          "context": "Кнопка поиска, Content L_FcDeepVerify",
+          "excerpt": "<Button Content=\"{Binding L_FcDeepVerify}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 19,
+          "context": "FcDeepVerify RU/EN",
+          "excerpt": "public static string FcDeepVerify         => Ru ? \"✓✓ Найти рабочие конфиги\" : \"✓✓ Find working configs\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1872,
+          "context": "FcFindButton содержит ✓✓",
+          "excerpt": "public static string FcFindButton => Ru ? \"✓✓ Найти рабочие конфиги\" : \"✓✓ Find working configs\";"
+        }
+      ],
+      "note": "Выделено по назначению и реальным потребителям, независимо от совпадения исходного символа.\nДействие отделено от пассивного статуса verified; не считать FcDeepVerify или AdvPublicFindWorkingButton отдельными потребителями лишь по обёрткам Localization."
+    },
+    {
+      "id": "flag",
+      "name": "Выбор конфигурации",
+      "purpose": "Обозначить карточку конфигурации и режима VPN.",
+      "category": "Навигация",
+      "screens": [
+        "Android / Простой режим",
+        "Desktop / Простой режим — конфигурация"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⚑",
+        "variants": []
+      },
+      "proposed": "proposed/flag.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 999,
+          "context": "Text значка строки конфигурации",
+          "excerpt": "Text = \"⚑\","
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 145,
+          "context": "Потомок Button OpenConfigPickerCommand",
+          "excerpt": "<TextBlock Text=\"⚑\" FontSize=\"12\""
+        }
+      ],
+      "note": "Общий флаг-навигация, не флаг страны.\nДинамический набор флагов не перечисляется как фиксированный список стран; это не брендовые активы. Строка конфигурации интерактивна, сам значок не имеет отдельного действия. proposed/flag.svg обозначает семейство, а не замену всех стран одним рисунком: код страны и конкретный региональный флаг необходимо сохранить."
+    },
+    {
+      "id": "globe",
+      "name": "Неизвестная страна",
+      "purpose": "Показать fallback флага при невалидной длине кода страны.",
+      "category": "Метаданные",
+      "screens": [
+        "Android / Публичные конфигурации",
+        "Desktop / Публичные — поиск и сохранённые, некорректный непустой код страны"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "🌐",
+        "variants": []
+      },
+      "proposed": "proposed/globe.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 744,
+          "context": "Пустой код перехватывается вызывающей строкой и отображается как тире",
+          "excerpt": "Text = string.IsNullOrEmpty(entry.CountryCode)"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 878,
+          "context": "Возврат FlagFor для пустого или не двухбуквенного кода",
+          "excerpt": "if (string.IsNullOrEmpty(cc) || cc.Length != 2) return \"🌐\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 47,
+          "context": "CountryDisplay обходится без FlagFor при пустом CountryCode",
+          "excerpt": "public string CountryDisplay => string.IsNullOrEmpty(Entry.CountryCode)"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 49,
+          "context": "Непустой код проходит через FlagFor",
+          "excerpt": ": $\"{FlagFor(Entry.CountryCode)} {Entry.CountryCode}\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 172,
+          "context": "FlagFor: null/empty или длина !=2 -> 🌐",
+          "excerpt": "if (string.IsNullOrEmpty(cc) || cc.Length != 2) return \"🌐\";"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 217,
+          "context": "CountryDisplay поиска",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"{Binding CountryDisplay}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 355,
+          "context": "CountryDisplay сохранённых",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"{Binding CountryDisplay}\""
+        }
+      ],
+      "note": "В реально привязанном CountryDisplay пустая страна — тире, не globe. Globe достижим для непустого кода длины !=2; валидные страны сохраняются.\nРеальный fallback функции; пустой код в текущем потребителе даёт тире, поэтому глобус достигается для непустого кода неверной длины."
+    },
+    {
+      "id": "increase",
+      "name": "Увеличить значение",
+      "purpose": "Увеличивает лимит найденных конфигов или порог задержки",
+      "category": "Действия",
+      "screens": [
+        "Android / Публичные конфигурации: настройки поиска"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "+",
+        "variants": [
+          "+ лимит конфигов",
+          "+ порог пинга"
+        ]
+      },
+      "proposed": "proposed/increase.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 518,
+          "context": "Первый потребитель BuildSpinnerControl: целевое количество",
+          "excerpt": "var targetSpinner = BuildSpinnerControl("
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 545,
+          "context": "Второй потребитель BuildSpinnerControl: порог задержки",
+          "excerpt": "var pingSpinner = BuildSpinnerControl("
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 689,
+          "context": "MakeSpinnerStepButton(+)",
+          "excerpt": "var plus  = MakeSpinnerStepButton(\"+\");"
+        }
+      ],
+      "note": "Числовой шаг отделён от добавления сущности; семантический id отсутствует в таблице векторов.",
+      "geometry": "add"
+    },
+    {
+      "id": "info",
+      "name": "Информация",
+      "purpose": "Обозначить справку о приоритете правил маршрутизации.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Сеть — правила"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "ⓘ",
+        "variants": []
+      },
+      "proposed": "proposed/info.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 420,
+          "context": "Информационный баннер правил",
+          "excerpt": "Text=\"ⓘ\""
+        }
+      ],
+      "note": "Старые длинные Core CustomRulesDescription/PageDescription с ⓘ больше не имеют desktop XAML-потребителя; они в приложении source-only."
+    },
+    {
+      "id": "lock",
+      "name": "VPN в системном уведомлении",
+      "purpose": "Обозначает работающий VPN-сервис",
+      "category": "Состояния",
+      "screens": [
+        "Android / Системное уведомление Android"
+      ],
+      "interactive": false,
+      "original": {
+        "label": "android.R.drawable.ic_lock_idle_lock",
+        "variants": [
+          "Системный small icon Android"
+        ]
+      },
+      "proposed": "proposed/lock.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/VpnRouterService.java",
+          "line": 1488,
+          "context": "NotificationCompat.Builder.setSmallIcon",
+          "excerpt": ".setSmallIcon(android.R.drawable.ic_lock_idle_lock)"
+        }
+      ],
+      "note": "Framework drawable, не брендовый launcher icon. В репозитории нет его SVG; точный рисунок зависит от платформы."
+    },
+    {
+      "id": "more-horizontal",
+      "name": "Дополнительные действия",
+      "purpose": "Открыть меню окна, массовых действий или строки правила.",
+      "category": "Навигация",
+      "screens": [
+        "Desktop / Главное окно",
+        "Desktop / Сеть — правила, широкая и узкая компоновки"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⋯",
+        "variants": []
+      },
+      "proposed": "proposed/more-horizontal.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 555,
+          "context": "Button.Content, меню окна",
+          "excerpt": "<Button.Content>⋯</Button.Content>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 898,
+          "context": "BulkBtnWide",
+          "excerpt": "<TextBlock Text=\"⋯\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1058,
+          "context": "BulkBtnNarrow",
+          "excerpt": "<TextBlock Text=\"⋯\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1306,
+          "context": "Меню карточки правила, широкая компоновка",
+          "excerpt": "<TextBlock Text=\"⋯\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1399,
+          "context": "Меню карточки правила, узкая компоновка",
+          "excerpt": "<TextBlock Text=\"⋯\""
+        }
+      ],
+      "note": "Комментарии с прежним Content=⋯ не считались дополнительными потребителями."
+    },
+    {
+      "id": "more-vertical",
+      "name": "Дополнительное меню",
+      "purpose": "Открывает меню оболочки",
+      "category": "Навигация",
+      "screens": [
+        "Android / Простой режим",
+        "Android / Расширенный режим"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⋮",
+        "variants": [
+          "Простой режим",
+          "Расширенный режим"
+        ]
+      },
+      "proposed": "proposed/more-vertical.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 318,
+          "context": "Content кнопки меню расширенной оболочки",
+          "excerpt": "Content = \"⋮\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.axaml.cs",
+          "line": 701,
+          "context": "Content кнопки меню",
+          "excerpt": "Content = \"⋮\","
+        }
+      ],
+      "note": "Два самостоятельных потребителя одного символа."
+    },
+    {
+      "id": "pending",
+      "name": "Проверка выполняется",
+      "purpose": "Показывает активный тест сервера",
+      "category": "Состояния",
+      "screens": [
+        "Android / Подписки",
+        "Android / Серверы"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "…",
+        "variants": [
+          "…"
+        ]
+      },
+      "proposed": "proposed/pending.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1099,
+          "context": "Потребитель в списке серверов",
+          "excerpt": "var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1241,
+          "context": "ResolveLatencyDisplay: isTesting → …",
+          "excerpt": "return (\"…\", GetBrush(\"TextMutedBrush\"));"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 632,
+          "context": "Потребитель в агрегированном списке подписок",
+          "excerpt": "var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);"
+        }
+      ],
+      "note": "Включено самостоятельное статусное многоточие, не обычные многоточия в предложениях и не more-horizontal."
+    },
+    {
+      "id": "play",
+      "name": "Запустить",
+      "purpose": "Запускает VPN или выбранный инструмент",
+      "category": "Действия",
+      "screens": [
+        "Android / Расширенный режим",
+        "Desktop / Telegram-прокси",
+        "Desktop / Главное окно — нижняя панель",
+        "Desktop / Обход DPI"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "▶",
+        "variants": [
+          "▶ Запустить VPN",
+          "▶ Start VPN",
+          "Path M8,5 L8,19 L19,12 z"
+        ],
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M8,5 L8,19 L19,12 z\" fill=\"currentColor\"/></svg>"
+      },
+      "proposed": "proposed/play.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 399,
+          "context": "Начальный Content = Localization.StartVPN",
+          "excerpt": "Content = Localization.StartVPN,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 841,
+          "context": "Обновление Content отключённого VPN",
+          "excerpt": ": Localization.StartVPN;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 61,
+          "context": "StartVPN wrapper",
+          "excerpt": "public static string StartVPN => global::VPNRouter.Core.Localization.Strings.StartVPN;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 160,
+          "context": "_connectButtonText = Strings.StartVPN",
+          "excerpt": "[ObservableProperty] private string _connectButtonText = Strings.StartVPN;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 7309,
+          "context": "ConnectButtonText выбирает StartVPN/StopVPN",
+          "excerpt": "ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 852,
+          "context": "Content ConnectButtonText",
+          "excerpt": "Content=\"{Binding ConnectButtonText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 244,
+          "context": "Path 11×11, видим при !ZapretEnabled",
+          "excerpt": "<Path Width=\"11\" Height=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 249,
+          "context": "Data M8,5 L8,19 L19,12 z",
+          "excerpt": "Data=\"M8,5 L8,19 L19,12 z\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 319,
+          "context": "StartZapretWithSelectedStrategyCommand, Unicode ▶",
+          "excerpt": "<TextBlock Text=\"▶\" FontSize=\"9\" VerticalAlignment=\"Center\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 183,
+          "context": "Path 11×11, видим при !TgProxyEnabled",
+          "excerpt": "<Path Width=\"11\" Height=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 188,
+          "context": "Data M8,5 L8,19 L19,12 z",
+          "excerpt": "Data=\"M8,5 L8,19 L19,12 z\"/>"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 122,
+          "context": "StartVPN, escaped U+25B6, RU/EN",
+          "excerpt": "public static string StartVPN => Ru ? \"\\u25b6  Запустить VPN\" : \"\\u25b6  Start VPN\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 122,
+          "context": "StartVPN содержит U+25B6",
+          "excerpt": "public static string StartVPN => Ru ? \"\\u25b6  Запустить VPN\" : \"\\u25b6  Start VPN\";"
+        }
+      ],
+      "note": "Два из четырёх всех desktop XAML Paths. В Simple текущая CTA текстовая; старый SmpConnectButtonText вынесен в source-only.\nКнопки простого режима ButtonConnect/ButtonDisconnect текстовые и не используют SmpStartVpn/SmpStopVpn.\nСлева показана собственная Desktop-геометрия; текстовые и платформенные варианты перечислены в источниках."
+    },
+    {
+      "id": "radio-off",
+      "name": "Невыбранный вариант",
+      "purpose": "Обозначить доступный, но не выбранный сервер или режим.",
+      "category": "Элементы выбора",
+      "screens": [
+        "Android / Подписки",
+        "Android / Серверы",
+        "Desktop / Мастер настройки",
+        "Desktop / Подписки",
+        "Desktop / Простой режим",
+        "Desktop / Серверы",
+        "Desktop / Сеть — маршрутизация"
+      ],
+      "interactive": true,
+      "original": {
+        "label": "Border.rbx 12×12, CornerRadius=6, BorderThickness=1.5, Transparent; стандартный RadioButton",
+        "variants": [
+          "Ellipse активной точки скрыт",
+          "Border 12×12, радиус 6, BorderStrongBrush, прозрачный фон"
+        ],
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"5.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg>"
+      },
+      "proposed": "proposed/radio-off.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1020,
+          "context": "radioOuter Border в состоянии !isActive",
+          "excerpt": "var radioOuter = new Border"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1029,
+          "context": "Прозрачный фон неактивного выбора",
+          "excerpt": "Background = isActive ? GetBrush(\"SuccessSolidBrush\") : Brushes.Transparent,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 561,
+          "context": "radio Border агрегированного сервера",
+          "excerpt": "var radio = new Border"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 568,
+          "context": "Прозрачный фон неактивного выбора",
+          "excerpt": "Background = isActive ? GetBrush(\"SuccessSolidBrush\") : Brushes.Transparent,"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 248,
+          "context": "Стандартный RadioButton split",
+          "excerpt": "<RadioButton Grid.Column=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 274,
+          "context": "Стандартный RadioButton full",
+          "excerpt": "<RadioButton Grid.Column=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 33,
+          "context": "Border.rbx базовый стиль",
+          "excerpt": "<Style Selector=\"Border.rbx\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 202,
+          "context": "Серверный индикатор",
+          "excerpt": "<Border Grid.Column=\"0\" Classes=\"rbx\" Classes.active=\"{Binding IsActive}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 235,
+          "context": "Стандартный RadioButton split",
+          "excerpt": "<RadioButton GroupName=\"SmpTunnel\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 247,
+          "context": "Стандартный RadioButton full",
+          "excerpt": "<RadioButton GroupName=\"SmpTunnel\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 30,
+          "context": "Border.rbx базовый стиль",
+          "excerpt": "<Style Selector=\"Border.rbx\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 159,
+          "context": "Серверный индикатор",
+          "excerpt": "<Border Grid.Column=\"0\" Classes=\"rbx\" Classes.active=\"{Binding IsActive}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/SetupWizardWindow.axaml",
+          "line": 72,
+          "context": "Стандартный RadioButton split",
+          "excerpt": "<RadioButton Grid.Column=\"0\" GroupName=\"WizardRouting\""
+        },
+        {
+          "file": "VPNRouter.App/Views/SetupWizardWindow.axaml",
+          "line": 85,
+          "context": "Стандартный RadioButton full",
+          "excerpt": "<RadioButton Grid.Column=\"0\" GroupName=\"WizardRouting\""
+        }
+      ],
+      "note": "Состояния одного элемента, не дополнительные места интерфейса.\nSVG — эквивалент собственной геометрии. Стандартные RadioButton используют тему Fluent, а не эти собственные кольца.\nСлева показана собственная Desktop-геометрия; текстовые и платформенные варианты перечислены в источниках."
+    },
+    {
+      "id": "radio-on",
+      "name": "Выбранный вариант",
+      "purpose": "Обозначить активный сервер или выбранный режим маршрутизации.",
+      "category": "Элементы выбора",
+      "screens": [
+        "Android / Подписки",
+        "Android / Серверы",
+        "Desktop / Мастер настройки",
+        "Desktop / Подписки",
+        "Desktop / Простой режим",
+        "Desktop / Серверы",
+        "Desktop / Сеть — маршрутизация"
+      ],
+      "interactive": true,
+      "original": {
+        "label": "Border.rbx.active 12×12 + белый Ellipse 4×4; стандартный RadioButton",
+        "variants": [
+          "Собственный серверный индикатор",
+          "RadioButton темы Avalonia",
+          "Border 12×12, радиус 6, SuccessSolidBrush; белый Ellipse 4×4"
+        ],
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"5.25\" fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"1.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\" fill=\"white\"/></svg>"
+      },
+      "proposed": "proposed/radio-on.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1020,
+          "context": "radioOuter Border",
+          "excerpt": "var radioOuter = new Border"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1034,
+          "context": "Внутренний Ellipse только при isActive",
+          "excerpt": "radioOuter.Child = new Ellipse"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 561,
+          "context": "radio Border агрегированной строки",
+          "excerpt": "var radio = new Border"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 573,
+          "context": "Внутренний Ellipse только при isActive",
+          "excerpt": "radio.Child = new Avalonia.Controls.Shapes.Ellipse"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 248,
+          "context": "RadioButton IsSplitTunnel",
+          "excerpt": "<RadioButton Grid.Column=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 274,
+          "context": "RadioButton IsFullTunnel",
+          "excerpt": "<RadioButton Grid.Column=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 42,
+          "context": "Стиль активного Border.rbx",
+          "excerpt": "<Style Selector=\"Border.rbx.active\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 202,
+          "context": "Border.rbx active IsActive",
+          "excerpt": "<Border Grid.Column=\"0\" Classes=\"rbx\" Classes.active=\"{Binding IsActive}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 203,
+          "context": "Белый Ellipse активного сервера",
+          "excerpt": "<Ellipse Width=\"4\" Height=\"4\" Fill=\"White\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 235,
+          "context": "RadioButton IsSplitTunnel",
+          "excerpt": "<RadioButton GroupName=\"SmpTunnel\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 247,
+          "context": "RadioButton !IsSplitTunnel",
+          "excerpt": "<RadioButton GroupName=\"SmpTunnel\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 39,
+          "context": "Стиль активного Border.rbx",
+          "excerpt": "<Style Selector=\"Border.rbx.active\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 159,
+          "context": "Border.rbx active IsActive",
+          "excerpt": "<Border Grid.Column=\"0\" Classes=\"rbx\" Classes.active=\"{Binding IsActive}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 160,
+          "context": "Белый Ellipse активного сервера",
+          "excerpt": "<Ellipse Width=\"4\" Height=\"4\" Fill=\"White\""
+        },
+        {
+          "file": "VPNRouter.App/Views/SetupWizardWindow.axaml",
+          "line": 72,
+          "context": "RadioButton SelectedSplitTunnel",
+          "excerpt": "<RadioButton Grid.Column=\"0\" GroupName=\"WizardRouting\""
+        },
+        {
+          "file": "VPNRouter.App/Views/SetupWizardWindow.axaml",
+          "line": 85,
+          "context": "RadioButton SelectedFullTunnel",
+          "excerpt": "<RadioButton Grid.Column=\"0\" GroupName=\"WizardRouting\""
+        }
+      ],
+      "note": "Собственные круги — индикаторы выбора строки ListBox; стандартные RadioButton сохраняют нативную семантику, клавиатуру и accessibility. Геометрия встроенной темы не находится в исходниках приложения.\nSVG — эквивалент собственной геометрии. Действие выбора принадлежит строке, а не отдельному Ellipse.\nСлева показана собственная Desktop-геометрия; текстовые и платформенные варианты перечислены в источниках."
+    },
+    {
+      "id": "refresh",
+      "name": "Обновить данные",
+      "purpose": "Обновляет подписку или перечитывает журнал",
+      "category": "Действия",
+      "screens": [
+        "Android / Подписки",
+        "Android / Просмотр журнала",
+        "Desktop / Подписки"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "↻",
+        "variants": [
+          "⟳"
+        ]
+      },
+      "proposed": "proposed/refresh.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.Notifications.cs",
+          "line": 132,
+          "context": "Кнопка перечитывания журнала",
+          "excerpt": "Content = \"⟳\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 1018,
+          "context": "Кнопка обновления подписки",
+          "excerpt": "var refreshBtn = StyledRowActionButton(\"↻\", Localization.TipRefreshSubscription);"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 372,
+          "context": "RefreshSubscriptionCommand",
+          "excerpt": "Content=\"↻\""
+        }
+      ],
+      "note": "Названия экранов и назначение получены из команд, не из внешнего вида стрелки.\nПроверка доступности сервера вынесена в retest, применение настроек — в apply."
+    },
+    {
+      "id": "remove",
+      "name": "Уменьшить значение",
+      "purpose": "Уменьшает лимит найденных конфигов или порог задержки",
+      "category": "Действия",
+      "screens": [
+        "Android / Публичные конфигурации: настройки поиска"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "−",
+        "variants": [
+          "− лимит конфигов",
+          "− порог пинга"
+        ]
+      },
+      "proposed": "proposed/remove.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 518,
+          "context": "Первый потребитель BuildSpinnerControl",
+          "excerpt": "var targetSpinner = BuildSpinnerControl("
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 545,
+          "context": "Второй потребитель BuildSpinnerControl",
+          "excerpt": "var pingSpinner = BuildSpinnerControl("
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 688,
+          "context": "MakeSpinnerStepButton(−)",
+          "excerpt": "var minus = MakeSpinnerStepButton(\"−\");"
+        }
+      ],
+      "note": "Это уменьшение числа, не удаление сущности."
+    },
+    {
+      "id": "remove-circle",
+      "name": "Выключить все правила",
+      "purpose": "Выключить все пользовательские правила без удаления.",
+      "category": "Действия",
+      "screens": [
+        "Desktop / Сеть — правила, массовые действия"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⊝",
+        "variants": []
+      },
+      "proposed": "proposed/remove-circle.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 935,
+          "context": "DisableAllCustomRulesCommand, широкое меню",
+          "excerpt": "<TextBlock Text=\"⊝\" Width=\"14\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1095,
+          "context": "DisableAllCustomRulesCommand, узкое меню",
+          "excerpt": "<TextBlock Text=\"⊝\" Width=\"14\""
+        }
+      ],
+      "note": "Не смешивать с удалением."
+    },
+    {
+      "id": "retest",
+      "name": "Перепроверить",
+      "purpose": "Проверить сервер или повторно проверить сохранённые публичные конфиги.",
+      "category": "Действия",
+      "screens": [
+        "Android / Подписки",
+        "Android / Серверы",
+        "Desktop / Подписки — серверы",
+        "Desktop / Публичные — сохранённые",
+        "Desktop / Серверы"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⟳",
+        "variants": [
+          "↻",
+          "↻ Перепроверить ({n})",
+          "↻ Recheck ({n})"
+        ]
+      },
+      "proposed": "proposed/retest.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1128,
+          "context": "testBtn.Content",
+          "excerpt": "Content = \"⟳\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.SubscribePage.cs",
+          "line": 663,
+          "context": "refreshBtn.Content в агрегированном списке серверов",
+          "excerpt": "Content = \"⟳\","
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 725,
+          "context": "FcSpeedColumnTooltip wrapper",
+          "excerpt": "public static string FcSpeedColumnTooltip => global::VPNRouter.Core.Localization.Strings.FcSpeedColumnTooltip;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 765,
+          "context": "FcSavedTabHint wrapper",
+          "excerpt": "public static string FcSavedTabHint => global::VPNRouter.Core.Localization.Strings.FcSavedTabHint;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 766,
+          "context": "FcSavedRecheckStaleBtn wrapper",
+          "excerpt": "public static string FcSavedRecheckStaleBtn(int n) => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckStaleBtn(n);"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigsPageViewModel.cs",
+          "line": 245,
+          "context": "SavedRecheckStaleButtonText",
+          "excerpt": "public string SavedRecheckStaleButtonText => Strings.FcSavedRecheckStaleBtn(StaleSavedCount);"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 154,
+          "context": "L_FcSpeedColumnTooltip",
+          "excerpt": "public string L_FcSpeedColumnTooltip => Strings.FcSpeedColumnTooltip;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 174,
+          "context": "L_FcSavedTabHint",
+          "excerpt": "public string L_FcSavedTabHint           => Strings.FcSavedTabHint;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 237,
+          "context": "Tooltip скорости, поиск",
+          "excerpt": "ToolTip.Tip=\"{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 284,
+          "context": "Text L_FcSavedTabHint",
+          "excerpt": "Text=\"{Binding L_FcSavedTabHint}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 289,
+          "context": "SavedRecheckStaleButtonText -> RecheckAllStaleCommand",
+          "excerpt": "Content=\"{Binding FreeConfigsVm.SavedRecheckStaleButtonText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 369,
+          "context": "Tooltip скорости, сохранённые",
+          "excerpt": "ToolTip.Tip=\"{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 378,
+          "context": "RecheckOneCommand",
+          "excerpt": "<Button Content=\"↻\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 265,
+          "context": "TestServerCommand",
+          "excerpt": "Content=\"⟳\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 196,
+          "context": "TestServerCommand",
+          "excerpt": "Content=\"⟳\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 101,
+          "context": "FcSpeedColumnTooltip RU, ссылка на ↻",
+          "excerpt": "? \"Скорость измеряется во время Глубокой проверки. «—» означает, что замер не запускался — нажмите ↻ или «Глубоко проверить» чтобы получить значение.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 102,
+          "context": "FcSpeedColumnTooltip EN, ссылка на ↻",
+          "excerpt": ": \"Speed is measured during Deep verify. \\\"—\\\" means it wasn't measured — click ↻ or 'Deep verify' to get a number.\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 161,
+          "context": "FcSavedTabHint RU, ↻ в пояснении",
+          "excerpt": "? \"Конфиги, найденные в прошлых поисках. Они могут перестать работать со временем — нажмите ↻ чтобы перепроверить.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 162,
+          "context": "FcSavedTabHint EN",
+          "excerpt": ": \"Configs you've found in past searches. They may stop working over time — click ↻ to recheck.\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 164,
+          "context": "FcSavedRecheckStaleBtn, RU",
+          "excerpt": "? $\"↻ Перепроверить ({n})\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 165,
+          "context": "FcSavedRecheckStaleBtn, EN",
+          "excerpt": ": $\"↻ Recheck ({n})\";"
+        }
+      ],
+      "note": "Ссылки на значок в пояснениях не являются отдельными кнопками; interactive описывает семейство с действием.\nОбщий рисунок с обновлением журнала, но другая семантика."
+    },
+    {
+      "id": "search-tab",
+      "name": "Вкладка поиска",
+      "purpose": "Открывает поиск публичных конфигураций",
+      "category": "Действия",
+      "screens": [
+        "Android / Публичные конфигурации",
+        "Desktop / Публичные — вкладка поиска"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "▶",
+        "variants": [
+          "▶ Поиск",
+          "▶ Search"
+        ]
+      },
+      "proposed": "proposed/search-tab.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 124,
+          "context": "MakeAdvancedSubTabButton(Localization.FcTabSearch)",
+          "excerpt": "_fcTabSearch = MakeAdvancedSubTabButton(Localization.FcTabSearch,"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 948,
+          "context": "Обновление подписи FcTabSearch",
+          "excerpt": "_fcTabSearch.Content = Localization.FcTabSearch;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 762,
+          "context": "FcTabSearch wrapper",
+          "excerpt": "public static string FcTabSearch => global::VPNRouter.Core.Localization.Strings.FcTabSearch;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 173,
+          "context": "L_FcTabSearch",
+          "excerpt": "public string L_FcTabSearch              => Strings.FcTabSearch;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 35,
+          "context": "Вкладка Content L_FcTabSearch",
+          "excerpt": "<ListBoxItem Content=\"{Binding L_FcTabSearch}\" Padding=\"10,4\" FontSize=\"11\"/>"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 157,
+          "context": "FcTabSearch",
+          "excerpt": "public static string FcTabSearch                 => Ru ? \"▶ Поиск\"     : \"▶ Search\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 157,
+          "context": "FcTabSearch содержит ▶",
+          "excerpt": "public static string FcTabSearch                 => Ru ? \"▶ Поиск\"     : \"▶ Search\";"
+        }
+      ],
+      "note": "Выделено по назначению и реальным потребителям, независимо от совпадения исходного символа.\nНе действие запуска VPN; самостоятельный семантический id, вектор ведущего агента.",
+      "geometry": "search"
+    },
+    {
+      "id": "shield",
+      "name": "Щит безопасности",
+      "purpose": "Обозначить удаление небезопасных шаблонных конфигов.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Главное окно — предупреждение о конфигурации"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "🛡",
+        "variants": []
+      },
+      "proposed": "proposed/shield.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 244,
+          "context": "HasPlaceholderPruneNotice",
+          "excerpt": "Text=\"🛡\""
+        }
+      ],
+      "note": "Unicode, фактический вид зависит от шрифта ОС."
+    },
+    {
+      "id": "shield-bolt",
+      "name": "Щит с молнией",
+      "purpose": "Обозначить инструмент обхода DPI.",
+      "category": "Инструменты",
+      "screens": [
+        "Desktop / Обход DPI — заголовок"
+      ],
+      "interactive": false,
+      "original": {
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 z M13,7 L9,13 L12,13 L11,17 L15,11 L12,11 z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
+        "variants": [
+          "20×20, Stretch=Uniform"
+        ]
+      },
+      "proposed": "proposed/shield-bolt.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 198,
+          "context": "Path в заголовке карточки",
+          "excerpt": "<Path Width=\"20\" Height=\"20\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 206,
+          "context": "Исходная геометрия щита с молнией",
+          "excerpt": "Data=\"M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 z M13,7 L9,13 L12,13 L11,17 L15,11 L12,11 z\"/>"
+        }
+      ],
+      "note": "Исходная геометрия перенесена без изменения; не бренд VPNRouter."
+    },
+    {
+      "id": "sort",
+      "name": "Сортировка",
+      "purpose": "Отсортировать правила по типу.",
+      "category": "Действия",
+      "screens": [
+        "Android / Серверы",
+        "Desktop / Сеть — правила, массовые действия"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "↕",
+        "variants": [
+          "↑",
+          "по пингу ↑",
+          "by ping ↑"
+        ]
+      },
+      "proposed": "proposed/sort.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 895,
+          "context": "Выбор подписи SrvSortByLatencyAsc",
+          "excerpt": "? Localization.SrvSortByLatencyAsc"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1490,
+          "context": "Обновление подписи сортировки",
+          "excerpt": "? Localization.SrvSortByLatencyAsc"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1510,
+          "context": "Повторная локализация сортировки",
+          "excerpt": "? Localization.SrvSortByLatencyAsc"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 946,
+          "context": "SortCustomRulesByTypeCommand, широкое меню",
+          "excerpt": "<TextBlock Text=\"↕\" Width=\"14\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1106,
+          "context": "SortCustomRulesByTypeCommand, узкое меню",
+          "excerpt": "<TextBlock Text=\"↕\" Width=\"14\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1806,
+          "context": "SrvSortByLatencyAsc содержит ↑",
+          "excerpt": "public static string SrvSortByLatencyAsc => Ru ? \"по пингу ↑\" : \"by ping ↑\";"
+        }
+      ],
+      "note": "Две реальные компоновки.\nОтдельно от исходящего трафика."
+    },
+    {
+      "id": "status",
+      "name": "Индикатор состояния",
+      "purpose": "Показать подключение, активную конфигурацию, состояние компонента или наличие несохранённых изменений.",
+      "category": "Состояния",
+      "screens": [
+        "Android / Инструменты: DPI",
+        "Android / Простой режим",
+        "Android / Расширенный режим",
+        "Android / Старые отдельные панели DPI и Telegram — только исходники",
+        "Desktop / Telegram-прокси",
+        "Desktop / Аварийный канал",
+        "Desktop / Главное окно",
+        "Desktop / Обход DPI",
+        "Desktop / Простой режим",
+        "Desktop / Серверы — свои конфиги",
+        "Desktop / Сеть — правила и служба"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "●",
+        "variants": [
+          "Ellipse 4×4",
+          "Ellipse 6×6",
+          "Ellipse 8×8",
+          "Ellipse 10×10",
+          "success / warning / muted",
+          "Пульсация warning 1,2 с",
+          "● несохранённые изменения",
+          "● Запущена — PID {pid}",
+          "Ellipse 10×10: SuccessSolidBrush",
+          "Ellipse 10×10: WarningSolidBrush",
+          "Ellipse 10×10: TextMutedBrush",
+          "Ellipse 8×8: динамическое состояние",
+          "Ellipse 8×8: недоступный Telegram"
+        ]
+      },
+      "proposed": "proposed/status.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 369,
+          "context": "_advFooterStatusDot Ellipse 8×8",
+          "excerpt": "_advFooterStatusDot = new Ellipse"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.DpiBypass.cs",
+          "line": 125,
+          "context": "_dpiStatusBarDot: source-only старый построитель",
+          "excerpt": "_dpiStatusBarDot = new Ellipse"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.DpiBypass.cs",
+          "line": 400,
+          "context": "_dpiFooterStatusDot: source-only старый построитель",
+          "excerpt": "_dpiFooterStatusDot = new Ellipse"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.Tools.cs",
+          "line": 58,
+          "context": "tgInfoDot: source-only BuildTelegramTabContent",
+          "excerpt": "var tgInfoDot = new Ellipse"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.Tools.cs",
+          "line": 378,
+          "context": "_toolsZapretFooterDot Ellipse 8×8",
+          "excerpt": "_toolsZapretFooterDot = new Ellipse"
+        },
+        {
+          "file": "VPNRouter.Android/Controls/StatusCard.cs",
+          "line": 52,
+          "context": "_dotOn Ellipse 10×10",
+          "excerpt": "_dotOn = new Ellipse { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };"
+        },
+        {
+          "file": "VPNRouter.Android/Controls/StatusCard.cs",
+          "line": 53,
+          "context": "_dotWarn Ellipse 10×10",
+          "excerpt": "_dotWarn = new Ellipse { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };"
+        },
+        {
+          "file": "VPNRouter.Android/Controls/StatusCard.cs",
+          "line": 54,
+          "context": "_dotOff Ellipse 10×10",
+          "excerpt": "_dotOff = new Ellipse { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 358,
+          "context": "ServiceRunningLine wrapper",
+          "excerpt": "public static string ServiceRunningLine(int pid) => global::VPNRouter.Core.Localization.Strings.ServiceRunningLine(pid);"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 1014,
+          "context": "RulesEditorDirty wrapper",
+          "excerpt": "public static string RulesEditorDirty => global::VPNRouter.Core.Localization.Strings.RulesEditorDirty;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 88,
+          "context": "L_RulesEditorDirty",
+          "excerpt": "public string L_RulesEditorDirty => Strings.RulesEditorDirty;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 134,
+          "context": "L_ServiceRunningLine выбирает строку с PID",
+          "excerpt": "ServiceVm.ServicePid.HasValue ? Strings.ServiceRunningLine(ServiceVm.ServicePid.Value) : Strings.ServiceRunningText;"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 169,
+          "context": "Стиль Ellipse.pulse",
+          "excerpt": "<Style Selector=\"Ellipse.pulse\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 419,
+          "context": "VPN pill success; родитель NavigateToVpnCommand",
+          "excerpt": "<Ellipse Width=\"4\" Height=\"4\" VerticalAlignment=\"Center\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 438,
+          "context": "VPN pill warning, Ellipse.pulse; родитель NavigateToVpnCommand",
+          "excerpt": "<Ellipse Classes=\"pulse\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 454,
+          "context": "VPN pill off; родитель NavigateToVpnCommand",
+          "excerpt": "<Ellipse Width=\"4\" Height=\"4\" VerticalAlignment=\"Center\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 826,
+          "context": "Footer IsConnected converter",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 408,
+          "context": "Air pill, 6×6",
+          "excerpt": "<Ellipse Width=\"6\" Height=\"6\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 843,
+          "context": "Footer, 8×8",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml",
+          "line": 69,
+          "context": "Не установлен",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml",
+          "line": 129,
+          "context": "Установлен, отключён",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml",
+          "line": 281,
+          "context": "Подключён",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml",
+          "line": 334,
+          "context": "Footer IsWgturnConnected converter",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1487,
+          "context": "Read direct wide, статическая ●",
+          "excerpt": "Text=\"●\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1528,
+          "context": "Read direct narrow, статическая ●",
+          "excerpt": "<TextBlock Text=\"●\" FontFamily=\"Consolas, 'SF Mono', monospace\" FontSize=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1564,
+          "context": "Read proxy wide, статическая ●",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"●\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1596,
+          "context": "Read proxy narrow, статическая ●",
+          "excerpt": "<TextBlock Text=\"●\" FontFamily=\"Consolas, 'SF Mono', monospace\" FontSize=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1632,
+          "context": "Read block wide, статическая ●",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"●\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1664,
+          "context": "Read block narrow, статическая ●",
+          "excerpt": "<TextBlock Text=\"●\" FontFamily=\"Consolas, 'SF Mono', monospace\" FontSize=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1769,
+          "context": "Text L_RulesEditorDirty",
+          "excerpt": "Text=\"{Binding L_RulesEditorDirty}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2233,
+          "context": "Text L_ServiceRunningLine",
+          "excerpt": "<TextBlock Text=\"{Binding L_ServiceRunningLine}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/ServersPage.axaml",
+          "line": 342,
+          "context": "● активного custom config",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"●\" Foreground=\"{DynamicResource SuccessSolidBrush}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 52,
+          "context": "SimpleStatusIsOn",
+          "excerpt": "<Ellipse Width=\"10\" Height=\"10\" VerticalAlignment=\"Center\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 55,
+          "context": "SimpleStatusIsWarn",
+          "excerpt": "<Ellipse Width=\"10\" Height=\"10\" VerticalAlignment=\"Center\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 58,
+          "context": "SimpleStatusIsOff",
+          "excerpt": "<Ellipse Width=\"10\" Height=\"10\" VerticalAlignment=\"Center\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 217,
+          "context": "Air pill, 6×6",
+          "excerpt": "<Ellipse Width=\"6\" Height=\"6\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 429,
+          "context": "Информационная карточка версии, TgProxyBadgeBrush",
+          "excerpt": "<Ellipse Grid.Column=\"0\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 538,
+          "context": "Footer, 8×8",
+          "excerpt": "<Ellipse Width=\"8\" Height=\"8\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 601,
+          "context": "ServiceRunningLine RU U+25CF",
+          "excerpt": "? $\"\\u25CF Запущена \\u2014 PID {pid}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 602,
+          "context": "ServiceRunningLine EN U+25CF",
+          "excerpt": ": $\"\\u25CF Running \\u2014 PID {pid}\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1080,
+          "context": "RulesEditorDirty RU",
+          "excerpt": "? \"● несохранённые изменения\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1081,
+          "context": "RulesEditorDirty EN",
+          "excerpt": ": \"● unsaved changes\";"
+        }
+      ],
+      "note": "17 статусных Ellipse; ещё 2 малых Ellipse принадлежат radio, 2 больших 140×140 — декоративное свечение и исключены. Read-mode ● вопреки комментарию не является toggle и не меняется на ○; меняется RowOpacity. Точки в кликабельных pill не отдельные действия.\nSVG — эквивалент геометрии Ellipse, не исходный SVG-файл. BuildDpiBypassTabContent и BuildTelegramTabContent не имеют найденных вызовов; их вхождения сохранены только как source-only."
+    },
+    {
+      "id": "status-off",
+      "name": "Служба остановлена",
+      "purpose": "Показать остановленную службу Windows.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Сеть — автозапуск"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "○",
+        "variants": [
+          "○ Остановлена",
+          "○ Stopped"
+        ]
+      },
+      "proposed": "proposed/status-off.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 359,
+          "context": "ServiceStoppedLine wrapper",
+          "excerpt": "public static string ServiceStoppedLine => global::VPNRouter.Core.Localization.Strings.ServiceStoppedLine;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 132,
+          "context": "L_ServiceStoppedLine",
+          "excerpt": "public string L_ServiceStoppedLine => Strings.ServiceStoppedLine;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 2239,
+          "context": "Text L_ServiceStoppedLine",
+          "excerpt": "<TextBlock Text=\"{Binding L_ServiceStoppedLine}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 604,
+          "context": "ServiceStoppedLine RU U+25CB",
+          "excerpt": "? \"\\u25CB Остановлена\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 605,
+          "context": "ServiceStoppedLine EN U+25CB",
+          "excerpt": ": \"\\u25CB Stopped\";"
+        }
+      ],
+      "note": "Не radio и не переключатель темы."
+    },
+    {
+      "id": "stop",
+      "name": "Остановить",
+      "purpose": "Остановить VPN, инструмент или поиск публичных конфигов.",
+      "category": "Действия",
+      "screens": [
+        "Android / Публичные конфигурации",
+        "Android / Расширенный режим",
+        "Android / Системное уведомление Android",
+        "Desktop / Telegram-прокси",
+        "Desktop / Главное окно — нижняя панель",
+        "Desktop / Обход DPI",
+        "Desktop / Публичные — поиск"
+      ],
+      "interactive": true,
+      "original": {
+        "symbol": "⏹",
+        "variants": [
+          "⬛",
+          "Border 10×10, CornerRadius=2",
+          "⏹ Остановить поиск",
+          "⏹ Stop search",
+          "✕ Остановить",
+          "✕ Stop",
+          "⬛ Остановить VPN",
+          "⬛ Stop VPN",
+          "android.R.drawable.ic_menu_close_clear_cancel"
+        ],
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><rect x=\"7\" y=\"7\" width=\"10\" height=\"10\" rx=\"2\" fill=\"currentColor\"/></svg>"
+      },
+      "proposed": "proposed/stop.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.AdvancedShell.cs",
+          "line": 840,
+          "context": "Content активного VPN = Localization.StopVPN",
+          "excerpt": "? Localization.StopVPN"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 167,
+          "context": "Content = Localization.FcStopButton",
+          "excerpt": "Content = Localization.FcStopButton,"
+        },
+        {
+          "file": "VPNRouter.Android/VpnRouterService.java",
+          "line": 1490,
+          "context": "NotificationCompat.addAction с системным drawable и stopPi",
+          "excerpt": ".addAction(android.R.drawable.ic_menu_close_clear_cancel, notifDisconnect, stopPi)"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 62,
+          "context": "StopVPN wrapper",
+          "excerpt": "public static string StopVPN => global::VPNRouter.Core.Localization.Strings.StopVPN;"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 755,
+          "context": "FcDeepStop wrapper",
+          "excerpt": "public static string FcDeepStop => global::VPNRouter.Core.Localization.Strings.FcDeepStop;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs",
+          "line": 163,
+          "context": "L_FcDeepStop",
+          "excerpt": "public string L_FcDeepStop => Strings.FcDeepStop;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 7309,
+          "context": "ConnectButtonText StartVPN/StopVPN",
+          "excerpt": "ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 852,
+          "context": "Content ConnectButtonText",
+          "excerpt": "Content=\"{Binding ConnectButtonText}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 250,
+          "context": "Border 10×10, CornerRadius 2; IsVisible ZapretEnabled",
+          "excerpt": "<Border Width=\"10\" Height=\"10\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 86,
+          "context": "Content L_FcDeepStop, CancelCommand",
+          "excerpt": "<Button Content=\"{Binding L_FcDeepStop}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 189,
+          "context": "Border 10×10, CornerRadius 2; IsVisible TgProxyEnabled",
+          "excerpt": "<Border Width=\"10\" Height=\"10\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 148,
+          "context": "FcDeepStop",
+          "excerpt": "public static string FcDeepStop        => Ru ? \"⏹ Остановить поиск\" : \"⏹ Stop search\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 123,
+          "context": "StopVPN, escaped U+2B1B",
+          "excerpt": "public static string StopVPN => Ru ? \"\\u2b1b  Остановить VPN\" : \"\\u2b1b  Stop VPN\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 123,
+          "context": "StopVPN содержит U+2B1B",
+          "excerpt": "public static string StopVPN => Ru ? \"\\u2b1b  Остановить VPN\" : \"\\u2b1b  Stop VPN\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1874,
+          "context": "FcStopButton содержит ✕",
+          "excerpt": "public static string FcStopButton => Ru ? \"✕ Остановить\" : \"✕ Stop\";"
+        }
+      ],
+      "note": "Оба небольших Border — настоящие пиктограммы остановки, не контейнеры.\nСистемный drawable не хранится в репозитории: точная геометрия и видимость значка действия зависят от Android. Остановка отделена от закрытия и удаления.\nСлева показана собственная Desktop-геометрия; текстовые и платформенные варианты перечислены в источниках."
+    },
+    {
+      "id": "success",
+      "name": "Установка завершена",
+      "purpose": "Обозначить успешное завершение инструкции установки.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Встроенная инструкция установки — русский и английский"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "✅",
+        "variants": []
+      },
+      "proposed": "proposed/success.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Assets/InstallGuide.html",
+          "line": 49,
+          "context": "RU .note завершения",
+          "excerpt": "<div class=\"note\">✅ Готово! Приложение запустится. В следующий раз просто открывай из Applications.</div>"
+        },
+        {
+          "file": "VPNRouter.App/Assets/InstallGuide.html",
+          "line": 62,
+          "context": "EN .note завершения",
+          "excerpt": "<div class=\"note\">✅ Done! The app will launch. Next time just open from Applications.</div>"
+        }
+      ],
+      "note": "Исходный HTML включён в desktop asset-аудит. Кнопка копирования отдельно меняется на ✓, отражено в check. Номера шагов и текстовые кнопки не иконки."
+    },
+    {
+      "id": "switch",
+      "name": "Переключатель правила",
+      "purpose": "Включить или выключить правило в карточке.",
+      "category": "Собственные элементы управления",
+      "screens": [
+        "Desktop / Сеть — карточки правил, широкая и узкая компоновки"
+      ],
+      "interactive": true,
+      "original": {
+        "label": "IosToggleCheckBox: Track Border 32×18 r9 + Thumb Border 14×14 r7",
+        "variants": [
+          "Выключен: бегунок слева",
+          "Включён: бегунок справа, SuccessSolidBrush"
+        ],
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 24\"><rect x=\"0\" y=\"3\" width=\"32\" height=\"18\" rx=\"9\" fill=\"currentColor\"/><circle cx=\"23\" cy=\"12\" r=\"7\" fill=\"white\"/></svg>"
+      },
+      "proposed": "proposed/switch.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 37,
+          "context": "ControlTheme IosToggleCheckBox",
+          "excerpt": "<ControlTheme x:Key=\"IosToggleCheckBox\" TargetType=\"CheckBox\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 50,
+          "context": "Border Track",
+          "excerpt": "<Border Name=\"Track\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 54,
+          "context": "Border Thumb",
+          "excerpt": "<Border Name=\"Thumb\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 64,
+          "context": "Стиль checked",
+          "excerpt": "<Style Selector=\"^:checked\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 67,
+          "context": "Checked Thumb вправо",
+          "excerpt": "<Style Selector=\"^:checked /template/ Border#Thumb\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1287,
+          "context": "CheckBox широкого правила, Theme IosToggleCheckBox",
+          "excerpt": "<CheckBox Grid.Column=\"4\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 1385,
+          "context": "CheckBox узкого правила, Theme IosToggleCheckBox",
+          "excerpt": "<CheckBox Grid.Row=\"0\" Grid.Column=\"2\""
+        }
+      ],
+      "note": "Это живой CheckBox, не заменять статичным SVG. Proposed только иллюстрация состояния в каталоге; сохранить клавиатуру, focus, bindings и semantics.\nСлева показана собственная Desktop-геометрия; текстовые и платформенные варианты перечислены в источниках."
+    },
+    {
+      "id": "telegram",
+      "name": "Бумажный самолёт",
+      "purpose": "Обозначить инструмент Telegram-прокси.",
+      "category": "Инструменты",
+      "screens": [
+        "Desktop / Telegram-прокси — заголовок"
+      ],
+      "interactive": false,
+      "original": {
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M21,3 L11,13 M21,3 L14.5,21 L11,13 L3,9.5 z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
+        "variants": [
+          "20×20, Stretch=Uniform"
+        ]
+      },
+      "proposed": "proposed/telegram.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 133,
+          "context": "Собственный Path функционального заголовка",
+          "excerpt": "<Path Width=\"20\" Height=\"20\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 141,
+          "context": "Исходная геометрия бумажного самолёта",
+          "excerpt": "Data=\"M21,3 L11,13 M21,3 L14.5,21 L11,13 L3,9.5 z\"/>"
+        }
+      ],
+      "note": "Включён как собственный UI Path инструмента, а не загруженный identity asset стороннего приложения."
+    },
+    {
+      "id": "timer",
+      "name": "Устаревшая проверка",
+      "purpose": "Обозначить устаревшие данные победившей стратегии.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Обход DPI"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "⏱",
+        "variants": []
+      },
+      "proposed": "proposed/timer.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1455,
+          "context": "Легенда RU",
+          "excerpt": "? \"✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1456,
+          "context": "Легенда EN",
+          "excerpt": ": \"✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4274,
+          "context": "Glyph устаревшего победителя",
+          "excerpt": "Glyph = \"⏱\","
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 287,
+          "context": "Tooltip легенды",
+          "excerpt": "ToolTip.Tip=\"{Binding LblStrategyBadgeLegend}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 291,
+          "context": "Glyph быстрого выбора",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 354,
+          "context": "Легенда",
+          "excerpt": "<TextBlock Text=\"⏱\" FontSize=\"8\" Classes=\"zglyph-stale\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 570,
+          "context": "Glyph тонкой настройки",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        }
+      ],
+      "note": "В данном продукте секундомер означает устаревание, не текущую длительность."
+    },
+    {
+      "id": "untested",
+      "name": "Не проверено",
+      "purpose": "Обозначить стратегию без результатов проверки.",
+      "category": "Состояния",
+      "screens": [
+        "Desktop / Обход DPI"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "◌",
+        "variants": []
+      },
+      "proposed": "proposed/untested.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1455,
+          "context": "Легенда RU",
+          "excerpt": "? \"✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1456,
+          "context": "Легенда EN",
+          "excerpt": ": \"✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4283,
+          "context": "Победитель без достаточных данных",
+          "excerpt": "Glyph = \"◌\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4325,
+          "context": "Стратегия без результатов",
+          "excerpt": "Glyph = \"◌\","
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 287,
+          "context": "Tooltip легенды",
+          "excerpt": "ToolTip.Tip=\"{Binding LblStrategyBadgeLegend}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 291,
+          "context": "Glyph быстрого выбора",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 350,
+          "context": "Легенда",
+          "excerpt": "<TextBlock Text=\"◌\" FontSize=\"8\" Classes=\"zglyph-muted\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 570,
+          "context": "Glyph тонкой настройки",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        }
+      ],
+      "note": "Не анимированный spinner: это статический статус непроверенной стратегии.",
+      "geometry": "pending"
+    },
+    {
+      "id": "verified",
+      "name": "Глубокая проверка",
+      "purpose": "Обозначить глубокую проверку публичного конфига и её результаты.",
+      "category": "Проверка",
+      "screens": [
+        "Android / Публичные конфигурации",
+        "Desktop / Публичные — поиск и сохранённые"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "✓✓",
+        "variants": [
+          "— ✓✓",
+          "N ms ✓✓",
+          "{latency} ms ✓✓"
+        ]
+      },
+      "proposed": "proposed/verified.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 768,
+          "context": "Verified без положительной задержки",
+          "excerpt": "FreeConfigStatus.Verified when entry.LatencyMs <= 0 => \"— ✓✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 769,
+          "context": "Verified с задержкой",
+          "excerpt": "FreeConfigStatus.Verified                            => $\"{entry.LatencyMs} ms ✓✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 802,
+          "context": "Вывод latencyText в бейдже",
+          "excerpt": "Text = latencyText,"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 684,
+          "context": "FcStatusDeepVerifyDone wrapper",
+          "excerpt": "public static string FcStatusDeepVerifyDone(int verified) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyDone(verified);"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 835,
+          "context": "FcConnectNeedsVerify wrapper",
+          "excerpt": "public static string FcConnectNeedsVerify => global::VPNRouter.Core.Localization.Strings.FcConnectNeedsVerify;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 69,
+          "context": "Verified без положительного RTT: — ✓✓",
+          "excerpt": "FreeConfigStatus.Verified when Entry.LatencyMs <= 0 => \"— ✓✓\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 70,
+          "context": "Verified: N ms ✓✓",
+          "excerpt": "FreeConfigStatus.Verified    => $\"{Entry.LatencyMs} ms ✓✓\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigsPageViewModel.cs",
+          "line": 630,
+          "context": "StatusText из результата проверки",
+          "excerpt": "? Strings.FcStatusDeepVerifyDone(verifiedList.Count)"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigsPageViewModel.cs",
+          "line": 1735,
+          "context": "StatusText из результата глубокой проверки",
+          "excerpt": "? Strings.FcStatusDeepVerifyDone(foundVerified)"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigsPageViewModel.cs",
+          "line": 1788,
+          "context": "StatusText, запрет подключения непроверенного конфига",
+          "excerpt": "StatusText = Strings.FcConnectNeedsVerify;"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 227,
+          "context": "LatencyDisplay, поиск",
+          "excerpt": "<TextBlock Text=\"{Binding LatencyDisplay}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 365,
+          "context": "LatencyDisplay, сохранённые",
+          "excerpt": "<TextBlock Text=\"{Binding LatencyDisplay}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 421,
+          "context": "Text FreeConfigsVm.StatusText",
+          "excerpt": "Text=\"{Binding FreeConfigsVm.StatusText}\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 33,
+          "context": "FcStatusDeepVerifyDone RU",
+          "excerpt": "? $\"Готово: найдено {verified} реально рабочих (✓✓)\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 34,
+          "context": "FcStatusDeepVerifyDone EN",
+          "excerpt": ": $\"Done: {verified} truly working found (✓✓)\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1943,
+          "context": "FcConnectNeedsVerify RU",
+          "excerpt": "? \"Дождитесь проверки конфига (✓✓) перед подключением.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1944,
+          "context": "FcConnectNeedsVerify EN",
+          "excerpt": ": \"Wait for the config to be verified (✓✓) before connecting.\";"
+        }
+      ],
+      "note": "Пассивный результат глубокой проверки; кнопка запуска показана отдельно.\nОтдельно от кнопки запуска поиска find-working."
+    },
+    {
+      "id": "warning",
+      "name": "Предупреждение",
+      "purpose": "Показать восстановление настроек, сомнительный маршрут, неполный результат проверки или ошибку окружения.",
+      "category": "Состояния",
+      "screens": [
+        "Android / Отдельная панель DPI — только исходники",
+        "Desktop / Главное окно",
+        "Desktop / Обход DPI",
+        "Desktop / Подписки",
+        "Desktop / Простой режим",
+        "Desktop / Публичные — предупреждение перед подключением",
+        "Desktop / Серверы"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "⚠",
+        "variants": [
+          "!"
+        ]
+      },
+      "proposed": "proposed/warning.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.DpiBypass.cs",
+          "line": 67,
+          "context": "Определение построителя без найденного вызова",
+          "excerpt": "private Control BuildDpiBypassTabContent()"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.DpiBypass.cs",
+          "line": 154,
+          "context": "warningIcon.Text внутри BuildDpiBypassTabContent",
+          "excerpt": "Text = \"⚠\","
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs",
+          "line": 29,
+          "context": "Префикс OnAutoFailoverMessage",
+          "excerpt": "var text = \"⚠ \" + message;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.Connection.cs",
+          "line": 30,
+          "context": "StatusText = предупреждение",
+          "excerpt": "StatusText = text;                 // classic/advanced status line"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.FreeConfigs.cs",
+          "line": 261,
+          "context": "Программный TextBlock предупреждения публичного прокси",
+          "excerpt": "Text = \"⚠ \" + Strings.FcSecWarnHeader,"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.ServerTesting.cs",
+          "line": 302,
+          "context": "RU предупреждение о перехвате проверки активным VPN",
+          "excerpt": "? \"⚠ Активный VPN или прокси перехватывает соединения — реальные пинги недоступны. Отключите VPN для честных результатов или нажмите «Глубокая проверка» (она запускает sing-box отдельно и не зависит от текущего туннеля).\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.ServerTesting.cs",
+          "line": 303,
+          "context": "EN предупреждение о перехвате проверки",
+          "excerpt": ": \"⚠ Active VPN or proxy intercepting connections — real pings unavailable. Disconnect for true results or click Deep verify (it spawns sing-box independently and bypasses the current tunnel).\");"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.SimpleMode.cs",
+          "line": 260,
+          "context": "SimpleStatusDescription возвращает _lastConnectionAlert",
+          "excerpt": "if (HasConnectionAlert) return _lastConnectionAlert!;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1455,
+          "context": "LblStrategyBadgeLegend RU",
+          "excerpt": "? \"✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 1456,
+          "context": "LblStrategyBadgeLegend EN",
+          "excerpt": ": \"✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 4309,
+          "context": "Glyph частично успешной стратегии",
+          "excerpt": "glyph = $\"⚠ {result.Passed}/{result.Total}\";"
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 211,
+          "context": "Восстановление настроек",
+          "excerpt": "Text=\"⚠\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 277,
+          "context": "Неудачное обновление",
+          "excerpt": "Text=\"⚠\""
+        },
+        {
+          "file": "VPNRouter.App/Views/MainWindow.axaml",
+          "line": 830,
+          "context": "Text StatusText",
+          "excerpt": "Text=\"{Binding StatusText}\" FontSize=\"11\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 123,
+          "context": "ASCII ! в уведомлении блокировки антивирусом",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"!\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 287,
+          "context": "Tooltip LblStrategyBadgeLegend",
+          "excerpt": "ToolTip.Tip=\"{Binding LblStrategyBadgeLegend}\">"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 291,
+          "context": "Glyph в быстром выборе стратегии",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 342,
+          "context": "Легенда частичного успеха",
+          "excerpt": "<TextBlock Text=\"⚠\" FontSize=\"8\" Classes=\"zglyph-warning\"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 570,
+          "context": "Glyph в тонкой настройке",
+          "excerpt": "<TextBlock Text=\"{Binding Glyph}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 66,
+          "context": "Text SimpleStatusDescription",
+          "excerpt": "<TextBlock Text=\"{Binding SimpleStatusDescription}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SimplePage.axaml",
+          "line": 172,
+          "context": "Подозрительный активный outbound",
+          "excerpt": "<TextBlock Text=\"⚠\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/SubscribePage.axaml",
+          "line": 267,
+          "context": "SubscriptionTestImplausibleWarning",
+          "excerpt": "<TextBlock Text=\"{Binding SubscriptionTestImplausibleWarning}\""
+        }
+      ],
+      "note": "Декоративный символ внутри кликабельной конфигурационной карточки не является самостоятельным действием. LblDpiWarning сейчас не привязан и вынесен отдельно.\nSOURCE-ONLY: вызов BuildDpiBypassTabContent не найден; действующая вкладка Tools строится отдельно. Не выдавать за видимую текущую панель."
+    }
+  ],
+  "appendix": [
+    {
+      "id": "country-flags",
+      "name": "Флаги стран",
+      "purpose": "Сохранить страну публичного сервера как региональные метаданные.",
+      "category": "Метаданные",
+      "screens": [
+        "Desktop / Публичные — поиск",
+        "Desktop / Публичные — сохранённые"
+      ],
+      "interactive": false,
+      "original": {
+        "label": "CountryDisplay: пара Regional Indicator U+1F1E6 + (буква ISO-2 − A), затем код страны",
+        "variants": [
+          "Пример в комментарии исходника: 🇷🇺 RU",
+          "Пустой CountryCode отображается как —"
+        ]
+      },
+      "proposed": "proposed/country-flags.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 47,
+          "context": "CountryDisplay",
+          "excerpt": "public string CountryDisplay => string.IsNullOrEmpty(Entry.CountryCode)"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 49,
+          "context": "FlagFor(Entry.CountryCode) + CountryCode",
+          "excerpt": ": $\"{FlagFor(Entry.CountryCode)} {Entry.CountryCode}\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 174,
+          "context": "ToUpperInvariant для ISO-2",
+          "excerpt": "var upper = cc.ToUpperInvariant();"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 177,
+          "context": "Первый Regional Indicator",
+          "excerpt": "chars[0] = 0x1F1E6 + (upper[0] - 'A');"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 178,
+          "context": "Второй Regional Indicator",
+          "excerpt": "chars[1] = 0x1F1E6 + (upper[1] - 'A');"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/FreeConfigs/FreeConfigItemViewModel.cs",
+          "line": 179,
+          "context": "Конкатенация двух Unicode code points",
+          "excerpt": "return char.ConvertFromUtf32(chars[0]) + char.ConvertFromUtf32(chars[1]);"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 217,
+          "context": "CountryDisplay, поиск; EmojiFlagFont",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"{Binding CountryDisplay}\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/FreeConfigsPage.axaml",
+          "line": 355,
+          "context": "CountryDisplay, сохранённые; EmojiFlagFont",
+          "excerpt": "<TextBlock Grid.Column=\"0\" Text=\"{Binding CountryDisplay}\""
+        }
+      ],
+      "note": "Это динамическое семейство, не конечный список иконок стран. Не заменять разные страны одним globe. Proposed — место для решения семейства lead, не готовая универсальная замена. CountryFlag getter отдельно не потребляется XAML; активна ветка CountryDisplay."
+    },
+    {
+      "id": "source-only",
+      "name": "Неиспользуемые desktop-глифы и границы аудита",
+      "purpose": "Отделить строки и вычисляемые свойства без подтверждённого desktop-потребителя от реально показанных иконок.",
+      "category": "Только исходники — нет desktop-потребителя",
+      "screens": [],
+      "interactive": false,
+      "original": {
+        "label": "Не включать в активные группы каталога",
+        "variants": [
+          "Core Apply ↻; ThemeDark ● / ThemeLight ○; TrayStart ▶ / TrayStop ⬛",
+          "Core ChannelStable ●",
+          "FcKeepVerified / FcKeepVerifiedOnly ✓✓; FcRefreshSources ↻; FcRetestAll ▶; FcSavedRecheckAllBtn ↻; FcUserSrcAdd +; FcPageDescription ✓",
+          "SmpAdvancedLink ▸; SmpChangeConfig ▾; SmpStartVpn ▶ / SmpStopVpn ⏹ -> SmpConnectButtonText без XAML",
+          "CustomRulesDescription / CustomRulesPageDescription ⓘ",
+          "DiagHealthCheckOk ✓; SrvSortByLatencyAsc ↑; FcFindButton ✓✓; FcStopButton ✕; FcSavedClearAll ✕; FcSavedRemoveOne ✕",
+          "ServerViewModel.DeepDisplay ⏳ / ✗ / ! / ✓ без XAML-потребителя",
+          "BoolToChevronConverter defaults ▲/▼ переопределены единственным вызовом ▽|›",
+          "LblDpiWarning ⚠ не привязан",
+          "App AutoFailoverSwitching → не вызывается в App",
+          "Android-only glyph labels без desktop wrapper/consumer исключены",
+          "Обычные •/· маркеры списков и разделители не action icons",
+          "Большие Ellipse 140×140 — декоративное свечение, не status glyph"
+        ]
+      },
+      "proposed": "proposed/source-only.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 127,
+          "context": "Apply, только App wrapper66",
+          "excerpt": "public static string Apply => Ru ? \"\\u21bb  Применить\" : \"\\u21bb  Apply\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 146,
+          "context": "ThemeDark -> ThemeToggleText, нет XAML",
+          "excerpt": "public static string ThemeDark => Ru ? \"\\u25cf Тёмная\" : \"\\u25cf Dark\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 147,
+          "context": "ThemeLight -> ThemeToggleText, нет XAML",
+          "excerpt": "public static string ThemeLight => Ru ? \"\\u25cb Светлая\" : \"\\u25cb Light\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.ThemeAndLogo.cs",
+          "line": 97,
+          "context": "Неиспользуемый в XAML _themeToggleText",
+          "excerpt": "[ObservableProperty] private string _themeToggleText = Strings.ThemeDark;"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.cs",
+          "line": 7308,
+          "context": "Обновление ThemeToggleText без visual consumer",
+          "excerpt": "ThemeToggleText = IsDarkTheme ? Strings.ThemeLight : Strings.ThemeDark;"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 674,
+          "context": "TrayStart, не потребляется текущим tray меню",
+          "excerpt": "public static string TrayStart => Ru ? \"\\u25b6 Запустить VPN\" : \"\\u25b6 Start VPN\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 675,
+          "context": "TrayStop, не потребляется текущим tray меню",
+          "excerpt": "public static string TrayStop => Ru ? \"\\u2b1b Остановить VPN\" : \"\\u2b1b Stop VPN\";"
+        },
+        {
+          "file": "VPNRouter.App/App.axaml.cs",
+          "line": 235,
+          "context": "Реальный NativeMenuItem Connect — без глифа",
+          "excerpt": "var connectItem = new NativeMenuItem(\"Connect\");"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 846,
+          "context": "ChannelStable, только wrapper466",
+          "excerpt": "public static string ChannelStable => Ru ? \"● Стабильная\" : \"● Stable\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 75,
+          "context": "FcKeepVerified",
+          "excerpt": "public static string FcKeepVerified     => Ru ? \"Только ✓✓\"           : \"Keep ✓✓ only\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 76,
+          "context": "FcKeepVerifiedOnly alias",
+          "excerpt": "public static string FcKeepVerifiedOnly => FcKeepVerified;"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 85,
+          "context": "FcRefreshSources",
+          "excerpt": "public static string FcRefreshSources     => Ru ? \"↻ Обновить список\"    : \"↻ Refresh list\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 86,
+          "context": "FcRetestAll",
+          "excerpt": "public static string FcRetestAll          => Ru ? \"▶ Перепроверить\"      : \"▶ Retest all\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 166,
+          "context": "FcSavedRecheckAllBtn",
+          "excerpt": "public static string FcSavedRecheckAllBtn        => Ru ? \"↻ Перепроверить всё\" : \"↻ Recheck all\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 228,
+          "context": "FcUserSrcAdd",
+          "excerpt": "public static string FcUserSrcAdd          => Ru ? \"+ Добавить\" : \"+ Add\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 269,
+          "context": "FcPageDescription RU",
+          "excerpt": "? \"Публичные VLESS-конфиги. Проверка: TCP + TLS handshake с валидацией сертификата. ✓ = сервер живой и TLS-валидный.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.FreeConfigs.cs",
+          "line": 270,
+          "context": "FcPageDescription EN",
+          "excerpt": ": \"Public VLESS configs. Tests: TCP + TLS handshake with cert validation. ✓ = server alive and TLS-valid.\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 54,
+          "context": "SmpAdvancedLink",
+          "excerpt": "public static string SmpAdvancedLink => Ru ? \"Расширенные настройки ▸\" : \"Advanced settings ▸\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 61,
+          "context": "SmpChangeConfig",
+          "excerpt": "public static string SmpChangeConfig => Ru ? \"Сменить конфиг или режим ▾\" : \"Change config or mode ▾\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 76,
+          "context": "SmpStartVpn",
+          "excerpt": "public static string SmpStartVpn => Ru ? \"▶  Запустить VPN\" : \"▶  Start VPN\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.SimpleMode.cs",
+          "line": 77,
+          "context": "SmpStopVpn",
+          "excerpt": "public static string SmpStopVpn => Ru ? \"⏹  Остановить VPN\" : \"⏹  Stop VPN\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.SimpleMode.cs",
+          "line": 142,
+          "context": "SmpConnectButtonText не встречается в XAML",
+          "excerpt": "public string SmpConnectButtonText => IsConnected ? Strings.SmpStopVpn : Strings.SmpStartVpn;"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 961,
+          "context": "CustomRulesDescription RU",
+          "excerpt": "? \"Свои правила для определённых доменов / IP / портов / процессов. Действия: direct (мимо VPN), proxy (через VPN), block (блокировать). ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если они включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 962,
+          "context": "CustomRulesDescription EN",
+          "excerpt": ": \"Custom rules for specific domains / IPs / ports / processes. Actions: direct (bypass VPN), proxy (force through VPN), block (drop). ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 980,
+          "context": "CustomRulesPageDescription RU",
+          "excerpt": "? \"Свои правила маршрутизации для определённых доменов / IP / портов / процессов. ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 981,
+          "context": "CustomRulesPageDescription EN",
+          "excerpt": ": \"Custom routing rules for specific domains / IPs / ports / processes. ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1399,
+          "context": "DiagHealthCheckOk RU",
+          "excerpt": "? \"✓ Проверка {0} с назад\""
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1400,
+          "context": "DiagHealthCheckOk EN",
+          "excerpt": ": \"✓ Last check {0}s ago\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1806,
+          "context": "SrvSortByLatencyAsc",
+          "excerpt": "public static string SrvSortByLatencyAsc => Ru ? \"по пингу ↑\" : \"by ping ↑\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1872,
+          "context": "FcFindButton",
+          "excerpt": "public static string FcFindButton => Ru ? \"✓✓ Найти рабочие конфиги\" : \"✓✓ Find working configs\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1874,
+          "context": "FcStopButton",
+          "excerpt": "public static string FcStopButton => Ru ? \"✕ Остановить\" : \"✕ Stop\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1886,
+          "context": "FcSavedClearAll",
+          "excerpt": "public static string FcSavedClearAll => Ru ? \"✕ Удалить всё\" : \"✕ Clear all\";"
+        },
+        {
+          "file": "VPNRouter.Core/Localization/Strings.cs",
+          "line": 1888,
+          "context": "FcSavedRemoveOne",
+          "excerpt": "public static string FcSavedRemoveOne => \"✕\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/ServerViewModel.cs",
+          "line": 355,
+          "context": "DeepDisplay IsDeepTesting -> ⏳",
+          "excerpt": "if (IsDeepTesting) return \"⏳\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/ServerViewModel.cs",
+          "line": 356,
+          "context": "DeepDisplay failure -> ✗",
+          "excerpt": "if (IsDeepFailed) return \"✗\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/ServerViewModel.cs",
+          "line": 357,
+          "context": "DeepDisplay inconclusive -> !",
+          "excerpt": "if (IsDeepInconclusive) return \"!\";   // local/unsupported — not a server verdict"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/ServerViewModel.cs",
+          "line": 360,
+          "context": "DeepDisplay verified bandwidth -> ✓",
+          "excerpt": "if (BandwidthMbps > 0) return $\"✓ {BandwidthMbps}M\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/ServerViewModel.cs",
+          "line": 361,
+          "context": "DeepDisplay verified latency -> ✓",
+          "excerpt": "if (HttpLatencyMs > 0) return $\"✓ {HttpLatencyMs}ms\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/ServerViewModel.cs",
+          "line": 362,
+          "context": "DeepDisplay verified -> ✓",
+          "excerpt": "return \"✓\";"
+        },
+        {
+          "file": "VPNRouter.App/Converters.cs",
+          "line": 56,
+          "context": "Default ▲/▼",
+          "excerpt": "var glyphs = (parameter as string)?.Split('|', 2) ?? new[] { \"▲\", \"▼\" };"
+        },
+        {
+          "file": "VPNRouter.App/Converters.cs",
+          "line": 57,
+          "context": "Fallback ▲",
+          "excerpt": "var trueGlyph = glyphs.Length > 0 ? glyphs[0] : \"▲\";"
+        },
+        {
+          "file": "VPNRouter.App/Converters.cs",
+          "line": 58,
+          "context": "Fallback ▼",
+          "excerpt": "var falseGlyph = glyphs.Length > 1 ? glyphs[1] : \"▼\";"
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 165,
+          "context": "LblDpiWarning RU",
+          "excerpt": "? \"⚠ Только Windows. Можно использовать без VPN и вместе с VPN.\""
+        },
+        {
+          "file": "VPNRouter.App/ViewModels/MainWindowViewModel.LocalizedLabels.cs",
+          "line": 166,
+          "context": "LblDpiWarning EN",
+          "excerpt": ": \"⚠ Windows only. Can be used without VPN and alongside VPN.\";"
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 925,
+          "context": "AutoFailoverSwitching RU",
+          "excerpt": "? $\"Сервер недоступен. Переключаемся ({n}/{total}) → {serverName}\""
+        },
+        {
+          "file": "VPNRouter.App/Localization/Strings.cs",
+          "line": 926,
+          "context": "AutoFailoverSwitching EN",
+          "excerpt": ": $\"Server unreachable. Switching ({n}/{total}) → {serverName}\";"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/DpiBypassPage.axaml",
+          "line": 164,
+          "context": "Декоративное свечение Ellipse140, исключено",
+          "excerpt": "<Ellipse Width=\"140\" Height=\"140\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 104,
+          "context": "Декоративное свечение Ellipse140, исключено",
+          "excerpt": "<Ellipse Width=\"140\" Height=\"140\""
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 433,
+          "context": "• маркер списка",
+          "excerpt": "<Run Text=\"•  \"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 446,
+          "context": "• маркер списка",
+          "excerpt": "<Run Text=\"•  \"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/NetworkPage.axaml",
+          "line": 469,
+          "context": "• маркер списка",
+          "excerpt": "<Run Text=\"•  \"/>"
+        },
+        {
+          "file": "VPNRouter.App/Views/Pages/TelegramPage.axaml",
+          "line": 440,
+          "context": "· текстовый разделитель",
+          "excerpt": "<TextBlock Text=\"·\""
+        }
+      ],
+      "note": "Приложение для lead: перенести в coverage/appendix, не создавать proposed/source-only.svg. Source-only означает отсутствие найденного desktop-потребителя, а не гарантированно мёртвый код всего репозитория: Core также обслуживает Android. Исключены бренд/app/tray identity assets, mascot и сторонние application identity assets. Сканировались все 12 Views/Pages/Windows XAML и App.axaml/Styles, Core localization, App wrappers/ViewModels, Converters и InstallGuide. Каталог исходников не доказывает runtime-видимость на всех ОС; приложение, тесты и live-конфигурации не запускались. Фреймворк рисует собственные CheckBox/ComboBox/Expander/ScrollBar/NumericUpDown glyphs: без vendored template source их геометрия не приписывается репозиторию."
+    },
+    {
+      "id": "android-country-flags",
+      "name": "Флаги стран Android — сохранить",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 746,
+          "context": "Страна строки отображает FlagFor(entry.CountryCode)",
+          "excerpt": ": $\"{FlagFor(entry.CountryCode)} {entry.CountryCode}\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 880,
+          "context": "Первый региональный индикатор из кода страны",
+          "excerpt": "var c0 = 0x1F1E6 + (upper[0] - 'A');"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 881,
+          "context": "Второй региональный индикатор из кода страны",
+          "excerpt": "var c1 = 0x1F1E6 + (upper[1] - 'A');"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 882,
+          "context": "Объединение индикаторов в флаг",
+          "excerpt": "return char.ConvertFromUtf32(c0) + char.ConvertFromUtf32(c1);"
+        }
+      ],
+      "note": "Региональные индикаторы страны не заменяются общей пиктограммой."
+    },
+    {
+      "id": "unknown-status",
+      "name": "Нет результата проверки",
+      "purpose": "Показывает отсутствие применимого результата или страны",
+      "category": "Состояния",
+      "screens": [
+        "Android / Серверы",
+        "Android / Подписки",
+        "Android / Публичные конфигурации"
+      ],
+      "interactive": false,
+      "original": {
+        "symbol": "—",
+        "variants": [
+          "Нет результата",
+          "Проверка неприменима",
+          "Неизвестная страна",
+          "Нет задержки"
+        ]
+      },
+      "proposed": "proposed/unknown-status.svg",
+      "sources": [
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1243,
+          "context": "result is null → —",
+          "excerpt": "return (\"—\", GetBrush(\"TextMutedBrush\"));"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1255,
+          "context": "SkippedNotApplicable → —",
+          "excerpt": "ServerProbeStatus.SkippedNotApplicable => (\"—\", GetBrush(\"TextMutedBrush\")),"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.ServerList.cs",
+          "line": 1256,
+          "context": "Неизвестный статус → —",
+          "excerpt": "_                                      => (\"—\", GetBrush(\"TextMutedBrush\")),"
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 745,
+          "context": "Отсутствующий CountryCode → —",
+          "excerpt": "? \"—\""
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 768,
+          "context": "Нет задержки у Verified: — ✓✓",
+          "excerpt": "FreeConfigStatus.Verified when entry.LatencyMs <= 0 => \"— ✓✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 770,
+          "context": "Нет задержки у Ok: — ✓",
+          "excerpt": "FreeConfigStatus.Ok       when entry.LatencyMs <= 0 => \"— ✓\","
+        },
+        {
+          "file": "VPNRouter.Android/AndroidApp.FreeConfigs.cs",
+          "line": 778,
+          "context": "Статус по умолчанию → —",
+          "excerpt": "_                                                     => \"—\","
+        }
+      ],
+      "note": "Включены самостоятельные UI-маркеры отсутствия данных; обычные тире в прозе исключены. Семантический id отсутствует в vector-definitions.json."
+    }
+  ]
+}
