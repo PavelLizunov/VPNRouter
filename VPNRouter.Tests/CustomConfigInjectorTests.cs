@@ -1236,11 +1236,11 @@ public class CustomConfigInjectorTests
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
         var ddrServer = servers!.OfType<JsonObject>().Single(s => s["tag"]?.ToString() == ddr);
         Assert.Equal("https", ddrServer["type"]?.ToString());
-        Assert.Equal("1.1.1.1", ddrServer["server"]?.ToString());
+        Assert.Equal("8.8.8.8", ddrServer["server"]?.ToString());
         Assert.Equal("/dns-query", ddrServer["path"]?.ToString());
         Assert.Equal("dns-direct", ddrServer["detour"]?.ToString());
         Assert.DoesNotContain(servers.OfType<JsonObject>(), s =>
-            s["type"]?.ToString() == "udp" && s["server"]?.ToString() == "1.1.1.1");
+            s["type"]?.ToString() == "udp" && s["server"]?.ToString() == "8.8.8.8");
 
         AssertSingBoxCheckPasses(result, "domainproxy-nodns-full");
     }

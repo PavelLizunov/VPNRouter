@@ -1475,6 +1475,11 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              Padding="14,6,14,4"/>
                   <ItemsControl ItemsSource="{Binding ReadModeDirectRules}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
                         <StackPanel Spacing="0">
@@ -1553,6 +1558,11 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              Padding="14,8,14,4"/>
                   <ItemsControl ItemsSource="{Binding ReadModeProxyRules}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
                         <StackPanel Spacing="0">
@@ -1621,6 +1631,11 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              Padding="14,8,14,4"/>
                   <ItemsControl ItemsSource="{Binding ReadModeBlockRules}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CustomRuleViewModel">
                         <StackPanel Spacing="0">

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:ctrl="using:VPNRouter.App.Controls"
              xmlns:pages="using:VPNRouter.App.Views.Pages"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -30,10 +31,10 @@
                          IsVisible="{Binding IsTgProxyAvailable}"/>
         </ListBox>
 
-        <!-- Sub-pages -->
+        <!-- Sub-pages: lazily instantiated on first activation -->
         <Grid Grid.Row="1">
-            <pages:DpiBypassPage IsVisible="{Binding IsZapretToolSelected}"/>
-            <pages:TelegramPage  IsVisible="{Binding IsTgProxyToolSelected}"/>
+            <ctrl:DeferredPage IsActive="{Binding IsZapretToolSelected}" PageType="{x:Type pages:DpiBypassPage}"/>
+            <ctrl:DeferredPage IsActive="{Binding IsTgProxyToolSelected}" PageType="{x:Type pages:TelegramPage}"/>
         </Grid>
 
     </Grid>

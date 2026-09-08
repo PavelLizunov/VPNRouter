@@ -725,7 +725,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             list.Remove(existing);
         }
 
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
 
         try { SaveSettings(); }
         catch (Exception ex)
@@ -771,7 +771,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             list.Remove(existing);
         }
 
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
 
         try { SaveSettings(); }
         catch (Exception ex)
@@ -803,6 +803,40 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         return _settings.App.RoutingAppsInclude
             ??= new List<string>();
+    }
+
+    private int _batchUpdateDepth;
+    public bool IsBatchUpdating => _batchUpdateDepth > 0;
+
+    /// <summary>
+    /// Suppresses per-item <see cref="SaveSettings"/> calls during bulk operations
+    /// (e.g. Select All, Clear All, group toggles, Steam import). Persists settings
+    /// exactly once when the outermost batch scope disposes.
+    /// </summary>
+    public IDisposable BeginBatchUpdate()
+    {
+        System.Threading.Interlocked.Increment(ref _batchUpdateDepth);
+        return new BatchUpdateScope(this);
+    }
+
+    private sealed class BatchUpdateScope : IDisposable
+    {
+        private MainWindowViewModel? _vm;
+        public BatchUpdateScope(MainWindowViewModel vm) => _vm = vm;
+        public void Dispose()
+        {
+            var vm = System.Threading.Interlocked.Exchange(ref _vm, null);
+            if (vm == null) return;
+            if (System.Threading.Interlocked.Decrement(ref vm._batchUpdateDepth) == 0)
+            {
+                if (!vm._isLoadingUI)
+                {
+                    try { vm.SaveSettings(); }
+                    catch (Exception ex) { vm._logger?.Warning(ex, "[VM] SaveSettings after batch update failed"); }
+                    vm.MarkRoutingSettingsChanged();
+                }
+            }
+        }
     }
 
     /// <summary>

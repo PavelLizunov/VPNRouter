@@ -761,7 +761,7 @@ public static class SettingsLoader
         Dns = new DnsSettings
         {
             Strategy = "ipv4_only",
-            VpnDns = "https://1.1.1.1/dns-query",
+            VpnDns = "https://8.8.8.8/dns-query",
             LocalDns = "local"
         },
         SingBox = new SingBoxSettings
