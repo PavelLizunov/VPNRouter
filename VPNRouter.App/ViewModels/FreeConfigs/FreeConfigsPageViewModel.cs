@@ -1498,7 +1498,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             StatusText = Strings.FcUserSrcEmptyUrl;
             return;
         }
-        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
             StatusText = Strings.FcUserSrcInvalidUrl;
             return;

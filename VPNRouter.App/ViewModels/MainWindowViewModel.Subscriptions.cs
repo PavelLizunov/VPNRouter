@@ -84,6 +84,13 @@ public partial class MainWindowViewModel
         var url = (NewSubUrl ?? "").Trim();
         if (string.IsNullOrWhiteSpace(url)) return;
 
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            _logger.Warning("[VM] AddSubscription blocked invalid/non-http(s) URL: {Url}", CanaryPolicy.RedactUrl(url));
+            return;
+        }
+
         var name = (NewSubName ?? "").Trim();
         if (string.IsNullOrEmpty(name)) name = $"Sub {Subscriptions.Count + 1}";
 
