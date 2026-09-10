@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Serilog;
 using VPNRouter.Core.Models;
 
@@ -11,10 +16,11 @@ namespace VPNRouter.Core.Services;
 ///
 /// <para>Reuses the mature, PROTOCOL-AWARE <see cref="TcpTlsProbe.ProbeServerAsync"/>
 /// (VLESS+Reality → TCP-only, plain TLS → full handshake, Hy2/TUIC → UDP) so a
-/// Reality server isn't false-flagged dead by a naive TLS probe. Runs the whole
-/// pool in parallel within a short deadline — cheap enough for the connect path,
-/// unlike <see cref="VlessDeepVerifier"/> which spins up a real sing-box per
-/// server. A server that's reachable but whose proxy is broken is caught by the
+/// Reality server isn't false-flagged dead by a naive TLS probe. Runs the pool
+/// with a bounded worker pool (up to <see cref="MaxConcurrency"/> = 8 workers)
+/// within a short deadline — cheap enough for the connect path, unlike
+/// <see cref="VlessDeepVerifier"/> which spins up a real sing-box per server.
+/// A server that's reachable but whose proxy is broken is caught by the
 /// post-connect AutoFailover layer (G4); the two layers compose like the
 /// engine-vs-GUI split in Clash/sing-box/Hiddify.</para>
 ///
@@ -24,6 +30,8 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public sealed class ServerHealthProbe
 {
+    internal const int MaxConcurrency = 8;
+
     private readonly ILogger? _logger;
     private readonly Func<VlessServerEntry, CancellationToken, Task<ServerProbeResult>> _probe;
 
@@ -36,42 +44,90 @@ public sealed class ServerHealthProbe
     }
 
     /// <summary>
-    /// Probe every server in parallel, bounded by <paramref name="overallDeadline"/>.
+    /// Probe every server in parallel, bounded by <paramref name="overallDeadline"/> and
+    /// <see cref="MaxConcurrency"/> (8 workers).
     /// Servers that don't complete in time, error, or come back not-reachable are
-    /// reported dead. Result order is undefined — callers use <see cref="PickBest"/>.
+    /// reported dead. Pre-cancellation throws immediately; unstarted or cancelled
+    /// servers remain dead.
     /// </summary>
     public async Task<List<ServerLiveness>> ProbeAllAsync(
         IReadOnlyList<VlessServerEntry> servers,
         TimeSpan overallDeadline,
         CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (servers == null || servers.Count == 0)
             return new List<ServerLiveness>();
+
+        int count = servers.Count;
+        var results = new ServerLiveness[count];
+        for (int i = 0; i < count; i++)
+        {
+            results[i] = new ServerLiveness(servers[i], Alive: false, LatencyMs: int.MaxValue);
+        }
+
+        if (overallDeadline == TimeSpan.Zero)
+            return results.ToList();
 
         using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadlineCts.CancelAfter(overallDeadline);
         var token = deadlineCts.Token;
 
-        var tasks = servers.Select(async s =>
-        {
-            try
-            {
-                var r = await _probe(s, token).ConfigureAwait(false);
-                var alive = r.IsReachable;
-                return new ServerLiveness(s, alive, alive ? r.LatencyMs : int.MaxValue);
-            }
-            catch (Exception ex)
-            {
-                _logger?.Debug("[ServerHealthProbe] {Name} ({Host}:{Port}) probe failed: {Err}",
-                    s.Name, s.Server, s.Port, ex.Message);
-                return new ServerLiveness(s, false, int.MaxValue);
-            }
-        });
+        int nextIndex = 0;
 
-        var results = (await Task.WhenAll(tasks).ConfigureAwait(false)).ToList();
+        async Task WorkerAsync()
+        {
+            while (!token.IsCancellationRequested)
+            {
+                int index = Interlocked.Increment(ref nextIndex) - 1;
+                if (index >= count)
+                    break;
+
+                if (token.IsCancellationRequested)
+                    break;
+
+                var s = servers[index];
+                try
+                {
+                    var r = await _probe(s, token).ConfigureAwait(false);
+                    token.ThrowIfCancellationRequested();
+                    var alive = r?.IsReachable == true;
+                    results[index] = new ServerLiveness(s, alive, alive ? r!.LatencyMs : int.MaxValue);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger?.Debug("[ServerHealthProbe] {Name} ({Host}:{Port}) probe deadline expired",
+                        s?.Name, s?.Server, s?.Port);
+                    results[index] = new ServerLiveness(s, false, int.MaxValue);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Debug("[ServerHealthProbe] {Name} ({Host}:{Port}) probe failed: {Err}",
+                        s?.Name, s?.Server, s?.Port, ex.Message);
+                    results[index] = new ServerLiveness(s, false, int.MaxValue);
+                }
+            }
+        }
+
+        int workerCount = Math.Min(count, MaxConcurrency);
+        var workers = new Task[workerCount];
+        for (int i = 0; i < workerCount; i++)
+        {
+            workers[i] = WorkerAsync();
+        }
+
+        await Task.WhenAll(workers).ConfigureAwait(false);
+
+        ct.ThrowIfCancellationRequested();
+
         _logger?.Information("[ServerHealthProbe] {Alive}/{Total} servers alive",
-            results.Count(r => r.Alive), results.Count);
-        return results;
+            results.Count(r => r.Alive), count);
+        return results.ToList();
     }
 
     /// <summary>

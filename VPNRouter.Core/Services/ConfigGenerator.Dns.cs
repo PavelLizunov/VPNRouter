@@ -138,13 +138,15 @@ public static partial class ConfigGenerator
             // tunnel they're explicitly bypassing. profile.DnsMode is
             // irrelevant here (it's a property of the legacy profile
             // system); we mirror routing intent on the DNS layer.
+            // Under StrictDns, the all-DNS-via-VPN guarantee overrides this.
             if (processes.Count > 0)
             {
+                var dnsServer = strictDns ? "vpn-dns" : "local-dns";
                 dns.Rules.Add(new DnsRule
                 {
                     ProcessName = processes.ToList(),
                     Action      = "route",
-                    Server      = "local-dns"
+                    Server      = dnsServer
                 });
             }
         }
@@ -161,9 +163,10 @@ public static partial class ConfigGenerator
             //   smart   → local-dns (the explicit "tunnel traffic, local DoH for
             //             geo-CDN nearness" opt-in; an encrypted-DoH tradeoff),
             //   vpn_only / direct / anything else → vpn-dns (tunnel the DNS).
+            // Under StrictDns, the all-DNS-via-VPN guarantee overrides smart mode.
             if (processes.Count > 0)
             {
-                var dnsServer = profile.DnsMode == "smart" ? "local-dns" : "vpn-dns";
+                var dnsServer = strictDns || profile.DnsMode != "smart" ? "vpn-dns" : "local-dns";
                 dns.Rules.Add(new DnsRule
                 {
                     ProcessName = processes.ToList(),

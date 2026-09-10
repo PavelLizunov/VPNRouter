@@ -159,73 +159,119 @@ internal static class TwoPhaseStartCoordinator
 
         try
         {
-            // ── Phase A: wait for SingBoxStarted, startTask completion, or budget expiry ──
-            using var phaseACts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var phaseADelay = Task.Delay(aBudget, phaseACts.Token);
-            var phaseAResult = await Task.WhenAny(startedTcs.Task, startTask, phaseADelay)
-                .ConfigureAwait(false);
-
-            // Cancel the timer immediately so its CT-Linked task doesn't
-            // outlive this scope into a finalized state (keeps the worker
-            // pool clean even though it would be GC'd anyway).
-            try { phaseACts.Cancel(); } catch { /* idempotent */ }
-
             if (cancellationToken.IsCancellationRequested)
                 return TwoPhaseStartOutcome.Cancelled;
 
-            if (phaseAResult == phaseADelay)
+            // ── Phase A: wait for SingBoxStarted, startTask completion, or budget expiry ──
+            using (var phaseACts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
-                // Phase A timed out. SingBoxStarted never fired AND startTask
-                // didn't complete. Real hang in DeployAndSetupFirewall /
-                // TunAdapterDiagnostics / wintun launch.
-                return TwoPhaseStartOutcome.PhaseATimeout;
+                try
+                {
+                    var phaseADelay = Task.Delay(aBudget, phaseACts.Token);
+                    var phaseAResult = await Task.WhenAny(startedTcs.Task, connectedTcs.Task, startTask, phaseADelay)
+                        .ConfigureAwait(false);
+
+                    if (cancellationToken.IsCancellationRequested)
+                        return TwoPhaseStartOutcome.Cancelled;
+
+                    if (connectedTcs.Task.IsCompletedSuccessfully)
+                        return TwoPhaseStartOutcome.Connected;
+
+                    // Race: if started already fired, prioritize event unless task fault/cancel
+                    if (startedTcs.Task.IsCompletedSuccessfully)
+                    {
+                        if (startTask.IsFaulted || (startTask.IsCanceled && !cancellationToken.IsCancellationRequested))
+                            return TwoPhaseStartOutcome.StartTaskCompleted;
+
+                        // Phase A success; proceed to Phase B.
+                    }
+                    else if (phaseAResult == phaseADelay)
+                    {
+                        // Phase A timed out. SingBoxStarted never fired.
+                        return TwoPhaseStartOutcome.PhaseATimeout;
+                    }
+                    else if (phaseAResult == startTask)
+                    {
+                        if (startTask.IsFaulted || (startTask.IsCanceled && !cancellationToken.IsCancellationRequested))
+                            return TwoPhaseStartOutcome.StartTaskCompleted;
+
+                        // startTask clean completion before Started shouldn't falsely green.
+                        // clean-noStarted enters wait Phase A until original deadline or typedConnected / Started.
+                        var secondAResult = await Task.WhenAny(startedTcs.Task, connectedTcs.Task, phaseADelay)
+                            .ConfigureAwait(false);
+
+                        if (cancellationToken.IsCancellationRequested)
+                            return TwoPhaseStartOutcome.Cancelled;
+
+                        if (connectedTcs.Task.IsCompletedSuccessfully)
+                            return TwoPhaseStartOutcome.Connected;
+
+                        if (startedTcs.Task.IsCompletedSuccessfully)
+                        {
+                            // Started fired in time; proceed to Phase B.
+                        }
+                        else if (secondAResult == phaseADelay)
+                        {
+                            return TwoPhaseStartOutcome.PhaseATimeout;
+                        }
+                    }
+                }
+                finally
+                {
+                    try { phaseACts.Cancel(); } catch { /* idempotent */ }
+                }
             }
 
-            if (phaseAResult == startTask)
-            {
-                // startTask returned before SingBoxStarted fired. Two
-                // possibilities:
-                //   (a) Instant-throw (ConflictingVpnException, validation
-                //       failure) — caller awaits startTask to surface it.
-                //   (b) Successful return that never went through the
-                //       SingBox phase (custom-config no-op? — not currently
-                //       a thing, but defensive).
-                // Either way, defer to caller's await semantics.
-                return TwoPhaseStartOutcome.StartTaskCompleted;
-            }
-
-            // phaseAResult == startedTcs.Task — Phase A success.
-            // SingBoxStarted fired; check if Connected also already fired
-            // (possible if engine is ultra-fast on a happy path).
+            // Phase A succeeded. Check if Connected also already fired.
             if (connectedTcs.Task.IsCompletedSuccessfully)
                 return TwoPhaseStartOutcome.Connected;
 
             // ── Phase B: wait for Connected, startTask completion, or budget expiry ──
-            using var phaseBCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var phaseBDelay = Task.Delay(bBudget, phaseBCts.Token);
-            var phaseBResult = await Task.WhenAny(connectedTcs.Task, startTask, phaseBDelay)
-                .ConfigureAwait(false);
-
-            try { phaseBCts.Cancel(); } catch { /* idempotent */ }
-
-            if (cancellationToken.IsCancellationRequested)
-                return TwoPhaseStartOutcome.Cancelled;
-
-            if (phaseBResult == phaseBDelay)
-                return TwoPhaseStartOutcome.PhaseBTimeout;
-
-            if (phaseBResult == startTask)
+            using (var phaseBCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
             {
-                // startTask returned without Connected — most likely a
-                // late instant-throw (sanity check failed mid-pipeline)
-                // or the warmup probe failed but startTask considered
-                // that a soft-success. Caller awaits startTask for the
-                // truth.
-                return TwoPhaseStartOutcome.StartTaskCompleted;
-            }
+                try
+                {
+                    var phaseBDelay = Task.Delay(bBudget, phaseBCts.Token);
+                    var phaseBResult = await Task.WhenAny(connectedTcs.Task, startTask, phaseBDelay)
+                        .ConfigureAwait(false);
 
-            // phaseBResult == connectedTcs.Task — Phase B success.
-            return TwoPhaseStartOutcome.Connected;
+                    if (cancellationToken.IsCancellationRequested)
+                        return TwoPhaseStartOutcome.Cancelled;
+
+                    if (connectedTcs.Task.IsCompletedSuccessfully)
+                        return TwoPhaseStartOutcome.Connected;
+
+                    if (phaseBResult == phaseBDelay)
+                        return TwoPhaseStartOutcome.PhaseBTimeout;
+
+                    if (phaseBResult == startTask)
+                    {
+                        if (startTask.IsFaulted || (startTask.IsCanceled && !cancellationToken.IsCancellationRequested))
+                            return TwoPhaseStartOutcome.StartTaskCompleted;
+
+                        // If startTask completes SUCCESSFULLY before Connected, continue waiting
+                        // connected vs SAME phaseBDelay without resetting timer (not loop busycompleted task).
+                        var secondBResult = await Task.WhenAny(connectedTcs.Task, phaseBDelay)
+                            .ConfigureAwait(false);
+
+                        if (cancellationToken.IsCancellationRequested)
+                            return TwoPhaseStartOutcome.Cancelled;
+
+                        if (connectedTcs.Task.IsCompletedSuccessfully)
+                            return TwoPhaseStartOutcome.Connected;
+
+                        if (secondBResult == phaseBDelay)
+                            return TwoPhaseStartOutcome.PhaseBTimeout;
+                    }
+
+                    return TwoPhaseStartOutcome.Connected;
+                }
+                finally
+                {
+                    // phaseBCts canceled only AFTER final outcome, not before second wait.
+                    try { phaseBCts.Cancel(); } catch { /* idempotent */ }
+                }
+            }
         }
         finally
         {

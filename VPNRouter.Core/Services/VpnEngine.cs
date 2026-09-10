@@ -42,6 +42,8 @@ public class VpnEngine : IDisposable
     // failovers; reset on every successful start.
     private ConfigSanityCheck? _sanityCheck;
     private AutoFailoverEngine? _failover;
+    private long _failoverGeneration;
+    private AppSettings? _failoverSettingsContext;
     // Reconnect fix (2026-06-15): the user's "Ignore VPN conflict" decision,
     // remembered from the last StartAsync so the internal AutoFailover restart
     // delegates re-enter StartAsync with the SAME skip. Else a failover after an
@@ -191,6 +193,44 @@ public class VpnEngine : IDisposable
     /// </summary>
     public event Action<int>? Connected;
 
+    /// <summary>
+    /// Captures an engine-scoped readiness guard for UI consumers handling <see cref="Connected"/>.
+    /// Captures current <see cref="_singBox"/>, <see cref="_sessionCts"/>, and <see cref="_failoverGeneration"/>
+    /// at event-time. The returned predicate returns false unless !_disposed, _warmupConfirmed,
+    /// current _singBox matches the captured non-null instance, current session CTS matches the
+    /// captured non-null instance and is not canceled, generation is unchanged, and manager PID matches
+    /// and is running. Handles lookup exceptions fail-closed.
+    /// </summary>
+    internal Func<bool> CaptureReadinessGuard(int pid)
+    {
+        if (_disposed) return () => false;
+        var capturedSingBox = _singBox;
+        var capturedSessionCts = _sessionCts;
+        var capturedGeneration = _failoverGeneration;
+        var capturedHandle = capturedSingBox?.OwnedProcessHandle;
+
+        return () =>
+        {
+            try
+            {
+                if (_disposed) return false;
+                if (!_warmupConfirmed) return false;
+                if (capturedSingBox == null || !ReferenceEquals(_singBox, capturedSingBox)) return false;
+                if (capturedSessionCts == null || !ReferenceEquals(_sessionCts, capturedSessionCts) || capturedSessionCts.IsCancellationRequested) return false;
+                if (_failoverGeneration != capturedGeneration) return false;
+                if (capturedHandle == null || !ReferenceEquals(_singBox.OwnedProcessHandle, capturedHandle)) return false;
+                if (capturedSingBox.Pid != pid) return false;
+                if (capturedHandle.HasExited) return false;
+                if (capturedSingBox.State != SingBoxState.Running) return false;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        };
+    }
+
     /// <summary>F-E (2026-05-11): fired when <see cref="AutoFailoverEngine"/>
     /// switches to a different server after the pre-start sanity check or
     /// post-start Clash API probe flagged the active one as dead. Carries
@@ -319,6 +359,7 @@ public class VpnEngine : IDisposable
             // Fresh session: link caller token so Stop() or caller ct cancels bring-up.
             _sessionCts?.Dispose();
             _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            ResetFailoverContext(settings);
             try
             {
                 await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck).ConfigureAwait(false);
@@ -345,6 +386,20 @@ public class VpnEngine : IDisposable
         {
             _lifecycleGate.Release();
         }
+    }
+
+    /// <summary>
+    /// NIGHT-06: Assigns the active failover settings context and resets the lazy
+    /// AutoFailoverEngine instance so that subsequent failovers use the new settings
+    /// and pool rather than retaining a stale configuration from a prior intent.
+    /// Increments the engine failover generation to invalidate any queued closures.
+    /// Called on public StartAsync (after already-running guard) and on successful ApplyAsync.
+    /// </summary>
+    internal void ResetFailoverContext(AppSettings settings)
+    {
+        _failoverGeneration++;
+        _failoverSettingsContext = settings;
+        _failover = null;
     }
 
     private bool HasLiveOrStartingSingBox()
@@ -528,10 +583,21 @@ public class VpnEngine : IDisposable
     /// the safe gated path; pre-start (gate already held) re-enters
     /// StartAsyncInternal directly — re-taking the non-reentrant gate deadlocks.
     /// </summary>
-    internal async Task<bool> ExecuteFailoverRestartAsync(AppSettings captured, CancellationToken ct)
+    internal async Task<bool> ExecuteFailoverRestartAsync(
+        AppSettings captured,
+        CancellationToken ct,
+        long? expectedGeneration = null)
     {
         if (_postStartPhase)
-            return await ExecuteProbeFailoverRestartAsync(captured, ct).ConfigureAwait(false);
+            return await ExecuteProbeFailoverRestartAsync(captured, ct, expectedGeneration).ConfigureAwait(false);
+
+        if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
+            (_failoverSettingsContext is not null && !ReferenceEquals(_failoverSettingsContext, captured)))
+        {
+            _logger?.Information(
+                "[VpnEngine] Pre-start failover restart aborted — captured settings or generation do not match active failover context (stale failover intent)");
+            return false;
+        }
 
         try
         {
@@ -560,11 +626,22 @@ public class VpnEngine : IDisposable
     /// is the already-teardown-cancelled probe token; intentionally ignored for the
     /// bring-up. internal for the seam test.
     /// </summary>
-    internal async Task<bool> ExecuteProbeFailoverRestartAsync(AppSettings captured, CancellationToken probeCt)
+    internal async Task<bool> ExecuteProbeFailoverRestartAsync(
+        AppSettings captured,
+        CancellationToken probeCt,
+        long? expectedGeneration = null)
     {
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
         try
         {
+            if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
+                (_failoverSettingsContext is not null && !ReferenceEquals(_failoverSettingsContext, captured)))
+            {
+                _logger?.Information(
+                    "[VpnEngine] Failover restart aborted — captured settings or generation do not match active failover context (stale failover intent)");
+                return false;
+            }
+
             TeardownInternal();
             var session = _sessionCts;
             if (session == null || session.IsCancellationRequested)
@@ -807,6 +884,8 @@ public class VpnEngine : IDisposable
                 TunFingerprint = newTunFingerprint;
                 ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
                 configCommitted = true;
+                ResetFailoverContext(settings);
+                UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
                 _logger?.Information("[VpnEngine] Applied via hot-reload");
                 // The sing-box commit is irreversible here; finish driver
@@ -822,12 +901,21 @@ public class VpnEngine : IDisposable
 
             // v2.31.7-r1: pass through forceRestart so the structural-
             // change intent reaches sing-box.
-            _singBox.ReloadConfigJson(configJson, forceRestart);
+            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart))
+            {
+                RestoreActiveBaseline();
+                _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
+                OnStatus("Apply failed: sing-box reload or restart was not confirmed");
+                return false;
+            }
+
             ActiveConfigMode = newConfigMode;
             ActiveRoutingMode = newRoutingMode;
             TunFingerprint = newTunFingerprint;
             ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
             configCommitted = true;
+            ResetFailoverContext(settings);
+            UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
             // W1.2 hook 2 — re-engage the true-split driver after a structural hot-apply. forceRestart
@@ -848,6 +936,16 @@ public class VpnEngine : IDisposable
         }
     }
 
+    private void UpdateFirewallCommittedConfig(string configJson, string routingMode, Profile? profile)
+    {
+        if (_firewall is ICommittedFirewallConfig committed)
+        {
+            var isFullTunnel = routingMode.Equals("full", StringComparison.OrdinalIgnoreCase);
+            var enabledForFullTunnel = (profile?.BlockOnVpnFail == true) && isFullTunnel;
+            committed.UpdateCommittedConfig(configJson, enabledForFullTunnel);
+        }
+    }
+
     // ─── Stop ────────────────────────────────────────────────────────────────
 
     public void Stop()
@@ -865,6 +963,8 @@ public class VpnEngine : IDisposable
         _lifecycleGate.Wait();
         try
         {
+            _failoverGeneration++;
+            _failover = null;
             TeardownInternal();
         }
         finally
@@ -1099,7 +1199,11 @@ public class VpnEngine : IDisposable
             // relay-open failure-rate signal doesn't need it (ProxyStreamError
             // attribution is a later enrichment).
             _connHealthStream = new ClashLogStream(
-                $"http://127.0.0.1:{clashPort}", _connHealth, proxyEndpoints: null, logger: _logger);
+                $"http://127.0.0.1:{clashPort}",
+                _connHealth,
+                proxyEndpoints: null,
+                logger: _logger,
+                secret: settings.SingBox.ClashApiSecret);
             _connHealthStream.Start();
             _logger?.Information(
                 "[VpnEngine] Connection-health telemetry started (observe-only, Clash port {Port})", clashPort);
@@ -1491,10 +1595,16 @@ public class VpnEngine : IDisposable
     private sealed class VpnEngineStartupHost : StartupHostInternal
     {
         private readonly VpnEngine _engine;
+        private readonly long _generation;
+        private readonly CancellationTokenSource? _sessionCts;
+        private SingBoxManager? _singBoxManager;
+        private IProcessHandle? _startedHandle;
 
         public VpnEngineStartupHost(VpnEngine engine)
         {
             _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+            _generation = engine._failoverGeneration;
+            _sessionCts = engine._sessionCts;
         }
 
         public ILogger? Logger => _engine._logger;
@@ -1511,6 +1621,7 @@ public class VpnEngine : IDisposable
 
         public void OnSingBoxStarted(int pid)
         {
+            _startedHandle = _singBoxManager?.OwnedProcessHandle;
             _engine.EnterPostStartPhase(); // P02 FAIL-1
             _engine.SingBoxStarted?.Invoke(pid);
         }
@@ -1524,6 +1635,24 @@ public class VpnEngine : IDisposable
         // App-side two-phase timer depends on).
         public void OnConnected(int pid)
         {
+            try
+            {
+                if (_engine._disposed) return;
+                if (_generation != _engine._failoverGeneration) return;
+                if (_sessionCts == null || _sessionCts.IsCancellationRequested || !ReferenceEquals(_engine._sessionCts, _sessionCts))
+                    return;
+
+                if (_singBoxManager == null || !ReferenceEquals(_engine._singBox, _singBoxManager) || _singBoxManager.Pid != pid || _singBoxManager.State != SingBoxState.Running)
+                    return;
+
+                if (_startedHandle == null || _startedHandle.HasExited || !ReferenceEquals(_singBoxManager.OwnedProcessHandle, _startedHandle))
+                    return;
+            }
+            catch
+            {
+                return;
+            }
+
             // v2.44.2 (P0): warmup fetched gstatic THROUGH the tunnel — the
             // outbound is provably reachable. Record it so the post-start
             // delay-test probe won't false-positive-failover a working link.
@@ -1588,7 +1717,11 @@ public class VpnEngine : IDisposable
 
         public void SetScanResult(ScanResult result) => _engine._scanResult = result;
 
-        public void SetSingBoxManager(SingBoxManager manager) => _engine._singBox = manager;
+        public void SetSingBoxManager(SingBoxManager manager)
+        {
+            _singBoxManager = manager;
+            _engine._singBox = manager;
+        }
 
         public void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings)
         {
@@ -1646,16 +1779,31 @@ public class VpnEngine : IDisposable
         public AutoFailoverEngine WireFailoverWithStop(ConfigSanityCheck sanityCheck)
             => WireFailoverCore(sanityCheck);
 
-        // P02 FAIL-1: both wire methods install the same phase-aware delegate;
+        // P02 FAIL-1 / NIGHT-06: both wire methods install the same phase-aware delegate;
         // the ??= slot collision is harmless because dispatch reads the live flag.
+        // Reads engine current settings context (falling back to host-captured settings only
+        // if needed for existing direct host seams). Captures a single settings local as
+        // both constructor argument and restart closure so pool and closure share the same object.
+        // Captures generation in a local so the delegate captures generation at creation time.
         private AutoFailoverEngine WireFailoverCore(ConfigSanityCheck sanityCheck)
         {
+            var settings = _engine._failoverSettingsContext ?? CapturedSettings();
+            var generation = _engine._failoverGeneration;
             _engine._failover ??= new AutoFailoverEngine(
-                CapturedSettings(),
+                settings,
                 sanityCheck,
                 restart: (innerCt) =>
-                    _engine.ExecuteFailoverRestartAsync(CapturedSettings(), innerCt),
-                logger: _engine._logger);
+                    _engine.ExecuteFailoverRestartAsync(settings, innerCt, generation),
+                logger: _engine._logger)
+            {
+                IsCurrentIntent = () =>
+                {
+                    var sessionCts = _engine._sessionCts;
+                    return !_engine._disposed
+                        && _engine._failoverGeneration == generation
+                        && (sessionCts == null || !sessionCts.IsCancellationRequested);
+                }
+            };
             return _engine._failover;
         }
 

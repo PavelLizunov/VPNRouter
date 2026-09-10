@@ -333,4 +333,449 @@ public sealed class MvmTwoPhaseStartTimerTests
         Assert.Equal(60, (int)TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
         Assert.Equal(20, (int)TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
     }
+
+    // ─── Test 9: Started then clean start completion, later Connected succeeds ───
+
+    [Fact]
+    public async Task Started_ThenCleanStartCompletion_LaterConnectedSucceeds()
+    {
+        // NIGHT-07: Phase B must not abort upon clean startTask completion.
+        // If startTask completes cleanly after SingBoxStarted, coordinator continues
+        // waiting for Connected vs SAME phaseBDelay; when Connected fires, returns Connected.
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        var phaseA = TimeSpan.FromMilliseconds(500);
+        var phaseB = TimeSpan.FromMilliseconds(500);
+
+        var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: phaseA,
+            phaseBBudget: phaseB,
+            cancellationToken: ct);
+
+        await Task.Delay(50, ct);
+        fake.FireStarted(12345);
+
+        // startTask completes cleanly after Started fired
+        await Task.Delay(50, ct);
+        startTcs.TrySetResult(true);
+
+        // Connected fires later, still within Phase B budget
+        await Task.Delay(50, ct);
+        fake.FireConnected(12345);
+
+        var outcome = await coordinatorTask;
+        Assert.Equal(TwoPhaseStartOutcome.Connected, outcome);
+
+        Assert.Equal(1, fake.StartedSubscriptions);
+        Assert.Equal(1, fake.StartedUnsubscriptions);
+        Assert.Equal(1, fake.ConnectedSubscriptions);
+        Assert.Equal(1, fake.ConnectedUnsubscriptions);
+    }
+
+    // ─── Test 10: Clean start completion in Phase A, then Started, then Connected ───
+
+    [Fact]
+    public async Task CleanStartCompletion_ThenStarted_LaterConnectedSucceeds()
+    {
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        var phaseA = TimeSpan.FromMilliseconds(500);
+        var phaseB = TimeSpan.FromMilliseconds(500);
+
+        var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: phaseA,
+            phaseBBudget: phaseB,
+            cancellationToken: ct);
+
+        // startTask completes cleanly before Started fires
+        await Task.Delay(50, ct);
+        startTcs.TrySetResult(true);
+
+        // Started fires within Phase A budget
+        await Task.Delay(50, ct);
+        fake.FireStarted(12345);
+
+        // Connected fires within Phase B budget
+        await Task.Delay(50, ct);
+        fake.FireConnected(12345);
+
+        var outcome = await coordinatorTask;
+        Assert.Equal(TwoPhaseStartOutcome.Connected, outcome);
+
+        Assert.Equal(1, fake.StartedSubscriptions);
+        Assert.Equal(1, fake.StartedUnsubscriptions);
+        Assert.Equal(1, fake.ConnectedSubscriptions);
+        Assert.Equal(1, fake.ConnectedUnsubscriptions);
+    }
+
+    // ─── Test 11: Clean completed, no Started times out not success ──────
+
+    [Fact]
+    public async Task CleanCompleted_NoStarted_TimesOutPhaseA_NotSuccess()
+    {
+        // NIGHT-07: startTask clean completion before Started must NOT falsely green
+        // or return StartTaskCompleted. It must wait until Phase A budget expires
+        // and return PhaseATimeout.
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+
+        // Complete cleanly immediately
+        startTcs.TrySetResult(true);
+
+        var phaseA = TimeSpan.FromMilliseconds(200);
+        var phaseB = TimeSpan.FromMilliseconds(2000);
+
+        var start = DateTime.UtcNow;
+        var outcome = await TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: phaseA,
+            phaseBBudget: phaseB,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var elapsed = DateTime.UtcNow - start;
+
+        Assert.Equal(TwoPhaseStartOutcome.PhaseATimeout, outcome);
+        var lowerBound = phaseA - TimeSpan.FromMilliseconds(20);
+        Assert.True(elapsed >= lowerBound,
+            $"Expected at least {lowerBound} elapsed, got {elapsed}");
+
+        // Subscriptions must still be unhooked
+        Assert.Equal(1, fake.StartedSubscriptions);
+        Assert.Equal(1, fake.StartedUnsubscriptions);
+        Assert.Equal(1, fake.ConnectedSubscriptions);
+        Assert.Equal(1, fake.ConnectedUnsubscriptions);
+    }
+
+    // ─── Test 12: No Connected Phase B timeout with original deadline not reset ───
+
+    [Fact]
+    public async Task NoConnected_PhaseBTimeout_OriginalDeadlineNotReset()
+    {
+        // NIGHT-07: in Phase B, if startTask completes cleanly after some delay,
+        // the coordinator continues waiting on the SAME phaseBDelay without resetting the timer.
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        var phaseA = TimeSpan.FromMilliseconds(500);
+        var phaseB = TimeSpan.FromMilliseconds(300);
+
+        var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: phaseA,
+            phaseBBudget: phaseB,
+            cancellationToken: ct);
+
+        await Task.Delay(50, ct);
+        fake.FireStarted(12345);
+
+        // Phase B started. Record time.
+        var phaseBStart = DateTime.UtcNow;
+
+        // After 100ms into Phase B, startTask completes cleanly.
+        await Task.Delay(100, ct);
+        startTcs.TrySetResult(true);
+
+        // Connected NEVER fires.
+        var outcome = await coordinatorTask;
+        var phaseBElapsed = DateTime.UtcNow - phaseBStart;
+
+        Assert.Equal(TwoPhaseStartOutcome.PhaseBTimeout, outcome);
+
+        // Deadline was NOT reset to a new 300ms delay upon startTask completion.
+        // It must have elapsed ~300ms from phaseBStart.
+        var lowerBound = phaseB - TimeSpan.FromMilliseconds(30);
+        Assert.True(phaseBElapsed >= lowerBound,
+            $"Expected Phase B elapsed at least {lowerBound}, got {phaseBElapsed}");
+        Assert.True(phaseBElapsed < phaseB + TimeSpan.FromMilliseconds(180),
+            $"Timer must not reset upon clean completion; expected < 480ms, got {phaseBElapsed}");
+
+        Assert.Equal(1, fake.StartedSubscriptions);
+        Assert.Equal(1, fake.StartedUnsubscriptions);
+        Assert.Equal(1, fake.ConnectedSubscriptions);
+        Assert.Equal(1, fake.ConnectedUnsubscriptions);
+    }
+
+    // ─── Test 13: Deterministic regression: Phase B zero budget returns PhaseBTimeout ───
+
+    [Fact]
+    public async Task NIGHT07_DeterministicRegression_PhaseBZeroBudget_ReturnsPhaseBTimeout()
+    {
+        // NIGHT-07: startTask=CompletedTask, subscribeStarted synchronously invokes handler,
+        // Connected does not fire, PhaseB=0. Must return PhaseBTimeout, not StartTaskCompleted.
+        var startedSubscriptions = 0;
+        var startedUnsubscriptions = 0;
+        var connectedSubscriptions = 0;
+        var connectedUnsubscriptions = 0;
+
+        var outcome = await TwoPhaseStartCoordinator.RunAsync(
+            startTask: Task.CompletedTask,
+            subscribeStarted: handler =>
+            {
+                startedSubscriptions++;
+                handler(12345); // synchronously fires Started on subscribe
+                return () => startedUnsubscriptions++;
+            },
+            subscribeConnected: _ =>
+            {
+                connectedSubscriptions++;
+                return () => connectedUnsubscriptions++;
+            },
+            phaseABudget: TimeSpan.FromSeconds(5),
+            phaseBBudget: TimeSpan.Zero,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(TwoPhaseStartOutcome.PhaseBTimeout, outcome);
+        Assert.Equal(1, startedSubscriptions);
+        Assert.Equal(1, startedUnsubscriptions);
+        Assert.Equal(1, connectedSubscriptions);
+        Assert.Equal(1, connectedUnsubscriptions);
+    }
+
+    // ─── Test 14: Fault/cancel prompt in Phase B ─────────────────────────
+
+    [Fact]
+    public async Task FaultCancelPrompt_PhaseB_ReturnsStartTaskCompletedPromptly()
+    {
+        // NIGHT-07: Faulted startTask returns existing StartTaskCompleted promptly for caller await.
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: TimeSpan.FromSeconds(10),
+            phaseBBudget: TimeSpan.FromSeconds(10),
+            cancellationToken: ct);
+
+        await Task.Delay(50, ct);
+        fake.FireStarted(12345);
+
+        // In Phase B, startTask faults.
+        await Task.Delay(50, ct);
+        var faultStart = DateTime.UtcNow;
+        startTcs.TrySetException(new InvalidOperationException("warmup failed"));
+
+        var outcome = await coordinatorTask;
+        var faultElapsed = DateTime.UtcNow - faultStart;
+
+        Assert.Equal(TwoPhaseStartOutcome.StartTaskCompleted, outcome);
+        // Prompt return: must not wait for the 10s Phase B budget!
+        Assert.True(faultElapsed < TimeSpan.FromSeconds(2),
+            $"Expected prompt return after fault, took {faultElapsed}");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await startTask);
+        Assert.Equal("warmup failed", ex.Message);
+    }
+
+    // ─── Test 15: Internal cancel prompt returns StartTaskCompleted ──────
+
+    [Fact]
+    public async Task InternalCancellation_Prompt_ReturnsStartTaskCompleted()
+    {
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: TimeSpan.FromSeconds(10),
+            phaseBBudget: TimeSpan.FromSeconds(10),
+            cancellationToken: ct);
+
+        await Task.Delay(50, ct);
+        fake.FireStarted(12345);
+
+        await Task.Delay(50, ct);
+        var cancelStart = DateTime.UtcNow;
+        startTcs.TrySetCanceled();
+
+        var outcome = await coordinatorTask;
+        var cancelElapsed = DateTime.UtcNow - cancelStart;
+
+        Assert.Equal(TwoPhaseStartOutcome.StartTaskCompleted, outcome);
+        Assert.True(cancelElapsed < TimeSpan.FromSeconds(2),
+            $"Expected prompt return after internal cancel, took {cancelElapsed}");
+    }
+
+    // ─── Test 16: External cancellation in Phase B returns Cancelled ─────
+
+    [Fact]
+    public async Task ExternalCancellation_PhaseB_ReturnsCancelled()
+    {
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+
+        using var cts = new CancellationTokenSource();
+
+        var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: fake.SubscribeStarted,
+            subscribeConnected: fake.SubscribeConnected,
+            phaseABudget: TimeSpan.FromSeconds(5),
+            phaseBBudget: TimeSpan.FromSeconds(5),
+            cancellationToken: cts.Token);
+
+        await Task.Delay(50);
+        fake.FireStarted(12345);
+
+        // startTask completed cleanly
+        await Task.Delay(50);
+        startTcs.TrySetResult(true);
+
+        // Now during Phase B wait, cancel outer CTS
+        await Task.Delay(50);
+        cts.Cancel();
+
+        var outcome = await coordinatorTask;
+        Assert.Equal(TwoPhaseStartOutcome.Cancelled, outcome);
+
+        Assert.Equal(1, fake.StartedSubscriptions);
+        Assert.Equal(1, fake.StartedUnsubscriptions);
+        Assert.Equal(1, fake.ConnectedSubscriptions);
+        Assert.Equal(1, fake.ConnectedUnsubscriptions);
+    }
+
+    // ─── Test 17: Race Started already fired prioritizes event unless fault ───
+
+    [Fact]
+    public async Task Race_StartedAlreadyFired_PrioritizesEvent_WhenClean()
+    {
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        // Clean completion + Started fired synchronously
+        startTcs.TrySetResult(true);
+
+        var outcome = await TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: handler =>
+            {
+                handler(12345);
+                return () => { };
+            },
+            subscribeConnected: handler =>
+            {
+                handler(12345);
+                return () => { };
+            },
+            phaseABudget: TimeSpan.FromSeconds(1),
+            phaseBBudget: TimeSpan.FromSeconds(1),
+            cancellationToken: ct);
+
+        // Clean completion + Started fired -> event prioritized -> Connected
+        Assert.Equal(TwoPhaseStartOutcome.Connected, outcome);
+    }
+
+    [Fact]
+    public async Task Race_StartedAlreadyFired_PrioritizesFault_WhenTaskFaulted()
+    {
+        var (startTask, startTcs) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
+
+        // Task faults before or during Started race
+        startTcs.TrySetException(new InvalidOperationException("race fault"));
+
+        var outcome = await TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: handler =>
+            {
+                handler(12345);
+                return () => { };
+            },
+            subscribeConnected: _ => () => { },
+            phaseABudget: TimeSpan.FromSeconds(1),
+            phaseBBudget: TimeSpan.FromSeconds(1),
+            cancellationToken: ct);
+
+        // Task fault must be prioritized over Started event!
+        Assert.Equal(TwoPhaseStartOutcome.StartTaskCompleted, outcome);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await startTask);
+        Assert.Equal("race fault", ex.Message);
+    }
+
+    // ─── Test 18: Subscriptions removed across all outcomes ──────────────
+
+    [Theory]
+    [InlineData("Connected")]
+    [InlineData("PhaseATimeout")]
+    [InlineData("PhaseBTimeout")]
+    [InlineData("StartTaskFault")]
+    [InlineData("Cancelled")]
+    public async Task SubscriptionsRemoved_AllOutcomes(string scenario)
+    {
+        var fake = new FakeEngineEvents();
+        var (startTask, startTcs) = ControlledTask();
+        using var cts = new CancellationTokenSource();
+
+        Task<TwoPhaseStartOutcome> coordinatorTask;
+
+        switch (scenario)
+        {
+            case "Connected":
+                coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+                    startTask, fake.SubscribeStarted, fake.SubscribeConnected,
+                    TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(200), cts.Token);
+                fake.FireStarted(123);
+                fake.FireConnected(123);
+                await coordinatorTask;
+                break;
+
+            case "PhaseATimeout":
+                coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+                    startTask, fake.SubscribeStarted, fake.SubscribeConnected,
+                    TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50), cts.Token);
+                await coordinatorTask;
+                break;
+
+            case "PhaseBTimeout":
+                coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+                    startTask, fake.SubscribeStarted, fake.SubscribeConnected,
+                    TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(50), cts.Token);
+                fake.FireStarted(123);
+                await coordinatorTask;
+                break;
+
+            case "StartTaskFault":
+                coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+                    startTask, fake.SubscribeStarted, fake.SubscribeConnected,
+                    TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), cts.Token);
+                startTcs.TrySetException(new InvalidOperationException("fault"));
+                await coordinatorTask;
+                break;
+
+            case "Cancelled":
+                cts.Cancel();
+                coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
+                    startTask, fake.SubscribeStarted, fake.SubscribeConnected,
+                    TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), cts.Token);
+                await coordinatorTask;
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(scenario));
+        }
+
+        Assert.Equal(1, fake.StartedSubscriptions);
+        Assert.Equal(1, fake.StartedUnsubscriptions);
+        Assert.Equal(1, fake.ConnectedSubscriptions);
+        Assert.Equal(1, fake.ConnectedUnsubscriptions);
+    }
 }

@@ -478,6 +478,14 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
+        var firewall = (_host as StartupHostInternal)?.Firewall;
+        if (firewall is ICommittedFirewallConfig committedFirewall)
+        {
+            var isFullTunnel = (settings.App.RoutingMode ?? "split")
+                .Equals("full", StringComparison.OrdinalIgnoreCase);
+            committedFirewall.UpdateCommittedConfig(configJson, profile.BlockOnVpnFail && isFullTunnel);
+        }
+
         // Phase 8 — StartMonitors.
         StartMonitorsPhase(settings, profile, scanResult);
 
@@ -1084,7 +1092,7 @@ internal sealed class StartupPipeline
         // crash, disables on successful restart.
         var firewall = _host.FirewallFactory();
         _host.SetFirewallManager(firewall);
-        if (profile.BlockOnVpnFail)
+        if (profile.BlockOnVpnFail && firewall is not ICommittedFirewallConfig)
         {
             // P1 (2026-07-10): pass the EXPLICIT routing intent so the Linux/macOS
             // global kill-switch arms ONLY in full-tunnel. Pre-fix an empty
