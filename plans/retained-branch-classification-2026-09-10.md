@@ -1,0 +1,11 @@
+# Retained branch classification after PR233
+
+Baseline main0bcc8166510310d39e442b09a3e0e804eb94dd01. Read-only remote-tip/ancestry/cherry inventory; no deletion from this classification. Owner chose remaining branch cleanup BEFORE proposed broad main campaign.
+
+Three retained remote heads now fully reachable from main: deferred Android f4d5265cd55e91fffefb1789cd2d445b4cd1f931, desktop pictogram93fda2c9ee0eced801c63a8a60e6271f05af99db, UI pictogramfe17014d7b33218b336d9f4820d5fddbe5c6e715. Each has a stale registered worktree; no metadata/prune approval inferred. Deferred Android reachability does not mean its API24 migration is active in main; its history was incorporated and later restored to legacy, so preserve its navigable WIP tip unless owner explicitly approves disposition.
+
+Other retained security/bot branches inspected with git cherry show unmatched patch IDs (+), not equivalent (-). This is insufficient evidence of semantic uniqueness or redundancy; squash/reworked accepted solutions may differ. Preserve until per-branch accepted replacement/test comparison or explicit archival decision. gh-pages/main are protected retention targets. Local tips must be classified independently; update-checker local a3dea4ae differs from remote48f4bd83.
+
+Closed PR253 branch sentinel/url-scheme-validation-12055544954490502712 was absent locally, so fetched exact branch only. Current tip6f812c1402ce249f41b4e99aea5a4f6dace7056b differs from GitHub CLOSED PR head5e46b0344907a8ec30affba06b29698213a712af. git diff between these commits is empty; latest commit changes no tree. Original PR253 test-data preservation in accepted254 is documented in repository-cleanup-candidates-2026-09-10.md. No deletion authorized or performed for this branch yet; validate tree equality plus existing preservation comparison when presenting it.
+
+Next useful decisions: explicit archive of seven stale worktree registrations with branch/commit preservation; owner disposition of three reachable worktree-bound heads; scoped semantic comparison of remaining security branches. Avoid treating all closed PR branches as disposable. The seven newly approved/deleted merged heads are separately recorded in merged-branch-recovery-followup-2026-09-10.json.
