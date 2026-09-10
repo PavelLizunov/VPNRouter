@@ -1,5 +1,12 @@
 {
-  "status": "resolved_not_installed",
+  "status": "installed_verified_tool_versions_apk_verification_pending",
+  "installation_receipt": "plans/pr233-android-install-outcome-2026-09-10.md",
+  "platform_tools_followup": {
+    "owner_approval": "pr233-platform-tools-consent: Разрешаю platform-tools",
+    "scope": "Install only platform-tools in existing user-local SDK and retry unsigned build; do not run adb or fastboot, connect devices, install emulator or NDK",
+    "status": "installed_37.0.1_guarded_unsigned_apk_pass",
+    "build_receipt": "plans/pr233-android-build-verification-2026-09-10.md"
+  },
   "target": "linux-worker",
   "root_relative_to_home": ".local/share/vpnrouter-build-tools",
   "jdk": {
@@ -34,5 +41,5 @@
       "size": 63737259
     }
   ],
-  "limits": "Google repository supplies SHA1 consistency checks, not signature/authenticity proof. Preserve HTTPS vendor source and record SHA256 of downloaded archives. Do not auto-install platform-tools, tools, emulator, NDK or accept unrelated licenses. Verify sdkmanager under approved JDK17 before package installation; compatibility not yet executed. Minimum supported app API23 and legacy libbox1.13.10 unchanged."
+  "limits": "Google repository supplies SHA1 consistency checks, not signature/authenticity proof. Preserve HTTPS vendor source and record SHA256 of downloaded archives. Do not auto-install platform-tools, tools, emulator, NDK or accept unrelated licenses. sdkmanager20.0 verified under approved JDK17; platform36 revision2/build-tools36.0.0 inventory and aapt2 execution confirmed. Android workload36.1.2 installed; APK verification pending. Platform/build-tools archives handled by sdkmanager, no independently measured archive SHA256 claimed; CLI archive measured SHA256 is recorded in installation receipt. Minimum supported app API23 and legacy libbox1.13.10 unchanged."
 }

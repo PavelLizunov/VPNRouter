@@ -1,8 +1,12 @@
 {
   "sdk_version": "10.0.301",
   "source": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json",
-  "installation_status": "pending",
-  "root_relative_to_worker_home": ".local/share/vpnrouter-build-tools/dotnet-10.0.301",
+  "installation_status": "installed_verified_sdk_info_and_desktop_publish",
+  "installation_receipt": "plans/pr233-worker-sdk-install-outcome-2026-09-10.md",
+  "roots_relative_to_worker_home": {
+    "linux-x64": ".local/share/vpnrouter-build-tools/dotnet-10.0.301",
+    "osx-arm64": "Library/Application Support/VPNRouterBuildTools/dotnet-10.0.301"
+  },
   "archives": {
     "linux-x64": {
       "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.301/dotnet-sdk-10.0.301-linux-x64.tar.gz",

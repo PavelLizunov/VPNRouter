@@ -1,8 +1,10 @@
 # PR #233 integration assessment
 
-Read-only assessment of e5594f14 against accepted fa7685c5; no current native builds, runtime deployment or remote CI proof. Integration remains separate from active #237 documentation merge.
+This document began as a read-only assessment of e5594f14 against fa7685c5. The discovery sections below preserve that earlier checkpoint, not current toolchain or CI state. Current integrated product snapshot is c81c514e3cc2e103261155a1e7eb3f25e927b2c9 against accepted main f4b75f18b4ed6c2ced48e76735ff2ee8f9b58d21. See plans/pr233-platform-verification-progress-2026-09-10.md for current observed CI and native desktop packaging receipts. No runtime deployment performed.
 
-## Current integration checkpoint
+Final bounded source refresh at c81c514e: PASS, no new confirmed merge-blocking source defect. Nine previously reviewed core/test/workflow/build blobs unchanged. Subsequent code change only adjusts Windows PowerShell extraction guard9->10 for added native verification block, retaining parsing of all blocks; actual Windows CI passed. Review does not independently establish remote build results or Android success. Android unsigned verification remains separately owned and pending; final merge acceptance not yet recorded.
+
+## Historical integration preparation checkpoint
 
 Owner clarified: complete remaining merge before the broader combined-main/anti-slop/performance verification. Ordinary #233 review and green exact-head gates still apply. Merge inputs: original e5594f14be1da949138d9f0594e8509e28e9260a and accepted main f4b75f18b4ed6c2ced48e76735ff2ee8f9b58d21. No use of old combined verification branch.
 

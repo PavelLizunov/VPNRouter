@@ -1,5 +1,7 @@
 # PR233 initial integration CI
 
+Historical first-run receipt. Statements of pending verification below refer to bf67072f, not the current branch. Subsequent product snapshot c81c514e passed all five CI checks; current counts, native Windows cases and desktop packaging evidence are in plans/pr233-platform-verification-progress-2026-09-10.md. Source refresh PASS is recorded in plans/pr233-integration-assessment-2026-09-10.md. Android result and final acceptance remain separate.
+
 Snapshot bf67072f1c227708eeb99f20c6813e1a8df44ac6. Full Ubuntu test, Go Windows and fingerprint checks passed in34518382625/34518382050. Windows update package/native workflow34518382279 passed; detailed native-case receipts still need extraction before final acceptance. Duplicate manual run34518392401 cancellation requested to avoid repeating PR-triggered workload.
 
 Windows characterization run failed one assertion: ReleaseSafetyBehaviorTests.UpdaterWorkflow_PowerShellBlocksParseInWindowsPowerShell51 line197 still expected9 extracted run blocks. Integration adds a tenth Cronet/native FakeIP block. Other439 passed,8 skipped. Actual workflow diff inspected: one new multiline PowerShell block. Corrective change pins10 instead of9 and retains parsing ALL blocks using Windows PowerShell5.1; does not remove safety coverage or alter product. Corrected exact-SHA CI pending.
