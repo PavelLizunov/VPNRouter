@@ -1,0 +1,7 @@
+# PR196 local snapshot preservation
+
+Read-only comparison. Reviewed local dsh/pr196-clean tip cfedf86f49777a813f1a1a1424cd7c0dc29835e7 differs from accepted PR200 head b0149a21fc40f001d0662697efead96f9c05a4da only by one added 51-line outcome document in accepted head. All reviewed source, tests, workflow and package files therefore match exactly. PR200 is MERGED as 230c5bfa51521bd77cb9c776c6e456506b098b48; ancestry in origin/main verified.
+
+Other local update branch tip a3dea4aeb1bff0b0b059522e5666b1e1222840ce differs from reviewed cfedf86f in three files only: it lacks the two-line CI gate and 26 test lines, restores weaker macOS rollback (does not remove partial target before mv), waits 15 rather than 150 iterations of 0.2 seconds despite the 30-second comment, and interpolates the executable path in a double-quoted shell log. These are superseded implementation differences, not useful new functionality. Both local refs were removed in one atomic update-ref transaction after fresh exact-tip, no-worktree and accepted-merge ancestry checks. Local absence verified; remote untouched.
+
+Remote tip 48f4bd83f65e4178ea98cbc4d5b8416980407481 is a different rewritten snapshot. GitHub PR196 closure explicitly rejects its unrelated reversions and names #200 as trusted replacement. Remote full preservation comparison not completed here: no remote deletion justified solely by local equivalence. No runtime test rerun or current-main update subsystem correctness claim.
