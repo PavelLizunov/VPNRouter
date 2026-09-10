@@ -34,12 +34,12 @@ Candidate/stable channel selection; wrong version/SHA/tag; malformed/missing/ext
 
 ## Six gates
 
-- Gate 1 — Build: PENDING, Release solution build on authorized exact-SHA worker/CI.
-- Gate 2 — Tests: PENDING, focused release contracts, isolated behavior regressions, full discovered suite and applicable PowerShell syntax checks.
-- Gate 3 — Documentation: PENDING, release skills/runbooks and README review; ledger and final outcome.
-- Gate 4 — Independent review: IN PROGRESS, distinct workflow and verifier reviewers; final bug-hunt/security review required.
+- Gate 1 — Build: PARTIAL, CI Release test graph build zero errors and Windows package build passed; full solution command not run, exact local SDK unavailable.
+- Gate 2 — Tests: PASS for applicable CI selection: 154 Windows contracts; 2993 Ubuntu tests passed, 57 skipped; updater and Go passed. Unfiltered visual suite not run.
+- Gate 3 — Documentation: PASS, release skills/runbooks and both README sections reconciled; ledger preserves external acceptance follow-ups.
+- Gate 4 — Independent review: PASS within source scope, separate correctness/security/test reviewers; confirmed integration defects corrected, corrective patch independently reviewed.
 - Gate 5 — UI/remote release: N/A for current tooling-only implementation; real WINBRAT post-ship and release publication require separate authorization and are not claimed tested.
-- Gate 6 — Integration: PENDING, mocked publication/recovery paths and workflow consistency; mechanical split characterization N/A.
+- Gate 6 — Integration: PASS for isolated gate fixtures and Windows packaged updater; live release/signing/distribution deliberately unexecuted. Mechanical split characterization N/A.
 
 ## Baseline evidence
 
@@ -47,4 +47,8 @@ GitHub main matched base SHA. Paginated check-runs query returned successful tes
 
 ## Outcome
 
-IN PROGRESS. No implementation or release readiness claimed. Independent reviewers started; final evidence and PR pending.
+PARTIAL acceptance / implementation ready for owner review at PR #255. Brief `5f3d37e2`, implementation `c7e3043b`, corrective green snapshot `26b0bdb8`; all pushed only to task branch. First CI exposed two stale assertions and an existing installer PowerShell5.1 encoding defect; corrected without disabling tests. No merge/tag/release/deployment performed.
+
+Primary outputs: draft-only exact-SHA staging and no unsigned fallback under SignPath configuration; fail-closed platform prerequisites; canonical current CI evidence with pagination; all-asset integrity before parsing and fixed asset identity; disabled legacy Android signing; validated stable-only APT; safer WINBRAT ownership/cleanup and soak oracle; source-aligned runbooks and regression fixtures.
+
+Detailed checks, independent review, environment preflights, remaining owner-authorized gates and rollback context: `plans/release-pipeline-review-evidence-2026-09-10.md`. Full solution/visual gate and live release checks remain explicit limitations, not silently passed requirements. Rollback uses reviewed revert of task commits only; never published-tag rewrite.

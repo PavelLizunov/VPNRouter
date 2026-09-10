@@ -42,6 +42,14 @@ Failures were two stale source assertions after integration (native-stderr helpe
 
 macOS worker preflight: mm4.local, 41 GiB free disk, no dotnet on PATH; no SDK provisioning/build performed.
 
-## Pending acceptance
+## Verified corrective snapshot
 
-Implementation Windows PowerShell/.NET execution, full build/test suite, exact implementation CI, and final outcome/ledger resolution remain pending. Source/YAML contracts and mocked behavior cannot replace hosted platform builds, signing, distribution and owner-authorized post-ship verification. This report is PARTIAL, not a release readiness assertion.
+Commit `26b0bdb8` on PR #255: all five check groups passed. Run 34470761742 has 154/154 Windows contracts (zero skipped), Ubuntu build zero errors and 3050 discovered tests: 2993 passed, 57 skipped, zero failures. Windows updater run 34470761749 passed; Go Windows and grep passed. These exercise real PowerShell 5.1 isolated gates, parse checks, hash/inventory/soak fixtures, Linux embedded Python integrity fixtures and the packaged Windows updater. New tests were not disabled to obtain green.
+
+Skills applied: change-verification (executed CI evidence), security-review (differential workflow/script review and reachable trust boundaries), bug-hunt (independent correctness/security/test reviewers), repository-readme (both source-build sections updated). Final review corrections independently checked; runtime service changes and secrets were outside scope.
+
+## Remaining acceptance limits
+
+Implementation review and PR CI are verified within the exercised scope. The full Release solution command and unfiltered visual suite were not run on the local workers because the exact SDK was unavailable; CI builds the test graph and Windows packages and runs its documented filtered suites. No full platform release builds, production signing, APT publication, Homebrew notification or fixed-WINBRAT live update/dataplane/cleanup operation was performed. Those require an explicit release/deployment authorization. Some ledger entries remain unchecked as external acceptance follow-ups; no waiver is implied.
+
+The code and procedure repairs are ready for owner review, not a claim that a candidate has shipped or that all future releases are problem-free. GitHub draft/upload/publish operations are not transactional: serial owner operation and immutable release policy remain required. A future release must pass all documented exact-tag gates. Post-ship currently insists on exact SDK 10.0.301 despite global.json latestPatch; reconcile or provide that SDK explicitly before the real gate rather than silently bypass it.
