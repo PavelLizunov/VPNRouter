@@ -419,6 +419,7 @@ public partial class MainWindowViewModel
 
         foreach (var group in AllAppGroups())
         {
+            group.BeginBatchUpdate = BeginBatchUpdate;
             group.PropertyChanged -= OnAppGroupPropertyChanged;
             group.PropertyChanged += OnAppGroupPropertyChanged;
             group.Apps.CollectionChanged -= OnAppsCollectionChanged;
@@ -439,6 +440,7 @@ public partial class MainWindowViewModel
         if (e.NewItems != null)
             foreach (AppGroupViewModel g in e.NewItems)
             {
+                g.BeginBatchUpdate = BeginBatchUpdate;
                 g.PropertyChanged -= OnAppGroupPropertyChanged;
                 g.PropertyChanged += OnAppGroupPropertyChanged;
                 g.Apps.CollectionChanged -= OnAppsCollectionChanged;
@@ -454,7 +456,7 @@ public partial class MainWindowViewModel
 
     private void OnAppGroupPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
         if (e.PropertyName == nameof(AppGroupViewModel.IsChecked))
         {
             MarkRoutingSettingsChanged();
@@ -498,15 +500,14 @@ public partial class MainWindowViewModel
 
     private void OnAppItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
         if (e.PropertyName == nameof(AppItemViewModel.IsChecked))
         {
             MarkRoutingSettingsChanged();
-            // Bug-r9-I (2026-05-11): same rationale as OnAppGroupPropertyChanged
-            // — toggle must persist even when disconnected. A group-level
-            // toggle cascades to N apps which means N saves in a row, but
-            // YAML write is sub-millisecond and the user can't toggle
-            // fast enough to make this a bottleneck.
+            // If sender is an AppItemViewModel with WriteMode wired, WriteMode already handles SaveSettings
+            // when not in batch update. Avoid double disk write.
+            if (sender is AppItemViewModel item && item.WriteMode != null) return;
+
             try { SaveSettings(); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AppItem change failed"); }
         }
@@ -669,12 +670,13 @@ public partial class MainWindowViewModel
     }
 
     [RelayCommand]
-    private void ImportSteamGames()
+    private async Task ImportSteamGames()
     {
         if (!IsAppsListEditorExclude)
             AppsListEditorMode = "exclude";
 
-        var games = Services.SteamLibraryScanner.FindInstalledGames().ToList();
+        using var _ = BeginBatchUpdate();
+        var games = await Task.Run(() => Services.SteamLibraryScanner.FindInstalledGames().ToList());
         var added = 0;
         foreach (var game in games)
         {
@@ -684,7 +686,6 @@ public partial class MainWindowViewModel
 
         if (added > 0)
         {
-            SaveSettings();
             ShowRulesToast(IsRussian
                 ? $"Steam: найдено {added} .exe"
                 : $"Steam: found {added} .exe files");

@@ -22,8 +22,8 @@ Headless Avalonia harness in `VPNRouter.Tests` runs offscreen rendering, page sc
 - `VPNRouter.App/`: Project root, `App.axaml` (global resources, Light/Dark theme dictionaries), `Program.cs` (entry point).
 - `VPNRouter.App/Styles/`: Design tokens in `Tokens.axaml` (semantic color brushes, radii, spacing).
 - `VPNRouter.App/Localization/`: `Strings.cs` pass-throughs to the bilingual Core string source; ViewModel-facing `L_*` getters live in the relevant ViewModel partials.
-- `VPNRouter.App/ViewModels/`: ViewModels including `MainWindowViewModel` partial files split by concern (AutostartBootstrap, Connection, ConnStats, FreeConfigs, Localization, LocalizedLabels, Profiles, RuntimeStatus, ServerTesting, Settings, SimpleMode, Subscriptions, ThemeAndLogo, Wgturn) and sub-directories such as `FreeConfigs/`.
-- `VPNRouter.App/Views/`: Windows (`MainWindow`, `AboutWindow`, `SetupWizardWindow`) and `Views/Pages/` tab views (`SimplePage`, `ServersPage`, `SubscribePage`, `NetworkPage`, `ApplicationsPage`, `ToolsPage`, `DpiBypassPage`, `TelegramPage`, `FreeConfigsPage`, `EmergencyChannelPage`).
+- `VPNRouter.App/ViewModels/`: ViewModels including `MainWindowViewModel` partial files split by concern (AutostartBootstrap, Connection, ConnStats, FreeConfigs, Localization, LocalizedLabels, Profiles, RuntimeStatus, ServerTesting, Settings, SimpleMode, Subscriptions, ThemeAndLogo) and sub-directories such as `FreeConfigs/`.
+- `VPNRouter.App/Views/`: Windows (`MainWindow`, `AboutWindow`, `SetupWizardWindow`) and `Views/Pages/` tab views (`SimplePage`, `ServersPage`, `SubscribePage`, `NetworkPage`, `ApplicationsPage`, `ToolsPage`, `DpiBypassPage`, `TelegramPage`, `FreeConfigsPage`).
 - `VPNRouter.App/Services/`: Desktop application services (e.g., `SelfRepair`, `FileManagerHelper`, `ShellMenuRegistrar`, `ShortcutSelfHeal`, `InstallHealthCheck`, `ShortcutResolver`, `SingleInstance`, `WindowsServiceHelper`, `SteamLibraryScanner`, `WindowForegroundHelper`).
 - `VPNRouter.App/Assets/`: App icons, mascot assets, embedded fonts, and install guide resources.
 

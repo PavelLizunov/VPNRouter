@@ -89,12 +89,22 @@ public static partial class ConfigGenerator
             if (isFullTunnel || isExcludeMode)
             {
                 // final = "proxy": (almost) all traffic rides the TCP-only proxy.
+                // Reject UDP/443 unconditionally so Chromium/QUIC handshakes fail-fast to TCP
+                // without waiting for sniffing and avoiding WinDivert fake-packet corruption.
+                rules.Add(new RouteRule { Network = "udp", Port = new List<int> { 443 }, Action = "reject" });
                 rules.Add(new RouteRule { Protocol = "quic", Action = "reject" });
             }
             else if (processes.Count > 0)
             {
                 // Split include: only the listed apps ride the TCP-only proxy,
                 // so scope the QUIC reject to them — other apps keep QUIC direct.
+                rules.Add(new RouteRule
+                {
+                    ProcessName = processes.ToList(),
+                    Network     = "udp",
+                    Port        = new List<int> { 443 },
+                    Action      = "reject"
+                });
                 rules.Add(new RouteRule
                 {
                     ProcessName = processes.ToList(),

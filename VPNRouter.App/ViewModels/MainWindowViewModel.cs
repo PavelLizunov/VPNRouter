@@ -469,19 +469,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
     public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
-    /// <summary>True when the wgturn Emergency Channel is available — Windows /
-    /// macOS / Linux. The wgturn-cli binary is fetched on-demand per platform by
-    /// WgturnUpdater (which publishes windows/darwin/linux x64+arm64 assets), so it
-    /// needs no bundling.</summary>
-    public bool IsEmergencyChannelAvailable =>
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux();
-    /// <summary>Tools-tab visibility gate. Visible when ANY sub-tool is available,
-    /// so the Emergency Channel shows on macOS/Linux even though Zapret + Telegram
-    /// proxy are Windows-only. Was gated on <see cref="IsZapretAvailable"/>, which
-    /// hid the whole Tools tab — and the cross-platform Emergency Channel — off
-    /// Windows (the parity bug fixed 2026-06-15).</summary>
+    /// <summary>Tools-tab visibility gate. Visible when ANY sub-tool is available.</summary>
     public bool IsToolsAvailable => Internals.ToolTabAvailability.ToolsTabVisible(
-        IsZapretAvailable, IsTgProxyAvailable, IsEmergencyChannelAvailable);
+        IsZapretAvailable, IsTgProxyAvailable);
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
@@ -735,7 +725,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             list.Remove(existing);
         }
 
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
 
         try { SaveSettings(); }
         catch (Exception ex)
@@ -781,7 +771,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             list.Remove(existing);
         }
 
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
 
         try { SaveSettings(); }
         catch (Exception ex)
@@ -813,6 +803,40 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         return _settings.App.RoutingAppsInclude
             ??= new List<string>();
+    }
+
+    private int _batchUpdateDepth;
+    public bool IsBatchUpdating => _batchUpdateDepth > 0;
+
+    /// <summary>
+    /// Suppresses per-item <see cref="SaveSettings"/> calls during bulk operations
+    /// (e.g. Select All, Clear All, group toggles, Steam import). Persists settings
+    /// exactly once when the outermost batch scope disposes.
+    /// </summary>
+    public IDisposable BeginBatchUpdate()
+    {
+        System.Threading.Interlocked.Increment(ref _batchUpdateDepth);
+        return new BatchUpdateScope(this);
+    }
+
+    private sealed class BatchUpdateScope : IDisposable
+    {
+        private MainWindowViewModel? _vm;
+        public BatchUpdateScope(MainWindowViewModel vm) => _vm = vm;
+        public void Dispose()
+        {
+            var vm = System.Threading.Interlocked.Exchange(ref _vm, null);
+            if (vm == null) return;
+            if (System.Threading.Interlocked.Decrement(ref vm._batchUpdateDepth) == 0)
+            {
+                if (!vm._isLoadingUI)
+                {
+                    try { vm.SaveSettings(); }
+                    catch (Exception ex) { vm._logger?.Warning(ex, "[VM] SaveSettings after batch update failed"); }
+                    vm.MarkRoutingSettingsChanged();
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -2638,25 +2662,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 5;
 
     // Tools sub-tabs
-    // v2.32.2 (W-4) — added third tab «Emergency Channel» (wgturn).
     // Sub-tab order on the Tools page top strip:
     //   0 = Zapret
     //   1 = Telegram Proxy
-    //   2 = Emergency Channel (new)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
     [NotifyPropertyChangedFor(nameof(IsTgProxyToolSelected))]
-    [NotifyPropertyChangedFor(nameof(IsEmergencyChannelToolSelected))]
-    // Default to the first AVAILABLE sub-tab so macOS/Linux (no Zapret/TgProxy)
-    // opens on the Emergency Channel instead of the hidden Windows-only Zapret page.
     private int _selectedToolIndex = Internals.ToolTabAvailability.DefaultToolIndex(
-        OperatingSystem.IsWindows(),                                             // Zapret
-        OperatingSystem.IsWindows(),                                             // Telegram proxy
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()); // Emergency Channel
+        OperatingSystem.IsWindows(), // Zapret
+        OperatingSystem.IsWindows()); // Telegram proxy
 
     public bool IsZapretToolSelected => SelectedToolIndex == 0;
     public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
-    public bool IsEmergencyChannelToolSelected => SelectedToolIndex == 2;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
@@ -2776,13 +2793,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // paths (Free Configs Use, paste, subscription rebuild). Must happen
         // after _settings loads.
         WireServersOrphanTracking();
-
-        // v2.32.2 (W-4) — populate Emergency Channel card state from the
-        // settings YAML before any UI binding fires. Polls
-        // WgturnUpdater.IsInstalled() once; subsequent flips come from
-        // Download / Remove commands. Implementation in
-        // MainWindowViewModel.Wgturn.cs.
-        InitializeWgturnState();
 
         // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
@@ -6359,11 +6369,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            // Security: validate absolute URI with http or https scheme only
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                Process.Start(new ProcessStartInfo { FileName = uri.AbsoluteUri, UseShellExecute = true });
+            }
+            else
+            {
+                Serilog.Log.Logger.Warning("[VM] OpenUrl blocked non-http(s) URL: {Url}", CanaryPolicy.RedactUrl(url));
+            }
         }
         catch (Exception ex)
         {
-            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", url);
+            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", CanaryPolicy.RedactUrl(url));
         }
     }
 

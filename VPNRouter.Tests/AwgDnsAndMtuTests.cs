@@ -56,7 +56,7 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     }
 
     [Fact]
-    public void Awg_BlockAdsOff_HostnameVpnDnsFallsBackToCloudflare()
+    public void Awg_BlockAdsOff_HostnameVpnDnsFallsBackToGoogle()
     {
         // A DoH *hostname* can't be a plain-UDP target (it would need resolving
         // over the very tunnel we're bootstrapping). Fall back to a literal IP.
@@ -64,7 +64,7 @@ public sealed class AwgDnsAndMtuTests : IDisposable
 
         var vpnDns = Assert.Single(config.Dns.Servers, s => s.Tag == "vpn-dns");
         Assert.Equal("udp", vpnDns.Type);
-        Assert.Equal("1.1.1.1", vpnDns.Server);
+        Assert.Equal("8.8.8.8", vpnDns.Server);
     }
 
     [Fact]

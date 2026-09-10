@@ -11,12 +11,20 @@ When release or platform facts change, update this file.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
+- Publication order: accepted main commit -> immutable tag with verified SHA ->
+  draft (`--verify-tag --latest=false`, also `--prerelease` for candidates) ->
+  all platform staging and tag tests/update -> exact 16 assets/all hashes ->
+  explicit tag-ref integrity dispatch with `auto_draft_on_failure=false` ->
+  separately authorized publication. APT and full fixed-WINBRAT verification
+  follow publication; dispatch missing integrity/APT runs at the release tag.
+  Stable Homebrew notification is explicit after publication because draft
+  staging suppresses it. Published corrections require a new version/tag.
 
 ## Platforms and how each is built
 
 | Platform | Built by | Notes |
 |---|---|---|
-| Windows (x64 ZIP) | locally via `build.ps1 -Upload` | full install and update ZIPs are attached to the GitHub release |
+| Windows (x64 ZIP) | `build.ps1 -Upload` stages unsigned ZIPs; `sign-windows.yml` builds/signs from the exact tag when configured | existing immutable tag and draft required; any SignPath settings prohibit unsigned fallback; no overwrite or publication |
 | macOS (DMG / ZIP) | GitHub Actions `build-mac.yml` on a `v*` tag | Apple Silicon; not Developer ID signed or notarized yet |
 | Linux (.deb / AppImage / tar.gz) | GitHub Actions `build-linux.yml` on a `v*` tag | `.deb` postinst applies `setcap` for passwordless TUN |
 | Android (ARM64 APK) | GitHub Actions `build-android.yml` on a `v*` tag | built and signed in CI; shipped to Releases and `vpn.ninitux.com/android` |

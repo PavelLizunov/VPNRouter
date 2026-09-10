@@ -21,7 +21,9 @@
     Path to sing-box.exe to bundle. Empty uses publish\sing-box-lx.exe when present;
     otherwise non-upload local builds fall back to upstream sing-box.
 .PARAMETER Upload
-    Upload the ZIPs to GitHub Releases using gh CLI
+    Stage unsigned ZIPs on an existing authorized draft using gh CLI. Requires
+    clean accepted main and an existing matching immutable tag. Does not publish.
+    Any SignPath enrollment setting blocks this unsigned path; use Sign Windows.
 .PARAMETER GitHubRepo
     GitHub repo in "owner/repo" format (default: PavelLizunov/VPNRouter)
 .PARAMETER AndroidAlso
@@ -72,6 +74,35 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $bundleSplitDriver = $BundleSplitDriver -or $Upload
+
+# Upload stages an existing immutable tag on a draft only. It never publishes.
+if ($Upload) {
+    if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?$') {
+        throw 'Release version must be X.Y.Z or X.Y.Z-rN.'
+    }
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "gh CLI not found." }
+    $releaseCommit = (& git -C $Root rev-parse HEAD | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $releaseCommit -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve release HEAD.' }
+    $sourceChanges = @(& git -C $Root status --porcelain --untracked-files=all)
+    if ($LASTEXITCODE -ne 0 -or $sourceChanges.Count) { throw 'Release source checkout must be clean.' }
+    $acceptedCommit = (& gh api "repos/$GitHubRepo/commits/main" --jq '.sha' | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $acceptedCommit -ne $releaseCommit) { throw 'Release HEAD must equal accepted main.' }
+    $tagCommit = (& gh api "repos/$GitHubRepo/commits/v$Version" --jq '.sha' | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $releaseCommit) { throw 'Existing remote release tag must match HEAD.' }
+    $releaseJson = (& gh release view "v$Version" --repo $GitHubRepo --json isDraft,isPrerelease | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw 'Create the authorized draft release before building.' }
+    $releaseState = $releaseJson | ConvertFrom-Json
+    if (-not $releaseState.isDraft -or [bool]$releaseState.isPrerelease -ne ($Version -match '-r[1-9][0-9]*$')) {
+        throw 'Release must be a draft with the correct candidate/stable channel.'
+    }
+    $secretJson = (& gh api --paginate "repos/$GitHubRepo/actions/secrets?per_page=100" --jq '.secrets[].name' | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect signing enrollment; unsigned staging is refused.' }
+    $variableNames = (& gh api --paginate "repos/$GitHubRepo/actions/variables?per_page=100" --jq '.variables[].name' | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect signing configuration; unsigned staging is refused.' }
+    if ($secretJson -match '(?m)^SIGNPATH_' -or $variableNames -match '(?m)^SIGNPATH_EXPECTED_SUBJECT\s*$') {
+        throw 'SignPath configuration is present (possibly incomplete); use Sign Windows, never unsigned fallback.'
+    }
+}
 
 # ── v2.29.0-r7 LAYER 1: AppVersion match check ──
 # Trigger: v2.29.0-r1..r5 dev cycle bug (CLAUDE-AI fake-tag fiasco).
@@ -141,31 +172,8 @@ foreach ($dir in @($DistDir, $FdDir, $UpdateDir, $PackageDir)) {
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
 
-# ── Prune stale release ZIPs from the repo root ──
-# DISK-FULL INCIDENT (v2.41.1 stable cut, 2026-06-06): every run drops the
-# install + update ZIPs (~100 MB/version) into the repo root and used to
-# leave them there forever. Across the v2.37.0 -> v2.41.1 cycle ~106 stale
-# ZIPs (~5.3 GB) piled up, filled the VM's C: drive, and Compress-Archive
-# died mid-cut with "There is not enough space on the disk". These root ZIPs
-# are gitignored (see .gitignore "VPNRouter-*.zip") and the canonical copies
-# live on the GitHub release, so old local ones are disposable. We prune
-# BEFORE building (not after) so the space is freed ahead of the
-# Compress-Archive writes that would otherwise hit a full disk. Each pruned
-# ZIP's .sha256 sidecar is removed alongside it so it never becomes an
-# orphan. Keep only the newest $KeepZipVersions versions (install + update).
-$KeepZipVersions = 3
-$staleRootZips = @(Get-ChildItem -Path $Root -Filter "VPNRouter-*.zip" -File -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -Skip ($KeepZipVersions * 2))
-foreach ($z in $staleRootZips) {
-    Remove-Item $z.FullName -Force -ErrorAction SilentlyContinue
-    $sidecar = "$($z.FullName).sha256"
-    if (Test-Path $sidecar) { Remove-Item $sidecar -Force -ErrorAction SilentlyContinue }
-    Write-Host "       Pruned stale ZIP: $($z.Name)" -ForegroundColor DarkGray
-}
-if ($staleRootZips.Count -gt 0) {
-    Write-Host "       Pruned $($staleRootZips.Count) stale root ZIP(s); kept newest $KeepZipVersions versions" -ForegroundColor Gray
-}
+# Other versions' ZIPs and sidecars are not owned by this build. Storage
+# preflight/explicit operator cleanup must precede building when space is low.
 
 # ── Publish all three self-contained to SAME dir (shared runtime) ──
 Write-Host "[2/9] Publishing VPNRouter.App (Avalonia, self-contained)..." -ForegroundColor Yellow
@@ -384,7 +392,7 @@ if ($effectiveSingBoxPath) {
 }
 
 # ── slipstream-client.exe — DNS-tunnel transport, BUNDLED (Windows-only MVP) ──
-# Unlike wgturn/zapret (on-demand pull), slipstream is BUNDLED because it's a
+# Unlike zapret (on-demand pull), slipstream is BUNDLED because it's a
 # last-resort transport reached precisely when GitHub is blocked (circular dep:
 # can't pull the binary from GitHub at the moment you need it to reach GitHub).
 # Built from source locally (Mygod/slipstream-rust + picoquic), fully static /MT
@@ -457,17 +465,6 @@ if ($bundleSplitDriver) {
 } else {
     Write-Host "       split-tunnel driver: NOT bundled (local build without -BundleSplitDriver)" -ForegroundColor Gray
 }
-
-# ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──
-# Pre-r3 the build step here cloned PavelLizunov/wgturn-core and
-# cross-compiled wgturn-cli.exe into app/bin/. This caused:
-#   - Inconsistency between Win and Mac/Linux installers (CI couldn't clone
-#     the previously-private repo; Windows local-build had it).
-#   - ~10 MB bundled artifact that no UI surface used in r10.
-# The bundle step is removed; the Phase 2 on-demand WgturnUpdater (see
-# plans/wgturn-on-demand-download.md) handles delivery instead, in line
-# with how Zapret + Telegram-proxy are already shipped on-demand.
-Write-Host "       wgturn-cli: downloaded on demand (not bundled)" -ForegroundColor Gray
 
 # ── Zapret (DPI bypass) — downloaded on demand from Flowseal/zapret-discord-youtube ──
 Write-Host "       Zapret: downloaded on demand (not bundled)" -ForegroundColor Gray
@@ -639,7 +636,6 @@ if (Test-Path $driverInDist) {
     if (Test-Path $stLicInDist) { Copy-Item $stLicInDist $BootstrapDir -Force }
     Write-Host "       split-tunnel driver/ included in update (under _bootstrap/)" -ForegroundColor Gray
 }
-# wgturn-cli: downloaded on demand (v2.32.1-r3+, see plans/wgturn-on-demand-download.md)
 # Zapret: downloaded on demand, not in update package
 # Also include profiles and README under _bootstrap/.
 $UpdateProfilesDst = Join-Path $BootstrapDir "profiles"
@@ -880,17 +876,25 @@ if ($Upload) {
             Write-Host "       Including local Android APK in release assets" -ForegroundColor Gray
         }
 
-        gh release create $tag $releaseAssets `
-            --repo $GitHubRepo `
-            --title "VPNRouter v$Version" `
-            --notes "VPNRouter v$Version" `
-            --latest
-
-        $releaseCreateExitCode = $LASTEXITCODE
-        if ($releaseCreateExitCode -eq 0) {
-            Write-Host "       Uploaded: https://github.com/$GitHubRepo/releases/tag/$tag" -ForegroundColor Green
-        } else {
-            throw "GitHub release creation failed (exit $releaseCreateExitCode)."
+        # Recheck source/tag and draft immediately before staging. Existing
+        # assets are not clobbered: partial staging requires explicit inspection.
+        $currentHead = (& git -C $Root rev-parse HEAD | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $currentHead -ne $releaseCommit) { throw 'Release HEAD changed during build.' }
+        $changes = @(& git -C $Root status --porcelain --untracked-files=all)
+        if ($LASTEXITCODE -ne 0 -or $changes.Count) { throw 'Release source changed during build.' }
+        $tagCommit = (& gh api "repos/$GitHubRepo/commits/$tag" --jq '.sha' | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $releaseCommit) { throw 'Remote release tag changed during build.' }
+        $releaseJson = (& gh release view $tag --repo $GitHubRepo --json isDraft,isPrerelease | Out-String)
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot recheck draft release.' }
+        $releaseState = $releaseJson | ConvertFrom-Json
+        if (-not $releaseState.isDraft -or [bool]$releaseState.isPrerelease -ne ($Version -match '-r[1-9][0-9]*$')) {
+            throw 'Release is no longer the expected draft; refusing staging.'
         }
+        & gh release upload $tag @releaseAssets --repo $GitHubRepo
+        $releaseUploadExitCode = $LASTEXITCODE
+        if ($releaseUploadExitCode -ne 0) {
+            throw "GitHub draft upload failed (exit $releaseUploadExitCode); inspect partial assets before retrying."
+        }
+        Write-Host "       Staged on draft $tag; publication requires the complete pre-publish gate." -ForegroundColor Green
     }
 }

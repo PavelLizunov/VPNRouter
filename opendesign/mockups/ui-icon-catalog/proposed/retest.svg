@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+<title id="title">Перепроверить</title>
+<desc id="desc">Проверить сервер или повторно проверить сохранённые публичные конфиги.</desc>
+<path d="M20 9a8 8 0 1 0 0 6M20 4v5h-5m-5 0 5 3-5 3Z"/>
+</svg>

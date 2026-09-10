@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+<title id="title">Публичный сервер без имени</title>
+<desc id="desc">Обозначить fallback имени импортированного публичного сервера.</desc>
+<path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/>
+</svg>

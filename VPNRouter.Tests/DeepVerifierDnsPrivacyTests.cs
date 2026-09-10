@@ -24,7 +24,7 @@ public sealed class DeepVerifierDnsPrivacyTests
                 .GetProperty("servers")[0];
 
             Assert.Equal("https", server.GetProperty("type").GetString());
-            Assert.Equal("1.1.1.1", server.GetProperty("server").GetString());
+            Assert.Equal("8.8.8.8", server.GetProperty("server").GetString());
             Assert.Equal("/dns-query", server.GetProperty("path").GetString());
             Assert.Equal("dns-direct-out", server.GetProperty("detour").GetString());
         }
