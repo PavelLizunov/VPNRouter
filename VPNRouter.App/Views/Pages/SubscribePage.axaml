@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -25,21 +26,6 @@
            cards with URL subtitle + last-refresh timestamp, matching the
            srv-row shape. -->
   <UserControl.Styles>
-
-    <!-- Radio indicator (shared identical to ServersPage). -->
-    <Style Selector="Border.rbx">
-      <Setter Property="Width" Value="12"/>
-      <Setter Property="Height" Value="12"/>
-      <Setter Property="CornerRadius" Value="6"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-    </Style>
-    <Style Selector="Border.rbx.active">
-      <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidBrush}"/>
-      <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
-    </Style>
 
     <!-- Row wrapper — arctic tint when active -->
     <Style Selector="Border.srv-row">
@@ -156,11 +142,10 @@
           <Border Classes="srv-row" Classes.active="{Binding IsActive}">
             <Grid ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8">
 
-              <Border Grid.Column="0" Classes="rbx" Classes.active="{Binding IsActive}">
-                <Ellipse Width="4" Height="4" Fill="White"
-                         IsVisible="{Binding IsActive}"
-                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-              </Border>
+              <Panel Grid.Column="0" VerticalAlignment="Center">
+                <icons:Pictogram Id="radio-on" Width="16" Height="16" IsVisible="{Binding IsActive}" Foreground="{DynamicResource SuccessSolidBrush}"/>
+                <icons:Pictogram Id="radio-off" Width="16" Height="16" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
+              </Panel>
 
               <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                 <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
@@ -193,11 +178,11 @@
                          HorizontalAlignment="Center"/>
 
               <Button Grid.Column="5" Classes="srv-refresh"
-                      Content="⟳"
+                      icons:PictogramText.Icons="retest" icons:PictogramText.Content="⟳"
                       Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                       CommandParameter="{Binding}"
                       IsEnabled="{Binding !IsTesting}"
-                      ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
+                      ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
             </Grid>
           </Border>
         </DataTemplate>
@@ -264,7 +249,7 @@
                   Background="{DynamicResource WarningBgBrush}"
                   BorderBrush="{DynamicResource WarningBorderBrush}"
                   BorderThickness="1">
-              <TextBlock Text="{Binding SubscriptionTestImplausibleWarning}"
+              <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding SubscriptionTestImplausibleWarning}"
                          FontSize="10" TextWrapping="Wrap"
                          Foreground="{DynamicResource WarningFgBrush}"/>
           </Border>
@@ -369,17 +354,17 @@
                              Margin="0,0,4,0" Foreground="{DynamicResource AccentSolidBrush}"/>
 
                 <Button Grid.Column="3" Classes="srv-refresh"
-                        Content="↻"
+                        icons:PictogramText.Icons="refresh" icons:PictogramText.Content="↻"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
                         CommandParameter="{Binding}"
                         IsEnabled="{Binding !IsRefreshing}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}"/>
 
                 <Button Grid.Column="4" Classes="srv-refresh"
-                        Content="✕"
+                        icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
                         CommandParameter="{Binding}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}"/>
               </Grid>
             </Border>
           </DataTemplate>
@@ -408,7 +393,7 @@
                  FontSize="10" Padding="6,4"
                  AutomationProperties.Name="{Binding LblSubscriptionUrlHint}"/>
         <Button Grid.Column="2"
-                Content="{Binding L_AddSubscription}"
+                icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddSubscription}"
                 Command="{Binding AddSubscriptionCommand}"
                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                 FontSize="11" FontWeight="SemiBold"

@@ -28,7 +28,19 @@ the exact task-owned artifacts, and do not report success.
 
 ## Mandatory executable gate
 
-Run this first after every rolling ship:
+Run after every rolling or stable publication, once tag-bound postpublication
+integrity and APT runs finish. Never require this published-binary gate before
+undrafting. Asset upload does not trigger a reliable completion event; if
+publication with a workflow token did not start downstream runs, dispatch:
+
+```powershell
+gh workflow run verify-release-integrity.yml --ref "v$v" -f tag="v$v" -f auto_draft_on_failure=false
+gh workflow run publish-apt.yml --ref "v$v" -f tag="v$v"
+```
+
+APT always reindexes the latest published stable; a candidate run proves its
+tag/SHA provenance and stable-feed health, not candidate inclusion. Then run
+the full executable gate (the manual phases never replace it):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/post-ship-verify.ps1 -Version $v
@@ -61,10 +73,14 @@ live behavior is asserted through sanitized semantic UIA results.
 $releaseCommit = gh api "repos/PavelLizunov/VPNRouter/commits/v$v" --jq '.sha'
 if ((git rev-parse HEAD) -ne $releaseCommit) { throw 'Checkout does not match release tag.' }
 if (git status --porcelain --untracked-files=all) { throw 'Checkout is not clean.' }
-powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1 -Commit $releaseCommit -Repo PavelLizunov/VPNRouter -IgnoreSkipped characterization-windows -RequiredSuccess "publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1" -RequiredWorkflows "Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT Repository,Verify Release Integrity,Auto-Update Integration Test (Windows)" -Strict
+powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1 -Commit $releaseCommit -ReleaseTag "v$v" -Repo PavelLizunov/VPNRouter -IgnoreSkipped characterization-windows -RequiredSuccess "publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1" -RequiredWorkflows "Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT Repository,Verify Release Integrity,Auto-Update Integration Test (Windows)" -Strict
 ```
 
-Exit 0 → proceed. Exit 1/2/3 → STOP.
+Strict mode selects the canonical workflow path, exact tag/SHA, allowed event,
+and latest run attempt, then its jobs. A same-SHA branch check or unrelated job
+name is not release evidence. Exit 0 → proceed. Exit 1/2/3 → STOP.
+Missing/partial assets fail closed: inspect provenance and hashes, never clobber
+release assets. Correct a published artifact under a new version/tag.
 
 ## 2. VM readiness + identity
 

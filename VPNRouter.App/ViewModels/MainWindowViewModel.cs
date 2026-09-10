@@ -469,19 +469,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
     public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
-    /// <summary>True when the wgturn Emergency Channel is available — Windows /
-    /// macOS / Linux. The wgturn-cli binary is fetched on-demand per platform by
-    /// WgturnUpdater (which publishes windows/darwin/linux x64+arm64 assets), so it
-    /// needs no bundling.</summary>
-    public bool IsEmergencyChannelAvailable =>
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux();
-    /// <summary>Tools-tab visibility gate. Visible when ANY sub-tool is available,
-    /// so the Emergency Channel shows on macOS/Linux even though Zapret + Telegram
-    /// proxy are Windows-only. Was gated on <see cref="IsZapretAvailable"/>, which
-    /// hid the whole Tools tab — and the cross-platform Emergency Channel — off
-    /// Windows (the parity bug fixed 2026-06-15).</summary>
+    /// <summary>Tools-tab visibility gate. Visible when ANY sub-tool is available.</summary>
     public bool IsToolsAvailable => Internals.ToolTabAvailability.ToolsTabVisible(
-        IsZapretAvailable, IsTgProxyAvailable, IsEmergencyChannelAvailable);
+        IsZapretAvailable, IsTgProxyAvailable);
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
@@ -735,7 +725,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             list.Remove(existing);
         }
 
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
 
         try { SaveSettings(); }
         catch (Exception ex)
@@ -781,7 +771,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             list.Remove(existing);
         }
 
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || IsBatchUpdating) return;
 
         try { SaveSettings(); }
         catch (Exception ex)
@@ -813,6 +803,40 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         return _settings.App.RoutingAppsInclude
             ??= new List<string>();
+    }
+
+    private int _batchUpdateDepth;
+    public bool IsBatchUpdating => _batchUpdateDepth > 0;
+
+    /// <summary>
+    /// Suppresses per-item <see cref="SaveSettings"/> calls during bulk operations
+    /// (e.g. Select All, Clear All, group toggles, Steam import). Persists settings
+    /// exactly once when the outermost batch scope disposes.
+    /// </summary>
+    public IDisposable BeginBatchUpdate()
+    {
+        System.Threading.Interlocked.Increment(ref _batchUpdateDepth);
+        return new BatchUpdateScope(this);
+    }
+
+    private sealed class BatchUpdateScope : IDisposable
+    {
+        private MainWindowViewModel? _vm;
+        public BatchUpdateScope(MainWindowViewModel vm) => _vm = vm;
+        public void Dispose()
+        {
+            var vm = System.Threading.Interlocked.Exchange(ref _vm, null);
+            if (vm == null) return;
+            if (System.Threading.Interlocked.Decrement(ref vm._batchUpdateDepth) == 0)
+            {
+                if (!vm._isLoadingUI)
+                {
+                    try { vm.SaveSettings(); }
+                    catch (Exception ex) { vm._logger?.Warning(ex, "[VM] SaveSettings after batch update failed"); }
+                    vm.MarkRoutingSettingsChanged();
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -2638,25 +2662,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 5;
 
     // Tools sub-tabs
-    // v2.32.2 (W-4) — added third tab «Emergency Channel» (wgturn).
     // Sub-tab order on the Tools page top strip:
     //   0 = Zapret
     //   1 = Telegram Proxy
-    //   2 = Emergency Channel (new)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
     [NotifyPropertyChangedFor(nameof(IsTgProxyToolSelected))]
-    [NotifyPropertyChangedFor(nameof(IsEmergencyChannelToolSelected))]
-    // Default to the first AVAILABLE sub-tab so macOS/Linux (no Zapret/TgProxy)
-    // opens on the Emergency Channel instead of the hidden Windows-only Zapret page.
     private int _selectedToolIndex = Internals.ToolTabAvailability.DefaultToolIndex(
-        OperatingSystem.IsWindows(),                                             // Zapret
-        OperatingSystem.IsWindows(),                                             // Telegram proxy
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()); // Emergency Channel
+        OperatingSystem.IsWindows(), // Zapret
+        OperatingSystem.IsWindows()); // Telegram proxy
 
     public bool IsZapretToolSelected => SelectedToolIndex == 0;
     public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
-    public bool IsEmergencyChannelToolSelected => SelectedToolIndex == 2;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
@@ -2757,6 +2774,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         _engine = PlatformServices.CreateVpnEngine(_logger);
         _engine.StatusChanged += OnEngineStatus;
+        _engine.Connected += OnEngineConnected;
         // 2026-06-09 (rectuspc report): surface AutoFailover messages — the
         // post-start probe finding the active server dead / no failover
         // candidate. This event had NO subscriber in the GUI, so a
@@ -2776,13 +2794,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // paths (Free Configs Use, paste, subscription rebuild). Must happen
         // after _settings loads.
         WireServersOrphanTracking();
-
-        // v2.32.2 (W-4) — populate Emergency Channel card state from the
-        // settings YAML before any UI binding fires. Polls
-        // WgturnUpdater.IsInstalled() once; subsequent flips come from
-        // Download / Remove commands. Implementation in
-        // MainWindowViewModel.Wgturn.cs.
-        InitializeWgturnState();
 
         // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
@@ -3198,10 +3209,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         TgProxyVersionText = TgProxyUpdater.IsInstalled()
             ? (TgProxyUpdater.GetLocalVersion() ?? "?")
             : (IsRussian ? "Не установлен" : "Not installed");
-        if (TgProxyManager.IsAnyRunning(TgProxyPort))
+        // Port is occupancy, never identity. Do not adopt foreign or unverified
+        // listeners merely because the port is in use. Only treat TgProxy as enabled if
+        // this process owns an active, running instance.
+        if (_tgProxy?.IsRunning == true)
         {
             TgProxyEnabled = true;
-            TgProxyStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
+            TgProxyStatus = $"{Strings.StatusRunning} (PID {_tgProxy.Pid})";
             if (!string.IsNullOrEmpty(TgProxySecret))
                 TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
         }
@@ -5871,9 +5885,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         var port = TgProxyPort;
         var secret = TgProxySecret;
-        var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(port);
         TgProxyManager? manager;
         lock (_tgProxyStateGate) manager = _tgProxy;
+        var wasRunning = manager?.IsRunning == true;
 
         try
         {
@@ -5884,11 +5898,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (wasRunning)
             {
                 manager?.Stop();
-                TgProxyManager.KillAll(port);
-                await Task.Delay(300, _tgProxyLifetimeCts.Token);
-                if (TgProxyManager.IsAnyRunning(port))
-                    throw new InvalidOperationException(
-                        $"Could not stop tg-ws-proxy on port {port} before update.");
+                if (manager?.IsRunning == true)
+                {
+                    TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;
+                    TgProxyStatus = VPNRouter.Core.Localization.Strings.TgProxyStopFailed;
+                    return;
+                }
                 TgProxyEnabled = false;
             }
 
@@ -5992,27 +6007,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
 #if PLATFORM_WINDOWS
         // If running → stop
-        if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
+        TgProxyManager? currentManager;
+        lock (_tgProxyStateGate) currentManager = _tgProxy;
+
+        var shouldStop = TgProxyEnabled || currentManager?.IsRunning == true;
+        if (shouldStop)
         {
-            TgProxyManager? currentManager;
-            lock (_tgProxyStateGate) currentManager = _tgProxy;
             currentManager?.Stop();
-            // v2.20.0: pass the port so KillByPort hits the actual
-            // python.exe running the proxy (process-name match never
-            // worked — see TgProxyManager.KillAll).
-            TgProxyManager.KillAll(TgProxyPort);
-            // Re-check a beat later; if the port is still bound
-            // something couldn't be killed (permissions? zombie?).
-            // We surface the truth instead of lying that we stopped.
-            await Task.Delay(300);
-            TgProxyRuntimeStatus = TgProxyManager.IsAnyRunning(TgProxyPort)
-                ? ComponentRuntimeStatus.Failed
-                : ComponentRuntimeStatus.Idle;
-            TgProxyEnabled = false;
-            TgProxyStatus = TgProxyRuntimeStatus == ComponentRuntimeStatus.Failed
-                ? (IsRussian ? "Не удалось остановить (проверьте права)" : "Couldn't stop (check permissions)")
-                : (IsRussian ? "Остановлен" : "Stopped");
-            TgProxyStats = "";
+
+            if (currentManager?.IsRunning == true)
+            {
+                TgProxyRuntimeStatus = ComponentRuntimeStatus.Failed;
+                TgProxyStatus = VPNRouter.Core.Localization.Strings.TgProxyStopFailed;
+            }
+            else
+            {
+                TgProxyRuntimeStatus = ComponentRuntimeStatus.Idle;
+                TgProxyEnabled = false;
+                TgProxyStatus = Strings.Stopped;
+                TgProxyStats = "";
+            }
             // v2.36.0-r7 (task #63 / MCP test r6 finding): wrap SaveSettings
             // in try/catch. Pre-r7 a concurrent reader of config.yaml (AV scan,
             // Dropbox sync, another shell briefly reading the file) would
@@ -6099,13 +6113,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // (defensive — don't show false-positive banner).
             IsTelegramSchemeWarningVisible = !TgProxyManager.IsTelegramSchemeRegistered();
 
-            if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))
+            if (manager.IsRunning)
             {
                 TgProxyEnabled = true;
                 TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", port, secret);
-                TgProxyStatus = IsRussian
-                    ? $"Работает (PID {manager.Pid})"
-                    : $"Running (PID {manager.Pid})";
+                TgProxyStatus = $"{Strings.StatusRunning} (PID {manager.Pid})";
 
                 // Preserve the old 2-4s failure-detection window without
                 // delaying the ready UI. A user Stop or manager replacement
@@ -6159,7 +6171,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         await Task.Delay(TgProxySettleDelayMs);
         if (_disposed || !ReferenceEquals(_tgProxy, manager) || !TgProxyEnabled)
             return;
-        if (manager.IsRunning || TgProxyManager.IsAnyRunning(port))
+        if (manager.IsRunning)
             return;
 
         TgProxyEnabled = false;
@@ -6230,7 +6242,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // secret → start" already. Re-using it keeps the start path
         // single-sourced and avoids drift if the toggle logic
         // evolves later (port retry, secret rotation policy, etc.).
-        if (!TgProxyEnabled && !TgProxyManager.IsAnyRunning(TgProxyPort))
+        if (!TgProxyEnabled)
         {
             await ToggleTgProxyAsync();
         }
@@ -6288,7 +6300,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
         if (IsTgProxyDownloading) return;
 
-        if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
+        if (TgProxyEnabled)
         {
             await ToggleTgProxyAsync();
         }
@@ -6359,11 +6371,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            // Security: validate absolute URI with http or https scheme only
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                Process.Start(new ProcessStartInfo { FileName = uri.AbsoluteUri, UseShellExecute = true });
+            }
+            else
+            {
+                Serilog.Log.Logger.Warning("[VM] OpenUrl blocked non-http(s) URL: {Url}", CanaryPolicy.RedactUrl(url));
+            }
         }
         catch (Exception ex)
         {
-            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", url);
+            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", CanaryPolicy.RedactUrl(url));
         }
     }
 
@@ -6379,7 +6400,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void RegenerateTgProxySecret()
     {
-        var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort);
+#if PLATFORM_WINDOWS
+        TgProxyManager? manager;
+        lock (_tgProxyStateGate) manager = _tgProxy;
+        var wasRunning = TgProxyEnabled || manager?.IsRunning == true;
+#else
+        var wasRunning = TgProxyEnabled;
+#endif
 
         TgProxySecret = Convert.ToHexStringLower(
             System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
@@ -7023,11 +7050,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Kill zapret on app exit
         KillAllZapret();
 
-        // Kill tg-ws-proxy on app exit
+        // Stop tg-ws-proxy on app exit
 #if PLATFORM_WINDOWS
-        // v2.31.6-r12: Debug-log instead of swallowing silently.
-        try { _tgProxy?.Stop(); TgProxyManager.KillAll(TgProxyPort); }
-        catch (Exception ex) { _logger.Debug(ex, "[VM] Quit: _tgProxy.Stop / KillAll failed"); }
+        try { _tgProxy?.Stop(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Quit: _tgProxy.Stop failed"); }
 #endif
 
         SaveSettings();
@@ -7088,6 +7114,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             _engine.StatusChanged -= OnEngineStatus;
+            _engine.Connected -= OnEngineConnected;
             _engine.AutoFailoverTriggered -= OnAutoFailoverMessage;
             _engine.TrueSplitEngagedChanged -= OnTrueSplitEngagedChanged;   // W1.3 (bug-hunt): don't leak a recreated VM
             _engine.TrueSplitStateChanged -= OnTrueSplitStateChanged;

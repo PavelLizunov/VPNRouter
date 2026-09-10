@@ -1,0 +1,38 @@
+{
+  "status": "resolved_not_installed",
+  "target": "linux-worker",
+  "root_relative_to_home": ".local/share/vpnrouter-build-tools",
+  "jdk": {
+    "version": "17.0.20.1+1",
+    "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz",
+    "sha256": "3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e",
+    "size": 193252603,
+    "license_reference": "https://adoptium.net/docs/faq"
+  },
+  "android_repository": "https://dl.google.com/android/repository/repository2-1.xml",
+  "android_license": "android-sdk-license",
+  "owner_license_approval": "Explicit ask_user_question android-sdk-license-consent: accepted installation for command-line tools, platform36, build-tools36.0.0 only; other licenses require separate approval",
+  "packages": [
+    {
+      "path": "cmdline-tools;20.0",
+      "url": "https://dl.google.com/android/repository/commandlinetools-linux-14742923_latest.zip",
+      "sha1": "48833c34b761c10cb20bcd16582129395d121b27",
+      "size": 172789259,
+      "selection": "Matches default archive in repository-pinned setup-android action40fd30fb8d7440372e1316f5d1809ec01dcd3699"
+    },
+    {
+      "path": "platforms;android-36",
+      "revision": "2",
+      "url": "https://dl.google.com/android/repository/platform-36_r02.zip",
+      "sha1": "2c1a80dd4d9f7d0e6dd336ec603d9b5c55a6f576",
+      "size": 65878410
+    },
+    {
+      "path": "build-tools;36.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r36_linux.zip",
+      "sha1": "b0b6376977657e8ad9b969bacf4093601da2c6fb",
+      "size": 63737259
+    }
+  ],
+  "limits": "Google repository supplies SHA1 consistency checks, not signature/authenticity proof. Preserve HTTPS vendor source and record SHA256 of downloaded archives. Do not auto-install platform-tools, tools, emulator, NDK or accept unrelated licenses. Verify sdkmanager under approved JDK17 before package installation; compatibility not yet executed. Minimum supported app API23 and legacy libbox1.13.10 unchanged."
+}

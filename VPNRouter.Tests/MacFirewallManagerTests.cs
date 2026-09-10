@@ -2,6 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
+using System.Text.Json;
+using System.Threading.Tasks;
+using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Platform.macOS;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -39,6 +43,10 @@ public class MacFirewallManagerTests : IDisposable
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-marker-" + Guid.NewGuid().ToString("N") + ".marker");
     private readonly string _pfconf =
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-pfconf-" + Guid.NewGuid().ToString("N") + ".conf");
+    private readonly string _rules =
+        Path.Combine(Path.GetTempPath(), "vpnrouter-fw-rules-" + Guid.NewGuid().ToString("N") + ".conf");
+    private readonly string _mainConf =
+        Path.Combine(Path.GetTempPath(), "vpnrouter-fw-main-" + Guid.NewGuid().ToString("N") + ".conf");
 
     private const string StockPfConf =
         "scrub-anchor \"com.apple/*\"\n" +
@@ -55,6 +63,8 @@ public class MacFirewallManagerTests : IDisposable
         try { if (File.Exists(_cfg)) File.Delete(_cfg); } catch { }
         try { if (File.Exists(_marker)) File.Delete(_marker); } catch { }
         try { if (File.Exists(_pfconf)) File.Delete(_pfconf); } catch { }
+        try { if (File.Exists(_rules)) File.Delete(_rules); } catch { }
+        try { if (File.Exists(_mainConf)) File.Delete(_mainConf); } catch { }
     }
 
     private static ProcessResult Ok(string stdout = "", string stderr = "") =>
@@ -82,8 +92,14 @@ public class MacFirewallManagerTests : IDisposable
         return f;
     }
 
-    private MacFirewallManager Sut(FakeProcessRunner fake, string? pfconf = null) =>
-        new MacFirewallManager(null, fake, _cfg, _marker, pfConfPath: pfconf ?? _pfconf);
+    private MacFirewallManager Sut(FakeProcessRunner fake, string? pfconf = null, string? rulesPath = null, string? mainConfPath = null, Func<string, IReadOnlyList<string>>? hostResolver = null) =>
+        new MacFirewallManager(null, fake, _cfg, _marker, hostResolver: hostResolver, pfConfPath: pfconf ?? _pfconf, rulesPath: rulesPath ?? _rules, mainConfPath: mainConfPath ?? _mainConf);
+
+    private static bool GetArmed(MacFirewallManager sut) =>
+        (bool)typeof(MacFirewallManager).GetField("_armed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(sut)!;
+
+    private static bool GetLoaded(MacFirewallManager sut) =>
+        (bool)typeof(MacFirewallManager).GetField("_loaded", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(sut)!;
 
     // Helpers to classify pfctl calls.
     private static bool IsAnchorLoad(ProcessRequest c) =>
@@ -362,7 +378,8 @@ public class MacFirewallManagerTests : IDisposable
             { ""type"": ""vless"", ""server"": ""5.6.7.8"" } ] }");
         var fake = OkRunner();
         var sut = new MacFirewallManager(null, fake, _cfg, _marker,
-            hostResolver: _ => Array.Empty<string>(), pfConfPath: _pfconf);
+            hostResolver: _ => Array.Empty<string>(), pfConfPath: _pfconf,
+            rulesPath: _rules, mainConfPath: _mainConf);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -385,7 +402,7 @@ public class MacFirewallManagerTests : IDisposable
             hostResolver: h => h == "proxy.example.com"
                 ? new[] { "203.0.113.10" }
                 : (IReadOnlyList<string>)Array.Empty<string>(),
-            pfConfPath: _pfconf);
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -394,6 +411,235 @@ public class MacFirewallManagerTests : IDisposable
         var rules = File.ReadAllText(load.Arguments.Last());
         Assert.Contains("203.0.113.10", rules);            // resolved IP allowed
         Assert.DoesNotContain("proxy.example.com", rules); // hostname never in pf
+    }
+
+    [Fact]
+    public void ReadServerIps_WireGuardEndpoint_PeerLiteralIPv4AndIPv6_PresentInGeneratedRules()
+    {
+        // WireGuard endpoint with literal IPv4 and IPv6 peer addresses (including AmneziaWG obfuscation fields)
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""tag"": ""proxy"",
+                    ""jc"": 4,
+                    ""jmin"": 10,
+                    ""jmax"": 20,
+                    ""s1"": 50,
+                    ""s2"": 100,
+                    ""h1"": ""123456"",
+                    ""address"": [ ""10.0.0.2/32"" ],
+                    ""peers"": [
+                        { ""address"": ""198.51.100.1"", ""port"": 51820, ""allowed_ips"": [ ""0.0.0.0/0"" ] },
+                        { ""address"": ""2001:db8::cafe"", ""port"": 51820, ""allowed_ips"": [ ""::/0"" ] }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.1", rules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::cafe", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Contains("198.51.100.1", extracted);
+        Assert.Contains("2001:db8::cafe", extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_HostnameResolver_GivesAAndAaaaCanonicalDedupe()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": ""wg.example.com"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h => h == "wg.example.com"
+                ? new[] { "198.51.100.20", "2001:0db8:0000:0000:0000:0000:0000:0001", "2001:db8::1", "198.51.100.20" }
+                : (IReadOnlyList<string>)Array.Empty<string>(),
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.20", rules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::1", rules);
+        Assert.DoesNotContain("2001:0db8", rules);
+
+        var lines = rules.Split('\n').Select(l => l.Trim()).ToList();
+        Assert.Equal(1, lines.Count(l => l == "pass out quick inet from any to 198.51.100.20"));
+        Assert.Equal(1, lines.Count(l => l == "pass out quick inet6 from any to 2001:db8::1"));
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.20", "2001:db8::1" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_WireGuardEndpoint_LocalInterfaceCidrAndAllowedIps_Absent()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""wireguard"",
+                    ""address"": [ ""172.31.254.2/32"", ""fd00:abcd::2/128"" ],
+                    ""peers"": [
+                        {
+                            ""address"": ""198.51.100.55"",
+                            ""port"": 51820,
+                            ""allowed_ips"": [ ""0.0.0.0/0"", ""198.18.0.0/15"", ""2001:db8:ffff::/48"" ]
+                        }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.55", rules);
+
+        // Local interface CIDR and tunnel addresses must never be allowlisted
+        Assert.DoesNotContain("172.31.254.2", rules);
+        Assert.DoesNotContain("fd00:abcd::2", rules);
+        Assert.DoesNotContain("/32", rules);
+        Assert.DoesNotContain("/128", rules);
+
+        // Allowed IPs CIDR ranges must never be allowlisted
+        Assert.DoesNotContain("198.18.0.0", rules);
+        Assert.DoesNotContain("2001:db8:ffff", rules);
+        Assert.DoesNotContain("0.0.0.0/0", rules);
+    }
+
+    [Fact]
+    public void ReadServerIps_UnknownEndpointType_Excluded()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                {
+                    ""type"": ""unknown-proto"",
+                    ""peers"": [ { ""address"": ""198.51.100.99"" } ]
+                },
+                {
+                    ""type"": ""tun"",
+                    ""peers"": [ { ""address"": ""198.51.100.88"" } ]
+                },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [ { ""address"": ""198.51.100.77"" } ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.77", rules);
+        Assert.DoesNotContain("198.51.100.99", rules);
+        Assert.DoesNotContain("198.51.100.88", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.77" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_MalformedSiblingsAndThrowingResolver_DoNotLoseValidLaterPeers()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""endpoints"": [
+                null,
+                123,
+                { ""type"": null },
+                {
+                    ""type"": ""wireguard"",
+                    ""peers"": [
+                        { ""address"": 12345 },
+                        {},
+                        { ""address"": ""throwing.example.com"" },
+                        { ""address"": null },
+                        { ""address"": ""198.51.100.66"" },
+                        { ""address"": ""valid.example.com"" }
+                    ]
+                }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h =>
+            {
+                if (h == "throwing.example.com") throw new SocketException(11001);
+                if (h == "valid.example.com") return new[] { "198.51.100.77" };
+                return Array.Empty<string>();
+            },
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 198.51.100.66", rules);
+        Assert.Contains("pass out quick inet from any to 198.51.100.77", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "198.51.100.66", "198.51.100.77" }, extracted);
+    }
+
+    [Fact]
+    public void ReadServerIps_InvalidInjectedResolverResult_AbsentFromGeneratedRules()
+    {
+        File.WriteAllText(_cfg, @"{
+            ""outbounds"": [
+                { ""type"": ""vless"", ""server"": ""injected.example.com"" }
+            ]
+        }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h => new[]
+            {
+                "1.2.3.4\npass out quick any",
+                "not-an-ip-address",
+                "10.0.0.1; rm -rf",
+                "2001:db8::1 } accept",
+                "93.184.216.34"
+            },
+            pfConfPath: _pfconf, rulesPath: _rules, mainConfPath: _mainConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(IsAnchorLoad);
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 93.184.216.34", rules);
+        Assert.DoesNotContain("pass out quick any", rules);
+        Assert.DoesNotContain("rm -rf", rules);
+        Assert.DoesNotContain("accept", rules);
+        Assert.DoesNotContain("not-an-ip-address", rules);
+
+        var extracted = sut.ReadServerIps();
+        Assert.Equal(new[] { "93.184.216.34" }, extracted);
     }
 
     // ── marker + orphan cleanup (D5/D6/D7) ──────────────────────────────────
@@ -484,5 +730,873 @@ public class MacFirewallManagerTests : IDisposable
             try { if (File.Exists(customRules)) File.Delete(customRules); } catch { }
             try { if (File.Exists(customMain)) File.Delete(customMain); } catch { }
         }
+    }
+
+    // ── NIGHT04: failure retention, retry, and token preservation ──────────
+
+    [Fact]
+    public void Disable_WhenFlushAnchorFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Flush fails: marker and loaded state must be preserved for retry.
+        flushFails = true;
+        sut.DisableBlockRules();
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+
+        // Retry succeeds: rules cleared, marker deleted, token released.
+        flushFails = false;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_WhenFlushAnchorFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        flushFails = true;
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+
+        flushFails = false;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedAnchorMarker_WhenFlushAnchorFails_RetainsMarker_AndSubsequentRetryClears()
+    {
+        File.WriteAllText(_marker, MacFirewallManager.AnchorMarker);
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("anchor flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        // Fresh instance: never armed, never enabled (_loaded == false)
+        var sut = Sut(fake);
+        Assert.False(GetLoaded(sut));
+        Assert.False(GetArmed(sut));
+
+        // Attempt 1: anchor flush fails -> marker must be retained
+        flushFails = true;
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.AnchorMarker, File.ReadAllText(_marker));
+        Assert.Contains(fake.RunCalls, IsAnchorFlush);
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("/etc/pf.conf"));
+
+        // Attempt 2: retry succeeds -> marker deleted
+        flushFails = false;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedLegacyMarker_RoutesToDefaultRulesetRestore_AndRetainsMarkerOnFailure_AndClearsOnRetry()
+    {
+        File.WriteAllText(_marker, MacFirewallManager.LegacyMarker);
+        var restoreFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"),
+            _ => Task.FromResult(restoreFails ? Fail("legacy restore failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        // Fresh instance: never armed, never enabled (_loaded == false)
+        var sut = Sut(fake);
+        Assert.False(GetLoaded(sut));
+        Assert.False(GetArmed(sut));
+
+        // Attempt 1: restore fails -> marker must be retained, anchor must NOT be flushed
+        restoreFails = true;
+        sut.DeleteAllRules();
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.LegacyMarker, File.ReadAllText(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+        Assert.DoesNotContain(fake.RunCalls, IsAnchorFlush);
+
+        // Attempt 2: retry succeeds -> legacy marker cleared
+        restoreFails = false;
+        sut.DeleteAllRules();
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedLegacyMarker_DoesNotClearLegacyMarkerAfterOnlyFlushingAnchor()
+    {
+        File.WriteAllText(_marker, MacFirewallManager.LegacyMarker);
+        var fake = new FakeProcessRunner();
+        // Allow anchor flush to succeed, but fail default ruleset restore
+        fake.OnRun(IsAnchorFlush, Ok());
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"), Fail("restore failed"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        var sut = Sut(fake);
+
+        sut.DeleteAllRules();
+
+        // Fresh instance must route to legacy cleanup, NOT just flush anchor and clear marker
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.LegacyMarker, File.ReadAllText(_marker));
+        Assert.DoesNotContain(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_WhenArmedButUnloaded_FailedFlushAnchorRetainsArmedState_AndRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        var sut = Sut(fake);
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.True(GetArmed(sut));
+        Assert.False(GetLoaded(sut));
+
+        // Attempt 1: Flush fails -> armed state must be retained!
+        flushFails = true;
+        sut.DeleteAllRules();
+        Assert.True(GetArmed(sut));
+
+        // Attempt 2: Flush succeeds -> armed state cleared
+        flushFails = false;
+        sut.DeleteAllRules();
+        Assert.False(GetArmed(sut));
+
+        // Disarmed -> EnableBlockRules is a no-op (no pfctl -E)
+        sut.EnableBlockRules();
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-E"));
+    }
+
+    [Fact]
+    public void DeleteAllRules_WhenLegacyLoaded_RestoresDefaultRuleset_AndReleasesToken()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = OkRunner();
+        var missingPfConf = Path.Combine(Path.GetTempPath(), "missing-" + Guid.NewGuid().ToString("N") + ".conf");
+        var sut = Sut(fake, pfconf: missingPfConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(GetLoaded(sut));
+        Assert.True(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.LegacyMarker, File.ReadAllText(_marker));
+
+        sut.DeleteAllRules();
+
+        Assert.False(GetLoaded(sut));
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+        Assert.DoesNotContain(fake.RunCalls, IsAnchorFlush);
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WhenAnchorFlushFails_PreservesMarker_AndSubsequentRetryClears()
+    {
+        File.WriteAllText(_marker, "anchor-v1");
+        var flushFails = true;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        // Attempt 1: anchor flush fails -> marker MUST NOT be deleted.
+        sut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker));
+
+        // Attempt 2: retry succeeds -> marker deleted.
+        flushFails = false;
+        sut.CleanupOrphanedRules(null);
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WhenLegacyRestoreFails_PreservesMarker_AndSubsequentRetryClears()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var restoreFails = true;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"),
+            _ => Task.FromResult(restoreFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        // Attempt 1: stock restore fails -> marker preserved.
+        sut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker));
+
+        // Attempt 2: retry succeeds -> marker cleared.
+        restoreFails = false;
+        sut.CleanupOrphanedRules(null);
+        Assert.False(File.Exists(_marker));
+    }
+
+    [Fact]
+    public void Disable_WhenLegacyRestoreFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    {
+        WriteConfig("9.9.9.9");
+        var restoreFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"),
+            _ => Task.FromResult(restoreFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+
+        var missingPfConf = Path.Combine(Path.GetTempPath(), "missing-" + Guid.NewGuid().ToString("N") + ".conf");
+        var sut = Sut(fake, pfconf: missingPfConf);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+        Assert.Equal("engaged", File.ReadAllText(_marker));
+
+        // Disable with failing restore
+        restoreFails = true;
+        sut.DisableBlockRules();
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-X"));
+
+        // Retry with succeeding restore
+        restoreFails = false;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+    }
+
+    [Fact]
+    public void TokenRelease_WhenReleaseFails_PreservesTokenForRetry_AndDoesNotAcquireDoubleEnable()
+    {
+        WriteConfig("9.9.9.9");
+        var releaseFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(r => r.Arguments.Contains("-X"), _ => Task.FromResult(releaseFails ? Fail("token release failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Flush rules succeeds, but token release fails:
+        // marker is cleared (no block rules remaining), but token is preserved.
+        releaseFails = true;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+
+        // Re-enable must reuse retained token and NOT acquire a second -E.
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+        var enableCalls = fake.RunCalls.Count(c => c.Arguments.Contains("-E"));
+        Assert.Equal(1, enableCalls); // only the initial -E, no second -E
+
+        // Disable with token release now succeeding.
+        releaseFails = false;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+
+        // Subsequent disable is a no-op because token was successfully released.
+        var countBefore = fake.RunCalls.Count;
+        sut.DisableBlockRules();
+        Assert.Equal(countBefore, fake.RunCalls.Count);
+    }
+
+    [Fact]
+    public void Dispose_WhenFlushOrTokenReleaseFails_RetriesOnSubsequentDispose()
+    {
+        WriteConfig("9.9.9.9");
+        var flushFails = false;
+        var releaseFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail() : Ok()));
+        fake.OnRun(r => r.Arguments.Contains("-X"), _ => Task.FromResult(releaseFails ? Fail() : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Call 1: flush fails -> marker kept, token kept.
+        flushFails = true;
+        releaseFails = true;
+        sut.Dispose();
+        Assert.True(File.Exists(_marker));
+
+        // Call 2: flush succeeds, but release fails -> marker deleted, token kept.
+        flushFails = false;
+        sut.Dispose();
+        Assert.False(File.Exists(_marker));
+
+        // Call 3: release succeeds -> token released, disposed flag finalized.
+        releaseFails = false;
+        sut.Dispose();
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+
+        // Call 4: already clean -> no-op.
+        var countBefore = fake.RunCalls.Count;
+        sut.Dispose();
+        Assert.Equal(countBefore, fake.RunCalls.Count);
+    }
+
+    [Fact]
+    public void RunSudo_WhenExit0ButTimedOut_IsTreatedAsFailure()
+    {
+        WriteConfig("9.9.9.9");
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        // Anchor load returns ExitCode 0 but TimedOut = true:
+        fake.OnRun(IsAnchorLoad, new ProcessResult(0, "", "timed out", TimeSpan.FromSeconds(10), TimedOut: true));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        // Must NOT treat timed out command as success: rules not loaded, marker not written, token released.
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+
+        // Also test orphan cleanup:
+        File.WriteAllText(_marker, "anchor-v1");
+        var orphanFake = new FakeProcessRunner();
+        orphanFake.OnRun(IsAnchorFlush, new ProcessResult(0, "", "", TimeSpan.FromSeconds(10), TimedOut: true));
+        orphanFake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var orphanSut = Sut(orphanFake);
+
+        orphanSut.CleanupOrphanedRules(null);
+        Assert.True(File.Exists(_marker)); // marker retained because flush timed out!
+    }
+
+    [Fact]
+    public void Disable_WhenTokenReleaseFails_DirectRetryReleasesTokenWithoutTouchingRules()
+    {
+        WriteConfig("9.9.9.9");
+        var releaseFails = false;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.Arguments.Contains("-E"), Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.Arguments.Contains("-sr"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(r => r.Arguments.Contains("-X"), _ => Task.FromResult(releaseFails ? Fail("token release failed") : Ok()));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));
+
+        // Call 1: rules flush succeeds, but token release fails -> marker deleted, token retained
+        releaseFails = true;
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-X") && c.Arguments.Contains("12345678"));
+
+        // Call 2: direct Disable retry without intermediate re-enable -> releases token, rules untouched
+        var flushCountBefore = fake.RunCalls.Count(IsAnchorFlush);
+        releaseFails = false;
+        sut.DisableBlockRules();
+        var flushCountAfter = fake.RunCalls.Count(IsAnchorFlush);
+        Assert.Equal(flushCountBefore, flushCountAfter);
+
+        // Call 3: subsequent Disable is a complete no-op
+        var totalCallsBefore = fake.RunCalls.Count;
+        sut.DisableBlockRules();
+        Assert.Equal(totalCallsBefore, fake.RunCalls.Count);
+    }
+
+    [Theory]
+    [InlineData("anchor-v1", "Anchor")]
+    [InlineData("  anchor-v1 \n", "Anchor")]
+    [InlineData("engaged", "Legacy")]
+    [InlineData(" engaged \r\n", "Legacy")]
+    [InlineData("unknown", "Unknown")]
+    [InlineData("engaged-v2", "Unknown")]
+    [InlineData("", "Unknown")]
+    public void InspectMarker_ClassifiesKnownAndUnknownMarkers(string content, string expected)
+    {
+        File.WriteAllText(_marker, content);
+        var sut = Sut(OkRunner());
+        Assert.Equal(expected, sut.InspectMarker().ToString());
+    }
+
+    [Fact]
+    public void InspectMarker_WhenMarkerMissing_ReturnsMissing()
+    {
+        var sut = Sut(OkRunner());
+        Assert.False(File.Exists(_marker));
+        Assert.Equal(MacFirewallManager.MarkerState.Missing, sut.InspectMarker());
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WithUnknownMarker_RetainsMarker_AndDoesNotBroadRestoreOrFlushAsSuccess()
+    {
+        File.WriteAllText(_marker, "arbitrary-unknown-content");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CleanupOrphanedRules(null);
+
+        // Marker must be retained and no broad restore or flush-as-success executed
+        Assert.True(File.Exists(_marker));
+        Assert.Equal("arbitrary-unknown-content", File.ReadAllText(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WithPersistedUnknownMarker_RetainsMarker_AndDoesNotBroadRestoreOrFlushAsSuccess()
+    {
+        File.WriteAllText(_marker, "arbitrary-unknown-content");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.DeleteAllRules();
+
+        // Marker must be retained, no broad restore (/etc/pf.conf), and no token release
+        Assert.True(File.Exists(_marker));
+        Assert.Equal("arbitrary-unknown-content", File.ReadAllText(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_WhenMarkerUnreadable_RetainsMarker_AndDoesNotBroadRestore()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        using (new FileStream(_marker, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            sut.CleanupOrphanedRules(null);
+        }
+
+        Assert.True(File.Exists(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void DeleteAllRules_NewInstance_WhenMarkerUnreadable_RetainsMarker_AndDoesNotBroadRestore()
+    {
+        File.WriteAllText(_marker, "engaged");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        using (new FileStream(_marker, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            sut.DeleteAllRules();
+        }
+
+        Assert.True(File.Exists(_marker));
+        Assert.Empty(fake.RunCalls);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_StaleFileOrNoFile_EmitsOnlyCommittedPeersV4V6()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.10" }
+          ],
+          "endpoints": [
+            {
+              "type": "wireguard",
+              "peers": [
+                { "address": "2001:db8::10" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        ((ICommittedFirewallConfig)sut).UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        Assert.True(sut.IsArmed);
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.FirstOrDefault(IsAnchorLoad);
+        Assert.NotNull(load);
+        var rules = File.ReadAllText(load!.Arguments.Last());
+
+        Assert.Contains("pass out quick inet from any to 203.0.113.10", rules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::10", rules);
+        Assert.DoesNotContain("198.51.100.1", rules);
+
+        Assert.Equal(new[] { "203.0.113.10", "2001:db8::10" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_NoConfigFileAtAll_EmitsOnlyCommittedPeers()
+    {
+        if (File.Exists(_cfg)) File.Delete(_cfg);
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.11" }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.FirstOrDefault(IsAnchorLoad);
+        Assert.NotNull(load);
+        var rules = File.ReadAllText(load!.Arguments.Last());
+
+        Assert.Contains("203.0.113.11", rules);
+        Assert.Equal(new[] { "203.0.113.11" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_ActiveAnchorMode_RefreshesAnchorWithB_WithoutCarrierOrEnableOrFlushUnblock()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsAnchorMode);
+
+        int callsBefore = fake.RunCalls.Count;
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.20" }
+          ],
+          "endpoints": [
+            {
+              "type": "wireguard",
+              "peers": [
+                { "address": "2001:db8::20" }
+              ]
+            }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        // MUST NOT call EnsureCarrier (pfctl -sr), pfctl -E, pfctl -F rules, or DisableBlockRules
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-sr"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-E"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-F"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-X"));
+
+        // Exactly one anchor reload call: pfctl -a Anchor -f <rulesPath>
+        var refreshCall = Assert.Single(fake.RunCalls.Skip(callsBefore), IsAnchorLoad);
+
+        var refreshedRules = File.ReadAllText(refreshCall.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 203.0.113.20", refreshedRules);
+        Assert.Contains("pass out quick inet6 from any to 2001:db8::20", refreshedRules);
+        Assert.DoesNotContain("198.51.100.1", refreshedRules);
+
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsAnchorMode);
+        Assert.Equal(new[] { "203.0.113.20", "2001:db8::20" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_ActiveLegacyMode_RefreshesMainRuleset_WithoutCarrierOrEnable()
+    {
+        WriteConfig("198.51.100.1");
+        // Make /etc/pf.conf missing so EnsureCarrier fails and it falls back to legacy broad load
+        if (File.Exists(_pfconf)) File.Delete(_pfconf);
+
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.False(sut.IsAnchorMode);
+
+        int callsBefore = fake.RunCalls.Count;
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.30" }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-a"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("-E"));
+
+        var refreshCall = Assert.Single(fake.RunCalls.Skip(callsBefore), IsMainLoad);
+
+        var refreshedRules = File.ReadAllText(refreshCall.Arguments.Last());
+        Assert.Contains("pass out quick inet from any to 203.0.113.30", refreshedRules);
+        Assert.DoesNotContain("198.51.100.1", refreshedRules);
+
+        Assert.True(sut.IsLoaded);
+        Assert.False(sut.IsAnchorMode);
+        Assert.Equal(new[] { "203.0.113.30" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_FailedRefresh_RetainsAForRetry()
+    {
+        WriteConfig("198.51.100.1");
+        var failRefresh = false;
+        var injections = 0;
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-E"),
+            Ok(stderr: "Token : 12345678"));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-sr"),
+            Ok(stdout: "anchor \"com.apple/*\" all\nanchor \"" + Anchor + "\" all\n"));
+        fake.OnRun(
+            r => failRefresh && r.ExecutablePath == "/usr/bin/sudo" && IsAnchorLoad(r),
+            _ =>
+            {
+                injections++;
+                return Task.FromResult(Fail("pfctl error"));
+            });
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsAnchorMode);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+        Assert.True(File.Exists(_marker));
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.99" }
+          ]
+        }
+        """;
+
+        failRefresh = true;
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        // Failed refresh keeps old cache/loaded/marker and proves fail executed
+        Assert.Equal(1, injections);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+        Assert.True(sut.IsLoaded);
+        Assert.True(File.Exists(_marker));
+
+        int callsBeforeRetry = fake.RunCalls.Count;
+        failRefresh = false;
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
+
+        // Retry succeeds: cacheB updated, one reload, no unblock/flush/token release, marker stays
+        Assert.Equal(1, injections);
+        Assert.Equal(new[] { "203.0.113.99" }, sut.ServerIps);
+        Assert.True(sut.IsLoaded);
+        Assert.True(File.Exists(_marker));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBeforeRetry), c => c.Arguments.Contains("-F"));
+        Assert.DoesNotContain(fake.RunCalls.Skip(callsBeforeRetry), c => c.Arguments.Contains("-X"));
+        Assert.Single(fake.RunCalls.Skip(callsBeforeRetry), IsAnchorLoad);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_MalformedJson_RetainsPriorList()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        // Malformed committed JSON
+        sut.UpdateCommittedConfig("{ invalid json content", enabledForFullTunnel: true);
+
+        // Retains prior list, does not turn parse exception into empty cache
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_Disabled_LiftsRulesAndDisarms()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsArmed);
+
+        int callsBefore = fake.RunCalls.Count;
+
+        var committedJsonB = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "203.0.113.50" }
+          ]
+        }
+        """;
+
+        sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: false);
+
+        // Disabled mode disarms, flushes anchor, deletes marker, retains prior unused cache
+        Assert.False(sut.IsArmed);
+        Assert.False(sut.IsLoaded);
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), IsAnchorFlush);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_MalformedJson_Disabled_RemovesRuleAndDisarms()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsArmed);
+
+        int callsBefore = fake.RunCalls.Count;
+
+        // Malformed JSON with disabled branch must still lift rules and disarm without throwing
+        sut.UpdateCommittedConfig("{ not valid json content", enabledForFullTunnel: false);
+
+        Assert.False(sut.IsArmed);
+        Assert.False(sut.IsLoaded);
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), IsAnchorFlush);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_Disabled_HostnameResolverThrows_InvokesZeroResolverAndDisarms()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake, hostResolver: _ => throw new InvalidOperationException("Hostname resolver must not be invoked when disabled"));
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        Assert.True(sut.IsArmed);
+
+        int callsBefore = fake.RunCalls.Count;
+
+        var committedJsonWithHost = """
+        {
+          "outbounds": [
+            { "type": "vless", "tag": "proxy", "server": "dns-lookup-will-throw.example.com" }
+          ]
+        }
+        """;
+
+        // Must not throw, zero DNS queries invoked when disabled
+        sut.UpdateCommittedConfig(committedJsonWithHost, enabledForFullTunnel: false);
+
+        Assert.False(sut.IsArmed);
+        Assert.False(sut.IsLoaded);
+        Assert.False(File.Exists(_marker));
+        Assert.Contains(fake.RunCalls.Skip(callsBefore), IsAnchorFlush);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("\"string\"")]
+    [InlineData("123")]
+    public void ParseServerIps_NonObjectRoot_ThrowsJsonException(string malformedRoot)
+    {
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        Assert.Throws<JsonException>(() => sut.ParseServerIps(malformedRoot));
+    }
+
+    [Fact]
+    public void ParseServerIps_EmptyObject_ReturnsEmptyList()
+    {
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        var ips = sut.ParseServerIps("{}");
+        Assert.Empty(ips);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void UpdateCommittedConfig_MalformedRootShape_RetainsPriorList(string malformedRoot)
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        sut.UpdateCommittedConfig(malformedRoot, enabledForFullTunnel: true);
+
+        // Retains prior list on non-object root shape
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+    }
+
+    [Fact]
+    public void UpdateCommittedConfig_EmptyObject_EmptiesList()
+    {
+        WriteConfig("198.51.100.1");
+        var fake = OkRunner();
+        var sut = Sut(fake);
+
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
+        Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
+
+        // Empty JSON object is valid committed config, clears server IPs without leak policy regression
+        sut.UpdateCommittedConfig("{}", enabledForFullTunnel: true);
+
+        Assert.Empty(sut.ServerIps);
     }
 }

@@ -258,7 +258,8 @@ public partial class MainWindowViewModel
                     {
                         new TextBlock
                         {
-                            Text = "⚠ " + Strings.FcSecWarnHeader,
+                            [Controls.PictogramText.IconsProperty] = "warning",
+                            [Controls.PictogramText.TextProperty] = "\u26a0 " + Strings.FcSecWarnHeader,
                             FontSize = 15,
                             FontWeight = FontWeight.Bold,
                             Foreground = Tok("WarningFgBrush", Avalonia.Media.Brushes.DarkOrange),
@@ -279,7 +280,8 @@ public partial class MainWindowViewModel
                             CornerRadius = new CornerRadius(4),
                             Child = new TextBlock
                             {
-                                Text = Strings.FcSecWarnDontUseList,
+                                [Controls.PictogramText.IconsProperty] = "error",
+                                [Controls.PictogramText.TextProperty] = Strings.FcSecWarnDontUseList,
                                 FontSize = 11,
                                 TextWrapping = TextWrapping.Wrap,
                                 Foreground = Tok("WarningFgBrush", Avalonia.Media.Brushes.SaddleBrown),
@@ -294,7 +296,8 @@ public partial class MainWindowViewModel
                             CornerRadius = new CornerRadius(4),
                             Child = new TextBlock
                             {
-                                Text = Strings.FcSecWarnGoodFor,
+                                [Controls.PictogramText.IconsProperty] = "check",
+                                [Controls.PictogramText.TextProperty] = Strings.FcSecWarnGoodFor,
                                 FontSize = 11,
                                 TextWrapping = TextWrapping.Wrap,
                                 Foreground = Tok("SuccessFgBrush", Avalonia.Media.Brushes.DarkGreen),

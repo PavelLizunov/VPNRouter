@@ -121,9 +121,6 @@ public static class DiagnosticsExporter
             if (File.Exists(singBoxOld))
                 AddLogTail(staging, singBoxOld, "singbox-old-tail.log", entries, warnings);
 
-            // emergency channel log, if present
-            AddLogTail(staging, AppPaths.WgturnCliLogPath, "wgturn-cli-tail.log", entries, warnings);
-
             // DNS-tunnel (slipstream) transport log, if present — carries the
             // QUIC-over-DNS connection lifecycle (idle-timeout 0x433, resolver-
             // unavailable, reconnect backoff) needed to root-cause a dropped

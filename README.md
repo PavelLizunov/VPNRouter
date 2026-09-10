@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">
-    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?include_prereleases&color=7C3AED" alt="Latest release"/>
+    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?color=7C3AED" alt="Latest release"/>
   </a>
   <a href="https://github.com/PavelLizunov/VPNRouter/releases">
     <img src="https://img.shields.io/github/downloads/PavelLizunov/VPNRouter/total?color=22C55E" alt="Downloads"/>
@@ -21,13 +21,11 @@
   </a>
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4" alt=".NET 10"/>
   <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Platform"/>
-  <img src="https://img.shields.io/badge/C%23_LOC-159k-blue" alt="159k C# LOC"/>
-  <img src="https://img.shields.io/badge/tests-2.7k%2B-success" alt="2,700+ tests"/>
 </p>
 
 ---
 
-## Install (one-liner, all three platforms)
+## Install
 
 <table>
 <tr>
@@ -67,7 +65,7 @@ Windows 10/11 x64. Auto-elevates via UAC. Registers Start Menu + Add/Remove Prog
 ```
 Download VPNRouter-v{version}-android-arm64.apk from Releases
 ```
-Android 6.0+ (API 23). Side-load via APK (no Play Store yet). Live-preview QR scanner, magic 1-step subscription paste, F-Droid-style permissions (only `CAMERA` + `INTERNET` + `VPN_SERVICE`). Self-update via in-app banner.
+Android 6.0+ (API 23), ARM64. Install the APK outside the Play Store. Supports QR scanning, subscription paste and an in-app update prompt. Permissions cover VPN operation, network state, notifications, app enumeration, APK installation, camera and power management; see the [Android manifest](VPNRouter.Android/AndroidManifest.xml).
 </td>
 </tr>
 </table>
@@ -78,14 +76,14 @@ Prefer manual install? See [**Manual download**](#manual-download) below for ZIP
 
 ## What it does
 
-Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](https://github.com/SagerNet/sing-box) TUN mode); everything else goes direct to your ISP. Not a full-tunnel VPN — it's a per-process router. Discord goes through the proxy, your bank site stays direct. No manual proxy settings per app.
+Routes application traffic through a proxy using [sing-box](https://github.com/SagerNet/sing-box) TUN mode. In the default split/include mode, selected applications use the proxy and the remaining traffic uses the direct route, subject to configured rules. Split/exclude mode keeps selected applications direct; full-tunnel mode routes traffic through the proxy apart from configured exceptions. Applications do not need individual proxy settings.
 
 ### Cross-platform core
 
-- **Split-tunnel routing** — pick the apps from a live process list; they go through your proxy, everything else stays direct.
+- **Split-tunnel routing** — choose applications from the process list and select whether to include them in the proxy route or exclude them from it.
 - **VLESS+Reality + custom configs** — use the built-in VLESS setup or bring your own sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing is injected either way.
-- **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool. Capability-aware providers can publish a VLESS target that must dial through a paired entry server; missing chain metadata or entry availability fails closed with no direct target fallback.
-- **Encrypted DNS defaults** — DNS for VPN-routed apps and geo/censorship rules is detoured through the encrypted proxy/tunnel; direct and smart public lookups use Cloudflare DoH. VPNRouter assigns no country-specific DNS provider and does not replace explicitly configured custom resolvers; if bootstrap DNS is missing, it synthesizes literal-IP Cloudflare DoH. Only configured LAN suffixes may use the OS resolver.
+- **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool. Desktop add commands accept only absolute HTTP(S) URLs for subscriptions and user-provided free-config sources; private and loopback HTTP(S) addresses remain allowed. Capability-aware providers can publish a VLESS target that must dial through a paired entry server; missing chain metadata or entry availability fails closed with no direct target fallback.
+- **DNS configuration** — generated DNS routes depend on routing mode, strict-DNS settings and custom rules. The built-in direct DoH resolver and synthesized fallback use Google `8.8.8.8`; configured LAN suffixes can use the OS resolver. Custom configurations pass through DNS/routing injection and validation, so inspect the generated configuration rather than assuming all original DNS settings remain unchanged.
 - **Server testing** — one-click TCP+TLS probe on any server. Deep verification (real HTTP round-trip + 5 MB bandwidth) for your own servers and subscription pools.
 - **Setup and diagnostics wizard (desktop)** — checks configuration, TUN, DNS and reachability, can reset MTU to the safe default `1420`, preserves the chosen routing mode, and offers undo plus redacted diagnostics export. Safe Mode remains a separate temporary start.
 - **Safe rollback** — the desktop app shows up to three previous stable versions only when their `.sha256` companion is available, verifies the selected archive before installing, and asks for explicit confirmation. Before a downgrade it saves a copy of `config.yaml`.
@@ -106,7 +104,7 @@ These are thin wrappers around upstream projects — they aren't part of the cor
 
 ### Bonus: Free Configs tab
 
-A public VLESS aggregator — ~25 000 configs from 14 open sources, pre-validated (TCP+TLS + GeoIP) server-side every 6 hours. Handy to try the app without your own VPN server; not a substitute for a paid or self-hosted endpoint.
+The Free Configs tab collects public VLESS endpoints. A scheduled server-side job runs every six hours; pool size, availability and validation results vary. Public endpoints are operated by third parties: a successful connectivity test does not establish operator trust.
 
 ## Feature matrix
 
@@ -143,7 +141,7 @@ regression checks, so they stay free of real credentials.
 
 ## Manual download
 
-For the one-liner install on all three platforms, see the [**Install**](#install-one-liner-all-three-platforms) section above. Prefer to install by hand? Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
+For desktop installation commands and Android APK instructions, see [Install](#install). Download the latest stable build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest); rolling candidates are listed under [all releases](https://github.com/PavelLizunov/VPNRouter/releases).
 
 | File | Platform | What it is |
 |---|---|---|
@@ -156,13 +154,13 @@ For the one-liner install on all three platforms, see the [**Install**](#install
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
-| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Verify with `sha256sum -c <file>.sha256` on Linux or `Get-FileHash <file>` on Windows. |
+| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
 
-Also served automatically every 6 hours:
+The scheduled pool job publishes this separate artifact when it succeeds:
 
 | File | What it is |
 |---|---|
-| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Aggregated ~25 000 public VLESS configs + GeoIP metadata. Consumed by the in-app Free Configs tab. |
+| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Public VLESS configurations and GeoIP metadata; pool size varies. Consumed by the in-app Free Configs tab. |
 
 Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time. On Linux, the `.deb` applies `setcap cap_net_admin,cap_net_bind_service` to the bundled sing-box so TUN comes up without root or a password (no systemd service is installed); an unsandboxed read-only `AppImage` falls back to a host `pkexec` password prompt. AppImages wrapped in bubblewrap or a user namespace (including NixOS `appimageTools.wrapType2`) cannot acquire permission to create the host TUN interface even when `getcap` shows the file capability. Use a native distro package outside that sandbox.
 
@@ -176,6 +174,8 @@ Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + 
 - A VLESS+Reality server, or use the Free Configs tab for a public one
 
 ## Build from source
+
+Install the .NET SDK specified by [`global.json`](global.json) (10.0.301, with patch roll-forward). The solution's default build excludes the Android app. Android packaging also requires the Android workload, SDK, JDK and local native libraries; see [Android build instructions](VPNRouter.Android/AGENTS.md).
 
 ```bash
 git clone https://github.com/PavelLizunov/VPNRouter.git
@@ -201,19 +201,19 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.3"
 # locally: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz), and the signed **Android ARM64 APK** are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). The **Windows** ZIPs are produced locally by `build.ps1 -Upload` and attached to the same release. See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
+**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz), and the signed **Android ARM64 APK** are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). Release uploads require an existing draft and an exact tag/SHA; manual builds must use `--ref vVERSION`. The **Windows** unsigned path `build.ps1 -Upload` only stages files on that draft and refuses configured or incomplete SignPath enrollment. When signing is configured, use `Sign Windows (SignPath)`. Publication is a separate maintainer action after the build/test and exact 16-asset integrity gates; candidates remain prereleases, not Latest. See the [release procedure](.dsh/skills/ship-rolling-candidate/SKILL.md). See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
 
 ## Architecture
 
 ```
-VPNRouter.sln (~159k LOC C# across 616 files in 7 projects)
-├── VPNRouter.Core                  — 54k LOC · 189 files — services, models, interfaces (cross-platform, zero UI deps)
-├── VPNRouter.App                   — 21k LOC · 59 files  — Avalonia desktop UI
-├── VPNRouter.Android               — 22k LOC · 37 files  — Mono.Android + Avalonia.Android
-├── VPNRouter.CLI                   —  1k LOC · 13 files  — Spectre.Console TUI
-├── VPNRouter.Service               —  1k LOC · 3 files  — Windows BackgroundService wrapper
-├── VPNRouter.Tools/PoolAggregator  — <1k LOC · 1 file — CI tool building the Free Configs pool.json
-└── VPNRouter.Tests                 — 60k LOC · 314 files — 2,700+ xUnit tests + headless Avalonia
+VPNRouter.sln
+├── VPNRouter.Core                  — services, models and platform adapters
+├── VPNRouter.App                   — Avalonia desktop UI
+├── VPNRouter.Android               — Android app (built separately)
+├── VPNRouter.CLI                   — command-line tools
+├── VPNRouter.Service               — Windows service
+├── VPNRouter.Tools/PoolAggregator  — Free Configs pool generator
+└── VPNRouter.Tests                 — xUnit and headless Avalonia tests
 ```
 
 ### Layering
@@ -227,7 +227,7 @@ VPNRouter.sln (~159k LOC C# across 616 files in 7 projects)
 - **Bilingual UI** — all strings live in `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android use pass-through wrappers; never duplicate keys.
 - **Async hygiene** — zero `async void` in Core; UI handlers use the standard `async void EventHandler` pattern; no `.Result` blocking calls outside `VpnEngine.cs:461` (tracked for refactor).
 - **Cross-cutting**: every service takes `ILogger?` (Serilog) for diagnostic-grade tracing into `vpnrouter*.log`.
-- **No telemetry**. No analytics, no error reporter, no ping-home. UpdateChecker only reads public GitHub Releases API.
+- **Diagnostics** — local logs and crash reports support troubleshooting; see [Privacy & trust](#privacy--trust) before sharing them.
 
 ### Key services
 
@@ -248,15 +248,16 @@ historical v3.0 modernization baseline and its follow-up work.
 3. Start sing-box in TUN mode (creates a virtual adapter)
 4. Windows routes all traffic through the adapter; sing-box then splits based on process name matching
 5. ETW watches for new processes starting → hot-reload the config via Clash API (no reconnect)
-6. On crash — firewall rules block listed processes until sing-box is back (leak protection)
+6. On failure, enabled firewall protection depends on platform, routing mode and privileges. Linux/macOS kill switches support full-tunnel mode only and remain disarmed in split mode; do not rely on per-process crash blocking there.
 
 ## Privacy & trust
 
 This is a VPN client — you should verify the code before trusting it.
 
-- **No telemetry.** No analytics, no pings home, no bug reporter. Auto-updater only reads public GitHub Releases API.
-- **No credential leaks.** Credentials (UUIDs, Reality keys) live in `%ProgramData%\VPNRouter\config.yaml` on disk, never sent anywhere except the sing-box process locally.
-- **Reproducible.** Build from source with the commands above. Compare the binary hash with your own build to verify.
+- **Local diagnostics.** Crash reports are written to the app data directory, with best-effort redaction of recognized secret formats before writing. The crash reporter does not upload them automatically. Review any diagnostics before sharing them.
+- **Network access.** Updates, subscriptions, public configuration sources and connectivity checks contact their configured services. The selected proxy server handles routed traffic; choose a provider you trust.
+- **Credentials.** Settings and generated sing-box configuration contain connection credentials. Protect the app data directory and do not publish configuration files or raw logs.
+- **Artifact verification.** SHA256 sidecars check that downloads match the supplied hashes; they do not independently authenticate the publisher. Building from source is supported, but byte-for-byte reproduction of release binaries is not established.
 - **Open license.** GPL-3.0 — any fork that distributes a binary must also publish its source.
 
 Found a security issue? Please report it **privately** — see [`SECURITY.md`](SECURITY.md). Don't open a public issue for security problems.

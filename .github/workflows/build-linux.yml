@@ -27,8 +27,53 @@ jobs:
     runs-on: ubuntu-22.04  # pin to 22.04 for glibc compatibility with older distros
 
     steps:
+      - name: Validate requested version and dispatch ref
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-r[1-9][0-9]*)?$ ]]; then
+            echo "::error::Expected X.Y.Z or X.Y.Z-rN (N >= 1)."
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if [ "$GITHUB_REF" != "refs/tags/$TAG" ]; then
+            echo "::error::Run workflow_dispatch with --ref $TAG; branch refs and mismatched tags are forbidden."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify requested tag and full AppVersion
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "refs/tags/$TAG"
+          TAG_SHA=$(git rev-parse 'FETCH_HEAD^{commit}')
+          if [ "$TAG_SHA" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Requested tag does not point to the exact workflow commit."
+            exit 1
+          fi
+          APPVER=$(sed -nE 's/^[[:space:]]*public static readonly string Version = "([^"]+)";.*/\1/p' VPNRouter.Core/AppVersion.cs)
+          if [ "$APPVER" != "$VERSION" ]; then
+            echo "::error::AppVersion/tag mismatch; full version including -rN must match."
+            exit 1
+          fi
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
@@ -45,18 +90,6 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: |
             nuget-${{ runner.os }}-
-
-      - name: Resolve version from tag or input
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="${{ inputs.version }}"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building version: $VERSION"
 
       # ── .NET publish ────────────────────────────────────────────────────
       # Self-contained so end users don't need dotnet installed.
@@ -313,9 +346,16 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           VER="${{ steps.version.outputs.version }}"
 
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::warning::Release $TAG does not exist yet — skipping upload. Create the release first, then re-run this workflow."
-            exit 0
+          # Re-resolve the remote tag after the build; never upload stale provenance.
+          git fetch --no-tags origin "refs/tags/$TAG"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$GITHUB_SHA" ]; then
+            echo "::error::Remote tag changed since this workflow started."
+            exit 1
+          fi
+          IS_DRAFT=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
+          if [ "$IS_DRAFT" != "true" ]; then
+            echo "::error::Release must already exist and remain a draft; refusing upload."
+            exit 1
           fi
 
           echo "Uploading to release $TAG..."
@@ -326,5 +366,5 @@ jobs:
             "VPNRouter-v${VER}-linux-amd64.deb.sha256" \
             "VPNRouter-v${VER}-linux.tar.gz" \
             "VPNRouter-v${VER}-linux.tar.gz.sha256" \
-            --repo "$GITHUB_REPOSITORY" --clobber
+            --repo "$GITHUB_REPOSITORY"
           echo "✓ Uploaded AppImage + .deb + tar.gz to $TAG"

@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">
-    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?include_prereleases&color=7C3AED" alt="Последний релиз"/>
+    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?color=7C3AED" alt="Последний релиз"/>
   </a>
   <a href="https://github.com/PavelLizunov/VPNRouter/releases">
     <img src="https://img.shields.io/github/downloads/PavelLizunov/VPNRouter/total?color=22C55E" alt="Загрузки"/>
@@ -21,13 +21,11 @@
   </a>
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4" alt=".NET 10"/>
   <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Платформы"/>
-  <img src="https://img.shields.io/badge/C%23_LOC-159k-blue" alt="159k строк C#"/>
-  <img src="https://img.shields.io/badge/тестов-2.7k%2B-success" alt="2 700+ тестов"/>
 </p>
 
 ---
 
-## Установка (one-liner на всех трёх платформах)
+## Установка
 
 <table>
 <tr>
@@ -67,7 +65,7 @@ Windows 10/11 x64. Авто-поднимается через UAC. Регист�
 ```
 Скачайте VPNRouter-v{version}-android-arm64.apk со страницы Releases
 ```
-Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Live-preview QR сканер, magic 1-step paste подписки, минимум permissions (`CAMERA` + `INTERNET` + `VPN_SERVICE`). Авто-обновление через in-app banner.
+Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Поддерживаются сканирование QR, вставка подписки и предложение обновления в приложении. Разрешения нужны для VPN, состояния сети, уведомлений, списка приложений, установки APK, камеры и управления питанием; полный список — в [Android manifest](VPNRouter.Android/AndroidManifest.xml).
 </td>
 </tr>
 </table>
@@ -78,14 +76,14 @@ Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Li
 
 ## Что делает
 
-Направляет трафик **выбранных приложений** через VLESS+Reality прокси (через [sing-box](https://github.com/SagerNet/sing-box) в TUN-режиме); всё остальное идёт напрямую к провайдеру. Это не full-tunnel VPN — это per-process роутер. Discord идёт через прокси, сайт банка остаётся напрямую. Никаких ручных proxy-настроек в каждом приложении.
+Направляет трафик приложений через прокси с помощью [sing-box](https://github.com/SagerNet/sing-box) в TUN-режиме. В стандартном режиме split/include выбранные приложения используют прокси, остальной трафик идёт напрямую с учётом настроенных правил. В split/exclude выбранные приложения остаются на прямом маршруте; full-tunnel направляет трафик через прокси, кроме настроенных исключений. Задавать прокси отдельно в каждом приложении не требуется.
 
 ### Кроссплатформенная основа
 
-- **Split-tunnel маршрутизация** — выберите приложения из живого списка процессов; они пойдут через ваш прокси, всё остальное останется напрямую.
+- **Split-tunnel маршрутизация** — выберите приложения из списка процессов и укажите, включить их в прокси-маршрут или исключить из него.
 - **VLESS+Reality + кастомные конфиги** — используйте встроенную VLESS-настройку или принесите свой sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing подмешивается в любом случае.
-- **Подписки** — вставьте один или несколько subscription URL, серверы обновляются в единый пул автоматически. Capability-aware провайдеры могут публиковать VLESS-цель, которая подключается только через связанный входной сервер; отсутствие метаданных цепочки или входного сервера завершается fail-closed без прямого подключения к цели.
-- **Шифрованный DNS по умолчанию** — DNS выбранных приложений и geo/censorship-правил идёт через зашифрованный прокси/туннель; прямые и smart-запросы к публичному DNS используют Cloudflare DoH. VPNRouter не назначает DNS-провайдеров отдельных стран и не заменяет явно заданные resolver-ы custom-конфига; если bootstrap DNS отсутствует, он добавляет Cloudflare DoH с literal IP. Только явно настроенные LAN-суффиксы могут использовать системный resolver.
+- **Подписки** — вставьте один или несколько subscription URL, серверы обновляются в единый пул автоматически. Desktop-команды добавления подписок и пользовательских источников бесплатных конфигураций принимают только абсолютные HTTP(S) URL; частные и loopback-адреса HTTP(S) остаются разрешены. Capability-aware провайдеры могут публиковать VLESS-цель, которая подключается только через связанный входной сервер; отсутствие метаданных цепочки или входного сервера завершается fail-closed без прямого подключения к цели.
+- **Настройка DNS** — сгенерированные DNS-маршруты зависят от режима маршрутизации, strict-DNS и пользовательских правил. Встроенный прямой DoH-resolver и добавляемый fallback используют Google `8.8.8.8`; настроенные LAN-суффиксы могут использовать системный resolver. Пользовательские конфигурации проходят подстановку DNS/маршрутов и валидацию: проверяйте сгенерированный конфиг, не предполагая, что все исходные DNS-настройки сохраняются без изменений.
 - **Тестирование серверов** — в один клик TCP+TLS-проба любого сервера. Deep verification (реальный HTTP round-trip + 5 МБ bandwidth) для ваших серверов и пулов подписок.
 - **Мастер настройки и диагностики (desktop)** — проверяет конфигурацию, TUN, DNS и доступность сети, умеет сбросить MTU к безопасному значению `1420`, сохраняет выбранный режим маршрутизации и предлагает отмену плюс экспорт обезличенной диагностики. Безопасный режим остаётся отдельным временным запуском.
 - **Безопасный откат** — desktop-приложение показывает до трёх предыдущих стабильных версий только при наличии `.sha256`-файла, проверяет выбранный архив перед установкой и требует отдельного подтверждения. Перед понижением версии сохраняется копия `config.yaml`.
@@ -126,7 +124,7 @@ Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Li
 
 ### Бонус: вкладка Free Configs
 
-Агрегатор публичных VLESS-конфигов — ~25 000 из 14 открытых источников, предварительно провалидированных (TCP+TLS + GeoIP) на сервере раз в 6 часов. Удобно попробовать приложение без своего VPN-сервера; не замена оплачиваемому или self-hosted endpoint'у.
+Вкладка Free Configs собирает публичные VLESS-серверы. Серверное задание запускается по расписанию раз в шесть часов; размер пула, доступность и результаты проверки меняются. Серверы принадлежат третьим лицам: успешная проверка соединения не подтверждает надёжность оператора.
 
 ## Скриншоты
 
@@ -143,7 +141,7 @@ Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Li
 
 ## Ручная установка
 
-One-liner'ы для всех трёх платформ — см. секцию [**Установка**](#установка-one-liner-на-всех-трёх-платформах) выше. Хочется поставить руками? Забирайте последний билд из [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
+Команды установки desktop-версий и инструкции для Android APK приведены в разделе [Установка](#установка). Последняя стабильная сборка доступна в [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest), rolling-кандидаты — в [общем списке релизов](https://github.com/PavelLizunov/VPNRouter/releases).
 
 | Файл | Платформа | Что это |
 |---|---|---|
@@ -156,13 +154,13 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Сырой tarball (для ручной установки или упаковки в другие форматы) |
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Подписанный ARM64 APK, API 23+. Собирается и подписывается в `build-android.yml` для каждого release-тега, затем публикуется в Releases и на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). In-app апдейтер доставляет будущие APK. |
-| `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Ручная проверка: `sha256sum -c <file>.sha256` на Linux или `Get-FileHash <file>` на Windows. |
+| `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Сравните результат `sha256sum <file>` на Linux, `shasum -a 256 <file>` на macOS или `Get-FileHash -Algorithm SHA256 <file>` на Windows с 64-символьным хешем из сайдкара. Часть сайдкаров содержит только хеш и не подходит для прямого вызова `sha256sum -c`. |
 
-Также обновляется автоматически каждые 6 часов:
+При успешном выполнении серверное задание публикует отдельный артефакт:
 
 | Файл | Что это |
 |---|---|
-| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Агрегированные ~25 000 публичных VLESS-конфигов + GeoIP-метаданные. Потребляется вкладкой Free Configs. |
+| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Публичные VLESS-конфигурации и GeoIP-метаданные; размер пула меняется. Потребляется вкладкой Free Configs. |
 
 Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); AppImage без песочницы использует системный `pkexec` с запросом пароля. AppImage, обёрнутый в bubblewrap или user namespace (включая NixOS `appimageTools.wrapType2`), не может получить право создать системный TUN-интерфейс, даже если `getcap` показывает capability файла. Используйте нативный пакет дистрибутива вне этой песочницы.
 
@@ -176,6 +174,8 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 - Сервер VLESS+Reality, или используйте вкладку Free Configs с публичными серверами
 
 ## Сборка из исходников
+
+Установите .NET SDK из [`global.json`](global.json) (10.0.301, с разрешённым переходом на новые патчи). Стандартная сборка solution не собирает Android-приложение. Для Android также нужны workload, Android SDK, JDK и локальные нативные библиотеки; см. [инструкцию сборки Android](VPNRouter.Android/AGENTS.md).
 
 ```bash
 git clone https://github.com/PavelLizunov/VPNRouter.git
@@ -201,19 +201,19 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.3"
 # локально: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz) и подписанный **Android ARM64 APK** собираются автоматически через GitHub Actions на каждый `v*` push тега — см. `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT-репозиторий), `.github/workflows/build-free-pool.yml` (обновляющийся Free Configs пул). **Windows** ZIP'ы собираются локально через `build.ps1 -Upload` и прикладываются к тому же релизу. Актуальная матрица сборки/платформ — [`CURRENT_STATE.md`](CURRENT_STATE.md).
+**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz) и подписанный **Android ARM64 APK** собираются автоматически через GitHub Actions на каждый `v*` push тега — см. `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT-репозиторий), `.github/workflows/build-free-pool.yml` (обновляющийся Free Configs пул). Загрузка релизных файлов требует существующего draft и точного соответствия тега/SHA; ручные сборки запускаются с `--ref vVERSION`. **Windows**-команда `build.ps1 -Upload` только загружает неподписанные файлы в draft и отказывается работать при полной или частичной настройке SignPath. При настроенной подписи используется `Sign Windows (SignPath)`. Публикация — отдельное действие владельца после сборки, тестов и проверки ровно 16 файлов; кандидаты остаются prerelease, а не Latest. См. [процедуру выпуска](.dsh/skills/ship-rolling-candidate/SKILL.md). Актуальная матрица сборки/платформ — [`CURRENT_STATE.md`](CURRENT_STATE.md).
 
 ## Архитектура
 
 ```
-VPNRouter.sln (~159k LOC C# в 616 файлах / 7 проектах)
-├── VPNRouter.Core                  — 54k LOC · 189 файлов — сервисы, модели, интерфейсы (zero UI deps)
-├── VPNRouter.App                   — 21k LOC · 59 файлов  — Avalonia desktop UI
-├── VPNRouter.Android               — 22k LOC · 37 файлов  — Mono.Android + Avalonia.Android
-├── VPNRouter.CLI                   —  1k LOC · 13 файлов  — Spectre.Console TUI
-├── VPNRouter.Service               —  1k LOC · 3 файла   — Windows BackgroundService wrapper
-├── VPNRouter.Tools/PoolAggregator  — <1k LOC · 1 файл — CI-утилита, собирающая Free Configs pool.json
-└── VPNRouter.Tests                 — 60k LOC · 314 файлов — 2 700+ xUnit тестов + headless Avalonia
+VPNRouter.sln
+├── VPNRouter.Core                  — сервисы, модели и платформенные адаптеры
+├── VPNRouter.App                   — desktop-интерфейс Avalonia
+├── VPNRouter.Android               — Android-приложение (собирается отдельно)
+├── VPNRouter.CLI                   — инструменты командной строки
+├── VPNRouter.Service               — служба Windows
+├── VPNRouter.Tools/PoolAggregator  — генератор пула Free Configs
+└── VPNRouter.Tests                 — xUnit и headless-тесты Avalonia
 ```
 
 ### Layering
@@ -227,7 +227,7 @@ VPNRouter.sln (~159k LOC C# в 616 файлах / 7 проектах)
 - **Bilingual UI** — все строки в `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android — pass-through wrapper'ы, никаких дублей.
 - **Async hygiene** — 0 `async void` в Core; UI-handler'ы стандартным `async void EventHandler` pattern; нет `.Result` blocking calls кроме `VpnEngine.cs:461` (на refactor).
 - **Cross-cutting**: каждый сервис принимает `ILogger?` (Serilog) для diagnostic-trace в `vpnrouter*.log`.
-- **Нет телеметрии**. Никакой аналитики, error reporter'ов, ping-home. UpdateChecker читает только публичный GitHub Releases API.
+- **Диагностика** — локальные логи и отчёты о сбоях помогают разбирать ошибки; перед их передачей см. [Приватность и доверие](#приватность-и-доверие).
 
 ### Ключевые сервисы
 
@@ -248,15 +248,16 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 3. Запускаем sing-box в TUN-режиме (создаётся виртуальный адаптер)
 4. ОС направляет весь трафик через адаптер; sing-box разделяет на основе совпадения имени процесса
 5. ETW следит за новыми процессами → hot-reload конфига через Clash API (без реконнекта)
-6. При crash — firewall-правила блокируют перечисленные процессы пока sing-box не вернётся (leak protection)
+6. При сбое действие включённой firewall-защиты зависит от платформы, режима маршрутизации и прав. В Linux/macOS kill-switch поддерживает только full-tunnel и остаётся отключённым в split-режиме; рассчитывать на блокировку отдельных процессов при сбое там нельзя.
 
 ## Приватность и доверие
 
 Это VPN-клиент — перед доверием следует проверить код.
 
-- **Никакой телеметрии.** Ни аналитики, ни пингов домой, ни автоотчётов о багах. Автоапдейтер только читает публичное GitHub Releases API.
-- **Никаких утечек credentials.** Credentials (UUID, Reality ключи) живут в `%ProgramData%\VPNRouter\config.yaml` на диске, никуда не отправляются кроме локального sing-box процесса.
-- **Воспроизводимо.** Собирайте из исходников командами выше. Сравните хеш бинарника с вашим билдом для проверки.
+- **Локальная диагностика.** Отчёты о сбоях записываются в каталог данных приложения с попыткой скрыть распознаваемые форматы секретов перед записью. Crash reporter не отправляет их автоматически. Перед передачей диагностики проверьте её содержимое.
+- **Сетевые обращения.** Обновления, подписки, публичные источники конфигураций и проверки доступности обращаются к настроенным сервисам. Выбранный прокси-сервер обрабатывает направленный через него трафик; выбирайте провайдера, которому доверяете.
+- **Учётные данные.** Настройки и сгенерированная конфигурация sing-box содержат параметры доступа. Защищайте каталог данных приложения и не публикуйте конфигурации или необработанные логи.
+- **Проверка файлов.** SHA256-сайдкары подтверждают соответствие загрузки указанному хешу, но не удостоверяют издателя независимо. Сборка из исходников поддерживается; побайтовое совпадение с релизными бинарниками не установлено.
 - **Открытая лицензия.** GPL-3.0 — любой форк, распространяющий бинарник, должен также публиковать исходники.
 
 Нашли security-issue? Сообщите **приватно** — см. [`SECURITY.md`](SECURITY.md). Не открывайте публичный issue по security-проблемам.

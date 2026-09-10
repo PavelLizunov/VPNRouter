@@ -86,7 +86,7 @@ public sealed class AntiCensorshipDnsTests
 
         var localDns = config.Dns.Servers.First(s => s.Tag == "local-dns");
         Assert.Equal("https", localDns.Type);
-        Assert.Equal("1.1.1.1", localDns.Server);
+        Assert.Equal("8.8.8.8", localDns.Server);
         Assert.Equal("dns-direct", localDns.Detour);
     }
 }

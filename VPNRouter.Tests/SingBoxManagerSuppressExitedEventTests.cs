@@ -59,16 +59,21 @@ public sealed class SingBoxManagerSuppressExitedEventTests
 
         var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
 
-        // Find the substring around the Windows graceful Kill site (the
-        // line that calls `_handle.Kill(entireProcessTree: true)` — first
-        // null-forgiving is on SuppressExitedEvent; the chain uses `_handle.`
-        // afterward since the compiler knows it's non-null). The suppression
-        // call must appear textually before the Kill.
-        var suppressIdx = src.IndexOf("_handle!.SuppressExitedEvent()", StringComparison.Ordinal);
-        var killIdx = src.IndexOf("_handle.Kill(entireProcessTree: true)", suppressIdx + 1, StringComparison.Ordinal);
+        // The Windows graceful path operates on the locally captured winTargetHandle
+        // so a concurrent lifecycle cannot replace the signal target. Pin both
+        // calls on that captured target and their ordering.
+        var winBranch = src.IndexOf("var winStopped = false;", StringComparison.Ordinal);
+        Assert.True(winBranch >= 0, "Windows graceful path landmark missing");
 
-        Assert.True(suppressIdx >= 0, "Expected `_handle!.SuppressExitedEvent()` in SingBoxManager.cs (Windows graceful path)");
-        Assert.True(killIdx >= 0, "Expected `_handle.Kill(entireProcessTree: true)` after SuppressExitedEvent in SingBoxManager.cs (Windows graceful path)");
+        var nextCatch = src.IndexOf("catch (Exception ex)", winBranch, StringComparison.Ordinal);
+        Assert.True(nextCatch > winBranch, "Windows branch catch-block not found");
+        var winWindow = src.Substring(winBranch, nextCatch - winBranch);
+
+        var suppressIdx = winWindow.IndexOf("winTargetHandle.SuppressExitedEvent()", StringComparison.Ordinal);
+        var killIdx = winWindow.IndexOf("winTargetHandle.Kill(entireProcessTree: true)", StringComparison.Ordinal);
+
+        Assert.True(suppressIdx >= 0, "Expected `winTargetHandle.SuppressExitedEvent()` in SingBoxManager.cs (Windows graceful path)");
+        Assert.True(killIdx >= 0, "Expected `winTargetHandle.Kill(entireProcessTree: true)` after SuppressExitedEvent in SingBoxManager.cs (Windows graceful path)");
         Assert.True(suppressIdx < killIdx,
             "SuppressExitedEvent must be called BEFORE Kill in the Windows graceful Stop path. " +
             $"suppressIdx={suppressIdx}, killIdx={killIdx} — wrong order would re-introduce brat's false-Crashed regression.");

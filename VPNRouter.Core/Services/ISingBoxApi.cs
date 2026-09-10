@@ -77,8 +77,10 @@ public interface ISingBoxApi
     /// </summary>
     /// <returns>A snapshot with the current active count and aggregate
     /// upload/download counters. Returns a snapshot with <c>ActiveCount=0</c>
-    /// and zeroed counters on any failure (caller distinguishes via
-    /// <see cref="ConnectionsSnapshot.CapturedAt"/> staleness if needed).</returns>
+    /// and zeroed counters on any failure. Note that timestamps alone do not
+    /// distinguish success from failure because both record capture time;
+    /// repository friend consumers inspect internal <see cref="ConnectionsSnapshot.IsValid"/>
+    /// metadata to distinguish failures from valid zero metrics.</returns>
     Task<ConnectionsSnapshot> GetConnectionsAsync(CancellationToken ct = default);
 
     /// <summary>
@@ -126,21 +128,33 @@ public interface ISingBoxApi
 /// <summary>
 /// Snapshot of sing-box's <c>/connections</c> endpoint at a point in time.
 /// Returned by <see cref="ISingBoxApi.GetConnectionsAsync"/>.
+/// Public legacy snapshot ctor fields are retained for minimal API preservation;
+/// timestamp alone does not denote success, and internal <see cref="IsValid"/> metadata
+/// is used by repository friend consumers to verify capture validity.
 /// </summary>
 /// <param name="ActiveCount">Number of active connections at capture time.</param>
 /// <param name="TotalUploadBytes">Aggregate upload bytes across all
 /// active connections.</param>
 /// <param name="TotalDownloadBytes">Aggregate download bytes across all
 /// active connections.</param>
-/// <param name="CapturedAt">When this snapshot was captured. Useful for
-/// callers to detect stale data (e.g. if the call failed and the
-/// implementation returned a zeroed snapshot, the timestamp shows when
-/// that decision was made).</param>
+/// <param name="CapturedAt">When this snapshot was captured. Note that timestamps
+/// alone do not distinguish success from failure; repository friend consumers
+/// check internal <see cref="IsValid"/> to determine whether the capture succeeded.</param>
 public sealed record ConnectionsSnapshot(
     int ActiveCount,
     long TotalUploadBytes,
     long TotalDownloadBytes,
-    DateTimeOffset CapturedAt);
+    DateTimeOffset CapturedAt)
+{
+    /// <summary>
+    /// Internal validity metadata used by repository friend consumers (<c>VPNRouter.App</c>,
+    /// <c>VPNRouter.Tests</c>) to distinguish successful snapshots from failure fallbacks.
+    /// Retained as internal (approved minimal API preservation; internal cref resolves
+    /// without CS1574 and no external callers access internal so no CS0122 issue);
+    /// timestamp alone does not denote success.
+    /// </summary>
+    internal bool IsValid { get; init; } = true;
+}
 
 /// <summary>
 /// Proxy metadata returned by <see cref="ISingBoxApi.ListProxiesAsync"/>.

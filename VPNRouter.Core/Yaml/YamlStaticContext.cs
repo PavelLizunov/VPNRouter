@@ -91,7 +91,6 @@ namespace VPNRouter.Core.Yaml;
 [YamlSerializable(typeof(CustomDirectRule))]
 [YamlSerializable(typeof(CustomRule))]
 [YamlSerializable(typeof(DnsSettings))]
-[YamlSerializable(typeof(EmergencyChannelSettings))]
 [YamlSerializable(typeof(MonitoringSettings))]
 [YamlSerializable(typeof(ProfileSource))]
 [YamlSerializable(typeof(SingBoxSettings))]
@@ -104,7 +103,6 @@ namespace VPNRouter.Core.Yaml;
 [YamlSerializable(typeof(VlessServerEntry))]
 [YamlSerializable(typeof(VlessTlsConfig))]
 [YamlSerializable(typeof(VlessTransportConfig))]
-[YamlSerializable(typeof(WgturnEntry))]
 public partial class YamlStaticContext
 {
 }

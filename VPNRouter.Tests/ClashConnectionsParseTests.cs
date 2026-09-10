@@ -87,4 +87,69 @@ public sealed class ClashConnectionsParseTests
             Encoding.UTF8.GetBytes("{\"downloadTotal\":1.5,\"uploadTotal\":2,\"connections\":[]}"),
             out _, out _, out _));
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("[]")]
+    [InlineData("[1, 2, 3]")]
+    [InlineData("\"string\"")]
+    [InlineData("123")]
+    [InlineData("true")]
+    [InlineData("null")]
+    public void NonObject_ReturnsFalse(string nonObjectJson)
+    {
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes(nonObjectJson), out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":50}")]
+    [InlineData("{\"downloadTotal\":100,\"connections\":[]}")]
+    [InlineData("{\"uploadTotal\":50,\"connections\":[]}")]
+    [InlineData("{\"otherField\":123}")]
+    public void MissingRequiredFields_ReturnsFalse(string incompleteJson)
+    {
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes(incompleteJson), out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData("{\"downloadTotal\":-1,\"uploadTotal\":50,\"connections\":[]}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":-1,\"connections\":[]}")]
+    [InlineData("{\"downloadTotal\":-100,\"uploadTotal\":-50,\"connections\":[]}")]
+    public void NegativeCounts_ReturnsFalse(string negativeJson)
+    {
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes(negativeJson), out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData("{\"downloadTotal\":9999999999999999999999999999999999999999,\"uploadTotal\":50,\"connections\":[]}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":9999999999999999999999999999999999999999,\"connections\":[]}")]
+    public void OverflowCounts_ReturnsFalse(string overflowJson)
+    {
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes(overflowJson), out _, out _, out _));
+    }
+
+    [Theory]
+    [InlineData("{\"downloadTotal\":\"100\",\"uploadTotal\":50,\"connections\":[]}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":\"50\",\"connections\":[]}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":50,\"connections\":{}}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":50,\"connections\":\"invalid\"}")]
+    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":50,\"connections\":123}")]
+    public void InvalidFieldTypes_ReturnsFalse(string invalidTypeJson)
+    {
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes(invalidTypeJson), out _, out _, out _));
+    }
+
+    [Fact]
+    public void TrailingGarbageAfterObject_ReturnsFalse()
+    {
+        Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
+            Encoding.UTF8.GetBytes("{\"downloadTotal\":100,\"uploadTotal\":50,\"connections\":[]} extra"),
+            out _, out _, out _));
+    }
 }

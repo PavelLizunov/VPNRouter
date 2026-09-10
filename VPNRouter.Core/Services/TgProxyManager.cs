@@ -42,10 +42,16 @@ public class TgProxyManager : IDisposable
     {
         get
         {
-            lock (_lifecycleGate)
+            var handle = Volatile.Read(ref _handle);
+            if (handle == null) return false;
+            try
             {
-                var handle = _handle;
-                return handle != null && !handle.HasExited;
+                return !handle.HasExited;
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+            {
+                _logger.Debug(ex, "[TgProxy] Handle HasExited query failed; assuming process still active");
+                return true;
             }
         }
     }
@@ -54,10 +60,16 @@ public class TgProxyManager : IDisposable
     {
         get
         {
-            lock (_lifecycleGate)
+            var handle = Volatile.Read(ref _handle);
+            if (handle == null) return null;
+            try
             {
-                var handle = _handle;
-                return handle != null && !handle.HasExited ? handle.Pid : null;
+                return !handle.HasExited ? handle.Pid : null;
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+            {
+                try { return handle.Pid; }
+                catch { return null; }
             }
         }
     }
@@ -87,6 +99,11 @@ public class TgProxyManager : IDisposable
             if (!_handle.HasExited)
                 _logger.Warning("[TgProxy] Already running (PID {Pid}), stopping first", _handle.Pid);
             Stop();
+            if (_handle != null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot start tg-ws-proxy: prior instance (PID {_handle.Pid}) could not be stopped.");
+            }
         }
 
         if (!File.Exists(TgProxyUpdater.PythonExePath))
@@ -476,58 +493,91 @@ public class TgProxyManager : IDisposable
     {
         lock (_lifecycleGate)
         {
-        if (_handle == null || _handle.HasExited)
-        {
-            _handle?.Dispose();
-            _handle = null;
-            _activeSecret = string.Empty;
-            return;
-        }
+            if (_handle == null)
+            {
+                return;
+            }
 
-        var handle = _handle;
-        _logger.Information("[TgProxy] Stopping (PID {Pid})", handle.Pid);
-
-        try
-        {
-            // v2.36.0-r5 (audit followup to brat r4 fix): suppress Exited
-            // event BEFORE Kill so the OS notification doesn't fire as a
-            // false "[TgProxy] Process exited (exit code: -1)" log entry
-            // on intentional Stop. Same Phase 3+ refactor regression that
-            // affected SingBoxManager (fixed in r4) — TgProxy wires
-            // startedHandle.Exited just like SingBoxManager. Sibling bug.
-            handle.SuppressExitedEvent();
-            handle.Kill(entireProcessTree: true);
-
-            // Symmetric replacement for the legacy `_process.WaitForExit(3000)`
-            // synchronisation barrier. The .GetAwaiter().GetResult() keeps
-            // Stop() sync-callable.
-            using var stopCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3000));
+            bool alreadyExited = false;
             try
             {
-                handle.WaitForExitAsync(stopCts.Token).GetAwaiter().GetResult();
+                alreadyExited = _handle.HasExited;
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
             {
-                // 3s elapsed — process may still be exiting. Dispose below
-                // will fire the final kill via ProcessHandle.Dispose.
-                _logger.Debug("[TgProxy] WaitForExitAsync timeout (3s) — proceeding to dispose");
+                alreadyExited = false;
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[TgProxy] Error stopping");
-        }
-        finally
-        {
-            try { handle.Dispose(); } catch { /* defensive */ }
-            _handle = null;
-            _activeSecret = string.Empty;
-            _logger.Information("[TgProxy] Stopped");
-        }
+
+            if (alreadyExited)
+            {
+                try { _handle.Dispose(); } catch { /* defensive */ }
+                _handle = null;
+                _activeSecret = string.Empty;
+                return;
+            }
+
+            var handle = _handle;
+            _logger.Information("[TgProxy] Stopping (PID {Pid})", handle.Pid);
+
+            try
+            {
+                // v2.36.0-r5 (audit followup to brat r4 fix): suppress Exited
+                // event BEFORE Kill so the OS notification doesn't fire as a
+                // false "[TgProxy] Process exited (exit code: -1)" log entry
+                // on intentional Stop. Same Phase 3+ refactor regression that
+                // affected SingBoxManager (fixed in r4) — TgProxy wires
+                // startedHandle.Exited just like SingBoxManager. Sibling bug.
+                handle.SuppressExitedEvent();
+                handle.Kill(entireProcessTree: true);
+
+                // Symmetric replacement for the legacy `_process.WaitForExit(3000)`
+                // synchronisation barrier. The .GetAwaiter().GetResult() keeps
+                // Stop() sync-callable.
+                using var stopCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3000));
+                try
+                {
+                    handle.WaitForExitAsync(stopCts.Token).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.Warning("[TgProxy] WaitForExitAsync timeout (3s) — process did not exit");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[TgProxy] Error stopping (PID {Pid})", handle.Pid);
+            }
+
+            bool confirmedExited = false;
+            try
+            {
+                confirmedExited = handle.HasExited;
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+            {
+                confirmedExited = false;
+            }
+
+            if (confirmedExited)
+            {
+                try { handle.Dispose(); } catch { /* defensive */ }
+                _handle = null;
+                _activeSecret = string.Empty;
+                _logger.Information("[TgProxy] Stopped");
+            }
+            else
+            {
+                _logger.Error(
+                    "[TgProxy] Stop failed to confirm exit for PID {Pid}; retaining handle and secret",
+                    handle.Pid);
+            }
         }
     }
 
-    /// <summary>Check if tg-ws-proxy is running by checking if the port is in use.</summary>
+    /// <summary>
+    /// Check if any TCP listener is active on the configured TgProxy port (occupancy probe).
+    /// A bound port indicates occupancy or conflict, not proof of process ownership.
+    /// </summary>
     public static bool IsAnyRunning(int port = 1443)
     {
         try
@@ -539,158 +589,24 @@ public class TgProxyManager : IDisposable
     }
 
     /// <summary>
-    /// Kill ALL tg-ws-proxy processes system-wide.
-    ///
-    /// v2.20.0: the actual tg-ws-proxy runs as <c>python.exe -m
-    /// proxy.tg_ws_proxy …</c> (see <see cref="StartAsync"/>). Enumerating
-    /// <c>tg-ws-proxy</c> / <c>TgWsProxy_windows</c> by process name matched
-    /// NOTHING — those names don't exist. The page's Stop button was calling
-    /// this helper expecting processes to die, but nothing happened unless
-    /// the current app instance still held an active handle (i.e. had
-    /// launched the proxy in this session). If tg-ws-proxy was started by
-    /// the Windows Service or a previous session, Stop was effectively a
-    /// no-op and the proxy kept serving traffic.
-    ///
-    /// Fix: port-based kill. Whoever is listening on
-    /// <paramref name="port"/> gets its PID resolved and killed. Covers
-    /// every way the proxy could have been started.
+    /// Legacy static cleanup entry point retained for binary compatibility.
+    /// Destructive port-based kills and process sweeps have been removed.
+    /// Per-instance process lifetime is managed exclusively via <see cref="Stop"/>.
     /// </summary>
-    /// <param name="port">TgProxy port from settings. Pass the actual
-    /// configured port; otherwise this is a no-op.</param>
+    /// <param name="port">Ignored. Retained for signature compatibility.</param>
     public static void KillAll(int port = 1443)
     {
-        // Legacy path: still sweep the old-style names in case some user
-        // has a really old build launching the proxy differently.
-        foreach (var name in new[] { "tg-ws-proxy", "TgWsProxy_windows" })
-        {
-            foreach (var proc in Process.GetProcessesByName(name))
-            {
-                try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
-                catch { }
-                finally { proc.Dispose(); }
-            }
-        }
-
-        // Port-based kill — the canonical path.
-        KillByPort(port);
+        // Safe no-op retained for signature compatibility.
     }
 
     /// <summary>
-    /// Find the PID listening on <paramref name="port"/> and terminate it.
-    /// Cross-platform: netstat+taskkill on Windows, lsof+kill on Unix.
-    /// Silent on failure; caller checks <see cref="IsAnyRunning"/> after.
+    /// Legacy port-based kill entry point retained for binary compatibility.
+    /// Retained for signature compatibility without destructive behavior.
     /// </summary>
+    /// <param name="port">Ignored. Retained for signature compatibility.</param>
     public static void KillByPort(int port)
     {
-        if (port <= 0) return;
-
-        try
-        {
-            // Quick guard — if nothing's listening, don't even spawn netstat.
-            var listeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
-            if (!listeners.Any(l => l.Port == port)) return;
-        }
-        catch { /* fall through — still try to kill */ }
-
-        if (OperatingSystem.IsWindows())
-        {
-            KillByPortWindows(port);
-        }
-        else
-        {
-            KillByPortUnix(port);
-        }
-    }
-
-    private static void KillByPortWindows(int port)
-    {
-        // netstat -ano | findstr :PORT  → collect PIDs listening on that port
-        var pids = new HashSet<int>();
-        try
-        {
-            var psi = new ProcessStartInfo("netstat", "-ano")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return;
-            var stdout = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
-
-            // Lines look like:
-            //   TCP    0.0.0.0:1443    0.0.0.0:0    LISTENING       12345
-            foreach (var line in stdout.Split('\n'))
-            {
-                if (!line.Contains("LISTENING")) continue;
-                if (!line.Contains($":{port} ")) continue;
-                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 5 && int.TryParse(parts[^1], out var pid))
-                    pids.Add(pid);
-            }
-        }
-        catch (Exception ex)
-        {
-            // v2.20.2: surface netstat failures instead of swallowing.
-            // If netstat can't run (unusual — it's a Windows built-in) the
-            // whole kill-by-port path is dead; we want the log to explain
-            // why the Stop button failed rather than leaving the proxy
-            // alive with no breadcrumbs.
-            Log.Warning(ex, "[TgProxy] KillByPortWindows: netstat invocation failed (port {Port})", port);
-            return;
-        }
-
-        foreach (var pid in pids)
-        {
-            try
-            {
-                using var p = Process.GetProcessById(pid);
-                p.Kill(entireProcessTree: true);
-                p.WaitForExit(3000);
-            }
-            catch { /* process may have exited already */ }
-        }
-    }
-
-    private static void KillByPortUnix(int port)
-    {
-        // lsof -iTCP:PORT -sTCP:LISTEN -t  → prints just the PID(s)
-        try
-        {
-            var psi = new ProcessStartInfo("lsof", $"-iTCP:{port} -sTCP:LISTEN -t")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true
-            };
-            using var proc = Process.Start(psi);
-            if (proc == null) return;
-            var stdout = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
-
-            foreach (var line in stdout.Split('\n'))
-            {
-                if (!int.TryParse(line.Trim(), out var pid)) continue;
-                try
-                {
-                    using var p = Process.GetProcessById(pid);
-                    p.Kill(entireProcessTree: true);
-                    p.WaitForExit(3000);
-                }
-                catch (Exception ex)
-                {
-                    Log.Debug(ex, "[TgProxy] KillByPortUnix: kill PID {Pid} failed", pid);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            // v2.20.2: log the outer failure so "Stop did nothing" on Unix
-            // has a breadcrumb. Most likely cause: `lsof` not on PATH
-            // (unusual on macOS, possible on minimal Linux containers).
-            Log.Warning(ex, "[TgProxy] KillByPortUnix: lsof invocation failed (port {Port})", port);
-        }
+        // Safe no-op retained for signature compatibility.
     }
 
     public void Dispose()
@@ -698,8 +614,11 @@ public class TgProxyManager : IDisposable
         lock (_lifecycleGate)
         {
             if (_disposed) return;
-            _disposed = true;
             Stop();
+            if (_handle == null)
+            {
+                _disposed = true;
+            }
         }
     }
 }

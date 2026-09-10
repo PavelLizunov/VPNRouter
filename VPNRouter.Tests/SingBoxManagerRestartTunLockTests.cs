@@ -77,6 +77,7 @@ namespace VPNRouter.Tests;
 /// <c>_owned</c> on the singleton AFTER Restart returns — pre-fix it
 /// would be false, post-fix true.</para>
 /// </summary>
+[Collection(SafeModeStateCollection.Name)]
 public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 {
     // ─── Fixture: shared seam wiring for the 3 tests ────────────────────
@@ -571,6 +572,265 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         }
     }
 
+    [Fact]
+    public void ReloadConfigJsonWithResult_LinuxCapabilityMode_FailedExactStop_ReturnsFalseWithRetainedHandleAndLock()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        var priorDataDir = GetAppPathsDataDir();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-failed-stop-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
+        EnsureConfigDir();
+
+        var runner = new FakeProcessRunner();
+        var manager = new SingBoxManager(DefaultSettings(), null, new FakeHttpClient(), runner);
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        var handle = new StubbornProcessHandle(NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        try
+        {
+            var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
+
+            Assert.False(result, "ReloadConfigJsonWithResult must return false when exact stop is unconfirmed.");
+            Assert.Equal(SingBoxState.Failed, manager.State);
+            Assert.Empty(runner.StartCalls);
+            Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
+            Assert.True(IsLockOwned(lockInstance));
+        }
+        finally
+        {
+            SetField(manager, "_handle", null);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+            RestoreAppPathsDataDir(priorDataDir);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ReloadConfigJsonWithResult_LinuxCapabilityMode_RetainedExactStopRetry_RegressionPin()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        EnsureConfigDir();
+
+        var runner = new FakeProcessRunner();
+        var manager = new SingBoxManager(DefaultSettings(), null, new FakeHttpClient(), runner);
+        SetField(manager, "_linuxUsedPkexec", false);
+
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+
+        var handle = new StubbornProcessHandle(NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        try
+        {
+            var firstResult = manager.ReloadConfigJsonWithResult("{\"case\":\"initial\"}", forceRestart: true);
+
+            Assert.False(firstResult, "Initial reload must return false when exact stop is unconfirmed.");
+            Assert.Equal(SingBoxState.Failed, manager.State);
+            Assert.Empty(runner.StartCalls);
+            Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
+            Assert.True(IsLockOwned(lockInstance), "TUN ownership lock must remain owned while exact stop is unconfirmed.");
+            Assert.Equal(1, handle.KillCallCount);
+
+            var configPath = VPNRouter.Core.AppPaths.CurrentConfigPath;
+            Assert.True(File.Exists(configPath));
+            var initialConfig = File.ReadAllText(configPath);
+            Assert.Contains("\"case\":\"initial\"", initialConfig);
+
+            // Repeated unconfirmed call is not barred solely by the flag: it invokes Kill again
+            // and does not overwrite disk while exact stop remains unconfirmed.
+            var retryResult = manager.ReloadConfigJsonWithResult("{\"case\":\"unconfirmed-retry\"}", forceRestart: true);
+
+            Assert.False(retryResult, "Repeated reload must return false while exact stop remains unconfirmed.");
+            Assert.Equal(SingBoxState.Failed, manager.State);
+            Assert.Empty(runner.StartCalls);
+            Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
+            Assert.True(IsLockOwned(lockInstance));
+            Assert.Equal(2, handle.KillCallCount);
+
+            var retryConfig = File.ReadAllText(configPath);
+            Assert.DoesNotContain("unconfirmed-retry", retryConfig);
+            Assert.Contains("\"case\":\"initial\"", retryConfig);
+
+            // Signal the same stubborn handle to exit, then confirm exact stop directly.
+            handle.SignalExit();
+            manager.Stop();
+
+            Assert.Equal(SingBoxState.Stopped, manager.State);
+            Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!,
+                "Direct Stop confirmation must clear _exactStopUnconfirmed.");
+            Assert.False((bool)GetField(manager, "_ownsTunLock")!,
+                "Direct Stop confirmation must clear _ownsTunLock.");
+            Assert.False(IsLockOwned(lockInstance),
+                "Direct Stop confirmation must release the TUN ownership lock.");
+            Assert.Null(GetField(manager, "_handle"));
+            Assert.True(handle.DisposeCalled,
+                "Confirmed exact stop must dispose the process handle.");
+        }
+        finally
+        {
+            SetField(manager, "_handle", null);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+        }
+    }
+
+    [Fact]
+    public void ReloadConfigJsonWithResult_DisposedOrNoLease_ReturnsFalseWithoutDiskWriteOrHttp()
+    {
+        var priorDataDir = GetAppPathsDataDir();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-reload-guard-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
+        VPNRouter.Core.AppPaths.EnsureDirectories();
+
+        var fakeHttp = new FakeHttpClient();
+        var runner = new FakeProcessRunner();
+        var manager = new SingBoxManager(DefaultSettings(), null, fakeHttp, runner);
+
+        try
+        {
+            // Case A: manager does not own TUN lease
+            SetField(manager, "_ownsTunLock", false);
+            var resultNoLease = manager.ReloadConfigJsonWithResult("{\"case\":\"no-lease\"}");
+            var tryResultNoLease = manager.TryReloadConfigJson("{\"case\":\"try-no-lease\"}");
+
+            Assert.False(resultNoLease, "ReloadConfigJsonWithResult must return false without lease.");
+            Assert.False(tryResultNoLease, "TryReloadConfigJson must return false without lease.");
+
+            var configPath = VPNRouter.Core.AppPaths.CurrentConfigPath;
+            Assert.False(File.Exists(configPath), "Must not write config to disk when lease is not owned.");
+            Assert.Empty(fakeHttp.SentRequests);
+
+            // Case B: manager is disposed
+            SetField(manager, "_ownsTunLock", true);
+            SetField(manager, "_disposed", 1);
+            var resultDisposed = manager.ReloadConfigJsonWithResult("{\"case\":\"disposed\"}");
+            var tryResultDisposed = manager.TryReloadConfigJson("{\"case\":\"try-disposed\"}");
+
+            Assert.False(resultDisposed, "ReloadConfigJsonWithResult must return false when disposed.");
+            Assert.False(tryResultDisposed, "TryReloadConfigJson must return false when disposed.");
+            Assert.False(File.Exists(configPath), "Must not write config to disk when disposed.");
+            Assert.Empty(fakeHttp.SentRequests);
+        }
+        finally
+        {
+            // Reset guards before real Dispose so CompareExchange succeeds and unsubscribes ProcessExit
+            SetField(manager, "_disposed", 0);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+
+            RestoreAppPathsDataDir(priorDataDir);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ReloadConfigJsonWithResult_SuccessfulRestart_ReturnsTrue()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Windows-only — LaunchProcess on Windows routes through IProcessRunner without pkexec.");
+
+        var priorDataDir = GetAppPathsDataDir();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-reload-restart-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
+        EnsureConfigDir();
+
+        var initialHandle = new FakeProcessHandle(pid: NewFakePid());
+        var replacementHandle = new FakeProcessHandle(pid: NewFakePid());
+
+        var runner = new FakeProcessRunner()
+            .OnStart(_ => true, _ => replacementHandle);
+
+        var settings = DefaultSettings();
+        var manager = new SingBoxManager(settings, null, new FakeHttpClient(), runner);
+
+        SetField(manager, "_handle", initialHandle);
+        SetField(manager, "_currentConfigPath",
+            Path.Combine(VPNRouter.Core.AppPaths.ConfigDir, "current.json"));
+
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+
+        try
+        {
+            var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
+
+            Assert.True(result, "ReloadConfigJsonWithResult must return true upon successful restart.");
+            Assert.True(initialHandle.HasExited, "Old process handle must have exited.");
+            Assert.Same(replacementHandle, GetField(manager, "_handle"));
+            Assert.False(replacementHandle.HasExited, "New process handle must be alive.");
+            Assert.Equal(SingBoxState.Running, manager.State);
+            Assert.True(IsLockOwned(lockInstance), "TUN ownership lock must remain owned across successful restart.");
+        }
+        finally
+        {
+            SetField(manager, "_handle", null);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+            initialHandle.Dispose();
+            replacementHandle.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+            RestoreAppPathsDataDir(priorDataDir);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ReloadConfigJsonWithResult_HotReloadSuccess_ReturnsTrue()
+    {
+        var priorDataDir = GetAppPathsDataDir();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-hot-reload-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
+        EnsureConfigDir();
+
+        var fakeHttp = new FakeHttpClient().Setup("/configs", "", statusCode: 204);
+        var runner = new FakeProcessRunner();
+        var manager = new SingBoxManager(DefaultSettings(), null, fakeHttp, runner);
+
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+
+        var handle = new FakeProcessHandle(pid: NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        try
+        {
+            var result = manager.ReloadConfigJsonWithResult("{\"dns\":{}}", forceRestart: false);
+
+            Assert.True(result, "ReloadConfigJsonWithResult must return true when Clash API hot-reload succeeds.");
+            Assert.Empty(runner.StartCalls);
+            Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.Single(fakeHttp.SentRequests);
+        }
+        finally
+        {
+            SetField(manager, "_handle", null);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+            handle.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+            RestoreAppPathsDataDir(priorDataDir);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     private static SingBoxSettings DefaultSettings() => new()
     {
         ExecutablePath = @"C:\nonexistent\sing-box.exe",
@@ -649,6 +909,20 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         catch { /* best-effort — Write will surface a clearer error */ }
     }
 
+    private static string? GetAppPathsDataDir()
+    {
+        var f = typeof(VPNRouter.Core.AppPaths).GetField("_dataDir", BindingFlags.Static | BindingFlags.NonPublic)
+             ?? typeof(VPNRouter.Core.AppPaths).GetField("_dataDirOverride", BindingFlags.Static | BindingFlags.NonPublic);
+        return (string?)f?.GetValue(null);
+    }
+
+    private static void RestoreAppPathsDataDir(string? priorDataDir)
+    {
+        var f = typeof(VPNRouter.Core.AppPaths).GetField("_dataDir", BindingFlags.Static | BindingFlags.NonPublic)
+             ?? typeof(VPNRouter.Core.AppPaths).GetField("_dataDirOverride", BindingFlags.Static | BindingFlags.NonPublic);
+        f?.SetValue(null, priorDataDir);
+    }
+
     private static object? GetField(SingBoxManager m, string fieldName)
     {
         var f = typeof(SingBoxManager).GetField(fieldName,
@@ -693,8 +967,9 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
     private sealed class StubbornProcessHandle(int pid) : IProcessHandle
     {
+        private volatile bool _hasExited;
         public int Pid { get; } = pid;
-        public bool HasExited => false;
+        public bool HasExited => _hasExited;
         public int KillCallCount { get; private set; }
         public bool DisposeCalled { get; private set; }
         public event EventHandler<string>? OutputLine { add { } remove { } }
@@ -702,12 +977,15 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         public event EventHandler<int>? Exited { add { } remove { } }
 
         public Task<int> WaitForExitAsync(CancellationToken ct)
-            => Task.FromException<int>(new OperationCanceledException(ct));
+            => _hasExited
+                ? Task.FromResult(0)
+                : Task.FromException<int>(new OperationCanceledException(ct));
 
         public void Kill(bool entireProcessTree = true) => KillCallCount++;
         public void SuppressExitedEvent() { }
         public ProcessSnapshot? TryGetSnapshot() => null;
         public void Dispose() => DisposeCalled = true;
+        public void SignalExit() => _hasExited = true;
     }
 
     private static void InvokePrivate(SingBoxManager m, string method, object?[] args)
