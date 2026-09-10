@@ -34,6 +34,14 @@ Windows worker identity WINBRAT confirmed read-only; no dotnet/MSBuild/testhost 
 
 Linux worker identity debian-xfce confirmed read-only, low load, about 6.6 GiB available RAM and 53 GiB free disk; dotnet absent from PATH. No build or provisioning performed.
 
+## Implementation CI round 1
+
+Commit `c7e3043bd42707ac2be7bc45bde264645c131958`, run 34470114730: Windows contracts 151 passed / 3 failed; Ubuntu discovered 3050, 2991 passed / 2 failed (remaining skipped per suite). Separate Windows update run 34470114613 passed, including staged-copy sentinel and exact receipt assertions. Go and grep passed.
+
+Failures were two stale source assertions after integration (native-stderr helper variable names and `_bootstrap` sentinel path), plus an existing installer PowerShell 5.1 parse failure exposed by adding ReleaseToolingContractTests to Windows CI. The installer has a UTF-8-no-BOM em dash inside a quoted warning; ANSI decoding interprets its bytes as smart-quote syntax and causes later parse cascades. Minimal repair substitutes ASCII hyphen only. Tests remain enabled and await rerun.
+
+macOS worker preflight: mm4.local, 41 GiB free disk, no dotnet on PATH; no SDK provisioning/build performed.
+
 ## Pending acceptance
 
 Implementation Windows PowerShell/.NET execution, full build/test suite, exact implementation CI, and final outcome/ledger resolution remain pending. Source/YAML contracts and mocked behavior cannot replace hosted platform builds, signing, distribution and owner-authorized post-ship verification. This report is PARTIAL, not a release readiness assertion.

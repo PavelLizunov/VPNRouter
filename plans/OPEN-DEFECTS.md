@@ -16,6 +16,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** — Newly enabled Windows PowerShell 5.1 parser gate exposes pre-existing UTF-8-no-BOM em dash in installer quoted warning, causing parse cascade under ANSI decoding; replace only that quoted punctuation with ASCII — `packaging/windows/install.ps1:333`, CI run 34470114730 WindowsInstaller_IsValidWindowsPowerShell failed on c7e3043b; repair awaiting rerun, PR #255.
 - [ ] **P2** — Windows updater CI installs and stages same build, asserting file presence/logs rather than replacement and exact receipt version; stable tags lack prepublication trigger — `.github/workflows/test-windows-update.yml:39-41,143-144,303-326`, source-confirmed 2026-09-10, PR #255.
 - [ ] **P1** — Legacy Android fallback signs a preuploaded APK without exact source provenance/package identity and clobbers published noncanonical `-android.apk` files; normal ARM64 workflow supersedes this path — `.github/workflows/sign-android.yml:59-67,83-115,122-134`, source-confirmed 2026-09-10, PR #255.
 - [ ] **P2** — UDP verification helper cleanup suppresses process termination/directory removal errors and can report successful probe while task-owned artifacts remain; liveupdate scheduled-task cleanup similarly suppresses failure — `tools/brat-verify.ps1:1187-1199,1694-1695` (baseline), source-confirmed 2026-09-10, PR #255.
