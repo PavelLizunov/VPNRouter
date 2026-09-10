@@ -194,7 +194,8 @@ public sealed class ReleaseSafetyBehaviorTests
         // This fixed-layout extraction is not a YAML validator; expressions are inert parse placeholders.
         var blocks = Regex.Matches(ReadSource(".github/workflows/test-windows-update.yml"),
             @"(?m)^        run: \|\r?\n((?:(?:          [^\r\n]*|)[\r]?\n)+)");
-        Assert.Equal(9, blocks.Count);
+        // Includes the migration's Cronet/native FakeIP verification block.
+        Assert.Equal(10, blocks.Count);
         var scripts = blocks.Select(block => Regex.Replace(block.Groups[1].Value, @"\$\{\{.*?\}\}", "fixture")).ToArray();
         await RunFixtureAsync("""
             $blocks = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'blocks.json') -Raw | ConvertFrom-Json
