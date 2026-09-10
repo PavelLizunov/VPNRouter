@@ -397,21 +397,19 @@ public sealed class ZapretActionsTests : IDisposable
     {
         // Path contains shell metacharacters -> OpenServiceMenu throws ArgumentException
         // before attempting Process.Start.
-        var originalDir = ZapretUpdater.ZapretDirOverride;
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_dir_&_calc_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var servicePath = Path.Combine(tempDir, "service.bat");
+        File.WriteAllText(servicePath, "@echo off");
+
         try
         {
-            ZapretUpdater.ZapretDirOverride = Path.Combine(Path.GetTempPath(), "zapret_dir_&_calc");
-            var targetDir = ZapretUpdater.ZapretDir;
-            Directory.CreateDirectory(targetDir);
-            var servicePath = Path.Combine(targetDir, "service.bat");
-            File.WriteAllText(servicePath, "@echo off");
-
-            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu());
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(servicePath));
             Assert.Contains("Service path contains disallowed shell metacharacters", ex.Message);
         }
         finally
         {
-            ZapretUpdater.ZapretDirOverride = originalDir;
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
 
