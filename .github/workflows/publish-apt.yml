@@ -1,15 +1,16 @@
 name: Publish APT Repository
 
-# Runs when a release is published (every `gh release create` / GitHub UI
-# publish). Can also be triggered manually via `gh workflow run publish-apt`
-# to re-sync the apt repo with the current state of GitHub Releases.
+# Every trigger reindexes the latest published canonical stable with a DEB/sidecar.
+# Retain that stable only, not ancient releases without Debian assets. Candidate
+# runs gate tag/SHA provenance and stable APT health, NOT candidate DEB inclusion.
+# Manual runs must use --ref <tag>; optional input tag must match that run ref.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish (e.g. v2.22.2-r10). Leave blank to republish current state."
+        description: "Run provenance tag (must match --ref tag). Always reindexes stable, never includes a candidate."
         required: false
         default: ""
 
@@ -30,9 +31,46 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    env:
+      INPUT_TAG: ${{ inputs.tag }}
+      EVENT_TAG: ${{ github.event.release.tag_name }}
     steps:
-      - name: Checkout main (for packaging/apt-repo config)
+      - name: Validate run tag binding
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" != "tag" ] ||
+             [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-r[1-9][0-9]*)?$ ]]; then
+              echo "::error::APT publication requires a canonical release tag ref; dispatch with --ref <tag>"
+              exit 1
+          fi
+          case "$GITHUB_EVENT_NAME" in
+              workflow_dispatch)
+                  if [ -n "$INPUT_TAG" ] && [ "$INPUT_TAG" != "$GITHUB_REF_NAME" ]; then
+                      echo "::error::Input tag must equal the workflow run tag"
+                      exit 1
+                  fi ;;
+              release)
+                  if [ "$EVENT_TAG" != "$GITHUB_REF_NAME" ]; then
+                      echo "::error::Release event tag must equal the workflow run tag"
+                      exit 1
+                  fi ;;
+              *) exit 1 ;;
+          esac
+
+      - name: Checkout exact run SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify remote tag matches run SHA
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "refs/tags/$GITHUB_REF_NAME"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Install reprepro + dependencies
         run: |
@@ -81,6 +119,8 @@ jobs:
           fi
 
       - name: Configure non-interactive GPG for reprepro
+        env:
+          APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
         run: |
           # reprepro calls gpg internally; we want zero prompting for a
           # passphrase or trust agent dialog on a headless runner.
@@ -100,10 +140,10 @@ jobs:
           # on "no trust path" warnings. import-ownertrust needs the full
           # 40-char fingerprint, not the short key id — look it up from
           # what we just imported.
-          FPR=$(gpg --list-secret-keys --with-colons "${{ secrets.APT_SIGNING_KEY_ID }}" \
+          FPR=$(gpg --list-secret-keys --with-colons "$APT_SIGNING_KEY_ID" \
                 | awk -F: '/^fpr:/ {print $10; exit}')
           if [ -z "$FPR" ]; then
-              echo "::error::could not resolve fingerprint for key id ${{ secrets.APT_SIGNING_KEY_ID }}"
+              echo "::error::could not resolve fingerprint for configured signing key"
               exit 1
           fi
           echo "Trust fingerprint: $FPR"
@@ -131,17 +171,7 @@ jobs:
 
       - name: Lay out apt repo skeleton
         run: |
-          # v2: wipe reprepro state on every run. Why? Earlier runs that
-          # failed AFTER writing to db/ (e.g. a passphrase issue that
-          # blocked signing but not the db write) left the repository in
-          # a state where reprepro thinks packages are included but pool/
-          # and dists/ are empty. The db entry then makes subsequent
-          # includedeb calls no-op ("already present"). Wiping db/pool/
-          # dists and re-including from scratch is safe because the
-          # source of truth is the .deb artifacts on GitHub Releases
-          # anyway.
-          rm -rf gh-pages-dir/apt/db gh-pages-dir/apt/pool gh-pages-dir/apt/dists
-
+          # Existing package state remains intact until a stable DEB is validated.
           mkdir -p gh-pages-dir/apt/conf
           cp packaging/apt-repo/distributions gh-pages-dir/apt/conf/distributions
           # Serve the public key in BOTH formats:
@@ -173,107 +203,47 @@ jobs:
           <p><a href="https://github.com/PavelLizunov/VPNRouter">&larr; GitHub</a></p>
           HTML
 
-      - name: Download .deb artifacts from release(s)
+      - name: Download and validate latest published stable DEB
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
-          EVENT_IS_PRERELEASE: ${{ github.event.release.prerelease }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          mkdir -p .apt-debs
-
-          # apt repo ships STABLE releases only. Prereleases (rolling
-          # -rN candidates, any release with prerelease=true on GitHub)
-          # are not suitable for `sudo apt upgrade` — they'd auto-update
-          # every user to experimental builds. Users who want prereleases
-          # download the .deb manually from GitHub Releases page.
-          is_stable_tag() {
-              local tag="$1"
-              # Reject tags that parse as non-stable by naming: -r1 / -r2 /
-              # -beta / -rc / -alpha etc. Plain "vX.Y.Z" only.
-              case "$tag" in
-                  *-r[0-9]*|*-rc*|*-beta*|*-alpha*|*-pre*) return 1 ;;
-              esac
-              # Also reject anything GitHub flagged as prerelease.
-              gh release view "$tag" --repo "${{ github.repository }}" \
-                  --json isPrerelease --jq '.isPrerelease' 2>/dev/null | grep -q false
-          }
-
-          if [ -n "$EVENT_TAG" ]; then
-              TAG="$EVENT_TAG"
-              echo "Triggered by release.published for tag: $TAG (prerelease=$EVENT_IS_PRERELEASE)"
-              if [ "$EVENT_IS_PRERELEASE" = "true" ] || ! is_stable_tag "$TAG"; then
-                  # v2.28.0: don't EXIT the whole workflow on prerelease —
-                  # we still want install.sh + landing page to publish.
-                  # v2.46.0-r6: release.published can arrive before
-                  # `gh release edit --prerelease`, so the event payload may
-                  # still say prerelease=false for rolling -rN tags. Treat the
-                  # tag shape as authoritative too.
-                  # Fix v2.28.0-r1+: also re-download ALL stable .debs and
-                  # re-include them, because the earlier "Lay out apt repo
-                  # skeleton" step wipes apt/db / pool / dists to guard
-                  # against half-broken reprepro state. If we skip the
-                  # download entirely, we'd end up publishing an EMPTY apt
-                  # repo (users `apt update` would stop working). Falling
-                  # through to the TAG="" branch re-downloads every stable
-                  # .deb from the last 30 releases and rebuilds dists/pool
-                  # from scratch — same effect as `workflow_dispatch` with
-                  # no tag, which is our documented "re-sync apt repo"
-                  # escape hatch.
-                  echo "::notice::$TAG is a prerelease — install.sh + landing page will publish, apt repo will re-sync from existing stable releases (this prerelease's .deb is NOT added)"
-                  TAG=""
-              fi
-          elif [ -n "$INPUT_TAG" ]; then
-              TAG="$INPUT_TAG"
-              echo "workflow_dispatch with explicit tag: $TAG"
-              if ! is_stable_tag "$TAG"; then
-                  echo "::warning::$TAG looks like a prerelease but was requested explicitly — honouring the request anyway"
-              fi
-          else
-              TAG=""
-              echo "workflow_dispatch without tag — will re-index ALL STABLE releases from the last 30"
-          fi
-
-          if [ -n "$TAG" ]; then
-              # v2.22.4: retry — release.published fires the moment the
-              # release is created, but the Linux CI upload of the .deb
-              # may still be in flight. Stable v2.48.0's Linux build
-              # completed just after the former ~3-minute ceiling, so keep
-              # six minutes of headroom without changing release ordering.
-              download_ok=0
-              for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-                  if gh release download "$TAG" \
-                      --repo "${{ github.repository }}" \
-                      --pattern "*-linux-amd64.deb" \
-                      --dir .apt-debs \
-                      --clobber 2>&1; then
-                      download_ok=1
-                      break
-                  fi
-                  echo "Attempt $attempt: .deb not available yet for $TAG, waiting 30s..."
-                  sleep 30
-              done
-              if [ "$download_ok" = "0" ]; then
-                  echo "::error::No linux-amd64.deb asset on release $TAG after 12 attempts (~6 min). Aborting."
-                  exit 1
-              fi
-          else
-              gh release list --repo "${{ github.repository }}" --limit 30 --json tagName --jq '.[] | .tagName' | while read -r t; do
-                  if is_stable_tag "$t"; then
-                      echo "-- downloading deb for stable release $t --"
-                      gh release download "$t" \
-                          --repo "${{ github.repository }}" \
-                          --pattern "*-linux-amd64.deb" \
-                          --dir .apt-debs \
-                          --clobber 2>/dev/null || echo "  (no .deb asset for $t)"
-                  else
-                      echo "-- skipping $t (prerelease) --"
-                  fi
-              done
-          fi
-
-          echo "Collected debs:"
-          ls -lh .apt-debs || true
+          set -euo pipefail
+          mkdir .apt-debs
+          # Pagination includes stable releases beyond any number of candidates.
+          # Retain the latest published stable. Its missing assets must fail,
+          # never silently fall back to an older release. Candidates stay out.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" > .apt-releases.json
+          TAG=$(jq -ers '
+            [ .[][]
+              | select(.draft == false and .prerelease == false)
+              | select(.tag_name | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+              ] | sort_by(.published_at) | last | .tag_name // error("No published stable release")
+          ' .apt-releases.json)
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          # Re-read selected release metadata; API/download failures are fatal.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json tagName,isDraft,isPrerelease,assets > .apt-selected.json
+          DEB="VPNRouter-$TAG-linux-amd64.deb"
+          jq -e --arg tag "$TAG" --arg deb "$DEB" '
+            .tagName == $tag and .isDraft == false and .isPrerelease == false
+            and ([.assets[] | select(.name == $deb)] | length) == 1
+            and ([.assets[] | select(.name == ($deb + ".sha256"))] | length) == 1
+          ' .apt-selected.json > /dev/null
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern "$DEB" --pattern "$DEB.sha256" --dir .apt-debs
+          cd .apt-debs
+          test -s "$DEB"
+          test -s "$DEB.sha256"
+          # Require the sole checksum record to name this DEB, not another path.
+          read -r HASH FILE < "$DEB.sha256"
+          [[ "$HASH" =~ ^[a-fA-F0-9]{64}$ ]]
+          test "$FILE" = "$DEB"
+          test "$(wc -l < "$DEB.sha256")" -eq 1
+          printf '%s  %s\n' "$HASH" "$DEB" | sha256sum --check --strict -
+          test "$(dpkg-deb --field "$DEB" Package)" = "vpnrouter"
+          test "$(dpkg-deb --field "$DEB" Version)" = "${TAG#v}"
+          test "$(dpkg-deb --field "$DEB" Architecture)" = "amd64"
+          echo "APT reindex selected $TAG (run provenance: $GITHUB_REF_NAME); candidates are never included"
 
       - name: Ensure gh-pages root metadata (CNAME, .nojekyll, index.md)
         run: |
@@ -386,26 +356,29 @@ jobs:
           </html>
           HTML
 
-      - name: Add .deb(s) to apt repo
+      - name: Add validated DEB and verify signed indexes
         run: |
-          if ! ls .apt-debs/*.deb > /dev/null 2>&1; then
-              echo "::warning::No .deb files downloaded — skipping reprepro include step"
-              exit 0
-          fi
-
-          cd gh-pages-dir/apt
-          for deb in ../../.apt-debs/*.deb; do
-              name=$(basename "$deb")
-              echo "Including $name"
-              # --ignore=extension in case filename has -r1 etc.; --component main
-              # -S net sets section in the generated index
-              reprepro -Vb . includedeb stable "$deb" || {
-                  echo "::warning::reprepro failed on $name (maybe already present)"
-              }
-          done
-
-          echo "Repository layout:"
-          find . -maxdepth 4 -type f | sort | head -40
+          set -euo pipefail
+          shopt -s nullglob
+          debs=(.apt-debs/*.deb)
+          test "${#debs[@]}" -eq 1
+          # Only local generated package state is replaced; publish stays gated.
+          rm -rf gh-pages-dir/apt/db gh-pages-dir/apt/pool gh-pages-dir/apt/dists
+          reprepro -Vb gh-pages-dir/apt includedeb stable "${debs[0]}"
+          reprepro -b gh-pages-dir/apt check
+          test -s gh-pages-dir/apt/dists/stable/main/binary-amd64/Packages
+          grep -qx 'Package: vpnrouter' gh-pages-dir/apt/dists/stable/main/binary-amd64/Packages
+          test -s gh-pages-dir/apt/dists/stable/Release
+          test -s gh-pages-dir/apt/dists/stable/InRelease
+          test -s gh-pages-dir/apt/dists/stable/Release.gpg
+          gpgv --keyring "$PWD/gh-pages-dir/apt/key.gpg" \
+              gh-pages-dir/apt/dists/stable/Release.gpg gh-pages-dir/apt/dists/stable/Release
+          gpgv --keyring "$PWD/gh-pages-dir/apt/key.gpg" \
+              --output .apt-signed-release gh-pages-dir/apt/dists/stable/InRelease
+          cmp .apt-signed-release gh-pages-dir/apt/dists/stable/Release
+          (cd gh-pages-dir/apt/dists/stable &&
+              awk '/^SHA256:/ {on=1; next} /^[^ ]/ {on=0} on {print $1 "  " $3}' Release |
+              sha256sum --check --strict -)
 
       - name: Publish gh-pages (single orphan commit, force-push)
         run: |
@@ -431,7 +404,7 @@ jobs:
               echo "::error::gh-pages working tree is empty — refusing to publish an empty site"
               exit 1
           fi
-          MSG="Publish $( [ -n "${{ github.event.release.tag_name }}" ] && echo "${{ github.event.release.tag_name }}" || echo "apt repo sync" )"
+          MSG="Publish stable APT reindex (run $GITHUB_REF_NAME at $GITHUB_SHA)"
           git commit -q -m "$MSG"
           git push --force origin HEAD:gh-pages
           echo "Published gh-pages as a single orphan commit: $MSG"

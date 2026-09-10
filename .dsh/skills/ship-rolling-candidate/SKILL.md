@@ -35,35 +35,104 @@ as Forgejo. Merge requires explicit owner authorization. After merge, continue
 only from a clean checkout whose `HEAD` equals accepted `origin/main`; use
 repo-relative scripts from that checkout.
 
-## Build and publish
+## Create the immutable tag and draft
 
-First inspect the configured SignPath secret names and
-`SIGNPATH_EXPECTED_SUBJECT` repository variable.
+After explicit release authorization, record the accepted commit as `$sha`,
+set `$version = 'X.Y.Z-rN'` and `$tag = "v$version"`. Require clean `HEAD` to
+match accepted GitHub `main` and AppVersion to match the full version. Create
+and push only this new tag; never replace an existing tag:
 
-- When signing is configured, create the immutable tag and a **draft** release
-  at the accepted commit, then run `Sign Windows (SignPath)`. Do not run a local
-  unsigned `build.ps1 -Upload`. The workflow builds from the exact tag, verifies
-  every required signature and stages the signed ZIPs while the release remains
-  draft. Publish only after the complete platform gate below.
-- Until enrollment is configured, build the custom sing-box-lx binary and use
-  the existing unsigned upload path from the accepted exact commit:
+```powershell
+git tag $tag $sha
+git push origin "refs/tags/$tag"
+$remoteSha = gh api "repos/PavelLizunov/VPNRouter/commits/$tag" --jq '.sha'
+if ($LASTEXITCODE -ne 0 -or $remoteSha -ne $sha) { throw 'Remote tag SHA mismatch.' }
+gh release create $tag --verify-tag --draft --prerelease --latest=false --title $tag --notes-file <notes-file>
+```
+
+Check every native command's exit code; stop on failure. Inspect an existing
+tag/draft instead of blindly repeating creation. `build.ps1 -Upload` does not
+create tags or releases and does not publish.
+
+## Stage Windows and other platforms
+
+Inspect the configured SignPath secret names and `SIGNPATH_EXPECTED_SUBJECT`
+repository variable without exposing values. Any SignPath configuration,
+including partial enrollment, forbids unsigned staging; finish enrollment or
+STOP. There is no unsigned fallback when signing fails.
+
+- Signed path: `gh workflow run sign-windows.yml --ref $tag -f version=$version`.
+  Wait for the exact-tag source build, owner signing approval and signature
+  verification before accepting its draft ZIPs and sidecars.
+- Only when all SignPath settings are absent, build the custom sing-box-lx on
+  the authorized exact-SHA worker and stage unsigned Windows assets:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/build-singbox-lx.ps1
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "X.Y.Z-rN" `
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version `
   -SingBoxPath "publish/sing-box-lx.exe" -Upload
 ```
 
-Apply release notes, mark the new release prerelease, keep the previous stable
-as Latest, and delete only the superseded rolling release page after the new
-candidate is fully verified. Never force-update a published tag.
+Unsigned staging requires `HEAD == accepted main == tag SHA`, an existing
+correct-channel draft, and no conflicting assets. It never clobbers assets.
+Wait for tag-triggered `build-mac.yml`, `build-linux.yml`, `build-android.yml`,
+`test.yml` and `test-windows-update.yml`. Missing draft means staging fails
+closed; after creating it, inspect run results and draft assets before retry.
+For a missing platform set, dispatch its build workflow with `--ref $tag
+-f version=$version` (and `-f upload_to_release=true` where offered). Test
+workflows use `--ref $tag` without a version input. Legacy `sign-android.yml`
+is disabled; use `build-android.yml`.
 
-## Exact platform and artifact gate
+A partial upload is not permission to overwrite or delete assets. Inspect names,
+hashes and provenance, then explicitly stage only missing files from the
+verified exact-tag output without clobber. If consistency cannot be proven,
+STOP; published corrections require a new version and immutable tag.
 
-Wait for exact-SHA tests plus macOS, Linux, Android, Windows update, APT and
-release-integrity workflows. Require exactly 16 canonical assets: 4 Windows,
-4 macOS, 6 Linux and 2 Android ARM64 files. Every sidecar must match. The full
-and update Windows ZIPs must contain their expected True Split driver bundles.
+## Prepublication gate and authorized publication
+
+Require all platform staging jobs and tag-bound tests/Windows update jobs green
+at the exact tag SHA, exactly 16 canonical assets (4 Windows, 4 macOS, 6 Linux,
+2 Android), every sidecar matching, and both Windows True Split driver bundles.
+Then explicitly dispatch and await the completed-draft integrity gate:
+
+```powershell
+gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
+```
+
+Run the prepublication strict gate with explicit requirements, because the
+default strict requirements include postpublication APT:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1 `
+  -Commit $sha -ReleaseTag $tag -Strict `
+  -RequiredSuccess "build=3,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1" `
+  -RequiredWorkflows "Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Verify Release Integrity,Auto-Update Integration Test (Windows),dotnet test"
+```
+
+Require canonical platform/test/update/integrity runs and jobs, not unrelated
+same-SHA checks. Inspect the exact-tag Sign Windows run separately when signing
+is configured. Do not require APT or post-ship verification before publication.
+After inspecting the successful integrity run and reconfirming owner authority:
+
+```powershell
+gh release edit $tag --draft=false --prerelease --latest=false
+```
+
+Confirm the candidate is public/prerelease and the previous stable remains
+Latest. Asset uploads are not `release: edited` completion signals. After
+publication, await integrity and APT runs; if token-trigger suppression leaves
+them absent, explicitly dispatch at the published tag:
+
+```powershell
+gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
+gh workflow run publish-apt.yml --ref $tag -f tag=$tag
+```
+
+Candidate APT runs verify provenance and reindex the latest published stable;
+they do not add candidates to APT. Homebrew notification is suppressed during
+draft staging and candidates must not notify the stable tap. Delete a
+superseded candidate release page only after the new candidate passes the
+post-ship gate; retain immutable tags.
 
 ## Mandatory post-ship gate
 
