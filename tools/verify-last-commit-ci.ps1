@@ -9,11 +9,16 @@ param(
     [string]$Commit,
     [string]$RequiredSuccess,
     [string]$RequiredWorkflows,
+    [string]$ReleaseTag,
     [switch]$Strict
 )
 
 if (-not $Repo) { $Repo = $env:REPO; if (-not $Repo) { $Repo = "PavelLizunov/VPNRouter" } }
 if ($Strict) {
+    if ($ReleaseTag -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?$') {
+        Write-Host 'ERROR: Strict requires ReleaseTag vX.Y.Z[-rN].' -ForegroundColor Red
+        exit 3
+    }
     if (-not $IgnoreSkipped) { $IgnoreSkipped = 'characterization-windows' }
     if (-not $RequiredSuccess) {
         $RequiredSuccess = 'publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1'
@@ -40,34 +45,56 @@ try {
 }
 finally { $ErrorActionPreference = $previousResolveErrorActionPreference }
 if (-not $head -or $resolveExitCode -ne 0) {
-    if ($Strict) {
-        Write-Host "ERROR: could not resolve commit reference." -ForegroundColor Red
-        exit 3
-    }
-    Write-Host "INFO: could not resolve commit reference. Allowing." -ForegroundColor Yellow
-    exit 0
+    Write-Host "ERROR: could not resolve commit reference." -ForegroundColor Red
+    exit 3
 }
 $head = $head.Trim()
 Write-Host "Verifying CI for $Commit : $head" -ForegroundColor Cyan
 
-$apiPath = "repos/$Repo/commits/$head/check-runs?per_page=30"
-$previousErrorActionPreference = $ErrorActionPreference
-try {
-    $ErrorActionPreference = "Continue"
-    $json = gh api $apiPath 2>&1
-    $apiExitCode = $LASTEXITCODE
-}
-finally {
-    $ErrorActionPreference = $previousErrorActionPreference
-}
-if ($apiExitCode -ne 0) {
-    Write-Host "ERROR: gh api failed." -ForegroundColor Red
-    Write-Host $json
+# Explicit pages work with older gh versions, without concatenated JSON or --slurp.
+# Reject changing/truncated populations rather than certify partial evidence.
+function Get-ApiItems([string]$Path, [string]$Property) {
+    $items = New-Object System.Collections.ArrayList
+    $ids = @{}
+    $total = $null
+    for ($page = 1; $page -le 100; $page++) {
+        $separator = if ($Path.Contains('?')) { '&' } else { '?' }
+        try {
+            $previousPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $json = gh api "${Path}${separator}per_page=100&page=$page" 2>&1
+                $code = $LASTEXITCODE
+            }
+            finally { $ErrorActionPreference = $previousPreference }
+            if ($code -ne 0) { throw 'gh api failed' }
+            $data = ($json -join "`n") | ConvertFrom-Json
+            if ($null -eq $data.total_count -or $null -eq $data.$Property -or
+                [string]$data.total_count -notmatch '^[0-9]+$') { throw 'missing pagination fields' }
+            if ($null -eq $total) { $total = [long]$data.total_count }
+            if ([long]$data.total_count -ne $total) { throw 'population changed during pagination' }
+            $batch = @($data.$Property)
+            foreach ($item in $batch) {
+                if ([string]$item.id -notmatch '^[1-9][0-9]*$' -or $ids.ContainsKey([string]$item.id)) {
+                    throw 'missing or duplicate item id'
+                }
+                $ids[[string]$item.id] = $true
+                [void]$items.Add($item)
+            }
+            if ($items.Count -gt $total) { throw 'pagination exceeded total_count' }
+            if ($items.Count -eq $total) { return $items.ToArray() }
+            if ($batch.Count -ne 100) { throw 'truncated API page' }
+        }
+        catch {
+            Write-Host "ERROR: incomplete GitHub evidence ($Property page $page): $_" -ForegroundColor Red
+            exit 3
+        }
+    }
+    Write-Host 'ERROR: GitHub pagination limit exceeded.' -ForegroundColor Red
     exit 3
 }
 
-$data = $json | ConvertFrom-Json
-$checks = $data.check_runs
+$checks = @(Get-ApiItems "repos/$Repo/commits/$head/check-runs?filter=latest" 'check_runs')
 
 if (-not $checks -or $checks.Count -eq 0) {
     Write-Host "WARN: no check-runs yet. Wait 30s and retry." -ForegroundColor Yellow
@@ -89,31 +116,24 @@ if ($TolerateFailure) {
 
 $workflowRuns = @()
 if ($Strict) {
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $workflowJson = gh api --method GET "repos/$Repo/actions/runs" -f "head_sha=$head" -F 'per_page=100' 2>&1
-        $workflowApiExitCode = $LASTEXITCODE
-    }
-    finally { $ErrorActionPreference = $previousErrorActionPreference }
-    if ($workflowApiExitCode -ne 0) {
-        Write-Host 'ERROR: GitHub Actions workflow query failed.' -ForegroundColor Red
-        Write-Host $workflowJson
-        exit 3
-    }
-    $workflowRuns = @(($workflowJson | ConvertFrom-Json).workflow_runs)
+    $workflowRuns = @(Get-ApiItems "repos/$Repo/actions/runs?head_sha=$head" 'workflow_runs')
 }
 
 $requiredGreen = @{}
 if ($Strict -and $RequiredSuccess) {
     foreach ($entry in $RequiredSuccess.Split(',')) {
         $trimmed = $entry.Trim()
-        if (-not $trimmed) { continue }
         if ($trimmed -notmatch '^(?<name>[^=]+)=(?<count>[1-9][0-9]*)$') {
             Write-Host "ERROR: invalid RequiredSuccess entry '$trimmed'." -ForegroundColor Red
             exit 3
         }
-        $requiredGreen[$Matches.name.Trim()] = [int]$Matches.count
+        $jobName = $Matches.name.Trim()
+        $count = 0
+        if (-not [int]::TryParse($Matches.count, [ref]$count) -or $requiredGreen.ContainsKey($jobName)) {
+            Write-Host "ERROR: duplicate or invalid RequiredSuccess entry '$trimmed'." -ForegroundColor Red
+            exit 3
+        }
+        $requiredGreen[$jobName] = $count
     }
 }
 
@@ -150,6 +170,86 @@ if ($failOk.Count -gt 0) {
 
 $hardRed = New-Object System.Collections.ArrayList
 $inProgress = New-Object System.Collections.ArrayList
+if ($Strict) {
+    $canonical = @{
+        'Build macOS DMG' = 'build-mac.yml'
+        'Build Android APK' = 'build-android.yml'
+        'Build Linux AppImage + .deb' = 'build-linux.yml'
+        'Publish APT Repository' = 'publish-apt.yml'
+        'Verify Release Integrity' = 'verify-release-integrity.yml'
+        'Auto-Update Integration Test (Windows)' = 'test-windows-update.yml'
+        'dotnet test' = 'test.yml'
+    }
+    $jobOwners = @{
+        'build' = @('build-mac.yml', 'build-android.yml', 'build-linux.yml')
+        'publish' = @('publish-apt.yml')
+        'verify' = @('verify-release-integrity.yml')
+        'test-update' = @('test-windows-update.yml')
+        'test' = @('test.yml')
+        'go-test-windows' = @('test.yml')
+        'characterization-windows' = @('test.yml')
+    }
+    $wanted = @{}
+    foreach ($workflowName in $RequiredWorkflows.Split(',')) {
+        $requiredWorkflow = $workflowName.Trim()
+        if (-not $canonical.ContainsKey($requiredWorkflow)) {
+            Write-Host "ERROR: unknown canonical workflow '$requiredWorkflow'." -ForegroundColor Red
+            exit 3
+        }
+        $wanted[$canonical[$requiredWorkflow]] = $requiredWorkflow
+    }
+    foreach ($jobName in $requiredGreen.Keys) {
+        if (-not $jobOwners.ContainsKey($jobName)) {
+            Write-Host "ERROR: unknown canonical job '$jobName'." -ForegroundColor Red
+            exit 3
+        }
+        foreach ($owner in $jobOwners[$jobName]) {
+            if (-not $wanted.ContainsKey($owner)) { $wanted[$owner] = $owner }
+        }
+    }
+    $selectedJobs = New-Object System.Collections.ArrayList
+    foreach ($file in $wanted.Keys) {
+        $requiredWorkflow = $wanted[$file]
+        $events = if ($file -in @('publish-apt.yml', 'verify-release-integrity.yml')) {
+            @('release', 'workflow_dispatch')
+        } elseif ($file -eq 'test-windows-update.yml') {
+            @('push', 'workflow_dispatch', 'release')
+        } else { @('push', 'workflow_dispatch') }
+        $run = $workflowRuns | Where-Object {
+            $_.path -ceq ".github/workflows/$file" -and
+            $_.head_sha -ceq $head -and $_.head_branch -ceq $ReleaseTag -and
+            $_.event -cin $events
+        } | Sort-Object @{ Expression = { [long]$_.id }; Descending = $true },
+            @{ Expression = { [long]$_.run_attempt }; Descending = $true } | Select-Object -First 1
+        if (-not $run) {
+            [void]$hardRed.Add("workflow '$requiredWorkflow' [required successful run missing]")
+            continue
+        }
+        if ($run.status -ne 'completed') {
+            [void]$inProgress.Add("workflow '$requiredWorkflow' [$($run.status)]")
+            continue
+        }
+        if ($run.conclusion -ne 'success') {
+            [void]$hardRed.Add("workflow '$requiredWorkflow' [$($run.conclusion)]")
+            continue
+        }
+        if ([string]$run.run_attempt -notmatch '^[1-9][0-9]*$') {
+            Write-Host 'ERROR: selected workflow has no valid run_attempt.' -ForegroundColor Red
+            exit 3
+        }
+        $jobs = @(Get-ApiItems "repos/$Repo/actions/runs/$($run.id)/attempts/$($run.run_attempt)/jobs" 'jobs')
+        if ($jobs.Count -eq 0) { [void]$hardRed.Add("workflow '$requiredWorkflow' [no jobs]") }
+        foreach ($job in $jobs) {
+            if ([string]$job.run_id -cne [string]$run.id -or $job.head_sha -cne $head) {
+                Write-Host 'ERROR: job identity does not match selected run.' -ForegroundColor Red
+                exit 3
+            }
+            $job | Add-Member -NotePropertyName CanonicalWorkflow -NotePropertyValue $file
+            [void]$selectedJobs.Add($job)
+        }
+    }
+    $checks = @($selectedJobs.ToArray())
+}
 $tolerated = New-Object System.Collections.ArrayList
 $green = 0
 foreach ($c in $checks) {
@@ -184,30 +284,12 @@ foreach ($c in $checks) {
             [void]$hardRed.Add("$name $($c.html_url)")
         } elseif ($failOk.ContainsKey($name)) {
             [void]$tolerated.Add("$name [failure, tolerated]")
-        } elseif ($name -eq "publish") {
-            $completedAt = if ($c.completed_at) { [DateTime]$c.completed_at } else { [DateTime]::MinValue }
-            $newerSuccess = $checks | Where-Object {
-                $_.name -eq $name -and
-                $_.conclusion -eq "success" -and
-                $_.completed_at -and
-                ([DateTime]$_.completed_at) -gt $completedAt
-            } | Select-Object -First 1
-
-            if ($newerSuccess) {
-                [void]$tolerated.Add("$name [failure, superseded by later success]")
-            } else {
-                [void]$hardRed.Add("$name $($c.html_url)")
-            }
         } else {
             [void]$hardRed.Add("$name $($c.html_url)")
         }
     }
     elseif ($conclusion -eq "cancelled") {
-        if ($Strict) {
-            [void]$hardRed.Add("$name [cancelled] $($c.html_url)")
-        } else {
-            [void]$tolerated.Add("$name [cancelled, superseded by success]")
-        }
+        [void]$hardRed.Add("$name [cancelled] $($c.html_url)")
     }
     else {
         [void]$hardRed.Add("$name [$conclusion] $($c.html_url)")
@@ -218,7 +300,8 @@ foreach ($c in $checks) {
 if ($Strict) {
     foreach ($required in $requiredGreen.GetEnumerator()) {
         $observed = @($checks | Where-Object {
-            $_.name -eq $required.Key -and
+            $_.name -ceq $required.Key -and
+            $_.CanonicalWorkflow -cin $jobOwners[$required.Key] -and
             $_.status -eq 'completed' -and
             $_.conclusion -eq 'success'
         }).Count
@@ -227,19 +310,6 @@ if ($Strict) {
         }
     }
 
-    foreach ($workflowName in $RequiredWorkflows.Split(',')) {
-        $requiredWorkflow = $workflowName.Trim()
-        if (-not $requiredWorkflow) { continue }
-        $successfulRun = @($workflowRuns | Where-Object {
-            $_.name -eq $requiredWorkflow -and
-            $_.head_sha -eq $head -and
-            $_.status -eq 'completed' -and
-            $_.conclusion -eq 'success'
-        }).Count
-        if ($successfulRun -lt 1) {
-            [void]$hardRed.Add("workflow '$requiredWorkflow' [required successful run missing]")
-        }
-    }
 }
 
 Write-Host ""
@@ -262,5 +332,9 @@ if ($inProgress.Count -gt 0) {
     Write-Host "BLOCKED: $($inProgress.Count) check(s) still running. Wait + retry." -ForegroundColor Yellow
     exit 2
 }
-Write-Host "OK: safe to ship the next candidate." -ForegroundColor Green
+if ($green -eq 0) {
+    Write-Host 'BLOCKED: no successful checks; skipped or waived checks are not green evidence.' -ForegroundColor Yellow
+    exit 2
+}
+Write-Host 'OK: CI evidence passed (does not authorize a release).' -ForegroundColor Green
 exit 0

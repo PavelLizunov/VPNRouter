@@ -1,276 +1,159 @@
-# VPNRouter Release Strategy (from 2026-04-20)
+# VPNRouter release strategy
 
-## Problem
+## Rolling candidates and stable cuts
 
-Between v2.17.9 and v2.21.9 we shipped **~30 prereleases** inside roughly
-two days. Each iteration-in-flight (bug → fix → user tests → another
-bug) minted a new patch version. Result:
+Work on `X.Y.Z` ships as successive `vX.Y.Z-r1`, `vX.Y.Z-r2`, etc.
+This policy replaced repeated patch releases during one testing cycle. Keep
+one active candidate release page alongside the current stable Latest. Remove
+a superseded candidate page only after its replacement passes full post-ship
+verification and retention is authorized; preserve immutable tags as history.
 
-- GitHub Releases page cluttered with in-progress iterations.
-- Auto-updater (with `Experimental` channel on) pings every
-  prerelease, causing user-side update-nag loop.
-- Storage footprint (each release ~30–50 MB × many) approached the
-  5 GiB public-repo soft limit (had to prune 88 v1.x-v2.9.x releases
-  on 2026-04-20).
+The experimental updater channel discovers prereleases; the stable channel
+ignores them. `UpdateChecker` orders `X.Y.Z-r1 < X.Y.Z-r2 < X.Y.Z`, so
+AppVersion must match the complete tag version, including `-rN`.
 
-## New scheme — rolling release candidates
+- Iterate within the same logical release by incrementing `rN`.
+- After a stable release, a new fix starts a new patch cycle at `-r1`.
+- A stable cut creates a new no-suffix AppVersion commit through branch/PR/CI,
+  then rebuilds all platforms from its new immutable stable tag. Merely changing
+  the candidate's prerelease flag does not produce a stable binary.
+- Every tag, release, merge and stable cut needs explicit owner authority.
+  A hotfix does not waive tests, candidate verification or the live-update gate.
 
-Work on version `X.Y.Z` lands as successive **release candidates**
-tagged `vX.Y.Z-r1`, `vX.Y.Z-r2`, etc. When a new rN+1 is ready, the
-previous rN is **deleted** so only one in-flight prerelease is ever
-visible. Once the user confirms it actually works, we cut **final
-`vX.Y.Z`** (no suffix) as stable Latest.
+`docs/agent-contract.md` is canonical. Executable procedures live in
+`.dsh/skills/ship-rolling-candidate/SKILL.md`,
+`.dsh/skills/cut-stable/SKILL.md` and
+`.dsh/skills/post-ship-mcp-verify/SKILL.md`.
 
-### Flow
+## Draft-first publication order
 
-```
-Start work on v2.22.0
-  ↓
-Ship fix A  →  publish v2.22.0-r1  (prerelease)
-  ↓                    User tests → finds bug B
-Ship fix B  →  publish v2.22.0-r2  (prerelease)
-                        gh release delete v2.22.0-r1 --yes
-                                  ↓ one visible prerelease at a time
-Ship fix C  →  publish v2.22.0-r3
-                        gh release delete v2.22.0-r2 --yes
-                                  ↓
-User: "works"
-  ↓
-Cut stable   →  publish v2.22.0   (non-prerelease, Latest)
-                        gh release delete v2.22.0-r3 --yes
-                                  ↓
-                 Only v2.22.0 remains on the Releases page.
-```
+1. Obtain release authorization. Record the accepted main commit SHA, require a
+   clean checkout at that SHA and exact full AppVersion, then create/push only
+   the new immutable version tag. Resolve the remote tag to its peeled commit
+   and compare it with the accepted SHA before creating a release.
+2. Create a draft using `gh release create TAG --verify-tag --draft
+   --latest=false` with release notes. Add `--prerelease` for a candidate.
+   Inspect an existing tag/draft rather than replacing it. No builder creates
+   releases or implicitly publishes assets.
+3. Inspect SignPath configuration without revealing values. Any SignPath secret
+   or `SIGNPATH_EXPECTED_SUBJECT` variable, even partial configuration, requires
+   the signed path: `gh workflow run sign-windows.yml --ref TAG -f version=VERSION`.
+   It builds exact-tag Windows sources and verifies signatures before staging.
+   Missing enrollment or failed signing means STOP, never unsigned fallback.
+4. Only with all SignPath settings absent, build the custom sing-box-lx on the
+   authorized exact-SHA worker, then run `build.ps1 -Version VERSION
+   -SingBoxPath publish/sing-box-lx.exe -Upload`. Upload only stages unsigned
+   Windows ZIPs/sidecars to the existing correct-channel draft; it requires
+   `HEAD == accepted main == tag SHA`, never creates/publishes, and never clobbers.
+5. Wait for tag-triggered `build-mac.yml`, `build-linux.yml`, `build-android.yml`,
+   `test.yml` and `test-windows-update.yml`. If the tag push preceded draft
+   creation, staging can fail safely because the draft was absent. Inspect runs
+   and existing assets first, then explicitly dispatch missing platform work
+   with `--ref TAG -f version=VERSION` and `-f upload_to_release=true` where
+   offered. Test workflows take `--ref TAG` without a version input.
+   Legacy `sign-android.yml` is disabled; use `build-android.yml`.
+6. Before publication, require all platform staging and tag-bound test/update
+   jobs green, exactly the 16 canonical assets below, all hashes matching and
+   both Windows True Split bundles. Explicitly dispatch and await:
 
-### Why this works
+   ```sh
+   gh workflow run verify-release-integrity.yml --ref TAG -f tag=TAG -f auto_draft_on_failure=false
+   ```
 
-- **One in-flight prerelease at a time.** Users looking at Releases
-  see: current stable Latest + optionally one active -rN.
-- **Stable changelog.** Every stable release represents a real
-  user-confirmed shippable state.
-- **Same tag semantics.** Users on `Experimental` channel get the
-  prerelease candidate; users on `Stable` only see the final.
-- **Storage-friendly.** One vX.Y.Z artifact set per version,
-  occasionally a transient -rN during active work.
+   Strict CI requires `-Commit SHA -ReleaseTag TAG -Strict`: canonical workflow
+   paths, tag/SHA, allowed events, latest run attempts and their jobs. Unrelated
+   same-SHA checks cannot satisfy the gate. Use the explicit prepublication
+   requirements in `ship-rolling-candidate`, not bare strict defaults (which
+   include APT). APT and full post-ship verification are not prepublication
+   prerequisites.
+7. Reconfirm owner authority, then publish with explicit channel/Latest flags:
 
-### When to use `-rN` vs. bumping patch
+   ```sh
+   # Candidate: keep the previous stable as Latest.
+   gh release edit TAG --draft=false --prerelease --latest=false
+   # Stable: only after the separately authorized stable-cut gates.
+   gh release edit TAG --draft=false --prerelease=false --latest
+   ```
 
-- **`-rN`** — still working on the same logical release: user
-  reported bug in the -rN, we're iterating on it. rN → rN+1.
-- **Bump patch (`vX.Y.Z+1`)** — previous `vX.Y.Z` was already
-  **cut as stable** and working for a while; a new issue surfaced
-  that's independent.
+8. Verify public state and tagged download URLs. Await postpublication integrity
+   and APT. Publication by workflow token may suppress downstream events; if
+   absent, explicitly dispatch both at the published tag:
 
-If we've cut stable and the user comes back with "it broke again
-in a different way" — new patch cycle starts as `vX.Y.(Z+1)-r1`.
+   ```sh
+   gh workflow run verify-release-integrity.yml --ref TAG -f tag=TAG -f auto_draft_on_failure=false
+   gh workflow run publish-apt.yml --ref TAG -f tag=TAG
+   ```
 
-### Hotfix emergency path
+   APT retains/reindexes the latest published canonical stable only, selected
+   before asset validation. A missing DEB or sidecar fails closed; it never
+   falls back to an older eligible stable. Candidate-tag runs prove provenance
+   and stable-feed health, not candidate DEB inclusion.
+9. Run the full fixed-WINBRAT post-ship gate after every candidate and stable
+   publication. No Core-only or tiny-change exemption applies. Stable Homebrew
+   notification is explicit after publication: draft staging in `build-mac.yml`
+   suppresses the tap event. Follow `cut-stable` for the `vpnrouter-release`
+   repository dispatch, then verify the tap run and cask version/hash. Never
+   rerun a public-release uploader just to notify the tap.
 
-If current stable (`vX.Y.Z`) is broken for all users and we need
-to ship a fix RIGHT NOW without a testing cycle: cut
-`vX.Y.(Z+1)` directly as stable, skip the `-rN` phase. Accept the
-risk, because the current stable is worse.
+## Recovery and integrity
 
----
+Missing, extra, malformed or partial assets fail closed. Inspect names, hashes
+and exact-tag provenance before explicitly staging only missing verified files;
+never overwrite existing release assets or silently delete partial uploads.
+If consistency cannot be proven, STOP. Published corrections require a new
+version/tag; never move a tag, replace public binaries or bypass failed gates.
 
-## Implementation checklist for DSH
+`verify-release-integrity.yml` checks the exact inventory, validates every
+sidecar and recomputes all eight hashes before inspecting archive contents.
+Windows embedded AppVersion is a hard gate. Other platforms retain limited
+embedded-version inspection because trimming/compression can remove literals;
+AppImage payloads are never executed to inspect their version. SHA sidecars
+prove consistency, not publisher authenticity or reproducibility.
 
-When starting new work on a bug batch:
+The integrity workflow runs on publication and explicit dispatch, not asset
+upload or `release: edited`. Do not assume an upload causes a final recheck.
+`auto_draft_on_failure=false` disables all release mutations for the explicit
+prepublication check. Automatic failure handling can flag/draft a corrupt
+release; this is containment, not authority to remove a failure banner and
+republish without a verified correction.
 
-1. Open the relevant plan file or create one.
-2. Pick the next `vX.Y.Z` number (usually current+1 patch, or
-   current+1 minor if it's a new feature batch).
-3. Ship the first iteration as **`vX.Y.Z-r1`** prerelease.
-4. User tests → reports feedback.
-5. Ship the fix as **`vX.Y.Z-r2`**. Remove superseded candidate release pages
-   only after the new candidate has passed post-ship verification; tags remain
-   as build history unless the retention policy explicitly says otherwise.
-6. Repeat steps 4-5 until user says "works".
-7. Cut stable through the native `cut-stable` skill: create a new
-   no-suffix AppVersion commit through branch/PR/CI, rebuild all platform
-   artifacts under a new immutable stable tag, and run the final WINBRAT gate.
+## Stable readiness gates
 
-### UpdateChecker compatibility
+A published candidate is ready for a separately authorized cut only after:
 
-`UpdateChecker` has a rolling-aware parser: `2.49.0-r1 < 2.49.0-r2 <
-2.49.0`. The stable channel ignores GitHub prereleases; the experimental
-channel can discover and update to `-rN`. AppVersion must therefore match the
-tag exactly, including the suffix.
+1. Clean Release solution build and full regression/headless suite on the
+   authorized preflighted exact-SHA worker.
+2. Canonical tag-bound macOS/Linux/Android, tests, Windows update, integrity and
+   postpublication APT runs succeed.
+3. Exactly 16 canonical assets with matching hashes and both True Split bundles.
+4. Full fixed-WINBRAT post-ship verification passes, including two connection
+   cycles and strict sanitized lifecycle/log checks.
+5. Previous-stable -> candidate real live-update gate passes, including helper
+   completion, exact installed version, receipt, relaunch and two connection
+   cycles. Preserve the procedure in `cut-stable`; no local VPN fallback.
+6. `tools/check-open-p0.ps1` exits 0, or an explicit owner waiver is recorded.
 
----
+Any failure blocks stable. Fix it in a new candidate and repeat the gates;
+rebuild and verify the final no-suffix stable tag after the authorized cut.
 
-## Verification gate (before promoting -rN to stable)
+## Canonical inventory: 16 assets
 
-A `-rN` candidate is **READY for stable cut** only when ALL of these
-are green. Cut itself is not autonomous; `docs/agent-contract.md` requires an explicit owner command.
+Each binary has a same-name `.sha256` sidecar, for eight binaries and eight
+sidecars. Replace `X.Y.Z` with the full version, including `-rN` when applicable.
 
-1. `dotnet build VPNRouter.sln -c Release` — 0 errors.
-2. Regression test suite green (xUnit + headless Avalonia).
-3. Mac + Linux + Android CI workflows green on the `-rN` tag
-   (`build-mac.yml`, `build-linux.yml`, `build-android.yml`).
-4. `gh release view vX.Y.Z-rN` shows exactly 16 canonical assets. The
-   authoritative post-ship gate checks exact names, hashes and both True Split
-   driver bundles.
-5. **`test-windows-update.yml` green on the `-rN` tag** (runs
-   automatically via `release: published` + `push: tags: v*-r*`
-   triggers; see `plans/v2.31.10-update-integration-test.md`). Catches
-   helper.cmd parser bugs of the v2.31.7-r10 class before they reach
-   users.
-6. Fixed-WINBRAT post-ship verification and the previous-stable live-update
-   gate both PASS, including two connection cycles and strict logs.
-7. `tools/check-open-p0.ps1` exits 0.
+| Platform | Binary | Producer |
+|---|---|---|
+| Windows | `VPNRouter-vX.Y.Z-win.zip` | unsigned `build.ps1` or exact-tag `sign-windows.yml` |
+| Windows | `VPNRouter-update-vX.Y.Z-win.zip` | unsigned `build.ps1` or exact-tag `sign-windows.yml` |
+| macOS | `VPNRouter-vX.Y.Z-mac.dmg` | `build-mac.yml` |
+| macOS | `VPNRouter-vX.Y.Z-mac.zip` | `build-mac.yml` |
+| Linux | `VPNRouter-vX.Y.Z-linux-amd64.deb` | `build-linux.yml` |
+| Linux | `VPNRouter-vX.Y.Z-linux-x86_64.AppImage` | `build-linux.yml` |
+| Linux | `VPNRouter-vX.Y.Z-linux.tar.gz` | `build-linux.yml` |
+| Android | `VPNRouter-vX.Y.Z-android-arm64.apk` | `build-android.yml` |
 
-If (5) is RED, **don't** promote to stable. Fix the helper.cmd
-generation or whatever surfaced, ship `-r(N+1)`, re-run.
-
----
-
-## What's in a release (16 assets)
-
-A complete `vX.Y.Z` (or `-rN`) release carries exactly these files.
-`verify-release-integrity.yml` (post-publish CI) treats this as the
-authoritative inventory: missing files are soft warnings, name/version
-mismatches inside binaries are version-check failures.
-
-| Platform | Asset | sha256 sidecar | Source workflow |
-|---|---|---|---|
-| Windows | `VPNRouter-vX.Y.Z-win.zip` | yes | `build.ps1` (local) |
-| Windows | `VPNRouter-update-vX.Y.Z-win.zip` | yes | `build.ps1` (local) |
-| macOS | `VPNRouter-vX.Y.Z-mac.dmg` | yes | `build-mac.yml` (cloud Mac runner) |
-| macOS | `VPNRouter-vX.Y.Z-mac.zip` | yes | `build-mac.yml` |
-| Linux | `VPNRouter-vX.Y.Z-linux-amd64.deb` | yes | `build-linux.yml` |
-| Linux | `VPNRouter-vX.Y.Z-linux-x86_64.AppImage` | yes | `build-linux.yml` |
-| Linux | `VPNRouter-vX.Y.Z-linux.tar.gz` | yes | `build-linux.yml` |
-| Android | `VPNRouter-vX.Y.Z-android-arm64.apk` | yes | `build-android.yml` |
-
-Counted: 4 (Win) + 4 (Mac) + 6 (Linux: 3 binaries × 2 with sidecars)
-+ 2 (Android: APK + sidecar) = **16**.
-
-### Android keystore (one-time setup, cross-link)
-
-`build-android.yml` signs each APK with a long-lived keystore stored as
-two GHA secrets: `ANDROID_KEYSTORE_BASE64` (base64-encoded `.keystore`
-file) and `ANDROID_KEYSTORE_PASSWORD`. The same keystore must be used
-for every release going forward — Android refuses to upgrade an installed
-APK if the new APK is signed with a different key, even when the
-`com.ninitux.vpnrouter` package id matches.
-
-One-time generation steps + GHA secret upload commands live in
-`plans/vpnrouter-android-platform-parity-roadmap.md` Phase A
-("One-time keystore setup"). Losing the keystore means existing Android
-users can't auto-update — they'd need to uninstall + reinstall, losing
-their settings. Backup encrypted to multiple secure locations (offline
-archive + password manager).
-
----
-
-## Enforcement
-
-The entry point is `docs/agent-contract.md`; executable release procedures live in `.dsh/skills/ship-rolling-candidate/` and `.dsh/skills/cut-stable/`.
-
----
-
-## Release integrity gate (added after v2.29.0 fake-tag fiasco)
-
-**Two-layer defense** against the bug class where a release tag says
-one version but the bundled binary reports another:
-
-### Layer 1 — local pre-build (`build.ps1` line ~54-83)
-
-Before publishing anything, `build.ps1` reads `VPNRouter.Core/AppVersion.cs`
-off disk and compares the `public const string Version` literal with the
-`-Version` argument passed to the build script. Mismatch → hard abort
-with remediation hint. Catches the original v2.29.0 cause: build script
-run from a stale worktree whose AppVersion.cs hadn't been bumped.
-
-### Layer 2 — post-publish CI (`.github/workflows/verify-release-integrity.yml`)
-
-Triggered on every `release: published` AND `release: edited` event
-(the latter catches `gh release upload --clobber` invocations after
-publish, including manual operator uploads). Runs on `ubuntu-latest`
-(all checks are file-inspection — no platform-specific tooling needed).
-
-What it checks:
-
-1. **Embedded AppVersion** — for each non-sha256 binary asset (Win zip×2,
-   Mac dmg+zip, Linux deb+AppImage+tar.gz, Android APK), extracts
-   `VPNRouter.Core.dll` (or, on Android, the assembly-store blob that
-   contains it) and scans its UTF-16 LE byte stream for the
-   AppVersion.Version literal. Asserts the release tag's version (with
-   leading `v` stripped) appears among the embedded matches.
-
-   Severity is split: **hard fail on Win** (JIT-compiled DLLs preserve
-   string constants intact), **soft warn on Mac/Linux/Android** (AOT/Mono
-   trim string literals, so absence isn't proof of mismatch). The Win
-   hard-check still catches the v2.29.0 fake-tag class for the platform
-   where helper.cmd auto-update lives.
-
-2. **SHA256 sidecars** — recomputes sha256 of every binary, compares
-   to the bundled `.sha256` sidecar. Two formats supported:
-   `<hex>  <filename>\n` (Linux CI + Android `sha256sum`) and bare `<hex>`
-   (Windows build.ps1 PowerShell-native).
-
-3. **Asset count** — current release-strategy contract is 16 assets
-   per release (4 Win + 4 Mac + 6 Linux + 2 Android). Missing assets are
-   a SOFT warning, not a failure: parallel CI (build-mac.yml,
-   build-linux.yml, build-android.yml) may still be uploading at the
-   time of the `release: published` event. Each subsequent
-   `release: edited` can re-run the workflow as uploads arrive. The final
-   `tools/post-ship-verify.ps1` check is the hard exact-16 gate.
-
-On failure (version mismatch or sha256 mismatch — these are catastrophic):
-- Marks the release as a **draft** (hides from users — they can't
-  download or browse to it).
-- Prepends a `<!-- verify-release-integrity: FAILED -->` banner with
-  the specific mismatch detail to release notes.
-- Posts the same detail to the workflow run's step summary so
-  maintainers see it without hunting.
-
-### Loop prevention
-
-The failure handler edits release notes, which fires `release: edited`,
-which would re-trigger the workflow. The order of operations prevents
-loops:
-
-1. `gh release edit --draft=true` fires `release: unpublished` (NOT in
-   our listener) — does not re-trigger.
-2. `gh release edit --notes-file <banner>` fires `release: edited`. The
-   workflow's "echo-loop guard" at job start checks both:
-   - is the release currently a draft? (step 1 made it so)
-   - do the notes already carry the FAILED marker? (step 2 added it)
-
-   If both true → skip. The guard only short-circuits the echo path —
-   if a maintainer un-drafts the release for re-verification, the
-   "is draft?" check evaluates false and verification runs fresh.
-
-`workflow_dispatch` always runs (operator override), and accepts an
-`auto_draft_on_failure` boolean input to dry-run without modifying
-the release (default `true`).
-
-### Adding to the rolling-rN policy
-
-Update step 5 in the rolling-rN flow (above) to include the post-publish
-gate:
-
-> 5. Repeat steps 4 [user testing] until either the user confirms or
->    the verification gate flags an issue. **`verify-release-integrity`
->    runs on every publish/edit and will draft the release if the
->    embedded AppVersion or sha256 doesn't match the tag.** A drafted
->    release means users won't see the broken candidate; fix and ship
->    `-r(N+1)` instead of unflagging.
-
-### Hotfix emergency path
-
-If the integrity gate flags a release that is genuinely correct (e.g.
-the workflow has a regression, false-positive on a new asset format),
-the manual escape hatch is:
-
-```bash
-# Remove the FAILED banner
-gh release edit vX.Y.Z-rN --notes "<original notes>" --repo PavelLizunov/VPNRouter
-# Un-draft
-gh release edit vX.Y.Z-rN --draft=false --repo PavelLizunov/VPNRouter
-```
-
-Re-running `verify-release-integrity` via `workflow_dispatch` is the
-preferred path (forces a re-check after asset corrections).
+Android production signing uses the long-lived `ANDROID_KEYSTORE_BASE64` and
+`ANDROID_KEYSTORE_PASSWORD` secrets. Preserve that keystore: changing it blocks
+installed APK upgrades. Enrollment/backup guidance remains in
+`plans/vpnrouter-android-platform-parity-roadmap.md` Phase A. Windows enrollment
+is documented in `plans/code-signing-signpath-runbook-2026-07-10.md`.

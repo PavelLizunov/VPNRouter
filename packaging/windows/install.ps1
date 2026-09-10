@@ -330,7 +330,7 @@ if ($exclOk) {
     } catch {}
 
     Warn "Could NOT confirm a Defender exclusion for VPNRouter."
-    if ($tp -eq $true) { Warn "  Reason: Windows Tamper Protection is ON — it blocks scripted exclusions." }
+    if ($tp -eq $true) { Warn "  Reason: Windows Tamper Protection is ON - it blocks scripted exclusions." }
     if ($thirdParty) { Warn "  Detected third-party antivirus: $($thirdParty -join ', ') (Defender exclusions do not apply to it)." }
     Warn "  => VPNRouter is UNSIGNED; an antivirus may delete it on a reboot scan."
     Warn "  => Add these two paths to your antivirus / Windows Security EXCLUSIONS manually:"
