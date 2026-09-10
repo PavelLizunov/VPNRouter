@@ -23,6 +23,10 @@ VlessUriParser restored byte-for-byte to accepted main; ServerUriParser differs 
 
 Independent reviewer re-read the complete rewritten tests, restored parser and subscription logging path against main. Source verdict PASS: original four introduced blockers removed; no mistaken test assertions found; Windows selection confirmed and git diff --check passed. Runtime URI behavior still requires CI. Unicode/malformed-escape/Naive matrices are not comprehensive, but unchanged stdlib behavior remains in place.
 
+## CI correction
+
+Run 34486559602 on 7b6d4fd2: Ubuntu 3033 passed / 1 failed / 57 skipped; Windows 194 passed / 1 failed / 0 skipped. It failed exactly one fixture on each OS: .NET accepts the tested bracket suffix, contradicting the source-only assumption that it rejects every suffix. That portion of the authority finding is withdrawn; valid-path and query regressions remain. Replaced the mistaken rejection expectation with direct System.Uri parity for all five protocols. Other malformed-port/bracket generic-error and secret-log assertions remain enabled. This is compatibility verification, not new stricter URI validation.
+
 ## Verification pending
 
 Independent corrective diff review and actual CI regression execution required before merge. Test matrix: plus/percent decoding, duplicates and insecure flags, ALPN, authority/path/brackets/ports, exception token exclusion and subscription capture logging, scheme filter/string parity. No actual hostile endpoint, deployment or live VPN tests. User-authorized merge remains conditional on green checks and successful review.

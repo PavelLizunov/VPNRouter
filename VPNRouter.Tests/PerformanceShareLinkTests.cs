@@ -104,7 +104,6 @@ public sealed class PerformanceShareLinkTests
     [InlineData("example.com:port-secret-marker")]
     [InlineData("example.com:70000")]
     [InlineData("[2001:db8::1")]
-    [InlineData("[2001:db8::1]bracket-secret-marker")]
     public void Parse_MalformedAuthority_ThrowsGenericErrorAndLogsNoSecrets(string authority)
     {
         foreach (var link in ShareLinks)
@@ -129,6 +128,17 @@ public sealed class PerformanceShareLinkTests
             Assert.DoesNotContain("query-secret-marker", logged);
             Assert.DoesNotContain("fragment-secret-marker", logged);
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(ShareLinks))]
+    public void Parse_BracketSuffix_PreservesSystemUriBehavior(string scheme, string userInfo)
+    {
+        const string authority = "[2001:db8::1]bracket-marker";
+        var baseline = new Uri($"https://{userInfo}@{authority}");
+        var entry = ServerUriParser.Parse($"{scheme}://{userInfo}@{authority}");
+        Assert.Equal(VlessUriParser.NormalizeHost(baseline.Host), entry.Server);
+        Assert.Equal(baseline.Port, entry.Port);
     }
 
     [Theory]
