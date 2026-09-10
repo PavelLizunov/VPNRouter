@@ -1,0 +1,5 @@
+# Performance branch preservation
+
+Local perf-autoresearch/vpnrouter-core tip b3985ba9ffede93849ac525f97ed2fbc2c89e5f2 is retained as unfinished work, not a completed branch. Read-only log and merge-base net-diff inspection found a benchmark project, runner/correctness/profiler scripts, autoresearch.manifest.sha256, and a remaining span-based parser change with ShareLinkHelper.cs. These seven benchmark/helper files are absent from accepted main 0bcc8166510310d39e442b09a3e0e804eb94dd01. Intermediate optimization/revert pairs exist, but the final net change is not empty.
+
+No benchmark, profiling, build, parser execution or campaign-state modification was performed. Commit subjects claiming zero allocation are historical descriptions, not verified performance results. This inventory does not establish benchmark quality, parser equivalence, or suitability for the proposed combined-main comparison. The untracked .dsh/performance-autoresearch/ directory is preserved independently and was not staged. Do not delete this ref as completed or merge the optimization as part of branch cleanup.

@@ -71,9 +71,9 @@ public sealed class SubscriptionUrlRedactionTests
             var client = new System.Net.Http.HttpClient(handler);
             const string sensitiveUrl = "https://rules.example/list.srs?token=secret123";
 
-            await RuleSetCacheManager.EnsureLocalAsync(
+            var result = await RuleSetCacheManager.EnsureLocalAsync(
                 sensitiveUrl,
-                "list.srs",
+                "cached-rules.srs",
                 logger: logger,
                 httpClient: client,
                 cacheDir: tmp,
@@ -82,6 +82,9 @@ public sealed class SubscriptionUrlRedactionTests
             var all = AllRenderedText(sink);
             Assert.DoesNotContain("secret123", all);
             Assert.DoesNotContain("token=", all);
+            Assert.NotNull(result);
+            Assert.DoesNotContain("/list.srs", all);
+            Assert.DoesNotContain(sensitiveUrl, all);
             Assert.Contains("https://rules.example", all);
         }
         finally

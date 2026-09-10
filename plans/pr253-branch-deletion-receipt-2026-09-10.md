@@ -1,0 +1,7 @@
+# Completed PR253 branch cleanup
+
+Owner authorizes deletion of completed work. Candidate sentinel/url-scheme-validation-12055544954490502712 exact tip6f812c1402ce249f41b4e99aea5a4f6dace7056b; original closed PR253 head5e46b0344907a8ec30affba06b29698213a712af. Both trees9cf3080fd01e3b66ad23de60795206dfa5997f5d. Accepted replacement PR254 merge1d21404aa9a2f3eb213be74790a754b9fd7cd9d7 reachable from main0bcc8166510310d39e442b09a3e0e804eb94dd01.
+
+Independent read-only comparison be98ee09: all three original scoped files match accepted254 in current main. FreeConfigsPageViewModel.cs1495-1507 and MainWindowViewModel.Subscriptions.cs84-93 retain trimmed absolute HTTP(S) validation before side effects. UrlValidationSecurityTests.cs original13 theory rows covered semantically by current30: file Unix/Windows, ftp, javascript, data/free sources, malformed input and valid HTTP(S); current tests add no-save/no-network checks, relative schemes/paths, trim/default names and successful subscription flow. Literal pathname/hostname changes do not create different validation branches. Localized invalid feedback replaces redacted warning; no original logging assertion lost. No unique useful test salvage identified. This is static coverage evidence, not new executed tests.
+
+Status: remote branch deleted with exact-SHA lease after revalidating tip, tree equality and replacement ancestry; fresh ls-remote confirms absence. Recovery uses full tip above; no local branch assumed. No other refs authorized by this receipt.

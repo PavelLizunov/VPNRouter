@@ -275,6 +275,8 @@ app:
             "[DBG] enc_key: mySecretEncKey456\n" +
             "[DBG] encryption_key=mySecretEncryptionKey789\n" +
             "[DBG] session_key=mySecretSessionKeyABC\n" +
+            "[DBG] auth_key=mySecretAuthKeyPQR\n" +
+            "[DBG] client_key=mySecretClientKeySTU\n" +
             "[DBG] user_key: mySecretUserKeyDEF");
         Assert.DoesNotContain("mySecretAccess123", outp);
         Assert.DoesNotContain("mySecretRefresh456", outp);
@@ -286,6 +288,8 @@ app:
         Assert.DoesNotContain("mySecretEncKey456", outp);
         Assert.DoesNotContain("mySecretEncryptionKey789", outp);
         Assert.DoesNotContain("mySecretSessionKeyABC", outp);
+        Assert.DoesNotContain("mySecretAuthKeyPQR", outp);
+        Assert.DoesNotContain("mySecretClientKeySTU", outp);
         Assert.DoesNotContain("mySecretUserKeyDEF", outp);
         Assert.Contains("access_token=", outp);
         Assert.Contains("refresh_token:", outp);
