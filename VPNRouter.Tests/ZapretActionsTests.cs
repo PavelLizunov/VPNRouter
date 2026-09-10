@@ -390,6 +390,31 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Throws<FileNotFoundException>(() => ZapretActions.RunTests());
     }
 
+    // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
+
+    [Fact]
+    public void OpenServiceMenu_PathWithMetacharacters_ThrowsArgumentException()
+    {
+        // Path contains shell metacharacters -> OpenServiceMenu throws ArgumentException
+        // before attempting Process.Start.
+        var originalDir = ZapretUpdater.ZapretDirOverride;
+        try
+        {
+            ZapretUpdater.ZapretDirOverride = Path.Combine(Path.GetTempPath(), "zapret_dir_&_calc");
+            var targetDir = ZapretUpdater.ZapretDir;
+            Directory.CreateDirectory(targetDir);
+            var servicePath = Path.Combine(targetDir, "service.bat");
+            File.WriteAllText(servicePath, "@echo off");
+
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu());
+            Assert.Contains("Service path contains disallowed shell metacharacters", ex.Message);
+        }
+        finally
+        {
+            ZapretUpdater.ZapretDirOverride = originalDir;
+        }
+    }
+
     // ── 13. Strategy parser: handles ^ line continuation + var substitution ──
 
     [Fact]

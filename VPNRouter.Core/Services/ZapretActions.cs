@@ -581,6 +581,9 @@ public static class ZapretActions
         if (!File.Exists(servicePath))
             throw new FileNotFoundException("service.bat not found", servicePath);
 
+        if (servicePath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
+            throw new ArgumentException("Service path contains disallowed shell metacharacters", nameof(servicePath));
+
         Process.Start(new ProcessStartInfo("cmd.exe", $"/k \"\"{servicePath}\"\"")
         {
             UseShellExecute = true,
