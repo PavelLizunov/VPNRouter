@@ -16,6 +16,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** — Pending PR #232 (6256e9f1) custom ParseComponents drops System.Uri authority/path validation: explicit-port paths fail parsing, bracket suffix garbage is ignored and invalid hosts can pass; ShareLinkHelper.cs:55-108 vs baseline ServerUriParser System.Uri. Source-confirmed review, no runtime differential test; retain validated authority parsing before merge.
+- [ ] **P1** — Pending PR #232 (6256e9f1) embeds untrusted port substring in FormatException; SubscriptionFetcher.cs:278 logs exception separately from scrubbed URI, allowing secret-bearing malformed authority/path text into raw logs. ShareLinkHelper.cs:108 -> logger.Warning(ex,...); source-confirmed review. Use generic diagnostics and add capture-logger regression before merge.
+
+- [ ] **P1** — Pending PR #232 (6256e9f1) replaces query duplicate aggregation with last-wins: allowInsecure=0&allowInsecure=1 becomes true in Hysteria2/TUIC instead of baseline false; ShareLinkHelper.ParseQuery dict[key]=val -> ServerUriParser TLS.Insecure. Literal '+' query decoding and repeated ALPN also change. Source-confirmed cleanup review; PR remains unmerged, runtime regression tests pending. Preserve HttpUtility-compatible semantics or obtain explicit behavior approval before acceptance.
+
 - [ ] **P2** — README denies full-tunnel support, implies platform-independent per-process crash blocking, and understates Android permissions; AppConfig.cs:14-52 supports full/exclude, LinuxFirewallManager.cs:96-120 and MacFirewallManager.cs:114-138 disarm split kill-switch, AndroidManifest.xml:14-65 lists additional permissions — bilingual documentation correction in PR #256, source-confirmed independent review.
 
 - [ ] **P2** — README privacy/build claims deny an existing local crash reporter and promise byte-identical release reproduction without evidence; SHA256 manual command assumes filename-bearing sidecars, while build.ps1:693-694 emits bare hashes — README.md / README.ru.md Privacy and manual-download sections, CrashReporter.cs:7-16; documentation repair in PR #256 awaiting review.
