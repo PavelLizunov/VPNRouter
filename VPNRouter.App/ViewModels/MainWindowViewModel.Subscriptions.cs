@@ -84,6 +84,14 @@ public partial class MainWindowViewModel
         var url = (NewSubUrl ?? "").Trim();
         if (string.IsNullOrWhiteSpace(url)) return;
 
+        // Security: enforce absolute URI validation restricted to http and https schemes
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            StatusText = Strings.SubscriptionEnterUrl;
+            return;
+        }
+
         var name = (NewSubName ?? "").Trim();
         if (string.IsNullOrEmpty(name)) name = $"Sub {Subscriptions.Count + 1}";
 

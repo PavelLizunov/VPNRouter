@@ -1498,7 +1498,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             StatusText = Strings.FcUserSrcEmptyUrl;
             return;
         }
-        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        // Security: enforce absolute URI validation restricted to http and https schemes
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
             StatusText = Strings.FcUserSrcInvalidUrl;
             return;
