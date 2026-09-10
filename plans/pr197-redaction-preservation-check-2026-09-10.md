@@ -1,0 +1,5 @@
+# PR197 redaction preservation check
+
+Main0bcc8166510310d39e442b09a3e0e804eb94dd01; closed PR197 tip2a816d20c59112021a87eb49cba67451f5873755, branch jules-15872943062637092828-d2b62e19. Closure states current main already redacts every subscription URL. Full original patch inspected: replaces seven CanaryPolicy.RedactUrl calls with a new local RedactUrlForLogging helper; no tests added.
+
+Current SubscriptionFetcher preserves shared redactor at all corresponding log sites plus initial fetching log. For valid absolute URLs both omit path/query/userinfo; original additionally retains nonstandard port and /[redacted] suffix, current emits only scheme/host. However original malformed-input fallback always returns [redacted], whereas CanaryPolicy.cs73-87 strips path/query/fragment and userinfo and can retain a coarse candidate. Thus a literal complete-equivalence claim is unsupported. No malicious-input runtime proof or product vulnerability established. Retain branch pending explicit accepted-policy comparison or archival disposition; do not introduce duplicate redaction helpers merely to remove a branch. No deletion performed.

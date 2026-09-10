@@ -1,0 +1,7 @@
+# RuleSet URL logging branch preservation check
+
+Read-only comparison against accepted main0bcc8166510310d39e442b09a3e0e804eb94dd01. Retained PR172 branch jules-4439400610055714346-7c325a2f tipdc5cbd10ef4986c7231b3b349fa5393e8f9c609c and PR182 branch jules-7563407372259111856-695ecb2c tip484e846a5c359c5c6bbcb9fe279e3ef751ac54a0 have closure comments declaring replacement in201.
+
+Original diffs inspected: both wrap fetching log URL in CanaryPolicy.RedactUrl and add a fake-HTTP capturing-logger test. PR172 asserts successful result, absence of token and /secret/path, retained origin. PR182 asserts successful result, absence of token, /api/ruleset and full URL, retained origin; unrelated SDK downgrade is not useful preservation work.
+
+Current SubscriptionUrlRedactionTests.cs63-91 provides RuleSetCacheManager_LogsDoNotContainToken with fake HTTP and capturing logger: no secret123, no token=, retained origin. It does not explicitly assert absence of path or full URL, or successful returned path. Therefore broad assertion that every original test property is preserved would overstate evidence. Branches retained pending bounded assertion preservation or explicit archival disposition; no product vulnerability inferred and no new test executed. Do not add reflection/shell or restore stale SDK changes. A future focused test edit can strengthen the existing fixture rather than duplicate its infrastructure.

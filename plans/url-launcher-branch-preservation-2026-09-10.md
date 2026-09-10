@@ -1,0 +1,7 @@
+# URL launcher branch preservation finding
+
+Read-only cleanup comparison against main0bcc8166510310d39e442b09a3e0e804eb94dd01. PR248 tip000f7650ad3fd595cbbeaef7f179c5444a06268a and PR245 tipe9b84314f9499907c5e0c710c4aeb0c37c8ebbd4 were closed as superseded by251. Accepted251 merge99fddf226d56d222bcf38a4d288ee3b53b05dd52 is reachable from main. This establishes production replacement, not full test preservation.
+
+Independent reviewer32411b17 found useful unmatched launcher negative runtime tests. PR248 TryOpenUrlSecurityTests covers9 null/empty/whitespace,file,cmd,powershell,ftp,relative,javascript cases. PR245 AppUrlLauncherSecurityTests covers12 Windows/Linux file URLs,javascript,cmd.exe,calc.exe,ftp,ssh,root-relative/relative,null/empty/whitespace cases. Main AppUrlRedactionSourceTests checks source-shaped redaction, and UrlValidationSecurityTests covers subscription/free-source entry guards rather than launcher execution.
+
+Production main retains absolute HTTP(S) allowlist and normalized URI/redacted arguments; no demonstrated launcher vulnerability or runtime failure from this inspection. Rejected TryOpenUrl API/member-hash change must not be restored merely to reuse stale tests. Fixed OpenLeakTest HTTPS constant does not create untrusted URL exposure; removed Wgturn changes are obsolete. Preserve branches until useful negative cases are adapted to current API with safe no-launch fixtures or explicitly archived with owner disposition. No branch deletion, test execution or product edits performed for this finding.
