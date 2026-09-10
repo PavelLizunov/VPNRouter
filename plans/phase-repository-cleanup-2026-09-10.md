@@ -10,7 +10,7 @@ Base: accepted main `065a2083545c85b788b302d8057be73b292f8d93`. Inventory open P
 
 ## How
 
-Read-only inventory first; verify PR ancestry and accepted merge records, not branch age or titles. Review overlapping security PRs and dependent documentation PRs separately from large product changes. Maintain exact-SHA evidence. Implement narrow bilingual README corrections and prose cleanup without new product features. No automatic conflict resolution, product migration, infrastructure change, tags or releases.
+Read-only inventory first; verify PR ancestry and accepted merge records, not branch age or titles. Review overlapping security PRs and dependent documentation PRs separately from large product changes. Maintain exact-SHA evidence. Implement narrow bilingual README corrections and prose cleanup without new product features. No blind conflict resolution, infrastructure changes, tags or releases. Owner subsequently authorized continued useful integration of #233/#235/#237/#240 with reviewed conflict resolution and green CI; substantial behavior changes require a separate decision.
 
 ## Risk and rollback
 
@@ -19,16 +19,20 @@ Primary risk is deleting unmerged work or silently accepting stale PRs. Retain a
 ## Checks and six gates
 
 1. Build: N/A for documentation/inventory-only work; product merges require their own actual CI evidence.
-2. Tests: pending narrow Markdown path/anchor/command checks and diff whitespace validation; exact PR CI after pushes.
-3. Documentation: pending bilingual README consistency, grounded prose, inventory and outcome.
-4. Review: pending independent safety/classification and README fact checks.
-5. UI/remote: N/A; no UI implementation or runtime deployment.
-6. Integration: pending fresh PR/branch state checks and approved-action receipts; preserve every unique change.
+2. Tests: prior README local link/anchor and diff whitespace checks passed; prior cleanup head `487c4637` CI green. Later cleanup documentation still requires its own diff checks and exact-head CI after any push; no builds in this reconciliation.
+3. Documentation: bilingual README corrections independently source-reviewed PASS; inventory/outcome reconciled with accepted #232/#254 and closed #253. Bilingual desktop HTTP(S) URL note and candidate/decision ledger updated to accepted behavior.
+4. Review: README source-review PASS is documentation evidence, not runtime verification. Final #232 `4b082e34` and #254 `23409668` corrective reviews PASS; unresolved PR dispositions remain outside that acceptance.
+5. UI/remote: N/A; no UI implementation or runtime deployment in cleanup reconciliation.
+6. Integration: approved merged-tip deletions recorded with recovery receipts; #232/#254 merged and #253 closed after preservation comparison. #233/#235/#237/#240 remain unresolved; #256 is owner-authorized for merge after final review and green exact-head CI.
 
 ## Outcome
 
 IN PROGRESS. Brief commit 1bad51a9, PR #256: all four CI checks passed. Owner approved deletion of the 44 exact merged-tip candidates. Revalidation retained two registered-worktree branches; atomic exact-SHA leased deletion removed 42 remote branches, then 13 matching local copies. Fresh remote listing confirmed absence and unchanged main/retained gh-pages. Full recovery tips and receipts are in repository-cleanup-recovery-2026-09-10.md; candidate names and PR disposition in repository-cleanup-candidates-2026-09-10.md.
 
-Both READMEs now correct absolute privacy/reproducibility claims, local crash reporting, Android permission scope, supported routing modes, Linux/macOS split kill-switch limits and bare-hash sidecar instructions. Removed static LOC/test badges; local links/anchors and git diff --check passed. Independent source review confirmed defects; follow-up review pending for last corrections. No product code changed. Existing stale feature/architecture counts and other README sections still need bounded review.
+Both READMEs now correct absolute privacy/reproducibility claims, local crash reporting, Android permission scope, supported routing modes, Linux/macOS split kill-switch limits and bare-hash sidecar instructions. Removed static LOC/test badges; prior local links/anchors and git diff --check passed. Independent source review of the corrections PASS; prior cleanup CI on `487c4637` green. The two README ledger items are resolved for documentation/source-review scope only, without a runtime, reproducibility or deployment claim. No product code changed in cleanup documentation. The README URL note and candidate ledger now reflect accepted #254 behavior and the latest owner decisions; remaining product/documentation PR reconciliation continues separately.
 
-No open PR closed or merged. #233/#235/#237/#240 conflict with main; #232/#253/#254 are behind, with green checks on their own heads only. All unique/deferred branches, user files and worktree registrations retained. Further PR disposition requires the agreed concrete owner decision, not automatic acceptance based on old CI.
+PR #232 final `4b082e34` passed corrective review and CI `34487206556` (Ubuntu 3038 passed / 57 skipped; Windows 199 passed; all four checks green), then merged as `9854399d`. Standard-library query/authority parsing and generic diagnostics were restored, retaining only span scheme filtering. Runtime testing withdrew the bracket-suffix rejection overclaim because System.Uri accepts the tested suffix; other query/path/log regressions are fixed. Historical custom-parser benchmarks remain superseded, not evidence for the narrowed implementation.
+
+PR #254 final `23409668` passed corrective review and CI `34489036398` (Ubuntu 3068 passed / 57 skipped; Windows 229 passed; all four checks green), then merged as `1d21404a`. Fresh GitHub API test comparison confirmed #253 data: rejection and blank-name HTTP(S) cases preserved; #253 closed, branch retained. The three #232 and two #254 ledger items are resolved with that exact evidence.
+
+Cleanup remains IN PROGRESS. #233/#235/#237/#240 remain unresolved; #256 is owner-authorized for merge after final review and green exact-head CI. The 42 remote and 13 local merged-branch deletions above have recovery records; registered-worktree branches and all unique/deferred work remain retained. Unrelated release/external acceptance defects remain unchecked, with no waivers. Further PR disposition or deletion requires the concrete owner decision, not automatic acceptance based on CI.

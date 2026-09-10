@@ -53,13 +53,15 @@ Status: owner approved the 44 candidates; 42 remote branches deleted after reval
 
 ## Open PR disposition proposals
 
-- #232: retain useful parser changes; behind main, checks green on own head. Refresh/integration review required before proposing merge.
+- #232: merged as `9854399d` after owner-approved narrowing, independent review and green exact-head CI `34487206556` on `4b082e34`. Only span scheme filtering retained; stdlib parsing restored. Branch retained pending explicit deletion decision.
 - #233: retain desktop core migration; conflicts with main and touches recently repaired release packaging. Separate reconciliation needed, not cleanup-by-merge.
 - #235: retain useful subsystem docs; conflicts with main. #237 inherits this branch, so closing as redundant requires preserving docs first.
 - #237: retain audit evidence; conflicts with main and inherits #235. Findings overlap #240; historical report must not re-open resolved findings accidentally.
 - #240: retain approved NIGHT fixes; conflicts with main across 63 files. No blind conflict resolution or bulk merge.
-- #253 / #254: same URL scheme guards, different subscription error handling and test cases. Prefer evaluating #254's user-visible feedback, preserve #253's useful additional cases before declaring it superseded. Neither merged/closed yet.
-- #256: current cleanup documentation PR; brief CI green, README changes in progress.
+- #254: merged as `1d21404a` after reviewed `23409668` passed CI `34489036398`. #253 closed after preserving data: rejection and blank-name HTTP(S) tests; both branches retained.
+- #256: owner authorized merge after final review and green exact-head CI; bilingual README reviewed, integration reports being finalized.
+
+Owner subsequently approved continuing useful integration of #233/#235/#237/#240 with reviewed conflict resolution and green CI. Substantial behavior changes still require a separate decision. This approval does not authorize discarding unique branch work.
 
 ## Retention rules
 

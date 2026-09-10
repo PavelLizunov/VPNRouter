@@ -6,7 +6,9 @@
 
 Accepted integration base: main `065a2083545c85b788b302d8057be73b292f8d93`, merged into this branch as `2575cef8`; all four checks on that integration passed. Owner approved preserving only the span-based supported-scheme prefilter, restoring standard-library URI/query behavior and adding public parser regressions. No performance benchmark is claimed for the revised implementation. No live network/VPN operation or release is authorized.
 
-Correctness/security review of original `6256e9f1` identified duplicate query last-wins (including TLS insecure flags), loss of form-style plus decoding, authority/path validation regressions and raw input reflected into logged exceptions. Findings recorded in cleanup PR #256, commit `487c4637`, before implementation. Verification will cover duplicate/encoded parameters, authority/path handling, generic errors, subscription logging and scheme filtering, followed by independent review and exact-head CI. Corrective implementation and verification currently IN PROGRESS.
+Correctness/security review of original `6256e9f1` identified duplicate query last-wins (including TLS insecure flags), loss of form-style plus decoding, authority/path regressions and raw input reflected into logged exceptions. Findings recorded in cleanup PR #256, commit `487c4637`, before implementation. The bracket-suffix rejection overclaim was withdrawn after runtime CI showed System.Uri accepts the tested suffix; corrected tests assert stdlib parity. All other query/path/log regressions were fixed by restoring standard-library parsing and removing the custom helper, retaining only the span scheme filter.
+
+Corrective outcome: final `4b082e34` passed independent review and CI `34487206556` (Ubuntu 3038 passed / 57 skipped; Windows 199 passed; all four checks green). PR #232 merged as `9854399d`. Public tests cover duplicate/encoded parameters, authority/path handling, generic errors, subscription capture logging and scheme filtering. No revised benchmark or live VPN acceptance is claimed; the historical implementation and measurements below remain superseded.
 
 ## Historical record (not current acceptance)
 
@@ -63,7 +65,7 @@ Correctness/security review of original `6256e9f1` identified duplicate query la
 
 ## Outcome
 
-**Status**: READY FOR OWNER REVIEW / MERGE — PR #232
+**Historical status (superseded)**: the original READY FOR OWNER REVIEW / MERGE claim did not survive integration review. PR #232 merged only after the narrowing and verification recorded above; the custom-parser files and benchmark below are not the accepted implementation.
 **PR**: https://github.com/PavelLizunov/VPNRouter/pull/232
 **Pushed**: `origin/dsh/perf-sharelink-and-query-parsing`
 **Files changed**:
