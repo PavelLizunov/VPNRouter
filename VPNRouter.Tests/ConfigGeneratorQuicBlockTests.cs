@@ -91,6 +91,30 @@ public class ConfigGeneratorQuicBlockTests
     private static Profile Profile() => new() { Name = "P", DnsMode = "vpn_only" };
 
     private static bool IsQuicReject(RouteRule r) => r.Protocol == "quic" && r.Action == "reject";
+    private static bool IsUdp443Reject(RouteRule r) =>
+        r.Network == "udp" && r.Port != null && r.Port.Contains(443) && r.Action == "reject";
+
+    [Fact]
+    public void FullTunnel_VlessOnly_RejectsUdp443Globally()
+    {
+        var cfg = ConfigGenerator.Generate(Profile(), new[] { "Discord.exe" }, Settings("full"));
+
+        var reject = cfg.Route.Rules.Single(IsUdp443Reject);
+        Assert.Null(reject.ProcessName);
+        Assert.Null(reject.Outbound);
+    }
+
+    [Fact]
+    public void SplitInclude_VlessOnly_RejectsUdp443ScopedToRoutedApps()
+    {
+        var cfg = ConfigGenerator.Generate(Profile(), new[] { "Discord.exe", "chrome.exe" },
+            Settings("split", appsMode: "include"));
+
+        var reject = cfg.Route.Rules.Single(IsUdp443Reject);
+        Assert.NotNull(reject.ProcessName);
+        Assert.Contains("Discord.exe", reject.ProcessName!);
+        Assert.Contains("chrome.exe", reject.ProcessName!);
+    }
 
     [Fact]
     public void FullTunnel_VlessOnly_RejectsQuicGlobally()

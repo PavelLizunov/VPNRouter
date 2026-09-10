@@ -1,6 +1,5 @@
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;

@@ -8,7 +8,7 @@
 # defect ledger to the cut gate. The cut-stable skill (pre-flight 6.5) runs this.
 #
 # Usage:
-#   pwsh tools/check-open-p0.ps1                 # exit 0 clean / exit 2 if open
+#   pwsh tools/check-open-p0.ps1                 # exit 0 clean / exit 2 if open / exit 3 invalid ledger
 #   pwsh tools/check-open-p0.ps1 -Waive 'reason' # exit 0, records the waiver line
 [CmdletBinding()]
 param([string]$Waive = '')
@@ -18,11 +18,16 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $ledger = Join-Path $repoRoot 'plans/OPEN-DEFECTS.md'
 
 if (-not (Test-Path -LiteralPath $ledger)) {
-    Write-Host "[check-open-p0] OK: no ledger at $ledger - nothing to gate."
-    exit 0
+    Write-Host "[check-open-p0] BLOCK: required ledger missing at $ledger."
+    exit 3
 }
 
 $lines = Get-Content -LiteralPath $ledger -Encoding UTF8
+$openHeadings = @($lines | Where-Object { $_ -match '(?i)^##\s+Open\b' })
+if ($openHeadings.Count -ne 1) {
+    Write-Host "[check-open-p0] BLOCK: ledger must contain exactly one Open section (found $($openHeadings.Count))."
+    exit 3
+}
 $inOpen = $false
 $open = @()
 foreach ($line in $lines) {
@@ -31,7 +36,7 @@ foreach ($line in $lines) {
         $inOpen = ($line -match '(?i)^##\s+Open\b')
         continue
     }
-    if ($inOpen -and ($line -match '^\s*-\s*\[\s\]\s') -and ($line -match '\*\*P[01]\*\*')) {
+    if ($inOpen -and ($line -match '^\s*-\s*\[\s\]\s') -and ($line -match '\*\*P[01]\b[^*]*\*\*')) {
         $open += $line.Trim()
     }
 }

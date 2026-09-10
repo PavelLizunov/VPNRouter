@@ -103,9 +103,13 @@ function Get-VerifiedArtifactHash {
     if (-not (Test-Path $ArtifactPath) -or -not (Test-Path $SidecarPath)) {
         throw 'A published Windows ZIP and its SHA256 sidecar were not both downloaded.'
     }
-    $expected = (Get-Content $SidecarPath -Raw).Trim().ToLowerInvariant()
-    if ($expected -notmatch '^[0-9a-f]{64}$') {
+    $sidecar = (Get-Content $SidecarPath -Raw).Trim()
+    if ($sidecar -notmatch '^(?<hash>[0-9a-fA-F]{64})(?:[ \t]+\*?(?<file>[^\r\n]+))?$') {
         throw "The published SHA256 sidecar is malformed: $SidecarPath"
+    }
+    $expected = $Matches.hash.ToLowerInvariant()
+    if ($Matches.ContainsKey('file') -and $Matches['file'] -cne [System.IO.Path]::GetFileName($ArtifactPath)) {
+        throw 'SHA256 sidecar names a different artifact.'
     }
     $actual = Get-Sha256Hex $ArtifactPath
     if ($actual -ne $expected) {
@@ -133,16 +137,25 @@ function Assert-ExactReleaseAssets {
         "VPNRouter-v$Version-android-arm64.apk",
         "VPNRouter-v$Version-android-arm64.apk.sha256"
     )
-    $releaseJson = (& gh release view "v$Version" --repo $Repo --json assets 2>&1 | Out-String)
+    $releaseJson = (& gh release view "v$Version" --repo $Repo --json 'assets,isDraft,isPrerelease,tagName' 2>&1 | Out-String)
     $releaseViewExitCode = $LASTEXITCODE
     if ($releaseViewExitCode -ne 0) { throw 'The release asset inventory could not be read.' }
     $release = $releaseJson | ConvertFrom-Json
+    if ($release.isDraft -ne $false -or $release.tagName -cne "v$Version" -or
+        $release.isPrerelease -ne ($Version -match '-r[1-9][0-9]*$')) {
+        throw 'Post-ship requires a published release with the exact tag and channel.'
+    }
     $actual = @($release.assets | ForEach-Object { [string]$_.name })
     $missing = @($expected | Where-Object { $actual -notcontains $_ })
     $unexpected = @($actual | Where-Object { $expected -notcontains $_ })
     if ($actual.Count -ne $expected.Count -or $missing.Count -gt 0 -or $unexpected.Count -gt 0) {
         throw 'The published release does not contain the exact expected 16 assets.'
     }
+    # IDs and update timestamps bind verification to this immutable inventory.
+    return (($release.assets | Sort-Object name | ForEach-Object {
+        if (-not $_.id -or -not $_.updatedAt -or $_.size -le 0) { throw 'Incomplete release asset identity.' }
+        '{0}|{1}|{2}|{3}' -f $_.name, $_.id, $_.size, $_.updatedAt
+    }) -join "`n")
 }
 
 function Resolve-ProjectDotNet {
@@ -215,6 +228,7 @@ try {
             '-ExecutionPolicy', 'Bypass',
             '-File', $CiGate,
             '-Commit', $releaseCommit,
+            '-ReleaseTag', "v$Version",
             '-Repo', $Repo,
             '-IgnoreSkipped', 'characterization-windows',
             '-RequiredSuccess', 'publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1',
@@ -231,18 +245,20 @@ try {
     if (-not (Test-Path $ReleaseRoot)) {
         New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
     }
-    Assert-ExactReleaseAssets
+    $inventoryBefore = Assert-ExactReleaseAssets
     Invoke-CheckedNative -FilePath 'gh' -Arguments @(
         'release', 'download', "v$Version",
         '--repo', 'PavelLizunov/VPNRouter',
-        '--pattern', $ZipName,
-        '--pattern', $HashName,
-        '--pattern', $UpdateZipName,
-        '--pattern', $UpdateHashName,
+        '--pattern', 'VPNRouter-*',
         '--dir', $ReleaseRoot,
         '--clobber'
     ) -Step 'Fresh release artifact download'
 
+    foreach ($suffix in @('win.zip', 'mac.dmg', 'mac.zip', 'linux.tar.gz', 'linux-amd64.deb', 'linux-x86_64.AppImage', 'android-arm64.apk')) {
+        $artifact = Join-Path $ReleaseRoot "VPNRouter-v$Version-$suffix"
+        Get-VerifiedArtifactHash -ArtifactPath $artifact -SidecarPath "$artifact.sha256" | Out-Null
+    }
+    if ((Assert-ExactReleaseAssets) -cne $inventoryBefore) { throw 'Release inventory changed during download.' }
     $installHash = Get-VerifiedArtifactHash -ArtifactPath $FreshZipPath -SidecarPath $FreshHashPath
     $updateHash = Get-VerifiedArtifactHash -ArtifactPath $FreshUpdateZipPath -SidecarPath $FreshUpdateHashPath
     $freshExpected = $installHash.Expected
@@ -260,9 +276,8 @@ try {
         Copy-Item -LiteralPath $FreshHashPath -Destination $HashPath
     }
     else {
-        $rootExpected = (Get-Content $HashPath -Raw).Trim().ToLowerInvariant()
-        $rootActual = Get-Sha256Hex $ZipPath
-        if ($rootExpected -ne $freshExpected -or $rootActual -ne $freshActual) {
+        $rootHash = Get-VerifiedArtifactHash -ArtifactPath $ZipPath -SidecarPath $HashPath
+        if ($rootHash.Expected -ne $freshExpected -or $rootHash.Actual -ne $freshActual) {
             throw 'The repo-root deploy artifact differs from the freshly downloaded release asset.'
         }
     }
@@ -284,6 +299,8 @@ try {
     # It also runs fixed HTTPS/UDP probes and sanitized lifecycle classification.
     $CurrentStep = 'ColdCycles'
     & $BratStability -Mode ColdCycles -Version $Version -Cycles $Cycles -RunSinceUtc $RemoteVerificationStartedUtc.ToString('o')
+    if ((Assert-ExactReleaseAssets) -cne $inventoryBefore) { throw 'Release inventory changed during verification.' }
+    if ((Resolve-ReleaseCommit) -ne $releaseCommit) { throw 'Release source identity changed during verification.' }
 }
 catch {
     $RunFailure = $_

@@ -485,12 +485,19 @@ public static class ZapretActions
     {
         var testPath = Path.Combine(ZapretUpdater.ZapretDir, "utils", "test zapret.ps1");
         if (!File.Exists(testPath)) throw new FileNotFoundException(testPath);
-        Process.Start(new ProcessStartInfo("powershell",
-            $"-NoProfile -ExecutionPolicy Bypass -File \"{testPath}\"")
+
+        var psi = new ProcessStartInfo("powershell")
         {
-            UseShellExecute = true,
+            UseShellExecute = false,
             WorkingDirectory = ZapretUpdater.ZapretDir
-        });
+        };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(testPath);
+
+        Process.Start(psi);
     }
 
     // ── Remove zapret / WinDivert services ──

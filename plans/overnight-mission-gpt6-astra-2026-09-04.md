@@ -8,9 +8,22 @@
 
 ---
 
-## Mission Directive
+## Superseded scope note — 2026-09-10
 
-You are tasked with an autonomous, comprehensive overnight deep audit of the VPNRouter codebase. 
+This mission is preserved as the original 2026-09-04 audit prompt, not a current
+execution mandate or evidence of completed verification. The service/partial
+counts and state-machine descriptions in its reading list are historical and
+superseded by the current source-navigation maps. #250 removed the Wgturn and
+emergency-channel APIs; do not revive them from older documentation.
+
+The owner has authorized useful documentation integration subject to review
+and green CI. Substantive behavior changes remain separate work; the parent
+owns merge integration, review and CI. No historical checked gate establishes
+current build, test or runtime success.
+
+## Mission Directive (original)
+
+You are tasked with an autonomous, comprehensive overnight deep audit of the VPNRouter codebase.
 
 Your objective is not a shallow linter run, but an autonomous exploration:
 1. Ingest and internalize all architectural documentation and subsystem invariants.
@@ -42,7 +55,7 @@ Before analyzing source code, thoroughly read the following documentation files 
 Once familiar with the system invariants, formulate your investigation plan across three core vectors. Prioritize areas with high concurrency, privilege boundaries, or complex cross-platform state transitions:
 
 ### Vector A: Correctness, Security & Race Conditions (Hardcore System Bugs)
-- **State Machine Concurrency**: Inspect `MainWindowViewModel.Connection.cs`, `VpnEngine.cs`, `SingBoxManager.Lifecycle.cs`, and `ResilientStarter.cs`. 
+- **State Machine Concurrency**: Inspect `MainWindowViewModel.Connection.cs`, `VpnEngine.cs`, `SingBoxManager.Lifecycle.cs`, and `ResilientStarter.cs`.
   - Look for race conditions during rapid user clicks, sleep/wake power transitions (`PowerEventListener.cs`), or network interface flapping (`NetworkInterfaceDetector.cs`).
   - Verify that `CancellationTokenSource` instances are properly linked, cancelled, and disposed without leaving zombie background tasks or orphaned sing-box instances.
 - **Privilege Boundaries & IPC**: Inspect `VPNRouter.Service`, `ProcessOwnership.cs`, `UnixOwnedProcessSignal.cs`, and installer scripts (`packaging/`).

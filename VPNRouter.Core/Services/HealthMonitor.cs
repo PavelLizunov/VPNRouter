@@ -103,7 +103,7 @@ public class HealthMonitor : IDisposable
     // alive-but-not-serving ticks. Both reset on Start()/OnSingBoxCrashed (new lifecycle).
     private bool _servingConfirmed;
     private int _wedgeStreak;
-    private const int WedgeKillThreshold = 2;   // consecutive not-serving ticks → kill
+    private const int WedgeKillThreshold = 4;   // consecutive not-serving ticks → kill (hardened from 2 to avoid false kills)
 
     // G4 (2026-06-27): set once when the restart ceiling is hit and a failover
     // has been requested, so we don't re-raise FailoverRequested on every

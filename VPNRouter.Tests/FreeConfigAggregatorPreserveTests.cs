@@ -1,7 +1,6 @@
 ﻿using Serilog;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Tests;

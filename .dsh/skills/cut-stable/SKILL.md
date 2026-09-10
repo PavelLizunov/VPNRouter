@@ -99,38 +99,104 @@ hard gate.
 6. Merge only after green CI. Build the stable tag from the exact merged
    `origin/main` commit with a clean checkout.
 
-## Build and publish
+## Create the stable draft and stage assets
 
-VPNRouter releases use the custom sing-box-lx binary for AWG/XHTTP support.
-Build it, then pass it explicitly:
+Use the accepted stable commit as `$sha`, `$version = 'X.Y.Z'` and
+`$tag = "v$version"`. Require clean `HEAD == accepted main`, with the exact
+no-suffix AppVersion. With explicit owner authorization, create and push the
+new immutable stable tag, verify its remote peeled SHA, then create the draft:
+
+```powershell
+git tag $tag $sha
+git push origin "refs/tags/$tag"
+$remoteSha = gh api "repos/PavelLizunov/VPNRouter/commits/$tag" --jq '.sha'
+if ($LASTEXITCODE -ne 0 -or $remoteSha -ne $sha) { throw 'Remote tag SHA mismatch.' }
+gh release create $tag --verify-tag --draft --latest=false --title $tag --notes-file <notes-file>
+```
+
+Check every native command's exit code and stop on failure. Inspect existing
+tags/drafts rather than recreating them. Never force-update a tag or broadly
+fetch all tags when auxiliary refs are unhealthy.
+
+Follow `ship-rolling-candidate`'s exact-tag staging and recovery procedure with
+the stable version: inspect SignPath settings first. Any configured setting,
+including partial enrollment, requires `sign-windows.yml --ref $tag
+-f version=$version`; signing failure has no unsigned fallback. Only when all
+settings are absent, build the custom sing-box-lx and stage unsigned ZIPs:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/build-singbox-lx.ps1
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "X.Y.Z" `
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version `
   -SingBoxPath "publish/sing-box-lx.exe" -Upload
 ```
 
-`build.ps1` must fail closed if release creation fails. Confirm the local tag,
-GitHub tag and release all point at the exact merged stable commit. Do not use a
-broad `git fetch origin --tags` when checkpoint refs are unhealthy.
+`-Upload` only stages to an existing correct-channel draft at the exact accepted
+main/tag SHA; it neither creates nor publishes a release and never clobbers.
+Wait for tag-triggered macOS/Linux/Android builds or explicitly dispatch each
+with `--ref $tag -f version=$version`. Missing draft fails staging safely;
+inspect existing assets before retrying missing files only. Partial or
+inconsistent assets mean STOP, not an overwrite. `build-android.yml` builds
+and production-signs the ARM64 APK; legacy `sign-android.yml` is disabled.
 
-Mirror the immutable stable tag only when the owner explicitly requests it, the configured mirror remote is verified, and its GitHub-equivalent SHA matches. Do not add, rename, or replace remotes automatically. Mirror unavailability is reported; it is never repaired by launching a VPN on the developer workstation.
+Mirror the immutable stable tag only when explicitly requested, with the
+configured mirror and GitHub-equivalent SHA verified. Do not repair remotes
+or launch a local VPN to reach them.
 
-## Platform and artifact gates
+## Prepublication gate
 
-Wait for macOS, Linux, Android, Windows update, APT, integrity and tag-test
-workflows. Then require:
+Require successful canonical macOS/Linux/Android staging, Windows signing when
+configured, `test.yml` and Windows update runs at this stable tag and SHA, then:
 
-- exactly 16 canonical assets;
-- every SHA sidecar matches;
-- full Windows ZIP contains the True Split bundle under `app/driver/`;
-- Windows update ZIP contains it under `_bootstrap/driver/`;
-- Android asset is `VPNRouter-vX.Y.Z-android-arm64.apk`;
-- release is published, non-draft and marked Latest;
-- all canonical tagged download URLs return success.
+- exactly 16 canonical assets and every SHA sidecar matching;
+- full Windows ZIP True Split bundle under `app/driver/`;
+- update Windows ZIP True Split bundle under `_bootstrap/driver/`;
+- Android asset `VPNRouter-vX.Y.Z-android-arm64.apk`.
 
-The Android workflow builds and production-signs the ARM64 APK directly.
-`.github/workflows/sign-android.yml` is only a legacy manual fallback.
+Explicitly verify the completed draft and wait for success:
+
+```powershell
+gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
+```
+
+Run the explicit prepublication strict command in `ship-rolling-candidate`
+with this stable `$sha` and `$tag`: it includes `-ReleaseTag`, three platform
+build jobs, tests/update/integrity and excludes APT. Do not use bare strict
+defaults here because they include APT. Require canonical tag-bound runs, not
+arbitrary checks sharing the SHA; inspect Sign Windows separately when used.
+APT and full post-ship checks belong after publication, not in this gate.
+
+## Publish and notify consumers
+
+After all draft gates pass and owner publication authority is confirmed:
+
+```powershell
+gh release edit $tag --draft=false --prerelease=false --latest
+```
+
+Confirm public/non-prerelease/Latest state and all canonical tagged download
+URLs. Await postpublication integrity and APT; token-originated publication may
+not trigger downstream workflows, so explicitly dispatch missing runs:
+
+```powershell
+gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
+gh workflow run publish-apt.yml --ref $tag -f tag=$tag
+```
+
+Homebrew notification in `build-mac.yml` is suppressed during draft staging.
+It is not automatically retriggered by publication. After verifying the public
+stable and DMG hash, send the workflow's tap event using an authorized token
+with contents-write access to `PavelLizunov/homebrew-vpnrouter`:
+
+```powershell
+gh api --method POST repos/PavelLizunov/homebrew-vpnrouter/dispatches `
+  -f event_type=vpnrouter-release -f "client_payload[version]=$version" -f "client_payload[tag]=$tag"
+```
+
+Keep credentials outside commands/logs. Inspect the tap's `update-cask.yml` run
+and resulting cask version/hash; missing access is an explicit blocker, not an
+automatic-success claim. Do not rerun the macOS uploader against a published
+release just to notify Homebrew. Published artifact corrections need a new
+version, not replacement assets or a moved tag.
 
 ## Mandatory stable post-ship verification
 

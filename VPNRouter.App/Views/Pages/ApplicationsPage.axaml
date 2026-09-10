@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -253,7 +254,7 @@
                  PlaceholderText="{Binding L_CategoryNamePrompt}"
                  FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
         <Button Grid.Row="2"
-                Content="{Binding L_AddCategory}"
+                icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddCategory}"
                 Command="{Binding AddCategoryCommand}"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Center"
@@ -274,14 +275,14 @@
             Margin="14,10,14,6">
         <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="13" FontWeight="Bold"
                    VerticalAlignment="Center"/>
-        <Button Grid.Column="1" Content="✕"
+        <Button Grid.Column="1" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                 IsVisible="{Binding IsCustomCategory}"
                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCategoryCommand}"
                 CommandParameter="{Binding}"
                 Background="Transparent" BorderThickness="0"
                 Padding="8,2" MinHeight="0" FontSize="11"
                 Opacity="0.6"
-                ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}"/>
+                ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}"/>
       </Grid>
 
       <!-- Explicit bulk actions; unlike the old master checkbox they never
@@ -333,14 +334,14 @@
                              FontSize="9"
                              Foreground="{DynamicResource TextMutedBrush}"/>
                 </Border>
-                <Button Grid.Column="3" Content="✕"
+                <Button Grid.Column="3" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                         IsVisible="{Binding IsCustom}"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
                         CommandParameter="{Binding}"
                         Background="Transparent" BorderThickness="0"
                         Padding="6,0" MinHeight="0" FontSize="11"
                         Foreground="{DynamicResource TextMutedBrush}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}"/>
               </Grid>
             </Border>
           </DataTemplate>
@@ -359,7 +360,7 @@
                      TextWrapping="Wrap"
                      FontSize="10"
                      Foreground="{DynamicResource WarningFgBrush}"/>
-          <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
+          <Button icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
                   IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).CanApplyAppChanges}"
@@ -381,7 +382,7 @@
                      FontSize="11" Padding="6,4"/>
             <!-- v2.30.6-r1 (UX-41 fix): hardcoded "+ Add" → bilingual binding. -->
             <Button Grid.Column="1"
-                    Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
+                    icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
                     CommandParameter="{Binding #CustomAppInput.Text}"
                     Margin="6,0,0,0"
@@ -395,7 +396,7 @@
 
     <!-- Empty state when no group selected -->
     <TextBlock Grid.Column="1"
-               Text="{Binding L_SelectCategoryHint}"
+               icons:PictogramText.Icons="arrow-left" icons:PictogramText.Text="{Binding L_SelectCategoryHint}"
                HorizontalAlignment="Center" VerticalAlignment="Center"
                FontSize="11" Opacity="0.5" FontStyle="Italic"
                IsVisible="{Binding SelectedActiveAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>

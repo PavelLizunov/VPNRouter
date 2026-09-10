@@ -48,22 +48,34 @@ public partial class MainWindowViewModel
     /// <summary>Rebuild aggregated server pool from all enabled subscriptions.</summary>
     private void RebuildSubscriptionPool()
     {
-        var selectedName = SelectedSubscriptionServer?.Name;
-        SubscriptionServers.Clear();
-
-        foreach (var sub in Subscriptions)
+        var prevLoading = _isLoadingUI;
+        _isLoadingUI = true;
+        try
         {
-            if (!sub.Enabled) continue;
-            foreach (var serverEntry in sub.UnderlyingEntry.Servers)
-                SubscriptionServers.Add(new ServerViewModel(serverEntry));
-        }
-        ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
-        ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3: subnet-risk flags from the store
+            var selectedUuid = SelectedSubscriptionServer?.Uuid;
+            var selectedName = SelectedSubscriptionServer?.Name;
+            SubscriptionServers.Clear();
 
-        // Restore selection if possible
-        SelectedSubscriptionServer = SubscriptionServers
-            .FirstOrDefault(s => s.Name == selectedName)
-            ?? SubscriptionServers.FirstOrDefault();
+            foreach (var sub in Subscriptions)
+            {
+                if (!sub.Enabled) continue;
+                foreach (var serverEntry in sub.UnderlyingEntry.Servers)
+                    SubscriptionServers.Add(new ServerViewModel(serverEntry));
+            }
+            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
+            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3: subnet-risk flags from the store
+
+            // Restore selection if possible, prioritizing UUID match over name match
+            SelectedSubscriptionServer = (!string.IsNullOrEmpty(selectedUuid)
+                ? SubscriptionServers.FirstOrDefault(s => s.Uuid == selectedUuid)
+                : null)
+                ?? SubscriptionServers.FirstOrDefault(s => s.Name == selectedName)
+                ?? SubscriptionServers.FirstOrDefault();
+        }
+        finally
+        {
+            _isLoadingUI = prevLoading;
+        }
     }
 
     [RelayCommand]
@@ -71,6 +83,14 @@ public partial class MainWindowViewModel
     {
         var url = (NewSubUrl ?? "").Trim();
         if (string.IsNullOrWhiteSpace(url)) return;
+
+        // Security: enforce absolute URI validation restricted to http and https schemes
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            StatusText = Strings.SubscriptionEnterUrl;
+            return;
+        }
 
         var name = (NewSubName ?? "").Trim();
         if (string.IsNullOrEmpty(name)) name = $"Sub {Subscriptions.Count + 1}";
@@ -123,6 +143,13 @@ public partial class MainWindowViewModel
         if (sub == null || string.IsNullOrWhiteSpace(sub.Url)) return;
         if (sub.IsRefreshing) return;
 
+        // Snapshot active server identity before refresh to prevent dropping active connection
+        var activeName = SelectedSubscriptionServer?.Name;
+        var activeUuid = SelectedSubscriptionServer?.Uuid;
+        var activeSigBefore = SelectedSubscriptionServer == null
+            ? null
+            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+
         sub.IsRefreshing = true;
         try
         {
@@ -153,6 +180,30 @@ public partial class MainWindowViewModel
             RebuildSubscriptionPool();
             SaveSettings();
         }
+
+        // G3: preserve active connection if active server configuration didn't change
+        if (IsConnected && IsSubscribeMode && !IsConnecting && activeSigBefore != null)
+        {
+            var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
+            var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
+                enabled.SelectMany(s => s.UnderlyingEntry.Servers
+                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
+                activeName, activeUuid);
+            var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
+
+            if (!activeChanged)
+            {
+                _logger.Information(
+                    "[VM] RefreshSubscription: active server '{Active}' unchanged — tunnel preserved",
+                    activeName ?? "(none)");
+            }
+            else
+            {
+                _logger.Information("[VM] RefreshSubscription: active server changed or removed, reconnecting...");
+                var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
+                await ReconnectAsync(reconnectName, ReconnectIntent.Subscription);
+            }
+        }
     }
 
     [RelayCommand]
@@ -160,6 +211,13 @@ public partial class MainWindowViewModel
     {
         var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
         if (enabled.Count == 0) return;
+
+        // Snapshot active server identity before refresh to prevent dropping active connection
+        var activeName = SelectedSubscriptionServer?.Name;
+        var activeUuid = SelectedSubscriptionServer?.Uuid;
+        var activeSigBefore = SelectedSubscriptionServer == null
+            ? null
+            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
 
         foreach (var s in enabled) s.IsRefreshing = true;
         try
@@ -190,6 +248,29 @@ public partial class MainWindowViewModel
             // the UI still reflects any entries that did complete successfully.
             RebuildSubscriptionPool();
             SaveSettings();
+        }
+
+        // G3: preserve active connection if active server configuration didn't change
+        if (IsConnected && IsSubscribeMode && !IsConnecting && activeSigBefore != null)
+        {
+            var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
+                enabled.SelectMany(s => s.UnderlyingEntry.Servers
+                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
+                activeName, activeUuid);
+            var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
+
+            if (!activeChanged)
+            {
+                _logger.Information(
+                    "[VM] RefreshAll: server pool refreshed, active server '{Active}' unchanged — tunnel preserved",
+                    activeName ?? "(none)");
+            }
+            else
+            {
+                _logger.Information("[VM] RefreshAll: active server changed or removed, reconnecting...");
+                var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
+                await ReconnectAsync(reconnectName, ReconnectIntent.Subscription);
+            }
         }
     }
 
@@ -303,6 +384,7 @@ public partial class MainWindowViewModel
             // server in the pool must not drop the tunnel (the hourly-refresh
             // reconnect that killed long-lived TCP conns like claude.exe).
             var activeName = SelectedSubscriptionServer?.Name;
+            var activeUuid = SelectedSubscriptionServer?.Uuid;
             var activeSigBefore = SelectedSubscriptionServer == null
                 ? null
                 : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
@@ -379,7 +461,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName);
+                activeName, activeUuid);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             var prevLoadingUi = _isLoadingUI;

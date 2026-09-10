@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="title desc">
+<title id="title">Применить настройки</title>
+<desc id="desc">Применяет изменённые настройки; поведение зависит от платформы</desc>
+<path d="M20 9a8 8 0 1 0 0 6M20 4v5h-5m-7 3 3 3 5-6"/>
+</svg>

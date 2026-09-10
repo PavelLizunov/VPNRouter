@@ -289,7 +289,6 @@ function Invoke-Soak {
     if (-not [bool]$boundary.Success) { throw 'Initial boundary probe failed.' }
 
     $deadline = $soakStarted.AddMinutes($DurationMinutes)
-    $consecutiveHttpOnly = 0
     $sample = 0
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         $sample++
@@ -304,9 +303,8 @@ function Invoke-Soak {
             elseif ($udpOk) { 'NotHU' }
             else { 'NotHNotU' }
         Write-Evidence -Kind 'SoakSample' -Data ([ordered]@{ Sample = $sample; Pair = $pair; State = $state })
-        if ($pair -eq 'HNotU') { $consecutiveHttpOnly++ } else { $consecutiveHttpOnly = 0 }
-        if ($consecutiveHttpOnly -eq 3) {
-            Write-Evidence -Kind 'UdpDivergenceIncident' -Data ([ordered]@{ Sample = $sample; Consecutive = 3 })
+        if (-not [bool]$control.Success -or -not $httpOk -or -not $udpOk) {
+            throw "Soak dataplane probe failed at sample $sample."
         }
         Start-Sleep -Seconds $SampleSeconds
     }

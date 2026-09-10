@@ -380,6 +380,16 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("--dpi-desync-fooling=md5sig", args);
     }
 
+    // ── 12b. RunTests: throws FileNotFoundException when script is missing ──
+
+    [Fact]
+    public void RunTests_MissingScriptFile_ThrowsFileNotFoundException()
+    {
+        // When utils/test zapret.ps1 is absent in ZapretDir, RunTests throws
+        // FileNotFoundException before attempting to spawn powershell.
+        Assert.Throws<FileNotFoundException>(() => ZapretActions.RunTests());
+    }
+
     // ── 13. Strategy parser: handles ^ line continuation + var substitution ──
 
     [Fact]
