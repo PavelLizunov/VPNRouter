@@ -19,163 +19,180 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("\"Status\":\"PASS\"", result.Stdout, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void CiGate_StrictRejectsCancelledPlatformAndIgnoresFailureWaiver()
+    [Theory]
+    [InlineData("green", 0)]
+    [InlineData("default-cancelled", 1)]
+    [InlineData("default-skipped", 2)]
+    [InlineData("unresolved", 3)]
+    [InlineData("strict-unresolved", 3)]
+    [InlineData("missing-tag", 3)]
+    [InlineData("invalid-tag", 3)]
+    [InlineData("wrong-path", 1)]
+    [InlineData("wrong-tag", 1)]
+    [InlineData("wrong-sha", 1)]
+    [InlineData("wrong-event", 1)]
+    [InlineData("newer-failed", 1)]
+    [InlineData("newer-pending", 1)]
+    [InlineData("cancelled-job", 1)]
+    [InlineData("failed-job-waiver", 1)]
+    [InlineData("skipped-job", 1)]
+    [InlineData("wrong-job-owner", 1)]
+    [InlineData("wrong-job-run", 3)]
+    [InlineData("unknown-workflow", 3)]
+    [InlineData("unknown-job", 3)]
+    [InlineData("checks-page-two-red", 1)]
+    [InlineData("runs-page-two-green", 0)]
+    [InlineData("jobs-page-two-red", 1)]
+    [InlineData("truncated-page", 3)]
+    [InlineData("duplicate-page", 3)]
+    [InlineData("missing-total", 3)]
+    [InlineData("changed-total", 3)]
+    [InlineData("malformed-json", 3)]
+    [InlineData("api-error", 3)]
+    [InlineData("no-checks", 2)]
+    [InlineData("missing-platform", 1)]
+    [InlineData("missing-attempt", 3)]
+    [InlineData("allowed-skip-required", 1)]
+    public void CiGate_BehavioralEvidenceContract(string scenario, int expectedExit)
     {
         if (!OperatingSystem.IsWindows())
             return;
 
-        var sourceRoot = FindRepoRoot();
-        var temp = Directory.CreateTempSubdirectory("vpnrouter-ci-strict-");
+        var temp = Directory.CreateTempSubdirectory("vpnrouter-ci-evidence-");
         try
         {
             var root = temp.FullName;
             var fakes = Directory.CreateDirectory(Path.Combine(root, "fakes")).FullName;
             var gate = Path.Combine(root, "verify-last-commit-ci.ps1");
-            File.Copy(Path.Combine(sourceRoot, "tools", "verify-last-commit-ci.ps1"), gate);
-            File.WriteAllText(Path.Combine(fakes, "git.cmd"), """
-                @echo off
-                echo 1111111111111111111111111111111111111111
-                exit /b 0
-                """);
-            File.WriteAllText(Path.Combine(fakes, "gh.cmd"), """
-                @echo off
-                if exist "%~dp0first-api.done" goto workflows
-                type nul > "%~dp0first-api.done"
-                type "%~dp0checks.json"
-                goto end
-                :workflows
-                type "%~dp0workflows.json"
-                :end
-                exit /b 0
-                """);
-            File.WriteAllText(Path.Combine(fakes, "checks.json"), """
-                {"check_runs":[
-                  {"name":"build","status":"completed","conclusion":"success","html_url":"https://example.invalid/1"},
-                  {"name":"build","status":"completed","conclusion":"success","html_url":"https://example.invalid/2"},
-                  {"name":"build","status":"completed","conclusion":"success","html_url":"https://example.invalid/3"},
-                  {"name":"build","status":"completed","conclusion":"cancelled","html_url":"https://example.invalid/4"},
-                  {"name":"test","status":"completed","conclusion":"success","html_url":"https://example.invalid/5"},
-                  {"name":"test","status":"completed","conclusion":"failure","html_url":"https://example.invalid/6"}
-                ]}
-                """);
-            File.WriteAllText(Path.Combine(fakes, "workflows.json"), """
-                {"workflow_runs":[]}
+            File.Copy(Path.Combine(FindRepoRoot(), "tools", "verify-last-commit-ci.ps1"), gate);
+            File.WriteAllText(Path.Combine(fakes, "git.cmd"), scenario.Contains("unresolved", StringComparison.Ordinal)
+                ? "@exit /b 1"
+                : "@echo off\r\necho 1111111111111111111111111111111111111111\r\nexit /b 0\r\n");
+            // Route by endpoint and page, never by call ordering. Unknown requests fail closed.
+            // A PowerShell shim avoids cmd.exe interpreting the API query ampersands.
+            File.WriteAllText(Path.Combine(fakes, "gh.ps1"), """
+                $endpoint = [string]$args[1]
+                Add-Content -LiteralPath (Join-Path $PSScriptRoot 'calls.txt') -Value $endpoint
+                if ($args[0] -ne 'api' -or $endpoint -notmatch '[?&]per_page=100&page=([1-9][0-9]*)$') { exit 9 }
+                $page = $Matches[1]
+                $kind = if ($endpoint -match '/check-runs\?') { 'checks' }
+                    elseif ($endpoint -match '/actions/runs\?head_sha=1111111111111111111111111111111111111111&') { 'runs' }
+                    elseif ($endpoint -match '/actions/runs/10/attempts/2/jobs\?') { 'jobs' }
+                    else { exit 9 }
+                $file = Join-Path $PSScriptRoot "$kind-$page.json"
+                if (-not (Test-Path -LiteralPath $file)) { exit 9 }
+                Get-Content -LiteralPath $file -Raw
+                exit 0
                 """);
 
-            var result = RunPowerShell(
-                root,
-                gate,
-                fakes,
-                new[] { "-Commit", "HEAD", "-RequiredSuccess", "build=3,test=1", "-Strict" },
-                new Dictionary<string, string?>
+            const string sha = "1111111111111111111111111111111111111111";
+            Dictionary<string, object?> Check(int id, string conclusion = "success") => new()
+            {
+                ["id"] = id, ["name"] = "test", ["status"] = "completed",
+                ["conclusion"] = conclusion, ["html_url"] = $"https://example.invalid/{id}",
+                ["head_sha"] = sha, ["run_id"] = 10,
+            };
+            Dictionary<string, object?> Run(int id) => new()
+            {
+                ["id"] = id, ["name"] = "dotnet test", ["path"] = ".github/workflows/test.yml",
+                ["head_sha"] = sha, ["head_branch"] = "v9.9.9-r1", ["event"] = "workflow_dispatch",
+                ["status"] = "completed", ["conclusion"] = "success", ["run_attempt"] = 2,
+            };
+            void Page(string kind, int page, string property, int total, IEnumerable<Dictionary<string, object?>> items) =>
+                File.WriteAllText(Path.Combine(fakes, $"{kind}-{page}.json"),
+                    System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+                    {
+                        ["total_count"] = total, [property] = items.ToArray(),
+                    }));
+
+            var check = Check(1);
+            var run = Run(10);
+            var job = Check(1000);
+            if (scenario == "default-cancelled") check["conclusion"] = "cancelled";
+            if (scenario == "default-skipped") check["conclusion"] = "skipped";
+            if (scenario == "wrong-path") run["path"] = ".github/workflows/impostor.yml";
+            if (scenario == "wrong-tag") run["head_branch"] = "main";
+            if (scenario == "wrong-sha") run["head_sha"] = new string('2', 40);
+            if (scenario == "wrong-event") run["event"] = "pull_request";
+            if (scenario == "cancelled-job") job["conclusion"] = "cancelled";
+            if (scenario == "failed-job-waiver") job["conclusion"] = "failure";
+            if (scenario == "skipped-job") job["conclusion"] = "skipped";
+            if (scenario == "wrong-job-owner") job["name"] = "publish";
+            if (scenario == "wrong-job-run") job["run_id"] = 11;
+            if (scenario == "missing-attempt") run.Remove("run_attempt");
+            if (scenario == "allowed-skip-required")
+            {
+                job["name"] = "characterization-windows";
+                job["conclusion"] = "skipped";
+            }
+            Page("checks", 1, "check_runs", 1, new[] { check });
+            if (scenario == "no-checks") Page("checks", 1, "check_runs", 0, Array.Empty<Dictionary<string, object?>>());
+            Page("runs", 1, "workflow_runs", 1, new[] { run });
+            Page("jobs", 1, "jobs", 1, new[] { job });
+            if (scenario is "newer-failed" or "newer-pending")
+            {
+                var newer = Run(11);
+                newer["conclusion"] = scenario == "newer-failed" ? "failure" : null;
+                newer["status"] = scenario == "newer-pending" ? "in_progress" : "completed";
+                Page("runs", 1, "workflow_runs", 2, new[] { run, newer });
+            }
+            if (scenario is "checks-page-two-red" or "truncated-page" or "duplicate-page" or "changed-total")
+            {
+                Page("checks", 1, "check_runs", 101,
+                    Enumerable.Range(1, scenario == "truncated-page" ? 30 : 100).Select(id => Check(id)));
+                Page("checks", 2, "check_runs", scenario == "changed-total" ? 102 : 101,
+                    new[] { Check(scenario == "duplicate-page" ? 1 : 101, "failure") });
+            }
+            if (scenario == "runs-page-two-green")
+            {
+                var others = Enumerable.Range(100, 100).Select(id =>
                 {
-                    ["TOLERATE_FAILURE"] = "test",
-                    ["TOLERATE_REASON"] = "must not apply to strict release verification",
+                    var other = Run(id);
+                    other["head_branch"] = "main";
+                    return other;
                 });
+                Page("runs", 1, "workflow_runs", 101, others);
+                Page("runs", 2, "workflow_runs", 101, new[] { run });
+            }
+            if (scenario == "jobs-page-two-red")
+            {
+                Page("jobs", 1, "jobs", 101, Enumerable.Range(1000, 100).Select(id => Check(id)));
+                Page("jobs", 2, "jobs", 101, new[] { Check(1100, "failure") });
+            }
+            if (scenario == "missing-total")
+                File.WriteAllText(Path.Combine(fakes, "checks-1.json"), "{\"check_runs\":[]}");
+            if (scenario == "malformed-json")
+                File.WriteAllText(Path.Combine(fakes, "checks-1.json"), "{invalid");
+            if (scenario == "api-error") File.Delete(Path.Combine(fakes, "checks-1.json"));
 
-            Assert.True(result.ExitCode == 1,
-                $"exit={result.ExitCode}{Environment.NewLine}stdout={result.Stdout}{Environment.NewLine}stderr={result.Stderr}");
-            Assert.Contains("build [cancelled]", result.Stdout, StringComparison.Ordinal);
-            Assert.Contains("https://example.invalid/6", result.Stdout, StringComparison.Ordinal);
-            Assert.DoesNotContain("failure, tolerated", result.Stdout, StringComparison.Ordinal);
-        }
-        finally
-        {
-            DeleteBestEffort(temp);
-        }
-    }
-
-    [Fact]
-    public void CiGate_StrictRequiresExactPlatformWorkflows()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        var sourceRoot = FindRepoRoot();
-        var temp = Directory.CreateTempSubdirectory("vpnrouter-ci-workflows-");
-        try
-        {
-            var root = temp.FullName;
-            var fakes = Directory.CreateDirectory(Path.Combine(root, "fakes")).FullName;
-            var gate = Path.Combine(root, "verify-last-commit-ci.ps1");
-            File.Copy(Path.Combine(sourceRoot, "tools", "verify-last-commit-ci.ps1"), gate);
-            File.WriteAllText(Path.Combine(fakes, "git.cmd"), """
-                @echo off
-                echo 1111111111111111111111111111111111111111
-                exit /b 0
-                """);
-            File.WriteAllText(Path.Combine(fakes, "gh.cmd"), """
-                @echo off
-                if exist "%~dp0first-api.done" goto workflows
-                type nul > "%~dp0first-api.done"
-                type "%~dp0checks.json"
-                goto end
-                :workflows
-                type "%~dp0workflows.json"
-                :end
-                exit /b 0
-                """);
-            File.WriteAllText(Path.Combine(fakes, "checks.json"), """
-                {"check_runs":[
-                  {"name":"test","status":"completed","conclusion":"success","html_url":"https://example.invalid/test"}
-                ]}
-                """);
-            File.WriteAllText(Path.Combine(fakes, "workflows.json"), """
-                {"workflow_runs":[
-                  {"name":"Build macOS DMG","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success"},
-                  {"name":"Build macOS DMG","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success"},
-                  {"name":"Build macOS DMG","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success"}
-                ]}
-                """);
-
-            var result = RunPowerShell(
-                root,
-                gate,
-                fakes,
-                new[]
-                {
-                    "-Commit", "HEAD",
-                    "-RequiredSuccess", "test=1",
-                    "-RequiredWorkflows", "Build macOS DMG,Build Linux AppImage + .deb",
-                    "-Strict",
-                });
-
-            Assert.True(result.ExitCode == 1,
-                $"exit={result.ExitCode}{Environment.NewLine}stdout={result.Stdout}{Environment.NewLine}stderr={result.Stderr}");
-            Assert.Contains("workflow 'Build Linux AppImage + .deb'", result.Stdout, StringComparison.Ordinal);
-            Assert.DoesNotContain("workflow 'Build macOS DMG' [required", result.Stdout, StringComparison.Ordinal);
-        }
-        finally
-        {
-            DeleteBestEffort(temp);
-        }
-    }
-
-    [Fact]
-    public void CiGate_StrictFailsClosedWhenCommitCannotBeResolved()
-    {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        var sourceRoot = FindRepoRoot();
-        var temp = Directory.CreateTempSubdirectory("vpnrouter-ci-unresolved-");
-        try
-        {
-            var root = temp.FullName;
-            var fakes = Directory.CreateDirectory(Path.Combine(root, "fakes")).FullName;
-            var gate = Path.Combine(root, "verify-last-commit-ci.ps1");
-            File.Copy(Path.Combine(sourceRoot, "tools", "verify-last-commit-ci.ps1"), gate);
-            File.WriteAllText(Path.Combine(fakes, "git.cmd"), "@exit /b 1");
-
-            var result = RunPowerShell(
-                root,
-                gate,
-                fakes,
-                new[] { "-Commit", "HEAD", "-Strict" });
-
-            Assert.Equal(3, result.ExitCode);
-            Assert.Contains("ERROR: could not resolve commit reference", result.Stdout, StringComparison.Ordinal);
+            var arguments = new List<string> { "-Commit", "HEAD" };
+            var strict = !scenario.StartsWith("default-", StringComparison.Ordinal) &&
+                scenario is not ("unresolved" or "checks-page-two-red" or "truncated-page" or
+                    "duplicate-page" or "changed-total" or "missing-total" or "malformed-json" or "api-error");
+            if (strict)
+            {
+                arguments.AddRange(new[] { "-Strict", "-RequiredWorkflows",
+                    scenario == "unknown-workflow" ? "Untrusted workflow" :
+                        scenario == "missing-platform" ? "dotnet test,Build macOS DMG" : "dotnet test",
+                    "-RequiredSuccess", scenario == "unknown-job" ? "unknown=1" :
+                        scenario == "allowed-skip-required" ? "characterization-windows=1" : "test=1" });
+                if (scenario != "missing-tag")
+                    arguments.AddRange(new[] { "-ReleaseTag", scenario == "invalid-tag" ? "v9.9.9-r0" : "v9.9.9-r1" });
+            }
+            var result = RunPowerShell(root, gate, fakes, arguments, new Dictionary<string, string?>
+            {
+                ["TOLERATE_FAILURE"] = "test", ["TOLERATE_REASON"] = "must not waive strict evidence",
+                ["IGNORE_SKIPPED"] = "test",
+            });
+            Assert.True(result.ExitCode == expectedExit,
+                $"scenario={scenario}; exit={result.ExitCode}; stdout={result.Stdout}; stderr={result.Stderr}");
+            Assert.DoesNotContain("safe to ship", result.Stdout, StringComparison.Ordinal);
+            if (scenario == "failed-job-waiver")
+                Assert.DoesNotContain("failure, tolerated", result.Stdout, StringComparison.Ordinal);
+            if (scenario is "green" or "jobs-page-two-red")
+                Assert.Contains("/actions/runs/10/attempts/2/jobs?", File.ReadAllText(Path.Combine(fakes, "calls.txt")), StringComparison.Ordinal);
+            if (scenario.Contains("page-two", StringComparison.Ordinal))
+                Assert.Contains("page=2", File.ReadAllText(Path.Combine(fakes, "calls.txt")), StringComparison.Ordinal);
         }
         finally
         {
@@ -237,7 +254,8 @@ public sealed class PostShipVerifierContractTests
                 Path.Combine(fakes, "release.json"),
                 System.Text.Json.JsonSerializer.Serialize(new
                 {
-                    assets = expectedAssets.Select(name => new { name }).ToArray(),
+                    isDraft = false, isPrerelease = true, tagName = "v" + version,
+                    assets = expectedAssets.Select((name, index) => new { name, id = index + 1, size = 1, updatedAt = "2026-01-01T00:00:00Z" }).ToArray(),
                 }));
 
             File.WriteAllText(Path.Combine(fakes, "dotnet.ps1"), """
@@ -272,6 +290,10 @@ public sealed class PostShipVerifierContractTests
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.sha256') -Destination (Join-Path $destination '{{hashName}}') -Force
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-update.zip') -Destination (Join-Path $destination '{{updateZipName}}') -Force
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-update.sha256') -Destination (Join-Path $destination '{{updateHashName}}') -Force
+                foreach ($suffix in @('mac.dmg','mac.zip','linux.tar.gz','linux-amd64.deb','linux-x86_64.AppImage','android-arm64.apk')) {
+                  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.zip') -Destination (Join-Path $destination "VPNRouter-v{{version}}-$suffix") -Force
+                  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.sha256') -Destination (Join-Path $destination "VPNRouter-v{{version}}-$suffix.sha256") -Force
+                }
                 exit 0
                 """);
             File.WriteAllText(Path.Combine(fakes, "git.cmd"), """
@@ -282,7 +304,7 @@ public sealed class PostShipVerifierContractTests
                 exit /b 0
                 """);
             File.WriteAllText(Path.Combine(tools, "verify-last-commit-ci.ps1"), """
-                param([string]$Commit, [string]$Repo, [string]$IgnoreSkipped, [string]$RequiredSuccess, [string]$RequiredWorkflows, [switch]$Strict)
+                param([string]$Commit, [string]$ReleaseTag, [string]$Repo, [string]$IgnoreSkipped, [string]$RequiredSuccess, [string]$RequiredWorkflows, [switch]$Strict)
                 Add-Content -LiteralPath $env:POSTSHIP_TRACE -Value "ci:$Commit`:$Repo`:$Strict"
                 exit 0
                 """);
@@ -500,7 +522,7 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("The published release does not contain the exact expected 16 assets", source, StringComparison.Ordinal);
         Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-FileHash", source, StringComparison.Ordinal);
-        Assert.Contains("$rootActual -ne $freshActual", source, StringComparison.Ordinal);
+        Assert.Contains("$rootHash.Actual -ne $freshActual", source, StringComparison.Ordinal);
         Assert.Contains("Invoke-CheckedNative -FilePath $PowerShellHost", source, StringComparison.Ordinal);
         Assert.Contains("Resolve-ReleaseCommit", source, StringComparison.Ordinal);
         Assert.Contains("repos/$Repo/commits/v$Version", source, StringComparison.Ordinal);
@@ -536,7 +558,13 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("[switch]$Strict", ciGate, StringComparison.Ordinal);
         Assert.Contains("$TolerateFailure = $null", ciGate, StringComparison.Ordinal);
         Assert.Contains("$requiredGreen", ciGate, StringComparison.Ordinal);
-        Assert.Contains("actions/runs\" -f \"head_sha=$head\"", ciGate, StringComparison.Ordinal);
+        Assert.Contains("actions/runs?head_sha=$head", ciGate, StringComparison.Ordinal);
+        Assert.Contains("[string]$ReleaseTag", ciGate, StringComparison.Ordinal);
+        Assert.Contains("$_.head_branch -ceq $ReleaseTag", ciGate, StringComparison.Ordinal);
+        Assert.Contains("$_.path -ceq \".github/workflows/$file\"", ciGate, StringComparison.Ordinal);
+        Assert.Contains("/attempts/$($run.run_attempt)/jobs", ciGate, StringComparison.Ordinal);
+        Assert.Contains("per_page=100&page=$page", ciGate, StringComparison.Ordinal);
+        Assert.Contains("population changed during pagination", ciGate, StringComparison.Ordinal);
         Assert.Contains("workflow '$requiredWorkflow'", ciGate, StringComparison.Ordinal);
         Assert.Contains("if ($Strict)", ciGate, StringComparison.Ordinal);
         Assert.Contains("$name [skipped, unexpected]", ciGate, StringComparison.Ordinal);

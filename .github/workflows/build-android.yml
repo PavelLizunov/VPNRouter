@@ -36,8 +36,53 @@ jobs:
     # runner RID and tries to restore an unavailable Mono.linux-x64 pack.
 
     steps:
+      - name: Validate requested version and dispatch ref
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-r[1-9][0-9]*)?$ ]]; then
+            echo "::error::Expected X.Y.Z or X.Y.Z-rN (N >= 1)."
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if [ "$GITHUB_REF" != "refs/tags/$TAG" ]; then
+            echo "::error::Run workflow_dispatch with --ref $TAG; branch refs and mismatched tags are forbidden."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify requested tag and full AppVersion
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "refs/tags/$TAG"
+          TAG_SHA=$(git rev-parse 'FETCH_HEAD^{commit}')
+          if [ "$TAG_SHA" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Requested tag does not point to the exact workflow commit."
+            exit 1
+          fi
+          APPVER=$(sed -nE 's/^[[:space:]]*public static readonly string Version = "([^"]+)";.*/\1/p' VPNRouter.Core/AppVersion.cs)
+          if [ "$APPVER" != "$VERSION" ]; then
+            echo "::error::AppVersion/tag mismatch; full version including -rN must match."
+            exit 1
+          fi
 
       # Wave 26 (Phase 6, 2026-05-18) — bumped to multi-version setup so
       # both 8.0 + 10.0 SDKs are available. Wave 23 (commit c33e372,
@@ -121,52 +166,13 @@ jobs:
       - name: Install .NET Android workload
         run: dotnet workload install android --skip-manifest-update
 
-      - name: Resolve version from tag or input
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="${{ inputs.version }}"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building version: $VERSION"
-
-      # audit batch-8 (2026-07-10): AppVersion.cs MUST match the release version
-      # (rule #5 — the embedded version, incl. -rN, tracks the tag). F3 (r8): the
-      # comparison is the FULL string, suffix included — a core-only compare let a
-      # stale -rN suffix through (AppVersion 2.47.0-r6 under tag v2.47.0-r7),
-      # which is exactly the v2.25.0-r1->r2 in-app update-loop class: the APK's
-      # versionName is forced from the tag, but the EMBEDDED AppVersion drives the
-      # in-app update check. Hard-fail before we build+sign a mislabelled installer.
-      - name: Validate AppVersion.cs matches release version
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.version.outputs.version }}"
-          APPVER=$(grep -oE 'readonly string Version = "[^"]+"' VPNRouter.Core/AppVersion.cs | grep -oE '"[^"]+"' | tr -d '"')
-          if [ "$APPVER" != "$VERSION" ]; then
-            echo "::error::AppVersion.cs ('$APPVER') != release version ('$VERSION') — full match incl. -rN required. Bump AppVersion.cs to match the tag (rule #5)."
-            exit 1
-          fi
-          echo "AppVersion.cs '$APPVER' matches release version exactly."
-
       # ── Decode signing keystore from secret ────────────────────────────
       # The keystore was generated locally one-time (see roadmap Phase A
       # "One-time keystore setup") and uploaded as ANDROID_KEYSTORE_BASE64.
       # Losing this keystore means we can't ship updates to existing
       # installs — Android refuses APKs signed with a different key on the
       # same package id. Backup encrypted to multiple locations.
-      # v2.32.2-r2 (2026-05-12): graceful skip when keystore secret
-      # isn't present. Pre-r2 the workflow exit-1'd on every release
-      # push, marking the run failed even though APK signing infra
-      # just isn't set up yet. That made every -rN ship show a red
-      # cross in the release CI list — confusing. Now we set a job-
-      # level output flag and skip downstream steps; the run records
-      # as success with a warning instead of failure. Roadmap Phase A
-      # (plans/vpnrouter-android-platform-parity-roadmap.md) still
-      # describes the one-time keystore generation + secret upload
-      # for when we actually want signed releases.
+      # Missing signing prerequisites fail the build, including build-only runs.
       - name: Decode signing keystore
         id: keystore_decode
         env:
@@ -174,15 +180,13 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${KEYSTORE_B64:-}" ]; then
-            echo "::warning::ANDROID_KEYSTORE_BASE64 secret is not set — skipping Android APK build. See plans/vpnrouter-android-platform-parity-roadmap.md Phase A for one-time keystore generation."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is required to build the signed APK."
+            exit 1
           fi
           echo "$KEYSTORE_B64" | base64 -d > "$GITHUB_WORKSPACE/vpnrouter.keystore"
           # Sanity check — file exists and is non-empty.
           test -s "$GITHUB_WORKSPACE/vpnrouter.keystore"
           echo "Keystore decoded: $(stat -c '%s bytes' "$GITHUB_WORKSPACE/vpnrouter.keystore")"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       # ── Provision libbox.aar from internal tooling release ─────────────
       # Phase 7 Wave 32 (2026-05-19) — libbox.aar (sing-box gomobile
@@ -229,13 +233,9 @@ jobs:
       # DO NOT commit a real libbox.aar — the
       # VPNRouter.Android/Lib/libbox*.aar gitignore rule is intentional.
       #
-      # Graceful skip pattern: if `gh release download` fails (release
-      # missing, asset missing, token-scoped wrong), set skip=true so
-      # a fresh fork or pre-provisioned repo records the build as a
-      # green run with a warning rather than a red failure.
+      # Missing release, missing asset and API errors must all fail the build.
       - name: Provision libbox.aar from tooling release
         id: libbox_provision
-        if: steps.keystore_decode.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Pin to a specific tooling release to make sing-box upgrades
@@ -263,9 +263,8 @@ jobs:
                --repo "$GITHUB_REPOSITORY" \
                --pattern "libbox.aar" \
                --output VPNRouter.Android/Lib/libbox.aar 2>&1; then
-            echo "::warning::Failed to fetch libbox.aar from tooling release $LIBBOX_RELEASE_TAG — skipping Android APK build. See .github/SECRETS.md for tooling-release provisioning."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::Failed to fetch required libbox.aar from tooling release $LIBBOX_RELEASE_TAG."
+            exit 1
           fi
           # Fail loudly if the downloaded asset is empty / corrupt.
           # test -s succeeds only when the file exists AND has
@@ -276,9 +275,7 @@ jobs:
           # pinned SHA256 exactly. A mismatch means the tooling-release
           # asset changed out from under the pin (re-upload, corruption, or
           # tampering) — fail CLOSED rather than build a native runtime we
-          # can't vouch for. This is intentionally a HARD failure, NOT the
-          # graceful skip above: the skip handles "asset absent" (fresh
-          # fork); a present-but-WRONG asset must stop the build loudly.
+          # can't vouch for. Absent and incorrect assets both fail closed.
           ACTUAL_SHA="$(sha256sum VPNRouter.Android/Lib/libbox.aar | awk '{print $1}')"
           if [ "$ACTUAL_SHA" != "$LIBBOX_AAR_SHA256" ]; then
             echo "::error::libbox.aar SHA256 mismatch on release $LIBBOX_RELEASE_TAG"
@@ -288,7 +285,6 @@ jobs:
             exit 1
           fi
           echo "libbox.aar provisioned + SHA256 verified ($(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar)) from release $LIBBOX_RELEASE_TAG"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       # ── Build signed APK ───────────────────────────────────────────────
       # arm64-only by default — covers all currently-shipping phones at
@@ -300,9 +296,6 @@ jobs:
       # Configuration=Release; we override with the absolute path so the
       # MSBuild target finds the file regardless of working directory.
       - name: dotnet publish (android-arm64, signed)
-        if: >-
-          steps.keystore_decode.outputs.skip != 'true' &&
-          steps.libbox_provision.outputs.skip != 'true'
         env:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
@@ -331,9 +324,6 @@ jobs:
       # without RID subdir under bin/). `find` is more robust than hard-
       # coding the path. The signed APK always carries the -Signed suffix.
       - name: Locate + rename APK
-        if: >-
-          steps.keystore_decode.outputs.skip != 'true' &&
-          steps.libbox_provision.outputs.skip != 'true'
         id: apk
         run: |
           set -euo pipefail
@@ -350,9 +340,6 @@ jobs:
           echo "apk=$APK_OUT" >> "$GITHUB_OUTPUT"
 
       - name: Verify production signing identity
-        if: >-
-          steps.keystore_decode.outputs.skip != 'true' &&
-          steps.libbox_provision.outputs.skip != 'true'
         env:
           EXPECTED_CERT_SHA256: 6e50af0f51ff021db30883eca9fd5d4e66c18d7d64fab3b1b346942bf045a221
         run: |
@@ -367,9 +354,6 @@ jobs:
           fi
 
       - name: Compute SHA256
-        if: >-
-          steps.keystore_decode.outputs.skip != 'true' &&
-          steps.libbox_provision.outputs.skip != 'true'
         run: |
           set -euo pipefail
           APK="${{ steps.apk.outputs.apk }}"
@@ -377,9 +361,6 @@ jobs:
           echo "→ $(cat "${APK}.sha256")"
 
       - name: Upload as workflow artifacts
-        if: >-
-          steps.keystore_decode.outputs.skip != 'true' &&
-          steps.libbox_provision.outputs.skip != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: android-build-v${{ steps.version.outputs.version }}
@@ -390,10 +371,8 @@ jobs:
 
       - name: Upload to GitHub Release
         if: >-
-          steps.keystore_decode.outputs.skip != 'true' &&
-          steps.libbox_provision.outputs.skip != 'true' &&
-          (github.event_name == 'push' ||
-          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release))
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -401,14 +380,21 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           APK="${{ steps.apk.outputs.apk }}"
 
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::warning::Release $TAG does not exist yet — skipping upload. Create the release first, then re-run this workflow."
-            exit 0
+          # Re-resolve the remote tag after the build; never upload stale provenance.
+          git fetch --no-tags origin "refs/tags/$TAG"
+          if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$GITHUB_SHA" ]; then
+            echo "::error::Remote tag changed since this workflow started."
+            exit 1
+          fi
+          IS_DRAFT=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
+          if [ "$IS_DRAFT" != "true" ]; then
+            echo "::error::Release must already exist and remain a draft; refusing upload."
+            exit 1
           fi
 
           echo "Uploading APK + sha256 to release $TAG..."
           gh release upload "$TAG" \
             "$APK" \
             "${APK}.sha256" \
-            --repo "$GITHUB_REPOSITORY" --clobber
+            --repo "$GITHUB_REPOSITORY"
           echo "✓ Uploaded APK + sha256 to $TAG"

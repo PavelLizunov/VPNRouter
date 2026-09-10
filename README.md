@@ -201,7 +201,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.3"
 # locally: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz), and the signed **Android ARM64 APK** are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). The **Windows** ZIPs are produced locally by `build.ps1 -Upload` and attached to the same release. See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
+**macOS (DMG)**, **Linux** (.deb/.AppImage/.tar.gz), and the signed **Android ARM64 APK** are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/build-android.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). Release uploads require an existing draft and an exact tag/SHA; manual builds must use `--ref vVERSION`. The **Windows** unsigned path `build.ps1 -Upload` only stages files on that draft and refuses configured or incomplete SignPath enrollment. When signing is configured, use `Sign Windows (SignPath)`. Publication is a separate maintainer action after the build/test and exact 16-asset integrity gates; candidates remain prereleases, not Latest. See the [release procedure](.dsh/skills/ship-rolling-candidate/SKILL.md). See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
 
 ## Architecture
 

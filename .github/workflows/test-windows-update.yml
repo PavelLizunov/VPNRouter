@@ -38,7 +38,7 @@ on:
     types: [published]
   push:
     tags:
-      - "v*-r*"
+      - "v*"
   # Auto-run on PRs that touch the update path or this workflow itself.
   # Keeps regression coverage tight without burning CI minutes on every PR.
   pull_request:
@@ -150,6 +150,16 @@ jobs:
             Get-ChildItem $installRoot -Recurse | Select-Object FullName | Format-Table -AutoSize
             throw "VPNRouter.CLI.exe not found at $cliExe"
           }
+          # Different data in old/new installs proves real copying, without
+          # corrupting assemblies required to run the old updater.
+          Set-Content -LiteralPath (Join-Path $appDir 'update-copy-probe.txt') -Value 'old' -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $stagedDir '_bootstrap\update-copy-probe.txt') -Value 'new' -Encoding ascii
+          $expectedHashes = @{}
+          foreach ($name in @('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'update-copy-probe.txt')) {
+              $source = if ($name -eq 'VPNRouter.GUI.exe') { Join-Path $stagedDir $name } else { Join-Path (Join-Path $stagedDir '_bootstrap') $name }
+              $expectedHashes[$name] = (Get-FileHash -Algorithm SHA256 $source).Hash
+          }
+          $expectedHashes | ConvertTo-Json | Set-Content -LiteralPath 'C:\TestVPNRouter\expected-hashes.json'
           $stagedGui = Join-Path $stagedDir "VPNRouter.GUI.exe"
           $stagedBootstrap = Join-Path $stagedDir "_bootstrap"
           if (-not (Test-Path $stagedGui)) { throw "Staged update missing VPNRouter.GUI.exe at $stagedGui" }
@@ -304,7 +314,14 @@ jobs:
           if (-not (Test-Path $coreDll)) {
             throw "Post-update Core.dll missing at $coreDll — xcopy may have wiped/skipped"
           }
-          Write-Host "OK: Core.dll present at $coreDll"
+          $expectedHashes = Get-Content -LiteralPath 'C:\TestVPNRouter\expected-hashes.json' -Raw | ConvertFrom-Json
+          foreach ($property in $expectedHashes.PSObject.Properties) {
+              $target = Join-Path "${{ steps.layout.outputs.appDir }}" $property.Name
+              if ((Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash -ne $property.Value) {
+                  throw "Updater did not install expected staged bytes: $($property.Name)"
+              }
+          }
+          Write-Host "OK: staged files replaced old install bytes"
 
           $sb = Join-Path "${{ steps.layout.outputs.appDir }}" "sing-box.exe"
           if (-not (Test-Path $sb)) {
@@ -322,8 +339,12 @@ jobs:
           $content = Get-Content $receipt
           Write-Host "Receipt content:"
           $content | ForEach-Object { Write-Host "  $_" }
-          if ($content.Count -lt 2) {
-            throw "Receipt has < 2 lines (expected timestamp + version)"
+          if ($content.Count -lt 2 -or $content[1].Trim() -cne '${{ steps.ver.outputs.version }}') {
+            throw "Receipt must contain the exact expected version"
+          }
+          $timestamp = [DateTimeOffset]::Parse($content[0])
+          if ($timestamp -lt [DateTimeOffset]::UtcNow.AddMinutes(-30) -or $timestamp -gt [DateTimeOffset]::UtcNow.AddMinutes(1)) {
+              throw 'Receipt timestamp is outside this test run.'
           }
 
       - name: Capture logs as artifact
