@@ -1,5 +1,9 @@
 # RuleSet URL logging branch preservation check
 
+## Preservation follow-up
+
+Owner approved the test-only transfer through `preserve-simple-redaction-tests`. Commit `e20869abae20c15a1750c38e00b4f346fc6e2aeb` adds successful-result, remote-path and full-URL absence assertions to the existing fixture. Local cache filename is deliberately `cached-rules.srs`, distinct from remote `/list.srs`, because the success log legitimately includes the local path. Independent source review passed after correcting that initial Unix false positive. All four GitHub checks passed on exact head e20869ab: test, characterization-windows and go-test-windows in run 34530917972, plus fingerprint check in run 34530918316. Focused worker execution passed both selected tests at the same SHA; parent verified primary TRX and collected-log hashes. See `redaction-test-preservation-verification-2026-09-10.md`. Branches remain until the tested transfer is accepted into main. The baseline comparison below is historical, before the transfer.
+
 Read-only comparison against accepted main0bcc8166510310d39e442b09a3e0e804eb94dd01. Retained PR172 branch jules-4439400610055714346-7c325a2f tipdc5cbd10ef4986c7231b3b349fa5393e8f9c609c and PR182 branch jules-7563407372259111856-695ecb2c tip484e846a5c359c5c6bbcb9fe279e3ef751ac54a0 have closure comments declaring replacement in201.
 
 Original diffs inspected: both wrap fetching log URL in CanaryPolicy.RedactUrl and add a fake-HTTP capturing-logger test. PR172 asserts successful result, absence of token and /secret/path, retained origin. PR182 asserts successful result, absence of token, /api/ruleset and full URL, retained origin; unrelated SDK downgrade is not useful preservation work.

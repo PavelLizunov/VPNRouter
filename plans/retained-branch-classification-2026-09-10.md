@@ -1,5 +1,7 @@
 # Retained branch classification after PR233
 
+> Historical inventory before the subsequent approved cleanup, not a live ref list. Pictogram refs and PR253 were later removed after preservation checks; seven stale registrations were archived; four historical verification refs were archived in a verified Git bundle. Local update snapshots and completed CLI/PR snapshots were also removed. See the corresponding `pictogram-branch-cleanup-receipt-2026-09-10.json`, `pr253-branch-deletion-receipt-2026-09-10.md`, `stale-worktree-archive-receipt-2026-09-10.md`, and `verification-bundle-recovery-2026-09-10.json`. Statements below about pending permissions and retained refs describe that earlier checkpoint only. Deferred Android and unfinished performance work remain retained; consult fresh Git refs for current state.
+
 Baseline main0bcc8166510310d39e442b09a3e0e804eb94dd01. Read-only remote-tip/ancestry/cherry inventory; no deletion from this classification. Owner chose remaining branch cleanup BEFORE proposed broad main campaign.
 
 Three retained remote heads now fully reachable from main: deferred Android f4d5265cd55e91fffefb1789cd2d445b4cd1f931, desktop pictogram93fda2c9ee0eced801c63a8a60e6271f05af99db, UI pictogramfe17014d7b33218b336d9f4820d5fddbe5c6e715. Each has a stale registered worktree; no metadata/prune approval inferred. Deferred Android reachability does not mean its API24 migration is active in main; its history was incorporated and later restored to legacy, so preserve its navigable WIP tip unless owner explicitly approves disposition.
