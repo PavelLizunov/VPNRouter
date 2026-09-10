@@ -18,4 +18,4 @@ Main 9854399d integrated as f569abe0; baseline CI 34487821429 passed all checks.
 
 ## Acceptance
 
-Pending implementation on #254, exact CI and corrective review. #253 closure remains conditional on preserving useful cases and accepted #254. Production guards unchanged by this follow-up; test fixes await exact-head CI and corrective review. This report records evidence for later authorized integration and does not authorize branch deletion or release.
+Corrective review PASS on final `23409668`. CI `34489036398` passed all four checks: Ubuntu 3068 passed / 57 skipped; Windows 229 passed. Owner-authorized PR #254 merged as `1d21404a`; production guards were unchanged by the test-hardening follow-up. After a fresh GitHub API test comparison confirmed preservation of data: rejection and blank-name HTTP(S) cases, #253 was closed; its branch remains retained. Acceptance covers source review and isolated CI regressions, not live endpoint, SSRF, deployment or release verification. No further branch deletion or release is authorized by this report.

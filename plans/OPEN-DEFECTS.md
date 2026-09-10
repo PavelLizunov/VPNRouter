@@ -16,10 +16,19 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-### URL validation PR #254 — corrective tests awaiting CI
+- [x] **P2 RESOLVED in PR #232 / reviewed `4b082e34` / merged `9854399d`** — Original `6256e9f1` custom ParseComponents changed authority/path behavior, including explicit-port paths; standard-library parsing restored, retaining only span scheme filtering. The bracket-suffix rejection overclaim is withdrawn: CI `34486559602` demonstrated System.Uri accepts the tested suffix; final tests assert stdlib parity, not stricter rejection. Corrective review PASS; CI `34487206556`: Ubuntu 3038 passed / 57 skipped, Windows 199 passed, all four checks green — `plans/pr232-integration-security-review-2026-09-10.md`.
+- [x] **P1 RESOLVED in PR #232 / reviewed `4b082e34` / merged `9854399d`** — Original custom invalid-port FormatException reflected raw input into SubscriptionFetcher exception logs independently of the scrubbed URI. Custom helper removed, generic stdlib errors restored and synthetic-secret capture-logger regressions added. Corrective review PASS; CI `34487206556`: Ubuntu 3038 passed / 57 skipped, Windows 199 passed, all four checks green — `plans/pr232-integration-security-review-2026-09-10.md`.
 
-- [ ] **P2** — ViewModel URL tests use plain Theory instead of Avalonia dispatcher attributes; corrected to AvaloniaTheory, runtime acceptance pending — `VPNRouter.Tests/UrlValidationSecurityTests.cs`, source-confirmed 2026-09-10; `plans/pr254-integration-security-review-2026-09-10.md`.
-- [ ] **P2** — FreeConfigs URL fixtures leave IDisposable ViewModels undisposed; using scopes added with save-count and fake HTTP side-effect checks, runtime acceptance pending — `VPNRouter.Tests/UrlValidationSecurityTests.cs`, source-confirmed 2026-09-10; PR #254.
+- [x] **P1 RESOLVED in PR #232 / reviewed `4b082e34` / merged `9854399d`** — Original dictionary last-wins changed duplicate insecure flags, repeated ALPN and literal '+' query decoding. HttpUtility-compatible parsing restored with public behavior regressions; only span scheme filtering retained. Corrective review PASS; CI `34487206556`: Ubuntu 3038 passed / 57 skipped, Windows 199 passed, all four checks green — `plans/pr232-integration-security-review-2026-09-10.md`.
+
+- [x] **P2 RESOLVED in PR #256 (independent source-review PASS; prior `487c4637` CI green)** — Bilingual READMEs now describe full/exclude routing, Linux/macOS split kill-switch limits and Android permission scope consistent with AppConfig.cs:14-52, LinuxFirewallManager.cs:96-120, MacFirewallManager.cs:114-138 and AndroidManifest.xml:14-65. Resolution is documentation/source-review scope, not runtime platform verification or merge authorization.
+
+- [x] **P2 RESOLVED in PR #256 (independent source-review PASS; prior `487c4637` CI green)** — Bilingual privacy/build prose now acknowledges the local crash reporter, removes unsupported byte-identical reproduction claims and corrects manual SHA256 handling for bare-hash sidecars; CrashReporter.cs:7-16 and build.ps1:693-694. Resolution is documentation/source-review scope, not executed crash-reporting, reproducibility or download verification; owner separately authorized #256 merge after final review and green exact-head CI.
+
+### URL validation PR #254 — corrective tests accepted and merged
+
+- [x] **P2 RESOLVED in PR #254 / reviewed `23409668` / merged `1d21404a`** — Plain Theory ViewModel URL fixtures corrected to AvaloniaTheory. Corrective review PASS; CI `34489036398`: Ubuntu 3068 passed / 57 skipped, Windows 229 passed, all four checks green — `VPNRouter.Tests/UrlValidationSecurityTests.cs`; `plans/pr254-integration-security-review-2026-09-10.md`.
+- [x] **P2 RESOLVED in PR #254 / reviewed `23409668` / merged `1d21404a`** — IDisposable FreeConfigs fixtures now use disposal scopes with save-count and serialized fake HTTP side-effect checks. Corrective review PASS; CI `34489036398`: Ubuntu 3068 passed / 57 skipped, Windows 229 passed, all four checks green. Fresh API comparison confirmed data: rejection and blank-name HTTP(S) cases from #253 preserved; #253 closed, branch retained — `VPNRouter.Tests/UrlValidationSecurityTests.cs`.
 
 ### Release pipeline review PR #255 — implementation verified, external acceptance pending
 

@@ -14,13 +14,13 @@ Keep standard Uri.TryCreate scheme handling; no new URL framework. Restore stati
 
 ## Six gates
 
-1. Build: baseline CI green, corrective CI pending.
-2. Tests: isolated dispatcher/fake-backed regressions pending on Linux and Windows.
-3. Docs: review report records limitations; owning README note to be reconciled with cleanup PR #256 after integration.
-4. Review: production source review passed; corrective test review pending.
+1. Build: PASS, all four corrective CI checks green on final `23409668`, run `34489036398`.
+2. Tests: PASS, Ubuntu 3068 passed / 57 skipped; Windows 229 passed, including isolated dispatcher/fake-backed regressions.
+3. Docs: review report records acceptance and limitations; owning README URL note remains assigned to cleanup PR #256, not a claim of completed public documentation here.
+4. Review: PASS, production source review and independent corrective review of `23409668`.
 5. UI/deployment: no live GUI/VPN changes executed; tests use headless dispatcher, deployment N/A.
-6. Integration: exact-SHA CI, owner-authorized merge, then explicit #253 preservation comparison before closure.
+6. Integration: PASS, owner-authorized #254 merge `1d21404a`; fresh GitHub API test comparison confirmed #253 data: rejection and blank-name HTTP(S) cases preserved before #253 closure. Its branch is retained.
 
 ## Outcome
 
-IN PROGRESS. No product code edits during test hardening. Original test defects: plain Theory for ViewModels and undisposed FreeConfigs fixtures; documented in pr254-integration-security-review-2026-09-10.md. No #253 closure yet.
+ACCEPTED AND MERGED as `1d21404a` after review of `23409668` and green CI `34489036398`. No product code edits during test hardening. Both test ledger defects are resolved: dispatcher attributes and IDisposable fixture cleanup, with save-count and serialized fake HTTP side-effect coverage. See pr254-integration-security-review-2026-09-10.md. #253 is closed after preservation comparison, branch retained. This does not establish SSRF protection, live endpoint/deployment acceptance, release authority or permission to merge cleanup PR #256; overall repository cleanup remains IN PROGRESS.
