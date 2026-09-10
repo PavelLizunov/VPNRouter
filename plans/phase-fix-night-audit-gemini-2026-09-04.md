@@ -1,5 +1,11 @@
 # Phase — Fix Overnight Audit Findings (Gemini)
 
+## Integration checkpoint — 2026-09-10
+
+Owner authorized integration of useful existing repairs after conflict review and green exact-head CI. Original PR head `ae352fdb` is being merged with accepted main `673cedac`; historical verification below is not current integrated acceptance. Preserve accepted release safeguards, DNS defaults, removed Wgturn surface, stdlib parser and HTTP(S) guards. Resolve characterization against the accepted main pin with the existing exact private-handler assertion; do not repin blindly. Windows CI now explicitly selects NIGHT regressions alongside accepted contract suites. Ledger union keeps NIGHT-01..12 pending current acceptance and retains two P1 follow-ups and external release gates. No native firewall/TUN/VPN deployment, release, Android migration, SafeMode semantics change or waiver is authorized. No branch deletion on abort without a separate preservation check and owner decision.
+
+Current integration/security review and final CI are pending. See `pr240-integration-assessment-2026-09-10.md`. Historical build/test counts, author labels and outcomes below describe the original work, not a new execution.
+
 **Owner**: Pavel Lizunov per canonical contract (`docs/agent-contract.md`)
 **Author**: Gemini (implementation author of code, tests, and documentation; lead is reviewer and coordinator)
 **Branch**: `dsh/fix-night-audit-gemini-2026-09-04` (based on accepted `main` `b7ce0e4f`, not tracking `origin/main`; tracks task origin branch)

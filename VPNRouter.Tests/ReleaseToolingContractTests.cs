@@ -19,7 +19,7 @@ public sealed class ReleaseToolingContractTests
     {
         var script = Read("tools", "check-open-p0.ps1");
 
-        Assert.Contains(@"\*\*P[01]\*\*", script);
+        Assert.Contains(@"\*\*P[01]\b[^*]*\*\*", script);
         Assert.Contains(@"(?i)^##\s+Open\b", script);
         Assert.Contains("$Waive", script);
     }
@@ -57,14 +57,22 @@ public sealed class ReleaseToolingContractTests
     }
 
     [Fact]
-    public void ReleaseUpload_FailsClosedWhenGitHubReleaseCreationFails()
+    public void ReleaseUpload_StagesOnlyExactSourceDraftWithoutPublishing()
     {
         var build = Read("build.ps1");
 
         Assert.Contains("throw \"gh CLI not found.", build);
-        Assert.Contains("$releaseCreateExitCode = $LASTEXITCODE", build);
-        Assert.Contains("if ($releaseCreateExitCode -eq 0)", build);
-        Assert.Contains("throw \"GitHub release creation failed", build);
+        Assert.Contains("$releaseUploadExitCode = $LASTEXITCODE", build);
+        Assert.Contains("if ($releaseUploadExitCode -ne 0)", build);
+        Assert.Contains("throw \"GitHub draft upload failed", build);
+        Assert.Contains("Existing remote release tag must match HEAD", build);
+        Assert.Contains("Remote release tag changed during build", build);
+        Assert.Contains("isDraft,isPrerelease", build);
+        Assert.Contains("use Sign Windows, never unsigned fallback", build);
+        Assert.DoesNotContain("gh release create", build);
+        Assert.DoesNotContain("--latest", build);
+        Assert.DoesNotContain("--clobber", build);
+        Assert.DoesNotContain("$staleRootZips", build);
     }
 
     [Fact]
@@ -116,7 +124,10 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("[ -z \"$ARTIFACT_CONFIG_SLUG\" ]", workflow);
         Assert.Contains("All five SignPath secrets are required", workflow);
         Assert.Contains("SIGNPATH_EXPECTED_SUBJECT", workflow);
-        Assert.Contains("refs/tags/v${{ inputs.version }}", workflow);
+        Assert.Contains("ref: ${{ github.sha }}", workflow);
+        Assert.Contains("Dispatch signing using --ref vVERSION", workflow);
+        Assert.Contains("Remote signing tag changed", workflow);
+        Assert.DoesNotContain("--clobber", workflow);
         Assert.Contains("AppVersion/tag mismatch", workflow);
         Assert.Contains("steps.upload-unsigned.outputs.artifact-id", workflow);
         Assert.DoesNotContain("gh release download", workflow);

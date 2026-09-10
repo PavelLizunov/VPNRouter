@@ -174,16 +174,18 @@ public static class ServerUriParser
         foreach (var lineSpan in MemoryExtensions.EnumerateLines(text.AsSpan()))
         {
             var trimmedSpan = lineSpan.Trim();
-            if (trimmedSpan.IsEmpty) continue;
+            if (trimmedSpan.IsEmpty || !IsSupportedScheme(trimmedSpan)) continue;
             var trimmed = trimmedSpan.ToString();
-            if (!IsSupportedScheme(trimmed)) continue;
             try { result.Add(Parse(trimmed)); } catch { /* skip malformed */ }
         }
         return result;
     }
 
     /// <summary>Cheap scheme-prefix probe — used by SubscriptionFetcher's per-line filter.</summary>
-    public static bool IsSupportedScheme(string line)
+    public static bool IsSupportedScheme(string line) => IsSupportedScheme(line.AsSpan());
+
+    /// <summary>Cheap scheme-prefix probe on span.</summary>
+    public static bool IsSupportedScheme(ReadOnlySpan<char> line)
     {
         // naive only counts as supported where the Cronet runtime exists
         // (Win/Linux). On macOS / Android this returns false so subscription

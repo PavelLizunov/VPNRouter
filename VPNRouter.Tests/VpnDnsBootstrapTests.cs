@@ -146,8 +146,18 @@ public sealed class VpnDnsBootstrapTests : IDisposable
         }
     }
 
+    private static string? ExplicitSingBoxPath()
+    {
+        var path = Environment.GetEnvironmentVariable("VPNROUTER_TEST_SING_BOX_PATH");
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        if (!Path.IsPathFullyQualified(path) || !File.Exists(path))
+            throw new InvalidOperationException("Explicit test sing-box path must be an existing absolute file; refusing fallback.");
+        return path;
+    }
+
     private static string? FindSingBox()
     {
+        if (ExplicitSingBoxPath() is { } supplied) return supplied;
         var root = FindRepoRoot();
         var candidates = new[]
         {
@@ -162,6 +172,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
 
     private static string? FindSingBoxLx()
     {
+        if (ExplicitSingBoxPath() is { } supplied) return supplied;
         var root = FindRepoRoot();
         var candidates = new[]
         {

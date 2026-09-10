@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -28,21 +29,6 @@
          • `tcp + reality` subtitle sourced from ServerViewModel.HostSubtitle
            (new in v2.25.3). -->
   <UserControl.Styles>
-
-    <!-- Radio indicator (unchecked = outlined, checked = filled+dot) -->
-    <Style Selector="Border.rbx">
-      <Setter Property="Width" Value="12"/>
-      <Setter Property="Height" Value="12"/>
-      <Setter Property="CornerRadius" Value="6"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-    </Style>
-    <Style Selector="Border.rbx.active">
-      <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidBrush}"/>
-      <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
-    </Style>
 
     <!-- Row wrapper — gets the arctic tint when active -->
     <Style Selector="Border.srv-row">
@@ -199,11 +185,10 @@
               <Grid ColumnDefinitions="14,*,100,42,40,24,24" ColumnSpacing="8">
 
                 <!-- Radio -->
-                <Border Grid.Column="0" Classes="rbx" Classes.active="{Binding IsActive}">
-                  <Ellipse Width="4" Height="4" Fill="White"
-                           IsVisible="{Binding IsActive}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
+                <Panel Grid.Column="0" VerticalAlignment="Center">
+                  <icons:Pictogram Id="radio-on" Width="16" Height="16" IsVisible="{Binding IsActive}" Foreground="{DynamicResource SuccessSolidBrush}"/>
+                  <icons:Pictogram Id="radio-off" Width="16" Height="16" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
+                </Panel>
 
                 <!-- Name + host subtitle (+ v2.32 r10 F-C orphan badge) -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
@@ -262,18 +247,18 @@
 
                 <!-- Refresh -->
                 <Button Grid.Column="5" Classes="srv-refresh"
-                        Content="⟳"
+                        icons:PictogramText.Icons="retest" icons:PictogramText.Content="⟳"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                         CommandParameter="{Binding}"
                         IsEnabled="{Binding !IsTesting}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
 
                 <!-- Per-row delete (× ) — does NOT change SelectedServer -->
                 <Button Grid.Column="6" Classes="srv-refresh"
-                        Content="✕"
+                        icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveServerByEntryCommand}"
                         CommandParameter="{Binding}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipDeleteServer}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipDeleteServer}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipDeleteServer}"/>
               </Grid>
             </Border>
           </DataTemplate>
@@ -295,11 +280,11 @@
               BorderBrush="{DynamicResource BorderDefaultBrush}"
               BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="0,6,0,0">
         <DockPanel>
-          <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="X"
+          <Button DockPanel.Dock="Top" HorizontalAlignment="Right" icons:PictogramText.Icons="close" icons:PictogramText.Content="X"
                   Command="{Binding CloseServerDetailCommand}"
                   Background="Transparent" BorderThickness="0"
                   Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
-                  ToolTip.Tip="{Binding L_TipCloseServerDetail}"/>
+                  ToolTip.Tip="{Binding L_TipCloseServerDetail}" AutomationProperties.Name="{Binding L_TipCloseServerDetail}"/>
           <Grid ColumnDefinitions="80,*"
                 RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                 DataContext="{Binding DetailServer}"
@@ -339,7 +324,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:CustomConfigViewModel">
               <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
+                <TextBlock Grid.Column="0" icons:PictogramText.Icons="status" icons:PictogramText.Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
                            IsVisible="{Binding IsActive}"
                            VerticalAlignment="Center" Margin="0,0,6,0" FontSize="9"/>
                 <TextBlock Grid.Column="1" Text="{Binding Name}"

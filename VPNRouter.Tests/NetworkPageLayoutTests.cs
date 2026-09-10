@@ -17,8 +17,8 @@ public sealed class NetworkPageLayoutTests
         Assert.Equal(3, Count(src, "IsVisible=\"{Binding !$parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}\""));
         Assert.Equal(3, Count(src, "IsVisible=\"{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}\""));
         Assert.Equal(6, Count(src, "Command=\"{Binding RemoveCommand}\""));     // delete in wide + narrow
-        Assert.Equal(6, Count(src, "Content=\"✕\""));
-        Assert.Equal(3, Count(src, "Grid.Column=\"1\" Content=\"✕\""));         // narrow delete in Auto column (index 1)
+        Assert.Equal(6, Count(src, "icons:PictogramText.Icons=\"delete\""));
+        Assert.Equal(3, Count(src, "Grid.Column=\"1\" icons:PictogramText.Icons=\"delete\""));         // narrow delete in Auto column (index 1)
         Assert.DoesNotContain("HorizontalScrollBarVisibility=\"Auto\"", src);
         Assert.DoesNotContain("HorizontalScrollBarVisibility=\"Visible\"", src);
     }

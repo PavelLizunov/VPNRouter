@@ -20,12 +20,12 @@ public sealed class AppUrlRedactionSourceTests
     [InlineData("MainWindowViewModel.Subscriptions.cs",
         "_logger.Warning(ex, \"[SubRefresh] Failed for {Url}\", CanaryPolicy.RedactUrl(s.Url));",
         "\"[SubRefresh] Failed for {Url}\", s.Url);")]
-    [InlineData("MainWindowViewModel.Wgturn.cs",
-        "_logger.Warning(\"[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}\", CanaryPolicy.RedactUrl(rawUrl));",
-        "\"[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}\", rawUrl);")]
     [InlineData("MainWindowViewModel.cs",
         "_logger.Warning(ex, \"Failed to parse server URI: {Line}\", CrashReporter.ScrubSecrets(line));",
         "\"Failed to parse server URI: {Line}\", line);")]
+    [InlineData("MainWindowViewModel.cs",
+        "Serilog.Log.Logger.Debug(ex, \"[VM] OpenUrl failed: {Url}\", CanaryPolicy.RedactUrl(url));",
+        "\"[VM] OpenUrl failed: {Url}\", url);")]
     public void LogSink_RedactsUrlArgument(string file, string wrapped, string raw)
     {
         var src = File.ReadAllText(FindRepoFile("VPNRouter.App", "ViewModels", file));

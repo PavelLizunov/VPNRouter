@@ -60,15 +60,15 @@ public static partial class ConfigGenerator
                 // Tunnelled resolver (Detour="proxy"). DoH over a TCP tunnel, plain
                 // UDP over a UDP-native (AmneziaWG) tunnel — see BuildVpnDnsServer.
                 BuildVpnDnsServer(settings, proxyIsUdpNative),
-                // Local DNS — Cloudflare DoH via dns-direct outbound (real NIC).
+                // Local DNS — Google DoH via dns-direct outbound (real NIC).
                 // type:local would call getaddrinfo() → system resolver → ISP DNS,
                 // which leaks queries to ISP for any process not in the routed list
-                // (e.g. Windows DnsCache svchost.exe). DoH via Cloudflare hides queries.
+                // (e.g. Windows DnsCache svchost.exe). DoH via Google hides queries.
                 new()
                 {
                     Tag        = "local-dns",
                     Type       = "https",
-                    Server     = "1.1.1.1",
+                    Server     = "8.8.8.8",
                     Path       = "/dns-query",
                     Detour     = "dns-direct"
                 }
@@ -225,13 +225,13 @@ public static partial class ConfigGenerator
 
     /// <summary>
     /// Reduce a DoH URL to a literal IP for plain-UDP DNS (which cannot bootstrap
-    /// a hostname over the tunnel without a loop). Falls back to Cloudflare 1.1.1.1
+    /// a hostname over the tunnel without a loop). Falls back to Google 8.8.8.8
     /// when the configured VPN DNS is a hostname rather than an IP literal.
     /// </summary>
     private static string ToPlainDnsIp(string dohUrl)
     {
         var host = ParseDohHost(dohUrl);
-        return System.Net.IPAddress.TryParse(host, out _) ? host : "1.1.1.1";
+        return System.Net.IPAddress.TryParse(host, out _) ? host : "8.8.8.8";
     }
 
     // ─── DoH URL parsing helpers ──────────────────────────────────────────────────

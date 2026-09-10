@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -120,7 +121,7 @@
                             BorderBrush="{DynamicResource DangerBorderBrush}"
                             BorderThickness="1">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-                            <TextBlock Grid.Column="0" Text="!"
+                            <TextBlock Grid.Column="0" icons:PictogramText.Icons="warning" icons:PictogramText.Text="!"
                                        Foreground="{DynamicResource DangerFgBrush}"
                                        FontSize="14" FontWeight="Bold"
                                        VerticalAlignment="Top"/>
@@ -138,13 +139,13 @@
                                     BorderThickness="1"
                                     Foreground="{DynamicResource DangerFgBrush}"
                                     VerticalAlignment="Center"/>
-                            <Button Grid.Column="3" Content="X"
+                            <Button Grid.Column="3" icons:PictogramText.Icons="close" icons:PictogramText.Content="X"
                                     Command="{Binding DismissZapretAvBlockToastCommand}"
                                     Padding="6,2" MinHeight="0" FontSize="10"
                                     Background="Transparent" BorderThickness="0"
                                     Foreground="{DynamicResource DangerFgBrush}"
                                     VerticalAlignment="Center"
-                                    ToolTip.Tip="{Binding L_TipDismiss}"/>
+                                    ToolTip.Tip="{Binding L_TipDismiss}" AutomationProperties.Name="{Binding L_TipDismiss}"/>
                         </Grid>
                     </Border>
 
@@ -195,15 +196,10 @@
                                             BoxShadow="0 2 6 0 #14000000"
                                             VerticalAlignment="Top"
                                             Margin="0,2,12,0">
-                                        <Path Width="20" Height="20"
-                                              Stretch="Uniform"
-                                              Stroke="{DynamicResource AccentFgBrush}"
-                                              StrokeThickness="1.8"
-                                              StrokeLineCap="Round"
-                                              StrokeJoin="Round"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Data="M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 z M13,7 L9,13 L12,13 L11,17 L15,11 L12,11 z"/>
+                                        <icons:Pictogram Id="shield-bolt" Width="20" Height="20"
+                                                         Foreground="{DynamicResource AccentFgBrush}"
+                                                         HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
                                     </Border>
 
                                     <TextBlock Grid.Column="1" Grid.Row="0"
@@ -241,17 +237,14 @@
                                         FontSize="13"
                                         AutomationProperties.Name="{Binding LblZapretMagicButton}">
                                     <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                        <Path Width="11" Height="11"
-                                              Stretch="Uniform"
-                                              Fill="{DynamicResource AccentOnSolidBrush}"
-                                              VerticalAlignment="Center"
-                                              IsVisible="{Binding !ZapretEnabled}"
-                                              Data="M8,5 L8,19 L19,12 z"/>
-                                        <Border Width="10" Height="10"
-                                                CornerRadius="2"
-                                                Background="{DynamicResource AccentOnSolidBrush}"
-                                                VerticalAlignment="Center"
-                                                IsVisible="{Binding ZapretEnabled}"/>
+                                        <icons:Pictogram Id="play" Width="14" Height="14"
+                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
+                                                         VerticalAlignment="Center"
+                                                         IsVisible="{Binding !ZapretEnabled}"/>
+                                        <icons:Pictogram Id="stop" Width="14" Height="14"
+                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
+                                                         VerticalAlignment="Center"
+                                                         IsVisible="{Binding ZapretEnabled}"/>
                                         <TextBlock Text="{Binding LblZapretMagicButton}"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
@@ -284,11 +277,11 @@
                                                   Padding="6,2"
                                                   MinHeight="0"
                                                   HorizontalAlignment="Stretch"
-                                                  ToolTip.Tip="{Binding LblStrategyBadgeLegend}">
+                                                  icons:PictogramText.Tip="{Binding LblStrategyBadgeLegend}">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate DataType="vm:ZapretStrategyDisplayItem">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <TextBlock Text="{Binding Glyph}"
+                                                        <TextBlock icons:PictogramText.Icons="check,warning,error,untested,timer" icons:PictogramText.Text="{Binding Glyph}"
                                                                    FontSize="10"
                                                                    MinWidth="40"
                                                                    Classes.zglyph-success="{Binding IsSuccess}"
@@ -316,7 +309,7 @@
                                                 BorderBrush="{DynamicResource AccentBorderBrush}"
                                                 BorderThickness="1">
                                             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                                <TextBlock Text="▶" FontSize="9" VerticalAlignment="Center"/>
+                                                <TextBlock icons:PictogramText.Icons="play" icons:PictogramText.Text="▶" FontSize="9" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding LblZapretRunSelected}" FontSize="10" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Button>
@@ -335,23 +328,23 @@
                                            Margin="0,2,0,0"
                                            MaxWidth="380">
                                     <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="✓" FontSize="8" Classes="zglyph-success"/>
+                                        <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.Text="✓" FontSize="8" Classes="zglyph-success"/>
                                         <TextBlock Text="{Binding LblLegendWorking}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="⚠" FontSize="8" Classes="zglyph-warning"/>
+                                        <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.Text="⚠" FontSize="8" Classes="zglyph-warning"/>
                                         <TextBlock Text="{Binding LblLegendPartial}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="✗" FontSize="8" Classes="zglyph-danger"/>
+                                        <TextBlock icons:PictogramText.Icons="error" icons:PictogramText.Text="✗" FontSize="8" Classes="zglyph-danger"/>
                                         <TextBlock Text="{Binding LblLegendFailed}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="◌" FontSize="8" Classes="zglyph-muted"/>
+                                        <TextBlock icons:PictogramText.Icons="untested" icons:PictogramText.Text="◌" FontSize="8" Classes="zglyph-muted"/>
                                         <TextBlock Text="{Binding LblLegendUntested}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="⏱" FontSize="8" Classes="zglyph-stale"/>
+                                        <TextBlock icons:PictogramText.Icons="timer" icons:PictogramText.Text="⏱" FontSize="8" Classes="zglyph-stale"/>
                                         <TextBlock Text="{Binding LblLegendStale}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                 </WrapPanel>
@@ -405,8 +398,8 @@
                                         Padding="10,5"
                                         HorizontalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                        <Ellipse Width="6" Height="6"
-                                                 Fill="{DynamicResource SuccessSolidBrush}"
+                                        <icons:Pictogram Id="status" Width="12" Height="12"
+                                                 Foreground="{DynamicResource SuccessSolidBrush}"
                                                  VerticalAlignment="Center"/>
                                         <TextBlock Text="{Binding LblZapretAirPill}"
                                                    FontSize="10"
@@ -567,7 +560,7 @@
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate DataType="vm:ZapretStrategyDisplayItem">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <TextBlock Text="{Binding Glyph}"
+                                                <TextBlock icons:PictogramText.Icons="check,warning,error,untested,timer" icons:PictogramText.Text="{Binding Glyph}"
                                                            FontSize="11"
                                                            MinWidth="44"
                                                            Classes.zglyph-success="{Binding IsSuccess}"
@@ -840,9 +833,9 @@
                             Orientation="Horizontal"
                             Spacing="6"
                             VerticalAlignment="Center">
-                    <Ellipse Width="8" Height="8"
+                    <icons:Pictogram Id="status" Width="16" Height="16"
                              VerticalAlignment="Center"
-                             Fill="{Binding ZapretEnabled, Converter={StaticResource StatusColorConverter}}"/>
+                             Foreground="{Binding ZapretEnabled, Converter={StaticResource StatusColorConverter}}"/>
                     <TextBlock Text="{Binding ZapretStatus}"
                                FontSize="10"
                                FontWeight="SemiBold"

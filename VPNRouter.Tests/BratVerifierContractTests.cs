@@ -164,12 +164,12 @@ public sealed class BratVerifierContractTests
         Assert.Contains("/artifacts/brat-verify/", ignore);
         Assert.DoesNotContain("gh auth status", gate);
 
-        var savePreference = gate.IndexOf("$previousErrorActionPreference = $ErrorActionPreference", StringComparison.Ordinal);
-        var relaxPreference = gate.IndexOf("$ErrorActionPreference = \"Continue\"", StringComparison.Ordinal);
-        var api = gate.IndexOf("$json = gh api $apiPath 2>&1", StringComparison.Ordinal);
-        var captureExit = gate.IndexOf("$apiExitCode = $LASTEXITCODE", StringComparison.Ordinal);
-        var restorePreference = gate.IndexOf("$ErrorActionPreference = $previousErrorActionPreference", StringComparison.Ordinal);
-        var failClosed = gate.IndexOf("if ($apiExitCode -ne 0)", StringComparison.Ordinal);
+        var savePreference = gate.IndexOf("$previousPreference = $ErrorActionPreference", StringComparison.Ordinal);
+        var relaxPreference = gate.IndexOf("$ErrorActionPreference = 'Continue'", savePreference, StringComparison.Ordinal);
+        var api = gate.IndexOf("$json = gh api", relaxPreference, StringComparison.Ordinal);
+        var captureExit = gate.IndexOf("$code = $LASTEXITCODE", api, StringComparison.Ordinal);
+        var restorePreference = gate.IndexOf("$ErrorActionPreference = $previousPreference", captureExit, StringComparison.Ordinal);
+        var failClosed = gate.IndexOf("if ($code -ne 0)", restorePreference, StringComparison.Ordinal);
         Assert.True(savePreference >= 0 && relaxPreference > savePreference && api > relaxPreference &&
                     captureExit > api && restorePreference > captureExit && failClosed > restorePreference,
             "The gh API call must scope native stderr handling, restore Stop, then fail closed.");
