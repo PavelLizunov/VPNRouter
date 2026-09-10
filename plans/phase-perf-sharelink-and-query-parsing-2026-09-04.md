@@ -1,5 +1,15 @@
 # Phase — Multi-Protocol Share Link and Query Parsing Performance Optimization
 
+> Historical implementation record, superseded by the owner-approved 2026-09-10 narrowing below. The old performance measurements and readiness claims do NOT apply to the revised PR. The original custom parser introduced query/authority/logging regressions identified during cleanup review; it must not be merged unchanged.
+
+## 2026-09-10 approved corrective scope
+
+Accepted integration base: main `065a2083545c85b788b302d8057be73b292f8d93`, merged into this branch as `2575cef8`; all four checks on that integration passed. Owner approved preserving only the span-based supported-scheme prefilter, restoring standard-library URI/query behavior and adding public parser regressions. No performance benchmark is claimed for the revised implementation. No live network/VPN operation or release is authorized.
+
+Correctness/security review of original `6256e9f1` identified duplicate query last-wins (including TLS insecure flags), loss of form-style plus decoding, authority/path validation regressions and raw input reflected into logged exceptions. Findings recorded in cleanup PR #256, commit `487c4637`, before implementation. Verification will cover duplicate/encoded parameters, authority/path handling, generic errors, subscription logging and scheme filtering, followed by independent review and exact-head CI. Corrective implementation and verification currently IN PROGRESS.
+
+## Historical record (not current acceptance)
+
 **Owner**: DSH session `session-527962d1-ce92-41c3-b855-73d0c090e510`
 **Branch**: `dsh/perf-sharelink-and-query-parsing`
 **Accepted base**: `origin/main` head `b7ce0e4f`

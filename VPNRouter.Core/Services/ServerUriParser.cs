@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
+using System.Web;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -391,26 +392,26 @@ public static class ServerUriParser
 
     private static VlessServerEntry ParseHysteria2(string uri)
     {
-        var schemeLen = uri.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase)
-            ? "hy2://".Length
-            : "hysteria2://".Length;
+        // Normalize hy2:// -> hysteria2:// then swap to https:// so System.Uri can parse.
+        var normalized = uri;
+        if (normalized.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
+            normalized = "hysteria2://" + normalized.Substring("hy2://".Length);
+        var fake = "https://" + normalized.Substring("hysteria2://".Length);
 
-        ShareLinkHelper.ParseComponents(
-            uri.AsSpan(schemeLen),
-            out var userinfoSpan,
-            out var server,
-            out var port,
-            out var querySpan,
-            out var name);
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid hysteria2 URI: cannot parse");
 
-        var password = ShareLinkHelper.Unescape(userinfoSpan);
+        var password = Uri.UnescapeDataString(parsed.UserInfo);
         if (password.Length == 0)
             throw new FormatException("Invalid hysteria2 URI: password missing (expected hysteria2://password@host:port)");
 
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid hysteria2 URI: host missing");
 
-        var query = ShareLinkHelper.ParseQuery(querySpan);
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
 
         var entry = new VlessServerEntry
         {
@@ -583,15 +584,12 @@ public static class ServerUriParser
 
     private static VlessServerEntry ParseTuic(string uri)
     {
-        ShareLinkHelper.ParseComponents(
-            uri.AsSpan("tuic://".Length),
-            out var userinfoSpan,
-            out var server,
-            out var port,
-            out var querySpan,
-            out var name);
+        var fake = "https://" + uri.Substring("tuic://".Length);
 
-        var userinfo = ShareLinkHelper.Unescape(userinfoSpan);
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid tuic URI: cannot parse");
+
+        var userinfo = Uri.UnescapeDataString(parsed.UserInfo);
         if (userinfo.Length == 0)
             throw new FormatException("Invalid tuic URI: uuid:password missing");
 
@@ -611,10 +609,13 @@ public static class ServerUriParser
             password = userinfo.Substring(colon + 1);
         }
 
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid tuic URI: host missing");
 
-        var query = ShareLinkHelper.ParseQuery(querySpan);
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
 
         return new VlessServerEntry
         {
@@ -661,18 +662,14 @@ public static class ServerUriParser
 
     private static VlessServerEntry ParseShadowsocks(string uri)
     {
-        ShareLinkHelper.ParseComponents(
-            uri.AsSpan("ss://".Length),
-            out var userinfoSpan,
-            out var server,
-            out var port,
-            out var querySpan,
-            out var name);
+        var fake = "https://" + uri.Substring("ss://".Length);
 
-        if (userinfoSpan.IsEmpty)
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid ss URI: cannot parse");
+
+        var userinfo = parsed.UserInfo;
+        if (userinfo.Length == 0)
             throw new FormatException("Invalid ss URI: userinfo missing");
-
-        var userinfo = userinfoSpan.ToString();
 
         // Try plain "method:password" first, then base64 fallback.
         string method;
@@ -707,10 +704,13 @@ public static class ServerUriParser
             password = decoded.Substring(colon2 + 1);
         }
 
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid ss URI: host missing");
 
-        var query = ShareLinkHelper.ParseQuery(querySpan);
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
 
         var entry = new VlessServerEntry
         {
@@ -763,19 +763,17 @@ public static class ServerUriParser
 
     private static VlessServerEntry ParseNaive(string uri)
     {
+        // Strip the scheme (naive / naive+https / naive+quic) up to "://" and
+        // swap in https:// so System.Uri can split userinfo/host/port/query.
         var schemeEnd = uri.IndexOf("://", StringComparison.Ordinal);
         if (schemeEnd < 0)
             throw new FormatException("Invalid naive URI: missing scheme separator");
+        var fake = "https://" + uri.Substring(schemeEnd + 3);
 
-        ShareLinkHelper.ParseComponents(
-            uri.AsSpan(schemeEnd + 3),
-            out var userinfoSpan,
-            out var server,
-            out var port,
-            out var querySpan,
-            out var name);
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid naive URI: cannot parse");
 
-        var userinfo = ShareLinkHelper.Unescape(userinfoSpan);
+        var userinfo = Uri.UnescapeDataString(parsed.UserInfo);
         if (userinfo.Length == 0)
             throw new FormatException("Invalid naive URI: user:password missing (expected naive+https://user:pass@host:port)");
 
@@ -795,10 +793,13 @@ public static class ServerUriParser
             password = userinfo.Substring(colon + 1);
         }
 
+        var server = VlessUriParser.NormalizeHost(parsed.Host);
+        var port = (parsed.Port > 0 && parsed.Port <= 65535) ? parsed.Port : 443;
         if (server.Length == 0)
             throw new FormatException("Invalid naive URI: host missing");
 
-        var query = ShareLinkHelper.ParseQuery(querySpan);
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
 
         return new VlessServerEntry
         {
