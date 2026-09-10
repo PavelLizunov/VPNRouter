@@ -16,6 +16,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### URL validation PR #254 — corrective tests awaiting CI
+
+- [ ] **P2** — ViewModel URL tests use plain Theory instead of Avalonia dispatcher attributes; corrected to AvaloniaTheory, runtime acceptance pending — `VPNRouter.Tests/UrlValidationSecurityTests.cs`, source-confirmed 2026-09-10; `plans/pr254-integration-security-review-2026-09-10.md`.
+- [ ] **P2** — FreeConfigs URL fixtures leave IDisposable ViewModels undisposed; using scopes added with save-count and fake HTTP side-effect checks, runtime acceptance pending — `VPNRouter.Tests/UrlValidationSecurityTests.cs`, source-confirmed 2026-09-10; PR #254.
+
 ### Release pipeline review PR #255 — implementation verified, external acceptance pending
 
 The next 16 audit entries have implementation repairs in `26b0bdb8`, green CI
