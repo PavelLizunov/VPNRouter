@@ -27,4 +27,8 @@ Primary risk is deleting unmerged work or silently accepting stale PRs. Retain a
 
 ## Outcome
 
-IN PROGRESS. No PR closed, branch deleted or product PR merged by this task. Initial current-main check-runs were green. PR #240 conflicts; #237 inherits #235; #253/#254 overlap but differ in error feedback. These observations are not merge approval.
+IN PROGRESS. Brief commit 1bad51a9, PR #256: all four CI checks passed. Owner approved deletion of the 44 exact merged-tip candidates. Revalidation retained two registered-worktree branches; atomic exact-SHA leased deletion removed 42 remote branches, then 13 matching local copies. Fresh remote listing confirmed absence and unchanged main/retained gh-pages. Full recovery tips and receipts are in repository-cleanup-recovery-2026-09-10.md; candidate names and PR disposition in repository-cleanup-candidates-2026-09-10.md.
+
+Both READMEs now correct absolute privacy/reproducibility claims, local crash reporting, Android permission scope, supported routing modes, Linux/macOS split kill-switch limits and bare-hash sidecar instructions. Removed static LOC/test badges; local links/anchors and git diff --check passed. Independent source review confirmed defects; follow-up review pending for last corrections. No product code changed. Existing stale feature/architecture counts and other README sections still need bounded review.
+
+No open PR closed or merged. #233/#235/#237/#240 conflict with main; #232/#253/#254 are behind, with green checks on their own heads only. All unique/deferred branches, user files and worktree registrations retained. Further PR disposition requires the agreed concrete owner decision, not automatic acceptance based on old CI.

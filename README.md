@@ -21,13 +21,11 @@
   </a>
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4" alt=".NET 10"/>
   <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Platform"/>
-  <img src="https://img.shields.io/badge/C%23_LOC-159k-blue" alt="159k C# LOC"/>
-  <img src="https://img.shields.io/badge/tests-2.7k%2B-success" alt="2,700+ tests"/>
 </p>
 
 ---
 
-## Install (one-liner, all three platforms)
+## Install
 
 <table>
 <tr>
@@ -67,7 +65,7 @@ Windows 10/11 x64. Auto-elevates via UAC. Registers Start Menu + Add/Remove Prog
 ```
 Download VPNRouter-v{version}-android-arm64.apk from Releases
 ```
-Android 6.0+ (API 23). Side-load via APK (no Play Store yet). Live-preview QR scanner, magic 1-step subscription paste, F-Droid-style permissions (only `CAMERA` + `INTERNET` + `VPN_SERVICE`). Self-update via in-app banner.
+Android 6.0+ (API 23), ARM64. Install the APK outside the Play Store. Supports QR scanning, subscription paste and an in-app update prompt. Permissions cover VPN operation, network state, notifications, app enumeration, APK installation, camera and power management; see the [Android manifest](VPNRouter.Android/AndroidManifest.xml).
 </td>
 </tr>
 </table>
@@ -78,11 +76,11 @@ Prefer manual install? See [**Manual download**](#manual-download) below for ZIP
 
 ## What it does
 
-Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](https://github.com/SagerNet/sing-box) TUN mode); everything else goes direct to your ISP. Not a full-tunnel VPN — it's a per-process router. Discord goes through the proxy, your bank site stays direct. No manual proxy settings per app.
+Routes application traffic through a proxy using [sing-box](https://github.com/SagerNet/sing-box) TUN mode. In the default split/include mode, selected applications use the proxy and the remaining traffic uses the direct route, subject to configured rules. Split/exclude mode keeps selected applications direct; full-tunnel mode routes traffic through the proxy apart from configured exceptions. Applications do not need individual proxy settings.
 
 ### Cross-platform core
 
-- **Split-tunnel routing** — pick the apps from a live process list; they go through your proxy, everything else stays direct.
+- **Split-tunnel routing** — choose applications from the process list and select whether to include them in the proxy route or exclude them from it.
 - **VLESS+Reality + custom configs** — use the built-in VLESS setup or bring your own sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing is injected either way.
 - **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool. Capability-aware providers can publish a VLESS target that must dial through a paired entry server; missing chain metadata or entry availability fails closed with no direct target fallback.
 - **Encrypted DNS defaults** — DNS for VPN-routed apps and geo/censorship rules is detoured through the encrypted proxy/tunnel; direct and smart public lookups use Cloudflare DoH. VPNRouter assigns no country-specific DNS provider and does not replace explicitly configured custom resolvers; if bootstrap DNS is missing, it synthesizes literal-IP Cloudflare DoH. Only configured LAN suffixes may use the OS resolver.
@@ -143,7 +141,7 @@ regression checks, so they stay free of real credentials.
 
 ## Manual download
 
-For the one-liner install on all three platforms, see the [**Install**](#install-one-liner-all-three-platforms) section above. Prefer to install by hand? Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
+For desktop installation commands and Android APK instructions, see [Install](#install). Download the latest stable build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest); rolling candidates are listed under [all releases](https://github.com/PavelLizunov/VPNRouter/releases).
 
 | File | Platform | What it is |
 |---|---|---|
@@ -156,7 +154,7 @@ For the one-liner install on all three platforms, see the [**Install**](#install
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
-| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Verify with `sha256sum -c <file>.sha256` on Linux or `Get-FileHash <file>` on Windows. |
+| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
 
 Also served automatically every 6 hours:
 
@@ -227,7 +225,7 @@ VPNRouter.sln (~159k LOC C# across 616 files in 7 projects)
 - **Bilingual UI** — all strings live in `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android use pass-through wrappers; never duplicate keys.
 - **Async hygiene** — zero `async void` in Core; UI handlers use the standard `async void EventHandler` pattern; no `.Result` blocking calls outside `VpnEngine.cs:461` (tracked for refactor).
 - **Cross-cutting**: every service takes `ILogger?` (Serilog) for diagnostic-grade tracing into `vpnrouter*.log`.
-- **No telemetry**. No analytics, no error reporter, no ping-home. UpdateChecker only reads public GitHub Releases API.
+- **Diagnostics** — local logs and crash reports support troubleshooting; see [Privacy & trust](#privacy--trust) before sharing them.
 
 ### Key services
 
@@ -246,15 +244,16 @@ historical v3.0 modernization baseline and its follow-up work.
 3. Start sing-box in TUN mode (creates a virtual adapter)
 4. Windows routes all traffic through the adapter; sing-box then splits based on process name matching
 5. ETW watches for new processes starting → hot-reload the config via Clash API (no reconnect)
-6. On crash — firewall rules block listed processes until sing-box is back (leak protection)
+6. On failure, enabled firewall protection depends on platform, routing mode and privileges. Linux/macOS kill switches support full-tunnel mode only and remain disarmed in split mode; do not rely on per-process crash blocking there.
 
 ## Privacy & trust
 
 This is a VPN client — you should verify the code before trusting it.
 
-- **No telemetry.** No analytics, no pings home, no bug reporter. Auto-updater only reads public GitHub Releases API.
-- **No credential leaks.** Credentials (UUIDs, Reality keys) live in `%ProgramData%\VPNRouter\config.yaml` on disk, never sent anywhere except the sing-box process locally.
-- **Reproducible.** Build from source with the commands above. Compare the binary hash with your own build to verify.
+- **Local diagnostics.** Crash reports are written to the app data directory, with best-effort redaction of recognized secret formats before writing. The crash reporter does not upload them automatically. Review any diagnostics before sharing them.
+- **Network access.** Updates, subscriptions, public configuration sources and connectivity checks contact their configured services. The selected proxy server handles routed traffic; choose a provider you trust.
+- **Credentials.** Settings and generated sing-box configuration contain connection credentials. Protect the app data directory and do not publish configuration files or raw logs.
+- **Artifact verification.** SHA256 sidecars check that downloads match the supplied hashes; they do not independently authenticate the publisher. Building from source is supported, but byte-for-byte reproduction of release binaries is not established.
 - **Open license.** GPL-3.0 — any fork that distributes a binary must also publish its source.
 
 Found a security issue? Please report it **privately** — see [`SECURITY.md`](SECURITY.md). Don't open a public issue for security problems.

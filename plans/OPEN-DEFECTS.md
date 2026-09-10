@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** — README denies full-tunnel support, implies platform-independent per-process crash blocking, and understates Android permissions; AppConfig.cs:14-52 supports full/exclude, LinuxFirewallManager.cs:96-120 and MacFirewallManager.cs:114-138 disarm split kill-switch, AndroidManifest.xml:14-65 lists additional permissions — bilingual documentation correction in PR #256, source-confirmed independent review.
+
+- [ ] **P2** — README privacy/build claims deny an existing local crash reporter and promise byte-identical release reproduction without evidence; SHA256 manual command assumes filename-bearing sidecars, while build.ps1:693-694 emits bare hashes — README.md / README.ru.md Privacy and manual-download sections, CrashReporter.cs:7-16; documentation repair in PR #256 awaiting review.
+
 ### Release pipeline review PR #255 — implementation verified, external acceptance pending
 
 The next 16 audit entries have implementation repairs in `26b0bdb8`, green CI
