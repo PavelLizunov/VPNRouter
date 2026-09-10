@@ -848,9 +848,12 @@ public static class CustomConfigInjector
         if (useRemoteDns && string.IsNullOrEmpty(targetTag) && !string.IsNullOrEmpty(proxyTag))
             targetTag = EnsureSynthesizedRemoteDns(servers, proxyTag);
 
-        // Fallback: first server (exclude mode, or no proxy outbound to route through)
+        // Fallback: first non-fakeip server (exclude mode, or no proxy outbound to route through)
         if (string.IsNullOrEmpty(targetTag))
-            targetTag = StjNodeHelpers.AsString((servers[0] as JsonObject)?["tag"]);
+            targetTag = servers.OfType<JsonObject>()
+                .Where(s => StjNodeHelpers.AsString(s["type"]) != "fakeip" && StjNodeHelpers.AsString(s["address"]) != "fakeip")
+                .Select(s => StjNodeHelpers.AsString(s["tag"]))
+                .FirstOrDefault();
 
         if (string.IsNullOrEmpty(targetTag)) return;
 
@@ -947,6 +950,7 @@ public static class CustomConfigInjector
         foreach (var server in servers)
         {
             if (server is not JsonObject sObj) continue;
+            if (StjNodeHelpers.AsString(sObj["type"]) == "fakeip" || StjNodeHelpers.AsString(sObj["address"]) == "fakeip") continue;
             if (!IsLocalDetour(outbounds, endpoints, StjNodeHelpers.AsString(sObj["detour"])))
                 return StjNodeHelpers.AsString(sObj["tag"]);
         }
@@ -982,6 +986,9 @@ public static class CustomConfigInjector
         {
             if (server is not JsonObject so || StjNodeHelpers.AsString(so["tag"]) != synthTag)
                 continue;
+
+            if (StjNodeHelpers.AsString(so["type"]) == "fakeip" || StjNodeHelpers.AsString(so["address"]) == "fakeip")
+                throw new InvalidOperationException($"DNS server tag '{synthTag}' collides with reserved synthesis tag. Choose another FakeIP server tag.");
 
             if (StjNodeHelpers.AsString(so["detour"]) == proxyTag)
                 return synthTag; // our own prior injection — truly idempotent
@@ -1032,6 +1039,8 @@ public static class CustomConfigInjector
             if (server is not JsonObject sObj) continue;
             var detour = StjNodeHelpers.AsString(sObj["detour"]);
             var type = StjNodeHelpers.AsString(sObj["type"]);
+            var address = StjNodeHelpers.AsString(sObj["address"]);
+            if (type == "fakeip" || address == "fakeip") continue;
             if (detour == "direct" || detour == "dns-direct" ||
                 string.IsNullOrEmpty(detour) && (type == "local" || type == "udp" || type == "dhcp"))
                 return StjNodeHelpers.AsString(sObj["tag"]);
@@ -1334,7 +1343,11 @@ public static class CustomConfigInjector
         const string tag = "vpnrouter-dns-direct";
         foreach (var s in servers)
             if (s is JsonObject so && StjNodeHelpers.AsString(so["tag"]) == tag)
+            {
+                if (StjNodeHelpers.AsString(so["type"]) == "fakeip" || StjNodeHelpers.AsString(so["address"]) == "fakeip")
+                    throw new InvalidOperationException($"DNS server tag '{tag}' collides with reserved bootstrap DNS tag. Choose another FakeIP server tag.");
                 return tag;
+            }
         servers.Add((JsonNode?)new JsonObject
         {
             ["tag"] = tag,
@@ -1399,7 +1412,191 @@ public static class CustomConfigInjector
     // ─── Private: Migrate legacy config to 1.13+ ──────────────────────────
 
     /// <summary>
+    /// Migrates legacy global <c>dns.fakeip</c> object and legacy fakeip servers to sing-box 1.12+ typed format (VPNCTL-06).
+    /// sing-box 1.14 rejects any presence of global <c>dns.fakeip</c>.
+    /// </summary>
+    private static void MigrateFakeIp(JsonObject config)
+    {
+        if (config["dns"] is not JsonObject dns)
+            return;
+
+        var servers = dns["servers"] as JsonArray;
+        JsonObject? legacyServer = null;
+        var typedServers = new List<JsonObject>();
+        int legacyCount = 0;
+
+        if (servers != null)
+        {
+            foreach (var s in servers)
+            {
+                if (s is not JsonObject sObj) continue;
+                var addr = StjNodeHelpers.AsString(sObj["address"]);
+                var type = StjNodeHelpers.AsString(sObj["type"]);
+                if (addr == "fakeip" && (string.IsNullOrEmpty(type) || type == "legacy"))
+                {
+                    legacyServer = sObj;
+                    legacyCount++;
+                }
+                else if (type == "fakeip")
+                {
+                    typedServers.Add(sObj);
+                }
+            }
+        }
+
+        if (legacyCount > 1)
+            throw new InvalidOperationException("Multiple legacy fakeip DNS servers found in 'dns.servers'.");
+
+        if (!dns.TryGetPropertyValue("fakeip", out var fakeIpNode))
+        {
+            if (legacyCount > 0)
+                throw new InvalidOperationException("Legacy DNS server with address 'fakeip' requires global 'dns.fakeip' configuration, but 'dns.fakeip' is absent.");
+            return;
+        }
+
+        if (fakeIpNode == null)
+        {
+            if (legacyCount > 0)
+                throw new InvalidOperationException("Legacy DNS server with address 'fakeip' requires global 'dns.fakeip' configuration, but 'dns.fakeip' is null.");
+            dns.Remove("fakeip");
+            return;
+        }
+
+        if (fakeIpNode is not JsonObject fakeIpObj)
+            throw new InvalidOperationException("Malformed 'dns.fakeip' configuration: expected a JSON object.");
+
+        bool enabled = false;
+        if (fakeIpObj.TryGetPropertyValue("enabled", out var enabledNode) && enabledNode != null)
+        {
+            if (enabledNode is not JsonValue ev || !ev.TryGetValue<bool>(out enabled))
+                throw new InvalidOperationException("Malformed 'dns.fakeip.enabled': must be a boolean.");
+        }
+        else if (fakeIpObj.ContainsKey("enabled"))
+        {
+            throw new InvalidOperationException("Malformed 'dns.fakeip.enabled': must be a boolean.");
+        }
+
+        string? globalV4 = null;
+        if (fakeIpObj.TryGetPropertyValue("inet4_range", out var v4Node) && v4Node != null)
+        {
+            if (v4Node is not JsonValue v4Val || !v4Val.TryGetValue<string>(out var v4Str) || string.IsNullOrWhiteSpace(v4Str) || !IsValidCidr(v4Str, isIpv6: false))
+                throw new InvalidOperationException("Malformed 'dns.fakeip.inet4_range': must be a valid IPv4 CIDR string.");
+            globalV4 = v4Str;
+        }
+
+        string? globalV6 = null;
+        if (fakeIpObj.TryGetPropertyValue("inet6_range", out var v6Node) && v6Node != null)
+        {
+            if (v6Node is not JsonValue v6Val || !v6Val.TryGetValue<string>(out var v6Str) || string.IsNullOrWhiteSpace(v6Str) || !IsValidCidr(v6Str, isIpv6: true))
+                throw new InvalidOperationException("Malformed 'dns.fakeip.inet6_range': must be a valid IPv6 CIDR string.");
+            globalV6 = v6Str;
+        }
+
+        if (!enabled)
+        {
+            if (legacyCount > 0)
+                throw new InvalidOperationException("Cannot migrate legacy fakeip DNS server when 'dns.fakeip.enabled' is false.");
+
+            dns.Remove("fakeip");
+            return;
+        }
+
+        if (legacyCount == 0 && typedServers.Count == 0)
+            throw new InvalidOperationException("'dns.fakeip' is enabled, but no fakeip DNS server was found in 'dns.servers'.");
+
+        if (legacyCount > 0 && typedServers.Count > 0)
+            throw new InvalidOperationException("Cannot migrate configuration with mixed legacy ('address': 'fakeip') and typed ('type': 'fakeip') DNS servers.");
+
+        if (typedServers.Count > 0)
+        {
+            foreach (var typed in typedServers)
+            {
+                string? typedV4 = null;
+                if (typed.TryGetPropertyValue("inet4_range", out var t4Node) && t4Node != null)
+                {
+                    if (t4Node is not JsonValue v4Val || !v4Val.TryGetValue<string>(out var v4Str) || string.IsNullOrWhiteSpace(v4Str) || !IsValidCidr(v4Str, isIpv6: false))
+                        throw new InvalidOperationException("Malformed typed fakeip server 'inet4_range': must be a valid IPv4 CIDR string.");
+                    typedV4 = v4Str;
+                }
+
+                string? typedV6 = null;
+                if (typed.TryGetPropertyValue("inet6_range", out var t6Node) && t6Node != null)
+                {
+                    if (t6Node is not JsonValue v6Val || !v6Val.TryGetValue<string>(out var v6Str) || string.IsNullOrWhiteSpace(v6Str) || !IsValidCidr(v6Str, isIpv6: true))
+                        throw new InvalidOperationException("Malformed typed fakeip server 'inet6_range': must be a valid IPv6 CIDR string.");
+                    typedV6 = v6Str;
+                }
+
+                if (globalV4 != null)
+                {
+                    if (typedV4 != null)
+                    {
+                        if (!string.Equals(globalV4, typedV4, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException("Conflicting fakeip IPv4 range between server and 'dns.fakeip'.");
+                    }
+                    else
+                    {
+                        typed["inet4_range"] = globalV4;
+                    }
+                }
+
+                if (globalV6 != null)
+                {
+                    if (typedV6 != null)
+                    {
+                        if (!string.Equals(globalV6, typedV6, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException("Conflicting fakeip IPv6 range between server and 'dns.fakeip'.");
+                    }
+                    else
+                    {
+                        typed["inet6_range"] = globalV6;
+                    }
+                }
+            }
+
+            dns.Remove("fakeip");
+            return;
+        }
+
+        if (globalV4 == null && globalV6 == null)
+            throw new InvalidOperationException("Legacy fakeip configuration requires at least one of 'inet4_range' or 'inet6_range'.");
+
+        var unsupported = new[] { "strategy", "address_resolver", "address_strategy", "client_subnet" }
+            .Where(f => legacyServer![f] != null).ToList();
+        if (unsupported.Count > 0)
+            throw new InvalidOperationException($"Legacy FakeIP DNS server uses options requiring manual migration: {string.Join(", ", unsupported)}.");
+
+        legacyServer!.Remove("strategy");
+        legacyServer.Remove("address_resolver");
+        legacyServer.Remove("address_strategy");
+        legacyServer.Remove("client_subnet");
+
+        // Convert existing legacy server: {address:'fakeip',tag:...} -> {type:'fakeip',tag:same,...}
+        legacyServer!.Remove("address");
+        legacyServer["type"] = "fakeip";
+        if (globalV4 != null)
+            legacyServer["inet4_range"] = globalV4;
+        if (globalV6 != null)
+            legacyServer["inet6_range"] = globalV6;
+        legacyServer.Remove("detour");
+
+        dns.Remove("fakeip");
+    }
+
+    private static bool IsValidCidr(string cidr, bool isIpv6)
+    {
+        var parts = cidr.Split('/');
+        if (parts.Length != 2) return false;
+        if (!System.Net.IPAddress.TryParse(parts[0], out var ip)) return false;
+        if (isIpv6 && ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6) return false;
+        if (!isIpv6 && ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false;
+        if (!int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var prefix)) return false;
+        return isIpv6 ? prefix >= 0 && prefix <= 128 : prefix >= 0 && prefix <= 32;
+    }
+
+    /// <summary>
     /// Migrates legacy config features to sing-box 1.13+ format:
+    /// 0. Legacy dns.fakeip object / servers → type-based format (VPNCTL-06)
     /// 1. Legacy DNS servers ("address": "tls://...") → type-based format (FATAL in 1.13.3)
     /// 2. Legacy DNS rules with "outbound" field → removed (FATAL in 1.13.3)
     /// 3. geosite/geoip rules → removed (require .db files not bundled)
@@ -1408,6 +1605,9 @@ public static class CustomConfigInjector
     /// </summary>
     private static void StripUnsupportedFeatures(JsonObject config, List<string>? excludeAddresses, bool forceIpv4Only, bool strictDns, bool ipv6Enabled)
     {
+        // 0. Migrate legacy dns.fakeip to typed fakeip server (VPNCTL-06)
+        MigrateFakeIp(config);
+
         // 1. Convert legacy DNS server format to type-based
         var dnsServers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
         if (dnsServers != null)
@@ -1519,6 +1719,7 @@ public static class CustomConfigInjector
             {
                 var obj = server as JsonObject;
                 if (obj == null) continue;
+                if (StjNodeHelpers.AsString(obj["type"]) == "fakeip") continue;
                 var detour = StjNodeHelpers.AsString(obj["detour"]);
                 // v2.40.0-r8 (#1 leak fix): normalize ANY local-resolving detour to the
                 // dns-direct real-NIC shim — INCLUDING a custom-named direct outbound
@@ -1581,6 +1782,7 @@ public static class CustomConfigInjector
                 foreach (var s in dnsServers)
                 {
                     if (s is not JsonObject sObj) continue;
+                    if (StjNodeHelpers.AsString(sObj["type"]) == "fakeip") continue;
                     var d = StjNodeHelpers.AsString(sObj["detour"]);
                     if ((d == "dns-direct" || d == "direct") && localTag == null)
                     {

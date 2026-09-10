@@ -73,7 +73,17 @@ public static partial class ConfigGenerator
                     Detour     = "dns-direct"
                 }
             },
-            Rules = new List<DnsRule>()
+            Rules = new List<DnsRule>
+            {
+                // Anti-Censorship DNS (TSPU ECH suppression in RU): reject HTTPS (type 65)
+                // and SVCB (type 64) queries so browsers fall back to standard TLS 1.3
+                // without ECH, eliminating TCP RST termination on Cloudflare domains.
+                new()
+                {
+                    QueryType = new List<string> { "HTTPS", "SVCB" },
+                    Action    = "reject"
+                }
+            }
         };
 
         // G6 (2026-06-27): split-DNS for private / LAN domains. Without this,
