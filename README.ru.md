@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">
-    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?include_prereleases&color=7C3AED" alt="Последний релиз"/>
+    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?color=7C3AED" alt="Последний релиз"/>
   </a>
   <a href="https://github.com/PavelLizunov/VPNRouter/releases">
     <img src="https://img.shields.io/github/downloads/PavelLizunov/VPNRouter/total?color=22C55E" alt="Загрузки"/>
@@ -124,7 +124,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 
 ### Бонус: вкладка Free Configs
 
-Агрегатор публичных VLESS-конфигов — ~25 000 из 14 открытых источников, предварительно провалидированных (TCP+TLS + GeoIP) на сервере раз в 6 часов. Удобно попробовать приложение без своего VPN-сервера; не замена оплачиваемому или self-hosted endpoint'у.
+Вкладка Free Configs собирает публичные VLESS-серверы. Серверное задание запускается по расписанию раз в шесть часов; размер пула, доступность и результаты проверки меняются. Серверы принадлежат третьим лицам: успешная проверка соединения не подтверждает надёжность оператора.
 
 ## Скриншоты
 
@@ -156,11 +156,11 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Подписанный ARM64 APK, API 23+. Собирается и подписывается в `build-android.yml` для каждого release-тега, затем публикуется в Releases и на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). In-app апдейтер доставляет будущие APK. |
 | `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Сравните результат `sha256sum <file>` на Linux, `shasum -a 256 <file>` на macOS или `Get-FileHash -Algorithm SHA256 <file>` на Windows с 64-символьным хешем из сайдкара. Часть сайдкаров содержит только хеш и не подходит для прямого вызова `sha256sum -c`. |
 
-Также обновляется автоматически каждые 6 часов:
+При успешном выполнении серверное задание публикует отдельный артефакт:
 
 | Файл | Что это |
 |---|---|
-| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Агрегированные ~25 000 публичных VLESS-конфигов + GeoIP-метаданные. Потребляется вкладкой Free Configs. |
+| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Публичные VLESS-конфигурации и GeoIP-метаданные; размер пула меняется. Потребляется вкладкой Free Configs. |
 
 Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); AppImage без песочницы использует системный `pkexec` с запросом пароля. AppImage, обёрнутый в bubblewrap или user namespace (включая NixOS `appimageTools.wrapType2`), не может получить право создать системный TUN-интерфейс, даже если `getcap` показывает capability файла. Используйте нативный пакет дистрибутива вне этой песочницы.
 
@@ -174,6 +174,8 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 - Сервер VLESS+Reality, или используйте вкладку Free Configs с публичными серверами
 
 ## Сборка из исходников
+
+Установите .NET SDK из [`global.json`](global.json) (10.0.301, с разрешённым переходом на новые патчи). Стандартная сборка solution не собирает Android-приложение. Для Android также нужны workload, Android SDK, JDK и локальные нативные библиотеки; см. [инструкцию сборки Android](VPNRouter.Android/AGENTS.md).
 
 ```bash
 git clone https://github.com/PavelLizunov/VPNRouter.git
@@ -204,14 +206,14 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.3"
 ## Архитектура
 
 ```
-VPNRouter.sln (~159k LOC C# в 616 файлах / 7 проектах)
-├── VPNRouter.Core                  — 54k LOC · 189 файлов — сервисы, модели, интерфейсы (zero UI deps)
-├── VPNRouter.App                   — 21k LOC · 59 файлов  — Avalonia desktop UI
-├── VPNRouter.Android               — 22k LOC · 37 файлов  — Mono.Android + Avalonia.Android
-├── VPNRouter.CLI                   —  1k LOC · 13 файлов  — Spectre.Console TUI
-├── VPNRouter.Service               —  1k LOC · 3 файла   — Windows BackgroundService wrapper
-├── VPNRouter.Tools/PoolAggregator  — <1k LOC · 1 файл — CI-утилита, собирающая Free Configs pool.json
-└── VPNRouter.Tests                 — 60k LOC · 314 файлов — 2 700+ xUnit тестов + headless Avalonia
+VPNRouter.sln
+├── VPNRouter.Core                  — сервисы, модели и платформенные адаптеры
+├── VPNRouter.App                   — desktop-интерфейс Avalonia
+├── VPNRouter.Android               — Android-приложение (собирается отдельно)
+├── VPNRouter.CLI                   — инструменты командной строки
+├── VPNRouter.Service               — служба Windows
+├── VPNRouter.Tools/PoolAggregator  — генератор пула Free Configs
+└── VPNRouter.Tests                 — xUnit и headless-тесты Avalonia
 ```
 
 ### Layering

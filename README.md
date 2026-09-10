@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">
-    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?include_prereleases&color=7C3AED" alt="Latest release"/>
+    <img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?color=7C3AED" alt="Latest release"/>
   </a>
   <a href="https://github.com/PavelLizunov/VPNRouter/releases">
     <img src="https://img.shields.io/github/downloads/PavelLizunov/VPNRouter/total?color=22C55E" alt="Downloads"/>
@@ -104,7 +104,7 @@ These are thin wrappers around upstream projects — they aren't part of the cor
 
 ### Bonus: Free Configs tab
 
-A public VLESS aggregator — ~25 000 configs from 14 open sources, pre-validated (TCP+TLS + GeoIP) server-side every 6 hours. Handy to try the app without your own VPN server; not a substitute for a paid or self-hosted endpoint.
+The Free Configs tab collects public VLESS endpoints. A scheduled server-side job runs every six hours; pool size, availability and validation results vary. Public endpoints are operated by third parties: a successful connectivity test does not establish operator trust.
 
 ## Feature matrix
 
@@ -156,11 +156,11 @@ For desktop installation commands and Android APK instructions, see [Install](#i
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
 | `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
 
-Also served automatically every 6 hours:
+The scheduled pool job publishes this separate artifact when it succeeds:
 
 | File | What it is |
 |---|---|
-| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Aggregated ~25 000 public VLESS configs + GeoIP metadata. Consumed by the in-app Free Configs tab. |
+| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Public VLESS configurations and GeoIP metadata; pool size varies. Consumed by the in-app Free Configs tab. |
 
 Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time. On Linux, the `.deb` applies `setcap cap_net_admin,cap_net_bind_service` to the bundled sing-box so TUN comes up without root or a password (no systemd service is installed); an unsandboxed read-only `AppImage` falls back to a host `pkexec` password prompt. AppImages wrapped in bubblewrap or a user namespace (including NixOS `appimageTools.wrapType2`) cannot acquire permission to create the host TUN interface even when `getcap` shows the file capability. Use a native distro package outside that sandbox.
 
@@ -174,6 +174,8 @@ Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + 
 - A VLESS+Reality server, or use the Free Configs tab for a public one
 
 ## Build from source
+
+Install the .NET SDK specified by [`global.json`](global.json) (10.0.301, with patch roll-forward). The solution's default build excludes the Android app. Android packaging also requires the Android workload, SDK, JDK and local native libraries; see [Android build instructions](VPNRouter.Android/AGENTS.md).
 
 ```bash
 git clone https://github.com/PavelLizunov/VPNRouter.git
@@ -204,14 +206,14 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.49.3"
 ## Architecture
 
 ```
-VPNRouter.sln (~159k LOC C# across 616 files in 7 projects)
-├── VPNRouter.Core                  — 54k LOC · 189 files — services, models, interfaces (cross-platform, zero UI deps)
-├── VPNRouter.App                   — 21k LOC · 59 files  — Avalonia desktop UI
-├── VPNRouter.Android               — 22k LOC · 37 files  — Mono.Android + Avalonia.Android
-├── VPNRouter.CLI                   —  1k LOC · 13 files  — Spectre.Console TUI
-├── VPNRouter.Service               —  1k LOC · 3 files  — Windows BackgroundService wrapper
-├── VPNRouter.Tools/PoolAggregator  — <1k LOC · 1 file — CI tool building the Free Configs pool.json
-└── VPNRouter.Tests                 — 60k LOC · 314 files — 2,700+ xUnit tests + headless Avalonia
+VPNRouter.sln
+├── VPNRouter.Core                  — services, models and platform adapters
+├── VPNRouter.App                   — Avalonia desktop UI
+├── VPNRouter.Android               — Android app (built separately)
+├── VPNRouter.CLI                   — command-line tools
+├── VPNRouter.Service               — Windows service
+├── VPNRouter.Tools/PoolAggregator  — Free Configs pool generator
+└── VPNRouter.Tests                 — xUnit and headless Avalonia tests
 ```
 
 ### Layering
