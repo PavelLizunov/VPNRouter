@@ -9,7 +9,28 @@
 **Blast radius**: Repository agent instructions (`VPNRouter.Core/Services/AGENTS.md`, `VPNRouter.Core/Platform/AGENTS.md`, `VPNRouter.App/ViewModels/AGENTS.md`, `docs/AGENTS.md`, updates to `VPNRouter.Core/AGENTS.md` and `VPNRouter.App/AGENTS.md`).
 **Rollback**: revert commit.
 
-## Why
+## Integration update — 2026-09-10
+
+The original brief and outcome below are preserved as historical provenance,
+not current verification evidence. Their exhaustive counts and checked build/
+test/navigation gates are superseded: markdown-only scope does not establish
+a green build, passing tests or inventory completeness.
+
+This correction integrates the documentation branch with main `ae51a93d`
+(original task head `9f8c8b5a`). It resolves the App map conflict while retaining
+the child-map link and the API removals from #250. Active maps now use source
+entry points rather than exhaustive counts, invented API lists or blanket
+lock-order/fail-closed guarantees. Specific corrections cover explicit Unix
+`isFullTunnel`, power-event `ProbeNow`, start completion versus readiness,
+linear `SuffixMatch`, and platform firewall failure/cleanup boundaries.
+
+Scope is documentation only. Useful integration remains authorized subject to
+review and green CI; substantive behavior work is separate. The parent owns
+staging, the merge commit, review and CI. No build or tests are run by this
+documentation worker. Current evidence is source inspection and scoped diff,
+whitespace, conflict-marker and local-link checks, reported at handoff.
+
+## Why (original 2026-09-04 brief)
 
 1. `VPNRouter.Core/Services/` contains 123 flat C# files with complex, interdependent responsibilities (process lifecycle, config generation, leak protection, DNS hardening, health metrics, and free config aggregation). While top-level `VPNRouter.Core/AGENTS.md` mentions a high-level summary, the vast majority of services lack explicit categorization, lifecycle contracts, and invariant maps.
 2. `VPNRouter.Core/Platform/` encapsulates cross-platform differences across Windows, Linux, macOS, Unix, and Android. The kill-switch, firewall rules, and DNS hardening behavior vary drastically across these OS targets, but there is no centralized matrix documenting OS capabilities, fail-closed vs fail-open behaviors, and required elevation.

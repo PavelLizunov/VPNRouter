@@ -455,7 +455,7 @@ public sealed class VlessDeepVerifier
             {
                 ["servers"] = new JsonArray
                 {
-                    (JsonNode?)new JsonObject { ["type"] = "https", ["tag"] = "dns-google", ["server"] = "1.1.1.1", ["path"] = "/dns-query", ["detour"] = "dns-direct-out" },
+                    (JsonNode?)new JsonObject { ["type"] = "https", ["tag"] = "dns-google", ["server"] = "8.8.8.8", ["path"] = "/dns-query", ["detour"] = "dns-direct-out" },
                 },
                 ["final"] = "dns-google",
             },

@@ -111,12 +111,4 @@ public class AppSettings
     [YamlMember(Alias = "update")]
     public UpdateSettings Update { get; set; } = new();
 
-    /// <summary>
-    /// r9 Phase 2 — emergency fallback channel settings (wgturn-core
-    /// integration). Persists the share URL + VK link the user pasted
-    /// in the future Phase-3 UI. The actual lifecycle service is
-    /// <see cref="VPNRouter.Core.Services.EmergencyChannel.EmergencyChannelEngine"/>.
-    /// </summary>
-    [YamlMember(Alias = "emergency_channel")]
-    public EmergencyChannelSettings EmergencyChannel { get; set; } = new();
 }

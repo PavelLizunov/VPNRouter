@@ -9,7 +9,7 @@ public class DnsSettings
     public string Strategy { get; set; } = "ipv4_only";
 
     [YamlMember(Alias = "vpn_dns")]
-    public string VpnDns { get; set; } = "https://1.1.1.1/dns-query";
+    public string VpnDns { get; set; } = "https://8.8.8.8/dns-query";
 
     [YamlMember(Alias = "local_dns")]
     public string LocalDns { get; set; } = "local";

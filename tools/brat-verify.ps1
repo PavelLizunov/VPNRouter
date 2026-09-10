@@ -1,4 +1,4 @@
-﻿# Safety: fixed target only. Never accepts a caller-supplied host/IP/hostname
+# Safety: fixed target only. Never accepts a caller-supplied host/IP/hostname
 # and never falls back to the local machine; every action first verifies over
 # WinRM that 100.115.182.0 really is WINBRAT, and fails closed on any mismatch.
 #
@@ -1185,8 +1185,21 @@ $udp.Dispose()
                         $row.Error = "Probe$stage$($_.Exception.GetType().Name)"
                     }
                     finally {
-                        if ($child -and -not $child.HasExited) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }
-                        if ($probeRoot) { Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction SilentlyContinue }
+                        try {
+                            if ($child -and -not $child.HasExited) {
+                                $child.Kill()
+                                if (-not $child.WaitForExit(10000)) { throw 'Probe child cleanup timed out.' }
+                            }
+                        }
+                        catch { $row.Success = $false; $row.Error = 'ProbeProcessCleanupFailed' }
+                        finally { if ($child) { $child.Dispose() } }
+                        try {
+                            if ($probeRoot -and (Test-Path -LiteralPath $probeRoot)) {
+                                Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction Stop
+                                if (Test-Path -LiteralPath $probeRoot) { throw 'Probe directory remains.' }
+                            }
+                        }
+                        catch { $row.Success = $false; $row.Error = 'ProbeDirectoryCleanupFailed' }
                         $udp.Dispose()
                     }
                     $udpResults += [pscustomobject]$row
@@ -1614,10 +1627,27 @@ $udp.Dispose()
                     return @{ Status = 'BLOCKED'; Lifecycle = 'InstalledCliMissing' }
                 }
 
-                Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI, sing-box -ErrorAction SilentlyContinue |
-                    Stop-Process -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 2
-                if (Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI -ErrorAction SilentlyContinue) {
+                $ownedPaths = @(
+                    (Join-Path $appDir 'VPNRouter.App.exe'), $gui, $cli,
+                    (Join-Path $appDir 'sing-box.exe'),
+                    'C:\ProgramData\VPNRouter\bin\sing-box.exe')
+                $ownedProcesses = @(Get-Process -Name VPNRouter.App,VPNRouter.GUI,VPNRouter.CLI,sing-box -ErrorAction SilentlyContinue)
+                foreach ($ownedProcess in $ownedProcesses) {
+                    try {
+                        # Pin the process handle before killing: a reused PID must
+                        # not transfer termination authority to a foreign process.
+                        $null = $ownedProcess.Handle
+                        if (-not $ownedProcess.HasExited -and $ownedProcess.Path -and $ownedPaths -icontains $ownedProcess.Path) {
+                            $ownedProcess.Kill()
+                            if (-not $ownedProcess.WaitForExit(10000)) { throw 'Owned process did not stop.' }
+                        }
+                    }
+                    finally { $ownedProcess.Dispose() }
+                }
+                $remaining = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+                    $_.ExecutablePath -and $ownedPaths -icontains $_.ExecutablePath
+                })
+                if ($remaining.Count) {
                     return @{ Status = 'BLOCKED'; Lifecycle = 'AppDidNotStop' }
                 }
 
@@ -1688,11 +1718,18 @@ $udp.Dispose()
                     $launchDeadline = [DateTime]::UtcNow.AddSeconds(45)
                     do {
                         Start-Sleep -Seconds 1
-                        $appStarted = $null -ne (Get-Process -Name VPNRouter.App -ErrorAction SilentlyContinue | Select-Object -First 1)
+                        $appStarted = $false
+                        $expectedSid = ([System.Security.Principal.NTAccount]::new($interactiveUser)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+                        foreach ($candidate in @(Get-CimInstance Win32_Process -Filter "Name='VPNRouter.App.exe'" -ErrorAction Stop)) {
+                            if ([string]$candidate.ExecutablePath -ine (Join-Path $appDir 'VPNRouter.App.exe') -or [int]$candidate.SessionId -le 0) { continue }
+                            $owner = Invoke-CimMethod -InputObject $candidate -MethodName GetOwnerSid -ErrorAction Stop
+                            if ($owner.ReturnValue -eq 0 -and $owner.Sid -eq $expectedSid) { $appStarted = $true }
+                        }
                     } while (-not $appStarted -and [DateTime]::UtcNow -lt $launchDeadline)
                 }
                 finally {
-                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { throw 'Live-update launch task cleanup failed.' }
                 }
 
                 $installedVersionText = ''

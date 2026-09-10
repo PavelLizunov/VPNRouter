@@ -60,27 +60,51 @@ certificate thumbprint (18 checks total). Repository secret names can be audited
 Do not upload locally built unsigned ZIPs for signing and do not run the signer
 against a public release. After the accepted release commit is on `main`:
 
-1. Create and push immutable tag `vX.Y.Z[-rN]` at that exact commit.
-2. Create the GitHub release as **draft** with that tag. Keep it draft while all
-   platform assets are assembled.
-3. Run the signer:
+1. Obtain explicit release authorization; record the accepted main commit SHA,
+   require clean HEAD and matching full AppVersion, then create and push a new
+   immutable tag `vX.Y.Z[-rN]`. Verify the remote peeled tag SHA equals that commit.
+2. Create the release with `gh release create TAG --verify-tag --draft
+   --latest=false` and release notes; add `--prerelease` for a candidate.
+   Keep it draft while all platform assets are assembled. An existing tag/draft
+   must be inspected, never silently recreated.
+3. Run the signer with the release tag as workflow ref:
 
 ```
-gh workflow run "Sign Windows (SignPath)" -f version=X.Y.Z-rN
+gh workflow run sign-windows.yml --ref vX.Y.Z-rN -f version=X.Y.Z-rN
 gh run watch <run-id> --exit-status
 ```
 
-The workflow checks out the exact tag on a GitHub-hosted Windows runner, proves
-`HEAD == tag commit == AppVersion`, builds sing-box-lx and both Windows ZIPs
+The workflow checks out `github.sha` on a GitHub-hosted Windows runner, proves
+`HEAD == run SHA == remote tag commit` and full AppVersion equals the requested
+version, then builds sing-box-lx and both Windows ZIPs
 from source, and passes that immutable Actions artifact ID directly to SignPath.
 Approve the request in the SignPath UI. Before any release mutation, a separate
 Windows job extracts both results and checks all 18 required App/GUI/CLI/
 Service/Core/sing-box signatures, certificate subject and thumbprint.
 
 Only verified ZIPs and newly computed sidecars are uploaded, and only while the
-release is still draft. If a signature, signer, build identity or draft check
-fails, no public release is modified. Publish only after all 16 canonical assets,
-sidecars and release gates are complete.
+release is still draft, after rechecking the remote tag SHA immediately before
+upload. If a signature, signer, build identity or draft check
+fails, no public release is modified. Uploads never overwrite existing assets;
+inspect partial results and explicitly recover only missing exact-tag files,
+or STOP if provenance or consistency cannot be proven.
+
+Wait for all platform staging and tag-bound test/update jobs, all 16 canonical
+assets and every matching sidecar, then dispatch and await:
+
+```
+gh workflow run verify-release-integrity.yml --ref TAG -f tag=TAG -f auto_draft_on_failure=false
+```
+
+Strict CI requires `-ReleaseTag TAG` and canonical tag/SHA-bound runs. Publish
+only with explicit owner authority: candidate `gh release edit TAG --draft=false
+--prerelease --latest=false`; stable `gh release edit TAG --draft=false
+--prerelease=false --latest`. APT and full fixed-WINBRAT post-ship verification
+follow publication. If token publication did not trigger integrity/APT, dispatch
+them explicitly with `--ref TAG -f tag=TAG` (integrity also uses
+`-f auto_draft_on_failure=false`). Follow `cut-stable` for explicit postpublish
+Homebrew notification; macOS draft staging suppresses the tap event.
+Published corrections require a new version/tag, not overwritten assets.
 
 ## Step 5 — Verify
 
@@ -97,9 +121,13 @@ powershell -c "Get-AuthenticodeSignature .\VPNRouter.App.exe | fl Status,SignerC
   (1) stops the AV false-quarantine that causes the "disappears after reboot"
   reports, (2) is the prerequisite for reputation, (3) makes the updater/service
   trusted.
-- Once enrollment is live, `ship-rolling-candidate` must take the draft-release
-  path above instead of local `build.ps1 -Upload`; `cut-stable` must complete
-  signing before the live-update and post-ship gates.
+- Every release uses draft-first staging. `build.ps1 -Upload` only stages
+  unsigned Windows assets to an existing draft/tag at accepted main's exact SHA;
+  it cannot create or publish releases. Any SignPath secret or expected-subject
+  variable, even partial configuration, blocks that unsigned path. Complete
+  enrollment or STOP; there is no unsigned fallback. Stable signing completes
+  before the stable post-ship gate; the previous-stable -> candidate gate remains
+  mandatory before cutting stable.
 - Current status (2026-08-13): none of the five `SIGNPATH_*` repository secrets
   is configured. Windows releases remain unsigned until the owner enrollment is
   approved and this runbook's verification returns `Valid`.

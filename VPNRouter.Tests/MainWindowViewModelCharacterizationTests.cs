@@ -258,7 +258,10 @@ public class MainWindowViewModelCharacterizationTests
         // v2.49 transition latency: + Windows-only TgProxy background recheck
         // task field and helper; no public command/property signature changed.
         // v2.49.2 app apply/connection serialization: + CanToggleConnection.
-        "2e2bb662ea621d8796834971ad518cfb6620e9bbce2edf3dd1d38abba3291931";
+        // 2026-09-08: removed dead EmergencyChannel/wgturn surface (IsEmergencyChannelAvailable,
+        // IsEmergencyChannelToolSelected, MainWindowViewModel.Wgturn.cs).
+        // 2026-09-08: added BeginBatchUpdate() / IsBatchUpdating batch persistence guard.
+        "dd8d24e1576f9427ef96d6981e7d5d3a2c4611937574884d3720ed96309945c6";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

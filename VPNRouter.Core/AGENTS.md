@@ -19,11 +19,11 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 ## Directory & Subdirectory Map
 
 - `Models/`: Data transfer objects, settings schema, profile structures, engine settings, and sing-box JSON configuration models (`AppSettings`, `Profile`, `ProcessRule`, `VPNConfig`, `AppConfig`, `TunSettings`, etc.).
-- `Services/`: Core service implementations and orchestration logic (see `Services/AGENTS.md` for the complete 123-service taxonomy and subsystem map):
+- `Services/`: Core service implementations and orchestration logic (see [Services/AGENTS.md](Services/AGENTS.md) for subsystem entry points and lifecycle caveats):
   - `VpnEngine.cs`: Central VPN lifecycle orchestrator (`StartAsync`, `ApplyAsync`, `Stop`). Coordinates profile resolution, process scanning, config generation, firewall management, ETW monitoring, health checks, and true-split driver engagement.
   - `SingBoxManager.cs`: sing-box process lifecycle and Clash API hot-reloading manager.
   - `ConfigGenerator.cs`: JSON generator for sing-box routing, DNS, and outbounds.
-  - `CustomConfigInjector.cs`: Injects process routing into custom sing-box JSON configurations; enforces fail-closed DNS and route rules.
+  - `CustomConfigInjector.cs`: Injects process routing and adjusts DNS/route settings in custom sing-box JSON; inspect the mode-specific branches and validation limits.
   - `LeakProtection.cs`: Safety validation for generated sing-box JSON configs (missing proxy outbounds, DNS strategy, strict routing).
   - `HealthMonitor.cs`: Periodic VPN connectivity health check and automatic restart/backoff logic.
   - `ConnectionHealthClassifier.cs`, `ConnectionHealthState.cs`, `ClashLogStream.cs`: Observe-only connection health telemetry parser, aggregator, and WebSocket subscriber.
@@ -39,7 +39,6 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
   - `SettingsLoader.cs`, `SettingsMigrator.cs`: YAML settings loading/saving (YamlDotNet) and schema migrations.
   - `ZapretProbeCache.cs`: Zapret probe cache persistence (`%ProgramData%\VPNRouter\cache\zapret_probe.json`).
 - `Services/FreeConfigs/`: Free config aggregator pipeline (`FreeConfigAggregator`, `FreeConfigCache`, `FreeConfigTester`, `FreeConfigDeepVerifier`, `FreeConfigGeoIp`, `FreeConfigPoolFetcher`, `FreeConfigSources`).
-- `Services/EmergencyChannel/`: Fail-safe backup connectivity channel manager (`EmergencyChannelManager`, `EmergencyChannelEngine`).
 - `Services/Diagnostics/`: Log export and diagnostic redaction helpers (`DiagnosticsExporter`, `DiagnosticsRedactor`).
 - `Services/UpdateSources/`: Update-source contracts and GitHub/sideload implementations.
 - `Interfaces/`: Core contracts (`IFirewallManager`, `IProcessScanner`, `IProcessMonitor`, `IProfileSource`). The Windows split-driver contract is declared with its manager in `Services/SplitTunnelDriverManager.cs`.
@@ -78,10 +77,9 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - A selected chained VLESS target must resolve exactly one direct, usable VLESS upstream. `GetActiveServers` includes that upstream and `ConfigGenerator` emits exactly `chain-entry` plus `proxy` with `proxy.detour = "chain-entry"`.
 - Missing, duplicate, nested, unsupported, or platform-filtered upstreams fail closed. Ordinary selection and auto-select pools must exclude chained targets unless that exact target is active; never fall back to a direct target connection.
 
-### Fail-Closed Routing & DNS
-- `CustomConfigInjector` enforces fail-closed rules: `route.final` is set to proxy in full-tunnel or exclude mode, Cloudflare DoH is synthesized when proxy detour DNS is missing, and `dns-direct` is excluded from remote DNS tags.
-- VPNRouter-owned geo/censorship DNS rules always use a real proxy-detour resolver; never assign a country-specific direct resolver. Direct DoH is limited to bootstrap and explicit direct/smart/failover behavior.
-- `LeakProtection.ValidateAppSettings` and `ValidateConfig` verify settings/generated JSON for missing proxy outbounds, DNS strategy integrity, and strict routing. Validation runs in both `StartAsync` and `ApplyAsync` flows of `VpnEngine`.
+### Routing & DNS source navigation
+- `CustomConfigInjector.cs` adjusts `route.final` and DNS selection by routing mode and strict-DNS settings. Inspect `EnsureSynthesizedRemoteDns` and its stamping helper for fallback resolver output; helper names/comments can lag the emitted values.
+- `ConfigGenerator.Dns.cs`, `ConfigGenerator.Route.cs` and `LeakProtection.cs` own generated routing/DNS and validation. Read their mode-specific branches with the startup/apply callers; validation is not a blanket guarantee that every DNS or failure path remains proxy-only.
 
 ### Safe Process Query Handles
 - All process enumeration in Core must use `ProcessQuery` wrappers (`AnyAlive`, `CountAlive`) or handle `Process[]` arrays inside `try...finally` blocks to explicitly dispose process handles and prevent OS handle leaks.
@@ -92,7 +90,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - Driver disengagement occurs during `TeardownInternal` after sing-box stops. If the driver is absent or fails, the engine safely fails open to post-capture process rules.
 
 ### Firewall Kill-Switch Invariants
-- Firewall behavior is mode- and platform-specific. Windows supports its intended per-process/full-tunnel protections; Linux/macOS arm their kill switches only for supported full-tunnel flows and remain disarmed in split-tunnel mode.
+- Firewall behavior is mode- and platform-specific. Windows uses per-executable `netsh` rules, not a global full-host block. Linux/macOS arm only when the explicit `isFullTunnel` argument is true, regardless of process-list emptiness. See [Platform/AGENTS.md](Platform/AGENTS.md) for source entry points and failure/cleanup boundaries.
 - Missing privilege prerequisites (for example a Linux sudo grant) must be surfaced explicitly; do not describe an unarmed firewall as fail-closed.
 
 ## Test Strategy

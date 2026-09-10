@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:fcvm="using:VPNRouter.App.ViewModels.FreeConfigs"
+             xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -32,7 +33,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="4"/>
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
-            <ListBoxItem Content="{Binding L_FcTabSearch}" Padding="10,4" FontSize="11"/>
+            <ListBoxItem icons:PictogramText.Icons="search-tab" icons:PictogramText.Content="{Binding L_FcTabSearch}" Padding="10,4" FontSize="11"/>
             <ListBoxItem Content="{Binding FreeConfigsVm.SavedTabHeaderText}"
                          Padding="10,4" FontSize="11"/>
         </ListBox>
@@ -72,7 +73,7 @@
                              reader could mis-announce when the button
                              swaps between Verify/Stop on busy state —
                              explicit Name matches the canonical label. -->
-                        <Button Content="{Binding L_FcDeepVerify}"
+                        <Button icons:PictogramText.Icons="find-working" icons:PictogramText.Content="{Binding L_FcDeepVerify}"
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
                                 IsVisible="{Binding !FreeConfigsVm.IsBusy}"
                                 Padding="0,10" FontSize="13" FontWeight="Bold"
@@ -83,7 +84,7 @@
                                 Foreground="White"
                                 ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepVerify}"/>
-                        <Button Content="{Binding L_FcDeepStop}"
+                        <Button icons:PictogramText.Icons="stop" icons:PictogramText.Content="{Binding L_FcDeepStop}"
                                 Command="{Binding FreeConfigsVm.CancelCommand}"
                                 IsVisible="{Binding FreeConfigsVm.IsBusy}"
                                 Padding="0,10" FontSize="13" FontWeight="Bold"
@@ -94,7 +95,7 @@
                                 Foreground="White"
                                 ToolTip.Tip="{Binding L_FcDeepStopTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepStop}"/>
-                        <Expander Header="{Binding L_FcAdvancedSettings}"
+                        <Expander
                                   Background="Transparent"
                                   BorderBrush="{DynamicResource SuccessBorderBrush}"
                                   BorderThickness="0,1,0,0"
@@ -102,6 +103,9 @@
                                   Margin="0,4,0,0"
                                   Foreground="{DynamicResource SuccessFgBrush}"
                                   FontSize="11" FontWeight="SemiBold">
+                            <Expander.Header>
+                                <TextBlock icons:PictogramText.Icons="chevron-down" icons:PictogramText.Text="{Binding L_FcAdvancedSettings}"/>
+                            </Expander.Header>
                             <StackPanel Spacing="8" Margin="0,6,0,2">
                                 <WrapPanel Orientation="Horizontal" ItemWidth="NaN" ItemHeight="NaN">
                                     <StackPanel Orientation="Horizontal" Spacing="4"
@@ -214,7 +218,7 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
                                         <Grid ColumnDefinitions="44,*,80,80,72" Height="22">
-                                            <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
+                                            <TextBlock Grid.Column="0" icons:PictogramText.Icons="globe" icons:PictogramText.Text="{Binding CountryDisplay}"
                                                        FontFamily="{DynamicResource EmojiFlagFont}, $Default"
                                                        FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
@@ -224,7 +228,7 @@
                                                     Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
                                                     VerticalAlignment="Center"
                                                     Background="{Binding LatencyColor}">
-                                                <TextBlock Text="{Binding LatencyDisplay}"
+                                                <TextBlock icons:PictogramText.Icons="verified,check" icons:PictogramText.Text="{Binding LatencyDisplay}"
                                                            Foreground="White" FontSize="9" FontWeight="SemiBold"/>
                                             </Border>
                                             <!-- v2.31.0-r4 (F-24 / UX-63):
@@ -234,7 +238,7 @@
                                                  Same hint used in Saved tab.
                                                  -->
                                             <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
-                                                       ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
+                                                       icons:PictogramText.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                        FontSize="9" Opacity="0.75" FontWeight="SemiBold"
                                                        VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                                             <TextBlock Grid.Column="4" Text="{Binding Transport}"
@@ -281,12 +285,12 @@
                          informative — explains why Saved configs may
                          break and how to recheck). -->
                     <TextBlock Grid.Column="0"
-                               Text="{Binding L_FcSavedTabHint}"
+                               icons:PictogramText.Icons="retest" icons:PictogramText.Text="{Binding L_FcSavedTabHint}"
                                FontSize="9" Opacity="0.55"
                                TextWrapping="Wrap"
                                VerticalAlignment="Center"/>
                     <Button Grid.Column="1"
-                            Content="{Binding FreeConfigsVm.SavedRecheckStaleButtonText}"
+                            icons:PictogramText.Icons="retest" icons:PictogramText.Content="{Binding FreeConfigsVm.SavedRecheckStaleButtonText}"
                             Command="{Binding FreeConfigsVm.RecheckAllStaleCommand}"
                             IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                             IsVisible="{Binding FreeConfigsVm.HasStaleSaved}"
@@ -298,7 +302,7 @@
                          Zapret". Foreground swapped from neutral grey to the
                          Danger token. -->
                     <Button Grid.Column="2"
-                            Content="{Binding L_FcSavedClearAllBtn}"
+                            icons:PictogramText.Icons="delete" icons:PictogramText.Content="{Binding L_FcSavedClearAllBtn}"
                             Command="{Binding FreeConfigsVm.ClearAllSavedCommand}"
                             IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                             FontSize="10" Padding="10,4"
@@ -352,7 +356,7 @@
                                 <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
                                     <Grid ColumnDefinitions="44,*,72,72,68,52" Height="22"
                                           Opacity="{Binding OpacityValue}">
-                                        <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
+                                        <TextBlock Grid.Column="0" icons:PictogramText.Icons="globe" icons:PictogramText.Text="{Binding CountryDisplay}"
                                                    FontFamily="{DynamicResource EmojiFlagFont}, $Default"
                                                    FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
@@ -362,11 +366,11 @@
                                                 Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{Binding LatencyColor}">
-                                            <TextBlock Text="{Binding LatencyDisplay}"
+                                            <TextBlock icons:PictogramText.Icons="verified,check" icons:PictogramText.Text="{Binding LatencyDisplay}"
                                                        Foreground="White" FontSize="9" FontWeight="SemiBold"/>
                                         </Border>
                                         <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
-                                                   ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
+                                                   icons:PictogramText.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                    FontSize="9" Opacity="0.85" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                                         <TextBlock Grid.Column="4" Text="{Binding FreshnessLabel}"
@@ -375,19 +379,19 @@
                                                    TextTrimming="CharacterEllipsis"/>
                                         <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
                                                     HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <Button Content="↻"
+                                            <Button icons:PictogramText.Icons="retest" icons:PictogramText.Content="↻"
                                                     Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).FreeConfigsVm.RecheckOneCommand}"
                                                     CommandParameter="{Binding}"
                                                     IsEnabled="{Binding !IsRecheckRunning}"
-                                                    ToolTip.Tip="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRecheckOneTooltip}"
+                                                    ToolTip.Tip="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRecheckOneTooltip}" AutomationProperties.Name="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRecheckOneTooltip}"
                                                     FontSize="10" Padding="4,1"
                                                     MinWidth="22" MinHeight="0"
                                                     CornerRadius="{StaticResource RadiusXs}"
                                                     Background="Transparent"/>
-                                            <Button Content="✕"
+                                            <Button icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                                                     Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).FreeConfigsVm.RemoveFromSavedCommand}"
                                                     CommandParameter="{Binding}"
-                                                    ToolTip.Tip="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRemoveOneTooltip}"
+                                                    ToolTip.Tip="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRemoveOneTooltip}" AutomationProperties.Name="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRemoveOneTooltip}"
                                                     FontSize="10" Padding="4,1"
                                                     MinWidth="22" MinHeight="0"
                                                     CornerRadius="{StaticResource RadiusXs}"
@@ -418,7 +422,7 @@
             <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Grid.Column="0"
-                               Text="{Binding FreeConfigsVm.StatusText}"
+                               icons:PictogramText.Icons="verified,check,warning,error" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding FreeConfigsVm.StatusText}"
                                FontSize="10" Opacity="0.7"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
@@ -435,7 +439,7 @@
                              Maximum="{Binding FreeConfigsVm.ProgressTotal}"
                              IsVisible="{Binding FreeConfigsVm.HasProgress}"
                              Height="4" CornerRadius="{StaticResource RadiusXs}"/>
-                <TextBlock Text="{Binding L_FcConnectHint}"
+                <TextBlock icons:PictogramText.Icons="arrow-up" icons:PictogramText.Text="{Binding L_FcConnectHint}"
                            IsVisible="{Binding !FreeConfigsVm.HasSelection}"
                            FontSize="10" Opacity="0.55"
                            HorizontalAlignment="Center" TextAlignment="Center"

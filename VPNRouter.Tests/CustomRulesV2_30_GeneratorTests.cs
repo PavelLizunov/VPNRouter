@@ -1,6 +1,5 @@
 ﻿using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 public class CustomRulesV2_30_GeneratorTests

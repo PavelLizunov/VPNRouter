@@ -76,3 +76,33 @@ Three priorities: destructive/DNS boundaries; confirmed Unix cleanup plus curren
 endpoint snapshot; lifecycle intent/readiness/commit semantics. Product code and
 live systems remain unchanged; fixes remain recommendations, not implementation.
 No release, waiver, tag, deployment or merge performed.
+
+## Integration addendum: 2026-09-10
+
+This addendum supersedes the historical baseline/dependency, readiness and delivery
+claims above for the current #237 integration. Original audit observations and
+proposed tests remain historical source-only evidence, not runtime reproduction.
+
+- Accepted dependency #235: reviewed `f1146be5`, green CI `34493112492`, merged
+  `fa7685c53ac495f5e31fb3fec5fb3fd6cde94309` (CI and merge receipt verified by the lead; merge authorized by the owner).
+- Reconcile original #237 `7678e6ef5c2204f0918d3daed2bbb262d7a84331` on the existing
+  task branch with that accepted main. This delta is documentation-only; inherited
+  main product changes are not audit implementation.
+- Preserve the morning report byte-identically to original #237, also shared by
+  #240. Keep every unrelated main ledger entry unchanged, including external
+  release acceptance pending; append all fourteen original audit entries.
+- The twelve product findings remain open until separate #240 acceptance. Only
+  NIGHT-DOC and the existing #235 map-drift entry resolve on the accepted maps'
+  scoped source-review/CI evidence. NIGHT-MEASURE remains open, research-only;
+  no benchmark or measured performance improvement is claimed.
+- Current local gates: report/ledger preservation and main-relative whitespace
+  checks are recorded in `pr237-integration-outcome-2026-09-10.md`. Builds, runtime
+  scenarios and new agents are outside this bounded documentation task.
+- Final corrective review and exact-head #237 CI remain pending. No staging,
+  commit, push, branch operation, release or deployment is performed by this worker.
+  Frozen handoff leaves merge-index resolution and subsequent delivery to the parent.
+
+Risk: losing accepted ledger history or mistaking historical evidence for current
+acceptance. Rollback only these integration documentation edits; retain the report,
+all source bytes and unrelated untracked work. Outcome and six current gates:
+`pr237-integration-outcome-2026-09-10.md`.

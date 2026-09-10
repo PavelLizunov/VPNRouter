@@ -1000,9 +1000,9 @@ public static class CustomConfigInjector
     private static void StampCloudflareDohViaProxy(JsonObject server, string proxyTag)
     {
         server.Remove("address");      // legacy field — invalid alongside a typed server
-        server.Remove("server_port");  // 1.1.1.1 DoH uses the default 443
+        server.Remove("server_port");  // DoH uses the default 443
         server["type"] = "https";
-        server["server"] = "1.1.1.1";
+        server["server"] = "8.8.8.8";
         server["path"] = "/dns-query";
         server["detour"] = proxyTag;
     }
@@ -1324,7 +1324,7 @@ public static class CustomConfigInjector
         {
             ["tag"] = tag,
             ["type"] = "https",
-            ["server"] = "1.1.1.1",
+            ["server"] = "8.8.8.8",
             ["path"] = "/dns-query",
             ["detour"] = "dns-direct",
         });
@@ -1481,7 +1481,7 @@ public static class CustomConfigInjector
                 {
                     obj["type"] = "https";
                     if (obj["server"] == null)
-                        obj["server"] = "1.1.1.1";
+                        obj["server"] = "8.8.8.8";
                     if (obj["path"] == null)
                         obj["path"] = "/dns-query";
                     obj.Remove("detour"); // re-added in step 1c below as dns-direct
