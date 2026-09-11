@@ -1,0 +1,7 @@
+# PR199 requirement preservation
+
+Closed PR199 remote `jules-16205616264188132291-d988214d`, tip `6caa0cb09e70bb7d1547214aa45247cb8e54f601`. Full merge-base diff inspected: DiagnosticsRedactor prefix pattern plus one three-input test only. Closure cites accepted #193/#201.
+
+Accepted main2689ee77 tests access_token, refresh_token and client_secret in Logs_RedactPrefixedSecretKeys; Logs_RedactJsonStyleKeyValueSecrets additionally exercises quoted short values through the same log regex. Current pattern independently handles optional quoting and whitespace around [=:], retaining captured key/delimiter. PR199 combines those supported features (quoted refresh token, space before client-secret equals); these literal cross-products do not introduce a separate key-specific parsing path. Old arbitrary suffix matching is not required to restore the accepted separator-qualified prefix policy. Compare pr194-preservation-2026-09-11.md for the same production delta.
+
+Disposition: completed requirement-level work, eligible for exact-tip cleanup under standing owner authorization. Source/test comparison only; no new runtime verification or all-input regex equivalence claim. Full tip identifies history, not independent backup. Remote branch deleted with exact-SHA lease after fresh remote tip, accepted main identity and no-worktree checks. Fresh remote absence verified. No local-ref or product changes.
