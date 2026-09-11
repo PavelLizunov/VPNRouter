@@ -575,17 +575,20 @@ public static class ZapretActions
 
     // ── Launch Flowseal service menu ──
 
-    public static void OpenServiceMenu()
+    public static void OpenServiceMenu(string? customServicePath = null)
     {
-        var servicePath = Path.Combine(ZapretUpdater.ZapretDir, "service.bat");
+        var servicePath = customServicePath ?? Path.Combine(ZapretUpdater.ZapretDir, "service.bat");
         if (!File.Exists(servicePath))
             throw new FileNotFoundException("service.bat not found", servicePath);
+
+        if (servicePath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
+            throw new ArgumentException("Service path contains disallowed shell metacharacters", nameof(servicePath));
 
         Process.Start(new ProcessStartInfo("cmd.exe", $"/k \"\"{servicePath}\"\"")
         {
             UseShellExecute = true,
             Verb = "runas",
-            WorkingDirectory = ZapretUpdater.ZapretDir
+            WorkingDirectory = Path.GetDirectoryName(servicePath) ?? ZapretUpdater.ZapretDir
         });
     }
 
