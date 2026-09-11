@@ -205,6 +205,7 @@ public sealed class CrashReporterScrubberTests
     [InlineData("wss://example.com/api?refresh_token=tok67890", "refresh_token=[REDACTED]")]
     [InlineData("ws://example.com/api?auth_token=tok11223", "auth_token=[REDACTED]")]
     [InlineData("wss://example.com/api?client_secret=sec99887", "client_secret=[REDACTED]")]
+    [InlineData("ws://example.com/api?clientsecret=sec99887", "clientsecret=[REDACTED]")]
     [InlineData("ws://example.com/api?api_secret=sec77665", "api_secret=[REDACTED]")]
     [InlineData("wss://example.com/api?private_key=key33221", "private_key=[REDACTED]")]
     [InlineData("ws://example.com/api?auth=credential_data", "auth=[REDACTED]")]

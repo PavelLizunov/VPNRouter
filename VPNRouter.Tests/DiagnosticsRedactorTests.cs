@@ -268,6 +268,7 @@ app:
             "[DBG] access_token=mySecretAccess123\n" +
             "[DBG] refresh_token: mySecretRefresh456\n" +
             "[DBG] client_secret=mySecretClient789\n" +
+            "[DBG] clientsecret=mySecretClientWithoutSep123\n" +
             "[DBG] auth_token=mySecretAuthABC\n" +
             "[DBG] secret_key=mySecretKeyDEF\n" +
             "[DBG] tg_proxy_secret=myTelegramProxySecret987\n" +
@@ -281,6 +282,7 @@ app:
         Assert.DoesNotContain("mySecretAccess123", outp);
         Assert.DoesNotContain("mySecretRefresh456", outp);
         Assert.DoesNotContain("mySecretClient789", outp);
+        Assert.DoesNotContain("mySecretClientWithoutSep123", outp);
         Assert.DoesNotContain("mySecretAuthABC", outp);
         Assert.DoesNotContain("mySecretKeyDEF", outp);
         Assert.DoesNotContain("myTelegramProxySecret987", outp);
@@ -293,6 +295,7 @@ app:
         Assert.DoesNotContain("mySecretUserKeyDEF", outp);
         Assert.Contains("access_token=", outp);
         Assert.Contains("refresh_token:", outp);
+        Assert.Contains("clientsecret=", outp);
         Assert.Contains("access_key=", outp);
         Assert.Contains("enc_key:", outp);
         Assert.Contains("encryption_key=", outp);
