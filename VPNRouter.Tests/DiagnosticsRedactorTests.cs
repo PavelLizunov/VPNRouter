@@ -298,6 +298,32 @@ app:
         Assert.Contains("encryption_key=", outp);
     }
 
+    [Fact]
+    public void Logs_RedactSeparatorlessSecretKeys()
+    {
+        // Separatorless secret keys like clientsecret, clientpassword, clientpass,
+        // refreshtoken, and accesstoken must be redacted, while non-secret flags
+        // like bypass=true or bypass_russian_traffic=true are preserved.
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] clientsecret=mySecretClientNoSep123\n" +
+            "[DBG] clientpassword: mySecretClientPass456\n" +
+            "[DBG] clientpass=mySecretPass789\n" +
+            "[DBG] refreshtoken=mySecretRefreshNoSepABC\n" +
+            "[DBG] accesstoken: mySecretAccessNoSepDEF\n" +
+            "[DBG] bypass=true\n" +
+            "[DBG] bypass_russian_traffic=true");
+        Assert.DoesNotContain("mySecretClientNoSep123", outp);
+        Assert.DoesNotContain("mySecretClientPass456", outp);
+        Assert.DoesNotContain("mySecretPass789", outp);
+        Assert.DoesNotContain("mySecretRefreshNoSepABC", outp);
+        Assert.DoesNotContain("mySecretAccessNoSepDEF", outp);
+        Assert.Contains("clientsecret=", outp);
+        Assert.Contains("refreshtoken=", outp);
+        Assert.Contains("accesstoken:", outp);
+        Assert.Contains("bypass=true", outp);
+        Assert.Contains("bypass_russian_traffic=true", outp);
+    }
+
     // AmneziaWG keys are credentials. The allowlist redacts them by default (not in
     // SafeKeys); these lock that in so a future SafeKeys change can't leak them.
     [Fact]
