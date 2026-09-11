@@ -2,7 +2,7 @@
 
 ## Transfer status
 
-Owner-approved test-only commit `e20869abae20c15a1750c38e00b4f346fc6e2aeb` adds the original short synthetic auth_key/client_key values and absence assertions to the existing fixture. Independent source review confirmed the values exercise key redaction rather than an unrelated long-key scrubber. No production regex change. Focused worker passed 2/2 selected tests and all four CI checks passed at that SHA; parent verified primary evidence, recorded in `redaction-test-preservation-verification-2026-09-10.md`. Branch remains retained until transfer acceptance into main. The inventory below describes the accepted-main baseline before this transfer.
+Owner-approved test-only commit `e20869abae20c15a1750c38e00b4f346fc6e2aeb` adds the original short synthetic auth_key/client_key values and absence assertions to the existing fixture. Independent source review confirmed the values exercise key redaction rather than an unrelated long-key scrubber. No production regex change. Focused worker passed 2/2 selected tests and all four CI checks passed at that SHA; parent verified primary evidence, recorded in `redaction-test-preservation-verification-2026-09-10.md`. Owner-approved PR257 subsequently merged as `2689ee77`; the prefixed-key branch was removed with an exact-SHA lease after acceptance. See `post257-preserved-branches-cleanup-2026-09-10.md`. The inventory below describes the accepted-main baseline before this transfer.
 
 Compared commit ff75497e2e3e330230b3d79f951c2eb91c494e2f on sentinel-redact-prefixed-secret-keys-11930939174604721738 with current main 0bcc8166510310d39e442b09a3e0e804eb94dd01. Original commit changes DiagnosticsRedactor regex to include bare key and adds six prefixed-key cases to Logs_RedactPrefixedSecretKeys.
 
