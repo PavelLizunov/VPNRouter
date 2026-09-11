@@ -68,6 +68,19 @@ public class RevealInFileManagerTests
         Assert.Empty(logsPsi.Arguments);
         Assert.Single(logsPsi.ArgumentList);
         Assert.Equal(malPath, logsPsi.ArgumentList[0]);
+
+        // Verify ProcessStartInfo pattern for RunHealthCheck report viewer
+        var healthPsi = new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "notepad.exe" : (OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open"),
+            UseShellExecute = false
+        };
+        healthPsi.ArgumentList.Add(malPath);
+
+        Assert.False(healthPsi.UseShellExecute);
+        Assert.Empty(healthPsi.Arguments);
+        Assert.Single(healthPsi.ArgumentList);
+        Assert.Equal(malPath, healthPsi.ArgumentList[0]);
     }
 }
 

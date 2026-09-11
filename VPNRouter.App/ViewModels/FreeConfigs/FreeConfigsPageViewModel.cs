@@ -1460,11 +1460,29 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     {
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            var logsDir = VPNRouter.Core.AppPaths.LogsDir;
+            Directory.CreateDirectory(logsDir);
+
+            // Security: Use ArgumentList instead of string concatenation to prevent argument injection
+            System.Diagnostics.ProcessStartInfo psi;
+            if (OperatingSystem.IsWindows())
             {
-                FileName = VPNRouter.Core.AppPaths.LogsDir,
-                UseShellExecute = true,
-            });
+                psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    UseShellExecute = false
+                };
+            }
+            else
+            {
+                psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
+                    UseShellExecute = false
+                };
+            }
+            psi.ArgumentList.Add(logsDir);
+            System.Diagnostics.Process.Start(psi);
         }
         catch (Exception ex)
         {

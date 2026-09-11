@@ -197,14 +197,14 @@ public partial class MainWindowViewModel
             File.WriteAllText(reportPath, report);
 
             // Open in system default text viewer.
+            // Security: Use ArgumentList instead of string concatenation to prevent argument injection and quoting errors on Linux/macOS
             ProcessStartInfo psi;
             if (OperatingSystem.IsWindows())
             {
                 psi = new ProcessStartInfo
                 {
                     FileName = "notepad.exe",
-                    Arguments = $"\"{reportPath}\"",
-                    UseShellExecute = true
+                    UseShellExecute = false
                 };
             }
             else
@@ -216,10 +216,10 @@ public partial class MainWindowViewModel
                 psi = new ProcessStartInfo
                 {
                     FileName = opener,
-                    Arguments = $"\"{reportPath}\"",
                     UseShellExecute = false
                 };
             }
+            psi.ArgumentList.Add(reportPath);
             System.Diagnostics.Process.Start(psi);
             // v2.31.0-r4 (F-26): inline confirmation toast so the user
             // gets feedback that the report was saved + opened. Pre-fix
