@@ -1,10 +1,10 @@
 # Combined main regression verification
 
-Status: proposed, execution deferred until integration completes. Owner clarified on 2026-09-10: finish merging first, then proceed to broader verification. Resume #233 under existing bounded review/green-CI acceptance; no waiver of its ordinary gates. Refresh candidate to final accepted main (including #233 if accepted) and review the concrete verification scope before starting. Branch deletion still requires preservation checks and applicable owner approval. This is verification, not an autonomous optimization campaign or release authorization.
+Status: executed on 2026-09-11 UTC per owner approval. All three phases completed on trusted linux-worker (test suite pass, anti-slop UI pass, performance characterization showing no regressions). Detailed evidence and hashes recorded in plans/main-verification-evidence-2026-09-11.md.
 
 ## Snapshots
 
-Candidate: accepted main f4b75f18b4ed6c2ced48e76735ff2ee8f9b58d21. Fetch and verify before execution; record any later main movement separately, never silently move target. Resolve the pre-integration baseline from first-parent history before #232/#254/#256/#235/#237/#240; record full SHA and actual tree differences. Use identical external fixtures for both snapshots. Intentional behavior changes need explicit expected-output differences, not automatic parity assertions.
+Candidate: accepted main 0c6dbf68408ea1c1578b93e93111ad54613302aa. Baseline: pre-integration commit 065a2083545c85b788b302d8057be73b292f8d93. Use identical external fixtures for both snapshots. Intentional behavior changes need explicit expected-output differences, not automatic parity assertions.
 
 ## Phase 1 — impact and functional contracts
 
