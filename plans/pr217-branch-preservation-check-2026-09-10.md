@@ -1,0 +1,7 @@
+# PR217 completed-work preservation check
+
+Main baseline0bcc8166510310d39e442b09a3e0e804eb94dd01. Closed PR217 remote security/redact-client-secret-crashreporter-6234708374270031273 tipa5d6cdf51557474c540165659fc48c18e4aee2d4. GitHub closure explicitly says superseded by219.
+
+Inspected full original commit: only CrashReporter.cs regex adds client[_-]?secret and CrashReporterScrubberTests adds ws://example.com/api?client_secret=clientsecret123 -> client_secret=[REDACTED]. Current CrashReporter.cs188-190 generalizes optional underscore/hyphen prefix before secret, preserving client_secret/client-secret. However separatorless clientsecret, accepted by original client[_-]?secret, is NOT matched by that generalization: after [?&], the prefix requires a separator. Therefore strict semantic redundancy is not established. Current test line207 explicitly retains client_secret in wss URL with different synthetic value. ws/wss distinction does not change query regex behavior; neither is removed by proxy-URI scrubber, as source comment states. No separate original test for separatorless form existed. This is static preservation analysis, not newly executed runtime evidence.
+
+Disposition: RETAIN pending separatorless clientsecret scope decision or safe case preservation. Existing client_secret test is retained, but original production pattern covered an extra spelling; no runtime verification performed. Full recovery tip above. No deletion authorized by this analysis or performed.
