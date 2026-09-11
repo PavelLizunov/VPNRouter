@@ -104,7 +104,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 
 ## Каталог фич
 
-**53 фичи** в 11 категориях. Полный справочник с flow-диаграммами + рейтингом сложности + service chains лежит в [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) (auto-generated audit). Сводка:
+Исторический каталог фич (аудит baseline v2.32.3 от 2026-05-17): **53 фичи** в 11 категориях. Полный справочник с flow-диаграммами + рейтингом сложности + service chains лежит в [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md). Сводка:
 
 | Категория | Фич | Сложность | Платформы |
 |---|---:|---|---|
@@ -225,8 +225,8 @@ VPNRouter.sln
 ### Best-practice заметки
 
 - **Bilingual UI** — все строки в `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android — pass-through wrapper'ы, никаких дублей.
-- **Async hygiene** — 0 `async void` в Core; UI-handler'ы стандартным `async void EventHandler` pattern; нет `.Result` blocking calls кроме `VpnEngine.cs:461` (на refactor).
-- **Cross-cutting**: каждый сервис принимает `ILogger?` (Serilog) для diagnostic-trace в `vpnrouter*.log`.
+- **Async hygiene** — 0 `async void` в Core; UI-handler'ы стандартным `async void EventHandler` pattern; везде в Core используется async/await без блокирующих `.Result` на асинхронных путях.
+- **Диагностика и логирование** — сервисы логируют через Serilog (внедрение `ILogger?` или статический логер) для детальной трассировки в `vpnrouter*.log`.
 - **Диагностика** — локальные логи и отчёты о сбоях помогают разбирать ошибки; перед их передачей см. [Приватность и доверие](#приватность-и-доверие).
 
 ### Ключевые сервисы
@@ -246,8 +246,8 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 1. Загружаем профиль → резолвим имена процессов, которые пойдут через VPN
 2. Генерируем sing-box JSON-конфиг с нужным TUN-inbound, VLESS+Reality outbound и `process_name`-route-правилами
 3. Запускаем sing-box в TUN-режиме (создаётся виртуальный адаптер)
-4. ОС направляет весь трафик через адаптер; sing-box разделяет на основе совпадения имени процесса
-5. ETW следит за новыми процессами → hot-reload конфига через Clash API (без реконнекта)
+4. Трафик поступает в виртуальный адаптер; sing-box разделяет его на основе совпадения имени процесса
+5. На Windows ETW отслеживает запуск новых процессов (сканирование процессов на macOS/Linux) → hot-reload конфига через Clash API (без реконнекта)
 6. При сбое действие включённой firewall-защиты зависит от платформы, режима маршрутизации и прав. В Linux/macOS kill-switch поддерживает только full-tunnel и остаётся отключённым в split-режиме; рассчитывать на блокировку отдельных процессов при сбое там нельзя.
 
 ## Приватность и доверие

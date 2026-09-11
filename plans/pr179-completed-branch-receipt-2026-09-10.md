@@ -1,0 +1,5 @@
+# PR179 completed branch cleanup
+
+Owner authorization: delete all completed work, preserving useful unique changes. Remote sentinel-fix-argument-injection-getcap-12254410649925418319 tip f4819f1da4ba4bfb123587c8a52b28f366c76c02. Closed PR179 explicitly superseded by merged201; closure states safe ArgumentList change ported and unrelated global.json downgrade intentionally discarded.
+
+Inspected original full stat: only SingBoxManager.Lifecycle.cs and global.json, no tests. Original production delta replaces quoted Arguments with ProcessStartInfo("getcap") and ArgumentList.Add(exePath). Current source lines731-738 retains this exact launch construction with UseShellExecute=false and output/error redirection. No runtime execution needed for this preservation comparison; no new security guarantee claimed. Accepted201 f9a7e09fd933bc21b696060df4866ae04a220431 ancestry must be checked before deletion. Recovery tip retained above. Status: accepted201 ancestry and exact remote tip checked; remote branch deleted with exact-SHA lease; fresh remote absence verified.

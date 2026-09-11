@@ -1,0 +1,9 @@
+{
+  "approval": "Owner: Можешь вообще все завершонное удалять наша цель все причесать чтоб вылядело очень чисто",
+  "baseline": "0bcc8166510310d39e442b09a3e0e804eb94dd01",
+  "status": "two_remote_refs_deleted_atomic_exact_leases_two_local_deleted_remote_absence_verified",
+  "branches": {
+    "dsh/desktop-pictogram-preview": "93fda2c9ee0eced801c63a8a60e6271f05af99db",
+    "dsh/ui-pictogram-catalog": "fe17014d7b33218b336d9f4820d5fddbe5c6e715"
+  }
+}

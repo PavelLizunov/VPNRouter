@@ -1,0 +1,14 @@
+{
+  "approval": "delete-seven-merged-branches: Удалить эти семь",
+  "baseline": "0bcc8166510310d39e442b09a3e0e804eb94dd01",
+  "status": "deleted_seven_remote_atomic_exact_leases_and_seven_local_ancestor_heads_verified_absent",
+  "branches": {
+    "dsh/document-gray-zones": "f1146be56944c1d83adf880bf0b523fa6b585388",
+    "dsh/fix-night-audit-gemini-2026-09-04": "8de197120627125a9cce8dac7f6ee0c042d235ed",
+    "dsh/overnight-audit-2026-09-04": "4694e88c1e29fbcde2bb91d1674226caf1b05f07",
+    "dsh/perf-sharelink-and-query-parsing": "4b082e34e140141ffd82ee50ff066b6984dafb21",
+    "dsh/repository-cleanup-20260910": "b4f3c25343794164dd00cf142067e4e624c22164",
+    "sentinel/enforce-http-https-url-validation-16166354341638659474": "2340966842174646b8100ca09b3ef4026ba40f07",
+    "dsh/upgrade-singbox-vpnctl-1.14": "94e6f2814a811ed0046427446564022659dc239a"
+  }
+}

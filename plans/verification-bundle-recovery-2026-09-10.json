@@ -1,0 +1,16 @@
+{
+  "approval": "archive-completed-verification-branches: Архивировать и удалить четыре ссылки",
+  "bundle": "/var/lib/dsh/Project/VPNRouter-cleanup-archives/2026-09-10-verification/verification-history.bundle",
+  "sha256": "3c384e23d5b3e1b5a81e9d26c8ac542134abe4a2ad0badcd4b09666492ecced0",
+  "bytes": 225852919,
+  "verification": "Complete history; git bundle verify, fetch into fresh restore-check.git, exact four tips and git fsck --full passed. Unborn default HEAD notice is expected in bare verification repository.",
+  "status": "four_remote_atomic_leased_and_local_exact_oid_refs_deleted_remote_absence_verified",
+  "limits": "Local backup only, not off-host. Preserve archive and restore-check.git. Never garbage collect archive based on branch removal.",
+  "recovery": "Verify SHA256, then git init --bare <new-empty-path> and git -C <new-empty-path> fetch <bundle> refs/heads/<branch>:refs/heads/<branch> for each listed branch; compare full tips. Remote restoration requires separate authorization.",
+  "branches": {
+    "dsh/fix-night-audit-red-verification-2026-09-05": "7f21286d7a14414de818510ccea04b7014caf776",
+    "dsh/verify-vpnctl-fakeip-red-2026-09-05": "c36e50349f5810f2782cb4535119723b6dd0d2ae",
+    "dsh/verify-vpnctl-packaging-red-2026-09-05": "0f85cbfeaf0d2030285c0ab44df1d64d13aefaef",
+    "dsh/verify-vpnctl-night-combined-2026-09-05": "1fe721a935f95986d60ea9bea3e76a87f4c11adf"
+  }
+}

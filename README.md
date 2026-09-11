@@ -108,7 +108,7 @@ The Free Configs tab collects public VLESS endpoints. A scheduled server-side jo
 
 ## Feature matrix
 
-**53 features** across 11 categories. Full reference with per-feature flow diagrams + complexity ratings + service chains lives in [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) (auto-generated audit). Summary:
+Historical feature catalog (v2.32.3 baseline audit, 2026-05-17): **53 features** across 11 categories. Full reference with per-feature flow diagrams + complexity ratings + service chains lives in [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md). Summary:
 
 | Category | Features | Complexity | Platforms |
 |---|---:|---|---|
@@ -225,8 +225,8 @@ VPNRouter.sln
 ### Best-practice notes
 
 - **Bilingual UI** — all strings live in `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android use pass-through wrappers; never duplicate keys.
-- **Async hygiene** — zero `async void` in Core; UI handlers use the standard `async void EventHandler` pattern; no `.Result` blocking calls outside `VpnEngine.cs:461` (tracked for refactor).
-- **Cross-cutting**: every service takes `ILogger?` (Serilog) for diagnostic-grade tracing into `vpnrouter*.log`.
+- **Async hygiene** — zero `async void` in Core; UI handlers use the standard `async void EventHandler` pattern; async/await throughout Core with no blocking `.Result` calls on asynchronous paths.
+- **Diagnostics & logging** — services log through Serilog (`ILogger?` injection or ambient logger) for diagnostic-grade tracing into `vpnrouter*.log`.
 - **Diagnostics** — local logs and crash reports support troubleshooting; see [Privacy & trust](#privacy--trust) before sharing them.
 
 ### Key services
@@ -246,8 +246,8 @@ historical v3.0 modernization baseline and its follow-up work.
 1. Load profile → resolve which process names go through the VPN
 2. Generate a sing-box JSON config with the right TUN inbound, VLESS+Reality outbound, and `process_name`-based route rules
 3. Start sing-box in TUN mode (creates a virtual adapter)
-4. Windows routes all traffic through the adapter; sing-box then splits based on process name matching
-5. ETW watches for new processes starting → hot-reload the config via Clash API (no reconnect)
+4. Traffic enters the virtual adapter; sing-box then splits based on process name matching
+5. On Windows, ETW watches for new processes starting (process scanning on macOS/Linux) → hot-reload the config via Clash API (no reconnect)
 6. On failure, enabled firewall protection depends on platform, routing mode and privileges. Linux/macOS kill switches support full-tunnel mode only and remain disarmed in split mode; do not rely on per-process crash blocking there.
 
 ## Privacy & trust

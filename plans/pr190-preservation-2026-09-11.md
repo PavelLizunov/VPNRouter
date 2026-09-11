@@ -1,0 +1,9 @@
+# PR190 requirement preservation
+
+Compared closed PR190 tip `e5c1d33752a3bedad8ce6fb80cd714ecd9f9d0b9` (`fix-http-url-scrub-redaction-18038784086806634237`) against accepted main `2689ee77a06cbb0274e3dc3adf141570c4377da8`. Full merge-base diff is three files: HTTP regex, three-row test and four-line historical .jules/sentinel.md note. Closure explicitly names merged #201 as replacement.
+
+Current CrashReporter.cs174-176 recognizes HTTP(S) scheme, optional userinfo, authority and optional [/?#] suffix; replacement203-206 keeps scheme/authority and replaces the suffix. Colon is permitted inside authority, so :8080 is retained without a separate port branch. Existing tests95-110 explicitly cover query and fragment directly after host, including unknown foo query data (not only recognized sensitive keys). Path test86-92 retains origin and rejects path. Original port row exercises the same suffix boundary, not a distinct unpreserved algorithm. This is source-level requirement preservation, not a newly executed port test or proof for all malformed inputs.
+
+Historical note's useful lesson retained here: a regex requiring a slash before query/fragment leaks suffixes directly after authority; match ?, # and / as suffix starts. Its suggested regex is superseded by accepted userinfo-aware implementation and should not be restored blindly. Original note date and wording are historical, not fresh incident evidence.
+
+Disposition: completed work eligible for owner-authorized exact-tip cleanup; production intent, regression categories and note's useful lesson preserved. Full tip is an identity receipt, not a standalone object backup. Remote branch subsequently deleted with exact-SHA lease after fresh tip, no-worktree and accepted #201 ancestry checks; fresh remote absence verified. No product or local branch change.
