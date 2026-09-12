@@ -113,6 +113,9 @@ public sealed class SubscriptionUrlRedactionTests
         var (logger, sink) = BuildCapturingLogger();
         const string ownerRepo = "testowner/testrepo?token=secret123";
 
+        // Pre-seed cache so the test is deterministic, fast, and does not perform un-intercepted WAN HTTP calls
+        RemoteVersionChecker.RecordManualCheck(ownerRepo, "v1.2.3", logger);
+
         await RemoteVersionChecker.GetLatestTagAsync(
             ownerRepo,
             "VPNRouterTest/1.0",

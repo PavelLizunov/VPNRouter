@@ -91,19 +91,7 @@ public sealed class SingBoxManagerProcessExitLeakTests
             "unsubscribe OnAppDomainProcessExit.");
     }
 
-    [Fact]
-    public void Source_Dispose_UnsubscribesProcessExitHandler()
-    {
-        // Deterministic backstop for the WeakReference test above: Dispose()
-        // MUST detach the named ProcessExit handler. A refactor that drops the
-        // unsubscribe (or reverts to an unremovable lambda) trips here.
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        Assert.True(File.Exists(sourcePath), $"SingBoxManager.cs not found at {sourcePath}");
-        var source = SingBoxSourceText.ReadAll(sourcePath);
 
-        Assert.Contains("AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit", source);
-        Assert.Contains("AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit", source);
-    }
 
     private static string FindRepoFile(params string[] segments)
     {

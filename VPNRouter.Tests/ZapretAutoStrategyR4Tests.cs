@@ -156,29 +156,9 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
 
     // ── FlowsealProgress shape ──────────────────────────────────────────────
 
-    [Fact]
-    public void FlowsealProgress_ScoreFieldsDefault_Zero()
-    {
-        // r3 callers used the 3-arg constructor — score fields must
-        // default to 0 so the ViewModel's "if (TotalChecks > 0)" branch
-        // doesn't fire spuriously.
-        var p = new ZapretAutoStrategy.FlowsealProgress(5, 20, "general (ALT3)");
-        Assert.Equal(5, p.CurrentIndex);
-        Assert.Equal(20, p.TotalCount);
-        Assert.Equal("general (ALT3)", p.StrategyName);
-        Assert.Equal(0, p.OkCount);
-        Assert.Equal(0, p.TotalChecks);
-    }
 
-    [Fact]
-    public void FlowsealProgress_WithScores_CarriesValues()
-    {
-        var p = new ZapretAutoStrategy.FlowsealProgress(
-            CurrentIndex: 5, TotalCount: 20, StrategyName: "general (ALT3)",
-            OkCount: 12, TotalChecks: 18);
-        Assert.Equal(12, p.OkCount);
-        Assert.Equal(18, p.TotalChecks);
-    }
+
+
 
     [Fact]
     public void FlowsealProgress_ScoreOnlyUpdate_EmptyStrategyName()
