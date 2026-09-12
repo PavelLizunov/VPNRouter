@@ -258,6 +258,10 @@ public partial class AndroidApp : Avalonia.Application
     // log-path copied, settings reset done, etc.) without a real Snackbar.
     private TextBlock? _menuFeedback;
 
+    private Thickness _currentSafeArea;
+    private ScrollViewer? _mainScroller;
+    private Grid? _updateBannerFloating;
+
     // v2.32.0 (2026-05-07) — auto-update banner. Mirrors desktop's
     // UpdateNotificationViewModel-driven card, except in code-behind
     // because Android view tree is built imperatively. State machine:
@@ -523,6 +527,27 @@ public partial class AndroidApp : Avalonia.Application
             // Fire-and-forget; banner surfaces if newer release found.
             _ = Task.Run(() => RunUpdateCheckAsync(manual: false));
 
+            // Subscribe to Safe Area / Window Insets updates
+            MainActivity.SafeAreaChanged += OnMainActivitySafeAreaChanged;
+            ApplySafeArea(MainActivity.CurrentSafeArea);
+
+            view.AttachedToVisualTree += (sender, _) =>
+            {
+                try
+                {
+                    var topLevel = TopLevel.GetTopLevel(sender as Visual);
+                    if (topLevel?.InsetsManager is { } insetsMgr)
+                    {
+                        insetsMgr.SafeAreaChanged += (_, args) =>
+                        {
+                            ApplySafeArea(args.SafeAreaPadding);
+                        };
+                        ApplySafeArea(insetsMgr.SafeAreaPadding);
+                    }
+                }
+                catch { }
+            };
+
             // v2.32.0 SR-2 — MarkStable on first attach + consume recovery
             // notice. Mirrors desktop MainWindow.Opened semantics.
             EventHandler<Avalonia.VisualTreeAttachmentEventArgs>? attachHandler = null;
@@ -553,6 +578,41 @@ public partial class AndroidApp : Avalonia.Application
     // ConsumeAndSurfaceRecoveryNotice moved to AndroidApp.Notifications.cs
     // (Phase 2C Wave 9, 2026-05-18).
 
+    private void OnMainActivitySafeAreaChanged(Thickness insets)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplySafeArea(insets));
+    }
+
+    internal void ApplySafeArea(Thickness insets)
+    {
+        _currentSafeArea = insets;
+        if (_mainScroller is not null)
+        {
+            // Simple page: top gets status bar + camera notch safe gap, bottom gets navigation bar padding
+            var top = Math.Max(12.0, insets.Top + 6.0);
+            var bottom = Math.Max(16.0, insets.Bottom + 16.0);
+            _mainScroller.Padding = new Thickness(0, top, 0, bottom);
+        }
+
+        if (_updateBannerFloating is not null)
+        {
+            var top = Math.Max(16.0, insets.Top + 8.0);
+            _updateBannerFloating.Margin = new Thickness(16, top, 16, 0);
+        }
+
+        ApplyAdvancedShellSafeArea(insets);
+        ApplyOverlaySafeArea(insets);
+    }
+
+    private void ApplyOverlaySafeArea(Thickness insets)
+    {
+        var pad = new Thickness(0, Math.Max(0.0, insets.Top), 0, Math.Max(0.0, insets.Bottom));
+        if (_logOverlay is not null) _logOverlay.Padding = pad;
+        if (_cfgExportOverlay is not null) _cfgExportOverlay.Padding = pad;
+        if (_cfgImportOverlay is not null) _cfgImportOverlay.Padding = pad;
+        if (_profilesOverlay is not null) _profilesOverlay.Padding = pad;
+    }
+
     private void ApplyTheme()
     {
         var pref = AndroidStorage.GetTheme();
@@ -563,6 +623,12 @@ public partial class AndroidApp : Avalonia.Application
             "system" => ThemeVariant.Default,
             _ => ThemeVariant.Light,
         };
+
+        try
+        {
+            MainActivity.Instance?.SetSystemBarsAppearance(RequestedThemeVariant == ThemeVariant.Dark);
+        }
+        catch { }
     }
 
     // ── Token helpers ───────────────────────────────────────────────────
@@ -1554,24 +1620,16 @@ public partial class AndroidApp : Avalonia.Application
         // status bar instead of stacking two top margins (16+12=28).
         // Removing the contentStack wrapper drops one redundant container
         // — outerGrid is now the direct ScrollViewer child.
-        var mainScroller = new ScrollViewer
+        _mainScroller = new ScrollViewer
         {
             Content = outerGrid,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(0, 12, 0, 16),
-            // Bug-AND-007b (2026-05-16) — explicitly Focusable so the
-            // scroll-gesture handler can shift focus from a focused
-            // TextBox to the scroller itself when a drag starts. By
-            // default ScrollViewer's Focusable is false on Avalonia 11,
-            // and calling .Focus() on a non-focusable control is a
-            // no-op — which left the TextBox still focused after a
-            // swipe, so the next tap couldn't re-pop the IME (Android
-            // only shows the keyboard when focus *enters* the TextBox,
-            // not when an already-focused one is re-tapped).
             Focusable = true,
         };
-        mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
+        _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
+        var mainScroller = _mainScroller;
 
         // DEFCT-002 (2026-05-10) — direct pointer-event scroll tracking on
         // the outer ScrollViewer. The default ScrollViewer template's inner
@@ -1717,7 +1775,7 @@ public partial class AndroidApp : Avalonia.Application
         // (_advShellOverlay). Margin pushes it below the system status
         // bar (16dp safe gap). The banner's own IsVisible toggle controls
         // when it surfaces.
-        var updateBannerFloating = new Grid
+        _updateBannerFloating = new Grid
         {
             VerticalAlignment = VerticalAlignment.Top,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -1725,6 +1783,7 @@ public partial class AndroidApp : Avalonia.Application
             Background = Brushes.Transparent,
             Children = { _updateBanner! },
         };
+        var updateBannerFloating = _updateBannerFloating;
 
         return new Grid
         {

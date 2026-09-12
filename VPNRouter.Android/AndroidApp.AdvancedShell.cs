@@ -88,6 +88,8 @@ public partial class AndroidApp
     // shell's SetFooterActions helper. Phase A leaves it empty; Phases
     // B-E populate it from their own tab content.
     private Border? _advFooterActionsHost;
+    private Border? _advHeaderBorder;
+    private Border? _advFooterBorder;
 
     /// <summary>
     /// Build the fullscreen Advanced shell overlay. Called once at
@@ -109,7 +111,8 @@ public partial class AndroidApp
         // re-targeting PlacementTarget mid-flight is brittle in Avalonia;
         // (2) the Advanced shell's brand row needs a "+ Simple" toggle
         // that the Simple page deliberately doesn't carry.
-        var headerBorder = BuildAdvancedHeader();
+        _advHeaderBorder = BuildAdvancedHeader();
+        var headerBorder = _advHeaderBorder;
 
         // ── Tab strip — POL-2-TABS (2026-05-10) replaced horizontal
         //    ScrollViewer with UniformGrid so all 6 tabs distribute evenly
@@ -176,7 +179,8 @@ public partial class AndroidApp
         //    the chrome (status + Start VPN button) plus an empty action-
         //    row slot above; Phases B-E may populate the action row per
         //    tab as needed.
-        var footerBorder = BuildAdvancedFooter();
+        _advFooterBorder = BuildAdvancedFooter();
+        var footerBorder = _advFooterBorder;
 
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(headerBorder, Dock.Top);
@@ -839,6 +843,21 @@ public partial class AndroidApp
             _advFooterConnectBtn.Content = connected
                 ? Localization.StopVPN
                 : Localization.StartVPN;
+        }
+    }
+
+    internal void ApplyAdvancedShellSafeArea(Thickness insets)
+    {
+        if (_advHeaderBorder is not null)
+        {
+            var topPad = Math.Max(8.0, insets.Top + 4.0);
+            _advHeaderBorder.Padding = new Thickness(0, topPad, 0, 0);
+        }
+
+        if (_advFooterBorder is not null)
+        {
+            var bottomPad = Math.Max(7.0, insets.Bottom + 6.0);
+            _advFooterBorder.Padding = new Thickness(12, 7, 12, bottomPad);
         }
     }
 }

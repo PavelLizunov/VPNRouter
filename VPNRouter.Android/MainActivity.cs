@@ -75,6 +75,9 @@ public class MainActivity : AvaloniaMainActivity
     private const int RequestExportConfig = 0xC01E;
     private const int RequestImportConfig = 0xC01F;
 
+    public static Thickness CurrentSafeArea { get; private set; }
+    public static event Action<Thickness>? SafeAreaChanged;
+
     // lucid-pike (2026-05-09) — Simple-page QR scan.
     //
     //   RequestCodeCameraQr: shared between the runtime-permission request
@@ -328,6 +331,8 @@ public class MainActivity : AvaloniaMainActivity
         // for the full rationale.
         AvaloniaToggleNodeInfoProviderPatch.Apply();
 
+        SetupWindowInsetsAndEdgeToEdge();
+
         base.OnCreate(savedInstanceState);
         Instance = this;
 
@@ -409,6 +414,116 @@ public class MainActivity : AvaloniaMainActivity
         {
             global::Android.Util.Log.Warn("VpnRouter",
                 $"B1: POST_NOTIFICATIONS request failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private void SetupWindowInsetsAndEdgeToEdge()
+    {
+        try
+        {
+            if (Window is null) return;
+
+            // Make system bars transparent for edge-to-edge rendering
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Lollipop)
+            {
+                Window.ClearFlags(WindowManagerFlags.TranslucentStatus | WindowManagerFlags.TranslucentNavigation);
+                Window.AddFlags(WindowManagerFlags.DrawsSystemBarBackgrounds);
+                Window.SetStatusBarColor(global::Android.Graphics.Color.Transparent);
+                Window.SetNavigationBarColor(global::Android.Graphics.Color.Transparent);
+            }
+
+            // Extend layout into camera cutout area on Android 9+ (API 28+)
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.P)
+            {
+                Window.Attributes!.LayoutInDisplayCutoutMode = LayoutInDisplayCutoutMode.ShortEdges;
+            }
+
+            // Listen for system bars and cutout insets via decor view
+            var decor = Window.DecorView;
+            if (decor != null)
+            {
+                AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(decor, new InsetsListener(this));
+                // Set initial bar icon appearance based on current theme
+                SetSystemBarsAppearance(AndroidStorage.GetTheme() == "dark");
+            }
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.Insets",
+                    $"SetupWindowInsetsAndEdgeToEdge failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { }
+        }
+    }
+
+    public void SetSystemBarsAppearance(bool isDark)
+    {
+        try
+        {
+            if (Window is null) return;
+            var controller = AndroidX.Core.View.WindowCompat.GetInsetsController(Window, Window.DecorView);
+            if (controller != null)
+            {
+                // In dark theme: light status/nav bar icons; in light theme: dark icons
+                controller.AppearanceLightStatusBars = !isDark;
+                controller.AppearanceLightNavigationBars = !isDark;
+            }
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.Insets",
+                    $"SetSystemBarsAppearance failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { }
+        }
+    }
+
+    private sealed class InsetsListener : Java.Lang.Object, AndroidX.Core.View.IOnApplyWindowInsetsListener
+    {
+        private readonly MainActivity _activity;
+        public InsetsListener(MainActivity activity) => _activity = activity;
+
+        public AndroidX.Core.View.WindowInsetsCompat OnApplyWindowInsets(
+            global::Android.Views.View v,
+            AndroidX.Core.View.WindowInsetsCompat insets)
+        {
+            try
+            {
+                // Combine system bars (status + nav) and display cutout (camera notch / hole punch)
+                var combined = insets.GetInsets(
+                    AndroidX.Core.View.WindowInsetsCompat.Type.SystemBars() |
+                    AndroidX.Core.View.WindowInsetsCompat.Type.DisplayCutout());
+
+                var density = _activity.Resources?.DisplayMetrics?.Density ?? 1.0f;
+                if (density <= 0.001f) density = 1.0f;
+
+                var safeArea = new Thickness(
+                    combined.Left / density,
+                    combined.Top / density,
+                    combined.Right / density,
+                    combined.Bottom / density);
+
+                if (CurrentSafeArea != safeArea)
+                {
+                    CurrentSafeArea = safeArea;
+                    SafeAreaChanged?.Invoke(safeArea);
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    global::Android.Util.Log.Warn("VpnRouter.Insets",
+                        $"OnApplyWindowInsets calculation failed: {ex.GetType().Name}: {ex.Message}");
+                }
+                catch { }
+            }
+
+            return insets;
         }
     }
 
