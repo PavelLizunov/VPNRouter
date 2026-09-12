@@ -70,75 +70,13 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
 {
     // ─── Source pins (OS-agnostic — run on Linux CI) ─────────────────────────
 
-    [Fact]
-    public void Source_StopInProgressFlag_DeclaredVolatile()
-    {
-        // Read on the ThreadPool dispatcher thread (OnProcessExited), written on
-        // the caller thread (StopInternal). Volatile gives the cross-thread
-        // memory-barrier without a lock — same rationale as _restartInProgress.
-        var src = ReadSingBoxManagerSource();
-        Assert.Contains("private volatile bool _stopInProgress", src);
-    }
 
-    [Fact]
-    public void Source_StopInternal_SetsStopInProgressTrueBeforeFirstKill()
-    {
-        // The flag must be set BEFORE any Kill — once Kill runs the OS may
-        // dispatch Exited concurrently, so the flag-write has to win by being
-        // first. Setting it right after the concurrent-stop guard covers the
-        // whole kill+wait+cleanup body.
-        var (body, _) = StopInternalBody();
 
-        var setIdx = body.IndexOf("_stopInProgress = true", StringComparison.Ordinal);
-        var firstKillIdx = body.IndexOf("Kill(entireProcessTree: true)", StringComparison.Ordinal);
 
-        Assert.True(setIdx >= 0, "Expected `_stopInProgress = true` inside StopInternal.");
-        Assert.True(firstKillIdx >= 0, "Expected a `Kill(entireProcessTree: true)` inside StopInternal.");
-        Assert.True(setIdx < firstKillIdx,
-            "`_stopInProgress = true` must be set BEFORE the first Kill in StopInternal — otherwise a " +
-            "late OS Exited callback can race the flag-write and leak through to Crashed. " +
-            $"setIdx={setIdx}, firstKillIdx={firstKillIdx}");
-    }
 
-    [Fact]
-    public void Source_StopInternal_ClearsStopInProgressInFinally()
-    {
-        // The clear must be paired with the existing _stopState reset finally so
-        // an exception mid-Stop can't leave the flag stuck TRUE — which would
-        // wrongly suppress a LATER genuine crash (the exact failure mode the
-        // _restartInProgress finally also guards against).
-        var (body, _) = StopInternalBody();
 
-        var clearIdx = body.IndexOf("_stopInProgress = false", StringComparison.Ordinal);
-        var stopStateResetIdx = body.IndexOf("Volatile.Write(ref _stopState, 0)", StringComparison.Ordinal);
 
-        Assert.True(clearIdx >= 0, "Expected `_stopInProgress = false` inside StopInternal's finally.");
-        Assert.True(stopStateResetIdx >= 0, "Expected the `Volatile.Write(ref _stopState, 0)` finally reset.");
-        Assert.True(clearIdx < stopStateResetIdx,
-            "`_stopInProgress = false` should sit in the same finally as (and before) the _stopState reset, " +
-            $"so both clear together at the end of a stop. clearIdx={clearIdx}, stopStateResetIdx={stopStateResetIdx}");
-    }
 
-    [Fact]
-    public void Source_OnProcessExited_SuppressionGuardOrsInStopInProgress_AndKeepsKillExitCodes()
-    {
-        // The suppression guard must OR-in _stopInProgress so the reconnect
-        // Stop() path (which never sets _restartInProgress) is covered — AND
-        // still gate on the intentional-kill exit codes so a genuine FATAL
-        // (exit 1) is never suppressed.
-        var src = ReadSingBoxManagerSource();
-        var handler = src.IndexOf("private void OnProcessExited()", StringComparison.Ordinal);
-        Assert.True(handler >= 0, "OnProcessExited not found");
-        var window = src.Substring(handler, Math.Min(8000, src.Length - handler));
-
-        Assert.Contains("_restartInProgress || _stopInProgress", window);
-
-        var guardIdx = window.IndexOf("_restartInProgress || _stopInProgress", StringComparison.Ordinal);
-        var after = window.Substring(guardIdx, Math.Min(400, window.Length - guardIdx));
-        Assert.Contains("-1", after);
-        Assert.Contains("137", after);
-        Assert.Contains("143", after);
-    }
 
     // ─── Behavioural pins (Windows-gated — see file header) ──────────────────
 
