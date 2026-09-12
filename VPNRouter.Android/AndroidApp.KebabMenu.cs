@@ -317,6 +317,12 @@ public partial class AndroidApp
         AndroidStorage.SetTheme(mode);
         RequestedThemeVariant = mode == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
 
+        try
+        {
+            MainActivity.Instance?.SetSystemBarsAppearance(mode == "dark");
+        }
+        catch { }
+
         // Refresh the on-demand Advanced-shell overlay for the new theme. Posted
         // at Background priority so the chrome rebuild stays off the tap handler;
         // the live Simple page has already repainted via DynamicResource.
