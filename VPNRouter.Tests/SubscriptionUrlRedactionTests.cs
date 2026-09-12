@@ -114,7 +114,15 @@ public sealed class SubscriptionUrlRedactionTests
         const string ownerRepo = "testowner/testrepo?token=secret123";
 
         // Pre-seed cache so the test is deterministic, fast, and does not perform un-intercepted WAN HTTP calls
-        RemoteVersionChecker.RecordManualCheck(ownerRepo, "v1.2.3", logger);
+        Directory.CreateDirectory(AppPaths.CacheDir);
+        var cacheFile = Path.Combine(AppPaths.CacheDir, "remote_versions.json");
+        var entry = new
+        {
+            LatestTag = "v1.2.3",
+            LastCheckUtc = DateTime.UtcNow
+        };
+        var dict = new Dictionary<string, object> { [ownerRepo] = entry };
+        File.WriteAllText(cacheFile, System.Text.Json.JsonSerializer.Serialize(dict));
 
         await RemoteVersionChecker.GetLatestTagAsync(
             ownerRepo,
