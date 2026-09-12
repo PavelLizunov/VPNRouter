@@ -180,7 +180,7 @@ jobs:
               # Read selected members into memory, never extract archive-controlled paths.
               with zipfile.ZipFile(path) as archive:
                   members = [m for m in archive.infolist() if not m.is_dir()
-                             and pathlib.PurePosixPath(m.filename).name == 'VPNRouter.Core.dll']
+                             and pathlib.PurePosixPath(m.filename.replace('\\', '/')).name == 'VPNRouter.Core.dll']
                   if not members and path.suffix == '.apk':
                       members = [m for m in archive.infolist() if m.filename.startswith('assemblies/')
                                  and m.filename.endswith(('.blob', '.dll')) and not m.is_dir()]
@@ -189,7 +189,7 @@ jobs:
           def inspect_tar(stream):
               with tarfile.open(fileobj=stream, mode='r|*') as archive:
                   return [archive.extractfile(m).read() for m in archive
-                          if m.isfile() and pathlib.PurePosixPath(m.name).name == 'VPNRouter.Core.dll']
+                          if m.isfile() and pathlib.PurePosixPath(m.name.replace('\\', '/')).name == 'VPNRouter.Core.dll']
 
           for name in expected:
               if name.endswith('.sha256'):

@@ -153,7 +153,11 @@ public sealed class ReleaseIntegrityWorkflowTests
                     z.writestr('../../escape', 'never written')
                     z.writestr('../../VPNRouter.Core.dll', '3.0.0'.encode('utf-16-le'))
                 assert scope['inspect_zip'](archive) == ['3.0.0'.encode('utf-16-le')]
-                assert sorted(p.name for p in root.iterdir()) == ['safe.zip']
+                archive_win = root / 'win.zip'
+                with zipfile.ZipFile(archive_win, 'w') as z:
+                    z.writestr('app\\VPNRouter.Core.dll', '3.0.0'.encode('utf-16-le'))
+                assert scope['inspect_zip'](archive_win) == ['3.0.0'.encode('utf-16-le')]
+                assert sorted(p.name for p in root.iterdir()) == ['safe.zip', 'win.zip']
                 stream = io.BytesIO()
                 with tarfile.open(fileobj=stream, mode='w') as t:
                     link = tarfile.TarInfo('VPNRouter.Core.dll')
