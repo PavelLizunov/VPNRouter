@@ -390,6 +390,42 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Throws<FileNotFoundException>(() => ZapretActions.RunTests());
     }
 
+    // ── 12b2. RunTests: throws ArgumentException when path contains metacharacters ──
+
+    [Theory]
+    [InlineData("zapret_dir_&_calc_")]
+    [InlineData("zapret_dir_|_cmd_")]
+    [InlineData("zapret_dir_^_echo_")]
+    [InlineData("zapret_dir_%EVIL%_")]
+    [InlineData("zapret_dir_\"_quote_")]
+    public void RunTests_PathWithMetacharacters_ThrowsArgumentException(string folderPrefix)
+    {
+        // Path contains shell metacharacters -> RunTests throws ArgumentException
+        // before attempting Process.Start.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"{folderPrefix}{Guid.NewGuid():N}");
+        var utilsDir = Path.Combine(tempDir, "zapret", "utils");
+        Directory.CreateDirectory(utilsDir);
+        var testPath = Path.Combine(utilsDir, "test zapret.ps1");
+        File.WriteAllText(testPath, "# test");
+
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var dataDir = Path.Combine(appData, "VPNRouter");
+
+        // Temporarily override data dir via AppPaths if possible, or test path directly if ZapretDir can be affected.
+        // Note: ZapretUpdater.ZapretDir uses AppPaths.DataDir.
+        AppPaths.OverrideDataDir(tempDir);
+        try
+        {
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.RunTests());
+            Assert.Contains("Test path contains disallowed shell metacharacters", ex.Message);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(dataDir);
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
 
     [Fact]
