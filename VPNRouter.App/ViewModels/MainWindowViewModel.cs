@@ -6539,7 +6539,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         if (addedAny)
+        {
+            if (SelectedServer == null)
+                SelectedServer = Servers.FirstOrDefault();
             SaveSettings();
+        }
 
         VlessUri = string.Empty;
     }
@@ -6548,7 +6552,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void RemoveServer()
     {
         if (SelectedServer != null)
-            Servers.Remove(SelectedServer);
+            RemoveServerByEntry(SelectedServer);
     }
 
     /// <summary>
@@ -6592,6 +6596,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // active server may have been the deleted one and we need to
         // re-mark the new selection.
         MarkOrphanServers();
+        RefreshActiveIndicator();
     }
 
     [RelayCommand]
@@ -6720,6 +6725,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
+        if (value.IsActive) return; // already active server, no-op
         // v2.30.2-r1 diag: trace every subscription-row selection.
         _logger?.Information(
             "[VM] OnSelectedSubscriptionServerChanged name={N} ip={Ip} IsConnected={C} IsSubscribeMode={S} IsConnecting={IC}",
