@@ -48,9 +48,9 @@ param(
     # SingBoxVersion: official sing-box-vpnctl release bundled for Windows desktop.
     # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
     # and build-mac.sh — all three platforms ship the same sing-box release.
-    [string]$SingBoxVersion = "1.14.0-vpnctl.3",
+    [string]$SingBoxVersion = "1.14.0-vpnctl.5",
     # Authoritative SHA256 of the official sing-box-vpnctl Windows amd64 archive.
-    [string]$SingBoxSha256 = "8094929df6c4b061dc9c360b1641474d41bdea16845d604a26d3721feefc6f74",
+    [string]$SingBoxSha256 = "3823e4baed13fec43b84acefa480ff9cf9b2c222ea9dd9ceb9987aefd623aeb4",
     # Optional override: pre-existing local sing-box.exe to bundle (local builds only; rejected with -Upload).
     [string]$SingBoxPath = "",
     # Optional override: pre-built slipstream-client.exe (DNS-tunnel transport)
