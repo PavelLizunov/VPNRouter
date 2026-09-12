@@ -1029,6 +1029,7 @@ public partial class AndroidApp
             Background = isActive ? GetBrush("SuccessSolidBrush") : Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        radioOuter.PointerReleased += (s, e) => ApplyServerSelection(srv);
         if (isActive)
         {
             radioOuter.Child = new Ellipse
@@ -1119,6 +1120,7 @@ public partial class AndroidApp
             VerticalAlignment = VerticalAlignment.Center,
             Child = pingTextInside,
         };
+        pingBadge.PointerReleased += (s, e) => ApplyServerSelection(srv);
         if (hasResult && !string.IsNullOrEmpty(result?.Error))
             ToolTip.SetTip(pingBadge, result.Error);
 
