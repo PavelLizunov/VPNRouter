@@ -114,8 +114,8 @@ public sealed class SubscriptionUrlRedactionTests
         const string ownerRepo = "testowner/testrepo?token=secret123";
 
         // Pre-seed cache so the test is deterministic, fast, and does not perform un-intercepted WAN HTTP calls
-        Directory.CreateDirectory(AppPaths.CacheDir);
-        var cacheFile = Path.Combine(AppPaths.CacheDir, "remote_versions.json");
+        Directory.CreateDirectory(VPNRouter.Core.AppPaths.CacheDir);
+        var cacheFile = Path.Combine(VPNRouter.Core.AppPaths.CacheDir, "remote_versions.json");
         var entry = new
         {
             LatestTag = "v1.2.3",
