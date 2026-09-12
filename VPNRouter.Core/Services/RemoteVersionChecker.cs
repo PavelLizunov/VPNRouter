@@ -73,7 +73,7 @@ public static class RemoteVersionChecker
             && (DateTime.UtcNow - cached.LastCheckUtc) < CacheTtl)
         {
             logger?.Debug("[RemoteVersionChecker] Cache hit for {Repo}: {Tag} ({AgeMin} min old)",
-                ownerRepo, cached.LatestTag,
+                CanaryPolicy.RedactUrl(ownerRepo), cached.LatestTag,
                 (int)(DateTime.UtcNow - cached.LastCheckUtc).TotalMinutes);
             return cached.LatestTag;
         }
