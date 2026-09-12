@@ -77,7 +77,7 @@ public class ZapretUpdater
     // shared client's 30-s default doesn't choke a large download.
     private static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(5);
 
-    public static string ZapretDir => Path.Combine(_dataDir, "zapret");
+    public static string ZapretDir => Path.Combine(AppPaths.DataDir, "zapret");
     public static string BinDir => Path.Combine(ZapretDir, "bin");
     public static string ListsDir => Path.Combine(ZapretDir, "lists");
     public static string WinwsExePath => Path.Combine(BinDir, "winws.exe");

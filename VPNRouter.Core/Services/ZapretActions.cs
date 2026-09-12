@@ -486,6 +486,9 @@ public static class ZapretActions
         var testPath = Path.Combine(ZapretUpdater.ZapretDir, "utils", "test zapret.ps1");
         if (!File.Exists(testPath)) throw new FileNotFoundException(testPath);
 
+        if (testPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
+            throw new ArgumentException("Test path contains disallowed shell metacharacters", nameof(testPath));
+
         var psi = new ProcessStartInfo("powershell")
         {
             UseShellExecute = false,
