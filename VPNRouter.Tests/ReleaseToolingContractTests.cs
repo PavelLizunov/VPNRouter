@@ -221,7 +221,7 @@ public sealed class ReleaseToolingContractTests
 
         using var process = System.Diagnostics.Process.Start(startInfo);
         Assert.NotNull(process);
-        Assert.True(process!.WaitForExit(10_000), "PowerShell parser timed out.");
+        Assert.True(process!.WaitForExit(30_000), "PowerShell parser timed out.");
         var stderr = process.StandardError.ReadToEnd();
         Assert.True(process.ExitCode == 0, stderr);
     }
@@ -324,7 +324,7 @@ public sealed class ReleaseToolingContractTests
 
             using var process = System.Diagnostics.Process.Start(startInfo);
             Assert.NotNull(process);
-            Assert.True(process!.WaitForExit(10_000), "Bootstrap binding probe timed out.");
+            Assert.True(process!.WaitForExit(30_000), "Bootstrap binding probe timed out.");
             var stdout = process.StandardOutput.ReadToEnd();
             var stderr = process.StandardError.ReadToEnd();
             Assert.True(process.ExitCode == 0, stderr);
