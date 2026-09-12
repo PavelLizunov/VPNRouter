@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<title>VPNRouter - Install</title>
+<style>
+  body{font:14px/1.5 system-ui,-apple-system,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#222}
+  code,pre{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:13px;font-family:ui-monospace,SF Mono,monospace}
+  pre{padding:12px;overflow:auto}
+  h1{font-size:1.7em;margin-bottom:.2em}
+  h2{font-size:1.1em;margin-top:1.8em;margin-bottom:.3em}
+  .sub{color:#666;margin:0 0 1.8em}
+  a{color:#0366d6;text-decoration:none}
+  a:hover{text-decoration:underline}
+  .plat{font-size:.9em;color:#888}
+</style>
+<h1>VPNRouter</h1>
+<p class="sub">Process-based split-tunnel VPN router. Routes selected apps through VLESS+Reality via sing-box TUN, everything else goes direct. <a href="https://github.com/PavelLizunov/VPNRouter">Source</a>.</p>
+
+<h2>Linux <span class="plat">(Debian / Ubuntu / Mint / Pop / elementary)</span></h2>
+<pre>curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh</pre>
+<p>Adds the signed apt repository, installs <code>vpnrouter</code>, enables passwordless VPN via POSIX capabilities. Updates: <code>sudo apt upgrade</code>.</p>
+
+<h2>macOS <span class="plat">(Apple Silicon, via Homebrew Cask)</span></h2>
+<pre>brew install --cask pavellizunov/vpnrouter/vpnrouter</pre>
+<p>Installs to <code>/Applications/VPNRouter.app</code>. First launch prompts once for sudoers setup, then passwordless. Updates: <code>brew upgrade --cask vpnrouter</code>.</p>
+
+<h2>Windows <span class="plat">(10 / 11, x64)</span></h2>
+<p>Run in PowerShell (auto-elevates via UAC):</p>
+<pre>iwr -useb https://vpn.ninitux.com/install.ps1 | iex</pre>
+<p>Installs to <code>C:\Program Files\VPNRouter</code>, registers Start Menu + Add/Remove Programs. Updates: re-run the same command. Uninstall: Settings &rarr; Apps &rarr; VPNRouter, or <code>iwr -useb https://vpn.ninitux.com/uninstall.ps1 | iex</code>.</p>
+
+<h2>Manual download</h2>
+<p>All platforms, including tar.gz / AppImage for non-Debian Linux: <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">GitHub Releases</a>.</p>
+<p>Traditional apt setup (without one-liner): see <a href="apt/">/apt/</a>.</p>
+</html>

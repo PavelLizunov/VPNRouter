@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>VPNRouter APT Repository</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#222}code,pre{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:13px}pre{padding:12px;overflow:auto}h1{font-size:1.6em}</style>
+<h1>VPNRouter APT Repository</h1>
+<p>Add this repository to Debian/Ubuntu/Mint and install via <code>apt</code>:</p>
+<pre>curl -fsSL https://pavellizunov.github.io/VPNRouter/apt/key.gpg \
+  | sudo tee /etc/apt/keyrings/vpnrouter.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/vpnrouter.gpg] https://pavellizunov.github.io/VPNRouter/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/vpnrouter.list
+sudo apt update
+sudo apt install vpnrouter</pre>
+<p>After that, <code>sudo apt upgrade</code> keeps VPNRouter up to date.</p>
+<p><a href="https://github.com/PavelLizunov/VPNRouter">&larr; GitHub</a></p>
