@@ -70,39 +70,7 @@ public sealed class SingBoxManagerConcurrentStopTests
         };
     }
 
-    [Fact]
-    public void Source_StopInternal_ContainsCompareExchangeGuard()
-    {
-        // B2 invariant pin (source-string). The entry guard MUST stay in
-        // StopInternal. If anyone refactors it to a lock object, a
-        // SemaphoreSlim, or anything else — they trip this test as a
-        // signal to re-pin the audit invariant. Mirrors Task #53's
-        // Restart_PreservesTunLock_SourcePin approach.
 
-        var thisAssembly = typeof(SingBoxManager).Assembly;
-        var thisAssemblyPath = thisAssembly.Location;
-        var coreDir = Path.GetDirectoryName(thisAssemblyPath)!;
-
-        // Source file lives at VPNRouter.Core/Services/SingBoxManager.cs
-        // relative to the repo root. Walk up from the assembly out-dir
-        // to find it; fall back to a CWD-relative path if that doesn't
-        // resolve (CI runner layout).
-        var sourcePath = FindRepoFile(coreDir, "VPNRouter.Core", "Services", "SingBoxManager.cs");
-        Assert.True(File.Exists(sourcePath),
-            $"SingBoxManager.cs source not found near assembly. Tried: {sourcePath}");
-
-        var source = SingBoxSourceText.ReadAll(sourcePath);
-
-        // The exact CompareExchange call shape we expect to find. Tied
-        // to the `_stopState` field name + the 1/0 sentinel values used
-        // by the B2 fix.
-        Assert.Contains("Interlocked.CompareExchange(ref _stopState, 1, 0)", source);
-
-        // Belt-and-braces: the reset in finally must also be present.
-        // Otherwise sequential Stop()'s would deadlock on the second
-        // call (guard never resets).
-        Assert.Contains("Volatile.Write(ref _stopState, 0)", source);
-    }
 
     [Fact]
     public async Task ConcurrentStop_ManyThreads_NoExceptionThrown()

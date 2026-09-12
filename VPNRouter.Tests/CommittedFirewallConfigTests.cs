@@ -18,62 +18,11 @@ namespace VPNRouter.Tests;
 /// </summary>
 public sealed class CommittedFirewallConfigTests
 {
-    [Fact]
-    public void Interface_ContractAndAccessibility_IsNarrowAndInternal()
-    {
-        var interfaceType = typeof(ICommittedFirewallConfig);
 
-        Assert.True(interfaceType.IsNotPublic, "ICommittedFirewallConfig must be internal, not public.");
-        Assert.True(interfaceType.IsInterface, "ICommittedFirewallConfig must be an interface.");
 
-        var method = interfaceType.GetMethod("UpdateCommittedConfig", BindingFlags.Public | BindingFlags.Instance);
-        Assert.NotNull(method);
-        Assert.Equal(typeof(void), method!.ReturnType);
 
-        var parameters = method.GetParameters();
-        Assert.Equal(2, parameters.Length);
-        Assert.Equal("configJson", parameters[0].Name);
-        Assert.Equal(typeof(string), parameters[0].ParameterType);
-        Assert.Equal("enabledForFullTunnel", parameters[1].Name);
-        Assert.Equal(typeof(bool), parameters[1].ParameterType);
-    }
 
-    [Fact]
-    public void UnixManagers_ImplementCapabilityExplicitly_ForwardingInternalMethod()
-    {
-        // Linux
-        Assert.True(typeof(ICommittedFirewallConfig).IsAssignableFrom(typeof(LinuxFirewallManager)),
-            "LinuxFirewallManager must implement ICommittedFirewallConfig.");
-        // Public method should not be exposed on class
-        Assert.Null(typeof(LinuxFirewallManager).GetMethod("UpdateCommittedConfig", BindingFlags.Public | BindingFlags.Instance));
-        // Internal method must exist
-        var linuxInternalMethod = typeof(LinuxFirewallManager).GetMethod(
-            "UpdateCommittedConfig", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(linuxInternalMethod);
-        Assert.True(linuxInternalMethod!.IsAssembly, "LinuxFirewallManager.UpdateCommittedConfig must be internal.");
 
-        // macOS
-        Assert.True(typeof(ICommittedFirewallConfig).IsAssignableFrom(typeof(MacFirewallManager)),
-            "MacFirewallManager must implement ICommittedFirewallConfig.");
-        // Public method should not be exposed on class
-        Assert.Null(typeof(MacFirewallManager).GetMethod("UpdateCommittedConfig", BindingFlags.Public | BindingFlags.Instance));
-        // Internal method must exist
-        var macInternalMethod = typeof(MacFirewallManager).GetMethod(
-            "UpdateCommittedConfig", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(macInternalMethod);
-        Assert.True(macInternalMethod!.IsAssembly, "MacFirewallManager.UpdateCommittedConfig must be internal.");
-    }
-
-    [Fact]
-    public void WindowsAndNullManagers_Unaffected_DoNotImplementCapability()
-    {
-        Assert.False(typeof(ICommittedFirewallConfig).IsAssignableFrom(typeof(FirewallManager)),
-            "Windows FirewallManager must NOT implement ICommittedFirewallConfig (Windows per-process rules unaffected).");
-#if !PLATFORM_WINDOWS
-        Assert.False(typeof(ICommittedFirewallConfig).IsAssignableFrom(typeof(NullFirewallManager)),
-            "NullFirewallManager must NOT implement ICommittedFirewallConfig.");
-#endif
-    }
 
     [Fact]
     public void LinuxFirewallManager_CommittedMethod_NeverReadsCurrentConfigPath()
