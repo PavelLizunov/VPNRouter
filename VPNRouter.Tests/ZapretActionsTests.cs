@@ -16,6 +16,7 @@
 //     helper extracted in this commit).
 // ============================================================================
 
+using VPNRouter.Core;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 
