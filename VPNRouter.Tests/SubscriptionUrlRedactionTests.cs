@@ -135,6 +135,36 @@ public sealed class SubscriptionUrlRedactionTests
     }
 
     [Fact]
+    public async Task GeoDataDownloader_LogsDoNotContainToken()
+    {
+        var (logger, sink) = BuildCapturingLogger();
+        var fakeHttp = new FakeHttpClient().SetupStream("raw.githubusercontent.com", new byte[15 * 1024]);
+        const string sensitiveUrl = "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs?token=secret123";
+        var downloader = new GeoDataDownloader(fakeHttp, logger);
+        var tmp = Path.Combine(Path.GetTempPath(), "vpnr-geodata-test-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            // Use reflection or invoke internal/private method if needed, or hit public EnsureGeoFilesAsync / test helper
+            // We can invoke EnsureFileAsync via reflection to test arbitrary sensitiveUrl
+            var method = typeof(GeoDataDownloader).GetMethod("EnsureFileAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(method);
+            var task = (Task<bool>)method.Invoke(downloader, new object[] { sensitiveUrl, tmp, 100L, "test-label", CancellationToken.None })!;
+            await task;
+
+            var all = AllRenderedText(sink);
+            Assert.DoesNotContain("secret123", all);
+            Assert.DoesNotContain("token=", all);
+            Assert.DoesNotContain("/SagerNet", all);
+            Assert.Contains("https://raw.githubusercontent.com", all);
+        }
+        finally
+        {
+            try { File.Delete(tmp); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task RefreshEntryAsync_LogsDoNotContainToken()
     {
         var (logger, sink) = BuildCapturingLogger();

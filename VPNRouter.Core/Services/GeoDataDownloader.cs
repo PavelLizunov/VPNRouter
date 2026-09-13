@@ -139,7 +139,7 @@ public class GeoDataDownloader
                 }
             }
 
-            _logger.Information("[GeoData] Downloading {Label} from {Url}", label, url);
+            _logger.Information("[GeoData] Downloading {Label} from {Url}", label, CanaryPolicy.RedactUrl(url));
 
             // Refresh path: download to a .tmp first, then atomic-rename
             // so a half-finished download doesn't replace a working file.
