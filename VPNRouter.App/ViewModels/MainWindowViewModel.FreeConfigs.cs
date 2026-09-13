@@ -73,11 +73,27 @@ public partial class MainWindowViewModel
 
             var newEntry = entry.ToVlessServerEntry();
 
+            // Snapshot previous state for rollback if candidate fails to connect
+            var prevSelectedServer = SelectedServer;
+            var prevIsConnected = IsConnected;
+            var prevIsSubscribeMode = IsSubscribeMode;
+            var prevIsVlessMode = IsVlessMode;
+            var prevSelectedModeIndex = SelectedServerModeIndex;
+
             // Does the Free config already exist in the user's Server list? Match by host:port:uuid.
             var existingVm = Servers.FirstOrDefault(s =>
                 string.Equals(s.Server, newEntry.Server, StringComparison.OrdinalIgnoreCase) &&
                 s.Port == newEntry.Port &&
                 string.Equals(s.Uuid, newEntry.Uuid, StringComparison.OrdinalIgnoreCase));
+
+            // Clean up previous temporary free servers to avoid polluting user's list
+            var oldEphemeral = Servers
+                .Where(s => s != existingVm && s.Name.StartsWith("⚡ free", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (var old in oldEphemeral)
+            {
+                Servers.Remove(old);
+            }
 
             ServerViewModel target;
             if (existingVm != null)
@@ -86,15 +102,8 @@ public partial class MainWindowViewModel
             }
             else
             {
-                // Ensure display name is unique in the VM collection.
-                var displayName = newEntry.Name;
-                var baseName = string.IsNullOrWhiteSpace(displayName) ? "⚡ free" : displayName;
-                displayName = baseName;
-                var suffix = 2;
-                while (Servers.Any(s => string.Equals(s.Name, displayName, StringComparison.OrdinalIgnoreCase)))
-                    displayName = $"{baseName} #{suffix++}";
+                var displayName = string.IsNullOrWhiteSpace(newEntry.Name) ? "⚡ free" : newEntry.Name;
                 newEntry.Name = displayName;
-
                 target = new ServerViewModel(newEntry);
                 Servers.Add(target);
             }
@@ -167,29 +176,56 @@ public partial class MainWindowViewModel
                 },
                 cancellationToken: cts.Token);
 
-            if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
+            if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout || outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
             {
-                _logger.Warning("[VM] ApplyFreeConfig: Phase A (sing-box launch) timed out after {N}s",
-                    (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
+                var isPhaseA = outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout;
+                _logger.Warning("[VM] ApplyFreeConfig: Phase {Phase} timed out", isPhaseA ? "A" : "B");
                 try { await Task.Run(() => _engine.Stop()); } catch { }
-                StatusText = Strings.StartTimeoutPhaseA;
-                return false;
-            }
-            if (outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
-            {
-                _logger.Warning("[VM] ApplyFreeConfig: Phase B (TUN warm-up) timed out after {N}s",
-                    (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
-                try { await Task.Run(() => _engine.Stop()); } catch { }
-                StatusText = Strings.StartTimeoutPhaseB;
+                StatusText = isPhaseA ? Strings.StartTimeoutPhaseA : Strings.StartTimeoutPhaseB;
+
+                if (existingVm == null)
+                {
+                    Servers.Remove(target);
+                }
+
+                if (prevIsConnected && prevSelectedServer != null)
+                {
+                    SelectedServer = prevSelectedServer;
+                    IsSubscribeMode = prevIsSubscribeMode;
+                    IsVlessMode = prevIsVlessMode;
+                    SelectedServerModeIndex = prevSelectedModeIndex;
+                    SaveSettings();
+                    _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+
+                    try
+                    {
+                        using var rollbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        await Task.Run(() => _engine.StartAsync(_settings, rollbackCts.Token, _skipVpnConflictThisSession));
+                        IsConnected = true;
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        _logger.Warning(rollbackEx, "[VM] ApplyFreeConfig: rollback start failed");
+                        IsConnected = false;
+                    }
+                }
+                else
+                {
+                    IsConnected = false;
+                }
+
+                IsConnecting = false;
                 return false;
             }
             // Surface any exception from startTask (Connected / StartTaskCompleted / Cancelled).
             await startTask;
+            IsConnecting = false;
             return true;
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "ApplyFreeConfig failed");
+            IsConnecting = false;
             return false;
         }
     }

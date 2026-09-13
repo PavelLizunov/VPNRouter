@@ -147,6 +147,13 @@ public partial class FreeConfigItemViewModel : ObservableObject
     /// <summary>Sort key for the Saved tab: tier-first then by latency.</summary>
     public int FreshnessSortKey => FreeConfigFreshness.SortKey(Entry, DateTime.UtcNow);
 
+    public bool IsFast => Entry.Status == FreeConfigStatus.Verified ||
+                          (Entry.Status == FreeConfigStatus.Ok && Entry.LatencyMs < 100);
+    public bool IsMedium => Entry.Status == FreeConfigStatus.Ok && Entry.LatencyMs >= 100 && Entry.LatencyMs < 300;
+    public bool IsSlow => Entry.Status == FreeConfigStatus.Ok && Entry.LatencyMs >= 300;
+    public bool IsDanger => Entry.Status is FreeConfigStatus.Slow or FreeConfigStatus.Implausible or FreeConfigStatus.TlsFailed;
+    public bool IsNeutral => !IsFast && !IsMedium && !IsSlow && !IsDanger;
+
     /// <summary>Hex color string for latency badge.</summary>
     public string LatencyColor => Entry.Status switch
     {

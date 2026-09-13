@@ -816,15 +816,12 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Center,
         };
 
-        // POL-1: row Height matches desktop FreeConfigsPage.axaml row
-        // template `Height="22"` (lines 215, 352). Pre-POL-1 used 26 dp
-        // which made each Public-tab row ~18% taller than desktop.
         var grid = new Grid
         {
             ColumnDefinitions = isSavedTab
-                ? new ColumnDefinitions("44,*,72,68,32")
+                ? new ColumnDefinitions("44,*,72,68,48")
                 : new ColumnDefinitions("44,*,72,68"),
-            Height = 22,
+            MinHeight = 48,
         };
         Grid.SetColumn(country, 0);
         Grid.SetColumn(endpoint, 1);
@@ -840,10 +837,10 @@ public partial class AndroidApp
             var removeBtn = new Avalonia.Controls.Button
             {
                 Content = Localization.FcSavedRemoveOne,
-                FontSize = 10,
-                Padding = new Thickness(4, 1),
-                MinWidth = 22,
-                MinHeight = 0,
+                FontSize = 11,
+                Padding = new Thickness(8),
+                MinWidth = 48,
+                MinHeight = 48,
                 CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
                 Background = Brushes.Transparent,
                 Foreground = dangerSolid,

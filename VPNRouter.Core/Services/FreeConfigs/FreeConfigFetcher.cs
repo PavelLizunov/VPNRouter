@@ -98,13 +98,14 @@ public sealed class FreeConfigFetcher
         var result = new List<string>(capacity: 256);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var raw in body.Split('\n', '\r'))
+        foreach (var line in MemoryExtensions.EnumerateLines(body.AsSpan()))
         {
-            var trimmed = raw.Trim();
+            var trimmed = line.Trim();
             if (trimmed.Length < 20) continue;
             if (!trimmed.StartsWith("vless://", StringComparison.OrdinalIgnoreCase)) continue;
-            if (seen.Add(trimmed))
-                result.Add(trimmed);
+            var str = trimmed.ToString();
+            if (seen.Add(str))
+                result.Add(str);
         }
 
         return result;
