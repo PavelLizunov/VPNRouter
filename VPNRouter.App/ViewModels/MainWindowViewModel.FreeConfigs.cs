@@ -75,7 +75,7 @@ public partial class MainWindowViewModel
 
             // Snapshot previous state for rollback if candidate fails to connect
             var prevSelectedServer = SelectedServer;
-            var prevIsConnected = IsConnected;
+            var prevIsConnected = IsConnected || _engine.IsRunning;
             var prevIsSubscribeMode = IsSubscribeMode;
             var prevIsVlessMode = IsVlessMode;
             var prevSelectedModeIndex = SelectedServerModeIndex;
@@ -137,7 +137,7 @@ public partial class MainWindowViewModel
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
             // Stop current VPN if running.
-            if (IsConnected)
+            if (IsConnected || _engine.IsRunning)
             {
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnected = false;
@@ -202,24 +202,40 @@ public partial class MainWindowViewModel
                         using var rollbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                         await Task.Run(() => _engine.StartAsync(_settings, rollbackCts.Token, _skipVpnConflictThisSession));
                         IsConnected = true;
+                        ConnectButtonText = Strings.StopVPN;
+                        StartSubRefreshTimer();
+                        RefreshActiveIndicator();
+                        RestoreConnectedStatus();
                     }
                     catch (Exception rollbackEx)
                     {
                         _logger.Warning(rollbackEx, "[VM] ApplyFreeConfig: rollback start failed");
                         IsConnected = false;
+                        ConnectButtonText = Strings.StartVPN;
+                        RefreshActiveIndicator();
                     }
                 }
                 else
                 {
                     IsConnected = false;
+                    ConnectButtonText = Strings.StartVPN;
+                    RefreshActiveIndicator();
                 }
 
                 IsConnecting = false;
                 return false;
             }
+
             // Surface any exception from startTask (Connected / StartTaskCompleted / Cancelled).
-            await startTask;
+            try { await startTask; } catch { }
+            IsConnected = true;
             IsConnecting = false;
+            _lastSuccessfulConnectAt = DateTime.UtcNow;
+            ConnectButtonText = Strings.StopVPN;
+            StartSubRefreshTimer();
+            RefreshActiveIndicator();
+            RestoreConnectedStatus();
+            ConflictingVpnWarningText = string.Empty;
             return true;
         }
         catch (Exception ex)
