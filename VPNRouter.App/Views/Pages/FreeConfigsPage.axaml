@@ -68,7 +68,7 @@
         </Style>
 
         <!-- Responsive layout for narrow window (< 420px): hide secondary columns to give endpoint space -->
-        <Style Selector="UserControl.narrow .col-aux">
+        <Style Selector="UserControl.narrow TextBlock.col-aux">
             <Setter Property="IsVisible" Value="False"/>
         </Style>
     </UserControl.Styles>

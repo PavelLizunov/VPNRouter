@@ -424,7 +424,7 @@
                     Background="{DynamicResource SurfaceBaseBrush}"
                     BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1">
               <Button.Flyout>
-                <MenuFlyout x:Name="RunningProcessesFlyout" Placement="TopEdgeAlignedRight"/>
+                <MenuFlyout Placement="TopEdgeAlignedRight"/>
               </Button.Flyout>
             </Button>
             <!-- v2.30.6-r1 (UX-41 fix): hardcoded "+ Add" → bilingual binding. -->
