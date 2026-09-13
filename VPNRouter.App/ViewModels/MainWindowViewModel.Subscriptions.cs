@@ -167,7 +167,7 @@ public partial class MainWindowViewModel
         var activeUuid = SelectedSubscriptionServer?.Uuid;
         var activeHost = SelectedSubscriptionServer?.Server;
         var activePort = SelectedSubscriptionServer?.Port ?? 0;
-        var activeHpk  = SelectedSubscriptionServer?.UnderlyingEntry?.Awg?.HeaderProtectionKey;
+        var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
         var activeSigBefore = SelectedSubscriptionServer == null
             ? null
             : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
@@ -242,7 +242,7 @@ public partial class MainWindowViewModel
         var activeUuid = SelectedSubscriptionServer?.Uuid;
         var activeHost = SelectedSubscriptionServer?.Server;
         var activePort = SelectedSubscriptionServer?.Port ?? 0;
-        var activeHpk  = SelectedSubscriptionServer?.UnderlyingEntry?.Awg?.HeaderProtectionKey;
+        var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
         var activeSigBefore = SelectedSubscriptionServer == null
             ? null
             : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
@@ -418,7 +418,7 @@ public partial class MainWindowViewModel
             var activeUuid = SelectedSubscriptionServer?.Uuid;
             var activeHost = SelectedSubscriptionServer?.Server;
             var activePort = SelectedSubscriptionServer?.Port ?? 0;
-            var activeHpk  = SelectedSubscriptionServer?.UnderlyingEntry?.Awg?.HeaderProtectionKey;
+            var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
             var activeSigBefore = SelectedSubscriptionServer == null
                 ? null
                 : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
