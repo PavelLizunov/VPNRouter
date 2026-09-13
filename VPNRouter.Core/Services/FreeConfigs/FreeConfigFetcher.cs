@@ -98,24 +98,47 @@ public sealed class FreeConfigFetcher
         var result = new List<string>(capacity: 256);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var raw in body.Split('\n', '\r'))
+        foreach (var line in MemoryExtensions.EnumerateLines(body.AsSpan()))
         {
-            var trimmed = raw.Trim();
-            if (trimmed.Length < 20) continue;
-            if (!trimmed.StartsWith("vless://", StringComparison.OrdinalIgnoreCase)) continue;
-            if (seen.Add(trimmed))
-                result.Add(trimmed);
+            var trimmed = line.Trim();
+            if (trimmed.Length < 15) continue;
+            if (!IsSupportedScheme(trimmed)) continue;
+            var str = trimmed.ToString();
+            if (seen.Add(str))
+                result.Add(str);
         }
 
         return result;
+    }
+
+    private static bool IsSupportedScheme(ReadOnlySpan<char> span)
+    {
+        return span.StartsWith("vless://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("ss://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("awg://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("awg3://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsSupportedScheme(string text)
+    {
+        return text.Contains("vless://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("hy2://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("tuic://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("ss://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("awg://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("awg3://", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? TryDecodeBase64(string body)
     {
         var trimmed = body.Trim();
 
-        // Raw already contains vless:// — not base64.
-        if (trimmed.Contains("vless://", StringComparison.OrdinalIgnoreCase)) return null;
+        // Raw already contains supported schemes — not base64.
+        if (ContainsSupportedScheme(trimmed)) return null;
 
         // Heuristic: length divisible by 4 (or close), no weird chars.
         if (trimmed.Length < 60) return null;
@@ -129,7 +152,7 @@ public sealed class FreeConfigFetcher
         {
             var bytes = Convert.FromBase64String(padded);
             var text = System.Text.Encoding.UTF8.GetString(bytes);
-            if (text.Contains("vless://", StringComparison.OrdinalIgnoreCase))
+            if (ContainsSupportedScheme(text))
                 return text;
         }
         catch

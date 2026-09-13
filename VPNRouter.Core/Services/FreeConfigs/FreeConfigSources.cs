@@ -50,15 +50,33 @@ public static class FreeConfigSources
         },
         new()
         {
-            Name = "EtoNeYaProject (github)",
-            Url  = "https://raw.githubusercontent.com/EtoNeYaProject/etoneyaproject.github.io/refs/heads/main/1",
-            ExpectedCount = 2200,
+            Name = "EtoNeYaProject (mirror)",
+            Url  = "https://alley.serv00.net/1",
+            ExpectedCount = 4900,
         },
         new()
         {
-            Name = "EtoNeYaProject (a9fm mirror)",
-            Url  = "https://etoneya.a9fm.site/1",
-            ExpectedCount = 1100,
+            Name = "0xRadikal/verified",
+            Url  = "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/verified/configs.txt",
+            ExpectedCount = 1300,
+        },
+        new()
+        {
+            Name = "mehrtat/vless",
+            Url  = "https://raw.githubusercontent.com/mehrtat/vless-collector/main/vless.txt",
+            ExpectedCount = 460,
+        },
+        new()
+        {
+            Name = "Delta-Kronecker/reality",
+            Url  = "https://raw.githubusercontent.com/Delta-Kronecker/V2ray-Config/main/config/reality/reality.txt",
+            ExpectedCount = 500,
+        },
+        new()
+        {
+            Name = "Au1rxx/hysteria2",
+            Url  = "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/protocol/hysteria2/v2ray-base64-0001.txt",
+            ExpectedCount = 600,
         },
         new()
         {
@@ -80,16 +98,15 @@ public static class FreeConfigSources
         },
         new()
         {
-            Name = "ByeWhiteLists2",
-            Url  = "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/refs/heads/main/ByeWhiteLists2.txt",
-            ExpectedCount = 1000,
+            Name = "kort0881/ru-sni",
+            Url  = "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/data/githubmirror/ru-sni/vless.txt",
+            ExpectedCount = 800,
         },
-        // ── Added v2.13.10 ──
         new()
         {
-            Name = "sevcator/5ubscrpt10n",
-            Url  = "https://raw.githubusercontent.com/sevcator/5ubscrpt10n/main/protocols/vl.txt",
-            ExpectedCount = 22000,
+            Name = "sevcator/5ubscrpt10n (mini)",
+            Url  = "https://raw.githubusercontent.com/sevcator/5ubscrpt10n/main/mini/m1n1-5ub-1.txt",
+            ExpectedCount = 3000,
         },
         new()
         {
@@ -105,9 +122,9 @@ public static class FreeConfigSources
         },
         new()
         {
-            Name = "kort0881/vpn-vless-configs-russia",
-            Url  = "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/clean/vless.txt",
-            ExpectedCount = 3500,
+            Name = "kort0881/clean",
+            Url  = "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/data/githubmirror/clean/vless.txt",
+            ExpectedCount = 12000,
         },
         new()
         {

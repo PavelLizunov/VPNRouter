@@ -241,12 +241,14 @@ public sealed class FreeConfigPoolFetcher
                 var entry = new FreeConfigEntry
                 {
                     Id          = GetString(s, "id") ?? "",
+                    Protocol    = GetString(s, "protocol") ?? "vless",
                     Host        = GetString(s, "host") ?? "",
                     Port        = s.TryGetProperty("port", out var p) ? p.GetInt32() : 443,
                     Uuid        = GetString(s, "uuid") ?? "",
                     Sni         = GetString(s, "sni") ?? "",
                     Transport   = GetString(s, "transport") ?? "tcp",
                     Security    = GetString(s, "security") ?? "reality",
+                    Path        = GetString(s, "path"),
                     CountryCode = GetString(s, "country"),
                     ResolvedIp  = GetString(s, "resolvedIp"),
                     SourceUrl   = GetString(s, "source") ?? "",
