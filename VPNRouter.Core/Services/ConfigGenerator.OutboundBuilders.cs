@@ -251,16 +251,55 @@ public static partial class ConfigGenerator
     }
 
     /// <summary>
-    /// AmneziaWG (AWG2) endpoint for a sing-box-lx (with_awg) client. The schema —
+    /// Normalize AmneziaWG 3.0 HeaderProtectionKey to a 64-character lowercase hex string.
+    /// Accepts 32-byte Base64 (from `awg genkey` or .conf) or 64-character hex.
+    /// </summary>
+    internal static string? NormalizeHeaderProtectionKey(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var trimmed = raw.Trim();
+        if (trimmed.Length == 64 && trimmed.All(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+            return trimmed.ToLowerInvariant();
+
+        try
+        {
+            var bytes = Convert.FromBase64String(trimmed);
+            if (bytes.Length == 32)
+                return Convert.ToHexString(bytes).ToLowerInvariant();
+        }
+        catch
+        {
+            // Not valid base64, return trimmed as fallback
+        }
+        return trimmed;
+    }
+
+    /// <summary>
+    /// AmneziaWG (AWG2 / AWG3) endpoint for a sing-box-lx / sing-box-vpnctl (with_awg) client. The schema —
     /// a <c>wireguard</c> endpoint with promoted obfuscation fields + peer with
-    /// <c>persistent_keepalive_interval</c> — was verified against <c>sing-box-lx check</c>
-    /// (2026-06-27). Server/Port are the peer endpoint; obfuscation params must match the
-    /// server. See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
+    /// <c>persistent_keepalive_interval</c> — supports AWG 1.0, AWG 2.0 (CPS i1..i5), and
+    /// AWG 3.x (header_protection_key, content_padding_addition, random_trailers, disable_cookies).
     /// </summary>
     internal static SingBoxEndpoint BuildAmneziaWgEndpoint(VlessServerEntry entry, string tag)
     {
         var awg = entry.Awg ?? new AwgConfig();
-        static string? NullIfEmpty(string s) => string.IsNullOrEmpty(s) ? null : s;
+        static string? NullIfEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;
+
+        var hpk = NormalizeHeaderProtectionKey(awg.HeaderProtectionKey);
+        var s1 = awg.S1;
+        var s2 = awg.S2;
+        var s3 = awg.S3;
+        var s4 = awg.S4;
+
+        // AmneziaWG 3.0 requirement: s1..s4 must each be >= 12 bytes when header protection key is used
+        if (!string.IsNullOrEmpty(hpk))
+        {
+            if (s1 < 12) s1 = 12;
+            if (s2 < 12) s2 = 12;
+            if (s3 < 12) s3 = 12;
+            if (s4 < 12) s4 = 12;
+        }
+
         return new SingBoxEndpoint
         {
             Type       = "wireguard",
@@ -270,10 +309,14 @@ public static partial class ConfigGenerator
             Address    = awg.Address.Count > 0 ? new List<string>(awg.Address) : new List<string> { "10.13.13.2/32" },
             PrivateKey = awg.PrivateKey,
             Jc = awg.Jc, Jmin = awg.Jmin, Jmax = awg.Jmax,
-            S1 = awg.S1, S2 = awg.S2, S3 = awg.S3, S4 = awg.S4,
+            S1 = s1, S2 = s2, S3 = s3, S4 = s4,
             H1 = NullIfEmpty(awg.H1), H2 = NullIfEmpty(awg.H2), H3 = NullIfEmpty(awg.H3), H4 = NullIfEmpty(awg.H4),
             I1 = NullIfEmpty(awg.I1), I2 = NullIfEmpty(awg.I2), I3 = NullIfEmpty(awg.I3),
             I4 = NullIfEmpty(awg.I4), I5 = NullIfEmpty(awg.I5),
+            HeaderProtectionKey    = hpk,
+            ContentPaddingAddition = NullIfEmpty(awg.ContentPaddingAddition),
+            RandomTrailers         = awg.RandomTrailers ? true : null,
+            DisableCookies         = awg.DisableCookies ? true : null,
             Peers = new List<WireGuardPeer>
             {
                 new()

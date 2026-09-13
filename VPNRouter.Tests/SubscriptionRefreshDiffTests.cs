@@ -93,4 +93,34 @@ public class SubscriptionRefreshDiffTests
 
         Assert.Equal(SubscriptionRefreshDiff.SignatureOf("3.3.3.3", 443, "u3"), sig);
     }
+
+    [Fact]
+    public void ActiveServerSignature_SharedUserUuid_MatchesByNameNotFirst()
+    {
+        // 95%+ of commercial subscription feeds share a single user-level UUID across all server nodes.
+        // ActiveServerSignature must resolve the exact node by Name, not blindly grab server 0 by UUID.
+        const string sharedUserUuid = "b09f195d-79e1-4560-9118-875f10b7cb34";
+        var servers = new[]
+        {
+            S("DE-Frankfurt", "1.1.1.1", 443, sharedUserUuid),
+            S("IS-Reykjavik", "2.2.2.2", 443, sharedUserUuid),
+            S("US-NewYork", "3.3.3.3", 443, sharedUserUuid),
+        };
+
+        var sig = SubscriptionRefreshDiff.ActiveServerSignature(servers, "IS-Reykjavik", sharedUserUuid, "2.2.2.2", 443);
+        Assert.Equal(SubscriptionRefreshDiff.SignatureOf("2.2.2.2", 443, sharedUserUuid), sig);
+    }
+
+    [Fact]
+    public void ActiveServerSignature_RenamedServer_MatchesByHostAndPort()
+    {
+        var before = new[] { S("DE-Fast", "1.1.1.1", 443, "u1") };
+        var after = new[] { S("Germany #1 Renamed", "1.1.1.1", 443, "u1") };
+
+        var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "DE-Fast", "u1", "1.1.1.1", 443);
+        var sigAfter = SubscriptionRefreshDiff.ActiveServerSignature(after, "DE-Fast", "u1", "1.1.1.1", 443);
+
+        Assert.NotNull(sigAfter);
+        Assert.Equal(sigBefore, sigAfter);
+    }
 }

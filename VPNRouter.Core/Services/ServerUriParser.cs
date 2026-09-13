@@ -72,6 +72,15 @@ public static class ServerUriParser
         if (uri.Length == 0)
             throw new FormatException("Empty URI");
 
+        if (IsWireGuardConf(uri))
+        {
+            if (!SingBoxFeatures.AwgAvailable)
+                throw new FormatException(
+                    "AmneziaWG / WireGuard requires a sing-box-vpnctl (with_awg) build. " +
+                    "This build bundles upstream sing-box — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
+            return ParseWireGuardConf(uri);
+        }
+
         if (uri.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
             return VlessUriParser.Parse(uri); // VLESS path checks placeholder internally.
 
@@ -108,22 +117,24 @@ public static class ServerUriParser
             entry = ParseDnsTunnel(uri);
         }
         else if (uri.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
-                 uri.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+                 uri.StartsWith("amneziawg3://", StringComparison.OrdinalIgnoreCase) ||
+                 uri.StartsWith("awg://", StringComparison.OrdinalIgnoreCase) ||
+                 uri.StartsWith("awg3://", StringComparison.OrdinalIgnoreCase))
         {
             // Runtime gate (mirror naive / dns-tunnel): AmneziaWG needs the
-            // sing-box-lx fork (with_awg). Official builds bundle upstream
+            // sing-box-lx / sing-box-vpnctl fork (with_awg). Official builds bundle upstream
             // sing-box, which FATALs on an `endpoints` wireguard block. Refuse
             // at intake so a hostile / stale subscription line can't brick an
             // official-build tunnel. ParseMultiple pre-filters via
             // IsSupportedScheme; this guards the direct / manual-paste path.
             if (!SingBoxFeatures.AwgAvailable)
                 throw new FormatException(
-                    "AmneziaWG requires a sing-box-lx (with_awg) build. This build bundles " +
+                    "AmneziaWG requires a sing-box-lx / sing-box-vpnctl (with_awg) build. This build bundles " +
                     "upstream sing-box — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
             entry = ParseAmneziaWg(uri);
         }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
 
         // v2.32.3 input gate (2026-05-17) — placeholder fingerprints can
         // surface in any protocol's server IP. Reject before the entry
@@ -171,6 +182,15 @@ public static class ServerUriParser
         var result = new List<VlessServerEntry>();
         if (string.IsNullOrWhiteSpace(text)) return result;
 
+        if (IsWireGuardConf(text))
+        {
+            if (SingBoxFeatures.AwgAvailable)
+            {
+                try { result.Add(ParseWireGuardConf(text)); } catch { /* skip malformed */ }
+            }
+            return result;
+        }
+
         foreach (var lineSpan in MemoryExtensions.EnumerateLines(text.AsSpan()))
         {
             var trimmedSpan = lineSpan.Trim();
@@ -199,12 +219,12 @@ public static class ServerUriParser
         if (line.StartsWith("dns-tunnel://", StringComparison.OrdinalIgnoreCase))
             return SlipstreamRuntimeAvailable;
 
-        // AmneziaWG — only where the sing-box-lx fork (with_awg) is bundled.
-        // On an official build this returns false so subscription parsing
-        // (SubscriptionFetcher / ParseMultiple) silently drops awg:// lines
-        // instead of feeding a tunnel-bricking endpoint into config-gen.
-        if (line.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase) ||
-            line.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+        // AmneziaWG (AWG2 / AWG3) — only where sing-box with_awg is bundled.
+        if (line.StartsWith("amneziawg://",  StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("amneziawg3://", StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("awg://",        StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("awg3://",       StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("[Interface]",   StringComparison.OrdinalIgnoreCase))
             return SingBoxFeatures.AwgAvailable;
 
         return line.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
@@ -472,8 +492,12 @@ public static class ServerUriParser
         // query, then authority on the LAST '@' (base64 has no '@'), then
         // host:port. Uri.UnescapeDataString decodes %XX but preserves '/'/'+'/'='.
         var rest = uri.Trim();
-        if (rest.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
+        if (rest.StartsWith("awg3://", StringComparison.OrdinalIgnoreCase))
+            rest = rest.Substring("awg3://".Length);
+        else if (rest.StartsWith("awg://", StringComparison.OrdinalIgnoreCase))
             rest = rest.Substring("awg://".Length);
+        else if (rest.StartsWith("amneziawg3://", StringComparison.OrdinalIgnoreCase))
+            rest = rest.Substring("amneziawg3://".Length);
         else if (rest.StartsWith("amneziawg://", StringComparison.OrdinalIgnoreCase))
             rest = rest.Substring("amneziawg://".Length);
 
@@ -529,6 +553,9 @@ public static class ServerUriParser
         if (string.IsNullOrWhiteSpace(addr))
             throw new FormatException("Invalid amneziawg URI: address is required (e.g. address=10.13.13.2/32)");
 
+        static bool ParseBoolParam(string? s) =>
+            !string.IsNullOrEmpty(s) && (s.Equals("true", StringComparison.OrdinalIgnoreCase) || s == "1" || s.Equals("yes", StringComparison.OrdinalIgnoreCase));
+
         return new VlessServerEntry
         {
             Name = name.Length > 0 ? name : $"amneziawg-{server}-{port}",
@@ -550,7 +577,142 @@ public static class ServerUriParser
                 H3   = query["h3"] ?? string.Empty, H4 = query["h4"] ?? string.Empty,
                 I1   = query["i1"] ?? string.Empty, I2 = query["i2"] ?? string.Empty, I3 = query["i3"] ?? string.Empty,
                 I4   = query["i4"] ?? string.Empty, I5 = query["i5"] ?? string.Empty,
+                HeaderProtectionKey    = query["header_protection_key"] ?? query["hpk"] ?? query["headerprotectionkey"] ?? string.Empty,
+                ContentPaddingAddition = query["content_padding_addition"] ?? query["cpa"] ?? query["contentpaddingaddition"] ?? string.Empty,
+                RandomTrailers         = ParseBoolParam(query["random_trailers"] ?? query["rt"] ?? query["randomtrailers"]),
+                DisableCookies         = ParseBoolParam(query["disable_cookies"] ?? query["dc"] ?? query["disablecookies"]),
             },
+        };
+    }
+
+    /// <summary>Detect if input text represents a WireGuard / AmneziaWG .conf format ([Interface] + [Peer]).</summary>
+    public static bool IsWireGuardConf(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var span = text.AsSpan().Trim();
+        return span.Contains("[Interface]", StringComparison.OrdinalIgnoreCase) &&
+               span.Contains("[Peer]", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Parse a standard WireGuard / AmneziaWG INI-style configuration file text into a VlessServerEntry.
+    /// Supports AWG 1.0, 2.0 (Jc, S1..S4, H1..H4, I1..I5) and AWG 3.x (HeaderProtectionKey, ContentPaddingAddition, RandomTrailers, DisableCookies).
+    /// </summary>
+    public static VlessServerEntry ParseWireGuardConf(string text, string? defaultName = null)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new FormatException("Invalid WireGuard/AmneziaWG config: text is empty");
+
+        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        string currentSection = string.Empty;
+        var ifaceDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var peerDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";"))
+                continue;
+
+            if (line.StartsWith("[") && line.EndsWith("]"))
+            {
+                currentSection = line.Substring(1, line.Length - 2).Trim();
+                continue;
+            }
+
+            var eq = line.IndexOf('=');
+            if (eq <= 0) continue;
+
+            var key = line.Substring(0, eq).Trim();
+            var val = line.Substring(eq + 1).Trim();
+
+            if (currentSection.Equals("Interface", StringComparison.OrdinalIgnoreCase))
+                ifaceDict[key] = val;
+            else if (currentSection.Equals("Peer", StringComparison.OrdinalIgnoreCase))
+                peerDict[key] = val;
+        }
+
+        if (!ifaceDict.TryGetValue("PrivateKey", out var privateKey) || string.IsNullOrEmpty(privateKey))
+            throw new FormatException("Invalid WireGuard/AmneziaWG config: PrivateKey is required in [Interface]");
+
+        if (!peerDict.TryGetValue("PublicKey", out var publicKey) || string.IsNullOrEmpty(publicKey))
+            throw new FormatException("Invalid WireGuard/AmneziaWG config: PublicKey is required in [Peer]");
+
+        if (!peerDict.TryGetValue("Endpoint", out var endpoint) || string.IsNullOrEmpty(endpoint))
+            throw new FormatException("Invalid WireGuard/AmneziaWG config: Endpoint is required in [Peer]");
+
+        string server;
+        var port = 51820;
+        if (endpoint.StartsWith("["))
+        {
+            var close = endpoint.IndexOf(']');
+            server = close > 0 ? endpoint.Substring(1, close - 1) : endpoint;
+            var after = close >= 0 ? endpoint.Substring(close + 1) : string.Empty;
+            if (after.StartsWith(":") && int.TryParse(after.Substring(1), out var p6) && p6 > 0) port = p6;
+        }
+        else
+        {
+            var colonIdx = endpoint.LastIndexOf(':');
+            if (colonIdx >= 0)
+            {
+                server = endpoint.Substring(0, colonIdx);
+                if (int.TryParse(endpoint.Substring(colonIdx + 1), out var p) && p > 0) port = p;
+            }
+            else server = endpoint;
+        }
+
+        if (string.IsNullOrEmpty(server))
+            throw new FormatException("Invalid WireGuard/AmneziaWG config: Endpoint host is missing");
+
+        ifaceDict.TryGetValue("Address", out var addrStr);
+        peerDict.TryGetValue("PresharedKey", out var psk);
+        peerDict.TryGetValue("PersistentKeepalive", out var keepaliveStr);
+
+        static bool ParseBool(string? s) =>
+            !string.IsNullOrEmpty(s) && (s.Equals("true", StringComparison.OrdinalIgnoreCase) || s == "1" || s.Equals("yes", StringComparison.OrdinalIgnoreCase));
+
+        static string Val(Dictionary<string, string> d, string k) =>
+            d.TryGetValue(k, out var v) ? v : string.Empty;
+
+        var awg = new AwgConfig
+        {
+            PrivateKey    = privateKey,
+            PeerPublicKey = publicKey,
+            PresharedKey  = psk ?? string.Empty,
+            Address       = string.IsNullOrWhiteSpace(addrStr) ? new List<string> { "10.13.13.2/32" }
+                            : addrStr.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0).ToList(),
+            Keepalive     = ParseMbps(keepaliveStr),
+            Jc   = ParseMbps(Val(ifaceDict, "Jc")),
+            Jmin = ParseMbps(Val(ifaceDict, "Jmin")),
+            Jmax = ParseMbps(Val(ifaceDict, "Jmax")),
+            S1   = ParseMbps(Val(ifaceDict, "S1")),
+            S2   = ParseMbps(Val(ifaceDict, "S2")),
+            S3   = ParseMbps(Val(ifaceDict, "S3")),
+            S4   = ParseMbps(Val(ifaceDict, "S4")),
+            H1   = Val(ifaceDict, "H1"),
+            H2   = Val(ifaceDict, "H2"),
+            H3   = Val(ifaceDict, "H3"),
+            H4   = Val(ifaceDict, "H4"),
+            I1   = Val(ifaceDict, "I1"),
+            I2   = Val(ifaceDict, "I2"),
+            I3   = Val(ifaceDict, "I3"),
+            I4   = Val(ifaceDict, "I4"),
+            I5   = Val(ifaceDict, "I5"),
+            HeaderProtectionKey    = Val(ifaceDict, "HeaderProtectionKey"),
+            ContentPaddingAddition = Val(ifaceDict, "ContentPaddingAddition"),
+            RandomTrailers         = ParseBool(Val(ifaceDict, "RandomTrailers")),
+            DisableCookies         = ParseBool(Val(ifaceDict, "DisableCookies")),
+        };
+
+        var name = !string.IsNullOrEmpty(defaultName) ? defaultName : $"awg-{server}-{port}";
+
+        return new VlessServerEntry
+        {
+            Name = name,
+            Protocol = "amneziawg",
+            Server = server,
+            Port = port,
+            Awg = awg,
         };
     }
 

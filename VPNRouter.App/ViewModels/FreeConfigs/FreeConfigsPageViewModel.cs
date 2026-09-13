@@ -948,11 +948,18 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     {
         try
         {
+            var prevSelectedId = SelectedItem?.Id;
             var items = _savedConfigs
                 .Select(c => new FreeConfigItemViewModel(c))
                 .OrderBy(vm => vm.FreshnessSortKey)
                 .ToList();
             DisplayedSavedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
+            if (SelectedFreeTabIndex == 1 && !string.IsNullOrEmpty(prevSelectedId))
+            {
+                var matched = DisplayedSavedConfigs.FirstOrDefault(c => c.Id == prevSelectedId);
+                if (matched != null)
+                    SelectedItem = matched;
+            }
         }
         catch (Exception ex)
         {
@@ -1931,11 +1938,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 .Select(c => new FreeConfigItemViewModel(c))
                 .ToList();
 
+            var prevSelectedId = SelectedItem?.Id;
             DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
 
-            // Auto-select first item so the Connect button is immediately actionable.
-            if (SelectedItem == null || !DisplayedConfigs.Contains(SelectedItem))
-                SelectedItem = DisplayedConfigs.FirstOrDefault();
+            // Restore selection by Id if still in the list, otherwise auto-select first item
+            SelectedItem = (!string.IsNullOrEmpty(prevSelectedId)
+                ? DisplayedConfigs.FirstOrDefault(c => c.Id == prevSelectedId)
+                : null)
+                ?? DisplayedConfigs.FirstOrDefault();
         }
         catch (Exception ex)
         {

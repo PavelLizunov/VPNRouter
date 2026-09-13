@@ -6507,39 +6507,58 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void AddServer()
     {
-        var lines = VlessUri?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+        var rawInput = (VlessUri ?? string.Empty).Trim();
         var addedAny = false;
 
-        foreach (var line in lines)
+        // Support direct pasting of AmneziaWG / WireGuard .conf files ([Interface] + [Peer])
+        if (ServerUriParser.IsWireGuardConf(rawInput))
         {
-            // v2.30.1-r3: dispatch by scheme via ServerUriParser instead
-            // of hard-coded vless:// prefix check. Pasting Hysteria2 /
-            // TUIC / Shadowsocks links lands in the same Servers list.
-            if (!ServerUriParser.IsSupportedScheme(line))
-                continue;
-
             try
             {
-                var entry = ServerUriParser.Parse(line);
-                // Check duplicate by name+IP+port (same IP+port with different
-                // name/uuid is OK). Port is part of the comparison — without it,
-                // two different transports on the same host (e.g. an AmneziaWG
-                // endpoint and an xhttp VLESS server, both named "main-brat" on
-                // the same IP but different ports) collide and the second paste
-                // silently does nothing.
-                if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
-                    continue;
-                Servers.Add(new ServerViewModel(entry));
-                addedAny = true;
+                var entry = ServerUriParser.Parse(rawInput);
+                if (!Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
+                {
+                    Servers.Add(new ServerViewModel(entry));
+                    addedAny = true;
+                }
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
+                _logger.Warning(ex, "Failed to parse WireGuard / AmneziaWG config: {Error}", ex.Message);
+            }
+        }
+        else
+        {
+            var lines = rawInput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var line in lines)
+            {
+                // v2.30.1-r3: dispatch by scheme via ServerUriParser instead
+                // of hard-coded vless:// prefix check. Pasting Hysteria2 /
+                // TUIC / Shadowsocks / AmneziaWG links lands in the same Servers list.
+                if (!ServerUriParser.IsSupportedScheme(line))
+                    continue;
+
+                try
+                {
+                    var entry = ServerUriParser.Parse(line);
+                    if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
+                        continue;
+                    Servers.Add(new ServerViewModel(entry));
+                    addedAny = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
+                }
             }
         }
 
         if (addedAny)
+        {
+            if (SelectedServer == null)
+                SelectedServer = Servers.FirstOrDefault();
             SaveSettings();
+        }
 
         VlessUri = string.Empty;
     }
@@ -6548,7 +6567,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void RemoveServer()
     {
         if (SelectedServer != null)
-            Servers.Remove(SelectedServer);
+            RemoveServerByEntry(SelectedServer);
     }
 
     /// <summary>
@@ -6592,6 +6611,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // active server may have been the deleted one and we need to
         // re-mark the new selection.
         MarkOrphanServers();
+        RefreshActiveIndicator();
     }
 
     [RelayCommand]
@@ -6720,6 +6740,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
+        if (value.IsActive) return; // already active server, no-op
         // v2.30.2-r1 diag: trace every subscription-row selection.
         _logger?.Information(
             "[VM] OnSelectedSubscriptionServerChanged name={N} ip={Ip} IsConnected={C} IsSubscribeMode={S} IsConnecting={IC}",
