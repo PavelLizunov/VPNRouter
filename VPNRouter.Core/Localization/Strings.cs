@@ -1312,10 +1312,10 @@ public static partial class Strings
     // (JSON) sub-tab. Pre-r1 was blank + a "Нажмите на конфиг для
     // активации" hint with nothing to click; now explains the feature.
     public static string CustomConfigsEmptyTitle => Ru
-        ? "У тебя пока нет своих конфигов"
+        ? "Нет добавленных конфигураций"
         : "No custom configs yet";
     public static string CustomConfigsEmptyHint => Ru
-        ? "Свой конфиг — это готовый JSON-файл sing-box для нестандартных протоколов (TUIC, Hysteria2, Reality+gRPC и др.). Нажми «Добавить конфиг…» внизу чтобы импортировать."
+        ? "Свой конфиг — это готовый JSON-файл sing-box для протоколов TUIC, Hysteria2, Reality+gRPC и др. Нажмите «Добавить конфиг…» внизу для импорта."
         : "A custom config is a ready-made sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click \"Add config…\" below to import.";
 
     // v2.32.0 — recovery banner shown after SettingsValidator rejected a
@@ -1345,7 +1345,7 @@ public static partial class Strings
     public static string Title => "VPNRouter v3.0";
 
     public static string Subtitle => Ru
-        ? "Android · вставь VLESS-URI или подписочный URL и подключись"
+        ? "Android · вставьте VLESS-URI или подписочный URL и подключитесь"
         : "Android · paste a VLESS URI or subscription URL and connect";
 
     public static string LangToggleLabel => Ru ? "EN" : "RU";
@@ -1434,7 +1434,7 @@ public static partial class Strings
     public static string ButtonRefresh => Ru ? "Обновить" : "Refresh";
 
     public static string ServerInputHintInitial => Ru
-        ? "Введи vless://-ссылку или подписочный URL и нажми «Сохранить». Для подписки потом «Обновить»."
+        ? "Введите vless://-ссылку или подписочный URL и нажмите «Сохранить». Для подписки нажмите «Обновить»."
         : "Paste a vless:// share-link or a subscription URL, then tap Save. For a subscription URL, tap Refresh after.";
 
     public static string SaveStatusCleared => Ru
@@ -1442,11 +1442,11 @@ public static partial class Strings
         : "Server cleared. The built-in placeholder will be used.";
 
     public static string SaveStatusUriBadHost => Ru
-        ? "URI распарсен, но не хватает host или порта. Проверь."
+        ? "URI разобран, но не указан хост или порт. Проверьте адрес."
         : "Parsed but missing host or port — please double-check.";
 
     public static string SaveStatusUriOk => Ru
-        ? "Сохранено. Сервер: {0}:{1}. Жми «Подключить»."
+        ? "Сохранено. Сервер: {0}:{1}. Нажмите «Подключить»."
         : "Saved. Server: {0}:{1}. Tap Connect.";
 
     public static string SaveStatusUriInvalid => Ru
@@ -1454,15 +1454,15 @@ public static partial class Strings
         : "Invalid VLESS URI: {0}";
 
     public static string SaveStatusSubStored => Ru
-        ? "URL подписки сохранён. Жми «Обновить» чтобы скачать список серверов."
+        ? "URL подписки сохранён. Нажмите «Обновить» для загрузки списка серверов."
         : "Subscription URL saved. Tap Refresh to fetch the server list.";
 
     public static string SaveStatusUnknown => Ru
-        ? "Не похоже ни на vless://, ни на http(s):// — проверь ввод."
+        ? "Не распознано как vless:// или http(s):// — проверьте ввод."
         : "Doesn't look like vless:// or http(s):// — check the input.";
 
     public static string RefreshNeedsUrl => Ru
-        ? "Сначала сохрани подписочный URL (https://…)."
+        ? "Сначала сохраните URL подписки (https://…)."
         : "Save a subscription URL first (https://…).";
 
     public static string RefreshFetching => Ru ? "Скачиваю…" : "Fetching…";
@@ -1532,7 +1532,7 @@ public static partial class Strings
         : "v{0} available · {1:F1} MB";
 
     public static string UpdateBannerSubtitle => Ru
-        ? "Нажми «Скачать» — установка запросит разрешение системы."
+        ? "Нажмите «Скачать» — система запросит разрешение на установку."
         : "Tap Download — install will ask for system permission.";
 
     public static string UpdateButtonDownload => Ru ? "Скачать" : "Download";
@@ -1546,7 +1546,7 @@ public static partial class Strings
     public static string UpdateButtonGrantPermission => Ru ? "Разрешить" : "Allow";
 
     public static string UpdateDownloadDone => Ru
-        ? "Скачано. Жми «Установить»."
+        ? "Файл загружен. Нажмите «Установить»."
         : "Downloaded. Tap Install.";
 
     public static string UpdateDownloadFailed => Ru
@@ -1558,7 +1558,7 @@ public static partial class Strings
         : "To install the APK from inside the app, allow \"Install from unknown sources\" for VPNRouter.";
 
     public static string UpdateInstallPermissionGranted => Ru
-        ? "Разрешение получено — жми «Установить» снова."
+        ? "Разрешение получено — нажмите «Установить»."
         : "Permission granted — tap Install again.";
 
     public static string UpdateInstallLaunchFailed => Ru
@@ -1869,7 +1869,7 @@ public static partial class Strings
     public static string FcOverlayTitle => Ru ? "Публичные конфиги" : "Public configs";
 
     public static string FcSearchHint => Ru
-        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые. Рабочие конфиги сохраняются автоматически — открой вкладку «Сохранённые», чтобы их увидеть."
+        ? "Соберём список из публичных источников и проверим доступность каждого узла. Нажмите «Найти» для отбора рабочих серверов. Конфигурации сохраняются автоматически во вкладке «Сохранённые»."
         : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest. Verified configs are saved automatically — open the Saved tab to see them.";
 
     public static string FcFindButton => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
@@ -1883,7 +1883,7 @@ public static partial class Strings
     public static string FcColStatus => Ru ? "Статус" : "Status";
 
     public static string FcSavedEmptyHint => Ru
-        ? "Сохранённых конфигов пока нет. Запусти «Найти» — найденные сохранятся здесь."
+        ? "Сохранённых конфигов пока нет. Нажмите «Найти» для добавления проверенных серверов."
         : "No saved configs yet. Run «Find» — results will be saved here.";
 
     public static string FcSavedClearAll => Ru ? "✕ Удалить всё" : "✕ Clear all";

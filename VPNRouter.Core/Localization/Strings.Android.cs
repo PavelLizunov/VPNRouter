@@ -150,7 +150,7 @@ public static partial class Strings
         : "Custom sing-box JSON";
 
     public static string CcCustomHint => Ru
-        ? "Вставь полный sing-box JSON-конфиг (например Hysteria2 + obfs, цепочки DNS, несколько outbounds). Перед сохранением жми «Проверить»."
+        ? "Вставьте полный JSON-конфиг sing-box (например Hysteria2 + obfs, цепочки DNS, несколько outbounds). Перед сохранением нажмите «Проверить»."
         : "Paste a full sing-box JSON config (e.g. Hysteria2 + obfs, DNS chains, multiple outbounds). Tap «Validate» before saving.";
 
     public static string CcCustomWatermark => Ru
@@ -178,11 +178,11 @@ public static partial class Strings
         : "✗ Could not parse JSON: {0}";
 
     public static string CcSaveStatusEmpty => Ru
-        ? "Введи sing-box JSON или нажми «Очистить»."
+        ? "Вставьте sing-box JSON или нажмите «Очистить»."
         : "Paste a sing-box JSON or tap «Clear».";
 
     public static string CcSaveStatusOk => Ru
-        ? "Сохранено. Жми «Подключить»."
+        ? "Сохранено. Нажмите «Подключить»."
         : "Saved. Tap Connect.";
 
     public static string CcSaveStatusInvalid => Ru
@@ -215,7 +215,7 @@ public static partial class Strings
         : "Splits TLS handshake inside the tunnel to bypass Russian ISP DPI. Uses sing-box's native tls_fragment — no separate service, unlike the Windows Zapret port.";
 
     public static string SettingsDpiBypassWarning => Ru
-        ? "Включай только если без него сайты не открываются. Может слегка увеличить задержку соединения."
+        ? "Включайте только если без него сайты не открываются. Может незначительно увеличить задержку соединения."
         : "Turn on only if sites don't open without it. May add a small connection-setup delay.";
 
     public static string SettingsDpiBypassOff => Ru ? "Выключен" : "Off";
@@ -412,18 +412,18 @@ public static partial class Strings
     /// when no enabled subscription has fetched any servers yet.
     /// </summary>
     public static string AdvSubscribeAggregatedEmpty => Ru
-        ? "В подписках пока нет серверов — добавь подписку ниже и нажми ↻."
+        ? "В подписках пока нет серверов — добавьте подписку ниже и нажмите ↻."
         : "No servers in any subscription yet — add one below and click ↻.";
 
     // ── Phase C: Android Settings tab side-nav (2026-05-10) ─────────────
     public static string SettingsSectionRules => Ru ? "Правила" : "Rules";
 
     public static string AdvSettingsRulesAndroidNote => Ru
-        ? "Кастомные правила маршрутизации (домен → действие) пока не подключены на Android. Пока что используй вкладку «Приложения» — там можно выбрать, какие приложения идут через VPN."
+        ? "Кастомные правила маршрутизации (домен → действие) пока не подключены на Android. Используйте вкладку «Приложения» — там можно выбрать, какие приложения идут через VPN."
         : "Custom routing rules (domain → action) aren't wired into the Android tunnel yet. For now use the Apps tab to choose which apps go through VPN.";
 
     public static string AdvSettingsAutostartAndroidIntro => Ru
-        ? "На Android системного аналога Windows-службы нет. Чтобы VPN поднимался после перезагрузки и при смене сети — включи «Always-on VPN» в системных настройках Android (кнопка ниже)."
+        ? "На Android системного аналога Windows-службы нет. Чтобы VPN поднимался после перезагрузки и при смене сети — включите «Always-on VPN» в системных настройках Android (кнопка ниже)."
         : "Android has no system-level equivalent of the Windows service. To bring the VPN up after reboot and network change, enable «Always-on VPN» in Android system settings (button below).";
 
     // AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E of Android Advanced
