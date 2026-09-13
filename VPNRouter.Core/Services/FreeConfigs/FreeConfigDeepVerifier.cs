@@ -304,33 +304,55 @@ public sealed class FreeConfigDeepVerifier
         };
 
         // TLS / Reality
-        if (s.Reality?.Enabled == true)
+        var isReality = string.Equals(s.Security, "reality", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(s.Reality?.PublicKey);
+
+        if (isReality)
         {
             outbound["tls"] = new JsonObject
             {
                 ["enabled"] = true,
-                ["server_name"] = s.Reality.ServerName ?? s.Server,
+                ["server_name"] = string.IsNullOrWhiteSpace(s.Reality?.ServerName) ? s.Server : s.Reality.ServerName,
                 ["utls"] = new JsonObject
                 {
                     ["enabled"] = true,
-                    ["fingerprint"] = string.IsNullOrWhiteSpace(s.Reality.Fingerprint) ? "chrome" : s.Reality.Fingerprint,
+                    ["fingerprint"] = string.IsNullOrWhiteSpace(s.Reality?.Fingerprint) ? "chrome" : s.Reality.Fingerprint,
                 },
                 ["reality"] = new JsonObject
                 {
                     ["enabled"] = true,
-                    ["public_key"] = s.Reality.PublicKey ?? "",
+                    ["public_key"] = s.Reality!.PublicKey,
                     ["short_id"]  = s.Reality.ShortId ?? "",
                 },
             };
         }
-        else if (s.Tls?.Enabled == true)
+        else if (string.Equals(s.Security, "tls", StringComparison.OrdinalIgnoreCase) || s.Tls?.Enabled == true)
         {
-            outbound["tls"] = new JsonObject
+            var sni = !string.IsNullOrWhiteSpace(s.Tls?.ServerName)
+                ? s.Tls.ServerName
+                : (!string.IsNullOrWhiteSpace(s.Reality?.ServerName) ? s.Reality.ServerName : s.Server);
+
+            var tlsObj = new JsonObject
             {
                 ["enabled"] = true,
-                ["server_name"] = s.Tls.ServerName ?? s.Server,
-                ["insecure"] = s.Tls.Insecure,
+                ["server_name"] = sni,
+                ["insecure"] = s.Tls?.Insecure ?? false,
             };
+
+            var fp = !string.IsNullOrWhiteSpace(s.Tls?.Fingerprint)
+                ? s.Tls.Fingerprint
+                : (!string.IsNullOrWhiteSpace(s.Reality?.Fingerprint) ? s.Reality.Fingerprint : null);
+
+            if (!string.IsNullOrWhiteSpace(fp))
+            {
+                tlsObj["utls"] = new JsonObject
+                {
+                    ["enabled"] = true,
+                    ["fingerprint"] = fp,
+                };
+            }
+
+            outbound["tls"] = tlsObj;
         }
 
         // Transport (tcp is implicit, grpc/ws need explicit block).
@@ -345,11 +367,28 @@ public sealed class FreeConfigDeepVerifier
         }
         else if (transportType == "ws")
         {
-            outbound["transport"] = new JsonObject
+            var wsObj = new JsonObject
             {
                 ["type"] = "ws",
                 ["path"] = s.Transport?.Path ?? "/",
             };
+            var hostHeader = s.Transport?.Host;
+            if (string.IsNullOrWhiteSpace(hostHeader) && s.Transport?.Headers != null && s.Transport.Headers.TryGetValue("Host", out var h))
+            {
+                hostHeader = h;
+            }
+            if (string.IsNullOrWhiteSpace(hostHeader))
+            {
+                hostHeader = !string.IsNullOrWhiteSpace(s.Tls?.ServerName) ? s.Tls.ServerName : s.Reality?.ServerName;
+            }
+            if (!string.IsNullOrWhiteSpace(hostHeader))
+            {
+                wsObj["headers"] = new JsonObject
+                {
+                    ["Host"] = hostHeader,
+                };
+            }
+            outbound["transport"] = wsObj;
         }
 
         // sing-box 1.13.3 quirk: DNS server with detour:"direct" is FATAL if the direct
