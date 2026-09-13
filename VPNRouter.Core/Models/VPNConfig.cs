@@ -159,6 +159,12 @@ public class SingBoxEndpoint
     [JsonPropertyName("i4")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I4 { get; set; }
     [JsonPropertyName("i5")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? I5 { get; set; }
 
+    // AmneziaWG 3.0 / 3.1 fields (sing-box-vpnctl with_awg).
+    [JsonPropertyName("header_protection_key")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? HeaderProtectionKey { get; set; }
+    [JsonPropertyName("content_padding_addition")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ContentPaddingAddition { get; set; }
+    [JsonPropertyName("random_trailers")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? RandomTrailers { get; set; }
+    [JsonPropertyName("disable_cookies")] [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? DisableCookies { get; set; }
+
     [JsonPropertyName("peers")] public List<WireGuardPeer> Peers { get; set; } = new();
 }
 

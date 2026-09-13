@@ -568,6 +568,7 @@ public partial class AndroidApp
             Background = isActive ? GetBrush("SuccessSolidBrush") : Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        radio.PointerReleased += (_, _) => ApplyServerSelection(srv);
         if (isActive)
         {
             radio.Child = new Avalonia.Controls.Shapes.Ellipse
@@ -655,6 +656,7 @@ public partial class AndroidApp
             VerticalAlignment = VerticalAlignment.Center,
             Child = pingTextInside,
         };
+        pingBadge.PointerReleased += (_, _) => ApplyServerSelection(srv);
         if (hasResult && !string.IsNullOrEmpty(result?.Error))
             ToolTip.SetTip(pingBadge, result.Error);
 
@@ -936,6 +938,7 @@ public partial class AndroidApp
         {
             sub.Enabled = enabledChk.IsChecked == true;
             AndroidStorage.SetSubscriptions(_subs);
+            RebuildAggregatedServerList();
         };
 
         // ── Column 1: name (srv-name) + metadata (srv-host).

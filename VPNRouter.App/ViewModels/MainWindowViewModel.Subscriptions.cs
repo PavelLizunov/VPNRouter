@@ -53,7 +53,9 @@ public partial class MainWindowViewModel
         try
         {
             var selectedUuid = SelectedSubscriptionServer?.Uuid;
-            var selectedName = SelectedSubscriptionServer?.Name;
+            var selectedName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
+            var selectedHost = SelectedSubscriptionServer?.Server;
+            var selectedPort = SelectedSubscriptionServer?.Port ?? 0;
             SubscriptionServers.Clear();
 
             foreach (var sub in Subscriptions)
@@ -65,12 +67,29 @@ public partial class MainWindowViewModel
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3: subnet-risk flags from the store
 
-            // Restore selection if possible, prioritizing UUID match over name match
-            SelectedSubscriptionServer = (!string.IsNullOrEmpty(selectedUuid)
-                ? SubscriptionServers.FirstOrDefault(s => s.Uuid == selectedUuid)
+            // Restore selection prioritizing matching the same server identity:
+            // 1. Name + (Uuid or Host/Port)
+            // 2. Name alone
+            // 3. Host + Port (if renamed by provider)
+            // 4. Uuid alone (only if unique in the pool, to prevent collapsing to server 0 when all share one client UUID)
+            // 5. Fallback to first
+            SelectedSubscriptionServer = (!string.IsNullOrEmpty(selectedName)
+                ? SubscriptionServers.FirstOrDefault(s =>
+                    string.Equals(s.Name, selectedName, StringComparison.Ordinal) &&
+                    ((!string.IsNullOrEmpty(selectedUuid) && string.Equals(s.Uuid, selectedUuid, StringComparison.Ordinal)) ||
+                     (!string.IsNullOrEmpty(selectedHost) && string.Equals(s.Server, selectedHost, StringComparison.OrdinalIgnoreCase) && s.Port == selectedPort)))
+                  ?? SubscriptionServers.FirstOrDefault(s => string.Equals(s.Name, selectedName, StringComparison.Ordinal))
                 : null)
-                ?? SubscriptionServers.FirstOrDefault(s => s.Name == selectedName)
+                ?? (!string.IsNullOrEmpty(selectedHost) && selectedPort > 0
+                    ? SubscriptionServers.FirstOrDefault(s =>
+                        string.Equals(s.Server, selectedHost, StringComparison.OrdinalIgnoreCase) && s.Port == selectedPort)
+                    : null)
+                ?? (!string.IsNullOrEmpty(selectedUuid) && SubscriptionServers.Count(s => string.Equals(s.Uuid, selectedUuid, StringComparison.Ordinal)) == 1
+                    ? SubscriptionServers.FirstOrDefault(s => string.Equals(s.Uuid, selectedUuid, StringComparison.Ordinal))
+                    : null)
                 ?? SubscriptionServers.FirstOrDefault();
+
+            RefreshActiveIndicator();
         }
         finally
         {
@@ -144,11 +163,14 @@ public partial class MainWindowViewModel
         if (sub.IsRefreshing) return;
 
         // Snapshot active server identity before refresh to prevent dropping active connection
-        var activeName = SelectedSubscriptionServer?.Name;
+        var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
         var activeUuid = SelectedSubscriptionServer?.Uuid;
+        var activeHost = SelectedSubscriptionServer?.Server;
+        var activePort = SelectedSubscriptionServer?.Port ?? 0;
+        var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
         var activeSigBefore = SelectedSubscriptionServer == null
             ? null
-            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
         sub.IsRefreshing = true;
         try
@@ -188,7 +210,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid);
+                activeName, activeUuid, activeHost, activePort, activeHpk);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             if (!activeChanged)
@@ -196,6 +218,9 @@ public partial class MainWindowViewModel
                 _logger.Information(
                     "[VM] RefreshSubscription: active server '{Active}' unchanged — tunnel preserved",
                     activeName ?? "(none)");
+                RefreshActiveIndicator();
+                OnPropertyChanged(nameof(SimpleStatusDescription));
+                OnPropertyChanged(nameof(SimpleActiveOutboundLine));
             }
             else
             {
@@ -213,11 +238,14 @@ public partial class MainWindowViewModel
         if (enabled.Count == 0) return;
 
         // Snapshot active server identity before refresh to prevent dropping active connection
-        var activeName = SelectedSubscriptionServer?.Name;
+        var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
         var activeUuid = SelectedSubscriptionServer?.Uuid;
+        var activeHost = SelectedSubscriptionServer?.Server;
+        var activePort = SelectedSubscriptionServer?.Port ?? 0;
+        var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
         var activeSigBefore = SelectedSubscriptionServer == null
             ? null
-            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
         foreach (var s in enabled) s.IsRefreshing = true;
         try
@@ -256,7 +284,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid);
+                activeName, activeUuid, activeHost, activePort, activeHpk);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             if (!activeChanged)
@@ -264,6 +292,9 @@ public partial class MainWindowViewModel
                 _logger.Information(
                     "[VM] RefreshAll: server pool refreshed, active server '{Active}' unchanged — tunnel preserved",
                     activeName ?? "(none)");
+                RefreshActiveIndicator();
+                OnPropertyChanged(nameof(SimpleStatusDescription));
+                OnPropertyChanged(nameof(SimpleActiveOutboundLine));
             }
             else
             {
@@ -383,11 +414,14 @@ public partial class MainWindowViewModel
             // reconnect when IT specifically changed — a rotation of some OTHER
             // server in the pool must not drop the tunnel (the hourly-refresh
             // reconnect that killed long-lived TCP conns like claude.exe).
-            var activeName = SelectedSubscriptionServer?.Name;
+            var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
             var activeUuid = SelectedSubscriptionServer?.Uuid;
+            var activeHost = SelectedSubscriptionServer?.Server;
+            var activePort = SelectedSubscriptionServer?.Port ?? 0;
+            var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
             var activeSigBefore = SelectedSubscriptionServer == null
                 ? null
-                : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+                : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
             // Parallel refresh, ignore per-entry failures
             await Task.WhenAll(enabled.Select(async s =>
@@ -461,7 +495,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid);
+                activeName, activeUuid, activeHost, activePort, activeHpk);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             var prevLoadingUi = _isLoadingUI;
@@ -474,6 +508,9 @@ public partial class MainWindowViewModel
                 _logger.Information(
                     "[SubRefresh] Server set changed but active '{Active}' unchanged — pool refreshed, no reconnect",
                     activeName ?? "(none)");
+                RefreshActiveIndicator();
+                OnPropertyChanged(nameof(SimpleStatusDescription));
+                OnPropertyChanged(nameof(SimpleActiveOutboundLine));
                 return;
             }
 

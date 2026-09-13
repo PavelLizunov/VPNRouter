@@ -325,4 +325,14 @@ public class AwgConfig
     [YamlMember(Alias = "i3")] public string I3 { get; set; } = string.Empty;
     [YamlMember(Alias = "i4")] public string I4 { get; set; } = string.Empty;
     [YamlMember(Alias = "i5")] public string I5 { get; set; } = string.Empty;
+
+    // AmneziaWG 3.0 / 3.1 fields.
+    /// <summary>Header protection key: base64 (32 bytes) or 64-character lowercase hex string.</summary>
+    [YamlMember(Alias = "header_protection_key")] public string HeaderProtectionKey { get; set; } = string.Empty;
+    /// <summary>Content padding addition: integer or "min-max" range string (e.g. "10-100").</summary>
+    [YamlMember(Alias = "content_padding_addition")] public string ContentPaddingAddition { get; set; } = string.Empty;
+    /// <summary>Random trailers for handshake messages (AWG 3.1).</summary>
+    [YamlMember(Alias = "random_trailers")] public bool RandomTrailers { get; set; }
+    /// <summary>Disable cookie replies (AWG 3.1).</summary>
+    [YamlMember(Alias = "disable_cookies")] public bool DisableCookies { get; set; }
 }
