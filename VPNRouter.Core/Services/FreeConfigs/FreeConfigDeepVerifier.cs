@@ -117,7 +117,7 @@ public sealed class FreeConfigDeepVerifier
         try
         {
             // 1. Build minimal sing-box config.
-            var vless = VlessUriParser.Parse(cfg.RawUri);
+            var vless = ServerUriParser.Parse(cfg.RawUri);
             var configJson = BuildSingleOutboundConfig(vless, socksPort, clashPort);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-verify-{Guid.NewGuid():N}.json");
             await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
@@ -291,114 +291,37 @@ public sealed class FreeConfigDeepVerifier
     /// </summary>
     internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort)
     {
-        // Use JsonNode to build the config cleanly.
-        var outbound = new JsonObject
-        {
-            ["type"] = "vless",
-            ["tag"] = "proxy",
-            ["server"] = s.Server,
-            ["server_port"] = s.Port,
-            ["uuid"] = s.Uuid,
-            ["flow"] = string.IsNullOrWhiteSpace(s.Flow) ? null : s.Flow,
-            ["packet_encoding"] = "xudp",
-        };
+        var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
+        JsonObject? outbound = null;
+        JsonNode? awgEndpoint = null;
 
-        // TLS / Reality
-        var isReality = string.Equals(s.Security, "reality", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(s.Reality?.PublicKey);
-
-        if (isReality)
+        if (protocol is "amneziawg" or "awg" or "awg3" or "amneziawg3")
         {
-            outbound["tls"] = new JsonObject
+            awgEndpoint = System.Text.Json.JsonSerializer.SerializeToNode(
+                ConfigGenerator.BuildAmneziaWgEndpoint(s, "proxy"));
+        }
+        else
+        {
+            outbound = protocol switch
             {
-                ["enabled"] = true,
-                ["server_name"] = string.IsNullOrWhiteSpace(s.Reality?.ServerName) ? s.Server : s.Reality.ServerName,
-                ["utls"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["fingerprint"] = string.IsNullOrWhiteSpace(s.Reality?.Fingerprint) ? "chrome" : s.Reality.Fingerprint,
-                },
-                ["reality"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["public_key"] = s.Reality!.PublicKey,
-                    ["short_id"]  = s.Reality.ShortId ?? "",
-                },
+                "hysteria2" or "hy2"  => VlessDeepVerifier.BuildHysteria2Outbound(s),
+                "tuic"                => VlessDeepVerifier.BuildTuicOutbound(s),
+                "shadowsocks" or "ss" => VlessDeepVerifier.BuildShadowsocksOutbound(s),
+                "naive"               => VlessDeepVerifier.BuildNaiveOutbound(s),
+                _                     => VlessDeepVerifier.BuildVlessOutbound(s),
             };
         }
-        else if (string.Equals(s.Security, "tls", StringComparison.OrdinalIgnoreCase) || s.Tls?.Enabled == true)
+
+        var outboundsArray = new JsonArray();
+        if (outbound != null)
         {
-            var sni = !string.IsNullOrWhiteSpace(s.Tls?.ServerName)
-                ? s.Tls.ServerName
-                : (!string.IsNullOrWhiteSpace(s.Reality?.ServerName) ? s.Reality.ServerName : s.Server);
-
-            var tlsObj = new JsonObject
-            {
-                ["enabled"] = true,
-                ["server_name"] = sni,
-                ["insecure"] = s.Tls?.Insecure ?? false,
-            };
-
-            var fp = !string.IsNullOrWhiteSpace(s.Tls?.Fingerprint)
-                ? s.Tls.Fingerprint
-                : (!string.IsNullOrWhiteSpace(s.Reality?.Fingerprint) ? s.Reality.Fingerprint : null);
-
-            if (!string.IsNullOrWhiteSpace(fp))
-            {
-                tlsObj["utls"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["fingerprint"] = fp,
-                };
-            }
-
-            outbound["tls"] = tlsObj;
+            outboundsArray.Add((JsonNode?)outbound);
         }
-
-        // Transport (tcp is implicit, grpc/ws need explicit block).
-        var transportType = s.Transport?.Type?.ToLowerInvariant() ?? "tcp";
-        if (transportType == "grpc")
-        {
-            outbound["transport"] = new JsonObject
-            {
-                ["type"] = "grpc",
-                ["service_name"] = s.Transport?.Path ?? "",
-            };
-        }
-        else if (transportType == "ws")
-        {
-            var wsObj = new JsonObject
-            {
-                ["type"] = "ws",
-                ["path"] = s.Transport?.Path ?? "/",
-            };
-            var hostHeader = s.Transport?.Host;
-            if (string.IsNullOrWhiteSpace(hostHeader) && s.Transport?.Headers != null && s.Transport.Headers.TryGetValue("Host", out var h))
-            {
-                hostHeader = h;
-            }
-            if (string.IsNullOrWhiteSpace(hostHeader))
-            {
-                hostHeader = !string.IsNullOrWhiteSpace(s.Tls?.ServerName) ? s.Tls.ServerName : s.Reality?.ServerName;
-            }
-            if (!string.IsNullOrWhiteSpace(hostHeader))
-            {
-                wsObj["headers"] = new JsonObject
-                {
-                    ["Host"] = hostHeader,
-                };
-            }
-            outbound["transport"] = wsObj;
-        }
+        outboundsArray.Add((JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true });
 
         // sing-box 1.13.3 quirk: DNS server with detour:"direct" is FATAL if the direct
         // outbound is "empty" (just {type:direct,tag:direct}). Workaround: separate
         // 'dns-direct' outbound with udp_fragment:true so it's non-empty.
-        //
-        // Phase 6 — Wave 31b: cast every JsonArray element to (JsonNode?)
-        // so the desugared .Add calls pick JsonArray.Add(JsonNode?) instead
-        // of Add<T>(T) (IL3050). Same wire-format output, zero behaviour
-        // change — just helps the AOT analyser.
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "error" },
@@ -421,12 +344,7 @@ public sealed class FreeConfigDeepVerifier
                     ["sniff"] = false,
                 },
             },
-            ["outbounds"] = new JsonArray
-            {
-                (JsonNode?)outbound,
-                // Dedicated non-empty direct outbound for DNS detour (udp_fragment:true makes it non-empty in 1.13).
-                (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
-            },
+            ["outbounds"] = outboundsArray,
             ["route"] = new JsonObject
             {
                 ["final"] = "proxy",
@@ -439,6 +357,11 @@ public sealed class FreeConfigDeepVerifier
             },
         };
 
+        if (awgEndpoint != null)
+        {
+            root["endpoints"] = new JsonArray { awgEndpoint };
+        }
+
         if (clashPort is int port)
         {
             root["experimental"] = new JsonObject
@@ -450,9 +373,6 @@ public sealed class FreeConfigDeepVerifier
             };
         }
 
-        // Phase 6 — defaults are WriteIndented=false anyway; using the
-        // parameterless overload sidesteps the .NET 10 "options must
-        // specify a TypeInfoResolver" throw without any wire-format change.
         return root.ToJsonString();
     }
 
