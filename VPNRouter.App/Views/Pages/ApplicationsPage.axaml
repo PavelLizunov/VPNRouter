@@ -55,7 +55,7 @@
     <Style Selector="Border.app-row">
       <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
       <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-      <Setter Property="Padding" Value="10,7"/>
+      <Setter Property="Padding" Value="8,6"/>
     </Style>
     <Style Selector="Border.app-row TextBlock.app-name">
       <Setter Property="FontSize" Value="11"/>
@@ -73,7 +73,7 @@
     <!-- Routing mode semantic status badges -->
     <Style Selector="Border.routing-badge">
       <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
-      <Setter Property="Padding" Value="5,1"/>
+      <Setter Property="Padding" Value="4,1"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style Selector="Border.vpn-badge">
@@ -240,7 +240,7 @@
     <!-- ─── MASTER (left): category list + inline add ─── -->
     <Border Grid.Column="0"
             BorderThickness="0,0,1,0"
-            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
             Background="{DynamicResource SurfaceSunkenBrush}">
       <Grid RowDefinitions="*,Auto,Auto">
         <ListBox Grid.Row="0"
@@ -337,7 +337,7 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:AppItemViewModel">
             <Border Classes="app-row">
-              <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding IsChecked}"
                           AutomationProperties.Name="{Binding ProcessName}"
@@ -345,16 +345,19 @@
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" Classes="app-name"
                            Text="{Binding ProcessName}"
+                           MinWidth="0"
                            TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding ProcessName}"/>
                 <Panel Grid.Column="2" IsVisible="{Binding IsChecked}">
                   <Border Classes="routing-badge vpn-badge"
+                          ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsListInclude}"
                           IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRoutingAppsModeInclude}">
-                    <TextBlock Text="[VPN]" FontSize="9" FontWeight="Bold"/>
+                    <TextBlock Text="VPN" FontSize="9" FontWeight="Bold"/>
                   </Border>
                   <Border Classes="routing-badge direct-badge"
+                          ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsListExclude}"
                           IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRoutingAppsModeExclude}">
-                    <TextBlock Text="[BYPASS]" FontSize="9" FontWeight="Bold"/>
+                    <TextBlock Text="BYPASS" FontSize="9" FontWeight="Bold"/>
                   </Border>
                 </Panel>
                 <Border Grid.Column="3" Classes="custom-badge"
@@ -379,9 +382,9 @@
 
       <!-- Add app input + Apply button -->
       <Border Grid.Row="3"
-              Padding="14,8"
+              Padding="10,8"
               BorderThickness="0,1,0,0"
-              BorderBrush="{DynamicResource BorderDefaultBrush}"
+              BorderBrush="{DynamicResource BorderSubtleBrush}"
               Background="{DynamicResource SurfaceSunkenBrush}">
         <StackPanel Spacing="6">
           <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsPendingApplyHint}"
@@ -405,36 +408,44 @@
                   HorizontalContentAlignment="Center"
                   FontSize="11" FontWeight="SemiBold"
                   Padding="0,5" CornerRadius="{StaticResource RadiusSm}"/>
-          <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
-            <TextBox Grid.Column="0" x:Name="CustomAppInput"
+          <!-- Two-tier clean OpenDesign add panel: Row 0 full-width input, Row 1 action buttons -->
+          <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+            <!-- Row 0: Full width TextBox -->
+            <TextBox Grid.Row="0" x:Name="CustomAppInput"
                      PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
-                     FontSize="11" Padding="6,4"/>
-            <Button Grid.Column="1" x:Name="BrowseExeButton"
-                    Content="..."
-                    Click="OnBrowseExeClicked"
-                    ToolTip.Tip="Browse executable"
-                    Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                    Background="{DynamicResource SurfaceBaseBrush}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"/>
-            <Button Grid.Column="2" x:Name="RunningProcessesButton"
-                    Content="Running"
-                    Click="OnSelectRunningProcessClicked"
-                    ToolTip.Tip="Running processes"
-                    Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                    Background="{DynamicResource SurfaceBaseBrush}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1">
-              <Button.Flyout>
-                <MenuFlyout Placement="TopEdgeAlignedRight"/>
-              </Button.Flyout>
-            </Button>
-            <!-- v2.30.6-r1 (UX-41 fix): hardcoded "+ Add" → bilingual binding. -->
-            <Button Grid.Column="3"
-                    icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
-                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
-                    CommandParameter="{Binding #CustomAppInput.Text}"
-                    Padding="14,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    FontWeight="SemiBold"/>
+                     FontSize="11" Padding="8,5"
+                     CornerRadius="{StaticResource RadiusSm}"
+                     HorizontalAlignment="Stretch"/>
+
+            <!-- Row 1: Action buttons row -->
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
+              <Button Grid.Column="0" x:Name="BrowseExeButton"
+                      Click="OnBrowseExeClicked"
+                      Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                      Background="{DynamicResource SurfaceBaseBrush}"
+                      BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1">
+                <TextBlock x:Name="BrowseExeButtonText" Text="Обзор..." TextTrimming="CharacterEllipsis"/>
+              </Button>
+              <Button Grid.Column="1" x:Name="RunningProcessesButton"
+                      Click="OnSelectRunningProcessClicked"
+                      Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                      Background="{DynamicResource SurfaceBaseBrush}"
+                      BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1">
+                <Button.Flyout>
+                  <MenuFlyout Placement="TopEdgeAlignedRight"/>
+                </Button.Flyout>
+                <TextBlock x:Name="RunningProcessesButtonText" Text="Запущенные" TextTrimming="CharacterEllipsis"/>
+              </Button>
+              <Button Grid.Column="2" x:Name="AddCustomAppButton"
+                      icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
+                      Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
+                      CommandParameter="{Binding #CustomAppInput.Text}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Padding="10,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                      Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                      FontWeight="SemiBold"/>
+            </Grid>
           </Grid>
         </StackPanel>
       </Border>
