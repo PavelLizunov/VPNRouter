@@ -274,7 +274,25 @@ public partial class AndroidApp
 
     private void OnAppPickerSearchChanged(object? sender, Avalonia.Controls.TextChangedEventArgs e)
     {
-        ApplyAppPickerFilter();
+        if (_appPickerSearch == null)
+        {
+            ApplyAppPickerFilter();
+            return;
+        }
+
+        if (_appPickerSearch.Tag is not DispatcherTimer timer)
+        {
+            timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                ApplyAppPickerFilter();
+            };
+            _appPickerSearch.Tag = timer;
+        }
+
+        timer.Stop();
+        timer.Start();
     }
 
     /// <summary>

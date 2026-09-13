@@ -26,6 +26,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     // back-compat with the pre-3G-1 static-loader path; tests can pass
     // <c>InMemorySettingsStore</c>.
     private readonly VPNRouter.Core.Services.ISettingsStore _settingsStore;
+    private readonly FreeConfigCache _savedCache;
+    private HashSet<string>? _lastCountryCodes;
 
     private List<FreeConfigEntry> _allConfigs = new();
 
@@ -70,6 +72,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         // <c>InMemorySettingsStore</c> to keep AddUserSource / RemoveUserSource
         // isolated from <c>%ProgramData%\VPNRouter\config.yaml</c>.
         _settingsStore = settingsStore ?? VPNRouter.Core.Services.RealSettingsStore.Instance;
+        _savedCache = new FreeConfigCache(logger, Path.Combine(VPNRouter.Core.AppPaths.DataDir, "free_configs_saved.json"));
         _aggregator = new FreeConfigAggregator(logger);
         _aggregator.OnStageChanged += OnAggregatorStage;
         _aggregator.OnTestProgress  += OnAggregatorProgress;
@@ -94,30 +97,26 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
         try
         {
-            var file = _aggregator.Cache.Load();
-            // v2.28.4-r4: drop entries that aren't Verified at cache-load time.
-            // The cache historically held everything the aggregator touched —
-            // Ok, Slow, TlsFailed, Implausible, Timeout, Unreachable — even
-            // entries that never made it through Deep Verify. After a session
-            // restart the user saw a list of "configs" that had only ever
-            // passed TCP+TLS (or hadn't even gotten that far) and were
-            // indistinguishable in the UI from genuinely Verified entries.
-            // Verified is the only status that proves a config carried real
-            // traffic at least once, so it's the only one worth surfacing on
-            // the next launch. Non-Verified entries can still be re-discovered
-            // by clicking the search button — and PreservePreviousValidation
-            // will keep this run's verified rows on subsequent searches.
-            //
-            // v2.28.6 Phase 2: tabs split — Search list is now ephemeral
-            // (cleared on app open / new search), Saved list persists from
-            // cache with a 30-day retention filter. If there's any saved
-            // history, default to the Saved tab so returning users see
-            // their working configs immediately instead of an empty Search
-            // tab.
             var now = DateTime.UtcNow;
-            var kept = file.Configs
+            var savedFile = _savedCache.Load();
+            var kept = savedFile.Configs
                 .Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now))
                 .ToList();
+
+            // Migration: if saved cache was empty and file does not exist, check pool / legacy cache
+            if (kept.Count == 0 && !File.Exists(_savedCache.FilePath))
+            {
+                var legacyFile = _aggregator.Cache.Load();
+                kept = legacyFile.Configs
+                    .Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now))
+                    .ToList();
+                if (kept.Count > 0)
+                {
+                    _savedConfigs = new List<FreeConfigEntry>(kept);
+                    SaveSavedConfigsToCache();
+                }
+            }
+
             _allConfigs = new List<FreeConfigEntry>();
             _savedConfigs = new List<FreeConfigEntry>(kept);
             ApplyFiltersAndStats();
@@ -126,13 +125,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             if (_savedConfigs.Count > 0 && SelectedFreeTabIndex == 0)
                 SelectedFreeTabIndex = 1;
 
-            if (file.LastAggregatedAt == DateTime.MinValue)
+            var poolFile = _aggregator.Cache.Load();
+            if (poolFile.LastAggregatedAt == DateTime.MinValue)
             {
                 StatusText = Strings.FcStatusEmpty;
             }
             else
             {
-                var age = DateTime.UtcNow - file.LastAggregatedAt;
+                var age = DateTime.UtcNow - poolFile.LastAggregatedAt;
                 StatusText = Strings.FcStatusCacheAge(FormatAge(age));
             }
         }
@@ -988,10 +988,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var file = _aggregator.Cache.Load();
-            file.Configs = _savedConfigs;
-            file.LastAggregatedAt = DateTime.UtcNow;
-            _aggregator.Cache.Save(file);
+            var file = new FreeConfigCache.CacheFile
+            {
+                Configs = _savedConfigs.ToList(),
+                LastAggregatedAt = DateTime.UtcNow,
+            };
+            _savedCache.Save(file);
         }
         catch (Exception ex)
         {
@@ -1854,86 +1856,91 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     {
         try
         {
-            TotalCount       = _allConfigs.Count;
-            WorkingCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Ok);
-            VerifiedCount    = _allConfigs.Count(c => c.Status == FreeConfigStatus.Verified);
-            TlsFailedCount   = _allConfigs.Count(c => c.Status == FreeConfigStatus.TlsFailed);
-            ImplausibleCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Implausible);
-            TimeoutCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Timeout);
-            UnreachableCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Unreachable);
+            var total = _allConfigs.Count;
+            var working = 0;
+            var verified = 0;
+            var tlsFailed = 0;
+            var implausible = 0;
+            var timeout = 0;
+            var unreachable = 0;
 
-            // Populate country filter dropdown.
-            var cc = _allConfigs
-                .Where(c => !string.IsNullOrEmpty(c.CountryCode))
-                .Select(c => c.CountryCode!)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var uniqueCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var bestByHost = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
 
-            Countries = new ObservableCollection<string>(new[] { "All" }.Concat(cc));
-            if (!Countries.Contains(SelectedCountry))
-                SelectedCountry = "All";
+            var maxPing = (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
+                ? Math.Clamp(LatencyGoalMaxPingMs.Value, 50, 2000)
+                : (int?)null;
+            var filterCountry = SelectedCountry;
+            var isAllCountry = string.IsNullOrEmpty(filterCountry) || string.Equals(filterCountry, "All", StringComparison.OrdinalIgnoreCase);
 
-            // Filter + sort. v2.28.5-r2: tightened to Verified only (was
-            // Ok + Verified). User feedback: "только полностью рабочие
-            // конфиги ничего другого". Ok = TCP+TLS-passed but never
-            // through real HTTPS, so it's not "fully working" yet. The
-            // new batched RefreshAsync loop already runs Deep Verify on
-            // every Ok candidate inline, so the displayed list shows only
-            // configs that completed the full pipeline.
-            IEnumerable<FreeConfigEntry> q = _allConfigs
-                .Where(c => c.Status == FreeConfigStatus.Verified);
-            if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
-                q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
-
-            // v2.39.0 (audit #7): re-apply the RU exclusion at the display
-            // boundary as a safety net. A cached/stale RU Verified row already
-            // sitting in _allConfigs (e.g. from a search before the user opted
-            // in) must not appear in the SEARCH list when ExcludeRu is on.
-            // NOTE (review L6): this scopes the SEARCH tab only — the Saved tab is
-            // a user-curated list and is intentionally NOT RU-filtered, so a saved
-            // RU row stays connectable. The queue builder already drops RU from
-            // processing; this is belt-and-suspenders at the Search visible boundary.
-            if (ExcludeRu)
-                q = q.Where(c => !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase));
-
-            // v2.28.3-r4 — also honour the max-ping setting in the displayed
-            // list. User report: "ищу с пингом 50, приложение пишет нашло, а
-            // на самом деле нет". Root cause: the goal-target filter only stops
-            // Refresh early — it doesn't filter the displayed entries. After
-            // Deep Verify re-measures latency (which is usually higher than
-            // TCP-only ping), some entries may exceed the user's threshold but
-            // still show up. v2.28.4-r3: applied unconditionally now that
-            // OnlyWorking is implicit.
-            if (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
+            // Single pass O(N) over _allConfigs
+            for (var i = 0; i < _allConfigs.Count; i++)
             {
-                // v2.40.0 (review L4): clamp to the same [50,2000] bound the search
-                // gate uses, so the displayed list and the search honour one
-                // threshold (no "found N but list shows fewer" divergence).
-                var maxPing = Math.Clamp(LatencyGoalMaxPingMs.Value, 50, 2000);
-                q = q.Where(c => c.LatencyMs > 0 && c.LatencyMs <= maxPing);
+                var c = _allConfigs[i];
+                switch (c.Status)
+                {
+                    case FreeConfigStatus.Ok: working++; break;
+                    case FreeConfigStatus.Verified: verified++; break;
+                    case FreeConfigStatus.TlsFailed: tlsFailed++; break;
+                    case FreeConfigStatus.Implausible: implausible++; break;
+                    case FreeConfigStatus.Timeout: timeout++; break;
+                    case FreeConfigStatus.Unreachable: unreachable++; break;
+                }
+
+                if (!string.IsNullOrEmpty(c.CountryCode))
+                {
+                    uniqueCountries.Add(c.CountryCode);
+                }
+
+                // Filter predicates (display Search tab only shows Verified)
+                if (c.Status != FreeConfigStatus.Verified)
+                    continue;
+
+                if (!isAllCountry && !string.Equals(c.CountryCode, filterCountry, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (ExcludeRu && string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (maxPing.HasValue && (c.LatencyMs <= 0 || c.LatencyMs > maxPing.Value))
+                    continue;
+
+                // Host deduplication: keep best entry per host (lowest LatencySortKey)
+                var host = c.Host ?? string.Empty;
+                if (bestByHost.TryGetValue(host, out var existing))
+                {
+                    if (FreeConfigItemViewModel.SortKeyFor(c) < FreeConfigItemViewModel.SortKeyFor(existing))
+                    {
+                        bestByHost[host] = c;
+                    }
+                }
+                else
+                {
+                    bestByHost[host] = c;
+                }
             }
 
-            // v2.28.3-r3: IP-level dedup at display time. The aggregator's
-            // dedup key is Server:Port:UUID, so the same IP can appear with
-            // different ports (Reality endpoints multiplexing one IP) or
-            // different UUIDs (key rotation / multi-tenant) — all legit
-            // entries technically, but visual noise for the user picking a
-            // server. User report on -r2: "1 и тот же IP несколько раз
-            // (например 205.237.107.192)". Keep the *best* entry per IP
-            // (lowest LatencySortKey, which already encodes status priority +
-            // latency). The aggregator-level entries are still all retained
-            // in _allConfigs so cache + Deep Verify still see them; only the
-            // visible list is collapsed.
-            // F4 (v2.45.0): dedup-by-host + order + cap on the RAW entries BEFORE
-            // building any VM, so we allocate (and sort/group) at most ~300
-            // FreeConfigItemViewModel instead of one per filtered entry. The sort
-            // key is the same FreeConfigItemViewModel.SortKeyFor(entry) the VM
-            // exposed — identical ordering, computed without the VM.
-            var items = q
+            TotalCount       = total;
+            WorkingCount     = working;
+            VerifiedCount    = verified;
+            TlsFailedCount   = tlsFailed;
+            ImplausibleCount = implausible;
+            TimeoutCount     = timeout;
+            UnreachableCount = unreachable;
+
+            // Only update Countries collection if the unique set actually changed
+            if (_lastCountryCodes == null || !_lastCountryCodes.SetEquals(uniqueCountries))
+            {
+                _lastCountryCodes = uniqueCountries;
+                var sortedCc = uniqueCountries.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
+                Countries = new ObservableCollection<string>(new[] { "All" }.Concat(sortedCc));
+                if (!Countries.Contains(SelectedCountry))
+                    SelectedCountry = "All";
+            }
+
+            // Sort only the deduped unique host entries (<= 300 items)
+            var items = bestByHost.Values
                 .OrderBy(FreeConfigItemViewModel.SortKeyFor)
-                .GroupBy(c => c.Host ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First())
                 .Take(300) // cap at 300 visible to keep ListBox responsive with emoji flags
                 .Select(c => new FreeConfigItemViewModel(c))
                 .ToList();

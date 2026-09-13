@@ -70,6 +70,25 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
+    <!-- Routing mode semantic status badges -->
+    <Style Selector="Border.routing-badge">
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
+      <Setter Property="Padding" Value="5,1"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.vpn-badge">
+      <Setter Property="Background" Value="{DynamicResource PillFastBgBrush}"/>
+    </Style>
+    <Style Selector="Border.vpn-badge TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource PillFastFgBrush}"/>
+    </Style>
+    <Style Selector="Border.direct-badge">
+      <Setter Property="Background" Value="{DynamicResource PillSlowBgBrush}"/>
+    </Style>
+    <Style Selector="Border.direct-badge TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource PillSlowFgBrush}"/>
+    </Style>
+
     <Style Selector="ListBox.cat-list ListBoxItem">
       <Setter Property="Padding" Value="4,0"/>
       <Setter Property="MinHeight" Value="0"/>
@@ -318,7 +337,7 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:AppItemViewModel">
             <Border Classes="app-row">
-              <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding IsChecked}"
                           AutomationProperties.Name="{Binding ProcessName}"
@@ -328,13 +347,23 @@
                            Text="{Binding ProcessName}"
                            TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding ProcessName}"/>
-                <Border Grid.Column="2" Classes="custom-badge"
+                <Panel Grid.Column="2" IsVisible="{Binding IsChecked}">
+                  <Border Classes="routing-badge vpn-badge"
+                          IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRoutingAppsModeInclude}">
+                    <TextBlock Text="[VPN]" FontSize="9" FontWeight="Bold"/>
+                  </Border>
+                  <Border Classes="routing-badge direct-badge"
+                          IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRoutingAppsModeExclude}">
+                    <TextBlock Text="[BYPASS]" FontSize="9" FontWeight="Bold"/>
+                  </Border>
+                </Panel>
+                <Border Grid.Column="3" Classes="custom-badge"
                         IsVisible="{Binding IsCustom}">
                   <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblCustomBadge}"
                              FontSize="9"
                              Foreground="{DynamicResource TextMutedBrush}"/>
                 </Border>
-                <Button Grid.Column="3" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
+                <Button Grid.Column="4" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                         IsVisible="{Binding IsCustom}"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
                         CommandParameter="{Binding}"
@@ -376,16 +405,33 @@
                   HorizontalContentAlignment="Center"
                   FontSize="11" FontWeight="SemiBold"
                   Padding="0,5" CornerRadius="{StaticResource RadiusSm}"/>
-          <Grid ColumnDefinitions="*,Auto">
+          <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
             <TextBox Grid.Column="0" x:Name="CustomAppInput"
                      PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
                      FontSize="11" Padding="6,4"/>
+            <Button Grid.Column="1" x:Name="BrowseExeButton"
+                    Content="..."
+                    Click="OnBrowseExeClicked"
+                    ToolTip.Tip="Browse executable"
+                    Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource SurfaceBaseBrush}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"/>
+            <Button Grid.Column="2" x:Name="RunningProcessesButton"
+                    Content="Running"
+                    Click="OnSelectRunningProcessClicked"
+                    ToolTip.Tip="Running processes"
+                    Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource SurfaceBaseBrush}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1">
+              <Button.Flyout>
+                <MenuFlyout x:Name="RunningProcessesFlyout" Placement="TopEdgeAlignedRight"/>
+              </Button.Flyout>
+            </Button>
             <!-- v2.30.6-r1 (UX-41 fix): hardcoded "+ Add" → bilingual binding. -->
-            <Button Grid.Column="1"
+            <Button Grid.Column="3"
                     icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
                     CommandParameter="{Binding #CustomAppInput.Text}"
-                    Margin="6,0,0,0"
                     Padding="14,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                     FontWeight="SemiBold"/>
