@@ -11,6 +11,10 @@ public partial class FreeConfigsPage : UserControl
     public FreeConfigsPage()
     {
         InitializeComponent();
+        SizeChanged += (s, e) =>
+        {
+            Classes.Set("narrow", e.NewSize.Width < 420);
+        };
     }
 
     private void InitializeComponent()

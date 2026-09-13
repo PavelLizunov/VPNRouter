@@ -19,6 +19,60 @@
          tab is removed — the green search card right above the list is
          the only "find configs" action, no second button below. -->
 
+    <UserControl.Styles>
+        <Style Selector="Border.latency-badge">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
+            <Setter Property="Padding" Value="4,1"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.latency-badge TextBlock">
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style Selector="Border.latency-badge.badge-fast">
+            <Setter Property="Background" Value="{DynamicResource PillFastBgBrush}"/>
+        </Style>
+        <Style Selector="Border.latency-badge.badge-fast TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PillFastFgBrush}"/>
+        </Style>
+
+        <Style Selector="Border.latency-badge.badge-medium">
+            <Setter Property="Background" Value="{DynamicResource PillMediumBgBrush}"/>
+        </Style>
+        <Style Selector="Border.latency-badge.badge-medium TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PillMediumFgBrush}"/>
+        </Style>
+
+        <Style Selector="Border.latency-badge.badge-slow">
+            <Setter Property="Background" Value="{DynamicResource PillSlowBgBrush}"/>
+        </Style>
+        <Style Selector="Border.latency-badge.badge-slow TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PillSlowFgBrush}"/>
+        </Style>
+
+        <Style Selector="Border.latency-badge.badge-danger">
+            <Setter Property="Background" Value="{DynamicResource PillDangerBgBrush}"/>
+        </Style>
+        <Style Selector="Border.latency-badge.badge-danger TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PillDangerFgBrush}"/>
+        </Style>
+
+        <Style Selector="Border.latency-badge.badge-neutral">
+            <Setter Property="Background" Value="{DynamicResource PillNeutralBgBrush}"/>
+        </Style>
+        <Style Selector="Border.latency-badge.badge-neutral TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PillNeutralFgBrush}"/>
+        </Style>
+
+        <!-- Responsive layout for narrow window (< 420px): hide secondary columns to give endpoint space -->
+        <Style Selector="UserControl.narrow TextBlock.col-aux">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- ═══ Sub-tab strip (matches ServersPage / ToolsPage) ═══ -->
@@ -194,10 +248,10 @@
                                 <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
                                            FontWeight="SemiBold" FontSize="9" Opacity="0.55"
                                            VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                <TextBlock Grid.Column="3" Text="{Binding L_FcColBandwidth}"
+                                <TextBlock Grid.Column="3" Classes="col-aux" Text="{Binding L_FcColBandwidth}"
                                            FontWeight="SemiBold" FontSize="9" Opacity="0.55"
                                            VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                <TextBlock Grid.Column="4" Text="{Binding L_FcColTransport}"
+                                <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding L_FcColTransport}"
                                            FontWeight="SemiBold" FontSize="9" Opacity="0.55"
                                            VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             </Grid>
@@ -222,14 +276,16 @@
                                                        FontFamily="{DynamicResource EmojiFlagFont}, $Default"
                                                        FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
+                                                       MinWidth="110"
                                                        FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
                                                        TextTrimming="CharacterEllipsis"/>
-                                            <Border Grid.Column="2" CornerRadius="{StaticResource RadiusXs}"
-                                                    Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
-                                                    VerticalAlignment="Center"
-                                                    Background="{Binding LatencyColor}">
-                                                <TextBlock icons:PictogramText.Icons="verified,check" icons:PictogramText.Text="{Binding LatencyDisplay}"
-                                                           Foreground="White" FontSize="9" FontWeight="SemiBold"/>
+                                            <Border Grid.Column="2" Classes="latency-badge"
+                                                    Classes.badge-fast="{Binding IsFast}"
+                                                    Classes.badge-medium="{Binding IsMedium}"
+                                                    Classes.badge-slow="{Binding IsSlow}"
+                                                    Classes.badge-danger="{Binding IsDanger}"
+                                                    Classes.badge-neutral="{Binding IsNeutral}">
+                                                <TextBlock icons:PictogramText.Icons="verified,check" icons:PictogramText.Text="{Binding LatencyDisplay}"/>
                                             </Border>
                                             <!-- v2.31.0-r4 (F-24 / UX-63):
                                                  added tooltip so "—" rows are
@@ -237,11 +293,11 @@
                                                  measured — run Deep verify").
                                                  Same hint used in Saved tab.
                                                  -->
-                                            <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                            <TextBlock Grid.Column="3" Classes="col-aux" Text="{Binding BandwidthDisplay}"
                                                        icons:PictogramText.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                        FontSize="9" Opacity="0.75" FontWeight="SemiBold"
                                                        VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                            <TextBlock Grid.Column="4" Text="{Binding Transport}"
+                                            <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding Transport}"
                                                        FontSize="9" Opacity="0.6"
                                                        VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                         </Grid>
@@ -323,10 +379,10 @@
                     <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
                                FontWeight="SemiBold" FontSize="9" Opacity="0.55"
                                VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                    <TextBlock Grid.Column="3" Text="{Binding L_FcColBandwidth}"
+                    <TextBlock Grid.Column="3" Classes="col-aux" Text="{Binding L_FcColBandwidth}"
                                FontWeight="SemiBold" FontSize="9" Opacity="0.55"
                                VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                    <TextBlock Grid.Column="4" Text="{Binding L_FcSavedColStatus}"
+                    <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding L_FcSavedColStatus}"
                                FontWeight="SemiBold" FontSize="9" Opacity="0.55"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Grid>
@@ -354,26 +410,28 @@
                             </ListBox.ItemsPanel>
                             <ListBox.ItemTemplate>
                                 <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
-                                    <Grid ColumnDefinitions="44,*,72,72,68,52" Height="22"
-                                          Opacity="{Binding OpacityValue}">
+                                    <Grid ColumnDefinitions="44,*,72,72,68,52" Height="22">
                                         <TextBlock Grid.Column="0" icons:PictogramText.Icons="globe" icons:PictogramText.Text="{Binding CountryDisplay}"
                                                    FontFamily="{DynamicResource EmojiFlagFont}, $Default"
                                                    FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
+                                                   MinWidth="110"
+                                                   Opacity="{Binding OpacityValue}"
                                                    FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
                                                    TextTrimming="CharacterEllipsis"/>
-                                        <Border Grid.Column="2" CornerRadius="{StaticResource RadiusXs}"
-                                                Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
-                                                VerticalAlignment="Center"
-                                                Background="{Binding LatencyColor}">
-                                            <TextBlock icons:PictogramText.Icons="verified,check" icons:PictogramText.Text="{Binding LatencyDisplay}"
-                                                       Foreground="White" FontSize="9" FontWeight="SemiBold"/>
+                                        <Border Grid.Column="2" Classes="latency-badge"
+                                                Classes.badge-fast="{Binding IsFast}"
+                                                Classes.badge-medium="{Binding IsMedium}"
+                                                Classes.badge-slow="{Binding IsSlow}"
+                                                Classes.badge-danger="{Binding IsDanger}"
+                                                Classes.badge-neutral="{Binding IsNeutral}">
+                                            <TextBlock icons:PictogramText.Icons="verified,check" icons:PictogramText.Text="{Binding LatencyDisplay}"/>
                                         </Border>
-                                        <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                        <TextBlock Grid.Column="3" Classes="col-aux" Text="{Binding BandwidthDisplay}"
                                                    icons:PictogramText.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                    FontSize="9" Opacity="0.85" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                        <TextBlock Grid.Column="4" Text="{Binding FreshnessLabel}"
+                                        <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding FreshnessLabel}"
                                                    FontSize="9" Opacity="0.7"
                                                    VerticalAlignment="Center" HorizontalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"/>

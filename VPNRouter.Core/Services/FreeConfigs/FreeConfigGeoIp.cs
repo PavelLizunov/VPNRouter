@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text.Json;
 using Serilog;
@@ -8,13 +9,13 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 
 /// <summary>
 /// Resolves DNS + GeoIP country code for free configs.
-/// Uses ip-api.com batch endpoint (100 IPs/query, 45 req/min unauthenticated).
-/// Caches IP→country results in memory and optionally on disk (not implemented — memory-only for MVP).
+/// Uses offline IFreeConfigCountryLookup if available, or falls back to ip-api.com batch endpoint.
 /// </summary>
 public sealed class FreeConfigGeoIp
 {
     private readonly HttpClient _http;
     private readonly ILogger _logger;
+    private readonly IFreeConfigCountryLookup? _offlineLookup;
     private readonly ConcurrentDictionary<string, string> _ipToCountry = new();
     private readonly SemaphoreSlim _rateLimit = new(1, 1);
     private DateTime _lastBatchAt = DateTime.MinValue;
@@ -27,52 +28,60 @@ public sealed class FreeConfigGeoIp
     /// <summary>Optional progress reporter for UI: (stage, done, total).</summary>
     public IProgress<(string stage, int done, int total)>? Progress { get; set; }
 
-    public FreeConfigGeoIp(ILogger logger)
+    public FreeConfigGeoIp(ILogger logger, IFreeConfigCountryLookup? offlineLookup = null)
     {
         _logger = logger;
+        _offlineLookup = offlineLookup;
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
     }
 
     /// <summary>
-    /// Resolves host→IP for each config (DNS lookup), then batch-queries ip-api.com for country codes.
+    /// Resolves host→IP for each config (DNS lookup with host deduplication), then enriches with country codes.
     /// Mutates cfg.ResolvedIp and cfg.CountryCode in place.
     /// </summary>
     public async Task EnrichAsync(IReadOnlyList<FreeConfigEntry> configs, CancellationToken ct = default)
     {
-        // Step 1: DNS resolve in parallel (limited).
-        using var sem = new SemaphoreSlim(30);
-        var total = configs.Count;
-        var done = 0;
+        // Step 1: Handle literal IPs directly and collect distinct unresolvable hostnames
+        var hostToIp = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var hostsToResolve = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var resolveTasks = configs.Select(async cfg =>
+        foreach (var cfg in configs)
         {
-            if (cfg.ResolvedIp != null)
-            {
-                var d = Interlocked.Increment(ref done);
-                Progress?.Report(("dns", d, total));
-                return;
-            }
+            if (cfg.ResolvedIp != null) continue;
 
             if (IPAddress.TryParse(cfg.Host, out var ip))
             {
                 cfg.ResolvedIp = ip.ToString();
-                var d = Interlocked.Increment(ref done);
-                Progress?.Report(("dns", d, total));
-                return;
             }
+            else if (!string.IsNullOrWhiteSpace(cfg.Host))
+            {
+                hostsToResolve.Add(cfg.Host.Trim());
+            }
+        }
 
+        // Step 2: Resolve unique hostnames once (reducing DNS queries by ~90%)
+        using var sem = new SemaphoreSlim(30);
+        var uniqueList = hostsToResolve.ToList();
+        var total = uniqueList.Count;
+        var done = 0;
+
+        var resolveTasks = uniqueList.Select(async host =>
+        {
             await sem.WaitAsync(ct);
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(3));
-                var entries = await Dns.GetHostAddressesAsync(cfg.Host, cts.Token);
+                var entries = await Dns.GetHostAddressesAsync(host, cts.Token);
                 var v4 = entries.FirstOrDefault(e => e.AddressFamily == AddressFamily.InterNetwork);
-                cfg.ResolvedIp = v4?.ToString();
+                if (v4 != null)
+                {
+                    hostToIp[host] = v4.ToString();
+                }
             }
             catch
             {
-                // Unresolvable — leave as null, GeoIP lookup will skip it.
+                // Unresolvable — skip
             }
             finally
             {
@@ -83,7 +92,29 @@ public sealed class FreeConfigGeoIp
         });
         await Task.WhenAll(resolveTasks);
 
-        // Step 2: Collect unique IPs without cached country yet.
+        // Assign resolved IPs back to all matching configs
+        foreach (var cfg in configs)
+        {
+            if (cfg.ResolvedIp == null && !string.IsNullOrWhiteSpace(cfg.Host) && hostToIp.TryGetValue(cfg.Host.Trim(), out var resolved))
+            {
+                cfg.ResolvedIp = resolved;
+            }
+        }
+
+        // Step 3: Fast offline GeoIP lookup if provided
+        if (_offlineLookup != null)
+        {
+            foreach (var cfg in configs)
+            {
+                if (!string.IsNullOrEmpty(cfg.ResolvedIp) && IPAddress.TryParse(cfg.ResolvedIp, out var parsedIp))
+                {
+                    cfg.CountryCode = _offlineLookup.LookupCountry(parsedIp);
+                }
+            }
+            return;
+        }
+
+        // Step 4: Online batch lookup fallback (ip-api.com)
         var uncached = configs
             .Where(c => !string.IsNullOrEmpty(c.ResolvedIp))
             .Select(c => c.ResolvedIp!)
@@ -91,7 +122,6 @@ public sealed class FreeConfigGeoIp
             .Where(ip => !_ipToCountry.ContainsKey(ip))
             .ToList();
 
-        // Step 3: Batch ip-api.com calls (100 IPs per request).
         var batches = uncached.Chunk(100).ToList();
         var batchDone = 0;
         Progress?.Report(("geoip", 0, batches.Count));
@@ -105,7 +135,7 @@ public sealed class FreeConfigGeoIp
             Progress?.Report(("geoip", batchDone, batches.Count));
         }
 
-        // Step 4: Assign country codes from cache.
+        // Assign country codes from memory cache
         foreach (var cfg in configs)
         {
             if (!string.IsNullOrEmpty(cfg.ResolvedIp) && _ipToCountry.TryGetValue(cfg.ResolvedIp, out var cc))
@@ -134,12 +164,13 @@ public sealed class FreeConfigGeoIp
         try
         {
             // ip-api.com batch endpoint: POST http://ip-api.com/batch?fields=query,countryCode
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(ips);
             using var req = new HttpRequestMessage(HttpMethod.Post, "http://ip-api.com/batch?fields=query,countryCode")
             {
-                Content = new StringContent(
-                    "[" + string.Join(",", ips.Select(ip => $"\"{ip}\"")) + "]",
-                    System.Text.Encoding.UTF8,
-                    "application/json"),
+                Content = new ByteArrayContent(jsonBytes)
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue("application/json") }
+                }
             };
 
             using var resp = await _http.SendAsync(req, ct);
@@ -168,14 +199,10 @@ public sealed class FreeConfigGeoIp
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Only rethrow if it's the USER's cancellation. HttpClient timeout also throws
-            // TaskCanceledException (a subtype of OperationCanceledException) but should be
-            // swallowed as a normal batch failure.
             throw;
         }
         catch (OperationCanceledException)
         {
-            // HttpClient timeout (15s) or our own CancelAfter. Treat as network failure — skip this batch.
             _logger.Warning("GeoIP batch timed out after 15s — skipping batch of {n} IPs", ips.Length);
         }
         catch (Exception ex)

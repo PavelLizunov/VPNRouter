@@ -89,6 +89,23 @@ public sealed class FreeConfigPoolFetcherTests
         Assert.Contains(entries, e => e.CountryCode == "DE");
     }
 
+    [Fact]
+    public void ParsePool_MultiProtocol_ParsesProtocolAndPath()
+    {
+        const string json = @"{
+          ""version"": 2,
+          ""servers"": [
+            { ""id"": ""a"", ""protocol"": ""hysteria2"", ""host"": ""1.2.3.4"", ""port"": 443, ""raw"": ""hysteria2://pass@1.2.3.4:443?sni=example.com"", ""country"": ""US"", ""path"": ""/chat"" }
+          ]
+        }";
+        using var s = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var entries = FreeConfigPoolFetcher.ParsePool(s);
+        var entry = Assert.Single(entries);
+        Assert.Equal("hysteria2", entry.Protocol);
+        Assert.Equal("/chat", entry.Path);
+        Assert.Equal("US", entry.CountryCode);
+    }
+
     // --- end-to-end fetch via fake handler ---
 
     [Fact]
