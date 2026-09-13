@@ -71,12 +71,12 @@ public static partial class Strings
         ? "Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед глубокой проверкой."
         : "Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
     public static string FcOpenLogs         => Ru ? "Логи"                : "Logs";
-    public static string FcClearFailed      => Ru ? "Убрать мусор"        : "Clear dead";
+    public static string FcClearFailed      => Ru ? "Удалить нерабочие"   : "Clear dead";
     public static string FcKeepVerified     => Ru ? "Только ✓✓"           : "Keep ✓✓ only";
     public static string FcKeepVerifiedOnly => FcKeepVerified;
     public static string FcClearAll         => Ru ? "Очистить всё"        : "Clear all";
     public static string FcCleanupHint      => Ru
-        ? "Очистка: убери мусорные записи, чтобы поиск работал быстрее. При следующем обновлении всё перезагрузится из источников."
+        ? "Очистка: удалите нерабочие записи, чтобы ускорить поиск. При следующем обновлении список загрузится заново из источников."
         : "Cleanup: remove dead entries to speed up Refresh. Next Refresh re-fetches from sources.";
     public static string FcStatusCleared(int removed, int kept) => Ru
         ? $"Удалено {removed} · осталось {kept}"

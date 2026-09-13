@@ -167,9 +167,10 @@ public partial class MainWindowViewModel
         var activeUuid = SelectedSubscriptionServer?.Uuid;
         var activeHost = SelectedSubscriptionServer?.Server;
         var activePort = SelectedSubscriptionServer?.Port ?? 0;
+        var activeHpk  = SelectedSubscriptionServer?.UnderlyingEntry?.Awg?.HeaderProtectionKey;
         var activeSigBefore = SelectedSubscriptionServer == null
             ? null
-            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
         sub.IsRefreshing = true;
         try
@@ -209,7 +210,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid, activeHost, activePort);
+                activeName, activeUuid, activeHost, activePort, activeHpk);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             if (!activeChanged)
@@ -241,9 +242,10 @@ public partial class MainWindowViewModel
         var activeUuid = SelectedSubscriptionServer?.Uuid;
         var activeHost = SelectedSubscriptionServer?.Server;
         var activePort = SelectedSubscriptionServer?.Port ?? 0;
+        var activeHpk  = SelectedSubscriptionServer?.UnderlyingEntry?.Awg?.HeaderProtectionKey;
         var activeSigBefore = SelectedSubscriptionServer == null
             ? null
-            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
         foreach (var s in enabled) s.IsRefreshing = true;
         try
@@ -282,7 +284,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid, activeHost, activePort);
+                activeName, activeUuid, activeHost, activePort, activeHpk);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             if (!activeChanged)
@@ -416,9 +418,10 @@ public partial class MainWindowViewModel
             var activeUuid = SelectedSubscriptionServer?.Uuid;
             var activeHost = SelectedSubscriptionServer?.Server;
             var activePort = SelectedSubscriptionServer?.Port ?? 0;
+            var activeHpk  = SelectedSubscriptionServer?.UnderlyingEntry?.Awg?.HeaderProtectionKey;
             var activeSigBefore = SelectedSubscriptionServer == null
                 ? null
-                : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid);
+                : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
             // Parallel refresh, ignore per-entry failures
             await Task.WhenAll(enabled.Select(async s =>
@@ -492,7 +495,7 @@ public partial class MainWindowViewModel
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid, activeHost, activePort);
+                activeName, activeUuid, activeHost, activePort, activeHpk);
             var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
 
             var prevLoadingUi = _isLoadingUI;

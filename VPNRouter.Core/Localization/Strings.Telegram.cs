@@ -36,7 +36,7 @@ public static partial class Strings
         : "Start & open Telegram";
     public static string TgProxySetupOnce => Ru
         // v2.30.5-r1 (UX-55 fix): EN "Start/Stop" inside RU sentence.
-        ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Запуск/Остановка."
+        ? "Нажмите «Открыть в Telegram» один раз для настройки прокси. Затем достаточно использовать кнопку запуска и остановки."
         : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
 
     // v2.31.6-r9 — purged 5 unused TgProxySetup* + TgProxyClientAutoHint

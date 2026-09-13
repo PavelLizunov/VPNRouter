@@ -6507,34 +6507,49 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void AddServer()
     {
-        var lines = VlessUri?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+        var rawInput = (VlessUri ?? string.Empty).Trim();
         var addedAny = false;
 
-        foreach (var line in lines)
+        // Support direct pasting of AmneziaWG / WireGuard .conf files ([Interface] + [Peer])
+        if (ServerUriParser.IsWireGuardConf(rawInput))
         {
-            // v2.30.1-r3: dispatch by scheme via ServerUriParser instead
-            // of hard-coded vless:// prefix check. Pasting Hysteria2 /
-            // TUIC / Shadowsocks links lands in the same Servers list.
-            if (!ServerUriParser.IsSupportedScheme(line))
-                continue;
-
             try
             {
-                var entry = ServerUriParser.Parse(line);
-                // Check duplicate by name+IP+port (same IP+port with different
-                // name/uuid is OK). Port is part of the comparison — without it,
-                // two different transports on the same host (e.g. an AmneziaWG
-                // endpoint and an xhttp VLESS server, both named "main-brat" on
-                // the same IP but different ports) collide and the second paste
-                // silently does nothing.
-                if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
-                    continue;
-                Servers.Add(new ServerViewModel(entry));
-                addedAny = true;
+                var entry = ServerUriParser.Parse(rawInput);
+                if (!Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
+                {
+                    Servers.Add(new ServerViewModel(entry));
+                    addedAny = true;
+                }
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
+                _logger.Warning(ex, "Failed to parse WireGuard / AmneziaWG config: {Error}", ex.Message);
+            }
+        }
+        else
+        {
+            var lines = rawInput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var line in lines)
+            {
+                // v2.30.1-r3: dispatch by scheme via ServerUriParser instead
+                // of hard-coded vless:// prefix check. Pasting Hysteria2 /
+                // TUIC / Shadowsocks / AmneziaWG links lands in the same Servers list.
+                if (!ServerUriParser.IsSupportedScheme(line))
+                    continue;
+
+                try
+                {
+                    var entry = ServerUriParser.Parse(line);
+                    if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server && s.Port == entry.Port))
+                        continue;
+                    Servers.Add(new ServerViewModel(entry));
+                    addedAny = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
+                }
             }
         }
 

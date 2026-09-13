@@ -254,6 +254,122 @@ public sealed class AmneziaWgEndpointTests : IDisposable
             r => r.Protocol == "quic" && r.Action == "reject");
     }
 
+    [Fact]
+    public void Build_Awg3_NormalizesHeaderProtectionKeyAndPadsS1S4()
+    {
+        var entry = Entry();
+        // 32-byte Base64 key
+        entry.Awg!.HeaderProtectionKey = "Z3R4VmlnQ05yTnlkTE5LMTJ2VjM4T0N4S1lXczM3aFU=";
+        entry.Awg.ContentPaddingAddition = "10-100";
+        entry.Awg.RandomTrailers = true;
+        entry.Awg.DisableCookies = true;
+        entry.Awg.S1 = 5;  // below 12
+        entry.Awg.S4 = 0;  // below 12
+
+        var ep = ConfigGenerator.BuildAmneziaWgEndpoint(entry, "proxy");
+        // 32-byte base64 -> 64-character lowercase hex
+        Assert.Equal("677478566967434e724e79644c4e4b3132765633384f43784b59577333376855", ep.HeaderProtectionKey);
+        Assert.Equal("10-100", ep.ContentPaddingAddition);
+        Assert.True(ep.RandomTrailers);
+        Assert.True(ep.DisableCookies);
+        // S1 and S4 boosted to >= 12
+        Assert.Equal(12, ep.S1);
+        Assert.Equal(12, ep.S4);
+    }
+
+    [Fact]
+    public void Serialize_Awg3_EmitsHeaderProtectionAndContentPadding()
+    {
+        var entry = Entry();
+        entry.Awg!.HeaderProtectionKey = "677478566967434e724e79644c4e4b3132765633384f43784b59577333376855";
+        entry.Awg.ContentPaddingAddition = "20-80";
+        entry.Awg.RandomTrailers = true;
+        entry.Awg.DisableCookies = true;
+
+        var json = JsonSerializer.Serialize(ConfigGenerator.BuildAmneziaWgEndpoint(entry, "proxy"));
+        Assert.Contains("\"header_protection_key\":\"677478566967434e724e79644c4e4b3132765633384f43784b59577333376855\"", json);
+        Assert.Contains("\"content_padding_addition\":\"20-80\"", json);
+        Assert.Contains("\"random_trailers\":true", json);
+        Assert.Contains("\"disable_cookies\":true", json);
+    }
+
+    [Fact]
+    public void Parse_Awg3Uri_PopulatesAwg3Fields()
+    {
+        var e = ServerUriParser.Parse(
+            "awg3://PEERPUB@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32" +
+            "&header_protection_key=Z3R4VmlnQ05yTnlkTE5LMTJ2VjM4T0N4S1lXczM3aFU=" +
+            "&content_padding_addition=10-100&random_trailers=true&disable_cookies=1#AWG3-Node");
+
+        Assert.Equal("amneziawg", e.Protocol);
+        Assert.Equal("1.2.3.4", e.Server);
+        Assert.Equal(51820, e.Port);
+        Assert.Equal("AWG3-Node", e.Name);
+        Assert.NotNull(e.Awg);
+        Assert.Equal("Z3R4VmlnQ05yTnlkTE5LMTJ2VjM4T0N4S1lXczM3aFU=", e.Awg!.HeaderProtectionKey);
+        Assert.Equal("10-100", e.Awg.ContentPaddingAddition);
+        Assert.True(e.Awg.RandomTrailers);
+        Assert.True(e.Awg.DisableCookies);
+    }
+
+    [Fact]
+    public void Parse_WireGuardConf_PopulatesEntry()
+    {
+        const string conf = """
+            [Interface]
+            Address = 10.8.1.7/32
+            PrivateKey = PRIVKEY123=
+            DNS = 1.1.1.1
+            Jc = 4
+            Jmin = 10
+            Jmax = 50
+            S1 = 55
+            S2 = 42
+            S3 = 40
+            S4 = 12
+            H1 = 1
+            H2 = 2
+            H3 = 3
+            H4 = 4
+            HeaderProtectionKey = HPKBASE64=
+            ContentPaddingAddition = 15-75
+            RandomTrailers = true
+            DisableCookies = true
+
+            [Peer]
+            PublicKey = PEERPUB456=
+            Endpoint = 77.239.123.44:30565
+            AllowedIPs = 0.0.0.0/0
+            PersistentKeepalive = 25
+            """;
+
+        Assert.True(ServerUriParser.IsWireGuardConf(conf));
+        var e = ServerUriParser.Parse(conf);
+        Assert.Equal("amneziawg", e.Protocol);
+        Assert.Equal("77.239.123.44", e.Server);
+        Assert.Equal(30565, e.Port);
+        Assert.NotNull(e.Awg);
+        Assert.Equal("PRIVKEY123=", e.Awg!.PrivateKey);
+        Assert.Equal("PEERPUB456=", e.Awg.PeerPublicKey);
+        Assert.Equal(new[] { "10.8.1.7/32" }, e.Awg.Address);
+        Assert.Equal(4, e.Awg.Jc);
+        Assert.Equal(10, e.Awg.Jmin);
+        Assert.Equal(50, e.Awg.Jmax);
+        Assert.Equal(55, e.Awg.S1);
+        Assert.Equal(42, e.Awg.S2);
+        Assert.Equal(40, e.Awg.S3);
+        Assert.Equal(12, e.Awg.S4);
+        Assert.Equal("1", e.Awg.H1);
+        Assert.Equal("2", e.Awg.H2);
+        Assert.Equal("3", e.Awg.H3);
+        Assert.Equal("4", e.Awg.H4);
+        Assert.Equal("HPKBASE64=", e.Awg.HeaderProtectionKey);
+        Assert.Equal("15-75", e.Awg.ContentPaddingAddition);
+        Assert.True(e.Awg.RandomTrailers);
+        Assert.True(e.Awg.DisableCookies);
+        Assert.Equal(25, e.Awg.Keepalive);
+    }
+
     private static AppSettings AwgSettings() => new()
     {
         App = new AppConfig { LogLevel = "info", RoutingMode = "full" },

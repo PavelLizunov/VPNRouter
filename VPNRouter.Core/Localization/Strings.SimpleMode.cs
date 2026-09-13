@@ -110,10 +110,10 @@ public static partial class Strings
     // exposes them to UI code.
     public static string SmpScanQrButton => Ru ? "Сканировать QR" : "Scan QR";
     public static string SmpQrPermissionDenied => Ru
-        ? "Камера недоступна — разреши доступ в настройках Android"
+        ? "Камера недоступна — разрешите доступ в настройках Android"
         : "Camera permission denied — grant in Android Settings";
     public static string SmpQrNotRecognized => Ru
-        ? "QR не распознан, попробуй ещё раз"
+        ? "QR-код не распознан. Повторите сканирование."
         : "QR not recognized, try again";
     public static string SmpQrScannedToast => Ru ? "QR распознан" : "QR recognized";
 
