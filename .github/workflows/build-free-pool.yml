@@ -48,12 +48,18 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Download GeoIP database
+        run: |
+          mkdir -p /tmp/geoip
+          curl -sL -o /tmp/geoip/GeoLite2-Country.mmdb "https://raw.githubusercontent.com/P3TERX/GeoLite.mmdb/download/GeoLite2-Country.mmdb"
+          ls -la /tmp/geoip/
+
       - name: Build and run PoolAggregator
         run: |
           mkdir -p /tmp/out
           dotnet run --project VPNRouter.Tools/PoolAggregator \
             --configuration Release \
-            -- --output /tmp/out/pool.json
+            -- --output /tmp/out/pool.json --mmdb /tmp/geoip/GeoLite2-Country.mmdb
 
       - name: Inspect output
         run: |
@@ -63,7 +69,7 @@ jobs:
           echo "Pool size: $(($SIZE / 1024)) KB, $COUNT entries, updated $UPDATED"
 
           if [ "$COUNT" -lt 1000 ]; then
-            echo "::warning::Pool has only $COUNT entries (expected > 10000) — sources may be broken"
+            echo "::warning::Pool has only $COUNT entries (expected >= 1000) — sources may be degraded"
           fi
 
           # Compress for smaller download + ETag stability

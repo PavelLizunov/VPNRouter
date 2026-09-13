@@ -119,8 +119,8 @@ public static partial class Strings
         ? "Загрузить список конфигов"
         : "Load configs list";
     public static string FcFilteredEmpty      => Ru
-        ? "Ничего не найдено по фильтру. Снимите «Только рабочие», увеличьте порог пинга или выберите «Все страны»."
-        : "No results for current filter. Uncheck 'Only working', raise the ping threshold, or choose 'All countries'.";
+        ? "Нет результатов с текущими фильтрами. Увеличьте порог пинга, отключите «Пропускать RU» или запустите новый поиск."
+        : "No results match the current filters. Increase the ping threshold, turn off 'Skip RU', or start a new search.";
     public static string FcRefreshHint        => Ru
         ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
         : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";

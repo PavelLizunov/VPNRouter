@@ -46,6 +46,12 @@ public sealed class FreeConfigEntry
     public int Port { get; set; }
     public string Uuid { get; set; } = string.Empty;
 
+    /// <summary>Protocol (vless, hysteria2, tuic, shadowsocks, amneziawg).</summary>
+    public string Protocol { get; set; } = "vless";
+
+    /// <summary>Optional transport path or service name.</summary>
+    public string? Path { get; set; }
+
     /// <summary>Display name from fragment (#...).</summary>
     public string Name { get; set; } = string.Empty;
 
@@ -125,7 +131,7 @@ public sealed class FreeConfigEntry
     public VlessServerEntry ToVlessServerEntry()
     {
         // Re-parse the raw URI to get a fully populated entry with all fields (Reality keys, TLS, transport details).
-        var entry = VlessUriParser.Parse(RawUri);
+        var entry = ServerUriParser.Parse(RawUri);
         // Override name so user can identify it as a free config.
         entry.Name = $"⚡ {BuildShortName()}";
         return entry;

@@ -28,6 +28,7 @@ public sealed class FreeConfigCache
 
     private readonly string _path;
     private readonly ILogger _logger;
+    private readonly SemaphoreSlim _ioLock = new(1, 1);
 
     public FreeConfigCache(ILogger logger)
         : this(logger, Path.Combine(AppPaths.CacheDir, "free_configs.json"))
@@ -36,7 +37,7 @@ public sealed class FreeConfigCache
 
     /// <summary>v2.32.0 — explicit-path constructor for unit tests so we
     /// can run hermetically against a temp dir.</summary>
-    internal FreeConfigCache(ILogger logger, string filePath)
+    public FreeConfigCache(ILogger logger, string filePath)
     {
         _logger = logger;
         _path = filePath;
@@ -66,6 +67,64 @@ public sealed class FreeConfigCache
     /// <see cref="CacheRecovery"/> for post-mortem.
     /// </summary>
     public CacheFile Load()
+    {
+        _ioLock.Wait();
+        try
+        {
+            return LoadInternal();
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Asynchronously loads cached configs using stream deserialization without LOH allocations.
+    /// </summary>
+    public async Task<CacheFile> LoadAsync(CancellationToken ct = default)
+    {
+        await _ioLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!File.Exists(_path))
+                return new CacheFile();
+
+            try
+            {
+                await using var stream = new FileStream(
+                    _path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 8192,
+                    useAsync: true);
+
+                var file = await JsonSerializer.DeserializeAsync(
+                    stream,
+                    VPNRouter.Core.Json.AppJsonContext.Default.CacheFile,
+                    ct).ConfigureAwait(false);
+
+                if (file != null && file.Configs != null)
+                {
+                    HealCorruptedSubThresholdLatencies(file);
+                    return file;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("FreeConfigCache: async stream load failed, falling back to recovery: {err}", ex.Message);
+            }
+
+            return LoadInternal();
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
+    private CacheFile LoadInternal()
     {
         var result = CacheRecovery.LoadOrRecover<CacheFile>(
             _path,
@@ -118,6 +177,7 @@ public sealed class FreeConfigCache
     /// </summary>
     public void Save(CacheFile file)
     {
+        _ioLock.Wait();
         try
         {
             // Stamp the current schema on every write — defends against
@@ -125,14 +185,64 @@ public sealed class FreeConfigCache
             // touched the property.
             file.SchemaVersion = CurrentSchemaVersion;
             EnsureCacheDir();
-            var tmp = _path + ".tmp";
-            var json = JsonSerializer.Serialize(file, VPNRouter.Core.Json.AppJsonContext.Default.CacheFile);
-            File.WriteAllText(tmp, json);
+            var tmp = $"{_path}.tmp.{Guid.NewGuid():N}";
+            using (var stream = new FileStream(
+                tmp,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 8192))
+            {
+                JsonSerializer.Serialize(stream, file, VPNRouter.Core.Json.AppJsonContext.Default.CacheFile);
+                stream.Flush();
+            }
             File.Move(tmp, _path, overwrite: true);
         }
         catch (Exception ex)
         {
             _logger.Warning("FreeConfigCache: save failed: {err}", ex.Message);
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Save cache asynchronously using FileStream without intermediate LOH string allocations.
+    /// </summary>
+    public async Task SaveAsync(CacheFile file, CancellationToken ct = default)
+    {
+        await _ioLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            file.SchemaVersion = CurrentSchemaVersion;
+            EnsureCacheDir();
+            var tmp = $"{_path}.tmp.{Guid.NewGuid():N}";
+            await using (var stream = new FileStream(
+                tmp,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 8192,
+                useAsync: true))
+            {
+                await JsonSerializer.SerializeAsync(
+                    stream,
+                    file,
+                    VPNRouter.Core.Json.AppJsonContext.Default.CacheFile,
+                    ct).ConfigureAwait(false);
+                await stream.FlushAsync(ct).ConfigureAwait(false);
+            }
+            File.Move(tmp, _path, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("FreeConfigCache: async save failed: {err}", ex.Message);
+        }
+        finally
+        {
+            _ioLock.Release();
         }
     }
 

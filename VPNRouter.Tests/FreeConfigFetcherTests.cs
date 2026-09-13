@@ -132,6 +132,16 @@ public sealed class FreeConfigFetcherTests
     }
 
     [Fact]
+    public void ExtractVlessLines_ExtractsMultiProtocolSchemes()
+    {
+        const string hy2 = "hy2://password@server.example:443?sni=example.com#h2";
+        const string ss = "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpwYXNz@server.example:443#ss";
+        var lines = FreeConfigFetcher.ExtractVlessLines($"ignored\n{Vless}\n{hy2}\n{ss}");
+
+        Assert.Equal(new[] { Vless, hy2, ss }, lines);
+    }
+
+    [Fact]
     public void ExtractVlessLines_EmptyInputReturnsEmpty()
     {
         Assert.Empty(FreeConfigFetcher.ExtractVlessLines(string.Empty));

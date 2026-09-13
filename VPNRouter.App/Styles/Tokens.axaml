@@ -118,6 +118,32 @@
             <SolidColorBrush x:Key="InfoFgBrush" Color="#FF075985"/>
             <SolidColorBrush x:Key="InfoSolidBrush" Color="#FF0284C7"/>
 
+            <!-- Ping / Latency Badge semantic tokens (WCAG AA >= 4.5:1) -->
+            <Color x:Key="PillFastBg">#FFDCFCE7</Color>
+            <Color x:Key="PillFastFg">#FF14532D</Color>
+            <SolidColorBrush x:Key="PillFastBgBrush" Color="#FFDCFCE7"/>
+            <SolidColorBrush x:Key="PillFastFgBrush" Color="#FF14532D"/>
+
+            <Color x:Key="PillMediumBg">#FFECFCCB</Color>
+            <Color x:Key="PillMediumFg">#FF365314</Color>
+            <SolidColorBrush x:Key="PillMediumBgBrush" Color="#FFECFCCB"/>
+            <SolidColorBrush x:Key="PillMediumFgBrush" Color="#FF365314"/>
+
+            <Color x:Key="PillSlowBg">#FFFEF3C7</Color>
+            <Color x:Key="PillSlowFg">#FF78350F</Color>
+            <SolidColorBrush x:Key="PillSlowBgBrush" Color="#FFFEF3C7"/>
+            <SolidColorBrush x:Key="PillSlowFgBrush" Color="#FF78350F"/>
+
+            <Color x:Key="PillDangerBg">#FFFEE2E2</Color>
+            <Color x:Key="PillDangerFg">#FF7F1D1D</Color>
+            <SolidColorBrush x:Key="PillDangerBgBrush" Color="#FFFEE2E2"/>
+            <SolidColorBrush x:Key="PillDangerFgBrush" Color="#FF7F1D1D"/>
+
+            <Color x:Key="PillNeutralBg">#FFF1F5F9</Color>
+            <Color x:Key="PillNeutralFg">#FF334155</Color>
+            <SolidColorBrush x:Key="PillNeutralBgBrush" Color="#FFF1F5F9"/>
+            <SolidColorBrush x:Key="PillNeutralFgBrush" Color="#FF334155"/>
+
             <!-- Shadows (arctic-tinted, soft) -->
             <BoxShadows x:Key="ShadowXs">0 1 1 0 #0A0F1320</BoxShadows>
             <BoxShadows x:Key="ShadowSm">0 1 2 0 #0F0F1320, 0 1 1 0 #0A0F1320</BoxShadows>
@@ -220,6 +246,32 @@
             <SolidColorBrush x:Key="InfoBorderBrush" Color="#590EA5E9"/>
             <SolidColorBrush x:Key="InfoFgBrush" Color="#FF7DD3FC"/>
             <SolidColorBrush x:Key="InfoSolidBrush" Color="#FF0EA5E9"/>
+
+            <!-- Ping / Latency Badge semantic tokens (WCAG AA >= 4.5:1) -->
+            <Color x:Key="PillFastBg">#FF1E3A2F</Color>
+            <Color x:Key="PillFastFg">#FF6EE7B7</Color>
+            <SolidColorBrush x:Key="PillFastBgBrush" Color="#FF1E3A2F"/>
+            <SolidColorBrush x:Key="PillFastFgBrush" Color="#FF6EE7B7"/>
+
+            <Color x:Key="PillMediumBg">#FF2D3B16</Color>
+            <Color x:Key="PillMediumFg">#FFBEF264</Color>
+            <SolidColorBrush x:Key="PillMediumBgBrush" Color="#FF2D3B16"/>
+            <SolidColorBrush x:Key="PillMediumFgBrush" Color="#FFBEF264"/>
+
+            <Color x:Key="PillSlowBg">#FF3D2E12</Color>
+            <Color x:Key="PillSlowFg">#FFFDE68A</Color>
+            <SolidColorBrush x:Key="PillSlowBgBrush" Color="#FF3D2E12"/>
+            <SolidColorBrush x:Key="PillSlowFgBrush" Color="#FFFDE68A"/>
+
+            <Color x:Key="PillDangerBg">#FF3B1A1A</Color>
+            <Color x:Key="PillDangerFg">#FFFCA5A5</Color>
+            <SolidColorBrush x:Key="PillDangerBgBrush" Color="#FF3B1A1A"/>
+            <SolidColorBrush x:Key="PillDangerFgBrush" Color="#FFFCA5A5"/>
+
+            <Color x:Key="PillNeutralBg">#FF1E2430</Color>
+            <Color x:Key="PillNeutralFg">#FF94A3B8</Color>
+            <SolidColorBrush x:Key="PillNeutralBgBrush" Color="#FF1E2430"/>
+            <SolidColorBrush x:Key="PillNeutralFgBrush" Color="#FF94A3B8"/>
 
             <!-- Shadows — deeper for dark surfaces -->
             <BoxShadows x:Key="ShadowXs">0 1 1 0 #66000000</BoxShadows>

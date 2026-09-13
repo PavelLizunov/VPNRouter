@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\VPNRouter.Core\VPNRouter.Core.csproj" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="MaxMind.GeoIP2" Version="5.2.0" />
   </ItemGroup>
 
 </Project>
