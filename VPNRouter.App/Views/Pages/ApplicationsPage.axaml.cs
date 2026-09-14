@@ -65,27 +65,17 @@ public partial class ApplicationsPage : UserControl
 
     private void UpdateLocalizedStrings()
     {
-        var browseText = this.FindControl<TextBlock>("BrowseExeButtonText");
-        if (browseText != null)
-        {
-            browseText.Text = Strings.BrowseExe;
-        }
-
         var browseBtn = this.FindControl<Button>("BrowseExeButton");
         if (browseBtn != null)
         {
+            browseBtn.Content = Strings.BrowseExe;
             ToolTip.SetTip(browseBtn, Strings.BrowseExeTooltip);
-        }
-
-        var runningText = this.FindControl<TextBlock>("RunningProcessesButtonText");
-        if (runningText != null)
-        {
-            runningText.Text = Strings.RunningProcesses;
         }
 
         var runningBtn = this.FindControl<Button>("RunningProcessesButton");
         if (runningBtn != null)
         {
+            runningBtn.Content = Strings.RunningProcesses;
             ToolTip.SetTip(runningBtn, Strings.RunningProcessesTooltip);
         }
     }
@@ -207,5 +197,7 @@ public partial class ApplicationsPage : UserControl
                 items.Add(menuItem);
             }
         }
+
+        flyout.ShowAt(btn);
     }
 }
