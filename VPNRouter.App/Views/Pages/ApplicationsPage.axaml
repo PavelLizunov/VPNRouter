@@ -423,9 +423,7 @@
                       Click="OnBrowseExeClicked"
                       Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                       Background="{DynamicResource SurfaceBaseBrush}"
-                      BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1">
-                <TextBlock x:Name="BrowseExeButtonText" Text="Обзор..." TextTrimming="CharacterEllipsis"/>
-              </Button>
+                      BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"/>
               <Button Grid.Column="1" x:Name="RunningProcessesButton"
                       Click="OnSelectRunningProcessClicked"
                       Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
@@ -434,7 +432,6 @@
                 <Button.Flyout>
                   <MenuFlyout Placement="TopEdgeAlignedRight"/>
                 </Button.Flyout>
-                <TextBlock x:Name="RunningProcessesButtonText" Text="Запущенные" TextTrimming="CharacterEllipsis"/>
               </Button>
               <Button Grid.Column="2" x:Name="AddCustomAppButton"
                       icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
