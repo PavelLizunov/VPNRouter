@@ -4092,13 +4092,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Fallback: taskkill /F as last resort
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo("taskkill", "/F /IM winws.exe")
+            // Security: Use ArgumentList instead of string concatenation to prevent argument injection/formatting issues
+            var psi = new System.Diagnostics.ProcessStartInfo("taskkill")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("/F");
+            psi.ArgumentList.Add("/IM");
+            psi.ArgumentList.Add("winws.exe");
             using var p = System.Diagnostics.Process.Start(psi);
             p?.WaitForExit(3000);
         }
