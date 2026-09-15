@@ -335,16 +335,29 @@ public partial class MainWindowViewModel
             ProcessStartInfo psi;
             if (OperatingSystem.IsLinux())
             {
+                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
                 // Use setsid --fork so the new instance survives our exit
                 // (same trick the updater uses after applying an update).
-                psi = new ProcessStartInfo("/usr/bin/setsid",
-                    $"--fork \"{exe}\" --safe")
-                { UseShellExecute = false, CreateNoWindow = true };
+                psi = new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/setsid",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                psi.ArgumentList.Add("--fork");
+                psi.ArgumentList.Add(exe);
+                psi.ArgumentList.Add("--safe");
             }
             else
             {
-                psi = new ProcessStartInfo(exe, "--safe")
-                { UseShellExecute = false, CreateNoWindow = true };
+                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
+                psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                psi.ArgumentList.Add("--safe");
             }
             System.Diagnostics.Process.Start(psi);
             // Release lock so next run's crash detector doesn't flag us.
@@ -417,14 +430,24 @@ public partial class MainWindowViewModel
             ProcessStartInfo psi;
             if (OperatingSystem.IsLinux())
             {
-                psi = new ProcessStartInfo("/usr/bin/setsid",
-                    $"--fork \"{exe}\"")
-                { UseShellExecute = false, CreateNoWindow = true };
+                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
+                psi = new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/setsid",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                psi.ArgumentList.Add("--fork");
+                psi.ArgumentList.Add(exe);
             }
             else
             {
-                psi = new ProcessStartInfo(exe)
-                { UseShellExecute = false, CreateNoWindow = true };
+                psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
             }
             System.Diagnostics.Process.Start(psi);
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
