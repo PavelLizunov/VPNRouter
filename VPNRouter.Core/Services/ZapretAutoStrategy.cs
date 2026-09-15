@@ -349,7 +349,7 @@ public static class ZapretAutoStrategy
         }
         catch (Exception ex)
         {
-            logger?.Debug(ex, "[ZapretAutoStrategy] Probe failed for {Url}", url);
+            logger?.Debug(ex, "[ZapretAutoStrategy] Probe failed for {Url}", CanaryPolicy.RedactUrl(url));
             return ProbeOutcome.Failed;
         }
     }
