@@ -76,6 +76,15 @@ public static class Strings
     // "+ Add" button. Pre-r1 was hardcoded EN string in
     // ApplicationsPage.axaml (D1 rule violation).
     public static string AddCustomAppBtn => global::VPNRouter.Core.Localization.Strings.AddCustomAppBtn;
+    public static string BrowseExe => global::VPNRouter.Core.Localization.Strings.BrowseExe;
+    public static string BrowseExeTooltip => global::VPNRouter.Core.Localization.Strings.BrowseExeTooltip;
+    public static string RunningProcesses => global::VPNRouter.Core.Localization.Strings.RunningProcesses;
+    public static string RunningProcessesTooltip => global::VPNRouter.Core.Localization.Strings.RunningProcessesTooltip;
+    public static string SelectExecutableDialogTitle => global::VPNRouter.Core.Localization.Strings.SelectExecutableDialogTitle;
+    public static string ExecutableFileFilter => global::VPNRouter.Core.Localization.Strings.ExecutableFileFilter;
+    public static string AllFilesFilter => global::VPNRouter.Core.Localization.Strings.AllFilesFilter;
+    public static string LoadingProcesses => global::VPNRouter.Core.Localization.Strings.LoadingProcesses;
+    public static string NoRunningProcessesFound => global::VPNRouter.Core.Localization.Strings.NoRunningProcessesFound;
 
     // ── Header ──
     public static string ThemeDark => global::VPNRouter.Core.Localization.Strings.ThemeDark;
