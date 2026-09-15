@@ -141,6 +141,15 @@ public static partial class Strings
     // "+ Add" button. Pre-r1 was hardcoded EN string in
     // ApplicationsPage.axaml (D1 rule violation).
     public static string AddCustomAppBtn => Ru ? "+ Добавить" : "+ Add";
+    public static string BrowseExe => Ru ? "Обзор..." : "Browse...";
+    public static string BrowseExeTooltip => Ru ? "Выбрать исполняемый файл (.exe)" : "Select executable file (.exe)";
+    public static string RunningProcesses => Ru ? "Запущенные" : "Running";
+    public static string RunningProcessesTooltip => Ru ? "Выбрать из запущенных процессов" : "Select running process";
+    public static string SelectExecutableDialogTitle => Ru ? "Выбор исполняемого файла" : "Select Executable";
+    public static string ExecutableFileFilter => Ru ? "Исполняемые файлы (*.exe, *.app)" : "Executables (*.exe, *.app)";
+    public static string AllFilesFilter => Ru ? "Все файлы (*.*)" : "All Files (*.*)";
+    public static string LoadingProcesses => Ru ? "Загрузка процессов..." : "Loading processes...";
+    public static string NoRunningProcessesFound => Ru ? "Процессы не найдены" : "No processes found";
 
     // ── Header ──
     public static string ThemeDark => Ru ? "\u25cf Тёмная" : "\u25cf Dark";
