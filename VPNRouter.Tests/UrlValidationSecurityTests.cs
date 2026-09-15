@@ -1,8 +1,11 @@
 using System;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.FreeConfigs;
@@ -170,6 +173,68 @@ public class UrlValidationSecurityTests
         finally
         {
             SubscriptionFetcher.Http = previous;
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t\r\n")]
+    [InlineData("file:///C:/Windows/win.ini")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/sub.txt")]
+    [InlineData("ssh://example.com")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("gopher://example.com")]
+    [InlineData("cmd.exe")]
+    [InlineData("calc.exe")]
+    [InlineData("powershell.exe")]
+    [InlineData("ms-settings:privacy")]
+    [InlineData("not-a-url")]
+    [InlineData("://invalid-uri")]
+    [InlineData("data:text/plain;base64,SGVsbG8=")]
+    [InlineData("/configs/sub.txt")]
+    [InlineData("../configs/sub.txt")]
+    public void MainWindowViewModel_OpenUrl_RejectsInvalidOrNonHttpSchemes(string? invalidUrl)
+    {
+        var sink = new InMemorySink();
+        var previousLogger = Log.Logger;
+        Log.Logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
+
+        try
+        {
+            var openUrlMethod = typeof(MainWindowViewModel).GetMethod(
+                "OpenUrl",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.NotNull(openUrlMethod);
+
+            var exception = Record.Exception(() => openUrlMethod.Invoke(null, new object?[] { invalidUrl }));
+            Assert.Null(exception);
+
+            var lines = sink.Render();
+            Assert.Contains(lines, l => l.Contains("[VM] OpenUrl blocked non-http(s) URL:"));
+        }
+        finally
+        {
+            Log.Logger = previousLogger;
+        }
+    }
+
+    private sealed class InMemorySink : ILogEventSink
+    {
+        private readonly System.Collections.Generic.List<string> _events = new();
+
+        public void Emit(LogEvent logEvent)
+        {
+            var rendered = logEvent.RenderMessage();
+            lock (_events) _events.Add(rendered);
+        }
+
+        public System.Collections.Generic.IReadOnlyList<string> Render()
+        {
+            lock (_events) return _events.ToArray();
         }
     }
 }
