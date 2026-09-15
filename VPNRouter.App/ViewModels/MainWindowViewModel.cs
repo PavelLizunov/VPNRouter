@@ -1505,16 +1505,27 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         try
         {
-            // Open in default text editor (notepad) — `explorer "<path>"`
-            // would open the folder; `start "" "<path>"` via cmd uses the
-            // default text handler.
-            // Security: Use ArgumentList instead of string concatenation to prevent argument injection/formatting issues
-            var psi = new System.Diagnostics.ProcessStartInfo
+            // Open in default text editor (notepad on Windows, open/xdg-open on Mac/Linux)
+            // Security: Use ArgumentList with UseShellExecute=false to prevent argument injection
+            ProcessStartInfo psi;
+            if (OperatingSystem.IsWindows())
             {
-                FileName = "notepad.exe",
-                UseShellExecute = false,
-                CreateNoWindow = false,
-            };
+                psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "notepad.exe",
+                    UseShellExecute = false,
+                    CreateNoWindow = false,
+                };
+            }
+            else
+            {
+                psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
+                    UseShellExecute = false,
+                    CreateNoWindow = false,
+                };
+            }
             psi.ArgumentList.Add(path);
             System.Diagnostics.Process.Start(psi);
         }
@@ -6363,7 +6374,28 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             if (Directory.Exists(path))
-                Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+            {
+                // Security: Use ArgumentList with UseShellExecute=false to prevent argument injection
+                ProcessStartInfo psi;
+                if (OperatingSystem.IsWindows())
+                {
+                    psi = new ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        UseShellExecute = false
+                    };
+                }
+                else
+                {
+                    psi = new ProcessStartInfo
+                    {
+                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
+                        UseShellExecute = false
+                    };
+                }
+                psi.ArgumentList.Add(path);
+                Process.Start(psi);
+            }
         }
         catch (Exception ex)
         {
