@@ -251,6 +251,31 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
     // ── ProbeOneTargetAsync URL redaction ───────────────────────────────────
 
     [Fact]
+    public void RunFlowsealProbeAsync_UsesArgumentListTokens_NoConcatenatedArgumentsString()
+    {
+        var source = LoadSource("VPNRouter.Core", "Services", "ZapretAutoStrategy.cs");
+        Assert.Contains("psi.ArgumentList.Add(\"-NoProfile\");", source);
+        Assert.Contains("psi.ArgumentList.Add(\"-ExecutionPolicy\");", source);
+        Assert.Contains("psi.ArgumentList.Add(\"Bypass\");", source);
+        Assert.Contains("psi.ArgumentList.Add(\"-File\");", source);
+        Assert.Contains("psi.ArgumentList.Add(scriptPath);", source);
+        Assert.DoesNotContain("Arguments = $\"-NoProfile", source);
+    }
+
+    private static string LoadSource(params string[] relativeParts)
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        for (var i = 0; i < 8 && directory != null; i++, directory = directory.Parent)
+        {
+            var candidate = Path.Combine(
+                new[] { directory.FullName }.Concat(relativeParts).ToArray());
+            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+        }
+        throw new FileNotFoundException(
+            $"Could not locate repository source: {Path.Combine(relativeParts)}");
+    }
+
+    [Fact]
     public async Task ProbeOneTargetAsync_LogsDoNotContainToken()
     {
         var sink = new CapturingSink();
