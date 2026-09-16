@@ -162,9 +162,9 @@ public interface IUpdateSource
 /// truncation check + progress bar denominator when
 /// <c>Content-Length</c> isn't set on the response).</param>
 /// <param name="AssetSha256">Hex-encoded SHA256 of the asset bytes (64
-/// lowercase chars). <c>null</c> when no <c>.sha256</c> companion file
-/// was published (legacy releases) — in that case the source falls
-/// back to size-only validation.</param>
+/// lowercase chars). Desktop <see cref="GitHubReleaseSource.CheckAsync"/>
+/// returns null instead of an info object when the companion is missing.
+/// Staging refuses extraction when this and the sidecar URL are both empty.</param>
 /// <param name="IsPrerelease">True when the release is flagged as
 /// pre-release on the source (GitHub <c>prerelease</c> flag). Lets the
 /// caller surface a "candidate" badge in the UI.</param>

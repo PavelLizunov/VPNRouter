@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Serilog;
@@ -198,6 +199,61 @@ public sealed class SubscriptionUrlRedactionTests
             .WriteTo.Sink(sink)
             .CreateLogger();
         return (logger, sink);
+    }
+
+    [Fact]
+    public async Task FetchAsync_TimeoutException_DoesNotLogRawUriOrToken()
+    {
+        var (logger, sink) = BuildCapturingLogger();
+        var fake = new FakeHttpClient().ThrowOn(
+            "provider.example",
+            new TimeoutException("HTTP request timed out after 15000 ms."));
+        var previous = SubscriptionFetcher.Http;
+        SubscriptionFetcher.Http = fake;
+        try
+        {
+            var servers = await SubscriptionFetcher.FetchAsync(SubUrl, logger);
+            Assert.Empty(servers);
+
+            var rendered = AllRenderedText(sink);
+            var exceptions = string.Join("\n", sink.Events
+                .Select(e => e.Exception?.ToString() ?? string.Empty));
+
+            Assert.DoesNotContain("secret123", rendered);
+            Assert.DoesNotContain("/api/sub", rendered);
+            Assert.DoesNotContain(SubUrl, rendered);
+            Assert.Contains(RedactedHost, rendered);
+            Assert.Contains("TimeoutException", rendered);
+
+            Assert.DoesNotContain("secret123", exceptions);
+            Assert.DoesNotContain(SubUrl, exceptions);
+        }
+        finally
+        {
+            SubscriptionFetcher.Http = previous;
+        }
+    }
+
+    [Fact]
+    public void PolicyHttpClient_TimeoutMessage_DoesNotEmbedRequestUri()
+    {
+        var src = File.ReadAllText(Path.Combine(
+            FindRepoRoot(), "VPNRouter.Core", "Services", "PolicyHttpClient.cs"));
+        Assert.DoesNotContain("HTTP request to {request.Uri}", src);
+        Assert.DoesNotContain("HTTP streaming request to {request.Uri}", src);
+        Assert.Contains("HTTP request timed out after", src);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "VPNRouter.sln")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        throw new DirectoryNotFoundException("VPNRouter.sln not found from " + AppContext.BaseDirectory);
     }
 
     private static string AllRenderedText(CapturingSink sink) =>

@@ -23,8 +23,9 @@ public class UpdateInfo
     public string? FullChecksumUrl { get; init; }
     /// <summary>URL of the .sha256 file for the lite update ZIP (null if not published).</summary>
     public string? LiteChecksumUrl { get; init; }
-    /// <summary>Already-normalized inline SHA256 (64 lowercase hex) of the full install asset.
+    /// <summary>Already-normalized inline SHA256 (64 lowercase hex) of the install asset.
     /// When non-null the download gate verifies against it directly without re-fetching
-    /// the sidecar; null falls back to <see cref="FullChecksumUrl"/>, then size-only.</summary>
+    /// the sidecar; null falls back to the matching checksum URL. Extraction is refused
+    /// when both are absent.</summary>
     public string? FullChecksumSha256 { get; init; }
 }

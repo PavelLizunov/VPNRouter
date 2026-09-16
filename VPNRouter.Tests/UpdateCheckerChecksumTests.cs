@@ -17,8 +17,8 @@ namespace VPNRouter.Tests;
 /// P01 UPD-1: the desktop update gate MUST hash-verify the downloaded asset
 /// against the inline SHA256 threaded from <c>UpdateSourceInfo.AssetSha256</c>
 /// (via <c>UpdateInfo.FullChecksumSha256</c>) BEFORE extraction — the
-/// <c>IUpdateSource.DownloadAsync</c> MUST-validate contract. The null-digest
-/// size-only fallback is covered by <see cref="UpdateCheckerStagingTests"/>.
+/// <c>IUpdateSource.DownloadAsync</c> MUST-validate contract. A missing digest
+/// refuses extraction (no size-only fallback).
 /// </summary>
 public class UpdateCheckerChecksumTests
 {
@@ -116,5 +116,17 @@ public class UpdateCheckerChecksumTests
         // A non-64-char digest is rejected before any compare/extract.
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => checker.DownloadAndStageAsync(Info("5.5.5", "abc")));
+    }
+
+    [Fact]
+    public async Task DownloadAndStageAsync_MissingDigest_RefusesExtract()
+    {
+        var zip = MinimalUpdateZip();
+        var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
+        var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => checker.DownloadAndStageAsync(Info("9.9.9", null)));
+        Assert.Contains("checksum is missing", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

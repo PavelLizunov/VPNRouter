@@ -301,10 +301,10 @@ public class UpdateChecker : IDesktopInstaller
             throw new InvalidOperationException(
                 $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
 
-        // ── Verify SHA256 before extraction (fail-closed on mismatch) ──
+        // ── Verify SHA256 before extraction (fail-closed) ──
         // Prefer the inline digest threaded from IUpdateSource; fall back to the
-        // legacy .sha256 URL fetch; when both are absent degrade to size-only.
-        string? expectedSha = useLite ? null : info.FullChecksumSha256;
+        // legacy .sha256 URL fetch. Missing digest must not extract.
+        string? expectedSha = info.FullChecksumSha256;
         if (string.IsNullOrEmpty(expectedSha) && !string.IsNullOrEmpty(checksumUrl))
         {
             var shaResponse = await _http.SendAsync(
@@ -312,7 +312,7 @@ public class UpdateChecker : IDesktopInstaller
                 ct);
             if (!shaResponse.IsSuccess())
                 throw new InvalidOperationException(
-                    $"Checksum download failed: HTTP {shaResponse.StatusCode} from {checksumUrl}");
+                    $"Checksum download failed: HTTP {shaResponse.StatusCode}");
             expectedSha = shaResponse.AsString().Trim().ToLowerInvariant();
 
             // Strip any trailing filename portion if the .sha256 file used "HASH  filename" format
@@ -320,31 +320,34 @@ public class UpdateChecker : IDesktopInstaller
                 expectedSha = expectedSha.Split(' ', 2)[0].Trim();
         }
 
-        if (!string.IsNullOrEmpty(expectedSha))
+        if (string.IsNullOrEmpty(expectedSha))
         {
-            StatusChanged?.Invoke("Verifying checksum...");
+            try { File.Delete(zipPath); } catch { }
+            throw new InvalidOperationException(
+                "Update checksum is missing — refusing to extract an unverified package.");
+        }
 
-            if (expectedSha.Length != 64)
-                throw new InvalidOperationException(
-                    $"Checksum is not a valid SHA256 (got {expectedSha.Length} hex chars, expected 64).");
+        StatusChanged?.Invoke("Verifying checksum...");
 
-            string actualSha;
-            await using (var fs = File.OpenRead(zipPath))
-            {
-                var hashBytes = await System.Security.Cryptography.SHA256.HashDataAsync(fs, ct);
-                actualSha = Convert.ToHexStringLower(hashBytes);
-            }
+        if (expectedSha.Length != 64)
+            throw new InvalidOperationException(
+                $"Checksum is not a valid SHA256 (got {expectedSha.Length} hex chars, expected 64).");
 
-            if (!string.Equals(actualSha, expectedSha, StringComparison.Ordinal))
-            {
-                // Delete the corrupt file so a retry pulls it fresh
-                try { File.Delete(zipPath); } catch { }
-                throw new InvalidOperationException(
-                    $"Checksum mismatch — download is corrupted.\r\n" +
-                    $"Expected: {expectedSha}\r\n" +
-                    $"Got:      {actualSha}\r\n" +
-                    $"File has been deleted. Click 'Update' again to retry.");
-            }
+        string actualSha;
+        await using (var fs = File.OpenRead(zipPath))
+        {
+            var hashBytes = await System.Security.Cryptography.SHA256.HashDataAsync(fs, ct);
+            actualSha = Convert.ToHexStringLower(hashBytes);
+        }
+
+        if (!string.Equals(actualSha, expectedSha, StringComparison.Ordinal))
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw new InvalidOperationException(
+                $"Checksum mismatch — download is corrupted.\r\n" +
+                $"Expected: {expectedSha}\r\n" +
+                $"Got:      {actualSha}\r\n" +
+                $"File has been deleted. Click 'Update' again to retry.");
         }
 
         StatusChanged?.Invoke("Extracting update...");
