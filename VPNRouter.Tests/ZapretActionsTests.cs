@@ -481,4 +481,31 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("/RESOLVED/lists/tls_clienthello_www_google_com.bin", args);
         Assert.DoesNotContain("%LISTS%", args);
     }
+
+    // ── 14. OpenHostsEditHelpers: uses ArgumentList and UseShellExecute=false ──
+
+    [Fact]
+    public void OpenHostsEditHelpers_SourceCodeUsesArgumentListAndDisableShellExecute()
+    {
+        // Security contract: OpenHostsEditHelpers launches notepad and explorer
+        // with UseShellExecute = false and ArgumentList to prevent argument injection.
+        var root = FindRootDirectory();
+        var sourcePath = Path.Combine(root, "VPNRouter.Core", "Services", "ZapretActions.cs");
+        var content = File.ReadAllText(sourcePath);
+
+        Assert.Contains("var notepadPsi = new ProcessStartInfo(\"notepad.exe\") { UseShellExecute = false };", content);
+        Assert.Contains("notepadPsi.ArgumentList.Add(tempPath);", content);
+        Assert.Contains("var explorerPsi = new ProcessStartInfo(\"explorer.exe\") { UseShellExecute = false };", content);
+        Assert.Contains("explorerPsi.ArgumentList.Add($\"/select,{hostsPath}\");", content);
+    }
+
+    private static string FindRootDirectory()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "VPNRouter.sln")))
+                return dir.FullName;
+        }
+        throw new DirectoryNotFoundException("Could not locate repository root.");
+    }
 }
