@@ -112,29 +112,35 @@ public sealed class GitHubReleaseSource : IUpdateSource
         if (newer.Count == 0)
             return null;
 
-        var latest = newer[0];
-        var asset = FindFullAsset(latest.Release.Assets, latest.Tag);
-        if (asset == null)
-            return null;
+        foreach (var candidate in newer)
+        {
+            var asset = FindFullAsset(candidate.Release.Assets, candidate.Tag);
+            if (asset == null)
+                continue;
 
-        // Companion .sha256 fetch — best-effort. Asset name is
-        // "{asset}.sha256" by build.ps1 convention.
-        var sha = await FetchChecksumAsync(latest.Release.Assets, asset, ct)
-            .ConfigureAwait(false);
+            // Companion .sha256 is required. Missing digest skips this
+            // release rather than offering an unverifiable extract.
+            var sha = await FetchChecksumAsync(candidate.Release.Assets, asset, ct)
+                .ConfigureAwait(false);
+            if (!IsValidSha256(sha))
+                continue;
 
-        var notes = newer
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
-            .Select(r => r.Release.Body!.Trim());
+            var notes = newer
+                .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
+                .Select(r => r.Release.Body!.Trim());
 
-        return new UpdateSourceInfo(
-            Version: latest.Tag,
-            ReleaseUrl: latest.Release.HtmlUrl ?? string.Empty,
-            AssetName: asset.Name,
-            DownloadUrl: asset.BrowserDownloadUrl,
-            AssetSize: asset.Size,
-            AssetSha256: sha,
-            IsPrerelease: latest.Release.Prerelease,
-            ReleaseNotes: string.Join("\n\n", notes));
+            return new UpdateSourceInfo(
+                Version: candidate.Tag,
+                ReleaseUrl: candidate.Release.HtmlUrl ?? string.Empty,
+                AssetName: asset.Name,
+                DownloadUrl: asset.BrowserDownloadUrl,
+                AssetSize: asset.Size,
+                AssetSha256: sha,
+                IsPrerelease: candidate.Release.Prerelease,
+                ReleaseNotes: string.Join("\n\n", notes));
+        }
+
+        return null;
     }
 
     /// <inheritdoc />

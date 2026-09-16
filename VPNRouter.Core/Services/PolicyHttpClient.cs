@@ -155,7 +155,7 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
             {
                 // Per-request timeout fired on the final allowed attempt.
                 throw new TimeoutException(
-                    $"HTTP request to {request.Uri} timed out after {request.Timeout.Value.TotalMilliseconds:F0} ms.");
+                    $"HTTP request timed out after {request.Timeout.Value.TotalMilliseconds:F0} ms.");
             }
             catch (Exception ex) when (IsTransient(ex) && attempt < request.RetryCount)
             {
@@ -247,7 +247,7 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
             // Per-request timeout fired during the headers phase. Surface
             // as TimeoutException so callers can branch on it.
             throw new TimeoutException(
-                $"HTTP streaming request to {request.Uri} timed out after {request.Timeout.Value.TotalMilliseconds:F0} ms.");
+                $"HTTP streaming request timed out after {request.Timeout.Value.TotalMilliseconds:F0} ms.");
         }
         finally
         {

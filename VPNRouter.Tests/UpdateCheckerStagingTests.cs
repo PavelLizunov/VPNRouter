@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -42,12 +43,12 @@ public class UpdateCheckerStagingTests
         return ms.ToArray();
     }
 
-    private static UpdateInfo Info() => new()
+    private static UpdateInfo Info(string sha) => new()
     {
         LatestVersion = "9.9.9",
         DownloadUrl = DownloadUrl,
         SizeBytes = 0,           // skip the "too small" guard
-        FullChecksumUrl = null,  // skip checksum verification
+        FullChecksumSha256 = sha,
         HasLiteUpdate = false,
     };
 
@@ -55,11 +56,12 @@ public class UpdateCheckerStagingTests
     public async Task DownloadAndStageAsync_UsesUniquePerAttemptSubdir_NoSharedClobber()
     {
         var zip = MinimalUpdateZip();
+        var sha = Convert.ToHexStringLower(SHA256.HashData(zip));
         var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
-        var dir1 = await checker.DownloadAndStageAsync(Info());
-        var dir2 = await checker.DownloadAndStageAsync(Info());
+        var dir1 = await checker.DownloadAndStageAsync(Info(sha));
+        var dir2 = await checker.DownloadAndStageAsync(Info(sha));
 
         try
         {

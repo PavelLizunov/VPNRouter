@@ -1107,7 +1107,7 @@ public partial class AndroidApp
         // Subscription gets cleared because free config = manual mode.
         try
         {
-            var vless = VPNRouter.Core.Services.VlessUriParser.Parse(entry.RawUri);
+            var vless = VPNRouter.Core.Services.ServerUriParser.Parse(entry.RawUri);
             var servers = AndroidStorage.GetServers() ?? new System.Collections.Generic.List<VPNRouter.Core.Models.VlessServerEntry>();
             // Match by host:port:uuid (display name can vary). Reuse the
             // existing entry's name so the user's curated label sticks.

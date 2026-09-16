@@ -226,8 +226,29 @@ public partial class MainWindowViewModel
                 return false;
             }
 
-            // Surface any exception from startTask (Connected / StartTaskCompleted / Cancelled).
-            try { await startTask; } catch { }
+            if (outcome != Internals.TwoPhaseStartOutcome.Connected)
+            {
+                // Match ToggleConnectionAsync: only typed Connected may paint green.
+                // StartTaskCompleted surfaces the start exception; Cancelled stops.
+                try { await startTask; }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[VM] ApplyFreeConfig: start task did not reach Connected");
+                }
+
+                if (outcome == Internals.TwoPhaseStartOutcome.Cancelled)
+                {
+                    try { await Task.Run(() => _engine.Stop()); } catch { }
+                }
+
+                IsConnecting = false;
+                IsConnected = false;
+                ConnectButtonText = Strings.StartVPN;
+                RefreshActiveIndicator();
+                return false;
+            }
+
+            try { await startTask; } catch { /* event-side Connected is authoritative */ }
             IsConnected = true;
             IsConnecting = false;
             _lastSuccessfulConnectAt = DateTime.UtcNow;

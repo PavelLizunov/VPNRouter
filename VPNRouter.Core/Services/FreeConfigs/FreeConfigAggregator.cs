@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Serilog;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
@@ -128,26 +129,9 @@ public sealed class FreeConfigAggregator
         {
             foreach (var raw in raws)
             {
-                try
-                {
-                    var vless = VlessUriParser.Parse(raw);
-                    var id = BuildId(vless.Server, vless.Port, vless.Uuid);
-                    if (byId.ContainsKey(id)) continue;
-                    byId[id] = new FreeConfigEntry
-                    {
-                        Id = id,
-                        SourceUrl = src.Url,
-                        RawUri = raw,
-                        Host = vless.Server,
-                        Port = vless.Port,
-                        Uuid = vless.Uuid,
-                        Name = vless.Name ?? "",
-                        Sni = vless.Reality?.ServerName ?? vless.Tls?.ServerName ?? "",
-                        Transport = vless.Transport?.Type ?? "tcp",
-                        Security = vless.Security ?? "reality",
-                    };
-                }
-                catch { }
+                var mapped = TryParseSourceLine(raw, src.Url);
+                if (mapped == null || byId.ContainsKey(mapped.Id)) continue;
+                byId[mapped.Id] = mapped;
             }
         }
         var configs = byId.Values.ToList();
@@ -241,6 +225,46 @@ public sealed class FreeConfigAggregator
         _cache.Save(file);
         OnStageChanged?.Invoke("Done");
         return file.Configs;
+    }
+
+    /// <summary>
+    /// Parse one share-link from a fallback source fetch. Uses
+    /// <see cref="ServerUriParser"/> so hysteria2/ss/tuic/awg lines are kept.
+    /// Format/placeholder failures return null (skip that line only).
+    /// </summary>
+    internal static FreeConfigEntry? TryParseSourceLine(string raw, string sourceUrl)
+    {
+        try
+        {
+            var parsed = ServerUriParser.Parse(raw);
+            var auth = parsed.Uuid;
+            if (string.IsNullOrEmpty(auth))
+                auth = parsed.Password;
+            if (string.IsNullOrEmpty(auth))
+                auth = parsed.Awg?.PrivateKey ?? "";
+            return new FreeConfigEntry
+            {
+                Id = BuildId(parsed.Server, parsed.Port, auth),
+                SourceUrl = sourceUrl,
+                RawUri = raw,
+                Host = parsed.Server,
+                Port = parsed.Port,
+                Uuid = parsed.Uuid,
+                Protocol = parsed.Protocol ?? "vless",
+                Name = parsed.Name ?? "",
+                Sni = parsed.Reality?.ServerName ?? parsed.Tls?.ServerName ?? "",
+                Transport = parsed.Transport?.Type ?? "tcp",
+                Security = parsed.Security ?? "reality",
+            };
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (PlaceholderConfigException)
+        {
+            return null;
+        }
     }
 
     private static string BuildId(string host, int port, string uuid)

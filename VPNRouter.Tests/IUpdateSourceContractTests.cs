@@ -146,6 +146,34 @@ public sealed class IUpdateSourceContractTests
     }
 
     [Fact]
+    public async Task GitHubReleaseSource_CheckAsync_MissingSidecar_ReturnsNull()
+    {
+        const string newerVersion = "2.32.1";
+        var assetName = AssetNameForCurrentPlatform(newerVersion);
+        var assetUrl = $"https://github.com/foo/bar/releases/download/v{newerVersion}/{assetName}";
+        var releasesJson = BuildReleasesJson(new[]
+        {
+            new ReleaseStub(
+                Tag: $"v{newerVersion}",
+                Prerelease: false,
+                Body: "No sidecar",
+                Assets: new[] {
+                    new AssetStub(assetName, assetUrl, 12_345_678),
+                }),
+        });
+
+        var fake = new FakeHttpClient().Setup(ReleasesApi, releasesJson);
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo, Channel = "stable" },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
+        Assert.Null(info);
+    }
+
+    [Fact]
     public async Task GitHubReleaseSource_CheckAsync_StableChannel_SkipsPrerelease()
     {
         // Arrange — newer release exists but is flagged prerelease;

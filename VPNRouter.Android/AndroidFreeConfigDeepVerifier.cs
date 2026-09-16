@@ -129,7 +129,7 @@ internal sealed class AndroidFreeConfigDeepVerifier
             // verify pass needs. clashPort=null omits the experimental.clash_api
             // block (we don't hot-reload the verify box, and a hardcoded port
             // would collide with the main VPN's :9090 when both run).
-            var vless = VlessUriParser.Parse(cfg.RawUri);
+            var vless = ServerUriParser.Parse(cfg.RawUri);
             configJson = FreeConfigDeepVerifier.BuildSingleOutboundConfig(
                 vless, socksPort, clashPort: null);
         }
@@ -214,7 +214,7 @@ internal sealed class AndroidFreeConfigDeepVerifier
                 try
                 {
                     socksPort2 = FindFreePort();
-                    var vless2 = VlessUriParser.Parse(cfg.RawUri);
+                    var vless2 = ServerUriParser.Parse(cfg.RawUri);
                     configJson2 = FreeConfigDeepVerifier.BuildSingleOutboundConfig(
                         vless2, socksPort2, clashPort: null);
                     using var overallCts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);

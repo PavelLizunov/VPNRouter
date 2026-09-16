@@ -114,7 +114,8 @@ public static class SubscriptionFetcher
         }
         catch (Exception ex)
         {
-            logger?.Error(ex, "[Subscription] Fetch failed for {Url}", CanaryPolicy.RedactUrl(url));
+            logger?.Error("[Subscription] Fetch failed for {Url}: {ExceptionType}",
+                CanaryPolicy.RedactUrl(url), ex.GetType().Name);
         }
 
         return (result, droppedPlaceholders, userInfo);
