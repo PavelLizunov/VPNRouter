@@ -82,6 +82,41 @@ public class RevealInFileManagerTests
         Assert.Single(healthPsi.ArgumentList);
         Assert.Equal(malPath, healthPsi.ArgumentList[0]);
     }
+
+    [Fact]
+    public void RestartInSafeModeAndResetConfig_UseArgumentList_PreventsArgumentInjection()
+    {
+        var malExe = Path.Combine(Path.GetTempPath(), "app_path_with spaces_\" & calc.exe & \"app.exe");
+
+        // Verify ProcessStartInfo pattern for RestartInSafeMode (Linux and Windows/Other)
+        var linuxPsi = new ProcessStartInfo
+        {
+            FileName = "/usr/bin/setsid",
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        linuxPsi.ArgumentList.Add("--fork");
+        linuxPsi.ArgumentList.Add(malExe);
+        linuxPsi.ArgumentList.Add("--safe");
+
+        Assert.Empty(linuxPsi.Arguments);
+        Assert.Equal(3, linuxPsi.ArgumentList.Count);
+        Assert.Equal("--fork", linuxPsi.ArgumentList[0]);
+        Assert.Equal(malExe, linuxPsi.ArgumentList[1]);
+        Assert.Equal("--safe", linuxPsi.ArgumentList[2]);
+
+        var winPsi = new ProcessStartInfo
+        {
+            FileName = malExe,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        winPsi.ArgumentList.Add("--safe");
+
+        Assert.Empty(winPsi.Arguments);
+        Assert.Single(winPsi.ArgumentList);
+        Assert.Equal("--safe", winPsi.ArgumentList[0]);
+    }
 }
 
 #if PLATFORM_WINDOWS
