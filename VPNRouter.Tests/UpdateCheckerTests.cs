@@ -247,6 +247,7 @@ public sealed class UpdateCheckerTests
         var http = new FakeHttpClient();
         http.Setup("api.github.com/repos/", BuildReleasesJson(
             new ReleaseShape("v2.35.0-r1", Prerelease: true, IncludeWinAsset: true)));
+        http.Setup("releases/download/synthetic/", new string('a', 64));
 
         var settings = new UpdateSettings { Channel = "experimental", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
@@ -330,6 +331,7 @@ public sealed class UpdateCheckerTests
                 Prerelease: false,
                 IncludeWinAsset: true,
                 IncludeLiteAsset: true)));
+        http.Setup("releases/download/synthetic/", new string('a', 64));
 
         var settings = new UpdateSettings { Channel = "stable", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
@@ -390,12 +392,16 @@ public sealed class UpdateCheckerTests
             {
                 if (!first) sb.Append(',');
                 AppendAsset(sb, $"VPNRouter-v{ver}-win.zip", 25_000_000);
+                sb.Append(',');
+                AppendAsset(sb, $"VPNRouter-v{ver}-win.zip.sha256", 64);
                 first = false;
             }
             if (r.IncludeLinuxAsset)
             {
                 if (!first) sb.Append(',');
                 AppendAsset(sb, $"VPNRouter-v{ver}-linux.tar.gz", 26_000_000);
+                sb.Append(',');
+                AppendAsset(sb, $"VPNRouter-v{ver}-linux.tar.gz.sha256", 64);
                 first = false;
             }
             if (r.IncludeLiteAsset)
