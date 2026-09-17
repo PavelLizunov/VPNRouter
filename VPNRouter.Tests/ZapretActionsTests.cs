@@ -427,6 +427,26 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    // ── 12c2. OpenHostsEditHelpers: implementation verification for UseShellExecute=false & ArgumentList ──
+
+    [Fact]
+    public void OpenHostsEditHelpers_UsesNoShellExecuteAndArgumentList()
+    {
+        var code = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..",
+            "VPNRouter.Core", "Services", "ZapretActions.cs"));
+
+        var methodStart = code.IndexOf("private static void OpenHostsEditHelpers(", StringComparison.Ordinal);
+        Assert.True(methodStart > 0, "OpenHostsEditHelpers method not found in ZapretActions.cs");
+
+        var methodEnd = code.IndexOf("// ── Game filter", methodStart, StringComparison.Ordinal);
+        var methodBody = code[methodStart..methodEnd];
+
+        Assert.Contains("UseShellExecute = false", methodBody);
+        Assert.Contains("notepadPsi.ArgumentList.Add(tempPath);", methodBody);
+        Assert.Contains("explorerPsi.ArgumentList.Add($\"/select,{hostsPath}\");", methodBody);
+    }
+
     // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
 
     [Fact]
