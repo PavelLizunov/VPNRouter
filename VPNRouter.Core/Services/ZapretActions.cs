@@ -293,8 +293,13 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            var notepadPsi = new ProcessStartInfo("notepad") { UseShellExecute = false };
+            notepadPsi.ArgumentList.Add(tempPath);
+            Process.Start(notepadPsi);
+
+            var explorerPsi = new ProcessStartInfo("explorer") { UseShellExecute = false };
+            explorerPsi.ArgumentList.Add($"/select,{hostsPath}");
+            Process.Start(explorerPsi);
         }
         catch { }
     }
