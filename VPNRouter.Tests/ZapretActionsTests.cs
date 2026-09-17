@@ -450,6 +450,30 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    // ── 12d. OpenHostsEditHelpers: source contract uses ArgumentList and disables shell execute ──
+
+    [Fact]
+    public void OpenHostsEditHelpers_SourceContract_UsesArgumentListAndDisablesShellExecute()
+    {
+        var zapretActions = LoadSource("VPNRouter.Core", "Services", "ZapretActions.cs");
+
+        Assert.Contains("var notepadPsi = new ProcessStartInfo(\"notepad.exe\") { UseShellExecute = false };", zapretActions);
+        Assert.Contains("notepadPsi.ArgumentList.Add(tempPath);", zapretActions);
+        Assert.Contains("var explorerPsi = new ProcessStartInfo(\"explorer.exe\") { UseShellExecute = false };", zapretActions);
+        Assert.Contains("explorerPsi.ArgumentList.Add($\"/select,{hostsPath}\");", zapretActions);
+    }
+
+    private static string LoadSource(params string[] relativeParts)
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        for (var i = 0; i < 8 && directory != null; i++, directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, Path.Combine(relativeParts));
+            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+        }
+        throw new FileNotFoundException($"Could not find source file: {Path.Combine(relativeParts)}");
+    }
+
     // ── 13. Strategy parser: handles ^ line continuation + var substitution ──
 
     [Fact]
