@@ -218,6 +218,30 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         Assert.Contains("[WARN] curl missing", r.ErrorLines);
     }
 
+    // ── RunFlowsealProbeAsync Input Validation ─────────────────────────────
+
+    [Fact]
+    public async Task RunFlowsealProbeAsync_DisallowedMetacharacters_ThrowsArgumentException()
+    {
+        if (!OperatingSystem.IsWindows() || !ZapretAutoStrategy.IsRunningAsAdmin())
+        {
+            return;
+        }
+
+        var badDir = Path.Combine(_tempRoot, "dir&with^meta");
+        var utilsDir = Path.Combine(badDir, "utils");
+        Directory.CreateDirectory(utilsDir);
+        var scriptPath = Path.Combine(utilsDir, "test zapret.ps1");
+        File.WriteAllText(scriptPath, "# dummy script");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            ZapretAutoStrategy.RunFlowsealProbeAsync(
+                badDir,
+                progress: null,
+                logger: null,
+                ct: CancellationToken.None));
+    }
+
     // ── IsRunningAsAdmin ────────────────────────────────────────────────────
 
     [Fact]
