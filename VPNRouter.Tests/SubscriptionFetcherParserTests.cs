@@ -56,6 +56,22 @@ public class SubscriptionFetcherParserTests
     }
 
     [Fact]
+    public void ParseBody_FieldsWithColons_DoesNotCollideKey()
+    {
+        // URIs with fields containing colons (e.g. Uuid "uuid:1" with Flow "xtls"
+        // vs Uuid "uuid" with Flow "1:xtls").
+        // Unescaped concatenation "Server:Port:uuid:1:xtls::" would collapse both.
+        // Escaped keys distinguish "uuid\:1" vs "1\:xtls".
+        var u1 = "vless://uuid%3A1@server1.example:443?security=tls&type=tcp&flow=xtls#one";
+        var u2 = "vless://uuid@server1.example:443?security=tls&type=tcp&flow=1%3Axtls#two";
+        var body = $"{u1}\n{u2}\n";
+
+        var result = SubscriptionFetcher.ParseBody(body);
+
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
     public void ParseBody_JsonWrapperWithConfig_DecodesBase64Inner()
     {
         // ninitux.com format: {"config":"<base64-encoded URI list>"}.
