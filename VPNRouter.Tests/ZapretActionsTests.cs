@@ -481,4 +481,38 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("/RESOLVED/lists/tls_clienthello_www_google_com.bin", args);
         Assert.DoesNotContain("%LISTS%", args);
     }
+
+    // ── 14. Hosts helper process start info: notepad ──
+
+    [Fact]
+    public void BuildNotepadStartInfo_UsesArgumentList_PreventsArgumentInjection()
+    {
+        var safePathWithSpaces = Path.Combine(Path.GetTempPath(), "test path with spaces", "hosts.txt");
+        var psi = ZapretActions.BuildNotepadStartInfo(safePathWithSpaces);
+
+        Assert.Equal("notepad.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        Assert.Empty(psi.Arguments);
+        Assert.Single(psi.ArgumentList);
+        Assert.Equal(safePathWithSpaces, psi.ArgumentList[0]);
+
+        var invalidPath = Path.Combine(Path.GetTempPath(), "test\"quote", "hosts.txt");
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildNotepadStartInfo(invalidPath));
+    }
+
+    // ── 15. Hosts helper process start info: explorer select ──
+
+    [Fact]
+    public void BuildExplorerSelectStartInfo_UseShellExecuteFalse_SelectSwitchFormatted()
+    {
+        var safePathWithSpaces = Path.Combine(Path.GetTempPath(), "hosts path with spaces", "hosts");
+        var psi = ZapretActions.BuildExplorerSelectStartInfo(safePathWithSpaces);
+
+        Assert.Equal("explorer.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        Assert.Equal($"/select,\"{safePathWithSpaces}\"", psi.Arguments);
+
+        var invalidPath = Path.Combine(Path.GetTempPath(), "hosts\"quote", "hosts");
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildExplorerSelectStartInfo(invalidPath));
+    }
 }

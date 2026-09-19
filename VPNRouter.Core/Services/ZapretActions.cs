@@ -280,6 +280,31 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
+    internal static ProcessStartInfo BuildNotepadStartInfo(string tempPath)
+    {
+        if (tempPath.Any(c => c is '"' or '\r' or '\n'))
+            throw new ArgumentException("Temp path contains invalid characters", nameof(tempPath));
+
+        // Security: Use UseShellExecute = false with ArgumentList to prevent argument injection
+        var psi = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
+        psi.ArgumentList.Add(tempPath);
+        return psi;
+    }
+
+    internal static ProcessStartInfo BuildExplorerSelectStartInfo(string hostsPath)
+    {
+        if (hostsPath.Any(c => c is '"' or '\r' or '\n'))
+            throw new ArgumentException("Hosts path contains invalid characters", nameof(hostsPath));
+
+        // Security: UseShellExecute = false prevents shell execution/command injection.
+        // Format /select,"path" allows explorer.exe to parse the /select, switch
+        // correctly without enclosing the switch inside quotes when path contains spaces.
+        return new ProcessStartInfo("explorer.exe", $"/select,\"{hostsPath}\"")
+        {
+            UseShellExecute = false
+        };
+    }
+
     private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
         // v2.20.2: notepad / explorer.exe are Windows-only. On Linux / macOS
@@ -293,8 +318,8 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            Process.Start(BuildNotepadStartInfo(tempPath));
+            Process.Start(BuildExplorerSelectStartInfo(hostsPath));
         }
         catch { }
     }
