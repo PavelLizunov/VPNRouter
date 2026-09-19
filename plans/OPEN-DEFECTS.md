@@ -16,6 +16,17 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Linux Headless runtime contract 2026-09-19
+
+- [x] **P1 RESOLVED / UNRELEASED (source-only)** — OMARCHY-RUNTIME-CONTRACT: inconsistent readiness/probe/start identity and implicit elevation in Linux Headless replaced by scoped default-unavailable policy, selected-path authorization and retained contexts; legacy null callers preserved. Snapshot `dabdc8c2`, 204 Core tests and 37 Headless groups pass; PR #296. Production provisioning/trust and privileged helper remain unimplemented, not waived. Evidence: `plans/omarchy-runtime-verification-2026-09-19.md`.
+- [x] **P1 RESOLVED / UNRELEASED (source-only)** — OMARCHY-RUNTIME-CACHE-REFUSAL: local runtime denial incorrectly changed working free configs to TlsFailed and saved cache; typed refusal now preserves entry/cache and maps unavailable. Negative control `a368989c` fails new assertion; `dabdc8c2` passes persisted-byte checks through feature/backend. Sources: `FreeConfigDeepVerifier.VerifyOneAsync`, `FreeConfigFeature.VerifyAsync`; PR #296.
+- [x] **P2 RESOLVED / UNRELEASED (source-only)** — OMARCHY-RUNTIME-RETAINED-CAPTURE: duplicated mutable policy getters lacked atomic denial retention; shared CAS Capture prevents fixture overwrite of retained production denial. Tests call production Capture directly, restore scopes, and exercise suppressed ExecutionContext flow. Snapshot `dabdc8c2`; PR #296. This is not a general concurrent operation-revocation guarantee.
+
+### Omarchy integration discovery 2026-09-17
+
+- [ ] **P2** — OMARCHY-OWNERSHIP: new Unix helper cannot rely on TunOwnershipLock exclusivity: named semaphore creation/wait exceptions return true, leaving ownership unavailable; enforce verified exclusive ownership before integrating rather than claiming current Linux cross-process protection — `VPNRouter.Core/Services/TunOwnershipLock.cs:78-99`; `plans/phase-omarchy-plugin-2026-09-17.md` — OPEN, target Omarchy adapter PR
+- [ ] **P2** — OMARCHY-PRIVILEGES: existing Linux firewall uses sudo -n nft and logs unsuccessful arming/loading without blocking; Omarchy contract forbids adding NOPASSWD, so integrate narrow authorized operations and truthful capability/error reporting before claiming firewall support — `VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs:38-44,152-164`; `plans/phase-omarchy-plugin-2026-09-17.md` — OPEN, target Omarchy adapter PR
+
 ### Mass review 2026-09-16 (HEAD `b101a7e2`, AppVersion 2.50.0-r9)
 
 Lead-verified against current source after Gemini/Opus/Grok swarms. Skills: bug-hunt, security-review, codebase-audit, change-verification, ponytail-review/audit/debt, audit-overflow-fix. Artifacts: `.dsh/security-review-report.md`, `.dsh/codebase-audit-scorecard-2026-09-16.md`. No product edits. `dotnet` not run on this host.

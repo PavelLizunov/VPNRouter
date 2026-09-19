@@ -66,6 +66,13 @@ public partial class SingBoxManager
                     direct);
             }
 
+            var policy = EffectivePolicy;
+            if (policy != null)
+            {
+                _logger.Information("[SingBoxManager] Linux stop: under runtime policy, avoiding pkexec/sudo escalation");
+                return false;
+            }
+
             var hostPath = ResolveSignalHelperHost();
             if (hostPath is null)
             {
@@ -113,6 +120,13 @@ public partial class SingBoxManager
                 return true;
             if (state == OwnedTargetState.IdentityUnavailable)
                 return RefuseUnknownIdentity(owned.Pid);
+
+            var policy = EffectivePolicy;
+            if (policy != null)
+            {
+                _logger.Information("[SingBoxManager] macOS stop: under runtime policy, avoiding sudo escalation");
+                return false;
+            }
 
             _logger.Warning(
                 "[SingBoxManager] macOS has no pidfd; signaling freshly validated exact PID {Pid}",

@@ -33,8 +33,34 @@ namespace VPNRouter.Tests;
 /// future "simplify back to one path" refactor would trip both the
 /// signature check and the call-site checks).</para>
 /// </summary>
-public sealed class ServiceAppCoexistenceTests
+public sealed class ServiceAppCoexistenceTests : System.IDisposable
 {
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-coexistence-{System.Guid.NewGuid():N}");
+    private readonly string? _previousRuntime = LinuxTunOwnership.OverrideRuntimeDirectory;
+    private readonly System.Reflection.FieldInfo _dataDirField = typeof(VPNRouter.Core.AppPaths)
+        .GetField("_dataDir", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+    private readonly object? _previousDataDir;
+
+    public ServiceAppCoexistenceTests()
+    {
+        _previousDataDir = _dataDirField.GetValue(null);
+        Directory.CreateDirectory(_tempDir);
+        VPNRouter.Core.AppPaths.OverrideDataDir(_tempDir);
+        if (System.OperatingSystem.IsLinux())
+        {
+            var runtime = Path.Combine(_tempDir, "runtime");
+            Directory.CreateDirectory(runtime, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            LinuxTunOwnership.OverrideRuntimeDirectory = runtime;
+        }
+    }
+
+    public void Dispose()
+    {
+        LinuxTunOwnership.OverrideRuntimeDirectory = _previousRuntime;
+        _dataDirField.SetValue(null, _previousDataDir);
+        Directory.Delete(_tempDir, recursive: true);
+    }
+
     [Fact]
     public void OrphanCleanup_KillOrphans_HasRespectTunLockParameter()
     {
@@ -177,7 +203,14 @@ public sealed class ServiceAppCoexistenceTests
             // legitimately fail. Don't assert the boolean — assert that
             // the call returned (didn't deadlock or throw) by reaching
             // this line.
-            Assert.True(acquired || !acquired);
+            if (System.OperatingSystem.IsLinux())
+            {
+                Assert.True(acquired, "Isolated Linux lock must remain available after probes");
+                Assert.Equal(TunOwnershipStatus.Owned, TunOwnershipLock.ProbeOwnership());
+                Assert.True(File.Exists(Path.Combine(LinuxTunOwnership.OverrideRuntimeDirectory!, LinuxTunOwnership.LockFileName)));
+            }
+            else
+                Assert.True(acquired || !acquired);
         }
         finally
         {
@@ -324,8 +357,13 @@ public sealed class ServiceAppCoexistenceTests
     private static CancellationTokenSource? OwnerMonitor(TunOwnershipLock instance)
         => GetField(instance, "_ownerRecordMonitorCts") as CancellationTokenSource;
 
-    private static Semaphore SeedProcessOnlyOwnership(TunOwnershipLock instance)
+    private static Semaphore? SeedProcessOnlyOwnership(TunOwnershipLock instance)
     {
+        if (System.OperatingSystem.IsLinux())
+        {
+            Assert.True(instance.TryAcquire(), "Reconnect must acquire the isolated real Linux flock");
+            return null;
+        }
         var semaphore = new Semaphore(1, 1);
         Assert.True(semaphore.WaitOne(0));
         SetField(instance, "_semaphore", semaphore);

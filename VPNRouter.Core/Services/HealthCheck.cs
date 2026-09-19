@@ -141,22 +141,47 @@ public static class HealthCheck
         }
 
         // ── sing-box binary ──
-        var singboxPath = AppPaths.SingBoxExePath;
-        if (File.Exists(singboxPath))
+        var policy = SingBoxRuntimePolicy.Current;
+        if (policy != null)
         {
-            var size = new FileInfo(singboxPath).Length;
-            results.Add(new(Level.Ok, $"sing-box at {singboxPath} ({size / 1024 / 1024} MB)"));
+            try
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Inspect);
+                var path = policy.SelectedExecutablePath;
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    var size = new FileInfo(path).Length;
+                    results.Add(new(Level.Ok, $"sing-box at {path} ({size / 1024 / 1024} MB)"));
+                }
+                else
+                {
+                    results.Add(new(Level.Err, "sing-box binary missing or unavailable under runtime policy"));
+                }
+            }
+            catch
+            {
+                results.Add(new(Level.Err, "sing-box binary unavailable or untrusted under runtime policy"));
+            }
         }
         else
         {
-            var bundled = Path.Combine(AppContext.BaseDirectory,
-                OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
-            if (File.Exists(bundled))
-                results.Add(new(Level.Warn,
-                    $"sing-box not deployed to {singboxPath} — will be copied from bundle on first start"));
+            var singboxPath = AppPaths.SingBoxExePath;
+            if (File.Exists(singboxPath))
+            {
+                var size = new FileInfo(singboxPath).Length;
+                results.Add(new(Level.Ok, $"sing-box at {singboxPath} ({size / 1024 / 1024} MB)"));
+            }
             else
-                results.Add(new(Level.Err,
-                    $"sing-box not found at {singboxPath} OR bundled at {bundled}"));
+            {
+                var bundled = Path.Combine(AppContext.BaseDirectory,
+                    OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
+                if (File.Exists(bundled))
+                    results.Add(new(Level.Warn,
+                        $"sing-box not deployed to {singboxPath} — will be copied from bundle on first start"));
+                else
+                    results.Add(new(Level.Err,
+                        $"sing-box not found at {singboxPath} OR bundled at {bundled}"));
+            }
         }
 
         // ── Update receipt ──
@@ -177,23 +202,30 @@ public static class HealthCheck
         // they hit the failure mid-Stop.
         if (OperatingSystem.IsLinux())
         {
-            var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
-            if (blocker != null)
+            if (policy != null)
             {
-                results.Add(new(Level.Warn,
-                    $"Linux sandbox blocks host TUN privileges ({blocker}). " +
-                    "Run VPNRouter outside AppImage/bubblewrap."));
-            }
-            else if (LinuxRuntimeEnvironment.ResolvePkexec() != null)
-            {
-                results.Add(new(Level.Ok, "pkexec / polkit available"));
+                results.Add(new(Level.Warn, "runtime policy unavailable"));
             }
             else
             {
-                results.Add(new(Level.Warn,
-                    "trusted pkexec not found — auto-update + " +
-                    "elevated Stop will fail unless NOPASSWD sudoers is " +
-                    "configured. Install policykit-1 (apt) or polkit (dnf)."));
+                var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
+                if (blocker != null)
+                {
+                    results.Add(new(Level.Warn,
+                        $"Linux sandbox blocks host TUN privileges ({blocker}). " +
+                        "Run VPNRouter outside AppImage/bubblewrap."));
+                }
+                else if (LinuxRuntimeEnvironment.ResolvePkexec() != null)
+                {
+                    results.Add(new(Level.Ok, "pkexec / polkit available"));
+                }
+                else
+                {
+                    results.Add(new(Level.Warn,
+                        "trusted pkexec not found — auto-update + " +
+                        "elevated Stop will fail unless NOPASSWD sudoers is " +
+                        "configured. Install policykit-1 (apt) or polkit (dnf)."));
+                }
             }
         }
 

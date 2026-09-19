@@ -21,7 +21,10 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 public sealed class FreeConfigDeepVerifier
 {
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
     private readonly string _singBoxPath;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     /// <summary>Time to wait for sing-box to bind SOCKS before we attempt HTTP.</summary>
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
@@ -52,7 +55,8 @@ public sealed class FreeConfigDeepVerifier
     public FreeConfigDeepVerifier(ILogger logger)
     {
         _logger = logger;
-        _singBoxPath = AppPaths.SingBoxExePath;
+        _policy = SingBoxRuntimePolicy.Current;
+        _singBoxPath = _policy?.SelectedExecutablePath ?? AppPaths.SingBoxExePath;
     }
 
     /// <summary>
@@ -65,7 +69,17 @@ public sealed class FreeConfigDeepVerifier
         IProgress<(int done, int total)>? progress = null,
         CancellationToken ct = default)
     {
-        if (!File.Exists(_singBoxPath))
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            if (!policy.IsAvailable)
+            {
+                _logger.Warning("DeepVerify: sing-box binary unavailable under runtime policy");
+                return;
+            }
+        }
+        else if (!File.Exists(_singBoxPath))
         {
             _logger.Warning("DeepVerify: sing-box binary not found at {path}", _singBoxPath);
             return;
@@ -82,6 +96,10 @@ public sealed class FreeConfigDeepVerifier
             {
                 await VerifyOneAsync(cfg, ct);
             }
+            catch (SingBoxRuntimePolicyException)
+            {
+                _logger.Warning("DeepVerify: policy denied verification for {host}:{port}", cfg.Host, cfg.Port);
+            }
             finally
             {
                 sem.Release();
@@ -95,6 +113,22 @@ public sealed class FreeConfigDeepVerifier
 
     public async Task VerifyOneAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            policy.Authorize(SingBoxRuntimeOperation.Verify);
+        }
+
+        var prevStatus = cfg.Status;
+        var prevLastError = cfg.LastError;
+        var prevLastTestedAt = cfg.LastTestedAt;
+        var prevLatencyMs = cfg.LatencyMs;
+        var prevLastDeepVerifyAt = cfg.LastDeepVerifyAt;
+        var prevMeasuredBandwidth = cfg.MeasuredBandwidthMbps;
+        var prevBandwidthTestedAt = cfg.BandwidthTestedAt;
+        var prevLastVerifyFailedAt = cfg.LastVerifyFailedAt;
+
         cfg.LastTestedAt = DateTime.UtcNow;
 
         // r9 P2: flag the probe window so RuntimeStatusDetector doesn't read our
@@ -125,7 +159,7 @@ public sealed class FreeConfigDeepVerifier
             // 2. Launch sing-box with stdout/stderr capture for diagnostics.
             var startInfo = new ProcessStartInfo
             {
-                FileName = _singBoxPath,
+                FileName = policy != null ? policy.SelectedExecutablePath! : _singBoxPath,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
@@ -145,6 +179,11 @@ public sealed class FreeConfigDeepVerifier
                     stderrBuffer,
                     e.Data,
                     DeepVerifyProbe.MaxDiagnosticBufferChars);
+
+            if (policy != null)
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Verify);
+            }
 
             if (!process.Start())
             {
@@ -242,6 +281,18 @@ public sealed class FreeConfigDeepVerifier
                     cfg.Host, cfg.Port, cc, httpErr, sw.ElapsedMilliseconds,
                     string.IsNullOrWhiteSpace(stderrSnip) ? "" : $" | sb-err: {stderrSnip}");
             }
+        }
+        catch (SingBoxRuntimePolicyException)
+        {
+            cfg.Status = prevStatus;
+            cfg.LastError = prevLastError;
+            cfg.LastTestedAt = prevLastTestedAt;
+            cfg.LatencyMs = prevLatencyMs;
+            cfg.LastDeepVerifyAt = prevLastDeepVerifyAt;
+            cfg.MeasuredBandwidthMbps = prevMeasuredBandwidth;
+            cfg.BandwidthTestedAt = prevBandwidthTestedAt;
+            cfg.LastVerifyFailedAt = prevLastVerifyFailedAt;
+            throw;
         }
         catch (OperationCanceledException)
         {

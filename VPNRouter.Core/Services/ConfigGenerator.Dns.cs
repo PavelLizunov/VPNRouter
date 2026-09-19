@@ -40,6 +40,23 @@ public static partial class ConfigGenerator
         // (override to vpn-dns).
         var defaultVpnDns = isFullTunnel || isExcludeMode || strictDns;
 
+        string? validatedOverride = null;
+        if (!string.IsNullOrWhiteSpace(settings.App?.DnsModeOverride))
+        {
+            var rawOverride = settings.App.DnsModeOverride.Trim().ToLowerInvariant();
+            if (rawOverride is "vpn_only" or "smart" or "direct")
+            {
+                validatedOverride = rawOverride;
+            }
+            else
+            {
+                // Validate unexpected override: fail closed to vpn_only
+                validatedOverride = "vpn_only";
+            }
+        }
+
+        var effectiveDnsMode = validatedOverride ?? profile.DnsMode;
+
         var dns = new SingBoxDns
         {
             // ipv4_only protects from IPv6 leaks (when VPN tunnels only IPv4) AND
@@ -176,7 +193,7 @@ public static partial class ConfigGenerator
             // Under StrictDns, the all-DNS-via-VPN guarantee overrides smart mode.
             if (processes.Count > 0)
             {
-                var dnsServer = strictDns || profile.DnsMode != "smart" ? "vpn-dns" : "local-dns";
+                var dnsServer = strictDns || effectiveDnsMode != "smart" ? "vpn-dns" : "local-dns";
                 dns.Rules.Add(new DnsRule
                 {
                     ProcessName = processes.ToList(),

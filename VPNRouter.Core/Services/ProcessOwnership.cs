@@ -508,10 +508,15 @@ internal static class ProcessOwnership
     {
         var result = new List<OwnedProcessIdentity>();
         var seenPids = new HashSet<int>();
-        var names = CandidateProcessNames(
+        var policyPath = SingBoxRuntimePolicy.Current?.SelectedExecutablePath;
+        var names = new HashSet<string>(CandidateProcessNames(
             AppPaths.SingBoxExePath,
             durablePath,
-            configuredCandidate ?? ConfiguredExePath);
+            configuredCandidate ?? ConfiguredExePath));
+        if (!string.IsNullOrEmpty(policyPath))
+        {
+            names.UnionWith(CandidateProcessNames(policyPath, null, null));
+        }
 
         foreach (var name in names)
         {
