@@ -57,6 +57,7 @@ public static class ProtocolTests
         await RunTestAsync(nameof(LifecycleChecks), LifecycleChecks.RunAsync);
         await RunTestAsync(nameof(StorageChecks), StorageChecks.RunAsync);
         await RunTestAsync(nameof(ProfileChecks), ProfileChecks.RunAsync);
+        await RunTestAsync(nameof(RuntimePolicyChecks), RuntimePolicyChecks.RunAsync);
 
         Console.WriteLine($"\nTest Results: {s_passedTests} passed, {s_failedTests} failed.");
         return s_failedTests == 0 ? 0 : 1;

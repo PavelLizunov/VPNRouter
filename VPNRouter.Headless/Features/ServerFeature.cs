@@ -17,15 +17,20 @@ public sealed class ServerFeature
 {
     private readonly ConfigStorage _storage;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public ServerFeature(ConfigStorage storage, ILogger? logger = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _logger = logger ?? Log.Logger;
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
     }
 
     public object List(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "offset", "limit");
 
         int offset = 0;
@@ -92,6 +97,7 @@ public sealed class ServerFeature
 
     public void Import(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "text");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -153,6 +159,7 @@ public sealed class ServerFeature
 
     public void Select(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -196,6 +203,7 @@ public sealed class ServerFeature
 
     public void Remove(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -229,6 +237,7 @@ public sealed class ServerFeature
 
     public async Task<object> TestAsync(JsonElement parameters, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "id");
 
         if (!parameters.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String)
@@ -258,6 +267,7 @@ public sealed class ServerFeature
 
     public async Task<object> VerifyAsync(JsonElement parameters, Action<object>? progress, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "id");
 
         if (!parameters.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String)
@@ -282,9 +292,16 @@ public sealed class ServerFeature
         string? safeError = null;
         if (!result.Ok)
         {
-            safeError = result.FailurePhase != DeepVerifyFailurePhase.None
-                ? result.FailurePhase.ToString()
-                : "Verification failed";
+            if (EffectivePolicy != null && (!EffectivePolicy.IsAvailable || result.FailurePhase == DeepVerifyFailurePhase.LocalSpawn))
+            {
+                safeError = "unavailable";
+            }
+            else
+            {
+                safeError = result.FailurePhase != DeepVerifyFailurePhase.None
+                    ? result.FailurePhase.ToString()
+                    : "Verification failed";
+            }
         }
 
         return new

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using VPNRouter.Core;
+using VPNRouter.Core.Services;
 using VPNRouter.Headless.Features;
 using VPNRouter.Headless.Storage;
 
@@ -29,6 +30,9 @@ public sealed class RouterBackend : IAsyncDisposable
     private readonly IRouterSession _session;
     private readonly ConfigStorage _storage;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     private readonly ServerFeature _serverFeature;
     private readonly SubscriptionFeature _subscriptionFeature;
@@ -51,6 +55,9 @@ public sealed class RouterBackend : IAsyncDisposable
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _logger = logger ?? Log.Logger;
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
+
+        using var _ = SingBoxRuntimePolicy.EnterScope(_policy);
         _storage = new ConfigStorage(dataDir, _logger);
 
         _serverFeature = new ServerFeature(_storage, _logger);
@@ -71,43 +78,52 @@ public sealed class RouterBackend : IAsyncDisposable
     /// </summary>
     public async Task<object> ExecuteAsync(string method, JsonElement parameters, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(method) || !MethodNameRegex.IsMatch(method))
-            throw new RouterException("invalid_request", "Invalid or missing method name");
-
-        // Urgent non-blocking control operations bypass busy concurrency check
-        if (method == "cancel")
-            return HandleCancel(parameters);
-
-        if (method == "disconnect")
-        {
-            EnsureEmptyParameters(parameters);
-            return await HandleDisconnectAsync(ct);
-        }
-
-        if (method == "snapshot")
-        {
-            EnsureEmptyParameters(parameters);
-            return GetSnapshot();
-        }
-
-        // Ordinary operations are strictly serialized (at most 1 active)
-        if (Interlocked.CompareExchange(ref _busyState, 1, 0) != 0)
-            throw new RouterException("busy", "Another operation is currently in progress");
-
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         try
         {
-            EmitStateChanged();
-            return await DispatchOrdinaryMethodAsync(method, parameters, ct);
+            if (string.IsNullOrWhiteSpace(method) || !MethodNameRegex.IsMatch(method))
+                throw new RouterException("invalid_request", "Invalid or missing method name");
+
+            // Urgent non-blocking control operations bypass busy concurrency check
+            if (method == "cancel")
+                return HandleCancel(parameters);
+
+            if (method == "disconnect")
+            {
+                EnsureEmptyParameters(parameters);
+                return await HandleDisconnectAsync(ct);
+            }
+
+            if (method == "snapshot")
+            {
+                EnsureEmptyParameters(parameters);
+                return GetSnapshot();
+            }
+
+            // Ordinary operations are strictly serialized (at most 1 active)
+            if (Interlocked.CompareExchange(ref _busyState, 1, 0) != 0)
+                throw new RouterException("busy", "Another operation is currently in progress");
+
+            try
+            {
+                EmitStateChanged();
+                return await DispatchOrdinaryMethodAsync(method, parameters, ct);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _busyState, 0);
+                EmitStateChanged();
+            }
         }
-        finally
+        catch (SingBoxRuntimePolicyException)
         {
-            Interlocked.Exchange(ref _busyState, 0);
-            EmitStateChanged();
+            throw new RouterException("unavailable", "VPN runtime is unavailable");
         }
     }
 
     public object GetSnapshot()
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         var settings = _storage.GetSettings();
         var configMode = settings.App?.ConfigMode?.ToLowerInvariant() ?? "generated";
         string activeServer = string.Empty;
@@ -400,6 +416,7 @@ public sealed class RouterBackend : IAsyncDisposable
         if (_isDisposed)
             return;
 
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         _isDisposed = true;
         _session.Changed -= OnSessionChanged;
 

@@ -2,7 +2,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Headless.Lifecycle;
@@ -13,11 +15,27 @@ namespace VPNRouter.Headless.Lifecycle;
 public sealed class VpnEngineAdapter : ILifecycleEngine
 {
     private readonly VpnEngine _engine;
+    private SingBoxRuntimePolicy? _policy;
     private bool _disposed;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
+
+    public VpnEngineAdapter()
+        : this(CreateProductionEngine())
+    {
+    }
+
+    private static VpnEngine CreateProductionEngine()
+    {
+        var policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        return PlatformServices.CreateVpnEngine(Log.Logger);
+    }
 
     public VpnEngineAdapter(VpnEngine engine)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
         _engine.SingBoxStarted += OnSingBoxStarted;
         _engine.Connected += OnConnected;
         _engine.StatusChanged += OnStatusChanged;
@@ -42,13 +60,22 @@ public sealed class VpnEngineAdapter : ILifecycleEngine
     public event Action<string>? Warning;
 
     public Task StartAsync(AppSettings settings, CancellationToken ct)
-        => _engine.StartAsync(settings, ct);
+    {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
+        return _engine.StartAsync(settings, ct);
+    }
 
     public Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct)
-        => _engine.ApplyAsync(settings, ct);
+    {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
+        return _engine.ApplyAsync(settings, ct);
+    }
 
     public void Stop()
-        => _engine.Stop();
+    {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
+        _engine.Stop();
+    }
 
     public Func<bool>? CaptureReadinessGuard(int pid)
         => _engine.CaptureReadinessGuard(pid);
@@ -59,6 +86,7 @@ public sealed class VpnEngineAdapter : ILifecycleEngine
     {
         if (_disposed) return;
         _disposed = true;
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         _engine.SingBoxStarted -= OnSingBoxStarted;
         _engine.Connected -= OnConnected;
         _engine.StatusChanged -= OnStatusChanged;

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Serilog;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Platform;
+using VPNRouter.Core.Services;
 using VPNRouter.Headless.Lifecycle;
 
 namespace VPNRouter.Headless;
@@ -17,6 +18,7 @@ namespace VPNRouter.Headless;
 public sealed class RouterSession : IRouterSession
 {
     private readonly ILifecycleEngine _engine;
+    private SingBoxRuntimePolicy? _policy;
     private readonly Func<OwnershipCheckResult>? _ownershipProbe;
     private readonly Func<bool>? _killSwitchProbe;
     private readonly Func<bool>? _capabilityReadinessProbe;
@@ -24,6 +26,8 @@ public sealed class RouterSession : IRouterSession
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _stateLock = new();
     private readonly TimeSpan? _stopTimeout;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     private CancellationTokenSource? _activeConnectCts;
     private string _state = SessionStates.Disconnected;
@@ -37,10 +41,18 @@ public sealed class RouterSession : IRouterSession
     /// <summary>
     /// Default constructor for production use.
     /// Wires Core PlatformServices.CreateVpnEngine without Avalonia or UI dependencies.
+    /// Constructs Core engine WITH Linux default policy active.
     /// </summary>
     public RouterSession()
-        : this(new VpnEngineAdapter(PlatformServices.CreateVpnEngine(Log.Logger)), null, null, Log.Logger)
+        : this(CreateProductionEngine(), null, null, Log.Logger)
     {
+    }
+
+    private static ILifecycleEngine CreateProductionEngine()
+    {
+        var policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        return new VpnEngineAdapter(PlatformServices.CreateVpnEngine(Log.Logger));
     }
 
     /// <summary>
@@ -55,6 +67,7 @@ public sealed class RouterSession : IRouterSession
         TimeSpan? stopTimeout = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
         _ownershipProbe = ownershipProbe;
         _killSwitchProbe = killSwitchProbe;
         _logger = logger;
@@ -139,10 +152,16 @@ public sealed class RouterSession : IRouterSession
     }
 
     /// <inheritdoc />
-    public bool CanConnect =>
-        !_disposed &&
-        (State == SessionStates.Disconnected || State == SessionStates.Error) &&
-        PlatformCapabilityVerifier.VerifyCanConnect(_ownershipProbe, _logger, _capabilityReadinessProbe);
+    public bool CanConnect
+    {
+        get
+        {
+            using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
+            return !_disposed &&
+                (State == SessionStates.Disconnected || State == SessionStates.Error) &&
+                PlatformCapabilityVerifier.VerifyCanConnect(_ownershipProbe, _logger, _capabilityReadinessProbe);
+        }
+    }
 
     /// <inheritdoc />
     public bool SupportsKillSwitch => PlatformCapabilityVerifier.VerifyKillSwitchSupport(_killSwitchProbe, _logger);
@@ -156,6 +175,7 @@ public sealed class RouterSession : IRouterSession
     /// <inheritdoc />
     public async Task ConnectAsync(AppSettings settings, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         ArgumentNullException.ThrowIfNull(settings);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -306,6 +326,16 @@ public sealed class RouterSession : IRouterSession
         {
             throw;
         }
+        catch (SingBoxRuntimePolicyException)
+        {
+            if (_ownsConnection)
+            {
+                await BoundedTeardown.StopBoundedAsync(_engine, timeout: _stopTimeout, logger: _logger).ConfigureAwait(false);
+                _ownsConnection = false;
+            }
+            TransitionState(SessionStates.Unavailable, "unavailable");
+            throw new RouterException("unavailable", "VPN runtime is unavailable");
+        }
         catch (Exception ex)
         {
             if (_ownsConnection)
@@ -350,6 +380,7 @@ public sealed class RouterSession : IRouterSession
     /// <inheritdoc />
     public async Task ApplyAsync(AppSettings settings, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         ArgumentNullException.ThrowIfNull(settings);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -404,6 +435,7 @@ public sealed class RouterSession : IRouterSession
     /// <inheritdoc />
     public async Task DisconnectAsync(CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         lock (_stateLock)
@@ -484,6 +516,7 @@ public sealed class RouterSession : IRouterSession
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         lock (_stateLock)
         {
             if (_disposed) return;

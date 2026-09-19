@@ -15,15 +15,20 @@ public sealed class SubscriptionFeature
 {
     private readonly ConfigStorage _storage;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public SubscriptionFeature(ConfigStorage storage, ILogger? logger = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _logger = logger ?? Log.Logger;
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
     }
 
     public object List(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "offset", "limit");
 
         int offset = 0;
@@ -68,6 +73,7 @@ public sealed class SubscriptionFeature
 
     public void Add(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "name", "url");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -122,6 +128,7 @@ public sealed class SubscriptionFeature
 
     public void Remove(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -150,6 +157,7 @@ public sealed class SubscriptionFeature
 
     public void Enable(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id", "enabled");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -185,6 +193,7 @@ public sealed class SubscriptionFeature
 
     public async Task RefreshAsync(JsonElement parameters, Action<object>? progress, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)

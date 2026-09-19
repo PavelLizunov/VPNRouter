@@ -15,6 +15,9 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public class VpnEngine : IDisposable
 {
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
     private SingBoxManager? _singBox;
     private HealthMonitor? _healthMonitor;
     private IProcessMonitor? _etw;
@@ -280,6 +283,7 @@ public class VpnEngine : IDisposable
         IUnixDnsHardening? unixDnsHardening = null,
         ISplitTunnelDriver? splitDriver = null)
     {
+        _policy = SingBoxRuntimePolicy.Current;
         _scanner = scanner;
         _firewallFactory = firewallFactory;
         _monitorFactory = monitorFactory;
@@ -344,6 +348,13 @@ public class VpnEngine : IDisposable
     /// </summary>
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            policy.Authorize(SingBoxRuntimeOperation.Start);
+        }
+
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -723,6 +734,13 @@ public class VpnEngine : IDisposable
     /// </summary>
     public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default, bool forceRestart = false)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            policy.Authorize(SingBoxRuntimeOperation.Start);
+        }
+
         // v2.46.1 (audit batch-1 #1): Apply joins the _lifecycleGate serialized set
         // (StartAsync / Stop / failover restart). Without the gate, Apply could pass
         // its IsRunning check and then race a Stop — hot-reloading a torn-down
@@ -950,6 +968,7 @@ public class VpnEngine : IDisposable
 
     public void Stop()
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         // v2.44.3 (P0): signal disconnect intent + cancel any in-flight failover
         // restart BEFORE taking the gate, so a restart mid-flight (holding the gate,
         // running under _sessionCts.Token) is cancelled and aborts instead of
@@ -982,6 +1001,7 @@ public class VpnEngine : IDisposable
     /// </summary>
     private void TeardownInternal()
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         OnStatus("Stopping...");
 
         // BR-5 (brat 2026-05-19) — re-ordered so sing-box dies EARLY,

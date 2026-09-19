@@ -39,10 +39,26 @@ public static class SingBoxFeatures
     internal static bool? OverrideXhttp { get; set; }
 
     /// <summary>True when the bundled sing-box was built <c>with_awg</c> (the lx fork).</summary>
-    public static bool AwgAvailable => OverrideAwg ?? Probe().awg;
+    public static bool AwgAvailable
+    {
+        get
+        {
+            var policy = SingBoxRuntimePolicy.Current;
+            if (policy != null) return policy.AwgAvailable;
+            return OverrideAwg ?? Probe().awg;
+        }
+    }
 
     /// <summary>True when the bundled sing-box was built <c>with_xhttp</c> (the lx fork).</summary>
-    public static bool XhttpAvailable => OverrideXhttp ?? Probe().xhttp;
+    public static bool XhttpAvailable
+    {
+        get
+        {
+            var policy = SingBoxRuntimePolicy.Current;
+            if (policy != null) return policy.XhttpAvailable;
+            return OverrideXhttp ?? Probe().xhttp;
+        }
+    }
 
     /// <summary>
     /// P2 (2026-07-10): fire the one-time capability probe on a BACKGROUND thread
@@ -55,6 +71,7 @@ public static class SingBoxFeatures
     /// </summary>
     public static void Prewarm()
     {
+        if (SingBoxRuntimePolicy.Current != null) return;
         if (OverrideAwg.HasValue && OverrideXhttp.HasValue) return;
         _ = Task.Run(() => { try { _ = Probe(); } catch { /* best-effort warm */ } });
     }
@@ -74,6 +91,12 @@ public static class SingBoxFeatures
 
     private static (bool awg, bool xhttp) Probe()
     {
+        var policy = SingBoxRuntimePolicy.Current;
+        if (policy != null)
+        {
+            return (policy.AwgAvailable, policy.XhttpAvailable);
+        }
+
         if (_probed) return (_awg, _xhttp);
         lock (_gate)
         {

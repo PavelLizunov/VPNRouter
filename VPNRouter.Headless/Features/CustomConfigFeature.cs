@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 using VPNRouter.Headless.Storage;
 
 namespace VPNRouter.Headless.Features;
@@ -15,16 +16,21 @@ public sealed class CustomConfigFeature
     private readonly ConfigStorage _storage;
     private readonly CustomConfigStorage _customStorage;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public CustomConfigFeature(ConfigStorage storage, ILogger? logger = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _logger = logger ?? Log.Logger;
         _customStorage = new CustomConfigStorage(_logger);
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
     }
 
     public object List(JsonElement parameters = default)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureEmptyParameters(parameters);
 
         var settings = _storage.GetSettings();
@@ -44,6 +50,7 @@ public sealed class CustomConfigFeature
 
     public void Import(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "name", "text");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -92,6 +99,7 @@ public sealed class CustomConfigFeature
 
     public void Select(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)
@@ -120,6 +128,7 @@ public sealed class CustomConfigFeature
 
     public void Remove(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "revision", "id");
 
         if (!parameters.TryGetProperty("revision", out var revProp) || revProp.ValueKind != JsonValueKind.String)

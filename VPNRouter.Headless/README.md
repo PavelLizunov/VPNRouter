@@ -6,15 +6,18 @@
 
 This is a draft integration, not an installable or accepted Linux VPN release.
 Linux firewall kill-switch and DNS-lockdown capabilities remain unavailable.
-Connection eligibility currently checks the data-directory sing-box path and
-cooperative ownership; it does not establish binary integrity or TUN privileges.
-The existing Core privilege-launch behavior is unchanged. Runtime binary
-selection/distribution and privileged protection integration remain unresolved.
+Under the Linux Headless runtime policy (`SingBoxRuntimePolicy`), connection readiness
+defaults to unavailable (`untrusted`) because no production trusted artifact is yet authorized.
+Mere file presence on disk at `AppPaths.SingBoxExePath` or within the application directory
+does not establish trust, integrity, or authority to launch code. Production launch,
+probing, and verification fail closed before any engine side effects occur.
+Runtime binary distribution and privileged protection integration remain unresolved.
 The Linux lock coordinates cooperating processes of the same UID, not all users.
 
 Verification covers isolated protocol/lifecycle/storage tests and selected Core
 regressions, not live shell interaction or VPN dataplane acceptance. See the
-[verification report](../plans/omarchy-integrated-candidate-2026-09-18.md).
+[backend verification report](../plans/omarchy-integrated-candidate-2026-09-18.md)
+and [runtime-contract evidence](../plans/omarchy-runtime-verification-2026-09-19.md).
 Do not interpret a passing build or CI run as permission to install or connect.
 
 ## Usage

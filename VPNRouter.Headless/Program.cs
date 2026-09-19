@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using VPNRouter.Core;
+using VPNRouter.Core.Services;
 using VPNRouter.Headless.Protocol;
 
 namespace VPNRouter.Headless;
@@ -89,6 +90,9 @@ public static class Program
         using var sigtermScope = sigtermRegistration;
         using var sigintScope = sigintRegistration;
         using var sigquitScope = sigquitRegistration;
+        using var policyScope = OperatingSystem.IsLinux()
+            ? SingBoxRuntimePolicy.EnterScope(SingBoxRuntimePolicy.Current ?? SingBoxRuntimePolicy.DefaultProduction)
+            : null;
 
         try
         {

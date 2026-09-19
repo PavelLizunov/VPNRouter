@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.Headless.Storage;
 
@@ -18,11 +19,15 @@ public sealed class FreeConfigFeature
     private readonly FreeConfigAggregator _aggregator;
     private readonly FreeConfigTester _tester;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public FreeConfigFeature(ConfigStorage storage, ILogger? logger = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _logger = logger ?? Log.Logger;
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
         _aggregator = new FreeConfigAggregator(_logger);
         _cache = _aggregator.Cache;
         _tester = new FreeConfigTester();
@@ -30,6 +35,7 @@ public sealed class FreeConfigFeature
 
     public object List(JsonElement parameters)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "offset", "limit");
 
         int offset = 0;
@@ -75,6 +81,7 @@ public sealed class FreeConfigFeature
 
     public async Task<object> RefreshAsync(JsonElement parameters, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureEmptyParameters(parameters);
 
         var existingFile = _cache.Load();
@@ -115,6 +122,7 @@ public sealed class FreeConfigFeature
 
     public async Task<object> TestAsync(JsonElement parameters, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "id");
 
         if (!parameters.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String)
@@ -151,6 +159,7 @@ public sealed class FreeConfigFeature
 
     public async Task<object> VerifyAsync(JsonElement parameters, Action<object>? progress, CancellationToken ct)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureAllowedProperties(parameters, "id");
 
         if (!parameters.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String)
@@ -165,7 +174,14 @@ public sealed class FreeConfigFeature
         progress?.Invoke(new { id, stage = "verify_free_start", completed = 0, total = 1 });
 
         var verifier = new FreeConfigDeepVerifier(_logger);
-        await verifier.VerifyOneAsync(entry, ct);
+        try
+        {
+            await verifier.VerifyOneAsync(entry, ct);
+        }
+        catch (SingBoxRuntimePolicyException)
+        {
+            throw new RouterException("unavailable", "VPN runtime is unavailable");
+        }
         _cache.Save(cacheFile);
 
         progress?.Invoke(new { id, stage = "verify_free_complete", completed = 1, total = 1 });

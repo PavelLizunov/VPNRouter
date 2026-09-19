@@ -14,15 +14,20 @@ public sealed class DiagnosticsFeature
 {
     private readonly Func<bool> _isConnected;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public DiagnosticsFeature(Func<bool> isConnected, ILogger? logger = null)
     {
         _isConnected = isConnected ?? (() => false);
         _logger = logger ?? Log.Logger;
+        _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
     }
 
     public object Check(JsonElement parameters = default)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureEmptyParameters(parameters);
 
         var results = HealthCheck.RunAll();
@@ -52,6 +57,7 @@ public sealed class DiagnosticsFeature
 
     public object Export(JsonElement parameters = default)
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureEmptyParameters(parameters);
 
         var diagnosticsDir = Path.Combine(AppPaths.DataDir, "diagnostics");

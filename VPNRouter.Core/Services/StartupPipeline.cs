@@ -299,6 +299,9 @@ internal sealed class StartupPipeline
     private readonly IStartupHost _host;
     private readonly ISettingsStore _store;
     private readonly IWindowsDnsHardening _dnsHardening;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     /// <summary>
     /// Task #49 (2026-05-21): static seam for the TUN warmup probe's
@@ -361,6 +364,7 @@ internal sealed class StartupPipeline
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _store = store ?? RealSettingsStore.Instance;
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
+        _policy = SingBoxRuntimePolicy.Current;
     }
 
     /// <summary>
@@ -374,6 +378,13 @@ internal sealed class StartupPipeline
         StartupContext context,
         CancellationToken ct)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            policy.Authorize(SingBoxRuntimeOperation.Start);
+        }
+
         ArgumentNullException.ThrowIfNull(context);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var settings = context.Settings;
@@ -1115,6 +1126,12 @@ internal sealed class StartupPipeline
     /// </summary>
     private void DeploySingBoxBinary(AppSettings settings)
     {
+        if (EffectivePolicy != null)
+        {
+            // For restricted policy: skip startup DeploySingBoxBinary copy
+            return;
+        }
+
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
             : AppPaths.SingBoxExePath;

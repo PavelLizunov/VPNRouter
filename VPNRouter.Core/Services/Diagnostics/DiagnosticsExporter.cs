@@ -298,10 +298,28 @@ public static class DiagnosticsExporter
             if (!exists && (name == "VPNRouter.App.exe" || name.StartsWith("sing-box")))
                 warnings.Add($"{name} MISSING from the install dir — likely AV-quarantined (see antivirus-integrity.txt)");
         }
-        var installBin = AppPaths.SingBoxExePath;   // %ProgramData%\VPNRouter\bin\sing-box.exe
-        sb.AppendLine($"{"bin/sing-box.exe (ProgramData)",-26} {(File.Exists(installBin) ? "present" : "MISSING")}");
-        if (!File.Exists(installBin))
-            warnings.Add("bin/sing-box.exe MISSING from ProgramData — likely AV-quarantined");
+        var policy = SingBoxRuntimePolicy.Current;
+        if (policy != null)
+        {
+            var p = policy.SelectedExecutablePath;
+            bool ok = false;
+            try
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Inspect);
+                ok = !string.IsNullOrEmpty(p) && File.Exists(p);
+            }
+            catch { }
+            sb.AppendLine($"{"sing-box (policy)",-26} {(ok ? "present" : "MISSING/UNTRUSTED")}");
+            if (!ok)
+                warnings.Add("sing-box is missing or untrusted under runtime policy");
+        }
+        else
+        {
+            var installBin = AppPaths.SingBoxExePath;   // %ProgramData%\VPNRouter\bin\sing-box.exe
+            sb.AppendLine($"{"bin/sing-box.exe (ProgramData)",-26} {(File.Exists(installBin) ? "present" : "MISSING")}");
+            if (!File.Exists(installBin))
+                warnings.Add("bin/sing-box.exe MISSING from ProgramData — likely AV-quarantined");
+        }
 
         if (!OperatingSystem.IsWindows())
         {

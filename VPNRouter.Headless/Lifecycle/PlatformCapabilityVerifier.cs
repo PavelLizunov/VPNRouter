@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using Serilog;
 using VPNRouter.Core;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.Headless.Lifecycle;
 
@@ -73,9 +74,18 @@ public static class PlatformCapabilityVerifier
             }
             else
             {
-                var exePath = AppPaths.SingBoxExePath;
-                if (!File.Exists(exePath))
-                    return false;
+                var policy = SingBoxRuntimePolicy.Current;
+                if (policy != null)
+                {
+                    if (!policy.IsAvailable)
+                        return false;
+                }
+                else
+                {
+                    var exePath = AppPaths.SingBoxExePath;
+                    if (!File.Exists(exePath))
+                        return false;
+                }
             }
 
             var ownership = ownershipProbe != null

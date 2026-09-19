@@ -56,12 +56,18 @@ its policy. All process launch/restart sites must recheck policy at use.
 
 ## Six gates / Outcome
 
-1. Build: PENDING solution Release on authorized worker.
-2. Tests: PENDING focused red/green, Headless groups, audited Core subset and CI;
+1. Build: PASS solution Release on authorized worker, snapshot `dabdc8c2`;
+   0 errors, 448 warnings.
+2. Tests: PASS 37 Headless groups and audited 204 Core cases; cache regression
+   negative control `a368989c` fails as expected. Post-push CI pending;
    full live-worker Core suite remains safety-gated, not silently waived.
-3. Docs: brief approved; owning README and consumer inventory pending.
-4. Review: PENDING independent correctness/test/security review and verification.
+3. Docs: owning README, consumer inventory and verification report updated.
+4. Review: independent correctness/test/security review completed; confirmed
+   issues corrected; scoped correction review found no blocking defects.
 5. UI/remote: no UI edit or deployment; isolated worker checks only, live gate N/A.
-6. Integration: PENDING default-behavior regression and reachable-consumer proof.
+6. Integration: audited legacy-default and scoped consumer tests pass;
+   no native non-Linux or production runtime/dataplane acceptance claimed.
 
-This brief records approval, not completed implementation or green acceptance.
+See [verification evidence](omarchy-runtime-verification-2026-09-19.md).
+Task publication and exact-SHA canonical CI receipt remain required before
+source-only delivery acceptance. Full native plugin readiness is not implied.

@@ -15,6 +15,10 @@ public partial class SingBoxManager
 
     public void StartWithJson(string configJson)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
+
         lock (_lifecycleGate)
         {
             if (Volatile.Read(ref _disposed) != 0)
@@ -53,9 +57,12 @@ public partial class SingBoxManager
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
 
-        var exePath = OperatingSystem.IsWindows()
-            ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-            : AppPaths.SingBoxExePath;
+        var policy = EffectivePolicy;
+        var exePath = policy != null
+            ? policy.SelectedExecutablePath
+            : (OperatingSystem.IsWindows()
+                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                : AppPaths.SingBoxExePath);
 
         // S1 (v2.45.0): register where WE launch sing-box so ProcessOwnership
         // recognises a custom executable_path (outside the default bin dir) as
@@ -63,9 +70,13 @@ public partial class SingBoxManager
         // sing-box and the next start couldn't acquire the TUN.
         ProcessOwnership.ConfiguredExePath = exePath;
 
-        if (!File.Exists(exePath))
+        if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath))
         {
             ReleaseTunOwnership();
+            if (policy != null)
+            {
+                throw new SingBoxRuntimePolicyException(SingBoxRuntimeOperation.Start, SingBoxRuntimeFailure.Missing);
+            }
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
 
@@ -587,6 +598,10 @@ public partial class SingBoxManager
 
     public void Restart()
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Restart);
+
         lock (_lifecycleGate)
             RestartCore();
     }
@@ -654,9 +669,12 @@ public partial class SingBoxManager
                 try { Thread.Sleep(750); } catch { }
             }
 
-            var exePath = OperatingSystem.IsWindows()
-                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                : AppPaths.SingBoxExePath;
+            var policy = EffectivePolicy;
+            var exePath = policy != null
+                ? policy.SelectedExecutablePath
+                : (OperatingSystem.IsWindows()
+                    ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                    : AppPaths.SingBoxExePath);
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -801,6 +819,12 @@ public partial class SingBoxManager
 
     private void LaunchProcess(string exePath)
     {
+        var policy = EffectivePolicy;
+        if (policy != null)
+        {
+            policy.Authorize(_restartInProgress ? SingBoxRuntimeOperation.Restart : SingBoxRuntimeOperation.Start);
+        }
+
         // PinkuDani Fix #3 (2026-05-21): reset the TUN-orphan crash flag +
         // stderr ring buffer at the launch chokepoint. EVERY start path
         // passes through here (user Start via StartWithJson, HealthMonitor
@@ -826,7 +850,11 @@ public partial class SingBoxManager
         // v2.41.1-r3: guarantee libcronet sits next to the runtime sing-box so
         // NaiveProxy outbounds don't FATAL "cronet: library not found". Single
         // launch chokepoint → covers Start / Restart / HealthMonitor recovery.
-        TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
+        // Under restricted policy: skip libcronet colocation.
+        if (policy == null)
+        {
+            TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
+        }
 
         // Hotfix 2026-05-19 (v2.35.0) — pre-launch TUN adapter cleanup
         // for Windows. EVERY start path passes through here (user Start,
@@ -875,7 +903,19 @@ public partial class SingBoxManager
         string spawnExe;
         IReadOnlyList<string> spawnArgs;
 
-        if (OperatingSystem.IsMacOS())
+        if (policy != null)
+        {
+            policy.Authorize(_restartInProgress ? SingBoxRuntimeOperation.Restart : SingBoxRuntimeOperation.Start);
+        }
+
+        if (OperatingSystem.IsLinux() && policy != null)
+        {
+            // Under restricted policy: direct execution only, never implicit pkexec/sudo, refuse root launch, no setcap.
+            _linuxUsedPkexec = false;
+            spawnExe = exePath;
+            spawnArgs = new[] { "run", "-c", _currentConfigPath };
+        }
+        else if (OperatingSystem.IsMacOS())
         {
             // sudo with NOPASSWD — sudoers configured by UI on first Connect
             spawnExe = "/usr/bin/sudo";
@@ -956,6 +996,11 @@ public partial class SingBoxManager
         {
             _logger.Debug("[SingBoxManager] LaunchProcess aborted — manager disposed before spawn");
             return;
+        }
+
+        if (policy != null)
+        {
+            policy.Authorize(_restartInProgress ? SingBoxRuntimeOperation.Restart : SingBoxRuntimeOperation.Start);
         }
 
         _handle = _runner.Start(request);

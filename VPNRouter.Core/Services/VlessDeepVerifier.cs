@@ -71,8 +71,11 @@ public sealed record DeepVerifyResult(
 public sealed class VlessDeepVerifier
 {
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
     private readonly string _singBoxPath;
     private readonly IProcessRunner _runner;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
@@ -108,7 +111,8 @@ public sealed class VlessDeepVerifier
     public VlessDeepVerifier(ILogger logger, IProcessRunner? runner = null)
     {
         _logger = logger;
-        _singBoxPath = AppPaths.SingBoxExePath;
+        _policy = SingBoxRuntimePolicy.Current;
+        _singBoxPath = _policy?.SelectedExecutablePath ?? AppPaths.SingBoxExePath;
         _runner = runner ?? Runner;
     }
 
@@ -126,11 +130,12 @@ public sealed class VlessDeepVerifier
     internal VlessDeepVerifier(ILogger logger, string singBoxPath, IProcessRunner? runner = null)
     {
         _logger = logger;
-        _singBoxPath = singBoxPath;
+        _policy = SingBoxRuntimePolicy.Current;
+        _singBoxPath = _policy?.SelectedExecutablePath ?? singBoxPath;
         _runner = runner ?? Runner;
     }
 
-    public bool IsAvailable => File.Exists(_singBoxPath);
+    public bool IsAvailable => EffectivePolicy != null ? EffectivePolicy.IsAvailable : File.Exists(_singBoxPath);
 
     /// <summary>Verify a batch of VLESS servers in parallel.</summary>
     public async Task VerifyBatchAsync(
@@ -140,7 +145,19 @@ public sealed class VlessDeepVerifier
         IProgress<(int done, int total)>? progress = null,
         CancellationToken ct = default)
     {
-        if (!IsAvailable)
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            if (!policy.IsAvailable)
+            {
+                _logger.Warning("[VlessDeepVerifier] sing-box binary unavailable under runtime policy");
+                foreach (var s in servers)
+                    onOneDone(s, DeepVerifyResult.Failed("sing-box runtime is unavailable or untrusted", DeepVerifyFailurePhase.LocalSpawn));
+                return;
+            }
+        }
+        else if (!IsAvailable)
         {
             _logger.Warning("[VlessDeepVerifier] sing-box not found at {Path}", _singBoxPath);
             foreach (var s in servers)
@@ -185,6 +202,20 @@ public sealed class VlessDeepVerifier
         bool measureBandwidth,
         CancellationToken ct = default)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            try
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Verify);
+            }
+            catch (SingBoxRuntimePolicyException)
+            {
+                return DeepVerifyResult.Failed("sing-box runtime is unavailable or untrusted", DeepVerifyFailurePhase.LocalSpawn);
+            }
+        }
+
         // v2.31.6-r16 (iter#7 / Phase 3): structured per-probe logging.
         // User feedback: «есть ли у проверки логи?» — pre-r16 only top-level
         // batch failures showed up in vpnrouter.log; per-server outcomes
@@ -263,7 +294,10 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
                     DeepVerifyFailurePhase.UnsupportedByVerifier);
             }
-            SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
+            if (policy == null)
+            {
+                SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
+            }
         }
 
         // r9 P2: flag the probe window so RuntimeStatusDetector doesn't read our
@@ -294,13 +328,17 @@ public sealed class VlessDeepVerifier
             // the load-bearing intent (no spurious Exited callback) is
             // preserved transitively.
             var request = new ProcessRequest(
-                ExecutablePath: _singBoxPath,
+                ExecutablePath: policy != null ? policy.SelectedExecutablePath! : _singBoxPath,
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
                 CaptureStderr: true);
 
             try
             {
+                if (policy != null)
+                {
+                    policy.Authorize(SingBoxRuntimeOperation.Verify);
+                }
                 handle = _runner.Start(request);
             }
             catch (Exception ex)

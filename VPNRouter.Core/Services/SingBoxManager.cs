@@ -12,6 +12,9 @@ public partial class SingBoxManager : IDisposable
 {
     private readonly SingBoxSettings _settings;
     private readonly ILogger _logger;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     // Phase 3+ (2026-05-21): IProcessRunner adoption — the LAST long-lived
     // spawn target in Core. The legacy `Process? _process` field is replaced
@@ -238,6 +241,7 @@ public partial class SingBoxManager : IDisposable
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
+        _policy = SingBoxRuntimePolicy.Current;
         _http = http ?? PolicyHttpClient.Shared;
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
