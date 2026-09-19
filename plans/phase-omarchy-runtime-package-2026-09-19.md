@@ -50,11 +50,21 @@ Do not alter shipped Core behavior or accept a manifest as production authority.
 Worker preflight: makepkg, fakeroot, bsdtar, Python and readelf present; resources
 available. Exact source and packaging snapshots recorded with every actual check.
 
-1. Build: PENDING Headless publish and non-root Arch package.
-2. Tests: PENDING packaging negative tests, policy and protocol regression gates.
-3. Docs: approved brief recorded; package README and helper boundary pending.
-4. Review: PENDING independent correctness/security/test review.
+1. Build: PASS fresh Headless publish and non-root Arch package on omarchy-test.
+2. Tests: PASS 80 packaging tests, 26 Core runtime-policy tests and 37 Headless
+   groups (including 41 lifecycle and 12 runtime subchecks).
+3. Docs: PASS package README, helper boundary and exact-snapshot evidence report.
+4. Review: PASS scoped independent correctness/security/test review; confirmed
+   blockers fixed. Minor tar EOF divergence recorded in OPEN-DEFECTS.
 5. UI/live: N/A, source/staging only; live installation explicitly excluded.
-6. Integration: PENDING payload inspection, package manifest/hash checks and CI.
+6. Integration: PASS mandatory artifact inspection, modes/ownership/manifest/hash;
+   final exact-SHA CI receipt follows push in PR #296.
 
-Outcome: pending. Approval authorizes this block only, not privileged execution.
+Outcome: final packaging snapshot d4478ecb7fa3be185a77d3c7a1f4e2a4c2869d6b built
+and inspected successfully. See omarchy-runtime-package-verification-2026-09-20.md.
+Package files remain on the test worker, not published. LICENSE inventory is
+explicitly incomplete (Serilog/YamlDotNet/Chromium notices), a blocking gate for
+binary distribution rather than an assertion that runtime supply is finished.
+Production runtime remains unavailable; approval did not authorize privileged
+execution, installation or deployment. Rollback is task-only source revert.
+Unrelated dirty worktree content preserved.

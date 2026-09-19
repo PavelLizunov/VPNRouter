@@ -16,6 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Omarchy staging package 2026-09-20
+
+- [ ] **P1** — OMARCHY-PACKAGE-NOTICES: staging package has incomplete distribution notices (Serilog, YamlDotNet, Chromium/Cronet); source and hashes are recorded, but the binary package must not be publicly released until authoritative notices and source-distribution obligations are checked. `packaging/arch/README.md`, manifest `missing_licenses` — before any binary distribution.
+- [ ] **P2** — OMARCHY-PACKAGE-TAR-EOF: raw header preflight inspects padding after zero blocks while Python tarfile stops at its first zero block; ignored suffix entries are not materialized. Private staging and exact inventory checks bound current use; a standalone general-purpose archive validator must reject nonzero suffixes. `packaging/arch/staging_tools.py:_inspect_raw_tar_headers` — before broader extractor reuse.
+- [x] **P1 RESOLVED / UNRELEASED (staging only)** — OMARCHY-PACKAGE-MAKEPKG: makepkg creates `src/payload.tar` as a symlink, rejected by the strict extractor; PKGBUILD now passes the original regular `startdir/payload.tar` with its pinned hash. Actual first build failed; reviewed package build succeeded, no symlink guard relaxation.
+- [x] **P1 RESOLVED / UNRELEASED (tests)** — OMARCHY-PACKAGE-FALSE-GREEN: original Avalonia and source-license tests duplicated inline behavior instead of invoking production functions; tests now call driver helpers and cover main's exported-source forwarding, hidden deps references, and positive package verification. `packaging/arch/tests/test_build_package.py`.
+
 ### Linux Headless runtime contract 2026-09-19
 
 - [x] **P2 RESOLVED / UNRELEASED (CI-only)** — OMARCHY-RUNTIME-CI-FILTER: main Ubuntu test filter excludes all Headless names, silently omitting 26 Core HeadlessRuntimePolicyTests; separate headless-contracts builds a different project. Added explicit scoped Core step with separate TRX output, preserving UI exclusions and all existing jobs. Evidence: `.github/workflows/test.yml:74-79`; earlier worker execution 26/26 within 204 audited cases. Exact follow-up CI receipt required in PR #296.

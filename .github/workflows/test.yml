@@ -146,6 +146,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Test Arch staging package contracts (no install)
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s packaging/arch/tests -p 'test_*.py' -v
+
       - name: Build Headless and Headless.Tests
         run: dotnet build VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release
 
