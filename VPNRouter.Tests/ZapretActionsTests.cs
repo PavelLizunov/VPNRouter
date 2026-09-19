@@ -481,4 +481,22 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("/RESOLVED/lists/tls_clienthello_www_google_com.bin", args);
         Assert.DoesNotContain("%LISTS%", args);
     }
+
+    [Fact]
+    public void OpenHostsEditHelpers_DoesNotThrow()
+    {
+        var tempFile = Path.GetTempFileName();
+        var hostsFile = Path.GetTempFileName();
+
+        try
+        {
+            var exception = Record.Exception(() => ZapretActions.OpenHostsEditHelpers(tempFile, hostsFile));
+            Assert.Null(exception);
+        }
+        finally
+        {
+            try { File.Delete(tempFile); } catch { }
+            try { File.Delete(hostsFile); } catch { }
+        }
+    }
 }

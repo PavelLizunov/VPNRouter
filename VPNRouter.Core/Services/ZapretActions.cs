@@ -280,9 +280,9 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
-    private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
+    internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
-        // v2.20.2: notepad / explorer.exe are Windows-only. On Linux / macOS
+        // notepad.exe / explorer.exe are Windows-only. On Linux / macOS
         // they don't exist and Process.Start would throw into the silent
         // catch, leaving the user with no feedback. Zapret is Windows-only
         // anyway (it ships winws.exe), so in practice this helper should
@@ -293,8 +293,19 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            var notepadPsi = new ProcessStartInfo("notepad.exe")
+            {
+                UseShellExecute = false
+            };
+            notepadPsi.ArgumentList.Add(tempPath);
+            Process.Start(notepadPsi);
+
+            var explorerPsi = new ProcessStartInfo("explorer.exe")
+            {
+                UseShellExecute = false
+            };
+            explorerPsi.ArgumentList.Add($"/select,{hostsPath}");
+            Process.Start(explorerPsi);
         }
         catch { }
     }
