@@ -104,5 +104,13 @@ correctness and acceptance tests. Coordinator source-verified findings:
 - Builder assumes trusted private staging and trusted installed SDK/makepkg/system
   configuration; not a sandbox against a hostile builder or concurrent writer.
 - Builds restore NuGet over network, are not claimed offline or bit-reproducible.
+- Initial implementation commit `62210cfe` CI exposed a test-environment defect:
+  setup-dotnet sets DOTNET_ROOT, which takes precedence over mocked shutil.which.
+  The publish test wrongly expected /mock/dotnet despite the real resolver finding
+  the CI SDK. Test-only correction mocks build_package.resolve_dotnet in three
+  publish tests; production package code and artifact bytes are unchanged.
+  Isolated red/green with an executable temporary DOTNET_ROOT: old test fails with
+  the observed Lists differ assertion (exit 1), corrected full 80 tests pass
+  (exit 0). No tests skipped or assertions removed.
 - Post-push exact-SHA CI receipt will be attached to PR #296; green CI is not
   permission to merge, publish, install or connect.

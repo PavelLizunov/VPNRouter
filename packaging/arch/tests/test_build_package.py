@@ -346,7 +346,7 @@ class TestPublishHeadless(unittest.TestCase):
                 return subprocess.CompletedProcess(cmd, 0, stdout="publish ok", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with mock.patch("shutil.which", return_value="/mock/dotnet"), \
+        with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
              mock.patch.dict(os.environ, {}, clear=False), \
              mock.patch("subprocess.run", side_effect=fake_run):
             build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
@@ -370,7 +370,7 @@ class TestPublishHeadless(unittest.TestCase):
         def fake_run(cmd, **kwargs):
             return subprocess.CompletedProcess(cmd, 0, stdout="10.0.200\n", stderr="")
 
-        with mock.patch("shutil.which", return_value="/mock/dotnet"), \
+        with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
              mock.patch("subprocess.run", side_effect=fake_run):
             with self.assertRaises(ValueError) as ctx:
                 build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
@@ -382,7 +382,7 @@ class TestPublishHeadless(unittest.TestCase):
         def fake_run(cmd, **kwargs):
             return subprocess.CompletedProcess(cmd, 0, stdout="10.0.301\n", stderr="")
 
-        with mock.patch("shutil.which", return_value="/mock/dotnet"), \
+        with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
              mock.patch("subprocess.run", side_effect=fake_run):
             with self.assertRaises(FileNotFoundError) as ctx:
                 build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
