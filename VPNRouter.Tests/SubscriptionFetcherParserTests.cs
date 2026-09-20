@@ -138,4 +138,19 @@ public class SubscriptionFetcherParserTests
         Assert.Empty(SubscriptionFetcher.ParseBody(""));
         Assert.Empty(SubscriptionFetcher.ParseBody("   \n\t  \n"));
     }
+
+    [Fact]
+    public void ParseBody_DeduplicationEscapesDelimiters_DoesNotCollideOnColonsOrBackslashes()
+    {
+        // Pin deduplication key escaping across Server, Port, Uuid, Flow, Username, Password.
+        // Two URIs with distinct passwords containing colons must not collide in the dedup table.
+        var uri1 = "tuic://user:1:pass@127.0.0.1:443#one";
+        var uri2 = "tuic://user:1:pass2@127.0.0.1:443#two";
+
+        var result = SubscriptionFetcher.ParseBody($"{uri1}\n{uri2}\n");
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("1:pass", result[0].Password);
+        Assert.Equal("1:pass2", result[1].Password);
+    }
 }
