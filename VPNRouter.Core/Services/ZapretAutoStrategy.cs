@@ -643,10 +643,17 @@ public static class ZapretAutoStrategy
                 Diagnostic: "missing_script", ErrorLines: Array.Empty<string>());
         }
 
+        // Security: validate path against shell metacharacters to prevent argument/command injection.
+        if (scriptPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
+        {
+            logger?.Warning("[ZapretAutoStrategy] Script path contains disallowed metacharacters: {Path}", scriptPath);
+            return new FlowsealSweepResult(null, 0, 0, "Invalid script path",
+                Diagnostic: "invalid_path", ErrorLines: Array.Empty<string>());
+        }
+
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
             WorkingDirectory = zapretInstallDir,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -661,6 +668,12 @@ public static class ZapretAutoStrategy
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
+        // Security: use ArgumentList instead of string interpolation to prevent argument injection.
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(scriptPath);
 
         // r38: per-probe persistent log file. Captures EVERY stdout/stderr
         // line with a timestamp so the user can grep for "what did probe see

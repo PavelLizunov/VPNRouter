@@ -279,6 +279,25 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         Assert.Contains("https://targets.example", allLogs);
     }
 
+    [Fact]
+    public async Task RunFlowsealProbeAsync_InvalidPathMetacharacters_RejectsPath()
+    {
+        // Check metacharacter rejection logic for script paths containing shell symbols
+        const string invalidPath = @"C:\zapret&dir\utils\test zapret.ps1";
+        Assert.True(invalidPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'));
+
+        if (OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin())
+        {
+            var badDir = Path.Combine(_tempRoot, "zapret&dir");
+            Directory.CreateDirectory(Path.Combine(badDir, "utils"));
+            var scriptPath = Path.Combine(badDir, "utils", "test zapret.ps1");
+            File.WriteAllText(scriptPath, "# dummy");
+
+            var result = await ZapretAutoStrategy.RunFlowsealProbeAsync(badDir, progress: null, logger: null, CancellationToken.None);
+            Assert.Equal("invalid_path", result.Diagnostic);
+        }
+    }
+
     private sealed class FailingHttpMessageHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
