@@ -10,3 +10,7 @@ source.tar
 __pycache__/
 *.pyc
 .work/
+
+# Reviewed upstream notice paths are source inputs, not build output.
+!notices/**/src/
+!notices/**/src/**

@@ -33,13 +33,13 @@ Rollback: revert task-owned source changes; no installed state exists.
 
 ## 3. Verification Checklist
 
-- [ ] Exact license source and payload-version correspondence verified.
-- [ ] Tests cover license file/expression, missing notice, wrong hash/version and
+- [x] Managed license source/payload-version correspondence verified; native uncertainties explicit.
+- [x] Tests cover license file/expression, missing notice, wrong hash/version and
       escaping paths; exercise implementation functions, not duplicate logic.
-- [ ] Inspect final package evidence, not only a source notices directory.
-- [ ] Non-root package rebuild on approved omarchy-test; existing tests green.
-- [ ] Independent review, task commit/push, exact-SHA CI verification.
-- [ ] Report distinguishes resolved records from remaining evidence/release gates.
+- [x] Inspect final package evidence, not only a source notices directory.
+- [x] Non-root package rebuild on approved omarchy-test; existing tests green.
+- [x] Independent review passed; task commit/push and exact-SHA CI receipt follow.
+- [x] Report distinguishes resolved records from remaining evidence/release gates.
 
 ## Execution and gates
 
@@ -47,11 +47,15 @@ Extend packaging/arch only, tests and owning README, plus task evidence/ledger.
 Use Python standard library and existing package inspector; no license-service
 framework. Bounded source research for native dependencies, no heavy native build.
 
-1. Build: PENDING actual package assembly, no installation.
-2. Tests: PENDING existing suite and license evidence negative fixtures.
-3. Documentation: approved brief recorded; outcome/evidence pending.
-4. Review: PENDING independent source/security/test review.
+1. Build: PASS non-root package assembly and final archive inspection, no installation.
+2. Tests: PASS 121 tests locally and on omarchy-test; four isolated red/green regressions.
+3. Documentation: README and bounded provenance research updated; see verification report.
+4. Review: scoped_verified after independent security/acceptance fixes; native exclusions remain.
 5. UI/live: N/A; source and isolated packaging only.
-6. Integration: PENDING manifest-to-payload checks and exact-SHA CI.
+6. Integration: PASS manifest-to-payload checks; exact-SHA CI follows task push.
 
-Outcome: pending. Prior binary-distribution block remains until evidence is proven.
+Outcome: scoped delivery, not complete distribution licensing. Serilog, YamlDotNet
+and apphost map to exact notice texts. Native source-tree notices are a partial
+superset; Go embedded notices, corresponding sources, Chromium linked credits and
+Cronet ABI/source-build provenance remain open. Execution stays unauthorized.
+See `omarchy-license-verification-2026-09-20.md` for immutable build evidence.

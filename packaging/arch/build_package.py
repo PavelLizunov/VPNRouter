@@ -29,6 +29,11 @@ try:
 except ImportError as err:
     raise ImportError(f"Failed to import staging_tools from {ARCH_DIR}: {err}") from err
 
+try:
+    import license_evidence
+except ImportError as err:
+    raise ImportError(f"Failed to import license_evidence from {ARCH_DIR}: {err}") from err
+
 BACKEND_COMMIT: str = "05c0bcaee08a5defb1ceeb1cdaab83b3bc1a2a8a"
 RUNTIME_URL: str = (
     "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/"
@@ -542,6 +547,7 @@ def inspect_package(pkg_file: Path, work_dir: Path) -> None:
         if not (manifest_root / "manifest.json").is_file():
             raise FileNotFoundError("Package missing required manifest.json")
         staging_tools.verify_manifest(manifest_root)
+        license_evidence.verify_license_evidence(manifest_root)
     finally:
         if temp_uncompressed.exists():
             try:
@@ -699,9 +705,18 @@ def main(argv: list[str] | None = None) -> int:
         except FileNotFoundError:
             missing_licenses.append(out_name)
 
-    missing_licenses.append("cronet-chromium-notices")
-    _, missing_nuget = gather_nuget_licenses(source_tree, [work_dir / ".nuget_packages"], licenses_dest_dir)
-    missing_licenses.extend(missing_nuget)
+    dotnet_root = Path(resolve_dotnet()).resolve().parent
+    catalog_dir = ARCH_DIR / "notices"
+    evidence = license_evidence.collect_license_evidence(
+        source_tree=source_tree,
+        payload_root=payload_dir,
+        dotnet_root=dotnet_root,
+        catalog_dir=catalog_dir,
+    )
+    for comp in evidence.get("components", []):
+        comp_id = comp.get("id", "unknown")
+        for reason in comp.get("unresolved", []):
+            missing_licenses.append(f"{comp_id}:{reason}")
 
     headless_elf = payload_dir / "VPNRouter.Headless"
     staging_tools.validate_elf_x86_64(headless_elf)
@@ -717,6 +732,8 @@ def main(argv: list[str] | None = None) -> int:
     template_pkgbuild = ARCH_DIR / "PKGBUILD"
     staging_tools_py = ARCH_DIR / "staging_tools.py"
     build_package_py = ARCH_DIR / "build_package.py"
+    license_evidence_py = ARCH_DIR / "license_evidence.py"
+    catalog_json = ARCH_DIR / "notices" / "catalog.json"
 
     metadata = {
         "source_commit": BACKEND_COMMIT,
@@ -725,6 +742,8 @@ def main(argv: list[str] | None = None) -> int:
             "PKGBUILD": compute_file_sha256(template_pkgbuild),
             "staging_tools.py": compute_file_sha256(staging_tools_py),
             "build_package.py": compute_file_sha256(build_package_py),
+            "license_evidence.py": compute_file_sha256(license_evidence_py),
+            "notices/catalog.json": compute_file_sha256(catalog_json),
         },
         "tool_versions": get_tool_versions(
             resolve_dotnet(),
@@ -740,12 +759,13 @@ def main(argv: list[str] | None = None) -> int:
             "arch_packages": ["glibc", "gcc-libs", "dotnet-runtime>=10", "dotnet-runtime<11"],
             "elf_needed": needed_deps,
         },
-        "license_inventory_complete": len(missing_licenses) == 0,
+        "license_inventory_complete": len(missing_licenses) == 0 and bool(evidence.get("complete", False)),
         "missing_licenses": sorted(set(missing_licenses)),
         "execution_authorized": False,
     }
     staging_tools.write_manifest(payload_dir, metadata)
     staging_tools.verify_manifest(payload_dir)
+    license_evidence.verify_license_evidence(payload_dir)
 
     payload_tar = work_dir / "payload.tar"
     payload_sha256 = create_payload_tar(stage_root, payload_tar)

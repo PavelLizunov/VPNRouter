@@ -32,3 +32,6 @@ build-mac.sh                                       text eol=lf
 *.gz                                               binary
 *.deb                                              binary
 *.AppImage                                         binary
+
+# Verbatim upstream third-party license notices — preserve exact bytes without whitespace modification
+packaging/arch/notices/** -whitespace

@@ -16,6 +16,17 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Omarchy license evidence 2026-09-20
+
+- [x] **P2 RESOLVED / UNRELEASED** — OMARCHY-NOTICE-IGNORE: packaging src/ ignore rule omitted vendored Chromium notices from Git snapshot; isolated build failed at catalog verification as designed. Scope exception needed for pinned notices tree. `packaging/arch/.gitignore` — current block.
+
+- [x] **P2 RESOLVED / UNRELEASED** — OMARCHY-LICENSE-UNKNOWN-VERIFIED: independent package verifier accepted a changed/unlisted component version as verified_texts although collector marks it unresolved; benign fixture reproduced. Requires task-controlled evidence/deps changes, not runtime execution authority. `plans/omarchy-license-security-review-2026-09-20.md` — current block.
+- [x] **P2 RESOLVED / UNRELEASED** — OMARCHY-LICENSE-NATIVE-ASSETS: collector joined only NuGet runtime assets while graph selected runtime or native; current two managed packages unaffected, native-only packages fail package inspection. `packaging/arch/license_evidence.py` — current block.
+
+- [x] **P1 RESOLVED / UNRELEASED** — OMARCHY-LICENSE-EXPRESSION: current filename-only collector misses Serilog4.4.0 Apache-2.0 and YamlDotNet18.1.0 MIT expression licenses and embedded libyaml notice; actual nuspec revisions confirmed on worker. `packaging/arch/build_package.py:gather_nuget_licenses` — approved license bundle block.
+- [ ] **P1** — OMARCHY-LICENSE-NATIVE-COVERAGE: top-level sing-box LICENSE does not inventory embedded Go dependencies; Cronet donor includes no Chromium third-party notice inventory. `plans/omarchy-native-license-research-2026-09-20.md` — before binary distribution.
+- [ ] **P1** — OMARCHY-CRONET-REVISION: selected donor libcronet.so matches upstream blob5b8e36ad9cd406f5ab783712631ca7c0532b6176 at def9ff0fb992, whereas fork dependency points to f80ef37265e5/blob9dbecbef5d11b40d83551fd9744ced49a67a4702. Runtime ABI compatibility not proven; no pin change authorized. `plans/omarchy-native-license-research-2026-09-20.md` — before runtime enablement.
+
 ### Omarchy staging package 2026-09-20
 
 - [ ] **P1** — OMARCHY-PACKAGE-NOTICES: staging package has incomplete distribution notices (Serilog, YamlDotNet, Chromium/Cronet); source and hashes are recorded, but the binary package must not be publicly released until authoritative notices and source-distribution obligations are checked. `packaging/arch/README.md`, manifest `missing_licenses` — before any binary distribution.

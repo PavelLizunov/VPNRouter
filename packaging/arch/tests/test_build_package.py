@@ -41,6 +41,7 @@ if str(ARCH_DIR) not in sys.path:
     sys.path.insert(0, str(ARCH_DIR))
 
 import build_package
+import license_evidence
 import staging_tools
 
 
@@ -514,6 +515,10 @@ class TestLicensesAndNotices(unittest.TestCase):
             forwarded_source_trees.append(source_tree)
             return []
 
+        def fake_collect(source_tree, payload_root, dotnet_root, catalog_dir):
+            forwarded_source_trees.append(source_tree)
+            return {"complete": False, "components": []}
+
         def fake_acquire(url, sha, fname, work_dir, cache):
             p = work_dir / fname
             p.write_bytes(b"dummy")
@@ -538,6 +543,8 @@ class TestLicensesAndNotices(unittest.TestCase):
              mock.patch("build_package.validate_publish", return_value=[]), \
              mock.patch("build_package.copy_source_licenses", side_effect=fake_copy_licenses), \
              mock.patch("build_package.gather_nuget_licenses", return_value=([], [])), \
+             mock.patch("license_evidence.collect_license_evidence", side_effect=fake_collect), \
+             mock.patch("license_evidence.verify_license_evidence"), \
              mock.patch("staging_tools.validate_elf_x86_64"), \
              mock.patch("build_package.get_elf_needed", return_value=[]), \
              mock.patch("staging_tools.write_manifest"), \
@@ -597,6 +604,128 @@ class TestLicensesAndNotices(unittest.TestCase):
         self.assertIn("YamlDotNet-LICENSE", missing)
         self.assertTrue((self.licenses_dest / "Serilog-License.txt").is_file())
         self.assertFalse((self.licenses_dest / "YamlDotNet-LICENSE.md").exists())
+
+    def test_main_collects_license_evidence_and_flattens_unresolved(self) -> None:
+        """Verify main collects license evidence, flattens unresolved entries, and preserves missing source licenses."""
+        fake_repo = self.tmp / "fake_repo_lic"
+        fake_repo.mkdir()
+        fake_work = self.tmp / "fake_work_lic"
+
+        collect_calls: list[dict] = []
+        written_manifests: list[dict] = []
+        verified_payloads: list[Path] = []
+
+        def fake_publish(source_tree, publish_dir, work_dir):
+            publish_dir.mkdir(parents=True, exist_ok=True)
+            (publish_dir / "VPNRouter.Headless.dll").write_bytes(b"dummy")
+            (publish_dir / "VPNRouter.Headless.deps.json").write_text("{}", encoding="utf-8")
+
+        def fake_copy_licenses(source_tree, licenses_dest):
+            return ["VPNRouter-LICENSE"]
+
+        def fake_collect(source_tree, payload_root, dotnet_root, catalog_dir):
+            collect_calls.append({
+                "source_tree": source_tree,
+                "payload_root": payload_root,
+                "dotnet_root": dotnet_root,
+                "catalog_dir": catalog_dir,
+            })
+            return {
+                "schema_version": 1,
+                "complete": False,
+                "components": [
+                    {
+                        "id": "Cronet",
+                        "version": "1.13.14",
+                        "status": "unresolved",
+                        "unresolved": ["linked-dependency-selection", "generated-Chromium-credits"],
+                    },
+                    {
+                        "id": "sing-box-vpnctl",
+                        "version": "1.14.0-vpnctl.5",
+                        "status": "unresolved",
+                        "unresolved": ["embedded-go-notices"],
+                    },
+                    {
+                        "id": "Serilog",
+                        "version": "4.4.0",
+                        "status": "verified_texts",
+                        "unresolved": [],
+                    },
+                ],
+            }
+
+        def fake_acquire(url, sha, fname, work_dir, cache):
+            p = work_dir / fname
+            p.write_bytes(b"dummy")
+            return p
+
+        def fake_safe_extract(archive, dest, sha):
+            dest.mkdir(parents=True, exist_ok=True)
+            if "runtime" in str(dest):
+                (dest / "sing-box").write_bytes(b"sb")
+                (dest / "LICENSE").write_bytes(b"lic")
+                (dest / "README.md").write_bytes(b"readme")
+            elif "cronet" in str(dest):
+                (dest / "libcronet.so").write_bytes(b"cronet")
+                (dest / "LICENSE").write_bytes(b"lic")
+
+        def fake_write_manifest(root, metadata):
+            written_manifests.append(metadata)
+
+        def fake_verify_lic(payload_root):
+            verified_payloads.append(payload_root)
+
+        with mock.patch("build_package.verify_repo_commit"), \
+             mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet/sdk/bin/dotnet"), \
+             mock.patch("build_package.export_source", return_value=(fake_work / "source.tar", "a" * 64)), \
+             mock.patch("staging_tools.safe_extract", side_effect=fake_safe_extract), \
+             mock.patch("build_package.acquire_archive", side_effect=fake_acquire), \
+             mock.patch("build_package.publish_headless", side_effect=fake_publish), \
+             mock.patch("build_package.validate_publish", return_value=[]), \
+             mock.patch("build_package.copy_source_licenses", side_effect=fake_copy_licenses), \
+             mock.patch("license_evidence.collect_license_evidence", side_effect=fake_collect), \
+             mock.patch("license_evidence.verify_license_evidence", side_effect=fake_verify_lic), \
+             mock.patch("staging_tools.validate_elf_x86_64"), \
+             mock.patch("build_package.get_elf_needed", return_value=[]), \
+             mock.patch("staging_tools.write_manifest", side_effect=fake_write_manifest), \
+             mock.patch("staging_tools.verify_manifest"), \
+             mock.patch("build_package.create_payload_tar", return_value="b" * 64), \
+             mock.patch("build_package.build_makepkg", return_value=(fake_work / "pkg.tar.zst", "c" * 64)), \
+             mock.patch("builtins.print"):
+            ret = build_package.main(["--repo", str(fake_repo), "--work-dir", str(fake_work)])
+            self.assertEqual(ret, 0)
+
+        # 1. Assert collect_license_evidence called with expected parameters
+        self.assertEqual(len(collect_calls), 1)
+        cc = collect_calls[0]
+        self.assertEqual(cc["source_tree"], fake_work / "source_tree")
+        self.assertEqual(cc["payload_root"], fake_work / "stage" / "usr" / "lib" / "vpnrouter-headless")
+        self.assertEqual(cc["dotnet_root"], Path("/mock/dotnet/sdk/bin").resolve())
+        self.assertEqual(cc["catalog_dir"], ARCH_DIR / "notices")
+
+        # 2. Assert written manifest metadata
+        self.assertEqual(len(written_manifests), 1)
+        meta = written_manifests[0]
+        self.assertFalse(meta["license_inventory_complete"])
+        expected_missing = [
+            "Cronet:generated-Chromium-credits",
+            "Cronet:linked-dependency-selection",
+            "VPNRouter-LICENSE",
+            "sing-box-vpnctl:embedded-go-notices",
+        ]
+        self.assertEqual(meta["missing_licenses"], expected_missing)
+
+        # 3. Assert packaging_files_sha256 contains license_evidence.py and notices/catalog.json
+        pkg_shas = meta["packaging_files_sha256"]
+        self.assertIn("license_evidence.py", pkg_shas)
+        self.assertIn("notices/catalog.json", pkg_shas)
+        self.assertEqual(len(pkg_shas["license_evidence.py"]), 64)
+        self.assertEqual(len(pkg_shas["notices/catalog.json"]), 64)
+
+        # 4. Assert verify_license_evidence was called after manifest generation
+        self.assertEqual(len(verified_payloads), 1)
+        self.assertEqual(verified_payloads[0], fake_work / "stage" / "usr" / "lib" / "vpnrouter-headless")
 
 
 class TestReadelfAndPackageInspection(unittest.TestCase):
@@ -807,8 +936,35 @@ class TestReadelfAndPackageInspection(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
         with mock.patch("shutil.which", return_value="/bin/bsdtar"), \
-             mock.patch("subprocess.run", side_effect=fake_run):
+             mock.patch("subprocess.run", side_effect=fake_run), \
+             mock.patch("license_evidence.verify_license_evidence") as mock_verify_lic:
             build_package.inspect_package(pkg_file, self.tmp)
+            mock_verify_lic.assert_called_once()
+            called_payload = mock_verify_lic.call_args[0][0]
+            self.assertEqual(called_payload.name, "vpnrouter-headless")
+            self.assertEqual(called_payload.parent.name, "lib")
+            self.assertEqual(called_payload.parent.parent.name, "usr")
+
+    def test_inspect_package_propagates_license_verification_failure(self) -> None:
+        """Verify inspect_package propagates failure from license_evidence.verify_license_evidence."""
+        pkg_file = self.tmp / "valid.pkg.tar.zst"
+        pkg_file.write_bytes(b"dummy")
+
+        valid_tar_bytes = self._create_valid_synthetic_pkg_tar(tamper=False)
+
+        def fake_run(cmd, **kwargs):
+            out_tar = Path(cmd[2])
+            out_tar.write_bytes(valid_tar_bytes)
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("shutil.which", return_value="/bin/bsdtar"), \
+             mock.patch("subprocess.run", side_effect=fake_run), \
+             mock.patch(
+                 "license_evidence.verify_license_evidence",
+                 side_effect=ValueError("license evidence missing or invalid"),
+             ):
+            with self.assertRaisesRegex(ValueError, "license evidence missing or invalid"):
+                build_package.inspect_package(pkg_file, self.tmp)
 
     def test_inspect_package_artifact_tamper_fails(self) -> None:
         """Verify inspect_package fails when package artifact is tampered against manifest."""
