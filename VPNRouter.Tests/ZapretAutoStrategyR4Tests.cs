@@ -248,6 +248,23 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(10), ZapretAutoStrategy.FlowsealMaxSweepTime);
     }
 
+    // ── RunFlowsealProbeAsync metacharacter validation ──────────────────────
+
+    [Fact]
+    public async Task RunFlowsealProbeAsync_ScriptPathContainsMetacharacters_ThrowsArgumentExceptionOnWindowsAdmin()
+    {
+        if (!OperatingSystem.IsWindows() || !ZapretAutoStrategy.IsRunningAsAdmin())
+            return;
+
+        var bogusDir = Path.Combine(_tempRoot, "dir&with\"meta");
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            ZapretAutoStrategy.RunFlowsealProbeAsync(
+                bogusDir,
+                progress: null,
+                logger: null,
+                CancellationToken.None));
+    }
+
     // ── ProbeOneTargetAsync URL redaction ───────────────────────────────────
 
     [Fact]
