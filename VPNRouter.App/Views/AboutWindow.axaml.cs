@@ -138,7 +138,7 @@ public partial class AboutWindow : Window
                 System.IO.Directory.CreateDirectory(AppPaths.LogsDir);
                 System.IO.File.AppendAllText(
                     logPath,
-                    $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {ex.Message}\n");
+                    $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {VPNRouter.Core.Services.CrashReporter.ScrubSecrets(ex.Message)}\n");
             }
             catch { /* log failure is not a crash */ }
 

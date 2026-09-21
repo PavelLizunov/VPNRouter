@@ -281,16 +281,17 @@ public static class SubscriptionFetcher
             }
         }
 
-        // Deduplicate by Server:Port:UUID:Flow:Username (Flow differs for TCP/UDP
-        // split pairs; Username distinguishes NaiveProxy servers that share a
+        // Deduplicate by Server:Port:UUID:Flow:Username:Password (Flow differs for TCP/UDP
+        // split pairs; Username/Password distinguishes NaiveProxy servers that share a
         // host:port but carry no UUID/Flow — without it two distinct naive creds
         // on the same endpoint would collapse to one. Empty for every non-naive
-        // protocol, so their dedup behaviour is unchanged).
+        // protocol, so their dedup behaviour is unchanged). Delimiter characters (\ and :)
+        // are escaped per field to prevent key collisions between distinct entries.
         var seen = new HashSet<string>();
         var deduped = new List<VlessServerEntry>(result.Count);
         foreach (var e in result)
         {
-            var key = $"{e.Server}:{e.Port}:{e.Uuid}:{e.Flow}:{e.Username}:{e.Password}";
+            var key = $"{EscapeKeyField(e.Server)}:{e.Port}:{EscapeKeyField(e.Uuid)}:{EscapeKeyField(e.Flow)}:{EscapeKeyField(e.Username)}:{EscapeKeyField(e.Password)}";
             if (seen.Add(key)) deduped.Add(e);
         }
         if (deduped.Count < result.Count)
@@ -354,4 +355,7 @@ public static class SubscriptionFetcher
 
         return servers.Count;
     }
+
+    private static string EscapeKeyField(string? value) =>
+        (value ?? string.Empty).Replace("\\", "\\\\").Replace(":", "\\:");
 }

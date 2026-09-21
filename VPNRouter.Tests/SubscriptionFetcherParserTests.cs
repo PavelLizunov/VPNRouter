@@ -138,4 +138,21 @@ public class SubscriptionFetcherParserTests
         Assert.Empty(SubscriptionFetcher.ParseBody(""));
         Assert.Empty(SubscriptionFetcher.ParseBody("   \n\t  \n"));
     }
+
+    [Fact]
+    public void ParseBody_DelimiterInFields_PreventsKeyCollision()
+    {
+        // Line 1: Uuid="u:1", Flow="b". Line 2: Uuid="u", Flow="1:b".
+        // Without escaping colons in key fields, both produce "srv.example:443:u:1:b::" and collide.
+        var uri1 = "vless://u%3A1@srv.example:443?flow=b#one";
+        var uri2 = "vless://u@srv.example:443?flow=1%3Ab#two";
+
+        var result = SubscriptionFetcher.ParseBody($"{uri1}\n{uri2}");
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("u:1", result[0].Uuid);
+        Assert.Equal("b", result[0].Flow);
+        Assert.Equal("u", result[1].Uuid);
+        Assert.Equal("1:b", result[1].Flow);
+    }
 }
