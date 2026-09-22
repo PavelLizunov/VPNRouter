@@ -427,6 +427,21 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    // ── 12d. OpenHostsEditHelpers: validates input paths safely ──
+
+    [Theory]
+    [InlineData(null, @"C:\Windows\System32\drivers\etc\hosts")]
+    [InlineData(@"C:\temp\hosts.txt", null)]
+    [InlineData("", @"C:\Windows\System32\drivers\etc\hosts")]
+    [InlineData(@"C:\temp\hosts.txt", "")]
+    [InlineData("C:\\temp\\hosts\r\n.txt", @"C:\Windows\System32\drivers\etc\hosts")]
+    [InlineData(@"C:\temp\hosts.txt", "C:\\Windows\\System32\\drivers\\etc\\hosts\" & calc.exe")]
+    public void OpenHostsEditHelpers_InvalidOrUnsafePaths_ReturnsWithoutException(string? tempPath, string? hostsPath)
+    {
+        // Must return silently without attempting Process.Start when paths are invalid or contain quotes/newlines.
+        ZapretActions.OpenHostsEditHelpers(tempPath!, hostsPath!);
+    }
+
     // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
 
     [Fact]

@@ -280,7 +280,7 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
-    private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
+    internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
         // v2.20.2: notepad / explorer.exe are Windows-only. On Linux / macOS
         // they don't exist and Process.Start would throw into the silent
@@ -289,6 +289,12 @@ public static class ZapretActions
         // never be reached on other platforms — but guarding the call keeps
         // the fallback noiseless instead of pretending it worked.
         if (!OperatingSystem.IsWindows())
+            return;
+
+        if (string.IsNullOrWhiteSpace(tempPath) || string.IsNullOrWhiteSpace(hostsPath))
+            return;
+
+        if (tempPath.Any(c => c is '\r' or '\n' or '"') || hostsPath.Any(c => c is '\r' or '\n' or '"'))
             return;
 
         try
