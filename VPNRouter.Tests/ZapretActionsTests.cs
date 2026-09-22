@@ -427,6 +427,28 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    // ── 12d. OpenHostsEditHelpers: throws ArgumentException when paths contain quotes/newlines ──
+
+    [Theory]
+    [InlineData("temp\"path")]
+    [InlineData("temp\rpath")]
+    [InlineData("temp\npath")]
+    public void OpenHostsEditHelpers_InvalidTempPath_ThrowsArgumentException(string invalidTempPath)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(invalidTempPath, "validHostsPath"));
+        Assert.Contains("Temp path contains disallowed characters", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("hosts\"path")]
+    [InlineData("hosts\rpath")]
+    [InlineData("hosts\npath")]
+    public void OpenHostsEditHelpers_InvalidHostsPath_ThrowsArgumentException(string invalidHostsPath)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers("validTempPath", invalidHostsPath));
+        Assert.Contains("Hosts path contains disallowed characters", ex.Message);
+    }
+
     // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
 
     [Fact]

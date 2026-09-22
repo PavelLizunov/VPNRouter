@@ -280,8 +280,13 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
-    private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
+    internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
+        if (tempPath.Any(c => c is '\r' or '\n' or '"'))
+            throw new ArgumentException("Temp path contains disallowed characters", nameof(tempPath));
+        if (hostsPath.Any(c => c is '\r' or '\n' or '"'))
+            throw new ArgumentException("Hosts path contains disallowed characters", nameof(hostsPath));
+
         // v2.20.2: notepad / explorer.exe are Windows-only. On Linux / macOS
         // they don't exist and Process.Start would throw into the silent
         // catch, leaving the user with no feedback. Zapret is Windows-only
