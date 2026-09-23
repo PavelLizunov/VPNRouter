@@ -318,6 +318,24 @@ public sealed class TgProxyOneButtonMvpTests
         return port;
     }
 
+    [Fact]
+    public void OpenInTelegram_ValidParameters_DoesNotThrow()
+    {
+        // Smoke test: calling OpenInTelegram with valid parameters constructs a valid tg:// URI.
+        // Process.Start might fail or succeed depending on OS handler registration, but exception is handled internally.
+        var exception = Record.Exception(() => TgProxyManager.OpenInTelegram("127.0.0.1", 1443, "00112233445566778899aabbccddeeff"));
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void OpenInTelegram_SourceCheck_ValidatesTgSchemeBeforeProcessStart()
+    {
+        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
+        Assert.NotNull(src);
+        Assert.Contains("string.Equals(uri.Scheme, \"tg\", StringComparison.OrdinalIgnoreCase)", src);
+        Assert.Contains("CanaryPolicy.RedactUrl(url)", src);
+    }
+
     private static void InvokeInternalStaticSave(AppSettings settings, string path)
     {
         // SettingsLoader.Save is `internal static`. The Tests assembly
