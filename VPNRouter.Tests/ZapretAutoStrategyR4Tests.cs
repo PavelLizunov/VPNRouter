@@ -218,6 +218,27 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         Assert.Contains("[WARN] curl missing", r.ErrorLines);
     }
 
+    // ── RunFlowsealProbeAsync metacharacters validation ──────────────────────
+
+    [Fact]
+    public async Task RunFlowsealProbeAsync_DisallowedMetacharacters_ThrowsArgumentException()
+    {
+        // On non-Windows, RunFlowsealProbeAsync returns early with "not_windows" diagnostic before checking scriptPath.
+        // Therefore, we only run this metacharacter validation test on Windows.
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var tempDir = Path.Combine(_tempRoot, "metachar_test");
+        var utilsDir = Path.Combine(tempDir, "utils");
+        Directory.CreateDirectory(utilsDir);
+
+        // Create tempDir with a disallowed metacharacter in path (e.g. quote ")
+        var invalidTempDir = Path.Combine(_tempRoot, "metachar\"test");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            ZapretAutoStrategy.RunFlowsealProbeAsync(invalidTempDir, null, null, CancellationToken.None));
+    }
+
     // ── IsRunningAsAdmin ────────────────────────────────────────────────────
 
     [Fact]
