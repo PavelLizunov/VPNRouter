@@ -435,15 +435,23 @@ public class TgProxyManager : IDisposable
         var url = BuildProxyLink(host, port, secret);
         try
         {
-            Process.Start(new ProcessStartInfo
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+                string.Equals(uri.Scheme, "tg", StringComparison.OrdinalIgnoreCase))
             {
-                FileName = url,
-                UseShellExecute = true
-            });
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = uri.AbsoluteUri,
+                    UseShellExecute = true
+                });
+            }
+            else
+            {
+                Log.Warning("[TgProxy] OpenInTelegram blocked non-tg scheme or invalid URL: {Url}", CanaryPolicy.RedactUrl(url));
+            }
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "[TgProxy] Failed to open tg:// link");
+            Log.Warning(ex, "[TgProxy] Failed to open tg:// link: {Url}", CanaryPolicy.RedactUrl(url));
         }
     }
 

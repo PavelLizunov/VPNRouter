@@ -215,6 +215,50 @@ public sealed class TgProxyAutostartLoggingTests
     }
 
     [Fact]
+    public void TgProxyManager_OpenInTelegram_ValidatesTgSchemeAndRedactsSecretInSource()
+    {
+        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
+        if (src == null) return;
+
+        var stripped = StripLineComments(src);
+
+        Assert.Contains("Uri.TryCreate", stripped);
+        Assert.Contains("uri.Scheme", stripped);
+        Assert.Contains("CanaryPolicy.RedactUrl", stripped);
+    }
+
+    [Fact]
+    public void OpenInTelegram_RedactsSecretInLogsOnLaunchFailure()
+    {
+        var sink = new InMemorySink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.Sink(sink)
+            .CreateLogger();
+
+        var origLogger = Log.Logger;
+        Log.Logger = logger;
+
+        try
+        {
+            const string secret = "1234567890abcdef1234567890abcdef";
+
+            // OpenInTelegram attempts Process.Start or logs a warning/failure
+            TgProxyManager.OpenInTelegram("127.0.0.1", 1443, secret);
+
+            var lines = sink.Render();
+            foreach (var line in lines)
+            {
+                Assert.DoesNotContain(secret, line);
+            }
+        }
+        finally
+        {
+            Log.Logger = origLogger;
+        }
+    }
+
+    [Fact]
     public void RedactSecretInArgs_HandlesEmptyAndNull()
     {
         // Defensive: empty string round-trips, null doesn't NRE. The
