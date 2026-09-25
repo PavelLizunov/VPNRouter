@@ -248,6 +248,30 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(10), ZapretAutoStrategy.FlowsealMaxSweepTime);
     }
 
+    [Fact]
+    public async Task RunFlowsealProbeAsync_ScriptPathWithMetacharacters_HandledSafely()
+    {
+        var result = await ZapretAutoStrategy.RunFlowsealProbeAsync(
+            Path.Combine(_tempRoot, "dir\"&calc"),
+            progress: null,
+            logger: null,
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal("not_windows", result.Diagnostic);
+        }
+        else if (!ZapretAutoStrategy.IsRunningAsAdmin())
+        {
+            Assert.Equal("not_admin", result.Diagnostic);
+        }
+        else
+        {
+            Assert.Equal("missing_script", result.Diagnostic);
+        }
+    }
+
     // ── ProbeOneTargetAsync URL redaction ───────────────────────────────────
 
     [Fact]
