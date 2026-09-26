@@ -237,23 +237,30 @@ public sealed class TgProxyAutostartLoggingTests
             .CreateLogger();
 
         var origLogger = Log.Logger;
+        var origLauncher = TgProxyManager.ProcessLauncher;
         Log.Logger = logger;
 
         try
         {
             const string secret = "1234567890abcdef1234567890abcdef";
 
-            // OpenInTelegram attempts Process.Start or logs a warning/failure
+            // Force launch failure with an exception message containing the secret
+            TgProxyManager.ProcessLauncher = psi => throw new System.ComponentModel.Win32Exception(
+                5, $"Failed to launch process '{psi.FileName}' with secret '{secret}'");
+
             TgProxyManager.OpenInTelegram("127.0.0.1", 1443, secret);
 
             var lines = sink.Render();
-            foreach (var line in lines)
-            {
-                Assert.DoesNotContain(secret, line);
-            }
+            Assert.NotEmpty(lines);
+            var logText = string.Join("\n", lines);
+
+            // Plaintext secret must be stripped/redacted from the log output
+            Assert.DoesNotContain(secret, logText);
+            Assert.Contains("REDACTED", logText);
         }
         finally
         {
+            TgProxyManager.ProcessLauncher = origLauncher;
             Log.Logger = origLogger;
         }
     }

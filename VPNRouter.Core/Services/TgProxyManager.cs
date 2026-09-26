@@ -421,6 +421,12 @@ public class TgProxyManager : IDisposable
     }
 
     /// <summary>
+    /// Test-only seam: launcher for shell process execution in <see cref="OpenInTelegram"/>.
+    /// Defaults to Process.Start(ProcessStartInfo).
+    /// </summary>
+    internal static Action<ProcessStartInfo> ProcessLauncher { get; set; } = psi => Process.Start(psi);
+
+    /// <summary>
     /// Build the tg://proxy deep link for Telegram Desktop.
     /// dd prefix = random padding mode (standard MTProto).
     /// </summary>
@@ -438,7 +444,7 @@ public class TgProxyManager : IDisposable
             if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
                 string.Equals(uri.Scheme, "tg", StringComparison.OrdinalIgnoreCase))
             {
-                Process.Start(new ProcessStartInfo
+                ProcessLauncher(new ProcessStartInfo
                 {
                     FileName = uri.AbsoluteUri,
                     UseShellExecute = true
@@ -451,7 +457,8 @@ public class TgProxyManager : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "[TgProxy] Failed to open tg:// link: {Url}", CanaryPolicy.RedactUrl(url));
+            var safeError = RedactSensitiveOutput(ex.Message, secret);
+            Log.Warning("[TgProxy] Failed to open tg:// link: {Type}: {Error}", ex.GetType().Name, safeError);
         }
     }
 
