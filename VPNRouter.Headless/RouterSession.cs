@@ -361,7 +361,14 @@ public sealed class RouterSession : IRouterSession
         finally
         {
             _activeConnectCts = null;
-            _gate.Release();
+            try
+            {
+                _gate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Safe if gate was disposed during concurrent teardown
+            }
         }
     }
 
@@ -428,7 +435,14 @@ public sealed class RouterSession : IRouterSession
         }
         finally
         {
-            _gate.Release();
+            try
+            {
+                _gate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Safe if gate was disposed during concurrent teardown
+            }
         }
     }
 
@@ -509,7 +523,14 @@ public sealed class RouterSession : IRouterSession
         }
         finally
         {
-            _gate.Release();
+            try
+            {
+                _gate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Safe if gate was disposed during concurrent teardown
+            }
         }
     }
 
@@ -532,37 +553,60 @@ public sealed class RouterSession : IRouterSession
             _engine.Connected -= OnEngineConnected;
             _engine.Warning -= OnEngineWarning;
 
-            // Ensure no non-owner disposal can stop foreign session
-            if (_ownsConnection)
+            // Wait for active operation to settle before tearing down engine
+            var gateAcquired = false;
+            try
             {
-                var ownershipCheck = _ownershipProbe != null ? _ownershipProbe() : LinuxOwnershipGuard.CheckOwnership(_logger);
-                var isHeldByForeign = ownershipCheck.Status == OwnershipStatus.HeldByAnother;
-                if (!isHeldByForeign)
+                gateAcquired = await _gate.WaitAsync(_stopTimeout ?? TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning("[RouterSession] Exception awaiting gate in DisposeAsync: {Message}", BoundedTeardown.SanitizeExceptionMessage(ex));
+            }
+
+            try
+            {
+                // Ensure no non-owner disposal can stop foreign session
+                if (_ownsConnection)
                 {
-                    var stopped = await BoundedTeardown.StopBoundedAsync(_engine, timeout: _stopTimeout, logger: _logger).ConfigureAwait(false);
-                    if (!stopped || _engine.IsRunning || _engine.SingBoxPid != null)
+                    var ownershipCheck = _ownershipProbe != null ? _ownershipProbe() : LinuxOwnershipGuard.CheckOwnership(_logger);
+                    var isHeldByForeign = ownershipCheck.Status == OwnershipStatus.HeldByAnother;
+                    if (!isHeldByForeign)
                     {
-                        TransitionState(SessionStates.Error, "stop_failed");
-                        // Do not call _engine.DisposeAsync() when BoundedTeardown timed out / failed,
-                        // to avoid running Stop() twice overlapping.
+                        var stopped = await BoundedTeardown.StopBoundedAsync(_engine, timeout: _stopTimeout, logger: _logger).ConfigureAwait(false);
+                        if (!stopped || _engine.IsRunning || _engine.SingBoxPid != null)
+                        {
+                            TransitionState(SessionStates.Error, "stop_failed");
+                            // Do not call _engine.DisposeAsync() when BoundedTeardown timed out / failed,
+                            // to avoid running Stop() twice overlapping.
+                        }
+                        else
+                        {
+                            _ownsConnection = false;
+                            TransitionState(SessionStates.Disconnected, null);
+                            await _engine.DisposeAsync().ConfigureAwait(false);
+                        }
                     }
                     else
                     {
+                        _logger?.Information("[RouterSession] DisposeAsync: Session is held by another process; avoiding stop of foreign engine.");
                         _ownsConnection = false;
-                        TransitionState(SessionStates.Disconnected, null);
                         await _engine.DisposeAsync().ConfigureAwait(false);
                     }
                 }
                 else
                 {
-                    _logger?.Information("[RouterSession] DisposeAsync: Session is held by another process; avoiding stop of foreign engine.");
-                    _ownsConnection = false;
                     await _engine.DisposeAsync().ConfigureAwait(false);
                 }
             }
-            else
+            finally
             {
-                await _engine.DisposeAsync().ConfigureAwait(false);
+                // Only dispose the gate if we acquired it and no surviving operations are running.
+                // Do not dispose the semaphore underneath a surviving task.
+                if (gateAcquired)
+                {
+                    _gate.Dispose();
+                }
             }
         }
         catch (Exception ex)
@@ -581,7 +625,6 @@ public sealed class RouterSession : IRouterSession
             {
                 TransitionState(SessionStates.Disconnected, null);
             }
-            _gate.Dispose();
         }
     }
 

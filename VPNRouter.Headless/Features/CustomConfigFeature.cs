@@ -68,6 +68,16 @@ public sealed class CustomConfigFeature
 
         _storage.ValidateRevision(revision);
 
+        string? previousText = null;
+        try
+        {
+            previousText = _customStorage.GetCustomConfigText(name);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("[CustomConfigFeature] Could not read existing custom config prior to overwrite: {ErrorType}", ex.GetType().Name);
+        }
+
         var persistedPath = _customStorage.SaveCustomConfig(name, text);
 
         var settings = _storage.GetSettings();
@@ -93,7 +103,31 @@ public sealed class CustomConfigFeature
             settings.App.ConfigMode = "custom";
         }
 
-        _storage.SaveSettings(settings, revision);
+        try
+        {
+            _storage.SaveSettings(settings, revision);
+        }
+        catch
+        {
+            // Transactional rollback of disk state if settings commit failed
+            try
+            {
+                if (previousText != null)
+                {
+                    _customStorage.SaveCustomConfig(name, previousText);
+                }
+                else
+                {
+                    _customStorage.DeleteCustomConfig(name);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("[CustomConfigFeature] Failed to rollback disk state after SaveSettings failure: {ErrorType}", ex.GetType().Name);
+            }
+            throw;
+        }
+
         _logger.Information("[CustomConfigFeature] Imported custom config {Name}", name);
     }
 
@@ -150,7 +184,6 @@ public sealed class CustomConfigFeature
 
         var wasActive = string.Equals(settings.App?.ActiveCustomConfig, match.Name, StringComparison.OrdinalIgnoreCase);
         configs.Remove(match);
-        _customStorage.DeleteCustomConfig(match.Name);
 
         if (wasActive)
         {
@@ -166,6 +199,17 @@ public sealed class CustomConfigFeature
         }
 
         _storage.SaveSettings(settings, revision);
+
+        // Delete the file on disk ONLY after settings are safely committed
+        try
+        {
+            _customStorage.DeleteCustomConfig(match.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("[CustomConfigFeature] Failed to delete custom config on disk after settings commit: {ErrorType}", ex.GetType().Name);
+        }
+
         _logger.Information("[CustomConfigFeature] Removed custom config {Name}", match.Name);
     }
 

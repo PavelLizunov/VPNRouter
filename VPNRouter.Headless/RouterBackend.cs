@@ -318,13 +318,13 @@ public sealed class RouterBackend : IAsyncDisposable
                 }
                 catch (RouterException conflictEx) when (conflictEx.Code == "conflict")
                 {
-                    _logger.Error(conflictEx, "[RouterBackend] Guarded rollback conflict: external modification preserved");
+                    _logger.Error("[RouterBackend] Guarded rollback conflict: external modification preserved: {ErrorType}", conflictEx.GetType().Name);
                     throw;
                 }
                 catch (Exception rollbackEx)
                 {
-                    _logger.Error(rollbackEx, "[RouterBackend] Guarded rollback failed");
-                    throw new RouterException("storage_error", "Rollback failed after apply failure", rollbackEx);
+                    _logger.Error("[RouterBackend] Guarded rollback failed: {ErrorType}", rollbackEx.GetType().Name);
+                    throw new RouterException("storage_error", "Rollback failed after apply failure");
                 }
 
                 throw;

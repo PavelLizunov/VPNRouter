@@ -129,6 +129,23 @@ public sealed class CustomConfigStorage
     }
 
     /// <summary>
+    /// Reads a custom configuration file from managed storage.
+    /// Returns null if the file does not exist.
+    /// </summary>
+    public string? GetCustomConfigText(string configName)
+    {
+        if (string.IsNullOrWhiteSpace(configName))
+            return null;
+
+        var destPath = CustomConfigInjector.GetProgramDataPath(configName);
+        AssertNoSymlinksInPath(destPath);
+        if (!File.Exists(destPath))
+            return null;
+
+        return File.ReadAllText(destPath, Encoding.UTF8);
+    }
+
+    /// <summary>
     /// Deletes a custom configuration file from managed storage.
     /// </summary>
     public void DeleteCustomConfig(string configName)

@@ -356,8 +356,8 @@ public sealed class ConfigStorage
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[ConfigStorage] Failed to create named mutex '{LockName}'; failing closed", lockName);
-            throw new RouterException("storage_error", "Failed to acquire configuration lock", ex);
+            _logger.Warning("[ConfigStorage] Failed to create named mutex '{LockName}': {ErrorType}; failing closed", lockName, ex.GetType().Name);
+            throw new RouterException("storage_error", "Failed to acquire configuration lock");
         }
 
         bool acquired;
@@ -372,8 +372,8 @@ public sealed class ConfigStorage
         catch (Exception ex)
         {
             mutex.Dispose();
-            _logger.Warning(ex, "[ConfigStorage] Exception waiting on named mutex '{LockName}'; failing closed", lockName);
-            throw new RouterException("storage_error", "Failed to acquire configuration lock", ex);
+            _logger.Warning("[ConfigStorage] Exception waiting on named mutex '{LockName}': {ErrorType}; failing closed", lockName, ex.GetType().Name);
+            throw new RouterException("storage_error", "Failed to acquire configuration lock");
         }
 
         if (!acquired)
