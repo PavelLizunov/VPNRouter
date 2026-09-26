@@ -496,8 +496,10 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Single(psi.ArgumentList);
         Assert.Equal(safePathWithSpaces, psi.ArgumentList[0]);
 
-        var invalidPath = Path.Combine(Path.GetTempPath(), "test\"quote", "hosts.txt");
-        Assert.Throws<ArgumentException>(() => ZapretActions.BuildNotepadStartInfo(invalidPath));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildNotepadStartInfo(""));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildNotepadStartInfo("   "));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildNotepadStartInfo("test\"quote\\hosts.txt"));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildNotepadStartInfo("test\r\nline\\hosts.txt"));
     }
 
     // ── 15. Hosts helper process start info: explorer select ──
@@ -512,7 +514,9 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.False(psi.UseShellExecute);
         Assert.Equal($"/select,\"{safePathWithSpaces}\"", psi.Arguments);
 
-        var invalidPath = Path.Combine(Path.GetTempPath(), "hosts\"quote", "hosts");
-        Assert.Throws<ArgumentException>(() => ZapretActions.BuildExplorerSelectStartInfo(invalidPath));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildExplorerSelectStartInfo(""));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildExplorerSelectStartInfo("   "));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildExplorerSelectStartInfo("hosts\"quote"));
+        Assert.Throws<ArgumentException>(() => ZapretActions.BuildExplorerSelectStartInfo("hosts\r\nline"));
     }
 }

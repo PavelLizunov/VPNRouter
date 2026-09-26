@@ -282,7 +282,7 @@ public static class ZapretActions
 
     internal static ProcessStartInfo BuildNotepadStartInfo(string tempPath)
     {
-        if (tempPath.Any(c => c is '"' or '\r' or '\n'))
+        if (string.IsNullOrWhiteSpace(tempPath) || tempPath.Any(c => c is '"' or '\r' or '\n'))
             throw new ArgumentException("Temp path contains invalid characters", nameof(tempPath));
 
         // Security: Use UseShellExecute = false with ArgumentList to prevent argument injection
@@ -293,7 +293,7 @@ public static class ZapretActions
 
     internal static ProcessStartInfo BuildExplorerSelectStartInfo(string hostsPath)
     {
-        if (hostsPath.Any(c => c is '"' or '\r' or '\n'))
+        if (string.IsNullOrWhiteSpace(hostsPath) || hostsPath.Any(c => c is '"' or '\r' or '\n'))
             throw new ArgumentException("Hosts path contains invalid characters", nameof(hostsPath));
 
         // Security: UseShellExecute = false prevents shell execution/command injection.
@@ -318,8 +318,13 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(BuildNotepadStartInfo(tempPath));
-            Process.Start(BuildExplorerSelectStartInfo(hostsPath));
+            // Validate both start infos before spawning either process so an invalid hostsPath
+            // does not spawn Notepad before failing on Explorer.
+            var notepadPsi = BuildNotepadStartInfo(tempPath);
+            var explorerPsi = BuildExplorerSelectStartInfo(hostsPath);
+
+            Process.Start(notepadPsi);
+            Process.Start(explorerPsi);
         }
         catch { }
     }
