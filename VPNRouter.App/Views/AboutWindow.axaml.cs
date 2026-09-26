@@ -75,15 +75,15 @@ public partial class AboutWindow : Window
     /// stream contained the "version" token. Also write any exception to a
     /// sidecar log so the next Mac report has something concrete.
     /// </summary>
-    private static string GetSingBoxVersion()
+    internal static string GetSingBoxVersion(string? forcedSingBoxPath = null, Func<string, Process>? customLauncher = null)
     {
         try
         {
-            var singboxPath = AppPaths.SingBoxExePath;
+            var singboxPath = forcedSingBoxPath ?? AppPaths.SingBoxExePath;
             if (!System.IO.File.Exists(singboxPath))
                 return "not installed";
 
-            using var proc = new Process
+            using var proc = customLauncher != null ? customLauncher(singboxPath) : new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -95,7 +95,7 @@ public partial class AboutWindow : Window
                     CreateNoWindow = true
                 }
             };
-            proc.Start();
+            if (customLauncher == null) proc.Start();
 
             // Drain both pipes so neither fills up and blocks the child.
             // ReadToEnd is fine because sing-box version exits within ms.
