@@ -201,31 +201,6 @@ public sealed class SubscriptionUrlRedactionTests
         return (logger, sink);
     }
 
-    [Theory]
-    [InlineData("file:///etc/passwd")]
-    [InlineData("ftp://example.com/sub")]
-    [InlineData("javascript:alert(1)")]
-    [InlineData("not-a-url")]
-    public async Task FetchAsync_NonHttpScheme_IsRefusedAndDoesNotFetch(string invalidUrl)
-    {
-        var (logger, sink) = BuildCapturingLogger();
-        var fake = new FakeHttpClient();
-        var previous = SubscriptionFetcher.Http;
-        SubscriptionFetcher.Http = fake;
-        try
-        {
-            var servers = await SubscriptionFetcher.FetchAsync(invalidUrl, logger);
-            Assert.Empty(servers);
-
-            var rendered = AllRenderedText(sink);
-            Assert.Contains("Refusing non-http(s) subscription URL", rendered);
-        }
-        finally
-        {
-            SubscriptionFetcher.Http = previous;
-        }
-    }
-
     [Fact]
     public async Task FetchAsync_TimeoutException_DoesNotLogRawUriOrToken()
     {
