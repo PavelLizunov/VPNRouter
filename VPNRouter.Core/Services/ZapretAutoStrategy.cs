@@ -621,6 +621,11 @@ public static class ZapretAutoStrategy
         // Our desktop app already requires admin for TUN setup so this is
         // double-coverage — defensive against UAC quirks / scheduled
         // task / service-mode restarts that could lose elevation.
+        var scriptPath = Path.Combine(zapretInstallDir, "utils", "test zapret.ps1");
+
+        if (scriptPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
+            throw new ArgumentException("Script path contains disallowed shell metacharacters", nameof(scriptPath));
+
         if (!OperatingSystem.IsWindows())
         {
             logger?.Information("[ZapretAutoStrategy] Flowseal probe only runs on Windows");
@@ -635,7 +640,6 @@ public static class ZapretAutoStrategy
                 Diagnostic: "not_admin", ErrorLines: Array.Empty<string>());
         }
 
-        var scriptPath = Path.Combine(zapretInstallDir, "utils", "test zapret.ps1");
         if (!File.Exists(scriptPath))
         {
             logger?.Warning("[ZapretAutoStrategy] Flowseal test zapret.ps1 not found at {Path}", scriptPath);
@@ -646,7 +650,6 @@ public static class ZapretAutoStrategy
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
             WorkingDirectory = zapretInstallDir,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -661,6 +664,11 @@ public static class ZapretAutoStrategy
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(scriptPath);
 
         // r38: per-probe persistent log file. Captures EVERY stdout/stderr
         // line with a timestamp so the user can grep for "what did probe see

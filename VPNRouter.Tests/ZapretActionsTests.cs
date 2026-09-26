@@ -427,6 +427,32 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    // ── 12d. BuildServiceMenuStartInfo: builds elevated cmd ProcessStartInfo ──
+
+    [Fact]
+    public void BuildServiceMenuStartInfo_BuildsElevatedCmdStartInfo()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_dir_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var servicePath = Path.Combine(tempDir, "service.bat");
+        File.WriteAllText(servicePath, "@echo off");
+
+        try
+        {
+            var psi = ZapretActions.BuildServiceMenuStartInfo(servicePath);
+
+            Assert.Equal("cmd.exe", psi.FileName);
+            Assert.True(psi.UseShellExecute);
+            Assert.Equal("runas", psi.Verb);
+            Assert.Equal($"/k \"\"{servicePath}\"\"", psi.Arguments);
+            Assert.Equal(tempDir, psi.WorkingDirectory);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
 
     [Fact]

@@ -237,6 +237,33 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         }
     }
 
+    // ── RunFlowsealProbeAsync metacharacter validation ──────────────────────
+
+    [Theory]
+    [InlineData("zapret_dir_&_calc_")]
+    [InlineData("zapret_dir_|_cmd_")]
+    [InlineData("zapret_dir_^_echo_")]
+    [InlineData("zapret_dir_%EVIL%_")]
+    [InlineData("zapret_dir_\"_quote_")]
+    public async Task RunFlowsealProbeAsync_PathWithMetacharacters_ThrowsArgumentException(string folderPrefix)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"{folderPrefix}{Guid.NewGuid():N}");
+        var utilsDir = Path.Combine(tempDir, "utils");
+        Directory.CreateDirectory(utilsDir);
+        var testPath = Path.Combine(utilsDir, "test zapret.ps1");
+        await File.WriteAllTextAsync(testPath, "# test");
+
+        try
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                ZapretAutoStrategy.RunFlowsealProbeAsync(tempDir, progress: null, logger: null, CancellationToken.None));
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     // ── FlowsealMaxSweepTime sanity ─────────────────────────────────────────
 
     [Fact]
