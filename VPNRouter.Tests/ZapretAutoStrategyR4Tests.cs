@@ -262,6 +262,42 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         Assert.DoesNotContain("Arguments = $\"-NoProfile", source);
     }
 
+    [Fact]
+    public void ProcessStartInfo_WithArgumentList_ExecutesScriptInPathWithMetacharactersAndSpaces()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var specialDir = Path.Combine(_tempRoot, "test ^ % & path with spaces");
+        var utilsDir = Path.Combine(specialDir, "utils");
+        Directory.CreateDirectory(utilsDir);
+
+        var scriptPath = Path.Combine(utilsDir, "test zapret.ps1");
+        File.WriteAllText(scriptPath, "Write-Output 'TEST_OK'");
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            WorkingDirectory = specialDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(scriptPath);
+
+        using var proc = System.Diagnostics.Process.Start(psi);
+        Assert.NotNull(proc);
+        Assert.True(proc!.WaitForExit(10_000));
+        Assert.Equal(0, proc.ExitCode);
+        var stdout = proc.StandardOutput.ReadToEnd();
+        Assert.Contains("TEST_OK", stdout);
+    }
+
     private static string LoadSource(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
