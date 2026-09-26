@@ -63,6 +63,15 @@ public static class SubscriptionFetcher
         if (string.IsNullOrWhiteSpace(url))
             return (result, 0, userInfo);
 
+        // Security check: strictly enforce absolute URI validation restricted to http/https schemes
+        // to prevent SSRF, local file access (e.g. file://), and malformed URI exceptions.
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsedUri) ||
+            (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
+        {
+            logger?.Warning("[Subscription] Refusing non-http(s) subscription URL: {Url}", CanaryPolicy.RedactUrl(url));
+            return (result, 0, userInfo);
+        }
+
         try
         {
             logger?.Information("[Subscription] Fetching {Url}", CanaryPolicy.RedactUrl(url));
@@ -70,7 +79,7 @@ public static class SubscriptionFetcher
             // 3G-2: bundled User-Agent + retry come from PolicyHttpClient
             // policy; per-request 15s timeout preserved for back-compat.
             var httpResp = await Http.SendAsync(
-                new HttpRequest(HttpMethod.Get, new Uri(url),
+                new HttpRequest(HttpMethod.Get, parsedUri,
                     Headers: SubscriptionHeaders,
                     Timeout: TimeSpan.FromSeconds(15)),
                 ct);
