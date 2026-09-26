@@ -481,4 +481,18 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("/RESOLVED/lists/tls_clienthello_www_google_com.bin", args);
         Assert.DoesNotContain("%LISTS%", args);
     }
+
+    // ── 14. OpenHostsEditHelpers: rejects invalid paths without throwing ──
+
+    [Theory]
+    [InlineData("temp.txt\"", "C:\\Windows\\System32\\drivers\\etc\\hosts")]
+    [InlineData("temp.txt", "hosts\r\n")]
+    [InlineData("", "hosts")]
+    [InlineData("temp.txt", "   ")]
+    public void OpenHostsEditHelpers_InvalidPaths_ReturnsWithoutThrowing(string tempPath, string hostsPath)
+    {
+        // Path contains disallowed characters (\r, \n, ") or is empty/whitespace ->
+        // OpenHostsEditHelpers returns safely without attempting Process.Start.
+        ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath);
+    }
 }
