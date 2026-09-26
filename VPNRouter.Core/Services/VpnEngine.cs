@@ -15,6 +15,9 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public class VpnEngine : IDisposable
 {
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
     private SingBoxManager? _singBox;
     private HealthMonitor? _healthMonitor;
     private IProcessMonitor? _etw;
@@ -280,6 +283,7 @@ public class VpnEngine : IDisposable
         IUnixDnsHardening? unixDnsHardening = null,
         ISplitTunnelDriver? splitDriver = null)
     {
+        _policy = SingBoxRuntimePolicy.Current;
         _scanner = scanner;
         _firewallFactory = firewallFactory;
         _monitorFactory = monitorFactory;
@@ -344,6 +348,13 @@ public class VpnEngine : IDisposable
     /// </summary>
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            policy.Authorize(SingBoxRuntimeOperation.Start);
+        }
+
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -723,6 +734,13 @@ public class VpnEngine : IDisposable
     /// </summary>
     public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default, bool forceRestart = false)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            policy.Authorize(SingBoxRuntimeOperation.Start);
+        }
+
         // v2.46.1 (audit batch-1 #1): Apply joins the _lifecycleGate serialized set
         // (StartAsync / Stop / failover restart). Without the gate, Apply could pass
         // its IsRunning check and then race a Stop — hot-reloading a torn-down
@@ -950,6 +968,7 @@ public class VpnEngine : IDisposable
 
     public void Stop()
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         // v2.44.3 (P0): signal disconnect intent + cancel any in-flight failover
         // restart BEFORE taking the gate, so a restart mid-flight (holding the gate,
         // running under _sessionCts.Token) is cancelled and aborts instead of
@@ -982,6 +1001,7 @@ public class VpnEngine : IDisposable
     /// </summary>
     private void TeardownInternal()
     {
+        using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         OnStatus("Stopping...");
 
         // BR-5 (brat 2026-05-19) — re-ordered so sing-box dies EARLY,
@@ -1421,12 +1441,12 @@ public class VpnEngine : IDisposable
         return name;
     }
 
-    internal static List<IProfileSource> BuildProfileSources(AppSettings settings)
+    internal static List<IProfileSource> BuildProfileSources(AppSettings settings, string? dataDir = null)
     {
         var sources = new List<IProfileSource>();
         int priority = 10;
 
-        foreach (var src in settings.ProfileSources)
+        foreach (var src in settings.ProfileSources ?? new List<ProfileSource>())
         {
             switch (src.Type?.ToLowerInvariant())
             {
@@ -1440,18 +1460,15 @@ public class VpnEngine : IDisposable
             priority += 10;
         }
 
-        // v2.21.9: platform-aware bundled profiles. Previously BuildProfileSources
-        // always loaded default.json (Windows layout with .exe process names
-        // and group names like "Discord_Privacy" / "Work_Suite" / "Browsers" /
-        // "Terminal"). On Linux SettingsLoader + MainWindowViewModel already
-        // route to default-linux.json for UI load/display, but this engine
-        // path still pulled default.json at runtime — so Apply ran with the
-        // WRONG profile catalogue. User hit "Profile 'Messengers' not found"
-        // because the UI offered Linux-style profiles but the engine only
-        // knew Windows-style ones.
+        // Platform-aware bundled profiles: ProfileManager.LoadAsync evaluates sources
+        // in ascending Priority order and selects the first non-empty collection (whole
+        // collection selection, not per-profile shadow merge).
         //
-        // Now we prefer the platform-specific variant if it exists, and
-        // fall back to default.json so Windows builds keep working.
+        // Priority hierarchy across tiers:
+        // - Explicit configured sources: priority 10..70 (local +10)
+        // - Bundled tier: platform bundled (80) before generic bundled (82)
+        // - User-directory tier: platform user (85) before generic user (87)
+        // - Built-in fallback: (99)
         var appDir = AppContext.BaseDirectory;
         var platformDefaultName = OperatingSystem.IsMacOS() ? "default-macos.json"
                                 : OperatingSystem.IsLinux() ? "default-linux.json"
@@ -1461,21 +1478,22 @@ public class VpnEngine : IDisposable
         if (File.Exists(platformBundled))
             sources.Add(new LocalProfileSource(platformBundled, 80));
 
-        // Generic default.json always added as a fallback at slightly lower
-        // priority so profiles referenced by BOTH files (e.g. SimpleSplit's
-        // Browsers + Discord_Privacy + Work_Suite) resolve against the
-        // platform variant first.
+        // Generic default.json is added as a fallback at lower priority (82)
+        // when distinct from the platform file, so platform-specific catalog (80)
+        // is selected first by ProfileManager.LoadAsync.
         var defaultJson = Path.Combine(appDir, "profiles", "default.json");
-        if (File.Exists(defaultJson))
-            sources.Add(new LocalProfileSource(defaultJson, 78));
+        if (File.Exists(defaultJson) && !defaultJson.Equals(platformBundled, StringComparison.Ordinal))
+            sources.Add(new LocalProfileSource(defaultJson, 82));
 
-        // User profiles directory under AppPaths (where ProfilesDir lives)
-        var platformProfiles = Path.Combine(AppPaths.ProfilesDir, platformDefaultName);
+        // User profiles directory under custom dataDir or AppPaths.DataDir
+        var effectiveDataDir = !string.IsNullOrWhiteSpace(dataDir) ? dataDir : AppPaths.DataDir;
+        var profilesDir = Path.Combine(effectiveDataDir, "profiles");
+        var platformProfiles = Path.Combine(profilesDir, platformDefaultName);
         if (File.Exists(platformProfiles))
             sources.Add(new LocalProfileSource(platformProfiles, 85));
-        var userDefault = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        var userDefault = Path.Combine(profilesDir, "default.json");
         if (File.Exists(userDefault) && !userDefault.Equals(platformProfiles, StringComparison.Ordinal))
-            sources.Add(new LocalProfileSource(userDefault, 83));
+            sources.Add(new LocalProfileSource(userDefault, 87));
 
         // Built-in fallback
         sources.Add(new BuiltInProfileSource());
@@ -1500,8 +1518,8 @@ public class VpnEngine : IDisposable
         if (File.Exists(platformBundled))
             sources.Add(new LocalProfileSource(platformBundled, 80));
         var defaultJson = Path.Combine(appDir, "profiles", "default.json");
-        if (File.Exists(defaultJson))
-            sources.Add(new LocalProfileSource(defaultJson, 78));
+        if (File.Exists(defaultJson) && !defaultJson.Equals(platformBundled, StringComparison.Ordinal))
+            sources.Add(new LocalProfileSource(defaultJson, 82));
         sources.Add(new BuiltInProfileSource());
         return sources;
     }

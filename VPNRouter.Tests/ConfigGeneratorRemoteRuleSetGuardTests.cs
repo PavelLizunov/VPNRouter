@@ -33,19 +33,47 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
 
     public ConfigGeneratorRemoteRuleSetGuardTests()
     {
-        // Isolate cache dir so the rule-set fetch in ApplyAdBlock does
-        // not corrupt the user's real %ProgramData% during tests.
+        _origDataDir = AppPaths.DataDir;
         _testDir = Path.Combine(Path.GetTempPath(), "vpnr-cfggen-rs-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_testDir);
-        _origDataDir = Environment.GetEnvironmentVariable("ProgramData") ?? "";
-        // We can't easily redirect AppPaths without DI; rely on the
-        // fact that even if RuleSetCacheManager populates the real
-        // %CacheDir%, we only assert the SHAPE of the generated config.
+        AppPaths.OverrideDataDir(_testDir);
+        try
+        {
+            var cache = Path.Combine(AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir);
+            Directory.CreateDirectory(cache);
+            foreach (var name in new[] { "adblock_reject.srs", "user-geosite-ru.srs", "user-geosite-cn.srs", "user-geoip-ru.srs" })
+                File.WriteAllBytes(Path.Combine(cache, name), new byte[] { 1 });
+            Directory.CreateDirectory(AppPaths.GeoDir);
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, new byte[10 * 1024]);
+            File.WriteAllBytes(AppPaths.GeoSiteRuPath, new byte[100]);
+            // Nonempty fresh files exercise the cache-hit/config-shape path.
+            // They are not valid SRS payloads and are never passed to sing-box.
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     public void Dispose()
     {
+        AppPaths.OverrideDataDir(_origDataDir);
         try { Directory.Delete(_testDir, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public void Fixture_UsesPrivateSeededRuleSets()
+    {
+        // Fail before generation if the fixture still shares testhost AppPaths.
+        Assert.Equal(_testDir, AppPaths.DataDir);
+        foreach (var name in new[] { "adblock_reject.srs", "user-geosite-ru.srs", "user-geosite-cn.srs", "user-geoip-ru.srs" })
+        {
+            var path = Path.Combine(AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir, name);
+            Assert.True(File.Exists(path));
+            Assert.True(new FileInfo(path).Length > 0);
+            Assert.True(DateTime.UtcNow - File.GetLastWriteTimeUtc(path) < RuleSetCacheManager.MaxAgeForUseAsIs);
+        }
+        Assert.True(GeoDataDownloader.AreGeoFilesAvailable());
     }
 
     private static AppSettings BuildSettings(bool blockAds, bool bypassRu, List<CustomRule>? customRules = null)
@@ -80,9 +108,7 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
     [InlineData(true, true)]
     public void Generate_ToggleMatrix_NoRemoteRuleSets(bool blockAds, bool bypassRu)
     {
-        // BypassRu silently disables itself if geo files aren't
-        // available on the host (intentional gate). That's fine — we're
-        // checking that whatever DOES end up in the config is type:local.
+        Fixture_UsesPrivateSeededRuleSets(); // Fail before a cache miss can reach HTTP.
         var settings = BuildSettings(blockAds, bypassRu);
         var profile = BuildProfile();
         var processes = new[] { "Discord.exe" };
@@ -97,14 +123,17 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
             $"Found {remoteEntries.Count} type:remote rule-set entries — these crash sing-box on TLS timeout. " +
             $"Tags: {string.Join(", ", remoteEntries.Select(r => r.Tag))}. " +
             "Route through RuleSetCacheManager + emit type:local instead.");
+        var expectedTags = new List<string>();
+        if (blockAds) expectedTags.Add("vpnrouter-adblock");
+        if (bypassRu) expectedTags.AddRange(new[] { "vpnrouter-geoip-ru", "vpnrouter-geosite-ru" });
+        AssertLocalEntries(ruleSet, expectedTags);
     }
 
     [Fact]
     public void Generate_WithCustomGeositeRule_NoRemoteRuleSets()
     {
-        // Even with user-defined geosite rules — which pre-r5 emitted
-        // type:remote pointing at SagerNet's GitHub raw — the result
-        // must be type:local (or omitted on cache+fetch failure).
+        Fixture_UsesPrivateSeededRuleSets();
+        // Seeded custom sets must be emitted, not silently omitted.
         var customRules = new List<CustomRule>
         {
             new() { Enabled = true, Type = "geosite", Action = "direct", Value = "ru,cn" },
@@ -123,5 +152,28 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
         Assert.True(remoteEntries.Count == 0,
             $"Found {remoteEntries.Count} type:remote rule-set entries from custom geosite/geoip rules. " +
             $"Tags: {string.Join(", ", remoteEntries.Select(r => r.Tag))}.");
+        AssertLocalEntries(ruleSet, new[] { "user-geosite-ru", "user-geosite-cn", "user-geoip-ru" });
+    }
+
+    private void AssertLocalEntries(List<RuleSetEntry> entries, IEnumerable<string> expectedTags)
+    {
+        Assert.Equal(expectedTags.OrderBy(tag => tag), entries.Select(entry => entry.Tag).OrderBy(tag => tag));
+        foreach (var entry in entries)
+        {
+            Assert.Equal("local", entry.Type);
+            Assert.Equal("binary", entry.Format);
+            Assert.NotNull(entry.Path);
+            var relative = Path.GetRelativePath(_testDir, entry.Path!);
+            Assert.False(Path.IsPathRooted(relative));
+            Assert.NotEqual("..", relative);
+            Assert.False(relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+            var expectedBytes = entry.Tag switch
+            {
+                "vpnrouter-geoip-ru" => new byte[10 * 1024],
+                "vpnrouter-geosite-ru" => new byte[100],
+                _ => new byte[] { 1 }
+            };
+            Assert.Equal(expectedBytes, File.ReadAllBytes(entry.Path!));
+        }
     }
 }

@@ -28,10 +28,12 @@
 
 #nullable enable
 
+using System.Reflection;
 using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using Xunit;
 
 namespace VPNRouter.Tests;
 
@@ -58,8 +60,82 @@ namespace VPNRouter.Tests;
 /// NullTunAdapterDiagnostics abstractions. See the brief's "Tests
 /// deferred" table for the full list.</para>
 /// </summary>
-public sealed class VpnEngineStartAsyncSeamTests
+public sealed class VpnEngineStartAsyncSeamTests : IDisposable
 {
+    private readonly string? _previousDataDir;
+    private readonly string _tempDataDir;
+    private readonly string? _previousRuntimeDirectory;
+
+    public VpnEngineStartAsyncSeamTests()
+    {
+        _previousDataDir = GetAppPathsDataDir();
+        _tempDataDir = Path.Combine(
+            Path.GetTempPath(),
+            $"vpnrouter-seam-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDataDir);
+        AppPaths.OverrideDataDir(_tempDataDir);
+        AppPaths.EnsureDirectories();
+        _previousRuntimeDirectory = LinuxTunOwnership.OverrideRuntimeDirectory;
+        if (OperatingSystem.IsLinux())
+        {
+            var runtime = Path.Combine(_tempDataDir, "runtime");
+            Directory.CreateDirectory(runtime, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            LinuxTunOwnership.OverrideRuntimeDirectory = runtime;
+        }
+    }
+
+    public void Dispose()
+    {
+        LinuxTunOwnership.OverrideRuntimeDirectory = _previousRuntimeDirectory;
+        RestoreAppPathsDataDir(_previousDataDir);
+        try
+        {
+            if (Directory.Exists(_tempDataDir))
+                Directory.Delete(_tempDataDir, recursive: true);
+        }
+        catch { /* best effort */ }
+    }
+
+    private static string? GetAppPathsDataDir()
+    {
+        var f = typeof(AppPaths).GetField("_dataDir", BindingFlags.Static | BindingFlags.NonPublic);
+        return (string?)f?.GetValue(null);
+    }
+
+    private static void RestoreAppPathsDataDir(string? priorDataDir)
+    {
+        var f = typeof(AppPaths).GetField("_dataDir", BindingFlags.Static | BindingFlags.NonPublic);
+        f?.SetValue(null, priorDataDir);
+    }
+
+    private string CreateDeterministicProfileSource(string profileName = "Discord_Privacy", bool blockOnVpnFail = true)
+    {
+        var profilesDir = Path.Combine(_tempDataDir, "profiles");
+        Directory.CreateDirectory(profilesDir);
+        var path = Path.Combine(profilesDir, $"profile-{profileName}-{(blockOnVpnFail ? "block" : "noblock")}-{Guid.NewGuid():N}.json");
+        var content = $$"""
+        {
+          "profiles": [
+            {
+              "name": "{{profileName}}",
+              "description": "Deterministic test profile",
+              "processes": [
+                {
+                  "name": "Discord",
+                  "include_children": true,
+                  "scan_patterns": ["Discord*"]
+                }
+              ],
+              "dns_mode": "vpn_only",
+              "block_on_vpn_fail": {{(blockOnVpnFail ? "true" : "false")}}
+            }
+          ]
+        }
+        """;
+        File.WriteAllText(path, content);
+        return path;
+    }
+
     // ─── Inline stubs (mirrors VpnEngineOrchestratorTests pattern) ───────
 
     private sealed class StubProcessScanner : IProcessScanner
@@ -129,6 +205,7 @@ public sealed class VpnEngineStartAsyncSeamTests
 
     private static IDisposable EnsureDummySingBoxBinary(AppSettings settings)
     {
+        settings.SingBox.ExecutablePath = AppPaths.SingBoxExePath;
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
             : AppPaths.SingBoxExePath;
@@ -223,7 +300,10 @@ public sealed class VpnEngineStartAsyncSeamTests
             Vless = new VlessConfig(),
             Tun = new TunSettings(),
             Dns = new DnsSettings(),
-            SingBox = new SingBoxSettings(),
+            SingBox = new SingBoxSettings
+            {
+                ExecutablePath = AppPaths.SingBoxExePath
+            },
             Monitoring = new MonitoringSettings(),
             ActiveProfile = "TestProfile",
         };
@@ -629,36 +709,49 @@ public sealed class VpnEngineStartAsyncSeamTests
         settings.ActiveProfile = "Discord_Privacy";
         settings.App.RoutingMode = "split";
 
-        using var engine = BuildEngine(scanner: scanner);
-
-        var startTask = Task.Run(async () =>
+        var profilePath = CreateDeterministicProfileSource("Discord_Privacy", blockOnVpnFail: true);
+        settings.ProfileSources = new List<ProfileSource>
         {
-            try
+            new() { Type = "local", Path = profilePath }
+        };
+
+        try
+        {
+            using var engine = BuildEngine(scanner: scanner);
+
+            var startTask = Task.Run(async () =>
             {
-                await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true);
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when Stop() cancels the linked session token
-            }
-            catch (Exception)
-            {
-                // Or if aborted downstream
-            }
-        });
+                try
+                {
+                    await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected when Stop() cancels the linked session token
+                }
+                catch (Exception)
+                {
+                    // Or if aborted downstream
+                }
+            });
 
-        await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        // When Stop() is called, it cancels _sessionCts. Because _sessionCts is linked to
-        // StartAsyncInternal, unblocking holdBringUp allows StartAsync to observe cancellation.
-        var stopTask = Task.Run(() => engine.Stop());
+            // When Stop() is called, it cancels _sessionCts. Because _sessionCts is linked to
+            // StartAsyncInternal, unblocking holdBringUp allows StartAsync to observe cancellation.
+            var stopTask = Task.Run(() => engine.Stop());
 
-        holdBringUp.TrySetResult();
+            holdBringUp.TrySetResult();
 
-        // Both startTask and stopTask should complete rapidly without waiting 5+ seconds.
-        await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(5));
+            // Both startTask and stopTask should complete rapidly without waiting 5+ seconds.
+            await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.False(engine.IsRunning);
+            Assert.False(engine.IsRunning);
+        }
+        finally
+        {
+            try { File.Delete(profilePath); } catch { }
+        }
     }
 
     // ─── 10. VENG-02: Startup failure tears down partial state & firewall rules ─
@@ -671,16 +764,29 @@ public sealed class VpnEngineStartAsyncSeamTests
         PopulateValidServer(settings);
         settings.ActiveProfile = "Discord_Privacy";
 
-        using var dummyBin = EnsureDummySingBoxBinary(settings);
-        using var engine = BuildEngine(firewall: firewall);
+        var profilePath = CreateDeterministicProfileSource("Discord_Privacy", blockOnVpnFail: true);
+        settings.ProfileSources = new List<ProfileSource>
+        {
+            new() { Type = "local", Path = profilePath }
+        };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true));
+        try
+        {
+            using var dummyBin = EnsureDummySingBoxBinary(settings);
+            using var engine = BuildEngine(firewall: firewall);
 
-        Assert.Equal("Simulated firewall rule creation failure during bring-up", ex.Message);
-        Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
-            "TeardownInternal must clean up firewall rules when bring-up throws");
-        Assert.False(engine.IsRunning);
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await engine.StartAsync(settings, CancellationToken.None, skipVpnConflictCheck: true));
+
+            Assert.Equal("Simulated firewall rule creation failure during bring-up", ex.Message);
+            Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
+                "TeardownInternal must clean up firewall rules when bring-up throws");
+            Assert.False(engine.IsRunning);
+        }
+        finally
+        {
+            try { File.Delete(profilePath); } catch { }
+        }
     }
 
     // ─── 11. VENG-01/02: Cancellation during bring-up invokes teardown ────
@@ -696,14 +802,27 @@ public sealed class VpnEngineStartAsyncSeamTests
         settings.ActiveProfile = "Discord_Privacy";
         settings.App.RoutingMode = "split";
 
-        using var dummyBin = EnsureDummySingBoxBinary(settings);
-        using var engine = BuildEngine(firewall: firewall);
+        var profilePath = CreateDeterministicProfileSource("Discord_Privacy", blockOnVpnFail: true);
+        settings.ProfileSources = new List<ProfileSource>
+        {
+            new() { Type = "local", Path = profilePath }
+        };
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await engine.StartAsync(settings, cts.Token, skipVpnConflictCheck: true));
+        try
+        {
+            using var dummyBin = EnsureDummySingBoxBinary(settings);
+            using var engine = BuildEngine(firewall: firewall);
 
-        Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
-            "Cancellation during bring-up must invoke TeardownInternal to clear partial state");
-        Assert.False(engine.IsRunning);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                await engine.StartAsync(settings, cts.Token, skipVpnConflictCheck: true));
+
+            Assert.True(firewall.DeleteAllRulesCalled || firewall.DisposeCalled,
+                "Cancellation during bring-up must invoke TeardownInternal to clear partial state");
+            Assert.False(engine.IsRunning);
+        }
+        finally
+        {
+            try { File.Delete(profilePath); } catch { }
+        }
     }
 }

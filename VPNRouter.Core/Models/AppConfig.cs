@@ -404,6 +404,14 @@ public class AppConfig
     public bool DnsLeakLockdown { get; set; } = false;
 
     /// <summary>
+    /// Optional DNS mode override ("vpn_only", "smart", "direct").
+    /// When null (default), DNS mode is determined by the active profile.
+    /// </summary>
+    [YamlMember(Alias = "dns_mode_override")]
+    [JsonPropertyName("dns_mode_override")]
+    public string? DnsModeOverride { get; set; }
+
+    /// <summary>
     /// v2.32.3 (2026-05-17): one-shot counter populated by
     /// <see cref="VPNRouter.Core.Services.SettingsMigrator.PruneKnownPlaceholders"/>
     /// when the load-time placeholder-fingerprint sweep removed at least one

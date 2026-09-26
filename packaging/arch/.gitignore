@@ -1,0 +1,16 @@
+# Arch package build artifacts
+*.pkg.tar.*
+*.sha256
+src/
+pkg/
+payload/
+payload.tar
+source.tar
+*.log
+__pycache__/
+*.pyc
+.work/
+
+# Reviewed upstream notice paths are source inputs, not build output.
+!notices/**/src/
+!notices/**/src/**

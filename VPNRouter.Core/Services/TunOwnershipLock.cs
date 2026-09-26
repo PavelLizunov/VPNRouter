@@ -41,6 +41,7 @@ public sealed class TunOwnershipLock : IDisposable
 
     private readonly ILogger _logger;
     private Semaphore? _semaphore;
+    private LinuxTunOwnership? _linuxLock;
     private bool _owned;
     private bool _disposed;
     private CancellationTokenSource? _ownerRecordMonitorCts;
@@ -63,6 +64,10 @@ public sealed class TunOwnershipLock : IDisposable
     public TunOwnershipLock(ILogger? logger = null)
     {
         _logger = logger ?? Log.Logger;
+        if (OperatingSystem.IsLinux())
+        {
+            _linuxLock = new LinuxTunOwnership(_logger);
+        }
     }
 
     internal bool HasOwnership => _owned;
@@ -73,6 +78,27 @@ public sealed class TunOwnershipLock : IDisposable
     /// </summary>
     public bool TryAcquire()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            lock (InstanceGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_owned) return true;
+
+                _linuxLock ??= new LinuxTunOwnership(_logger);
+                _owned = _linuxLock.TryAcquire();
+                if (_owned)
+                {
+                    _logger.Information("[TunLock] Acquired Linux flock (process owns sing-box)");
+                }
+                else
+                {
+                    _logger.Information("[TunLock] Held by another VPNRouter instance on Linux");
+                }
+                return _owned;
+            }
+        }
+
         if (_owned) return true;
 
         try
@@ -112,6 +138,7 @@ public sealed class TunOwnershipLock : IDisposable
     {
         lock (InstanceGate)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_owned) return false;
             return TryAcquire();
         }
@@ -119,12 +146,28 @@ public sealed class TunOwnershipLock : IDisposable
 
     public void Release()
     {
-        if (!_owned || _semaphore == null) return;
+        if (OperatingSystem.IsLinux())
+        {
+            lock (InstanceGate)
+            {
+                if (!_owned) return;
+                StopOwnerRecordMonitor();
+                _linuxLock?.Release();
+                _owned = false;
+                _logger.Information("[TunLock] Released Linux flock");
+            }
+            return;
+        }
+
+        if (!_owned) return;
         StopOwnerRecordMonitor();
         try
         {
-            _semaphore.Release();
-            _logger.Information("[TunLock] Released");
+            if (_semaphore != null)
+            {
+                _semaphore.Release();
+                _logger.Information("[TunLock] Released");
+            }
         }
         catch (SemaphoreFullException)
         {
@@ -147,8 +190,16 @@ public sealed class TunOwnershipLock : IDisposable
             if (_disposed) return;
             _disposed = true;
             Release();
-            _semaphore?.Dispose();
-            _semaphore = null;
+            if (OperatingSystem.IsLinux())
+            {
+                _linuxLock?.Dispose();
+                _linuxLock = null;
+            }
+            else
+            {
+                _semaphore?.Dispose();
+                _semaphore = null;
+            }
             if (ReferenceEquals(_instance, this))
                 _instance = null;
         }
@@ -284,6 +335,11 @@ public sealed class TunOwnershipLock : IDisposable
     /// </summary>
     public static TunOwnershipStatus ProbeOwnership()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            return LinuxTunOwnership.ProbeOwnership();
+        }
+
         try
         {
             using var probe = new Semaphore(1, 1, MutexName, out _);

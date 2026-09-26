@@ -1,3 +1,4 @@
+using System.Reflection;
 using Serilog;
 using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
@@ -50,6 +51,9 @@ public sealed class StartupPipelineTests : IDisposable
     // is restored in Dispose so parallel test classes are not affected.
     private readonly InMemorySettingsStore _store = new();
     private readonly bool _wasSafeMode;
+    private readonly string? _prevDataDir;
+    private readonly string _testDataDir;
+    private readonly string? _previousRuntimeDirectory;
 
     public StartupPipelineTests()
     {
@@ -62,11 +66,44 @@ public sealed class StartupPipelineTests : IDisposable
         // doesn't include "TestProfile".
         _wasSafeMode = SafeMode.Enabled;
         SafeMode.Enabled = true;
+
+        _prevDataDir = GetAppPathsDataDir();
+        _testDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-spt-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_testDataDir);
+        AppPaths.OverrideDataDir(_testDataDir);
+        AppPaths.EnsureDirectories();
+        _previousRuntimeDirectory = LinuxTunOwnership.OverrideRuntimeDirectory;
+        if (OperatingSystem.IsLinux())
+        {
+            var runtime = Path.Combine(_testDataDir, "runtime");
+            Directory.CreateDirectory(runtime, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            LinuxTunOwnership.OverrideRuntimeDirectory = runtime;
+        }
     }
 
     public void Dispose()
     {
+        LinuxTunOwnership.OverrideRuntimeDirectory = _previousRuntimeDirectory;
         SafeMode.Enabled = _wasSafeMode;
+        RestoreAppPathsDataDir(_prevDataDir);
+        try
+        {
+            if (Directory.Exists(_testDataDir))
+                Directory.Delete(_testDataDir, recursive: true);
+        }
+        catch { /* best effort */ }
+    }
+
+    private static string? GetAppPathsDataDir()
+    {
+        var f = typeof(AppPaths).GetField("_dataDir", BindingFlags.Static | BindingFlags.NonPublic);
+        return (string?)f?.GetValue(null);
+    }
+
+    private static void RestoreAppPathsDataDir(string? priorDataDir)
+    {
+        var f = typeof(AppPaths).GetField("_dataDir", BindingFlags.Static | BindingFlags.NonPublic);
+        f?.SetValue(null, priorDataDir);
     }
 
     // ─── Test helpers ────────────────────────────────────────────────────
@@ -341,9 +378,82 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.Equal(0, host.CapturedFirewall.CreateBlockRulesCount);
     }
 
+    private string CreateDeterministicProfileSource(string? activeProfile = null, bool? blockOnVpnFail = null)
+    {
+        var profilesDir = Path.Combine(_testDataDir, "profiles");
+        Directory.CreateDirectory(profilesDir);
+        var path = Path.Combine(profilesDir, $"test-profiles-{Guid.NewGuid():N}.json");
+
+        bool discordBlock = true;
+        bool browsersBlock = false;
+        if (string.Equals(activeProfile, "Discord_Privacy", StringComparison.OrdinalIgnoreCase) && blockOnVpnFail.HasValue)
+            discordBlock = blockOnVpnFail.Value;
+        if (string.Equals(activeProfile, "Browsers", StringComparison.OrdinalIgnoreCase) && blockOnVpnFail.HasValue)
+            browsersBlock = blockOnVpnFail.Value;
+
+        var extraProfile = "";
+        if (!string.IsNullOrEmpty(activeProfile)
+            && !string.Equals(activeProfile, "Discord_Privacy", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(activeProfile, "Browsers", StringComparison.OrdinalIgnoreCase))
+        {
+            var extraBlock = blockOnVpnFail ?? true;
+            extraProfile = $$"""
+            ,
+            {
+              "name": "{{activeProfile}}",
+              "description": "Dynamic test profile",
+              "processes": [
+                {
+                  "name": "proc",
+                  "include_children": true,
+                  "scan_patterns": ["proc*"]
+                }
+              ],
+              "dns_mode": "vpn_only",
+              "block_on_vpn_fail": {{(extraBlock ? "true" : "false")}}
+            }
+            """;
+        }
+
+        var content = $$"""
+        {
+          "profiles": [
+            {
+              "name": "Discord_Privacy",
+              "description": "Discord test profile",
+              "processes": [
+                {
+                  "name": "Discord",
+                  "include_children": true,
+                  "scan_patterns": ["Discord*"]
+                }
+              ],
+              "dns_mode": "vpn_only",
+              "block_on_vpn_fail": {{(discordBlock ? "true" : "false")}}
+            },
+            {
+              "name": "Browsers",
+              "description": "Browsers test profile",
+              "processes": [
+                {
+                  "name": "browser",
+                  "include_children": true,
+                  "scan_patterns": ["browser*"]
+                }
+              ],
+              "dns_mode": "vpn_only",
+              "block_on_vpn_fail": {{(browsersBlock ? "true" : "false")}}
+            }{{extraProfile}}
+          ]
+        }
+        """;
+        File.WriteAllText(path, content);
+        return path;
+    }
+
     // ColdStart walk with capturing firewall armed to abort at phase 6.
     private async Task<(Exception? Thrown, TestStartupHost Host)> RunFirewallWalkAsync(
-        string routingMode, string? activeProfile)
+        string routingMode, string? activeProfile, bool? blockOnVpnFail = null)
     {
         var settings = BuildBaseSettings();
         settings.App.RoutingMode = routingMode;
@@ -353,8 +463,14 @@ public sealed class StartupPipelineTests : IDisposable
         settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("main", "104.194.156.93", 443) };
         settings.Vless.ActiveServer = "main";
 
+        var profilePath = CreateDeterministicProfileSource(activeProfile, blockOnVpnFail);
+        settings.ProfileSources = new List<ProfileSource>
+        {
+            new() { Type = "local", Path = profilePath }
+        };
+
         var fakeBin = OperatingSystem.IsWindows()
-            ? Path.Combine(Path.GetTempPath(), $"vpnrouter-fake-singbox-{Guid.NewGuid():N}.exe")
+            ? Path.Combine(_testDataDir, $"vpnrouter-fake-singbox-{Guid.NewGuid():N}.exe")
             : AppPaths.SingBoxExePath;
         var createdFakeBin = !File.Exists(fakeBin);
         if (createdFakeBin)
@@ -380,11 +496,16 @@ public sealed class StartupPipelineTests : IDisposable
         }
         finally
         {
+            host.SetHealth?.Dispose();
+            host.SetEtw?.Dispose();
+            host.SetSingBox?.Dispose();
+            host.SetFirewall?.Dispose();
             SafeMode.Enabled = prevSafeMode;
             if (createdFakeBin)
             {
                 try { File.Delete(fakeBin); } catch { }
             }
+            try { File.Delete(profilePath); } catch { }
         }
     }
 

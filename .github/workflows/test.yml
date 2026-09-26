@@ -73,6 +73,11 @@ jobs:
       - name: Test
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
 
+      # The main filter excludes all names containing Headless, including this
+      # UI-free Core suite. Run it explicitly without enabling display tests.
+      - name: Test Headless runtime policy (Core)
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~VPNRouter.Tests.HeadlessRuntimePolicyTests." --logger "trx;LogFileName=headless-runtime-policy-results.trx" --logger "console;verbosity=normal"
+
       # `if: always()` so failed test runs still upload the .trx — that's
       # the diagnostic artifact the developer needs to triage. 30-day
       # retention matches build-linux.yml's convention.
@@ -124,3 +129,50 @@ jobs:
         run: dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\vpnrouter-cli"
       - name: Characterization and release-gate contracts (Windows)
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Characterization|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests|FullyQualifiedName~ReleaseDefectGateTests|FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PlatformReleaseWorkflowTests|FullyQualifiedName~ReleaseSafetyBehaviorTests|FullyQualifiedName~ReleaseIntegrityWorkflowTests|FullyQualifiedName~AptReleaseWorkflowTests|FullyQualifiedName~PerformanceShareLinkTests|FullyQualifiedName~UrlValidationSecurityTests|FullyQualifiedName~Night|FullyQualifiedName~CommittedFirewallConfigTests|FullyQualifiedName~SingBoxManagerRestartTunLockTests|FullyQualifiedName~SingBoxManagerSuppressExitedEventTests|FullyQualifiedName~MvmTwoPhaseStartTimerTests"
+
+  # Omarchy Quattro Port: Headless daemon contract gate and payload verification.
+  # Validates NDJSON protocol server, lifecycle contracts, and ensures complete
+  # Avalonia-free decoupling with bundled profiles payload.
+  # Isolated test-time execution without privilege escalation, VPN manipulation, or upload.
+  headless-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Test Arch staging package contracts (no install)
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s packaging/arch/tests -p 'test_*.py' -v
+
+      - name: Build Headless and Headless.Tests
+        run: dotnet build VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release
+
+      - name: Run Headless tests executable (timeout 180)
+        run: |
+          chmod +x VPNRouter.Headless.Tests/bin/Release/net10.0/VPNRouter.Headless.Tests
+          timeout 180 ./VPNRouter.Headless.Tests/bin/Release/net10.0/VPNRouter.Headless.Tests
+
+      - name: Publish Headless (framework-dependent)
+        run: dotnet publish VPNRouter.Headless/VPNRouter.Headless.csproj -c Release --self-contained false -o "$RUNNER_TEMP/vpnrouter-headless"
+
+      - name: Inspect dependencies and bundled payloads
+        run: |
+          set -euo pipefail
+          echo "Inspecting dependencies for Avalonia..."
+          if grep -i "avalonia" "$RUNNER_TEMP/vpnrouter-headless/VPNRouter.Headless.deps.json"; then
+            echo "::error::Avalonia assembly dependency detected in headless deps!"
+            exit 1
+          fi
+          if find "$RUNNER_TEMP/vpnrouter-headless" -maxdepth 1 -iname "*avalonia*.dll" | grep -q .; then
+            echo "::error::Avalonia DLL detected in headless publish output!"
+            exit 1
+          fi
+          echo "Verifying Linux profiles payload..."
+          test -f "$RUNNER_TEMP/vpnrouter-headless/profiles/default-linux.json"
+          test -f "$RUNNER_TEMP/vpnrouter-headless/profiles/default.json"
+          echo "Headless contracts inspection passed."
