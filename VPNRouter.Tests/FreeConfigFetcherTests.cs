@@ -77,6 +77,31 @@ public sealed class FreeConfigFetcherTests
     }
 
     [Theory]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/configs.txt")]
+    [InlineData("gopher://example.com/123")]
+    [InlineData("not-a-valid-url")]
+    [InlineData("")]
+    public async Task FetchAsync_RefusesNonHttpOrMalformedUrl(string invalidUrl)
+    {
+        using var logger = new LoggerConfiguration().CreateLogger();
+        var http = new FakeHttpClient();
+        var fetcher = new FreeConfigFetcher(logger, http);
+
+        var source = new FreeConfigSource
+        {
+            Name = "invalid-test-source",
+            Url = invalidUrl,
+            Enabled = true,
+        };
+
+        var result = await fetcher.FetchAsync(source);
+
+        Assert.Empty(result);
+        Assert.Empty(http.SentRequests);
+    }
+
+    [Theory]
     [InlineData(404)]
     [InlineData(503)]
     public async Task FetchAsync_HttpFailureReturnsEmpty(int statusCode)
