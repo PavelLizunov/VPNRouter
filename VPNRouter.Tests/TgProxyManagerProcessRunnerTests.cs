@@ -513,4 +513,12 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         Assert.Equal(99009, sut.Pid);
         second.SignalExit(0);
     }
+
+    [Fact]
+    public void OpenInTelegram_WithInvalidOrNonTgInputs_DoesNotThrow()
+    {
+        // Malformed host or non-tg scheme inputs should fail URI/scheme validation gracefully.
+        var ex = Record.Exception(() => TgProxyManager.OpenInTelegram("invalid host\r\n", 1443, "secret"));
+        Assert.Null(ex);
+    }
 }
