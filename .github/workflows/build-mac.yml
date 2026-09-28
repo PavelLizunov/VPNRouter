@@ -1,8 +1,5 @@
 name: Build macOS DMG
 
-# Triggered by:
-#  - pushing a v* tag (automatic on release)
-#  - manual dispatch (for testing or re-uploading missing artifacts)
 on:
   push:
     tags:
@@ -80,9 +77,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Phase 1 Q9 — NuGet package cache. build-mac.sh calls `dotnet publish`
-      # which restores packages from nuget.org; caching ~/.nuget/packages saves
-      # 30–60s on warm runs. Q11 will pin actions/cache to a commit SHA.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -95,31 +89,10 @@ jobs:
           chmod +x ./build-mac.sh
           ./build-mac.sh "${{ steps.version.outputs.version }}"
 
-      # v2.29.0-r8: Mac CI startup smoke-test. Filed since v2.28.6
-      # sudoers bug (which shipped through 5 -rN candidates because no
-      # CI step actually exercised the VPN startup path on Mac). This
-      # step runs `sing-box check -c <generated-sample-config.json>` to
-      # confirm the bundled sing-box accepts our generated config shape.
-      # Doesn't actually start the tunnel (TUN device requires elevation
-      # and a fully-authorised user session — neither available in CI),
-      # but catches the most common shipping regression: config schema
-      # drift, missing outbounds, removed sing-box features.
-      #
-      # Failure here marks the workflow red and surfaces the issue
-      # BEFORE it reaches user installs. Doesn't block the artifact
-      # upload (the DMG is still built); just adds a clear signal.
       - name: Smoke test - sing-box accepts our config shape
         continue-on-error: true
         run: |
           set -e
-          # build-mac.sh stages the bundle at /tmp/VPNRouter.app with sing-box in
-          # Contents/MacOS (the old check looked in Contents/Resources — wrong dir
-          # — and its `find /tmp` returned nothing, so this gate ALWAYS silently
-          # skipped; audit 2026-06-04). Use the known path + a broader fallback.
-          # Kept NON-BLOCKING: the staged .app may be cleaned up by DMG creation
-          # before this step runs, so "not found" is a skip, not a build failure.
-          # A real hard gate belongs inside build-mac.sh where $APP is guaranteed
-          # to exist — tracked as a follow-up.
           SINGBOX="/tmp/VPNRouter.app/Contents/MacOS/sing-box"
           if [ ! -x "$SINGBOX" ]; then
             ALT=$(find /tmp /private/tmp "$RUNNER_TEMP" -maxdepth 4 -name sing-box -path "*Contents/MacOS*" -type f 2>/dev/null | head -1)
@@ -132,10 +105,6 @@ jobs:
           fi
           echo "Found sing-box at $SINGBOX"
           "$SINGBOX" version || echo "::warning::sing-box version check failed"
-          # Minimal valid sing-box JSON to verify the binary's parser
-          # accepts the schema version it shipped against. Real config
-          # generation is not exercised here (would need a full app
-          # bootstrap); this is a "is this binary sane" smoke test.
           cat > /tmp/sb-smoke.json << 'EOF'
           {
             "log": { "level": "info" },
@@ -160,11 +129,6 @@ jobs:
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
-      # r17 — generate sha256 sidecars so the release asset list matches
-      # the Linux pattern (every binary + matching .sha256). Lets install
-      # scripts verify integrity without parsing the GitHub UI. Single
-      # `shasum -a 256` per artifact; we write the hash file in the
-      # canonical "<hash>  <filename>" format so `sha256sum -c` works.
       - name: Generate SHA256 sidecars
         id: artifacts-sha
         run: |
@@ -204,7 +168,6 @@ jobs:
           DMG_SHA="${{ steps.artifacts-sha.outputs.dmg_sha }}"
           ZIP_SHA="${{ steps.artifacts-sha.outputs.zip_sha }}"
 
-          # Re-resolve the remote tag after the build; never upload stale provenance.
           git fetch --no-tags origin "refs/tags/$TAG"
           if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$GITHUB_SHA" ]; then
             echo "::error::Remote tag changed since this workflow started."
@@ -220,53 +183,24 @@ jobs:
           gh release upload "$TAG" "$DMG" "$ZIP" "$DMG_SHA" "$ZIP_SHA" --repo "$GITHUB_REPOSITORY"
           echo "✓ Uploaded DMG + ZIP + 2 SHA256 sidecars to $TAG"
 
-      # ── Homebrew Cask auto-bump (stable releases only) ─────────────────
-      # Fires `repository_dispatch` in the PavelLizunov/homebrew-vpnrouter
-      # tap repo on every STABLE release. That tap's update-cask.yml then
-      # downloads the fresh DMG, computes SHA256, bumps Casks/vpnrouter.rb
-      # and commits. Daily cron on the tap side is a safety net — if this
-      # dispatch is ever dropped (GH Actions outage, token expiry), the
-      # cron picks up the new stable the next morning.
-      #
-      # Skips prereleases: rolling -rN / -alpha / -beta candidates should
-      # NOT land in the cask (Homebrew users doing `brew upgrade` would
-      # get surprise-upgraded to experimental builds). Match against the
-      # same tag-pattern rules publish-apt.yml uses.
       - name: Trigger Homebrew Cask update (stable only)
         if: >-
           (github.event_name == 'push' ||
            (github.event_name == 'workflow_dispatch' && inputs.upload_to_release))
         env:
-          # GH_TOKEN: the default GITHUB_TOKEN is enough for `gh release view`
-          # (read-only on our own repo). Without it, gh falls back to no-auth
-          # and hits rate-limited anonymous API → in the v2.28.0-r1 round
-          # the initial version of this step had no GH_TOKEN, gh failed,
-          # the `|| echo "true"` fallback activated, and the chain silently
-          # thought every stable release was a prerelease. Fixed by pinning
-          # GH_TOKEN explicitly here.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # HOMEBREW_TAP_DISPATCH_TOKEN must be a PAT with `contents:write`
-          # on PavelLizunov/homebrew-vpnrouter. Create via GitHub Settings
-          # → Developer Settings → Fine-grained PAT, scoped to that single
-          # repo. Store as an Actions secret on THIS repo.
-          #
-          # If the secret is missing the step logs a notice and skips —
-          # so forks / downstream clones don't fail on this step.
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
 
-          # Draft staging must never notify a consumer package feed.
           IS_DRAFT=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
           if [ "$IS_DRAFT" = "true" ]; then
               echo "::notice::Draft assets staged; Homebrew notification belongs after publication."
               exit 0
           fi
 
-          # Tag must not be a prerelease — mirror the pattern filter used
-          # in publish-apt.yml so only stable releases update the cask.
           case "$TAG" in
               *-r[0-9]*|*-rc*|*-beta*|*-alpha*|*-pre*)
                   echo "::notice::$TAG looks like a prerelease — not bumping Homebrew Cask"
@@ -274,9 +208,6 @@ jobs:
                   ;;
           esac
 
-          # Also check the release's isPrerelease flag on GitHub itself,
-          # just in case someone manually flagged a stable-looking tag
-          # as prerelease.
           IS_PRE=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease' 2>/dev/null || echo "true")
           if [ "$IS_PRE" = "true" ]; then
               echo "::notice::$TAG is flagged prerelease on GitHub — not bumping Homebrew Cask"

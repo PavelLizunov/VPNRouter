@@ -1,24 +1,4 @@
-# android-bootstrap.ps1 — reproducible toolchain installer for VPNRouter
-# Android development. Meta-test #8 (`docs/android-development-methodology.md`)
 # requires this script: «toolchain bootstrap works on fresh VM».
-#
-# Idempotent: run multiple times, skips already-installed parts.
-#
-# Usage:
-#   powershell -ExecutionPolicy Bypass -File tools/android-bootstrap.ps1
-#   powershell -ExecutionPolicy Bypass -File tools/android-bootstrap.ps1 -SkipSdkInstall
-#
-# What it installs:
-#   1. .NET 8 Android workload (if dotnet exists)
-#   2. Temurin 17 JDK via Adoptium MSI (if JAVA_HOME unset)
-#   3. Android SDK 34 cmdline-tools (if ANDROID_HOME unset)
-#   4. Validates: ANDROID_HOME / JAVA_HOME / dotnet workload presence
-#
-# Verification:
-#   After run, attempts test build:
-#     dotnet build VPNRouter.Android/VPNRouter.Android.csproj \
-#       -c Release /p:EnableAndroidTarget=true
-#   If exits 0 — bootstrap succeeded.
 
 [CmdletBinding()]
 param(
@@ -34,7 +14,6 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 Write-Host "── VPNRouter Android Bootstrap ──" -ForegroundColor Cyan
 Write-Host "Project root: $ProjectRoot" -ForegroundColor Gray
 
-# ── Step 1: .NET 8 SDK presence ──
 Write-Host "`n[1/5] Checking .NET 8 SDK..."
 try {
     $dotnetVersion = & dotnet --version 2>&1
@@ -46,7 +25,6 @@ catch {
     exit 1
 }
 
-# ── Step 2: Android workload ──
 Write-Host "`n[2/5] Checking dotnet android workload..."
 if ($SkipWorkload -or $VerifyOnly) {
     Write-Host "  Skipped (flag)" -ForegroundColor Yellow
@@ -64,7 +42,6 @@ if ($SkipWorkload -or $VerifyOnly) {
     }
 }
 
-# ── Step 3: JDK ──
 Write-Host "`n[3/5] Checking JDK..."
 $jdkOk = $false
 if ($env:JAVA_HOME -and (Test-Path "$env:JAVA_HOME\bin\javac.exe")) {
@@ -79,7 +56,6 @@ if (-not $jdkOk -and -not ($SkipJdkInstall -or $VerifyOnly)) {
     Write-Host "  After install, set JAVA_HOME and rerun this script." -ForegroundColor Yellow
 }
 
-# ── Step 4: Android SDK ──
 Write-Host "`n[4/5] Checking Android SDK..."
 $sdkOk = $false
 if ($env:ANDROID_HOME -and (Test-Path "$env:ANDROID_HOME\platforms")) {
@@ -98,7 +74,6 @@ if (-not $sdkOk -and -not ($SkipSdkInstall -or $VerifyOnly)) {
     Write-Host "    5. Rerun this script to verify." -ForegroundColor Gray
 }
 
-# ── Step 5: Verify by building ──
 Write-Host "`n[5/5] Verification build..."
 if (-not $jdkOk -or -not $sdkOk) {
     Write-Warning "  Skipped — JDK or SDK missing. Fix above warnings first."

@@ -1,72 +1,12 @@
-<#
-.SYNOPSIS
-    Builds VPNRouter distribution ZIPs.
-.DESCRIPTION
-    Publishes GUI, CLI, Service as self-contained win-x64 binaries with SHARED runtime.
-    Generates TWO archives:
-      - Install ZIP (~48 MB): app/ layout + Start VPN.cmd (for new installs + auto-update)
-      - Update ZIP (~3 MB): app binaries only (lite update for existing installs)
-
-    NOTE: Legacy flat ZIP (VPNRouter-v*.zip) was removed in v1.18.0.
-    Old clients (v1.17.1 and earlier) will not auto-detect this release.
-
-    When -AndroidAlso is supplied the script also attempts a local APK build
-    after the Windows artifacts. APK builds normally happen on CI
-    (build-android.yml, see git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md
-    Phase A); -AndroidAlso is a contributor convenience for sanity-checking
-    Android-side changes before pushing a tag.
-.PARAMETER Version
-    Version string for the ZIP filename (default: "1.0")
-.PARAMETER SingBoxPath
-    Optional path to a custom local sing-box.exe to bundle. For local builds only;
-    rejected when -Upload is specified.
-.PARAMETER Upload
-    Stage unsigned ZIPs on an existing authorized draft using gh CLI. Requires
-    clean accepted main and an existing matching immutable tag. Does not publish.
-    Any SignPath enrollment setting blocks this unsigned path; use Sign Windows.
-.PARAMETER GitHubRepo
-    GitHub repo in "owner/repo" format (default: PavelLizunov/VPNRouter)
-.PARAMETER AndroidAlso
-    Also build a signed Android APK (arm64) after the Windows artifacts.
-    Requires JAVA_HOME (JDK 17), ANDROID_HOME (Android SDK), the dotnet
-    'android' workload, and a signing keystore. The keystore is resolved
-    from env vars ANDROID_KEYSTORE_PATH + ANDROID_KEYSTORE_PASSWORD
-    (optionally ANDROID_KEYSTORE_KEY_ALIAS / ANDROID_KEYSTORE_KEY_PASSWORD),
-    or from a `.env.local` file at the repo root with the same keys, or
-    from a `vpnrouter.keystore` file inside VPNRouter.Android\. If any
-    prerequisite is missing the Android build is skipped with a warning;
-    the Windows artifacts above remain valid. When combined with -Upload
-    the APK + .sha256 are added to the release assets.
-.EXAMPLE
-    .\build.ps1 -Version "1.18.0"
-    .\build.ps1 -Version "1.18.0" -Upload
-    .\build.ps1 -Version "2.32.0-r1" -AndroidAlso
-    .\build.ps1 -Version "2.32.0" -Upload -AndroidAlso
-#>
 param(
     [string]$Version = "1.0",
-    # SingBoxVersion: official sing-box-vpnctl release bundled for Windows desktop.
-    # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
-    # and build-mac.sh — all three platforms ship the same sing-box release.
     [string]$SingBoxVersion = "1.14.0-vpnctl.5",
-    # Authoritative SHA256 of the official sing-box-vpnctl Windows amd64 archive.
     [string]$SingBoxSha256 = "3823e4baed13fec43b84acefa480ff9cf9b2c222ea9dd9ceb9987aefd623aeb4",
-    # Optional override: pre-existing local sing-box.exe to bundle (local builds only; rejected with -Upload).
     [string]$SingBoxPath = "",
-    # Optional override: pre-built slipstream-client.exe (DNS-tunnel transport)
-    # to bundle. Empty = probe tools\slipstream-cache\slipstream-client.exe, else
-    # graceful-skip (dns-tunnel stays unavailable until the binary is built+placed).
-    # Built from source (Mygod/slipstream-rust) — no pinned upstream release, so
-    # no auto-download. Windows-only MVP.
     [string]$SlipstreamPath = "",
     [switch]$Upload,
     [string]$GitHubRepo = "PavelLizunov/VPNRouter",
-    # Build a local Android APK alongside the Windows artifacts. See
-    # PARAMETER AndroidAlso for prereqs. Falls back to a clear warning
-    # (not a hard failure) when prereqs are missing.
     [switch]$AndroidAlso,
-    # W1.4 true-split: release uploads always include the pinned Mullvad driver.
-    # Keep the switch for local package tests that need to exercise the bundle.
     [switch]$BundleSplitDriver
 )
 
@@ -74,7 +14,6 @@ $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $bundleSplitDriver = $BundleSplitDriver -or $Upload
 
-# Upload stages an existing immutable tag on a draft only. It never publishes.
 if ($Upload) {
     if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?$') {
         throw 'Release version must be X.Y.Z or X.Y.Z-rN.'
@@ -103,32 +42,15 @@ if ($Upload) {
     }
 }
 
-# ── v2.29.0-r7 LAYER 1: AppVersion match check ──
-# Trigger: v2.29.0-r1..r5 dev cycle bug (CLAUDE-AI fake-tag fiasco).
-# build.ps1 was being run from main repo's working directory while the
-# author was developing in a worktree. main repo's AppVersion.cs was
-# stuck at v2.28.7 while the -Version arg said "2.29.0-r5". Build
-# silently produced v2.28.7 binary tagged as v2.29.0-r5. Users on
-# Windows clicked Update and got the same v2.28.7 binary back.
-#
-# Fix: compare -Version CLI arg with AppVersion.cs literal at build
-# start. Mismatch -> abort with a clear remediation hint. Catches the
-# entire class of "compiled wrong source tree" bugs in 0 seconds.
-#
-# See git show 6491be4c:plans/vpnrouter-update-reliability-strategy.md Layer 1.
 $appVersionFile = Join-Path $Root "VPNRouter.Core\AppVersion.cs"
 if (-not (Test-Path $appVersionFile)) {
     throw "ABORT: AppVersion.cs not found at $appVersionFile. Are you running build.ps1 from the wrong directory?"
 }
-# v2.32.1-r2: match both 'public const string Version =' (legacy) and
-# 'public static readonly string Version =' (current, switched for CI
-# verify-release-integrity friendliness — see AppVersion.cs comments).
 $appVersionLine = (Get-Content $appVersionFile |
     Select-String 'string Version =' | Select-Object -First 1).Line
 if (-not $appVersionLine) {
     throw "ABORT: could not parse 'string Version =' from $appVersionFile."
 }
-# Extract the string between the first pair of double quotes.
 if ($appVersionLine -match '"([^"]+)"') {
     $srcVersion = $Matches[1]
 } else {
@@ -150,7 +72,6 @@ Refusing to ship a binary whose AppVersion does not match the release tag.
 }
 Write-Host "[0/9] AppVersion match: $srcVersion = -Version $Version OK" -ForegroundColor Green
 
-# ── Sing-box supply-chain validation (fail early before publish/IO) ──
 if ($Upload -and $SingBoxPath) {
     throw "SingBoxPath override is for local builds only and cannot be used with -Upload."
 }
@@ -182,16 +103,12 @@ Write-Host "Install: $InstallZipPath"
 Write-Host "Update:  $UpdateZipPath"
 Write-Host ""
 
-# ── Clean ──
 Write-Host "[1/9] Cleaning previous build..." -ForegroundColor Yellow
 foreach ($dir in @($DistDir, $FdDir, $UpdateDir, $PackageDir)) {
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
 
-# Other versions' ZIPs and sidecars are not owned by this build. Storage
-# preflight/explicit operator cleanup must precede building when space is low.
 
-# ── Publish all three self-contained to SAME dir (shared runtime) ──
 Write-Host "[2/9] Publishing VPNRouter.App (Avalonia, self-contained)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r win-x64 --self-contained `
@@ -210,22 +127,10 @@ dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
-# ── Build backwards-compat launcher stub (VPNRouter.GUI.exe) ──
-# Old auto-updater (v2.3.x) and old shortcuts expect VPNRouter.GUI.exe.
-# Native Go exe — ~2MB, zero runtime dependency, runs on machines without .NET 8.
-#
-# v2.31.9-r1 trampoline: stub now ALSO performs integrity check (PE
-# version-info read of App/Core/Service.dll) before launching App.exe,
-# and self-repairs on mixed-version damage by spawning install.ps1.
-# `ChannelHint` ldflag carries the build's channel forward so a repair
-# triggered from a -rN binary lands back on the prerelease channel.
-# `main.go` only — package contains integrity.go, marker.go, repair.go,
-# integrity_test.go alongside but the build target is the whole pkg.
 Write-Host "[4b/9] Building VPNRouter.GUI launcher stub (Go native)..." -ForegroundColor Yellow
 $stubExe = Join-Path $DistDir "VPNRouter.GUI.exe"
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
-# Channel inferred from -Version: anything with "-r" suffix → prerelease.
 if ($Version -match '-r\d+$') { $stubChannel = "prerelease" } else { $stubChannel = "stable" }
 $stubLdflags = "-s -w -H windowsgui -X main.ChannelHint=$stubChannel"
 Push-Location "$Root\VPNRouter.GUI"
@@ -235,7 +140,6 @@ Pop-Location
 if ($stubExitCode -ne 0) { throw "GUI stub build failed (is Go installed?)" }
 Write-Host "       Stub channel: $stubChannel" -ForegroundColor Gray
 
-# ── Publish framework-dependent to temp dir (to identify app-only files) ──
 Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
@@ -246,22 +150,17 @@ dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
     -o $FdDir 2>&1 | Out-Null
-# Also copy stub to FdDir so update zip includes it
 Copy-Item $stubExe $FdDir -Force
 Write-Host "       App files identified: $((Get-ChildItem $FdDir -File).Count) files" -ForegroundColor Gray
 
-# ── Clean unnecessary files from dist ──
 Get-ChildItem $DistDir -Recurse -Include "*.pdb", "appsettings.*.json" | Remove-Item -Force
 
-# Remove unused localization satellite assemblies (WPF/WinForms resources for languages we don't use)
-# Keeps only 'en' (default, embedded in main DLLs). Saves ~15 MB.
 $localeDirs = @("cs", "de", "es", "fr", "it", "ja", "ko", "pl", "pt-BR", "ru", "sv", "tr", "zh-Hans", "zh-Hant")
 foreach ($locale in $localeDirs) {
     $localeDir = Join-Path $DistDir $locale
     if (Test-Path $localeDir) { Remove-Item -Recurse -Force $localeDir }
 }
 
-# Remove debug/diagnostic tools only (conservative — don't remove runtime DLLs)
 $unusedFiles = @(
     "createdump.exe",
     "mscordaccore.dll", "mscordaccore_amd64_amd64_*.dll", "mscordbi.dll"
@@ -270,7 +169,6 @@ foreach ($pattern in $unusedFiles) {
     Get-ChildItem $DistDir -Filter $pattern | Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-# ── Remove WPF DLLs (~41 MB) — app uses WinForms only, no WPF ──
 $wpfPatterns = @(
     "PresentationFramework*.dll", "PresentationCore.dll", "PresentationUI.dll",
     "PresentationNative_cor3.dll", "wpfgfx_cor3.dll", "D3DCompiler_47_cor3.dll",
@@ -289,11 +187,6 @@ foreach ($pattern in $wpfPatterns) {
     }
 }
 
-# ── Remove TraceEvent non-essential natives (~9 MB) ──
-# App is win-x64: arm64/ and x86/ folders not needed
-# msdia140.dll = symbol resolution (not used for ETW monitoring)
-# Microsoft.DiaSymReader.Native = symbol reading (not needed)
-# Keep only amd64/KernelTraceControl.dll (required for ETW)
 $nativeRemoved = 0
 foreach ($dir in @("arm64", "x86")) {
     $dirPath = Join-Path $DistDir $dir
@@ -313,7 +206,6 @@ if (Test-Path $diasym) {
     Remove-Item $diasym -Force
 }
 
-# ── Remove design-time / unused assemblies (~7 MB) ──
 $unusedAssemblies = @(
     "System.Windows.Forms.Design.dll", "System.Windows.Forms.Design.Editors.dll",
     "Microsoft.VisualBasic.Core.dll", "System.CodeDom.dll",
@@ -331,9 +223,6 @@ $totalSaved = ($wpfRemoved + $nativeRemoved + $designRemoved) / 1MB
 Write-Host "       Cleaned PDB, locale, debug, WPF, and unused files" -ForegroundColor Gray
 Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives $([math]::Round($nativeRemoved/1MB,1)) MB + design $([math]::Round($designRemoved/1MB,1)) MB = $([math]::Round($totalSaved,1)) MB saved" -ForegroundColor Gray
 
-# ── Bundle sing-box.exe ──
-# Bundles official sing-box-vpnctl release by default with verified SHA256.
-# Pass -SingBoxPath to bundle an explicit local build instead (local builds only).
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
 if ($SingBoxPath) {
     if ($Upload) {
@@ -347,7 +236,6 @@ if ($SingBoxPath) {
     if (Test-Path $ovCronet) { Copy-Item $ovCronet (Join-Path $DistDir "libcronet.dll") -Force }
     Write-Host "       Copied from: $SingBoxPath" -ForegroundColor Gray
 } else {
-    # Auto-download official sing-box-vpnctl release with verified SHA256.
     $singBoxCache = Join-Path $Root "tools\singbox-cache"
     New-Item -ItemType Directory -Force -Path $singBoxCache | Out-Null
     $zipName = "sing-box-$SingBoxVersion-windows-amd64.zip"
@@ -389,10 +277,6 @@ if ($SingBoxPath) {
     Write-Host "       Bundled sing-box-vpnctl v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
 }
 
-# ── Bundle libcronet.dll ──
-# Upstream sing-box-vpnctl Windows release packages only sing-box.exe (VPNCTL-05).
-# Fetch official SagerNet sing-box 1.13.14 archive to supply verified libcronet.dll
-# for NaiveProxy support.
 if (-not $SingBoxPath) {
     $cronetCache = Join-Path $Root "tools\singbox-cache"
     New-Item -ItemType Directory -Force -Path $cronetCache | Out-Null
@@ -441,13 +325,6 @@ if (-not $SingBoxPath) {
     Write-Host "       Bundled libcronet.dll from SagerNet v1.13.14 (verified SHA256)" -ForegroundColor Green
 }
 
-# ── slipstream-client.exe — DNS-tunnel transport, BUNDLED (Windows-only MVP) ──
-# Unlike zapret (on-demand pull), slipstream is BUNDLED because it's a
-# last-resort transport reached precisely when GitHub is blocked (circular dep:
-# can't pull the binary from GitHub at the moment you need it to reach GitHub).
-# Built from source locally (Mygod/slipstream-rust + picoquic), fully static /MT
-# so there is NO VCRUNTIME140 dependency. No pinned upstream release yet -> no
-# auto-download; graceful-skip if neither -SlipstreamPath nor the cache exists.
 Write-Host "[6b/9] Bundling slipstream-client.exe (DNS-tunnel)..." -ForegroundColor Yellow
 $slipStreamSrc = ""
 if ($SlipstreamPath -and (Test-Path $SlipstreamPath)) {
@@ -458,8 +335,6 @@ if ($SlipstreamPath -and (Test-Path $SlipstreamPath)) {
 }
 if ($slipStreamSrc) {
     Copy-Item $slipStreamSrc (Join-Path $DistDir "slipstream-client.exe") -Force
-    # Defensive: a dynamic build would need its sibling VCRUNTIME140.dll. The
-    # static build has none, so this normally copies nothing.
     $slipVcr = Join-Path (Split-Path $slipStreamSrc -Parent) "VCRUNTIME140.dll"
     if (Test-Path $slipVcr) { Copy-Item $slipVcr (Join-Path $DistDir "VCRUNTIME140.dll") -Force }
     $slipSize = [math]::Round((Get-Item $slipStreamSrc).Length / 1MB, 1)
@@ -468,21 +343,11 @@ if ($slipStreamSrc) {
     Write-Host "       slipstream-client: NOT bundled (no -SlipstreamPath, no tools\slipstream-cache) - dns-tunnel unavailable until built+placed" -ForegroundColor Yellow
 }
 
-# ── Bundle split-tunnel driver (W1.4, Windows-only) ──
-# The Mullvad win-split-tunnel kernel driver (true OS-level exclude-mode). Files pinned to
-# mullvadvpn-app-binaries@cc0affb2 with a HARD sha256 gate (mismatch = build FAIL) so a silent
-# ABI/driver bump can't slip in. Cached under tools\driver-cache\<commit>\ like singbox-cache.
-# Bundled into dist\driver\ = the app's AppContext.BaseDirectory\driver, where SplitTunnelDriverManager
-# looks for the .sys and lazily installs the kernel service on the first exclude-mode connect.
-# The .sys carries a Microsoft attestation countersignature, so it loads on prod Win10/11 x64
-# without test-signing. Not a separate release asset (rides inside the app ZIP → 14/16-asset invariant
-# unchanged). Mac/Linux never run this script, so their builds are untouched.
 Write-Host "[6c/9] Bundling split-tunnel driver..." -ForegroundColor Yellow
 if ($bundleSplitDriver) {
     $stCommit = "cc0affb2f06e870fb594e2dd6d61049611991586"
     $stCache  = Join-Path $Root "tools\driver-cache\$stCommit"
     New-Item -ItemType Directory -Force -Path $stCache | Out-Null
-    # filename -> pinned sha256 (source of truth: plans\w1-driver-abi-reference-2026-07-03.md).
     $stPins = [ordered]@{
         "mullvad-split-tunnel.sys" = "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201"
         "mullvad-split-tunnel.cat" = "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d"
@@ -507,7 +372,6 @@ if ($bundleSplitDriver) {
         Copy-Item $cached (Join-Path $stDst $f) -Force
         $stChecksums += "$actual  $f"
     }
-    # sha256sum-format sidecar (lowercase, ASCII/no-BOM — matches the .githooks Gate 6 expectations).
     $stChecksums | Set-Content -Encoding ascii (Join-Path $stDst "checksums.sha256")
     $stLicense = Join-Path $Root "LICENSE.split-tunnel"
     if (Test-Path $stLicense) { Copy-Item $stLicense (Join-Path $DistDir "LICENSE.split-tunnel") -Force }
@@ -516,10 +380,8 @@ if ($bundleSplitDriver) {
     Write-Host "       split-tunnel driver: NOT bundled (local build without -BundleSplitDriver)" -ForegroundColor Gray
 }
 
-# ── Zapret (DPI bypass) — downloaded on demand from Flowseal/zapret-discord-youtube ──
 Write-Host "       Zapret: downloaded on demand (not bundled)" -ForegroundColor Gray
 
-# ── Bundle profiles ──
 $ProfilesSrc = Join-Path $Root "profiles"
 $ProfilesDst = Join-Path $DistDir "profiles"
 if (Test-Path $ProfilesSrc) {
@@ -528,7 +390,6 @@ if (Test-Path $ProfilesSrc) {
     Write-Host "       Profiles copied" -ForegroundColor Gray
 }
 
-# ── Create README.txt ──
 $ReadmePath = Join-Path $DistDir "README.txt"
 @"
 VPNRouter v$Version
@@ -561,69 +422,25 @@ Service Installation (run as admin):
   VPNRouter.CLI.exe service start
 "@ | Set-Content -Path $ReadmePath -Encoding UTF8
 
-# ── Create clean package layout (app/ subfolder + launcher) ──
 Write-Host "[7/9] Creating package layout..." -ForegroundColor Yellow
 $AppDir = Join-Path $PackageDir "app"
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
-# Copy all dist files into app/
 Copy-Item "$DistDir\*" $AppDir -Recurse
 
-# Create Start VPN.cmd launcher in package root
 '@start "" "%~dp0app\VPNRouter.App.exe"' | Set-Content (Join-Path $PackageDir "Start VPN.cmd") -Encoding ASCII
 
-# Move README to package root (user-facing, not buried in app/)
 Move-Item (Join-Path $AppDir "README.txt") (Join-Path $PackageDir "README.txt") -Force
 
 Write-Host "       Package layout: Start VPN.cmd + README.txt + app/" -ForegroundColor Gray
 
-# ── Create INSTALL ZIP (app/ structure — for new installs + auto-update) ──
 Write-Host "[8/9] Creating install ZIP (app/ layout)..." -ForegroundColor Yellow
 if (Test-Path $InstallZipPath) { Remove-Item $InstallZipPath }
 Compress-Archive -Path "$PackageDir\*" -DestinationPath $InstallZipPath -CompressionLevel Optimal
 
-# ── Create UPDATE ZIP (v2.29.0-r6 bootstrap layout) ──
-# Layout:
-#   VPNRouter.GUI.exe       ← Go stub at ROOT (not locked, copyable by
-#                              broken pre-r6 ApplyUpdate)
-#   _bootstrap/             ← all app DLLs + sing-box + profiles
-#       VPNRouter.App.exe
-#       VPNRouter.Core.dll
-#       hostfxr.dll  ← .NET runtime, locked at copy time but goes to a
-#                      fresh subdir → no conflict
-#       ... rest ...
-#       sing-box.exe
-#       profiles/
-#       README.txt
-#
-# Why this layout: pre-r6 ApplyUpdateWindows did file copy in-process.
-# Many runtime DLLs were mapped into the running .NET app, .NET on
-# Windows refuses to overwrite mapped files, the .bak rename fallback
-# also failed silently for files opened without FILE_SHARE_DELETE.
-# Result: ~10% of files stayed old, app relaunch loaded a mixed-version
-# DLL set, AppVersion still showed the old number. Half the user base
-# couldn't update. r6 fix:
-#   * Top-level VPNRouter.GUI.exe is a freestanding Go binary, never
-#     mapped by .NET, never locked. Copy succeeds via plain File.Copy.
-#   * Everything else lives in `_bootstrap/`. Pre-r6 ApplyUpdate walks
-#     extractedDir recursively and copies each file to appDir at
-#     relative paths → DLLs land at appDir/_bootstrap/<dll>. None of
-#     those targets exist before the copy → no conflicts → no silent
-#     skips.
-#   * Pre-r6 ApplyUpdate then Process.Start's appDir/VPNRouter.GUI.exe.
-#     That's the NEW Go stub (just replaced). The new stub detects
-#     `_bootstrap/` next to itself, waits for the parent VPNRouter.App
-#     to exit (now nothing locked), xcopies _bootstrap/* over appDir
-#     overwriting, deletes _bootstrap/, launches the freshly-replaced
-#     VPNRouter.App.exe.
-#
-# r5+ ApplyUpdateWindows (detached .cmd helper) also handles this layout
-# correctly because the helper xcopies extractedDir as-is and the same
-# bootstrap recovery runs in the relaunch.
 Write-Host "[9/9] Creating update ZIP (bootstrap layout)..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
 
-# Top-level: ONLY the Go stub. This is the bootstrap entry point.
 $updateGuiStub = Join-Path $DistDir "VPNRouter.GUI.exe"
 if (-not (Test-Path $updateGuiStub)) {
     throw "Update ZIP build: VPNRouter.GUI.exe missing from $DistDir - Go stub not built?"
@@ -631,12 +448,9 @@ if (-not (Test-Path $updateGuiStub)) {
 Copy-Item $updateGuiStub $UpdateDir
 Write-Host "       VPNRouter.GUI.exe -> ROOT (bootstrap entry)" -ForegroundColor Gray
 
-# Bootstrap subdir: everything else.
 $BootstrapDir = Join-Path $UpdateDir "_bootstrap"
 New-Item -ItemType Directory -Force -Path $BootstrapDir | Out-Null
 
-# Copy app-only files from dist (using fd file list as reference)
-# EXCEPT VPNRouter.GUI.exe — that one stays at ROOT.
 $fdFileNames = (Get-ChildItem $FdDir -File).Name | Sort-Object -Unique
 $updateFileCount = 0
 foreach ($name in $fdFileNames) {
@@ -647,24 +461,18 @@ foreach ($name in $fdFileNames) {
         $updateFileCount++
     }
 }
-# Include sing-box.exe (version may change between releases)
 $singBoxInDist = Join-Path $DistDir "sing-box.exe"
 if (Test-Path $singBoxInDist) {
     Copy-Item $singBoxInDist $BootstrapDir
     $updateFileCount++
     Write-Host "       sing-box.exe included in update (under _bootstrap/)" -ForegroundColor Gray
 }
-# v2.41.1: libcronet.dll must travel with sing-box.exe in the update payload,
-# else a naive user who auto-updates loses the Cronet runtime and naive breaks.
 $cronetInDist = Join-Path $DistDir "libcronet.dll"
 if (Test-Path $cronetInDist) {
     Copy-Item $cronetInDist $BootstrapDir
     $updateFileCount++
     Write-Host "       libcronet.dll included in update (under _bootstrap/)" -ForegroundColor Gray
 }
-# slipstream-client.exe (DNS-tunnel) must travel in the update payload too, else
-# an auto-updated user loses the bundled transport (same class as libcronet).
-# (Static build -> no VCRUNTIME140.dll sibling; copy it only if a dynamic build left one.)
 $slipInDist = Join-Path $DistDir "slipstream-client.exe"
 if (Test-Path $slipInDist) {
     Copy-Item $slipInDist $BootstrapDir
@@ -673,10 +481,6 @@ if (Test-Path $slipInDist) {
     $slipVcrInDist = Join-Path $DistDir "VCRUNTIME140.dll"
     if (Test-Path $slipVcrInDist) { Copy-Item $slipVcrInDist $BootstrapDir; $updateFileCount++ }
 }
-# W1.4 true-split: the driver/ subdir must travel in the update payload too (bug-hunt P1), else an
-# auto-updated user keeps a STALE .sys while the app's ABI moves forward -> runic kernel error. The
-# top-level file loop above (Get-ChildItem -File) skips subdirs, so copy it explicitly. No-op for
-# normal ships (dist\driver only exists when built with -BundleSplitDriver).
 $driverInDist = Join-Path $DistDir "driver"
 if (Test-Path $driverInDist) {
     $UpdateDriverDst = Join-Path $BootstrapDir "driver"
@@ -686,28 +490,11 @@ if (Test-Path $driverInDist) {
     if (Test-Path $stLicInDist) { Copy-Item $stLicInDist $BootstrapDir -Force }
     Write-Host "       split-tunnel driver/ included in update (under _bootstrap/)" -ForegroundColor Gray
 }
-# Zapret: downloaded on demand, not in update package
-# Also include profiles and README under _bootstrap/.
 $UpdateProfilesDst = Join-Path $BootstrapDir "profiles"
 if (Test-Path $ProfilesSrc) {
     New-Item -ItemType Directory -Force -Path $UpdateProfilesDst | Out-Null
     Copy-Item "$ProfilesSrc\*" $UpdateProfilesDst -Recurse
 }
-# net8->net10 migration (2026-07-11) — cross-major auto-update fix: the
-# self-contained .NET RUNTIME DLLs must travel in the update payload too. The
-# update was otherwise app-only; a user auto-updating ACROSS a runtime major
-# (net8 -> net10) would get net10-compiled app DLLs dropped onto the FROZEN
-# net8 coreclr / System.Private.CoreLib on disk -> guaranteed crash (self-
-# contained has no cross-major roll-forward, and the GUI trampoline's app-DLL-
-# hash self-repair can't see a uniform runtime/app mismatch). Same
-# "travels-with-the-update-else-the-user-loses-it" rule as sing-box / libcronet
-# above, applied to the runtime. Copies every top-level dist file not already in
-# _bootstrap (the runtime DLLs — coreclr/clrjit/System.*/hostfxr), skipping the
-# root trampoline.
-# ponytail: always-include, not a cross-major-only flag — sing-box already makes
-# the update ~install-sized, so the runtime adds only ~compressed delta for
-# PERMANENT cross-major safety with no ship-time flag to forget. Gate behind a
-# version check only if update-download bandwidth ever becomes the constraint.
 $bootstrapNames = (Get-ChildItem $BootstrapDir -File).Name
 foreach ($f in Get-ChildItem $DistDir -File) {
     if ($f.Name -eq "VPNRouter.GUI.exe") { continue }   # trampoline lives at root
@@ -723,12 +510,10 @@ Write-Host "       Update package: 1 stub at root + $updateFileCount files in _b
 if (Test-Path $UpdateZipPath) { Remove-Item $UpdateZipPath }
 Compress-Archive -Path "$UpdateDir\*" -DestinationPath $UpdateZipPath -CompressionLevel Optimal
 
-# ── Clean temp dirs ──
 Remove-Item -Recurse -Force $FdDir
 Remove-Item -Recurse -Force $UpdateDir
 Remove-Item -Recurse -Force $PackageDir
 
-# ── Summary ──
 $installSize = (Get-Item $InstallZipPath).Length / 1MB
 $updateSize = (Get-Item $UpdateZipPath).Length / 1MB
 
@@ -737,7 +522,6 @@ Write-Host "=== Build complete ===" -ForegroundColor Green
 Write-Host "Install ZIP: $InstallZipPath ($([math]::Round($installSize, 1)) MB)" -ForegroundColor White
 Write-Host "Update ZIP:  $UpdateZipPath ($([math]::Round($updateSize, 1)) MB)" -ForegroundColor White
 
-# ── Generate SHA256 checksums for both ZIPs (uploaded alongside for verification) ──
 $InstallShaPath = "$InstallZipPath.sha256"
 $UpdateShaPath = "$UpdateZipPath.sha256"
 (Get-FileHash -Algorithm SHA256 $InstallZipPath).Hash.ToLower() | Set-Content $InstallShaPath -NoNewline
@@ -752,10 +536,6 @@ Get-ChildItem $DistDir -Recurse | ForEach-Object {
     if ($_.PSIsContainer) { "  $rel\" } else { "  $rel  ($([math]::Round($_.Length/1KB)) KB)" }
 }
 
-# ── Optional: local Android APK build (-AndroidAlso) ──
-# Contributor convenience. CI is authoritative — this just lets a dev
-# validate Android changes before pushing the tag. Failures here never
-# fail the script; Windows artifacts above already exist on disk.
 $AndroidBuilt = $false
 $ApkPath = $null
 $ApkShaPath = $null
@@ -764,7 +544,6 @@ if ($AndroidAlso) {
     Write-Host ""
     Write-Host "=== Android APK build (-AndroidAlso) ===" -ForegroundColor Cyan
 
-    # Load .env.local (KEY=VALUE per line). Existing env vars win.
     $envLocal = Join-Path $Root ".env.local"
     if (Test-Path $envLocal) {
         Get-Content $envLocal | ForEach-Object {
@@ -779,7 +558,6 @@ if ($AndroidAlso) {
         Write-Host "       Loaded $envLocal (existing env vars take precedence)" -ForegroundColor Gray
     }
 
-    # Prereq check — JAVA_HOME, ANDROID_HOME, dotnet workload 'android'.
     $issues = @()
     if (-not $env:JAVA_HOME) {
         $issues += "JAVA_HOME not set (point at JDK 17 - e.g. Temurin)"
@@ -805,8 +583,6 @@ if ($AndroidAlso) {
         foreach ($i in $issues) { Write-Host "  - $i" -ForegroundColor Yellow }
         Write-Host "Windows artifacts above are still valid; only the APK was skipped." -ForegroundColor Yellow
     } else {
-        # Resolve signing keystore. Order: env vars → .env.local (already
-        # merged above) → vpnrouter.keystore next to the .csproj.
         $signingArgs = @()
         $hasKeystore = $false
         $keystoreSource = ""
@@ -825,11 +601,6 @@ if ($AndroidAlso) {
         } else {
             $csprojKeystore = Join-Path $Root "VPNRouter.Android\vpnrouter.keystore"
             if (Test-Path $csprojKeystore) {
-                # csproj defaults pick this up via <AndroidSigningKeyStore>
-                # vpnrouter.keystore</AndroidSigningKeyStore>. The csproj
-                # does NOT specify a password — without env vars dotnet
-                # prompts interactively, which fails under -NonInteractive.
-                # So still require ANDROID_KEYSTORE_PASSWORD to be set.
                 if ($env:ANDROID_KEYSTORE_PASSWORD) {
                     $keyAlias = if ($env:ANDROID_KEYSTORE_KEY_ALIAS) { $env:ANDROID_KEYSTORE_KEY_ALIAS } else { "vpnrouter" }
                     $keyPass  = if ($env:ANDROID_KEYSTORE_KEY_PASSWORD) { $env:ANDROID_KEYSTORE_KEY_PASSWORD } else { $env:ANDROID_KEYSTORE_PASSWORD }
@@ -893,7 +664,6 @@ if ($AndroidAlso) {
     }
 }
 
-# ── Final artifact summary ──
 Write-Host ""
 Write-Host "=== Artifacts ===" -ForegroundColor Cyan
 Write-Host "  Windows install ZIP : $InstallZipName" -ForegroundColor White
@@ -906,7 +676,6 @@ if ($AndroidAlso) {
     }
 }
 
-# ── Upload to GitHub Releases (optional) ──
 if ($Upload) {
     Write-Host ""
     Write-Host "Uploading to GitHub Releases..." -ForegroundColor Yellow
@@ -916,18 +685,12 @@ if ($Upload) {
     } else {
         $tag = "v$Version"
 
-        # Build the asset list. APK + sha join only if the local Android
-        # build above produced them; missing keystore / missing prereqs
-        # silently fall through to a Windows-only upload (CI will publish
-        # the APK on tag push regardless).
         $releaseAssets = @($InstallZipPath, $UpdateZipPath, $InstallShaPath, $UpdateShaPath)
         if ($AndroidBuilt) {
             $releaseAssets += @($ApkPath, $ApkShaPath)
             Write-Host "       Including local Android APK in release assets" -ForegroundColor Gray
         }
 
-        # Recheck source/tag and draft immediately before staging. Existing
-        # assets are not clobbered: partial staging requires explicit inspection.
         $currentHead = (& git -C $Root rev-parse HEAD | Out-String).Trim()
         if ($LASTEXITCODE -ne 0 -or $currentHead -ne $releaseCommit) { throw 'Release HEAD changed during build.' }
         $changes = @(& git -C $Root status --porcelain --untracked-files=all)

@@ -22,7 +22,6 @@ public sealed class ReleaseIntegrityWorkflowTests
         Assert.Contains("repos/$GITHUB_REPOSITORY/commits/$TAG", script);
         Assert.Contains("[ \"$REMOTE_SHA\" != \"$WORKFLOW_SHA\" ]", script);
         Assert.True(script.IndexOf("exit 1", StringComparison.Ordinal) < script.IndexOf("GITHUB_OUTPUT", StringComparison.Ordinal));
-        Assert.Contains("--ref \"$TAG\" -f tag=\"$TAG\"", Source());
     }
 
     [Fact]

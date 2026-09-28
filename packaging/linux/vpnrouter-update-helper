@@ -1,15 +1,4 @@
 #!/bin/bash
-# VPNRouter update helper — runs as root via pkexec per polkit policy
-# at /usr/share/polkit-1/actions/com.vpnrouter.update.policy. Installed
-# with the .deb to /usr/libexec/vpnrouter-update-helper.
-#
-# Usage: vpnrouter-update-helper <staging-dir> <install-dir>
-#        [--owned-signal-v1 <pid> <started-at-utc-ticks> <executable-path>]
-#
-# Validates both paths, optionally asks the installed VPNRouter host to signal
-# one exact owned identity, copies staging to install dir, and sets +x on the
-# two binaries. Keeping all privileged work in one helper means polkit has to
-# authorize only ONE action per update without granting broad process matching.
 set -e
 
 SRC="${1:-}"
@@ -25,8 +14,6 @@ if [ "$#" -ne 2 ] && { [ "$#" -ne 6 ] || [ "$3" != "--owned-signal-v1" ]; }; the
     exit 2
 fi
 
-# Defence-in-depth: refuse arbitrary destinations. Only known VPNRouter
-# install locations are acceptable.
 case "$DST" in
     /opt/vpnrouter|/opt/vpnrouter/|/usr/local/vpnrouter|/usr/local/vpnrouter/) ;;
     *)
@@ -45,9 +32,6 @@ if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
     exit 5
 fi
 
-# Stop only the identity selected by the owning VPNRouter process. The current
-# host opens a Linux pidfd, re-reads PID/start/path after open, and signals that
-# descriptor. Refusal aborts before copy; there is deliberately no name fallback.
 if [ "$#" -eq 6 ]; then
     CURRENT_HOST="$DST/VPNRouter.App"
     if [ ! -x "$CURRENT_HOST" ]; then
@@ -60,21 +44,11 @@ if [ "$#" -eq 6 ]; then
     fi
 fi
 
-# Copy contents into installation dir (-T treats DST as the target, not
-# parent), preserving modes from the tarball extraction.
 cp -rfT "$SRC" "$DST"
 
-# Belt-and-braces chmod on the two executables that matter
 [ -f "$DST/VPNRouter.App" ] && chmod +x "$DST/VPNRouter.App"
 [ -f "$DST/sing-box" ]       && chmod +x "$DST/sing-box"
 
-# v2.28.0: re-apply POSIX capabilities on the freshly-copied sing-box.
-# `cp` strips extended attributes by default, and the CAP_NET_ADMIN +
-# CAP_NET_BIND_SERVICE capabilities live as xattrs — so without this,
-# every auto-update would silently revert passwordless mode, pushing the
-# user back to the pkexec password-prompt path. setcap is idempotent;
-# `|| true` lets the helper succeed even on file systems that don't
-# support xattrs (we just fall back to pkexec at runtime then).
 if [ -f "$DST/sing-box" ] && command -v setcap >/dev/null 2>&1; then
     setcap cap_net_admin,cap_net_bind_service=+eip "$DST/sing-box" 2>/dev/null || true
 fi

@@ -1,18 +1,4 @@
 #!/usr/bin/env bash
-# VPNRouter macOS build script.
-#
-# Run on a Mac with .NET 8 SDK installed. Produces:
-#   /tmp/VPNRouter-v<version>-mac.dmg
-#   /tmp/VPNRouter-v<version>-mac.zip
-#
-# DMG contents (all four required — don't ship without them):
-#   1. VPNRouter.app           — the app bundle
-#   2. Applications            — symlink to /Applications (drag target)
-#   3. InstallGuide.html       — Russian+English one-time sudoers setup guide
-#   4. Terminal                — alias to /System/Applications/Utilities/Terminal.app
-#
-# Usage:
-#   ./build-mac.sh 2.4.7
 
 set -euo pipefail
 
@@ -46,7 +32,6 @@ cp -R "$PUBLISH_DIR/." "$APP/Contents/MacOS/"
 chmod +x "$APP/Contents/MacOS/VPNRouter.App"
 cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
-# Bundle official sing-box-vpnctl release (with_awg + with_xhttp + with_clash_api).
 echo "    sing-box-vpnctl: downloading darwin-universal release..."
 SB_DARWIN_VER="1.14.0-vpnctl.5"
 SB_DARWIN_SHA256="660162cd54674c7697e0fc3e605e9b83758262bc780864eda431ec259055cd25"
@@ -62,7 +47,6 @@ unzip -q -o "$SB_DARWIN_ZIP" -d /tmp/
 cp "/tmp/sing-box-${SB_DARWIN_VER}-darwin-universal/sing-box" "$APP/Contents/MacOS/sing-box"
 rm -f "$SB_DARWIN_ZIP"
 chmod +x "$APP/Contents/MacOS/sing-box"
-# Strip the Gatekeeper quarantine xattr from the nested helper binary so it launches.
 xattr -d com.apple.quarantine "$APP/Contents/MacOS/sing-box" 2>/dev/null || true
 echo "    sing-box-vpnctl bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
 
@@ -92,24 +76,18 @@ mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 
-# Install guide HTML — explains one-time sudoers setup in RU/EN.
-# Lives in the repo so it version-controls alongside the app.
 if [ ! -f "$REPO_DIR/VPNRouter.App/Assets/InstallGuide.html" ]; then
     echo "ERROR: InstallGuide.html missing from repo. Don't ship DMG without it."
     exit 2
 fi
 cp "$REPO_DIR/VPNRouter.App/Assets/InstallGuide.html" "$STAGE/InstallGuide.html"
 
-# Terminal alias — user double-clicks it from the DMG to paste the sudo command.
 ln -s /System/Applications/Utilities/Terminal.app "$STAGE/Terminal"
 
 echo "    Contents:"
 ls -la "$STAGE"
 
 echo "[5/5] Creating DMG + zip..."
-# hdiutil create occasionally fails with "Resource busy" on GitHub
-# Actions macOS runners (shared storage contention). Retry up to 3x
-# with a sync between attempts so the VFS catches up.
 HDIUTIL_OK=0
 for attempt in 1 2 3; do
     if hdiutil create -volname "VPNRouter ${VERSION}" -srcfolder "$STAGE" \
@@ -120,7 +98,6 @@ for attempt in 1 2 3; do
     echo "hdiutil attempt ${attempt} failed; retrying after sync..."
     sync
     sleep 3
-    # Detach anything stale that might be holding the path
     hdiutil detach "/Volumes/VPNRouter ${VERSION}" 2>/dev/null || true
 done
 if [ "$HDIUTIL_OK" != "1" ]; then

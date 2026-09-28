@@ -1,17 +1,3 @@
-<#
-.SYNOPSIS
-    VPNRouter Linux build (cross-compile from Windows).
-
-.DESCRIPTION
-    Produces VPNRouter-v<version>-linux.tar.gz via `dotnet publish -r
-    linux-x64 --self-contained`. Static asset files (launcher, .desktop,
-    README) live in packaging/linux/ so we don't tangle with PowerShell
-    here-string escaping for multi-line bash/shell content.
-
-.PARAMETER Version
-.PARAMETER Upload
-.PARAMETER GitHubRepo
-#>
 param(
     [Parameter(Mandatory=$true)] [string]$Version,
     [switch]$Upload,
@@ -47,8 +33,6 @@ $AppDir = Join-Path $StageDir "VPNRouter"
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 Copy-Item -Path (Join-Path $PublishDir "*") -Destination $AppDir -Recurse -Force
 
-# Copy static asset files from packaging/linux/. The README contains a
-# {VERSION} placeholder that we substitute here.
 foreach ($asset in @("VPNRouter.sh", "vpnrouter.desktop")) {
     $src = Join-Path $PkgDir $asset
     if (Test-Path $src) { Copy-Item -Path $src -Destination (Join-Path $AppDir $asset) -Force }
@@ -64,7 +48,6 @@ if (Test-Path $readmeSrc) {
         [System.Text.UTF8Encoding]::new($false))
 }
 
-# Icon from Avalonia Assets (same mascot used by subheader + chrome).
 $iconSource = Join-Path $Root "VPNRouter.App\Assets\penguin_mascot.png"
 if (Test-Path $iconSource) {
     Copy-Item -Path $iconSource -Destination (Join-Path $AppDir "icon.png") -Force
@@ -76,10 +59,6 @@ Get-ChildItem $AppDir | ForEach-Object { Write-Host "      $($_.Name)" }
 Write-Host "[4/5] tar.gz..." -ForegroundColor Yellow
 Push-Location $StageDir
 try {
-    # Use Windows built-in tar.exe explicitly. Git Bash / MSYS2 PATHs
-    # often put a Cygwin tar first which treats C:\... as a remote host
-    # spec ("Cannot connect to C: resolve failed"). System32\tar.exe
-    # (bsdtar, shipped since Win10 1803) handles native paths correctly.
     $windowsTar = Join-Path $env:SystemRoot "System32\tar.exe"
     if (-not (Test-Path $windowsTar)) { $windowsTar = "tar" }
     & $windowsTar -czf $TarPath VPNRouter
