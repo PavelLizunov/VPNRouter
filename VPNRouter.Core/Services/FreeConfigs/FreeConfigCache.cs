@@ -149,41 +149,6 @@ public sealed class FreeConfigCache
         }
     }
 
-    public async Task SaveAsync(CacheFile file, CancellationToken ct = default)
-    {
-        await _ioLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            file.SchemaVersion = CurrentSchemaVersion;
-            EnsureCacheDir();
-            var tmp = $"{_path}.tmp.{Guid.NewGuid():N}";
-            await using (var stream = new FileStream(
-                tmp,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 8192,
-                useAsync: true))
-            {
-                await JsonSerializer.SerializeAsync(
-                    stream,
-                    file,
-                    VPNRouter.Core.Json.AppJsonContext.Default.CacheFile,
-                    ct).ConfigureAwait(false);
-                await stream.FlushAsync(ct).ConfigureAwait(false);
-            }
-            File.Move(tmp, _path, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning("FreeConfigCache: async save failed: {err}", ex.Message);
-        }
-        finally
-        {
-            _ioLock.Release();
-        }
-    }
-
     private void EnsureCacheDir()
     {
         var dir = Path.GetDirectoryName(_path);
