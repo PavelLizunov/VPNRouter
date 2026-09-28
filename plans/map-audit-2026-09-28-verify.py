@@ -5,9 +5,10 @@ Recomputes the accounting figures of the 2026-09-28 MAP_AUDIT from pinned Git
 objects of the VPNRouter repository and compares them with fixed expectations.
 
 Read-only contract:
-- reads commits, trees and blobs through `git cat-file`, `git ls-tree`,
-  `git grep` and `git merge-base --is-ancestor` only;
-- never fetches, checks out, writes files, or runs the historical map tooling
+- reads commits, trees and blobs through `git rev-parse`, `git cat-file`,
+  `git ls-tree`, `git grep` and `git merge-base --is-ancestor` only;
+- never fetches (lazy fetch is disabled for partial clones), checks out,
+  writes files, or runs the historical map tooling
   (`plans/agent-map/supervisor.py`, `plans/agent-map/generate_manifest.py`);
 - the companion repository is an external reference and is not read here.
 
@@ -23,6 +24,7 @@ import collections
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -62,16 +64,19 @@ EXPECTED_CHANGED_ON_TARGET = [
     "VPNRouter.Service/VPNRouter.Service.csproj",
 ]
 
+# Open entries of the PR #296 ledger and the source files each one cites.
+# The verifier re-derives these citations from the branch ledger text.
 IMPORTED_IDS_MAIN_APPLICABLE = {
-    # ledger ID on PR #296: files the branch entry cites
     "FAILOVER-WARMUP-RACE": ["VPNRouter.Core/Services/StartupPipeline.cs",
                              "VPNRouter.Core/Services/VpnEngine.cs"],
-    "WIN-DNS-RESTORE-ORPHAN": ["VPNRouter.Core/Services/WindowsDnsHardening.cs"],
+    "WIN-DNS-RESTORE-ORPHAN": ["VPNRouter.Core/Services/VpnEngine.cs",
+                               "VPNRouter.Core/Services/WindowsDnsHardening.cs"],
     "WIN-DNS-LOCKDOWN-TOCTOU": ["VPNRouter.Core/Services/WindowsDnsHardening.cs"],
     "LINUX-NFT-TAILSCALE-LOCKOUT": ["VPNRouter.Core/Platform/Linux/LinuxFirewallManager.cs"],
     "WIN-DNS-NETSH-TIMEOUT-DEADLINE": ["VPNRouter.Core/Services/FirewallManager.cs"],
     "WIN-BINDIR-ACL-FAIL-OPEN": ["VPNRouter.Core/AppPaths.cs"],
 }
+# Entries already checked as resolved (source-only) in the PR #296 ledger.
 IMPORTED_IDS_OUT_OF_TARGET = [
     "HEADLESS-GATE-DISPOSE-RACE",
     "HEADLESS-SERILOG-RAW-EXCEPTION",
@@ -88,7 +93,8 @@ class GitError(Exception):
 class Git:
     def __init__(self, repo):
         self.repo = repo
-        self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0")
+        self.env = dict(os.environ, GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0",
+                        GIT_NO_LAZY_FETCH="1")
 
     def run(self, args, stdin=None, ok_codes=(0,)):
         proc = subprocess.run(
@@ -144,7 +150,7 @@ class Git:
         return result
 
     def grep_files(self, sha, pattern, pathspecs, fixed=True):
-        args = ["grep", "-l", "-I"]
+        args = ["grep", "--no-color", "-l", "-I"]
         if fixed:
             args.append("-F")
         args += ["-e", pattern, sha, "--"] + pathspecs
@@ -360,7 +366,13 @@ def check_target(git, c, batches, accepted):
 def check_claims(git, c):
     print("== E. claim evidence on target %s" % TARGET)
     g = lambda pattern, specs: git.grep_files(TARGET, pattern, specs)
+    # Map lock names vs target: _gate/_stateLock/_engineGeneration are wrong
+    # identifiers; equivalent mechanisms exist under other names.
     c.eq("claim.vpnengine_lifecycle_gate", g("SemaphoreSlim _lifecycleGate", ["VPNRouter.Core/Services/"]),
+         ["VPNRouter.Core/Services/VpnEngine.cs"])
+    c.eq("claim.singbox_manager_lifecycle_lock", g("object _lifecycleGate", ["VPNRouter.Core/Services/SingBoxManager*.cs"]),
+         ["VPNRouter.Core/Services/SingBoxManager.cs"])
+    c.eq("claim.failover_generation_increment", g("_failoverGeneration++", ["VPNRouter.Core/Services/"]),
          ["VPNRouter.Core/Services/VpnEngine.cs"])
     c.eq("claim.config_lock_symbol", g("_configLock", ["*.cs"]), [])
     c.eq("claim.engine_generation_symbol", g("_engineGeneration", ["*.cs"]), [])
@@ -368,7 +380,8 @@ def check_claims(git, c):
     c.eq("claim.scutil_in_core", g("scutil", ["VPNRouter.Core/"]), [])
     c.eq("claim.mac_dns_networksetup", g("/usr/sbin/networksetup", ["VPNRouter.Core/Platform/macOS/"]),
          ["VPNRouter.Core/Platform/macOS/MacDnsHardening.cs"])
-    c.eq("claim.set_blocking_call_sites", g("setBlocking(", ["*.java", "*.cs"]),
+    # The only "setBlocking(" text is a localized hint string, not a call.
+    c.eq("claim.set_blocking_paren_occurrences", g("setBlocking(", ["*.java", "*.cs"]),
          ["VPNRouter.Core/Localization/Strings.Android.cs"])
     # NEW-1 evidence. Core readers: ProfileApplication/ProfileManager propagate
     # the value; StartupPipeline/VpnEngine drive the desktop firewall.
@@ -390,7 +403,11 @@ def check_claims(git, c):
     c.eq("claim.windows_named_owner_lock", g("Global\\VPNRouter-SingBox-Owner", ["VPNRouter.Core/"]),
          ["VPNRouter.Core/Services/TunOwnershipLock.cs"])
     c.eq("claim.cgroup_or_net_cls", sorted(set(g("cgroup", ["*.cs"]) + g("net_cls", ["*.cs"]))), [])
-    c.eq("claim.unix_domain_socket", g("UnixDomainSocketEndPoint", ["*.cs"]), [])
+    c.eq("claim.unix_domain_socket_endpoint", g("UnixDomainSocketEndPoint", ["*.cs"]), [])
+    c.eq("claim.named_pipe_users", g("NamedPipeServerStream", ["*.cs"]),
+         ["VPNRouter.App/Services/SingleInstance.cs"])
+    c.eq("claim.windows_service_hosting", g("AddWindowsService", ["VPNRouter.Service/"]),
+         ["VPNRouter.Service/Program.cs"])
 
     print("== F. ledger and build/test facts")
     target_ledger = git.blob(TARGET, "plans/OPEN-DEFECTS.md").decode("utf-8")
@@ -398,14 +415,25 @@ def check_claims(git, c):
     ids = sorted(list(IMPORTED_IDS_MAIN_APPLICABLE) + IMPORTED_IDS_OUT_OF_TARGET)
     c.eq("ledger.ids_on_map_branch", sorted(i for i in ids if i in map_ledger), ids)
     c.eq("ledger.ids_on_target", sorted(i for i in ids if i in target_ledger), [])
+    map_lines = {i: [l for l in map_ledger.splitlines()
+                     if l.lstrip().startswith("- [") and (" " + i + ":") in l]
+                 for i in ids}
+    c.eq("ledger.branch_entry_state", {i: [l.lstrip()[:5] for l in ls] for i, ls in map_lines.items()},
+         dict([(i, ["- [ ]"]) for i in IMPORTED_IDS_MAIN_APPLICABLE] +
+              [(i, ["- [x]"]) for i in IMPORTED_IDS_OUT_OF_TARGET]))
     base_tree, target_tree = git.tree(MAP_BASELINE), git.tree(TARGET)
-    identical = {}
-    for ident, paths in sorted(IMPORTED_IDS_MAIN_APPLICABLE.items()):
-        identical[ident] = all(p in target_tree and base_tree.get(p) == target_tree[p] for p in paths)
+    cited = {}
+    for ident in IMPORTED_IDS_MAIN_APPLICABLE:
+        names = set(re.findall(r"`([A-Za-z0-9_.]+\.cs)(?::[0-9,\-]+)?`", " ".join(map_lines[ident])))
+        cited[ident] = sorted(p for name in names for p in base_tree if p.endswith("/" + name))
+    c.eq("ledger.cited_files_from_branch_ledger", cited,
+         {k: sorted(v) for k, v in IMPORTED_IDS_MAIN_APPLICABLE.items()})
+    identical = {ident: all(p in target_tree and base_tree[p] == target_tree[p] for p in paths)
+                 for ident, paths in cited.items()}
     c.eq("ledger.cited_files_identical_baseline_to_target", identical, {
         "FAILOVER-WARMUP-RACE": False, "LINUX-NFT-TAILSCALE-LOCKOUT": True,
         "WIN-BINDIR-ACL-FAIL-OPEN": True, "WIN-DNS-LOCKDOWN-TOCTOU": True,
-        "WIN-DNS-NETSH-TIMEOUT-DEADLINE": True, "WIN-DNS-RESTORE-ORPHAN": True})
+        "WIN-DNS-NETSH-TIMEOUT-DEADLINE": True, "WIN-DNS-RESTORE-ORPHAN": False})
 
     sln = git.blob(TARGET, "VPNRouter.sln").decode("utf-8")
     android_guid = "{1E1BC019-F81F-4AA2-93D5-4BC65B566C10}"
