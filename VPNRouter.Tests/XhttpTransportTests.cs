@@ -7,15 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// XHTTP transport (managed level) for the sing-box-lx fork. XHTTP tunnels VLESS over
-/// plain HTTP/2, composes with Reality, and is INCOMPATIBLE with XTLS-Vision (so no flow).
-/// The emitted transport shape (host top-level, mode, x_padding_bytes, no_grpc_header) was
-/// verified vs the real `sing-box-lx check`. Needs a sing-box-lx (with_xhttp) client.
-/// <para>Forces <see cref="SingBoxFeatures.OverrideXhttp"/> = true so the type=xhttp
-/// intake gate (default-closed on official builds) lets these fork tests run; shares the
-/// serial collection with the other fork tests.</para>
-/// </summary>
 [Collection("SingBoxFeaturesSerial")]
 public sealed class XhttpTransportTests : IDisposable
 {
@@ -31,8 +22,8 @@ public sealed class XhttpTransportTests : IDisposable
             "&x_padding_bytes=100-1000&sni=example.com#X");
         Assert.Equal("xhttp", e.Transport.Type);
         Assert.Equal("/p", e.Transport.Path);
-        Assert.Equal("cdn.example.com", e.Transport.Host);     // top-level, not a header
-        Assert.Empty(e.Transport.Headers);                     // host did NOT go into headers
+        Assert.Equal("cdn.example.com", e.Transport.Host);
+        Assert.Empty(e.Transport.Headers);
         Assert.Equal("packet-up", e.Transport.Mode);
         Assert.Equal("100-1000", e.Transport.XPaddingBytes);
     }
@@ -45,9 +36,9 @@ public sealed class XhttpTransportTests : IDisposable
         var proxy = cfg.Outbounds.First(o => o.Type == "vless" && o.Tag == "proxy");
         Assert.NotNull(proxy.Transport);
         Assert.Equal("xhttp", proxy.Transport!.Type);
-        Assert.Equal("auto", proxy.Transport.Mode);            // empty -> defaulted to auto
+        Assert.Equal("auto", proxy.Transport.Mode);
         Assert.Equal("cdn.example.com", proxy.Transport.Host);
-        Assert.Null(proxy.Flow);                               // XTLS-Vision incompatible
+        Assert.Null(proxy.Flow);
     }
 
     private static AppSettings XhttpSettings() => new()
@@ -67,7 +58,7 @@ public sealed class XhttpTransportTests : IDisposable
                     Uuid = "11111111-1111-1111-1111-111111111111",
                     Security = "reality",
                     Reality = new VlessRealityConfig { PublicKey = "KEY", ShortId = "01ab" },
-                    Flow = "xtls-rprx-vision", // present but must be DROPPED for xhttp
+                    Flow = "xtls-rprx-vision",
                     Transport = new VlessTransportConfig
                     {
                         Type = "xhttp", Path = "/p", Host = "cdn.example.com",

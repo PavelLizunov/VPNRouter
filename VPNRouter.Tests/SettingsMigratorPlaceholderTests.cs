@@ -5,28 +5,8 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.32.3 (2026-05-17): pin the load-time placeholder-fingerprint sweep
-/// that <see cref="SettingsMigrator.PruneKnownPlaceholders"/> performs on
-/// every yaml load. The pass is aggressive — any entry tagged by
-/// <see cref="PlaceholderDefense"/> as a known-bad fingerprint is removed
-/// outright from the legacy scalar trio, manual server list, and every
-/// subscription. False-positive bans are worse than false negatives here
-/// (a banned valid server kills VPN), so the tests double-check that
-/// only the known-bad fingerprints get wiped.
-///
-/// <para>Counterpart in production code:
-/// <c>VPNRouter.Core.Services.SettingsMigrator.PruneKnownPlaceholders</c>.
-/// Counterpart in the loader pipeline: <see cref="SettingsLoader.LoadCore"/>
-/// post-migration step that stamps
-/// <see cref="AppConfig.PlaceholderPruneCount"/> when count > 0.</para>
-/// </summary>
 public class SettingsMigratorPlaceholderTests
 {
-    // Canonical placeholder fingerprints — same constants as
-    // ConfigSanityCheck.KnownPlaceholder*. Re-declared as local
-    // string literals so test failures point at the wrong-value with
-    // grep-friendly context rather than a "set membership" abstraction.
     private const string BadPubkey  = "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU";
     private const string BadShortId = "78ca7952";
     private const string BadServer  = "195.135.255.216";
@@ -75,7 +55,7 @@ public class SettingsMigratorPlaceholderTests
         s.Vless.Reality = new VlessRealityConfig
         {
             Enabled = true,
-            PublicKey = BadPubkey,    // ← placeholder hit
+            PublicKey = BadPubkey,
             ShortId = "clean-sid",
             ServerName = "yahoo.com",
         };
@@ -147,7 +127,6 @@ public class SettingsMigratorPlaceholderTests
 
         Assert.Equal(1, count);
         Assert.True(string.IsNullOrEmpty(s.Vless.ActiveServer));
-        // good-other survives — we don't auto-promote, but it's still in the list.
         Assert.Single(s.Vless.Servers);
         Assert.Equal("good-other", s.Vless.Servers[0].Name);
     }
@@ -197,7 +176,6 @@ public class SettingsMigratorPlaceholderTests
         var count = SettingsMigrator.PruneKnownPlaceholders(s, null);
 
         Assert.Equal(0, count);
-        // Nothing got mutated.
         Assert.Equal("1.2.3.4", s.Vless.Server);
         Assert.Equal(443, s.Vless.Port);
         Assert.Equal("clean-uuid", s.Vless.Uuid);
@@ -212,21 +190,18 @@ public class SettingsMigratorPlaceholderTests
     {
         var s = new AppSettings();
 
-        // (1) Scalar.
         s.Vless.Server = "anywhere";
         s.Vless.Reality = new VlessRealityConfig
         {
             Enabled = true,
-            PublicKey = BadPubkey,    // hit
+            PublicKey = BadPubkey,
             ShortId = "clean",
             ServerName = "x",
         };
 
-        // (2) Vless.Servers entry.
         s.Vless.Servers.Add(MakePlaceholder("manual-bad"));
         s.Vless.Servers.Add(MakeClean("manual-good"));
 
-        // (3) Subscription server entry.
         s.App.Subscriptions.Add(new SubscriptionEntry
         {
             Name = "sub",
@@ -240,7 +215,6 @@ public class SettingsMigratorPlaceholderTests
 
         var count = SettingsMigrator.PruneKnownPlaceholders(s, null);
 
-        // 1 scalar + 1 from Vless.Servers + 1 from subscription = 3.
         Assert.Equal(3, count);
         Assert.Equal(string.Empty, s.Vless.Server);
         Assert.Single(s.Vless.Servers);

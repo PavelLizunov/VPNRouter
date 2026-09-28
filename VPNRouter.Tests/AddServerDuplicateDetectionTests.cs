@@ -9,17 +9,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Regression for a 2026-07-01 user report: pasting a `vless://...type=xhttp`
-/// URI for a server already present at a different port did nothing — no
-/// error, no new row, the URI textbox just cleared as if it had been
-/// processed. Root cause: <c>MainWindowViewModel.AddServer</c>'s duplicate
-/// check compared only Name+Server(host), not Port, so a same-named,
-/// same-host server on a DIFFERENT port (the user's "main-brat" AmneziaWG
-/// endpoint on :51822 vs. the new "main-brat" xhttp VLESS transport on
-/// :9443, same IP) collided and the second entry was silently dropped via
-/// <c>continue</c>.
-/// </summary>
 public sealed class AddServerDuplicateDetectionTests : IDisposable
 {
     private readonly bool? _previousXhttpOverride;
@@ -53,7 +42,6 @@ public sealed class AddServerDuplicateDetectionTests : IDisposable
             Port = 51822,
         }));
 
-        // Real-world repro URI (sanitized creds match the user's actual report).
         vm.VlessUri =
             "vless://5550051c-2b10-4c11-8d73-b918118f86ef@93.95.226.167:9443?encryption=none&security=reality" +
             "&sni=yahoo.com&fp=randomized&pbk=4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw&sid=fb86a31808abe3f7" +
@@ -87,8 +75,6 @@ public sealed class AddServerDuplicateDetectionTests : IDisposable
 
         InvokeAddServer(vm);
 
-        // Genuine duplicate (same name+host+port) still collapses to one —
-        // the fix must not loosen this case, only the different-port case.
         Assert.Single(vm.Servers);
     }
 }

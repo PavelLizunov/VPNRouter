@@ -17,11 +17,6 @@
   <Border Padding="24,22" BorderThickness="0">
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="14">
 
-      <!-- v2.25.0 — About dialog. Replaces the by-line + version that
-           used to live in the compact header. Keep it centred, simple,
-           and aligned to the Arctic design system. -->
-
-      <!-- Logo -->
       <Border Grid.Row="0"
               Width="76" Height="76" HorizontalAlignment="Center"
               CornerRadius="{StaticResource RadiusLg}"
@@ -33,7 +28,6 @@
                HorizontalAlignment="Center" VerticalAlignment="Center"/>
       </Border>
 
-      <!-- Brand name + tagline -->
       <StackPanel Grid.Row="1" Spacing="4" HorizontalAlignment="Center">
         <TextBlock Text="{Binding L_AboutBrandName}"
                    FontSize="18" FontWeight="Bold"
@@ -47,7 +41,6 @@
                    Foreground="{DynamicResource TextSecondaryBrush}"/>
       </StackPanel>
 
-      <!-- Key-value info block -->
       <Border Grid.Row="2" Padding="14,10"
               CornerRadius="{StaticResource RadiusSm}"
               Background="{DynamicResource SurfaceSunkenBrush}"
@@ -86,7 +79,6 @@
         </Grid>
       </Border>
 
-      <!-- Repo link -->
       <Button Grid.Row="3"
               Click="OnOpenRepoClick"
               VerticalAlignment="Top"
@@ -104,7 +96,6 @@
         </StackPanel>
       </Button>
 
-      <!-- Footer — Close button -->
       <Button Grid.Row="4"
               Content="{Binding L_AboutCloseBtn}"
               Click="OnCloseClick"

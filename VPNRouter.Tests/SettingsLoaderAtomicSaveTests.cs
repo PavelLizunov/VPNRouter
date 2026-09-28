@@ -5,10 +5,6 @@ using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 using Xunit;
 
-// P05 (DATA-1): pins the atomic-save contract of SettingsLoader.Save.
-// Conventions mirror SettingsLoaderRobustnessTests (unique temp dir,
-// IDisposable cleanup, SafeModeStateCollection).
-
 namespace VPNRouter.Tests;
 
 [Collection(SafeModeStateCollection.Name)]
@@ -38,10 +34,6 @@ public class SettingsLoaderAtomicSaveTests : IDisposable
         }
     };
 
-    // A failed temp write must leave the previous config bytes intact.
-    // Sabotage: create the temp path as a DIRECTORY so FileStream.Create
-    // throws identically on Windows (access-denied) and Linux (EISDIR)
-    // before the rename ever runs. Deterministic on both CI platforms.
     [Fact]
     public void Save_FailedTempWrite_LeavesPreviousConfigIntact()
     {
@@ -49,7 +41,7 @@ public class SettingsLoaderAtomicSaveTests : IDisposable
         SettingsLoader.Save(NewSettings("good.example.com"), path);
         var originalBytes = File.ReadAllBytes(path);
 
-        Directory.CreateDirectory(path + ".tmp"); // sabotage — intentionally remains
+        Directory.CreateDirectory(path + ".tmp");
 
         Assert.ThrowsAny<Exception>(
             () => SettingsLoader.Save(NewSettings("bad.example.com"), path));
@@ -59,7 +51,6 @@ public class SettingsLoaderAtomicSaveTests : IDisposable
         Assert.DoesNotContain(reloaded.Vless.Servers, e => e.Server == "bad.example.com");
     }
 
-    // A successful Save must not leave its temp file behind.
     [Fact]
     public void Save_Success_LeavesNoTempFile()
     {

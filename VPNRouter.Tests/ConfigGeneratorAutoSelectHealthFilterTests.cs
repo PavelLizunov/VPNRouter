@@ -9,14 +9,6 @@ using CoreStrings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins the urltest R5 verdict-driven Auto-pool filter in <see cref="ConfigGenerator"/>:
-/// with AutoSelectBestServer on, members with a FRESH persisted
-/// ProtocolHandshakeBlockedLikely verdict are dropped from the urltest group;
-/// fail-open keeps the full pool when everything is blocked; manual (non-auto)
-/// selection is never overridden. Plus the audit's wording pin: Auto is a
-/// "quick web test", never a claim of full verification.
-/// </summary>
 public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
 {
     private readonly string _prevDataDir;
@@ -34,7 +26,7 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
     {
         ServerHealthStore.ResetForTests();
         AppPaths.OverrideDataDir(_prevDataDir);
-        try { Directory.Delete(_tempDir, recursive: true); } catch { /* best-effort */ }
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
     private static VlessServerEntry Vless(string name, string server) => new()
@@ -76,7 +68,6 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
         Processes = new(),
     };
 
-    /// <summary>Members of the urltest "proxy" group, or null when no group was emitted.</summary>
     private static List<string>? UrltestMembers(SingBoxConfig config)
     {
         var json = JsonSerializer.Serialize(config, VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig);
@@ -123,7 +114,6 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
         var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" }, Settings(autoSelect: true, a, b));
         var members = UrltestMembers(config);
 
-        // A wrong verdict must never brick connectivity — the full pool survives.
         Assert.NotNull(members);
         Assert.Equal(2, members!.Count);
     }
@@ -141,7 +131,7 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
         var members = UrltestMembers(config);
 
         Assert.NotNull(members);
-        Assert.Equal(3, members!.Count);   // recovered server gets its chance back
+        Assert.Equal(3, members!.Count);
     }
 
     [Fact]
@@ -159,26 +149,19 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
     [Fact]
     public void ManualSelection_IsNeverOverriddenByVerdict()
     {
-        // Auto OFF: the user explicitly picked the (blocked-marked) server — the
-        // generator must still emit it as the proxy. Respect the human.
         var a = Vless("srv-a", "10.0.0.1");
         ServerHealthStore.Record(a, ServerHealthVerdict.ProtocolHandshakeBlockedLikely);
 
         var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" }, Settings(autoSelect: false, a));
         var json = JsonSerializer.Serialize(config, VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig);
 
-        Assert.Contains("\"10.0.0.1\"", json);       // the chosen server is the proxy
-        Assert.Null(UrltestMembers(config));          // no auto group in manual mode
+        Assert.Contains("\"10.0.0.1\"", json);
+        Assert.Null(UrltestMembers(config));
     }
-
-    // ── R3: provider/subnet-level drop ───────────────────────────────────────
 
     [Fact]
     public void HighRiskSubnet_DropsItsUntestedSiblingsToo()
     {
-        // Two blocked on net:10.0.0.0/24 + one healthy elsewhere → the subnet is
-        // HighRisk (>=2 blocked + healthy alternative) → its UNTESTED sibling is
-        // dropped from the pool along with the blocked ones.
         var blocked1  = Vless("blk-1",   "10.0.0.1");
         var blocked2  = Vless("blk-2",   "10.0.0.2");
         var untested  = Vless("sibling", "10.0.0.3");
@@ -192,17 +175,14 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
             Settings(autoSelect: true, blocked1, blocked2, untested, healthy));
         var json = JsonSerializer.Serialize(config, VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig);
 
-        // Pool collapsed to the single healthy member → direct outbound, no group.
         Assert.Null(UrltestMembers(config));
         Assert.Contains("\"77.7.7.7\"", json);
-        Assert.DoesNotContain("\"10.0.0.3\"", json);   // the untested sibling went with its subnet
+        Assert.DoesNotContain("\"10.0.0.3\"", json);
     }
 
     [Fact]
     public void OneBlockedOnSubnet_DoesNotCondemnTheSubnet()
     {
-        // Below the >=2 threshold the subnet is NOT HighRisk — only the blocked
-        // member itself is dropped (R5), its sibling stays in the group.
         var blocked  = Vless("blk",     "10.0.0.1");
         var sibling  = Vless("sibling", "10.0.0.3");
         var healthy  = Vless("good",    "77.7.7.7");
@@ -222,8 +202,6 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
     [Fact]
     public void HighRiskSubnet_WithoutHealthyAlternative_IsNotFlagged()
     {
-        // No healthy server elsewhere → could be a client-wide outage, not a
-        // subnet block — nothing extra is dropped beyond the R5 individual drop.
         var blocked1 = Vless("blk-1",   "10.0.0.1");
         var blocked2 = Vless("blk-2",   "10.0.0.2");
         var sibling  = Vless("sibling", "10.0.0.3");
@@ -235,10 +213,8 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
             Settings(autoSelect: true, blocked1, blocked2, sibling));
         var json = JsonSerializer.Serialize(config, VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig);
 
-        Assert.Contains("\"10.0.0.3\"", json);   // the sibling survives
+        Assert.Contains("\"10.0.0.3\"", json);
     }
-
-    // ── Audit regression #6: wording pins ────────────────────────────────────
 
     [Fact]
     public void AutoSelectWording_IsQuickWebTest_NotBestServerClaim()

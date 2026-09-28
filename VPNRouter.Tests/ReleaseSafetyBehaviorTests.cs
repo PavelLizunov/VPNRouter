@@ -4,7 +4,6 @@ using System.Text.RegularExpressions;
 
 namespace VPNRouter.Tests;
 
-/// <summary>Isolated Windows PowerShell behavior; live-update and CI assertions are source-only.</summary>
 public sealed class ReleaseSafetyBehaviorTests
 {
     [Theory]
@@ -191,10 +190,8 @@ public sealed class ReleaseSafetyBehaviorTests
     public async Task UpdaterWorkflow_PowerShellBlocksParseInWindowsPowerShell51()
     {
         if (!OperatingSystem.IsWindows()) return;
-        // This fixed-layout extraction is not a YAML validator; expressions are inert parse placeholders.
         var blocks = Regex.Matches(ReadSource(".github/workflows/test-windows-update.yml"),
             @"(?m)^        run: \|\r?\n((?:(?:          [^\r\n]*|)[\r]?\n)+)");
-        // Includes the migration's Cronet/native FakeIP verification block.
         Assert.Equal(10, blocks.Count);
         var scripts = blocks.Select(block => Regex.Replace(block.Groups[1].Value, @"\$\{\{.*?\}\}", "fixture")).ToArray();
         await RunFixtureAsync("""

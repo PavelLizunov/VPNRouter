@@ -12,28 +12,11 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization regression suite for TgProxy process ownership and lifecycle safety.
-/// <para>
-/// Invariants verified:
-/// 1. Port occupancy is never identity: foreign listeners are unknown, not owned.
-/// 2. Zero process kills on foreign listeners: Quit, toggle, and update never terminate
-///    processes by port or unverified process name sweeps.
-/// 3. Positive owned stop: an active owned manager cleanly stops and suppresses events
-///    on its own process handle.
-/// 4. Exited handle safety: an already-exited process handle is never killed or re-opened by PID.
-/// 5. Non-blocking UI: runtime status polling and manager properties do not block UI execution.
-/// 6. Safe compatibility: legacy static entry points are non-destructive no-ops.
-/// </para>
-/// </summary>
 public sealed class TgProxyOwnershipCharacterizationTests
 {
-    // ─── 1. Static entry points are safe no-ops (compatibility) ───────────
-
     [Fact]
     public void TgProxyManager_KillAll_Structural_NoDestructiveCalls()
     {
-        // Structural: KillAll method must be a safe no-op with zero process-kill operations.
         var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
         var killAllBody = ExtractMethodBody(src, "KillAll");
 
@@ -50,7 +33,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
     [Fact]
     public void TgProxyManager_KillByPort_Structural_NoDestructiveCalls()
     {
-        // Structural: KillByPort method must be a safe no-op with zero process-kill operations.
         var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
         var killByPortBody = ExtractMethodBody(src, "KillByPort");
 
@@ -68,7 +50,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
     [Fact]
     public void RuntimeStatusDetector_IsTgProxyRunning_NeverClaimsPortOnlyTruth()
     {
-        // Port occupancy is never identity/truth of an owned TgProxy.
         Assert.False(RuntimeStatusDetector.IsTgProxyRunning(1443));
         Assert.False(RuntimeStatusDetector.IsTgProxyRunning(0));
         Assert.False(RuntimeStatusDetector.IsTgProxyRunning(-1));
@@ -79,8 +60,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         Assert.DoesNotContain("GetActiveTcpListeners", detectorBody);
         Assert.Contains("return false;", detectorBody);
     }
-
-    // ─── 2. Owned positive stop & exited handle safety ────────────────────
 
     [Fact]
     public void OwnedManager_PositiveStop_CallsKillAndSuppressOnOwnedHandle()
@@ -167,8 +146,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         Assert.DoesNotContain("Process.GetProcessesByName(\"TgWsProxy_windows\")", stripped);
     }
 
-    // ─── 3. Source call-graph audits (no destructive port/name kill paths) ─
-
     [Fact]
     public void MainWindowViewModel_Quit_ZeroKillAllOrPortKillCalls()
     {
@@ -214,7 +191,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         Assert.Contains("wasRunning = manager?.IsRunning == true;", updateBody);
         Assert.Contains("manager?.Stop();", updateBody);
 
-        // Source guard: confirmed stop check before download
         var stopIdx = updateBody.IndexOf("manager?.Stop();", StringComparison.Ordinal);
         var checkIdx = updateBody.IndexOf("if (manager?.IsRunning == true)", StringComparison.Ordinal);
         var downloadIdx = updateBody.IndexOf("DownloadAsync", StringComparison.Ordinal);
@@ -234,10 +210,10 @@ public sealed class TgProxyOwnershipCharacterizationTests
             : src.IndexOf("private void LoadSettingsIntoUI()", StringComparison.Ordinal);
         Assert.True(loadSettingsStart >= 0, "Expected LoadSettingsIntoUI in MainWindowViewModel.cs");
 
-        var start = src.IndexOf("// Telegram proxy", loadSettingsStart, StringComparison.Ordinal);
-        Assert.True(start >= 0, "Expected '// Telegram proxy' marker inside LoadSettingsIntoUI");
-        var end = src.IndexOf("// Update channel", start, StringComparison.Ordinal);
-        Assert.True(end > start, "Expected '// Update channel' marker after '// Telegram proxy'");
+        var start = src.IndexOf("TgProxyPort = _settings.App.TgProxyPort", loadSettingsStart, StringComparison.Ordinal);
+        Assert.True(start >= 0, "Expected the Telegram proxy block inside LoadSettingsIntoUI");
+        var end = src.IndexOf("ReceivePrereleases = _settings.Update.IsExperimental;", start, StringComparison.Ordinal);
+        Assert.True(end > start, "Expected the update-channel assignment after the Telegram proxy block");
 
         var section = StripLineComments(src[start..end]);
 
@@ -275,8 +251,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         Assert.Contains("Volatile.Read(ref _tgProxy)", body);
     }
 
-    // ─── 4. Stubborn process handle safety (failed kill retains handle/identity) ───
-
     private sealed class StubbornProcessHandle : IProcessHandle
     {
         public int Pid { get; }
@@ -297,7 +271,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         {
             if (!AllowExit)
             {
-                // Immediately canceled/fails: no wall-clock 3s wait
                 return Task.FromException<int>(new OperationCanceledException(ct));
             }
             return Task.FromResult(0);
@@ -343,23 +316,19 @@ public sealed class TgProxyOwnershipCharacterizationTests
             Assert.True(sut.IsRunning);
             Assert.Equal(99201, sut.Pid);
 
-            // Stop fails to confirm exit: Kill returns, HasExited false, WaitForExitAsync immediately canceled
             sut.Stop();
 
-            // Handle retained, IsRunning remains true, not disposed
             Assert.True(sut.IsRunning);
             Assert.Equal(99201, sut.Pid);
             Assert.Equal(0, handle.DisposeCallCount);
             Assert.Equal(1, handle.SuppressExitedEventCallCount);
             Assert.Equal(1, handle.KillCallCount);
 
-            // Start after Stop must reject replacement when prior _handle still present/live or unknown (do not overwrite)
             var ex = Assert.Throws<InvalidOperationException>(() => sut.Start(1443, "newsecret"));
             Assert.Contains("prior instance", ex.Message);
             Assert.True(sut.IsRunning);
             Assert.Equal(99201, sut.Pid);
 
-            // Repeated Stop retry cleanup succeeds once exit is confirmed
             handle.AllowExit = true;
             sut.Stop();
 
@@ -388,23 +357,19 @@ public sealed class TgProxyOwnershipCharacterizationTests
             Assert.True(sut.IsRunning);
             Assert.Equal(99202, sut.Pid);
 
-            // Stop fails: Kill throws Win32Exception, HasExited false
             sut.Stop();
 
-            // Handle retained, IsRunning remains true, not disposed
             Assert.True(sut.IsRunning);
             Assert.Equal(99202, sut.Pid);
             Assert.Equal(0, handle.DisposeCallCount);
             Assert.Equal(1, handle.SuppressExitedEventCallCount);
             Assert.Equal(1, handle.KillCallCount);
 
-            // Start won't replace
             var ex = Assert.Throws<InvalidOperationException>(() => sut.Start(1443, "newsecret"));
             Assert.Contains("prior instance", ex.Message);
             Assert.True(sut.IsRunning);
             Assert.Equal(99202, sut.Pid);
 
-            // Retry cleanup succeeds once exited
             handle.AllowExit = true;
             sut.Stop();
 
@@ -428,19 +393,15 @@ public sealed class TgProxyOwnershipCharacterizationTests
         var sut = new TgProxyManager(logger: null, runner: fake);
         SetProcessHandle(sut, handle);
 
-        // First dispose fails cleanup — does not mark fully disposed
         sut.Dispose();
         Assert.True(sut.IsRunning);
         Assert.Equal(0, handle.DisposeCallCount);
 
-        // Retry cleanup via Dispose succeeds once process exits
         handle.AllowExit = true;
         sut.Dispose();
         Assert.False(sut.IsRunning);
         Assert.Equal(1, handle.DisposeCallCount);
     }
-
-    // ─── Helpers ──────────────────────────────────────────────────────────
 
     private static void SetProcessHandle(TgProxyManager manager, IProcessHandle? handle)
     {
@@ -475,7 +436,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         var m = Regex.Match(stripped, pattern);
         if (!m.Success)
         {
-            // Fallback: type token + methodName without modifier
             pattern = @"\b(?!(?:await|return|throw)\b)(?:[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?\??)\s+" +
                       Regex.Escape(methodName) + @"\s*\(";
             m = Regex.Match(stripped, pattern);

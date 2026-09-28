@@ -3,45 +3,12 @@ using System.Text;
 
 namespace VPNRouter.Core.Services.Diagnostics;
 
-/// <summary>
-/// Collects a redacted diagnostics bundle (config + sing-box config + bounded
-/// log tails + env/health summary + geo file manifest) into a single ZIP on
-/// the user's Desktop, so a support request becomes a one-click attachment
-/// instead of a hand-collected pile of files.
-///
-/// Variant 0 (settled 2026-05-30): we host NOTHING. Collect → redact → ZIP →
-/// the user attaches it wherever they already get support. Everything is
-/// redacted by <see cref="DiagnosticsRedactor"/> before it lands in the ZIP;
-/// see that class for the fail-safe policy.
-///
-/// All collection is best-effort: a missing or locked file is noted as a
-/// warning and skipped, never fatal — a partial bundle still helps.
-/// </summary>
 public static class DiagnosticsExporter
 {
-    /// <summary>
-    /// Max log lines kept per log file. v2.41.0 (user ask 2026-06-04): bumped
-    /// 800 → 40000 so a bundle holds days of history, not a couple of busy hours.
-    /// sing-box is verbose ("found process path" spam), so 800 lines was minutes
-    /// on an active session; the byte cap below is the real bound now.
-    /// </summary>
     public const int LogTailLines = 40_000;
 
-    /// <summary>
-    /// Hard cap on bytes read when tailing a log (audit MEDIUM, 2026-06-02).
-    /// `TailLines` only ever needs the END of the file, so we seek to the last
-    /// <c>MaxTailReadBytes</c> instead of reading the whole thing — a corrupt or
-    /// runaway multi-GB log can no longer OOM the bundle. v2.41.0: 2 MB → 12 MB
-    /// so a full sing-box rotation (rotates at 10 MB → singbox.old.log) is
-    /// captured intact, and a daily app log is included whole.
-    /// </summary>
     public const long MaxTailReadBytes = 12L * 1024 * 1024;
 
-    /// <summary>
-    /// How many days of daily-rolled app logs (<c>vpnrouter{date}.log</c>) to
-    /// include. v2.41.0: was implicitly 1 (latest file only) → 3 days, so a
-    /// "couple of days" of context lands in the bundle.
-    /// </summary>
     public const int LogWindowDays = 3;
 
     public sealed record Result(
@@ -49,12 +16,6 @@ public static class DiagnosticsExporter
         IReadOnlyList<string> Entries,
         IReadOnlyList<string> Warnings);
 
-    /// <summary>
-    /// Build the bundle. <paramref name="timestamp"/> stamps the filename
-    /// (pass DateTime.Now from the UI; injected so tests are deterministic).
-    /// <paramref name="connected"/> is the current VPN connected-state.
-    /// <paramref name="destinationDir"/> defaults to the Desktop.
-    /// </summary>
     public static Result Export(DateTime timestamp, bool connected, string? destinationDir = null)
     {
         var warnings = new List<string>();
@@ -70,71 +31,37 @@ public static class DiagnosticsExporter
             AddText(staging, "summary.txt", BuildSummary(timestamp, connected, warnings), entries);
             AddText(staging, "windows-services.txt", BuildWindowsServicesSnapshot(warnings), entries);
 
-            // Antivirus / install-integrity snapshot (Windows). The load-bearing
-            // reason: multiple users report "VPNRouter disappears after a reboot"
-            // and the app's own logs can never show its OWN external deletion. This
-            // captures the AV state that CAN — Defender status + Tamper Protection
-            // (which silently no-ops install.ps1's exclusion), the registered AV
-            // product (catches 3rd-party Kaspersky/etc), our exclusion presence,
-            // past threat detections, Defender quarantine/remove events filtered to
-            // our binaries, whether our EXEs still exist, and their (un)signed state.
             AddText(staging, "antivirus-integrity.txt", BuildAntivirusSnapshot(warnings), entries);
 
-            // config.yaml (redacted)
             AddRedactedFile(staging, AppPaths.ConfigYamlPath, "config.redacted.yaml",
                 DiagnosticsRedactor.RedactConfigYaml, entries, warnings);
 
-            // Backup config files (unloadable or invalid)
             AddConfigBackups(staging, entries, warnings);
 
-            // current.json — what sing-box actually loaded (redacted)
             AddRedactedFile(staging, AppPaths.CurrentConfigPath, "current.redacted.json",
                 DiagnosticsRedactor.RedactSingboxJson, entries, warnings);
 
-            // state.json (PID/paths — redact as JSON, fail-safe)
             AddRedactedFile(staging, AppPaths.StatePath, "state.redacted.json",
                 DiagnosticsRedactor.RedactSingboxJson, entries, warnings);
 
-            // app log tails — last LogWindowDays of daily-rolled vpnrouter*.log,
-            // each kept under its own name so a few days of context is visible
-            // (v2.41.0: was the single latest file only).
             var appLogs = FindRecentAppLogs();
             if (appLogs.Count == 0)
                 warnings.Add("no vpnrouter*.log found — skipped");
             foreach (var log in appLogs)
                 AddLogTail(staging, log, Path.GetFileName(log), entries, warnings);
 
-            // update.log — the auto-update helper's per-run trace (wait-for-parent /
-            // stop-service / xcopy / relaunch, with timestamps + XCOPY_EXIT). The
-            // load-bearing reason: "VPNRouter disappears after a reboot" on the
-            // experimental channel is almost always the update APPLY window — the app
-            // stops during the xcopy and briefly vanishes from the tray, then
-            // relaunches as the new version. This log is the timeline that proves it
-            // (or shows a failed helper if it stayed gone). Absent from bundles before.
             AddLogTail(staging, Path.Combine(AppPaths.LogsDir, "update.log"), "update.log", entries, warnings);
 
-            // sing-box log tail (current + rotated .old), scrubbed. sing-box
-            // rotates at 10 MB → singbox.old.log; include both so the bundle
-            // spans more than the current session (v2.41.0).
             AddLogTail(staging, AppPaths.SingBoxLogPath, "singbox-tail.log", entries, warnings);
             var singBoxOld = Path.Combine(AppPaths.LogsDir, "singbox.old.log");
             if (File.Exists(singBoxOld))
                 AddLogTail(staging, singBoxOld, "singbox-old-tail.log", entries, warnings);
 
-            // DNS-tunnel (slipstream) transport log, if present — carries the
-            // QUIC-over-DNS connection lifecycle (idle-timeout 0x433, resolver-
-            // unavailable, reconnect backoff) needed to root-cause a dropped
-            // dns-tunnel. No-op for every non-dns-tunnel user (file absent).
             AddLogTail(staging, AppPaths.SlipstreamLogPath, "slipstream-tail.log", entries, warnings);
-            // r9 (DIAGNOSTIC): SlipstreamManager rotates the transport log to .prev at
-            // the start of each session. Capture it too so a reconnect after the key
-            // (degraded) session doesn't lose that session's per-path debug output.
             AddLogTail(staging, AppPaths.SlipstreamLogPath + ".prev", "slipstream-prev-tail.log", entries, warnings);
 
-            // geo file manifest (sizes + dates, NOT the files)
             AddText(staging, "geo-manifest.txt", BuildGeoManifest(), entries);
 
-            // ── zip it ──
             var destDir = ResolveDestination(destinationDir);
             Directory.CreateDirectory(destDir);
             var zipPath = Path.Combine(destDir, $"VPNRouter-diagnostics-{stamp}.zip");
@@ -145,11 +72,9 @@ public static class DiagnosticsExporter
         }
         finally
         {
-            try { Directory.Delete(staging, recursive: true); } catch { /* best-effort cleanup */ }
+            try { Directory.Delete(staging, recursive: true); } catch { }
         }
     }
-
-    // ── section builders ────────────────────────────────────────────────
 
     private static string BuildReadme() => string.Join(Environment.NewLine, new[]
     {
@@ -268,10 +193,6 @@ public static class DiagnosticsExporter
         }
     }
 
-    /// <summary>
-    /// Antivirus + install-integrity snapshot (Windows). Read-only — status queries,
-    /// event-log reads, file existence + Authenticode. No mutation of AV settings.
-    /// </summary>
     private static string BuildAntivirusSnapshot(List<string> warnings)
     {
         var sb = new StringBuilder();
@@ -285,7 +206,6 @@ public static class DiagnosticsExporter
         sb.AppendLine("quarantine of them, that is the deletion — add VPNRouter to your AV's");
         sb.AppendLine("exclusions (and the install dir), or use a signed build once available.");
 
-        // Install integrity works cross-platform; the rest is Windows-only.
         sb.AppendLine();
         sb.AppendLine("---- install files present ----");
         var appDir = AppContext.BaseDirectory;
@@ -298,7 +218,7 @@ public static class DiagnosticsExporter
             if (!exists && (name == "VPNRouter.App.exe" || name.StartsWith("sing-box")))
                 warnings.Add($"{name} MISSING from the install dir — likely AV-quarantined (see antivirus-integrity.txt)");
         }
-        var installBin = AppPaths.SingBoxExePath;   // %ProgramData%\VPNRouter\bin\sing-box.exe
+        var installBin = AppPaths.SingBoxExePath;
         sb.AppendLine($"{"bin/sing-box.exe (ProgramData)",-26} {(File.Exists(installBin) ? "present" : "MISSING")}");
         if (!File.Exists(installBin))
             warnings.Add("bin/sing-box.exe MISSING from ProgramData — likely AV-quarantined");
@@ -333,9 +253,6 @@ public static class DiagnosticsExporter
             "Sort InitialDetectionTime -Descending | Select -First 30 | Format-List | Out-String -Width 4096 } " +
             "catch { 'Get-MpThreatDetection unavailable' }");
 
-        // The definitive signal: Defender Operational quarantine/remove/block events
-        // (1116 detected, 1117 action taken, 1118/1119 remediation, 5001/5007) that
-        // NAME a VPNRouter/sing-box path, over the last 30 days.
         AppendCommand(sb, "Defender quarantine/remove events naming our binaries (30d)", "powershell.exe",
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
             "try { Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';" +
@@ -429,8 +346,6 @@ public static class DiagnosticsExporter
         return sb.ToString().TrimEnd();
     }
 
-    // ── helpers ─────────────────────────────────────────────────────────
-
     private static void AddText(string staging, string name, string content, List<string> entries)
     {
         File.WriteAllText(Path.Combine(staging, name), content);
@@ -446,7 +361,7 @@ public static class DiagnosticsExporter
                 .Where(f => Path.GetFileName(f).StartsWith("config.yaml.unloadable-", StringComparison.OrdinalIgnoreCase) ||
                             Path.GetFileName(f).StartsWith("config.yaml.invalid-", StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(File.GetLastWriteTimeUtc)
-                .Take(5) // SettingsLoader does not prune backups; keep diagnostics bundles bounded.
+                .Take(5)
                 .ToList();
 
             foreach (var backup in backups)
@@ -506,13 +421,6 @@ public static class DiagnosticsExporter
         }
     }
 
-    /// <summary>
-    /// Daily-rolled app logs (<c>vpnrouter{date}.log</c>) modified within the
-    /// last <see cref="LogWindowDays"/> days, oldest→newest. Falls back to the
-    /// single newest file if none fall inside the window (e.g. the app was idle
-    /// for days), so the bundle is never empty. Excludes the tiny
-    /// <c>vpnrouter-launch-error.log</c> crash stub (different concern).
-    /// </summary>
     internal static List<string> FindRecentAppLogs()
     {
         try
@@ -529,8 +437,6 @@ public static class DiagnosticsExporter
                 .OrderBy(File.GetLastWriteTimeUtc)
                 .ToList();
 
-            // If nothing is recent (idle for > window), still include the newest
-            // one so support has something to look at.
             if (recent.Count == 0)
                 recent.Add(all.OrderByDescending(File.GetLastWriteTimeUtc).First());
 
@@ -539,7 +445,6 @@ public static class DiagnosticsExporter
         catch { return new List<string>(); }
     }
 
-    /// <summary>Read a file even if another process holds it open for writing.</summary>
     private static string ReadAllTextShared(string path)
     {
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -547,13 +452,6 @@ public static class DiagnosticsExporter
         return sr.ReadToEnd();
     }
 
-    /// <summary>
-    /// Return the last <paramref name="maxLines"/> lines of a file (share-read),
-    /// bounded to the last <see cref="MaxTailReadBytes"/> so a huge/corrupt log
-    /// can't OOM the bundle (audit MEDIUM, 2026-06-02). When the file exceeds the
-    /// cap we seek to EOF − cap and drop the (likely partial) first line.
-    /// <c>internal</c> for direct unit testing.
-    /// </summary>
     internal static string TailLines(string path, int maxLines)
     {
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -562,8 +460,6 @@ public static class DiagnosticsExporter
         using var sr = new StreamReader(fs);
         var text = sr.ReadToEnd();
         var all = text.Replace("\r\n", "\n").Split('\n');
-        // If we seeked into the middle of the file, the first element is a
-        // partial line — drop it so the tail starts on a clean boundary.
         if (seeked && all.Length > 1) all = all.Skip(1).ToArray();
         if (all.Length <= maxLines) return string.Join(Environment.NewLine, all);
         return string.Join(Environment.NewLine, all.Skip(all.Length - maxLines));

@@ -6,16 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P2 (2026-07-10): the leak gate accepts an AWG "proxy" ENDPOINT as the proxy
-/// (sing-box-lx emits AmneziaWG as a top-level wireguard endpoint, not an
-/// outbound), but pre-fix never validated its CONTENTS — an empty
-/// private_key / no peers / a peer missing its public_key or endpoint
-/// address:port FATALs sing-box at startup. ValidateConfig runs in both
-/// StartAsync + Apply, so it should surface an actionable error instead of a
-/// bare "sing-box exited". Defense-in-depth: the awg:// parser already requires
-/// these fields; this catches a custom config / future codegen path.
-/// </summary>
 public sealed class LeakProtectionAwgEndpointTests
 {
     private static SingBoxConfig AwgConfig(SingBoxEndpoint proxy)
@@ -35,7 +25,6 @@ public sealed class LeakProtectionAwgEndpointTests
             {
                 new() { Type = "tun", Tag = "tun-in", Address = new() { "172.19.0.1/30" } },
             },
-            // proxy is the ENDPOINT; only "direct" lives in outbounds
             Outbounds = new List<SingBoxOutbound> { new() { Type = "direct", Tag = "direct" } },
             Endpoints = new List<SingBoxEndpoint> { proxy },
             Route = new SingBoxRoute
@@ -62,7 +51,6 @@ public sealed class LeakProtectionAwgEndpointTests
     {
         var result = LeakProtection.ValidateConfig(AwgConfig(HealthyProxy()));
         Assert.DoesNotContain(result.Errors, e => e.Contains("AWG 'proxy' endpoint"));
-        // hasProxy is satisfied by the endpoint → no "No 'proxy' outbound defined".
         Assert.DoesNotContain(result.Errors, e => e.Contains("No 'proxy' outbound"));
     }
 

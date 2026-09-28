@@ -2,9 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-/// <summary>v2.29.0-r7+ Phase 3C: persistent deep-verify checkpoint
-/// tests. Verifies the new <see cref="VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry.LastDeepVerifyAt"/>
-/// field and the 6-hour skip window logic that the search loop uses.</summary>
 public class FreeConfigDeepVerifyCheckpointTests
 {
     [Fact]
@@ -17,9 +14,6 @@ public class FreeConfigDeepVerifyCheckpointTests
     [Fact]
     public void Schema_Roundtrips_LastDeepVerifyAt_ViaJson()
     {
-        // Phase 3C field must round-trip through System.Text.Json so the
-        // cache file at %ProgramData%\VPNRouter\cache\free_configs.json
-        // survives app restart with the timestamp preserved.
         var stamp = new DateTime(2026, 4, 29, 14, 30, 0, DateTimeKind.Utc);
         var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
         {
@@ -40,13 +34,10 @@ public class FreeConfigDeepVerifyCheckpointTests
     [Fact]
     public void SkipDeepVerify_WithFreshCheckpoint_AndVerifiedStatus_True()
     {
-        // The skip predicate inlined in VerifyOneAndAppendAsync expects
-        // all three: Verified status, LastDeepVerifyAt set, age < 6h, and
-        // LatencyMs > 0. Replicate it as test logic.
         var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
         {
             Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
-            LastDeepVerifyAt = DateTime.UtcNow.AddHours(-2),  // 2h ago
+            LastDeepVerifyAt = DateTime.UtcNow.AddHours(-2),
             LatencyMs = 50,
         };
         Assert.True(ShouldSkipDeepVerify(entry));
@@ -58,7 +49,7 @@ public class FreeConfigDeepVerifyCheckpointTests
         var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
         {
             Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
-            LastDeepVerifyAt = DateTime.UtcNow.AddHours(-7),  // 7h ago, > 6h
+            LastDeepVerifyAt = DateTime.UtcNow.AddHours(-7),
             LatencyMs = 50,
         };
         Assert.False(ShouldSkipDeepVerify(entry));
@@ -83,7 +74,7 @@ public class FreeConfigDeepVerifyCheckpointTests
         {
             Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
             LastDeepVerifyAt = DateTime.UtcNow.AddHours(-1),
-            LatencyMs = 0,  // never TCP-tested
+            LatencyMs = 0,
         };
         Assert.False(ShouldSkipDeepVerify(entry));
     }
@@ -91,9 +82,6 @@ public class FreeConfigDeepVerifyCheckpointTests
     [Fact]
     public void SkipDeepVerify_NonVerifiedStatus_False()
     {
-        // Even with a recent timestamp, we must re-verify if the last
-        // status was anything other than Verified (e.g. TlsFailed or
-        // Timeout from a previous failed re-check).
         var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
         {
             Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.TlsFailed,
@@ -103,9 +91,6 @@ public class FreeConfigDeepVerifyCheckpointTests
         Assert.False(ShouldSkipDeepVerify(entry));
     }
 
-    /// <summary>Mirror of the inline skip-predicate in
-    /// VerifyOneAndAppendAsync. Kept here as test fixture so the
-    /// 6-hour boundary + flag combinations are pinned.</summary>
     private static bool ShouldSkipDeepVerify(VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry cfg)
     {
         return cfg.Status == VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified

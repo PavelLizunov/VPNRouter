@@ -185,7 +185,6 @@ public sealed class UnixOwnedProcessSignalTests
         }
         catch
         {
-            // Bounded cleanup of this test's own child only.
         }
         finally
         {

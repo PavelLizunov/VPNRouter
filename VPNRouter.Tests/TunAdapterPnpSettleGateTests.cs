@@ -318,7 +318,6 @@ public sealed class TunAdapterPnpSettleGateTests
         }
         catch (TargetInvocationException ex) when (ex.InnerException is TunAdapterNotReadyException)
         {
-            // Expected only in the fail-closed test's synthetic scan failure.
         }
     }
 

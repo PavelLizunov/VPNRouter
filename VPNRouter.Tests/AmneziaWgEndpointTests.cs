@@ -8,17 +8,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// AmneziaWG (AWG2) endpoint for the sing-box-lx fork. The emitted schema was verified
-/// against the real `sing-box-lx check` binary (2026-06-27): a `wireguard` endpoint with
-/// promoted obfuscation fields + a peer using `persistent_keepalive_interval`. Zero/empty
-/// AWG fields are omitted so a plain WireGuard endpoint stays byte-identical to upstream.
-/// See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
-/// <para>The class forces <see cref="SingBoxFeatures.OverrideAwg"/> = true so the awg://
-/// intake gate (which defaults closed on an official build) lets these fork tests run.
-/// Shares the serial collection with the other fork tests so the static override can't
-/// race a class that asserts the gate is closed.</para>
-/// </summary>
 [Collection("SingBoxFeaturesSerial")]
 public sealed class AmneziaWgEndpointTests : IDisposable
 {
@@ -46,7 +35,7 @@ public sealed class AmneziaWgEndpointTests : IDisposable
         Assert.Equal("PRIVKEYBASE64", ep.PrivateKey);
         Assert.Equal(new[] { "10.13.13.2/32" }, ep.Address);
         var peer = Assert.Single(ep.Peers);
-        Assert.Equal("1.2.3.4", peer.Address);     // Server -> peer endpoint host
+        Assert.Equal("1.2.3.4", peer.Address);
         Assert.Equal(51820, peer.Port);
         Assert.Equal("PUBKEYBASE64", peer.PublicKey);
         Assert.Equal(25, peer.PersistentKeepaliveInterval);
@@ -61,8 +50,7 @@ public sealed class AmneziaWgEndpointTests : IDisposable
         Assert.Contains("\"jc\":4", json);
         Assert.Contains("\"s2\":574", json);
         Assert.Contains("\"h1\":\"43613244-384550127\"", json);
-        Assert.Contains("\"persistent_keepalive_interval\":25", json); // NOT persistent_keepalive
-        // unset AWG params are omitted (a plain WireGuard endpoint stays byte-identical)
+        Assert.Contains("\"persistent_keepalive_interval\":25", json);
         Assert.DoesNotContain("\"s3\"", json);
         Assert.DoesNotContain("\"h2\"", json);
         Assert.DoesNotContain("\"i1\"", json);
@@ -83,17 +71,14 @@ public sealed class AmneziaWgEndpointTests : IDisposable
         var cfg = ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
 
-        // the AWG server becomes a "proxy" ENDPOINT (carries TCP+UDP natively)
         Assert.NotNull(cfg.Endpoints);
         var ep = Assert.Single(cfg.Endpoints!);
         Assert.Equal("wireguard", ep.Type);
         Assert.Equal("proxy", ep.Tag);
         Assert.Equal(4, ep.Jc);
-        // no vless/hy2 "proxy" OUTBOUND — only the base direct ones
         Assert.DoesNotContain(cfg.Outbounds, o => o.Tag == "proxy");
         Assert.DoesNotContain(cfg.Outbounds, o => o.Tag == "proxy-udp");
         Assert.Contains(cfg.Outbounds, o => o.Tag == "direct");
-        // full-tunnel routes everything at the "proxy" endpoint tag
         Assert.Equal("proxy", cfg.Route.Final);
     }
 
@@ -114,7 +99,7 @@ public sealed class AmneziaWgEndpointTests : IDisposable
         Assert.Equal(25, e.Awg.Keepalive);
         Assert.Equal(4, e.Awg.Jc);
         Assert.Equal(574, e.Awg.S2);
-        Assert.Equal("43613244-384550127", e.Awg.H1); // range kept as raw string
+        Assert.Equal("43613244-384550127", e.Awg.H1);
     }
 
     [Fact]
@@ -127,8 +112,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     [Fact]
     public void Parse_AwgUri_PreservesPlusInKeys()
     {
-        // bug-hunt (Codex): WireGuard keys are standard base64 ('+' common).
-        // HttpUtility.ParseQueryString would corrupt '+' to a space.
         var e = ServerUriParser.Parse(
             "awg://PEER@1.2.3.4:51820?private_key=ab+cd/ef==&preshared_key=gh+ij/kl==&address=10.13.13.2/32#H");
         Assert.Equal("ab+cd/ef==", e.Awg!.PrivateKey);
@@ -152,10 +135,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     [Fact]
     public void Parse_AwgUri_PeerPubkeyWithSlash_NotTruncated()
     {
-        // pre-flight regression (2026-06-28, vpnctl lx-test string): the peer
-        // public key is STANDARD base64 and routinely contains '/'. System.Uri
-        // treats '/' as the authority terminator and truncates the userinfo, so
-        // ParseAmneziaWg must split the authority manually.
         var e = ServerUriParser.Parse(
             "awg://aB/cD+eF/gH0=@104.194.156.93:51820?private_key=PRIV&address=10.66.0.22/32#n");
         Assert.Equal("aB/cD+eF/gH0=", e.Awg!.PeerPublicKey);
@@ -166,9 +145,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     [Fact]
     public void ConfigSanityCheck_AwgEndpointConfig_IsNotDead()
     {
-        // bug-hunt (Codex): CheckBeforeStart scans only outbounds; for AWG the
-        // proxy is an endpoint, so without endpoint-awareness it FATALs every
-        // AWG connect before sing-box launches.
         var cfg = ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
         var node = System.Text.Json.Nodes.JsonNode.Parse(
@@ -180,8 +156,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     [Fact]
     public void Generate_ActiveVless_SameHostAwgSibling_DoesNotEmitEndpoint()
     {
-        // bug-hunt (Codex): a same-host AWG sibling must NOT hijack a selected
-        // VLESS server. Active = vless -> VLESS proxy outbound, no endpoint.
         var cfg = ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(),
             SameHostMixed("v"));
@@ -233,9 +207,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     [Fact]
     public void Generate_AwgConfig_PassesLeakProtection()
     {
-        // bug-hunt P1: LeakProtection.ValidateConfig must recognise the "proxy"
-        // ENDPOINT (not just an outbound) or it hard-errors "No proxy outbound
-        // defined" and Strict validation aborts every AWG connect.
         var cfg = ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
         var result = LeakProtection.ValidateConfig(cfg);
@@ -246,8 +217,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     [Fact]
     public void Generate_AwgFullTunnel_DoesNotRejectQuic()
     {
-        // bug-hunt P1: an AmneziaWG tunnel is UDP-native, so the TCP-only-proxy
-        // QUIC-reject must NOT fire (it would needlessly force HTTP/3 apps to TCP).
         var cfg = ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, System.Array.Empty<string>(), AwgSettings());
         Assert.DoesNotContain(cfg.Route.Rules,
@@ -258,21 +227,18 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     public void Build_Awg3_NormalizesHeaderProtectionKeyAndPadsS1S4()
     {
         var entry = Entry();
-        // 32-byte Base64 key
         entry.Awg!.HeaderProtectionKey = "Z3R4VmlnQ05yTnlkTE5LMTJ2VjM4T0N4S1lXczM3aFU=";
         entry.Awg.ContentPaddingAddition = "10-100";
         entry.Awg.RandomTrailers = true;
         entry.Awg.DisableCookies = true;
-        entry.Awg.S1 = 5;  // below 12
-        entry.Awg.S4 = 0;  // below 12
+        entry.Awg.S1 = 5;
+        entry.Awg.S4 = 0;
 
         var ep = ConfigGenerator.BuildAmneziaWgEndpoint(entry, "proxy");
-        // 32-byte base64 -> 64-character lowercase hex
         Assert.Equal("677478566967434e724e79644c4e4b3132765633384f43784b59577333376855", ep.HeaderProtectionKey);
         Assert.Equal("10-100", ep.ContentPaddingAddition);
         Assert.True(ep.RandomTrailers);
         Assert.True(ep.DisableCookies);
-        // S1 and S4 boosted to >= 12
         Assert.Equal(12, ep.S1);
         Assert.Equal(12, ep.S4);
     }

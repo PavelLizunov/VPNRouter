@@ -6,38 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.32.0 (AND-SR-1, plans/vpnrouter-platform-current-diff.md §16.3) —
-/// pin the central Android self-repair pass against an in-memory
-/// SharedPreferences stand-in. The real
-/// <see cref="VPNRouter.Android.AndroidStorage.RepairAllOnLoad"/> entry
-/// point hits <c>Application.Context</c> and can't run on net8.0;
-/// <see cref="AndroidStorageSane.RepairAllOnLoad"/> takes get/set
-/// delegates so we drive it from a <see cref="Dictionary{TKey, TValue}"/>
-/// here. The Android entry point is a thin wrapper, exercised on-device.
-///
-/// <para>Why these tests matter: a regression in the repair pass means a
-/// hand-edited / older / corrupted preference value (KeyRoutingMode =
-/// "split-old", KeyDnsStrategy = "system", KeyTheme = "auto", …) reaches
-/// the routing engine as an unsupported string and either crashes or
-/// silently routes wrong. The tests pin:</para>
-///
-/// <list type="bullet">
-///   <item>Empty store → no changes (first-run path is undisturbed —
-///   we don't burn SharedPreferences commits on a fresh install).</item>
-///   <item>Valid stored values → no changes (idempotent against clean
-///   state).</item>
-///   <item>Unknown stored value → quarantined + reset to spec default;
-///   one human-readable change line per repair so the UI banner matches
-///   <see cref="VPNRouter.Core.Services.SettingsLoader.LastRecoveryNotice"/>
-///   in tone.</item>
-///   <item>Case-insensitive match → silently normalised to canonical
-///   casing (no notice — mismatched casing is a stylistic difference,
-///   not corruption).</item>
-///   <item>A second pass after the first repaired everything → empty
-///   result (idempotent).</item>
-/// </list>
-/// </summary>
 [Trait("Category", "Unit")]
 [Trait("Phase", "Phase0")]
 [Trait("Layer", "Core")]
@@ -54,12 +22,6 @@ public class AndroidStorageSaneTests
             Quarantined[$"{key}__corrupt"] = value;
     }
 
-    /// <summary>
-    /// The exact spec list AndroidStorage.RepairAllOnLoad uses on-device.
-    /// Duplicated here so the tests stay decoupled from the Android-only
-    /// VPNRouter.Android.AndroidStorage class — but if either side adds a
-    /// new key, the corresponding test should grow alongside.
-    /// </summary>
     private static IReadOnlyList<AndroidStorageSane.EnumKeySpec> Specs => new[]
     {
         new AndroidStorageSane.EnumKeySpec(
@@ -183,11 +145,8 @@ public class AndroidStorageSaneTests
         var result = AndroidStorageSane.RepairAllOnLoad(
             store.Get, store.Set, Specs, store.Quarantine);
 
-        // Casing diff is not corruption — no recovery notice.
         Assert.Empty(result.Changes);
         Assert.Empty(store.Quarantined);
-        // …but the canonical casing IS persisted so downstream ordinal
-        // comparisons don't surprise on next read.
         Assert.Equal("split", store.Live["routing_mode"]);
         Assert.Equal("dark", store.Live["theme"]);
     }
@@ -211,9 +170,6 @@ public class AndroidStorageSaneTests
     [Fact]
     public void NoQuarantineDelegate_StillRepairsAndRecords()
     {
-        // The quarantine callback is optional — Android's on-device path
-        // always supplies one, but the helper must not crash if a future
-        // caller (or test) skips it.
         var store = new FakeStore();
         store.Live["routing_mode"] = "garbage";
 
@@ -237,14 +193,12 @@ public class AndroidStorageSaneTests
             store.Quarantine);
 
         Assert.Empty(result.Changes);
-        // The bad value is left alone — no spec means no rule.
         Assert.Equal("garbage", store.Live["routing_mode"]);
     }
 
     [Fact]
     public void GetThrows_KeyIsSkipped_OtherKeysStillProcessed()
     {
-        // SR-4: backend failure on one key must not block repair of others.
         var store = new FakeStore();
         store.Live["dns_strategy"] = "weird";
         store.Live["theme"] = "neon";

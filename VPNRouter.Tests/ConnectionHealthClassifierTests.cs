@@ -5,21 +5,11 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// B0 (server-health telemetry, backlog §B0 / review §F1): pins the classifier that
-/// separates relay-open failures (any cause) from benign local closes from
-/// mid-stream proxy breaks. Motivating findings: in diag 214717, 733 "forcibly
-/// closed" lines are local upload closes (must NOT count as proxy failures), and
-/// ~224 relay opens fail with "dial tcp &lt;node&gt;: i/o timeout" (an EOF-only count
-/// misses these). Uses sanitized lines (RFC 5737 IPs) matching the exact sing-box
-/// formats; exact corpus counts live in the local-only fixture test.
-/// </summary>
 public sealed class ConnectionHealthClassifierTests
 {
     private const string ProxyEp = "198.51.100.7:443";
     private static IReadOnlySet<string> Proxy => new HashSet<string> { ProxyEp };
 
-    // ---- exact sanitized line shapes (1:1 with real singbox.log) ----
     private const string Eof =
         "+0300 2026-06-19 15:50:54 ERROR [810041638 108ms] connection: open connection to 203.0.113.10:21115 using outbound/vless[proxy]: EOF";
     private const string DialTimeout =
@@ -41,8 +31,6 @@ public sealed class ConnectionHealthClassifierTests
 
     private static ConnLogEvent C(string line, IReadOnlySet<string>? eps = null)
         => ConnectionHealthClassifier.Classify(line, eps)!;
-
-    // ---- relay-open failures: every cause is one RelayOpenFail, sub-typed by FailKind ----
 
     [Fact]
     public void RelayOpenEof_IsRelayOpenFail_KindEof()
@@ -82,15 +70,11 @@ public sealed class ConnectionHealthClassifierTests
         Assert.Equal("108ms", ev.DurationRaw);
     }
 
-    // ---- benign local closes: the 733, must never be a proxy failure ----
-
     [Theory]
     [InlineData(UploadRawRead)]
     [InlineData(UploadRawReadTuple)]
     public void UploadClosedRawRead_IsLocalClose(string line)
         => Assert.Equal(ConnHealthCategory.LocalClose, C(line, Proxy).Category);
-
-    // ---- mid-stream proxy break: established socket to node, distinct from relay-open ----
 
     [Fact]
     public void DownloadStreamBreakToProxy_IsProxyStreamError()
@@ -100,19 +84,13 @@ public sealed class ConnectionHealthClassifierTests
     public void StreamBreakToNonProxyRemote_IsOther()
         => Assert.Equal(ConnHealthCategory.Other, C(StreamBreakNonProxy, Proxy).Category);
 
-    // Without known proxy endpoints a stream break can't be attributed -> Other, never
-    // silently promoted to a proxy failure.
     [Fact]
     public void StreamBreakWithoutEndpoints_DegradesToOther()
         => Assert.Equal(ConnHealthCategory.Other, C(DownloadStreamBreakToProxy, null).Category);
 
-    // ---- denominator ----
-
     [Fact]
     public void OutboundConnectionTo_IsRelayOpenAttempt()
         => Assert.Equal(ConnHealthCategory.RelayOpenAttempt, C(Attempt, Proxy).Category);
-
-    // ---- prefix-agnostic + non-connection lines ----
 
     [Theory]
     [InlineData("[810041638 108ms] connection: open connection to 203.0.113.10:21115 using outbound/vless[proxy]: EOF")]

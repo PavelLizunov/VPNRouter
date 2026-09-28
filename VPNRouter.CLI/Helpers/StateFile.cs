@@ -7,16 +7,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.CLI.Commands;
 
-/// <summary>
-/// Persists running state so stop/status commands can find the exact CLI run
-/// and sing-box child from a different invocation.
-/// </summary>
 public class RunState
 {
-    /// <summary>
-    /// v2.32.0 — schema marker. Additive optional fields keep schema 1 readable;
-    /// incompatible shape changes must bump this value.
-    /// </summary>
     [JsonPropertyName("schema_version")]
     public int SchemaVersion { get; set; } = StateFile.CurrentSchemaVersion;
 
@@ -26,8 +18,6 @@ public class RunState
     public DateTime StartedAt { get; set; }
     public List<string> ProcessNames { get; set; } = new();
 
-    // Additive defaults preserve legacy schema-1 readability. A missing/empty
-    // generation is status-only: new Stop code refuses every destructive action.
     public Guid RunGeneration { get; set; }
     public long OwnerStartedAtUtcTicks { get; set; }
     public string OwnerExecutablePath { get; set; } = string.Empty;
@@ -61,8 +51,6 @@ public static class StateFile
     internal static bool ClearIfGeneration(Guid generation) =>
         ClearIfGeneration(generation, Path, StateMutexName);
 
-    // Internal path/name overloads let the cross-platform test assembly compile
-    // this exact source and exercise real locking without touching ProgramData.
     internal static void Write(RunState state, string path, string mutexName) =>
         WithLock(mutexName, () =>
         {
@@ -179,7 +167,6 @@ public static class StateFile
             }
             catch (AbandonedMutexException)
             {
-                // WaitOne grants ownership when reporting an abandoned mutex.
                 ownsMutex = true;
             }
 

@@ -21,17 +21,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Behavioral and source-guard tests for durable typed readiness event subscription (NIGHT-07 survivor fix):
-/// - Permanent `_engine.Connected += OnEngineConnected` in MainWindowViewModel constructor.
-/// - Unsubscription in MainWindowViewModel.Dispose alongside StatusChanged.
-/// - Legacy Connected strings never promote IsConnected from false.
-/// - Typed Connected event with matching running PID flips IsConnected to true.
-/// - Queue-drain safety: Stop cancellation, manager replacement, generation change, or VM disposal before drain preserves false.
-/// - Mismatched PID remains false.
-/// - Active coordinator (IsConnecting or _isReconnecting) is never bypassed by permanent handler.
-/// - StartupHost guards against stale host or reused PID.
-/// </summary>
 public sealed class NightDurableReadinessTests
 {
     private static void SetField(object target, string name, object? value)
@@ -73,7 +62,7 @@ public sealed class NightDurableReadinessTests
 
     private static async Task DrainUiQueueAsync()
     {
-        await Dispatcher.UIThread.InvokeAsync(() => { /* drain queued UI posts */ }, DispatcherPriority.Background);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
     }
 
     private static (VpnEngine engine, SingBoxManager manager, FakeProcessHandle handle, CancellationTokenSource sessionCts) CreateFakeEngine(int pid = 12345)
@@ -211,7 +200,6 @@ public sealed class NightDurableReadinessTests
         Assert.False(vm.IsConnected);
         Assert.Equal(Strings.StartVPN, vm.ConnectButtonText);
 
-        // 1. Legacy status strings must NEVER promote IsConnected from false
         InvokeEngineStatus(vm, "Connected (PID 12345)");
         await DrainUiQueueAsync();
         Assert.False(vm.IsConnected);
@@ -220,7 +208,6 @@ public sealed class NightDurableReadinessTests
         await DrainUiQueueAsync();
         Assert.False(vm.IsConnected);
 
-        // 2. Typed Connected event flips IsConnected to true and updates UI
         EmitConnectedEvent(engine, 12345);
         await DrainUiQueueAsync();
 
@@ -236,10 +223,8 @@ public sealed class NightDurableReadinessTests
         var vm = CreateIsolatedVm(engine);
         WireConnectedHandler(vm, engine);
 
-        // Emit Connected event (posts to UI dispatcher queue)
         EmitConnectedEvent(engine, 12345);
 
-        // Cancel the session CTS before UI queue drains
         sessionCts.Cancel();
 
         await DrainUiQueueAsync();
@@ -254,10 +239,8 @@ public sealed class NightDurableReadinessTests
         var vm = CreateIsolatedVm(engine);
         WireConnectedHandler(vm, engine);
 
-        // Emit Connected event (posts to UI dispatcher queue)
         EmitConnectedEvent(engine, 12345);
 
-        // Replace _singBox reference before UI queue drains
         var fakeRunner2 = new FakeProcessRunner();
         var fakeHandle2 = new FakeProcessHandle(54321);
         fakeRunner2.OnStart(_ => true, _ => fakeHandle2);
@@ -276,10 +259,8 @@ public sealed class NightDurableReadinessTests
         var vm = CreateIsolatedVm(engine);
         WireConnectedHandler(vm, engine);
 
-        // Emit Connected event (posts to UI dispatcher queue)
         EmitConnectedEvent(engine, 12345);
 
-        // Dispose VM before drain (simulate dispose flag without calling native real VM Dispose)
         SetField(vm, "_disposed", true);
 
         await DrainUiQueueAsync();
@@ -294,7 +275,6 @@ public sealed class NightDurableReadinessTests
         var vm = CreateIsolatedVm(engine);
         WireConnectedHandler(vm, engine);
 
-        // Emit Connected for a mismatched PID
         EmitConnectedEvent(engine, 99999);
 
         await DrainUiQueueAsync();
@@ -314,7 +294,6 @@ public sealed class NightDurableReadinessTests
 
         await DrainUiQueueAsync();
 
-        // Must stay false — explicit coordinator owns budget and state transition
         Assert.False(vm.IsConnected);
     }
 
@@ -330,7 +309,6 @@ public sealed class NightDurableReadinessTests
 
         await DrainUiQueueAsync();
 
-        // Must stay false — reconnect coordinator owns budget and state transition
         Assert.False(vm.IsConnected);
     }
 
@@ -343,7 +321,6 @@ public sealed class NightDurableReadinessTests
 
         EmitConnectedEvent(engine, 12345);
 
-        // Increment failover generation before drain
         SetField(engine, "_failoverGeneration", 2L);
 
         await DrainUiQueueAsync();
@@ -360,7 +337,6 @@ public sealed class NightDurableReadinessTests
 
         EmitConnectedEvent(engine, 12345);
 
-        // Invalidate warmup confirmation before drain
         SetField(engine, "_warmupConfirmed", false);
 
         await DrainUiQueueAsync();
@@ -391,7 +367,6 @@ public sealed class NightDurableReadinessTests
         var fired = false;
         engine.Connected += _ => fired = true;
 
-        // Invalidate generation on engine (simulating next host / failover)
         SetField(engine, "_failoverGeneration", 99L);
         SetField(engine, "_warmupConfirmed", false);
 
@@ -421,7 +396,6 @@ public sealed class NightDurableReadinessTests
         var onConnectedMethod = hostType.GetMethod("OnConnected", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, new[] { typeof(int) }, null);
         Assert.NotNull(onConnectedMethod);
 
-        // Replace manager on engine with a different manager instance that has the same PID (12345)
         var fakeRunner2 = new FakeProcessRunner();
         var fakeHandle2 = new FakeProcessHandle(12345);
         fakeRunner2.OnStart(_ => true, _ => fakeHandle2);
@@ -455,7 +429,6 @@ public sealed class NightDurableReadinessTests
         Assert.True(guard());
         Assert.Empty(GetFakeHttp(manager).SentRequests);
 
-        // Replace handle on the SAME manager with a new handle having the SAME PID
         var replacementHandle = new FakeProcessHandle(12345);
         SetField(manager, "_handle", replacementHandle);
 
@@ -472,7 +445,6 @@ public sealed class NightDurableReadinessTests
 
         EmitConnectedEvent(engine, 12345);
 
-        // Replace handle on the SAME manager with a new handle having the SAME PID before UI queue drains
         var replacementHandle = new FakeProcessHandle(12345);
         SetField(manager, "_handle", replacementHandle);
 
@@ -501,7 +473,6 @@ public sealed class NightDurableReadinessTests
         var onConnectedMethod = hostType.GetMethod("OnConnected", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, new[] { typeof(int) }, null);
         Assert.NotNull(onConnectedMethod);
 
-        // Replace handle on the SAME manager with a new handle having the SAME PID (12345)
         var replacementHandle = new FakeProcessHandle(12345);
         SetField(manager, "_handle", replacementHandle);
 
@@ -531,7 +502,6 @@ public sealed class NightDurableReadinessTests
         }
         Assert.NotNull(source);
 
-        // 1. Constructor subscription alongside StatusChanged
         var statusSubIdx = source!.IndexOf("_engine.StatusChanged += OnEngineStatus;", StringComparison.Ordinal);
         Assert.True(statusSubIdx >= 0, "Constructor must wire StatusChanged += OnEngineStatus");
 
@@ -541,7 +511,6 @@ public sealed class NightDurableReadinessTests
         Assert.True(Math.Abs(connectedSubIdx - statusSubIdx) < 200,
             "Connected subscription must be placed directly alongside StatusChanged in the constructor");
 
-        // 2. Dispose unsubscription alongside StatusChanged
         var statusUnsubIdx = source.IndexOf("_engine.StatusChanged -= OnEngineStatus;", StringComparison.Ordinal);
         Assert.True(statusUnsubIdx >= 0, "Dispose must unhook StatusChanged -= OnEngineStatus");
 
@@ -578,7 +547,6 @@ public sealed class NightDurableReadinessTests
         Assert.True(guard());
         Assert.Empty(fakeHttp.SentRequests);
 
-        // Fail-stop: invoke actual engine.Stop() which executes TeardownInternal using fake/seams
         engine.Stop();
 
         Assert.False(guard(), "CaptureReadinessGuard must reject after actual engine.Stop().");
@@ -596,13 +564,11 @@ public sealed class NightDurableReadinessTests
         var fakeHttp = GetFakeHttp(manager);
         Assert.Empty(fakeHttp.SentRequests);
 
-        // 1. Handle exited (killed or process exited)
         handle.Kill();
         Assert.True(handle.HasExited);
         Assert.False(guard(), "CaptureReadinessGuard must reject when handle has exited.");
         Assert.Empty(fakeHttp.SentRequests);
 
-        // 2. Manager state is not Running
         var (engine2, manager2, handle2, sessionCts2) = CreateFakeEngine(23456);
         var guard2 = engine2.CaptureReadinessGuard(23456);
         Assert.True(guard2());

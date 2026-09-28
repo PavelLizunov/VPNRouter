@@ -3,14 +3,6 @@ using VPNRouter.App.Localization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// ServerViewModel.HostSubtitle protocol-aware label — v2.41.1-r4
-//
-// brat screenshot: a NaiveProxy server was mislabeled "tcp + reality" in the
-// Servers list. naive fell into the VLESS default branch of the subtitle switch,
-// which renders Transport.Type ("tcp") + Security ("reality") — both default
-// fields that BuildNaiveOutbound ignores. The label must read "naive".
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class ServerViewModelSubtitleTests
 {
@@ -23,7 +15,7 @@ public class ServerViewModelSubtitleTests
             Protocol = "naive",
             Server = "cdn.example.com",
             Port = 443,
-            Security = "reality", // default field BuildNaiveOutbound ignores
+            Security = "reality",
             Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
             Transport = new VlessTransportConfig { Type = "tcp" },
         };
@@ -50,17 +42,13 @@ public class ServerViewModelSubtitleTests
     [Fact]
     public void HostSubtitle_AmneziaWg_ShowsAmneziaWg_NotTcpReality()
     {
-        // v2.45.0-r3: an awg:// entry carries empty Uuid + default
-        // Security="reality", so without a field-based check it fell into the
-        // VLESS default branch and rendered "tcp + reality" — the exact thing
-        // the user reported ("при добавлении AWG пишет что это vless").
         var entry = new VlessServerEntry
         {
             Name = "main-brat",
             Protocol = "amneziawg",
             Server = "104.194.156.93",
             Port = 51820,
-            Security = "reality", // default field the AWG endpoint ignores
+            Security = "reality",
             Awg = new AwgConfig
             {
                 PrivateKey = "XJRWW/WbfydGk7/7Kn3LLn+70XoT6se7SX9zUztOuKU=",
@@ -76,17 +64,14 @@ public class ServerViewModelSubtitleTests
     [Fact]
     public void HostSubtitle_AmneziaWg_DetectedByFieldEvenIfProtocolDropped()
     {
-        // Field-based robustness: even if a serialization round-trip reset
-        // Protocol to the "vless" default, the Awg payload still identifies
-        // this as AmneziaWG (mirrors the dns-tunnel IsDnsTunnel approach).
         var entry = new VlessServerEntry
         {
             Name = "main-brat",
-            Protocol = "vless", // simulate dropped discriminator
+            Protocol = "vless",
             Server = "93.95.226.167",
             Port = 51822,
             Security = "reality",
-            Awg = new AwgConfig { PeerPublicKey = "abc=", PrivateKey = "def=" }, // Jc=0 -> no obfs hint
+            Awg = new AwgConfig { PeerPublicKey = "abc=", PrivateKey = "def=" },
         };
         var vm = new ServerViewModel(entry);
         Assert.Equal("amneziawg", vm.HostSubtitle);
@@ -146,8 +131,6 @@ public class ServerViewModelSubtitleTests
     [Fact]
     public void HostSubtitle_NaiveWithRealHy2Sibling_ShowsNaivePlusHy2()
     {
-        // r8 #6: "naive + hy2" requires a REAL UDP-capable sibling in the
-        // collection (set via RefreshUdpSiblingFlags), not just a PairGroup tag.
         var naive = new ServerViewModel(new VlessServerEntry
         {
             Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com",
@@ -167,8 +150,6 @@ public class ServerViewModelSubtitleTests
     [Fact]
     public void HostSubtitle_NaivePairTagButNoSibling_ShowsNaiveOnly()
     {
-        // r8 #6: a PairGroup tag with NO matching Hy2/TUIC sibling must NOT claim
-        // "naive + hy2" — the label can't promise a pairing config-gen won't make.
         var naive = new ServerViewModel(new VlessServerEntry
         {
             Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com",
@@ -183,8 +164,6 @@ public class ServerViewModelSubtitleTests
     [Fact]
     public void RefreshUdpSiblingFlags_TracksManualAddAndRemove()
     {
-        // r9 follow-up #1: subtitle stays correct when the user adds/removes
-        // servers manually (the CollectionChanged hook re-runs RefreshUdpSiblingFlags).
         var naive = new ServerViewModel(new VlessServerEntry
         {
             Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com",
@@ -195,7 +174,7 @@ public class ServerViewModelSubtitleTests
         var list = new System.Collections.Generic.List<ServerViewModel> { naive };
 
         ServerViewModel.RefreshUdpSiblingFlags(list);
-        Assert.Equal("naive", naive.HostSubtitle);            // no sibling yet
+        Assert.Equal("naive", naive.HostSubtitle);
 
         var hy2 = new ServerViewModel(new VlessServerEntry
         {
@@ -203,10 +182,10 @@ public class ServerViewModelSubtitleTests
         });
         list.Add(hy2);
         ServerViewModel.RefreshUdpSiblingFlags(list);
-        Assert.Equal("naive + hy2", naive.HostSubtitle);      // sibling added
+        Assert.Equal("naive + hy2", naive.HostSubtitle);
 
         list.Remove(hy2);
         ServerViewModel.RefreshUdpSiblingFlags(list);
-        Assert.Equal("naive", naive.HostSubtitle);            // sibling removed
+        Assert.Equal("naive", naive.HostSubtitle);
     }
 }

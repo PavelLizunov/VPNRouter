@@ -15,32 +15,8 @@ using Orientation = Avalonia.Layout.Orientation;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// v2.32.0 (2026-05-07) — multi-subscription management UI, ported from
-/// desktop <c>VPNRouter.App/Views/Pages/SubscribePage.axaml</c> + the
-/// related VM commands (<c>AddSubscriptionAsync</c>,
-/// <c>RemoveSubscription</c>, <c>RefreshSubscriptionAsync</c>,
-/// <c>RefreshAllSubscriptionsAsync</c> in MainWindowViewModel.cs:3729-3844).
-///
-/// <para>Pre-2.32.0 the Android port supported a single subscription URL
-/// only (<see cref="AndroidStorage.GetSubscriptionUrl"/>) — desktop has
-/// always supported a list. This file adds the same UI surface: cards
-/// per subscription with name + URL+Ns+timestamp metadata, per-card
-/// refresh / delete (2-tap confirm) / edit-URL-inline, plus an add form
-/// at the bottom and a "Refresh all" button. Backed by
-/// <see cref="AndroidStorage.GetSubscriptions"/> which migrates the
-/// legacy single-URL key on first read.</para>
-///
-/// <para>Triggered from the existing "Расширенные настройки" card on
-/// the SimplePage (v3.0 Phase 3) — pre-2.32.0 that card was a no-op
-/// placeholder.</para>
-/// </summary>
 public partial class AndroidApp
 {
-    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone Subscribe overlay
-    // is gone — content moves into the Advanced shell as the Subscriptions
-    // tab. Field set is the same minus the overlay/title/close widgets the
-    // shell now owns.
     private StackPanel? _subsListStack;
     private TextBlock? _subsEmptyHint;
     private TextBox? _subsNewName;
@@ -49,15 +25,8 @@ public partial class AndroidApp
     private Avalonia.Controls.Button? _subsRefreshAllBtn;
     private TextBlock? _subsSectionLabel;
     private TextBlock? _subsRefreshAllStatus;
-    // A (2026-06-20) — opt-in urltest auto-select toggle (Subscribe tab, desktop parity).
     private Avalonia.Controls.CheckBox? _subsAutoSelectChk;
 
-    // ── AND-ADV-SERVERS-SUBSCRIBE Phase B (2026-05-10) ─────────────────
-    // Aggregated server list at the TOP of the Subscribe tab (mirrors
-    // desktop SubscribePage rows 109-197): 4-column table aggregating
-    // every enabled subscription's servers. Below it sits the middle
-    // action row (Test all / Deep verify / Refresh all) before the
-    // existing Subscriptions section + add form move down.
     private StackPanel? _subsAggListStack;
     private TextBlock? _subsAggEmptyHint;
     private TextBlock? _subsAggColServer;
@@ -67,79 +36,28 @@ public partial class AndroidApp
     private TextBlock? _subsAggStatusText;
     private TextBlock? _subsAggSectionHeaderLabel;
 
-    /// <summary>Per-server in-progress test flags for the aggregated
-    /// Subscribe-tab list. Separate from the Servers tab's
-    /// <c>_srvTestingKeys</c> so the two surfaces don't fight each
-    /// other when the user kicks off Test all on both.</summary>
     private readonly HashSet<string> _subsAggTestingKeys = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>In-memory mirror of the persisted server-test results
-    /// dict, refreshed on each tab activation. Mutated by
-    /// <see cref="OnSubsAggTestAllClicked"/> +
-    /// <see cref="TestSingleAggregatedServerAsync"/> so progressive
-    /// updates render between flushes — the
-    /// <see cref="AndroidStorage.SetServerTestResults"/> persist happens
-    /// at end-of-batch (not per-result) to keep SharedPreferences I/O
-    /// bounded.</summary>
     private Dictionary<string, AndroidStorage.ServerTestResultDto> _subsAggResults =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Cancellation source for the aggregated-list Test all
-    /// batch. Cancelled when the shell closes or the Subscribe tab is
-    /// switched away from.</summary>
     private CancellationTokenSource? _subsAggTestAllCts;
 
-    // AND-PERF (A5, v2.42.0): coalesce per-probe-result aggregated-list
-    // rebuilds. "Test all" delivers N results, and the old per-result
-    // Dispatcher.Post(RebuildAggregatedServerList) queued N full O(N) rebuilds
-    // = O(N^2) BuildAggregatedServerRow calls (janks hard at 100+ servers).
-    // Mirrors the Servers-tab _srvRebuildScheduled fix: this flag collapses a
-    // burst of results into ONE debounced rebuild. 0 = idle, 1 = a rebuild is
-    // already queued (Interlocked-guarded because ApplyAggregatedResult runs
-    // from up to 4 concurrent probe continuations).
     private int _subsAggRebuildScheduled;
 
-    /// <summary>
-    /// In-memory mirror of the persisted subscription list. Modified by
-    /// add / remove / refresh handlers, then flushed via
-    /// <see cref="AndroidStorage.SetSubscriptions"/> which also rebuilds
-    /// the aggregated server pool keyed by the connect path.
-    /// </summary>
     private List<SubscriptionEntry> _subs = new();
 
-    /// <summary>
-    /// Per-card view-state. Tracks which card is mid-refresh (for spinner
-    /// visibility), which card is mid-delete-confirm (2-tap pattern
-    /// matching kebab Reset), and which card has the inline URL editor
-    /// open. Indexed by SubscriptionEntry.Id since list reorder/recreate
-    /// would invalidate plain indices.
-    /// </summary>
     private readonly HashSet<string> _refreshingIds = new(StringComparer.OrdinalIgnoreCase);
     private string? _pendingDeleteId;
     private string? _editingId;
     private DateTime _lastDeleteTapAt = DateTime.MinValue;
 
-    /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) + AND-ADV-SERVERS-SUBSCRIBE
-    /// (Phase B, 2026-05-10) — body content for the Subscriptions tab
-    /// inside the Advanced shell. Layout mirrors desktop SubscribePage
-    /// (top → bottom):
-    ///   1. Aggregated server list (4-column table from every enabled sub)
-    ///   2. Middle action row (Test all + Deep verify + Refresh all)
-    ///   3. "Subscriptions" section header
-    ///   4. Subscriptions card list (existing per-card UI)
-    ///   5. Add-subscription form (Name + URL + Add)
-    /// </summary>
     private Control BuildSubscribeTabContent()
     {
-        // ── 1. Aggregated server list (TOP) ────────────────────────────
         var aggServerSection = BuildSubscribeAggregatedServerSection();
 
-        // ── 2. Middle action row (Test all + Deep verify + Refresh all)
         var middleActionRow = BuildSubscribeFooterActions();
 
-        // ── 3. Section header — "Subscriptions"  (left, no Refresh all
-        //       button anymore — that moved to the middle action row).
         _subsSectionLabel = new TextBlock
         {
             Text = Localization.SubscriptionsSection,
@@ -171,7 +89,6 @@ public partial class AndroidApp
             },
         };
 
-        // ── 4. Subscriptions card list (existing per-card UI) ──────────
         _subsListStack = new StackPanel
         {
             Spacing = 8,
@@ -195,18 +112,12 @@ public partial class AndroidApp
         var subsListScroller = new ScrollViewer
         {
             Content = listRoot,
-            // Cap the card list height so it doesn't push the add-form
-            // off-screen on tall sub lists. Mirrors desktop's MaxHeight=130
-            // pattern in SubscribePage.axaml line 270.
             MaxHeight = 180,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Background = GetBrush("SurfaceAppBrush"),
         };
 
-        // ── 5. Add-subscription form (bottom) ──────────────────────────
-        //     Mirrors desktop SubscribePage.axaml lines 338-361 (Row 4):
-        //     "100,*,Auto" name + URL + Add button with top divider.
         _subsNewName = new TextBox
         {
             Watermark = Localization.AdvSubscribeNameLabel,
@@ -241,10 +152,6 @@ public partial class AndroidApp
         };
         _subsAddBtn.Click += OnSubsAddClicked;
 
-        // Bug-AND-023 (2026-05-17, user-requested QR scanning) — QR
-        // button between URL field and Add so a user can paste a
-        // subscription URL by scanning the QR shown in the provider's
-        // panel.
         var subsQrBtn = new Avalonia.Controls.Button
         {
             Content = "📷",
@@ -283,10 +190,6 @@ public partial class AndroidApp
             Child = addFormRow,
         };
 
-        // ── A (2026-06-20) opt-in urltest auto-select toggle ───────────
-        //     Parity with desktop SubscribePage. Persists to AndroidStorage;
-        //     AndroidConfigBuilder reads it on connect to wrap the same-protocol
-        //     subscription pool in a sing-box urltest group (fastest node wins).
         _subsAutoSelectChk = new Avalonia.Controls.CheckBox
         {
             IsChecked = AndroidStorage.GetAutoSelectBestServer(),
@@ -307,11 +210,6 @@ public partial class AndroidApp
             Child = _subsAutoSelectChk,
         };
 
-        // ── Compose: aggregated server section fills the top space, the
-        //    rest of the chrome docks below it. DockPanel adds the
-        //    last child as the fill child, so addFormBorder /
-        //    subsListScroller / sectionHeaderBorder / middleActionRow all
-        //    dock Bottom-to-Top, then aggServerSection takes the rest.
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(addFormBorder, Dock.Bottom);
         DockPanel.SetDock(subsListScroller, Dock.Bottom);
@@ -332,18 +230,8 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Aggregated server table at the TOP of the Subscribe tab — desktop
-    /// Aggregated server table for the Subscribe tab. Mobile design
-    /// 2026-05-11 collapsed the 6-col desktop strip (Server / IP / Ping
-    /// / Port) into 4 columns: radio · name+meta · ping · refresh. IP +
-    /// port now live in the row's meta-line. Header strip keeps just
-    /// "Server" and "Ping" — the other captions were redundant with the
-    /// inline meta-line and ate horizontal real estate.
-    /// </summary>
     private DockPanel BuildSubscribeAggregatedServerSection()
     {
-        // ── Column header strip — matches desktop's tiny SemiBold caps. ──
         _subsAggColServer = new TextBlock
         {
             Text = Localization.ColServer,
@@ -379,7 +267,6 @@ public partial class AndroidApp
             Child = headerGrid,
         };
 
-        // ── Server list body + empty state ────────────────────────────
         _subsAggListStack = new StackPanel { Spacing = 0 };
         _subsAggEmptyHint = new TextBlock
         {
@@ -419,19 +306,8 @@ public partial class AndroidApp
         return dock;
     }
 
-    /// <summary>
-    /// Middle action row for the Subscribe tab — Test all (green) +
-    /// Deep verify (accent) + Refresh all (right-aligned, neutral).
-    /// Desktop SubscribePage.axaml rows 204-260 parity (where Test all +
-    /// Deep verify share the row with the Refresh-all section header).
-    /// Phase A may later move this row into a dedicated FooterActions
-    /// slot; today it docks inside the tab content.
-    /// </summary>
     private Border BuildSubscribeFooterActions()
     {
-        // POL-1: Test all + Deep verify use desktop's `Padding="10,4" FontSize="10"`
-        // (SubscribePage.axaml lines 210-225 — same shape as ServersPage so
-        // both tabs read consistently in the action bar row).
         _subsAggTestAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersTestAll,
@@ -469,10 +345,6 @@ public partial class AndroidApp
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
 
-        // POL-1: Refresh all uses desktop's compact "8,3" / FontSize 10
-        // pattern from SubscribePage.axaml line 257 (`Padding="8,3" FontSize="10"`).
-        // Pre-POL-1 used Padding=10,5 + FontSize=11 — too heavy for a
-        // tertiary action sitting next to two primary CTAs.
         _subsRefreshAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvSubscribeRefreshAll,
@@ -486,7 +358,6 @@ public partial class AndroidApp
         };
         _subsRefreshAllBtn.Click += OnSubsRefreshAllClicked;
 
-        // 4-column row: Test all | Deep verify | progress text (1*) | Refresh all
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"),
@@ -511,10 +382,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Aggregate every enabled subscription's servers and rebuild the
-    /// top-of-tab list. Empty state when no enabled sub has any servers.
-    /// </summary>
     private void RebuildAggregatedServerList()
     {
         if (_subsAggListStack is null || _subsAggEmptyHint is null) return;
@@ -539,14 +406,6 @@ public partial class AndroidApp
         }
     }
 
-    /// <summary>
-    /// Per-row template for the aggregated server table. Mirrors
-    /// <see cref="BuildServerRow"/> from <c>AndroidApp.ServerList.cs</c>
-    /// (radio | name+host | IP | Ping | Port | refresh button) but reads
-    /// from the local <c>_subsAggTestingKeys</c> + caller-supplied
-    /// results dict so the Subscribe tab's testing state stays separate
-    /// from the Servers tab's.
-    /// </summary>
     private Control BuildAggregatedServerRow(
         VlessServerEntry srv,
         string? activeServerName)
@@ -557,7 +416,6 @@ public partial class AndroidApp
         var isActive = !string.IsNullOrEmpty(activeServerName)
                        && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase);
 
-        // ── Radio dot — filled when active. ──
         var radio = new Border
         {
             Width = 12,
@@ -591,11 +449,6 @@ public partial class AndroidApp
             FontFamily = new FontFamily("monospace"),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        // Mobile design 2026-05-11 — collapse the desktop's separate IP /
-        // Port / Protocol columns into a single mono meta-line beneath
-        // the name. Format: `104.194.156.93 · :443 · reality` per
-        // Mobile.html line 520. Buys ~140 dp of horizontal real estate
-        // on a 384 dp phone width — IP+port were getting trimmed before.
         var metaParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(srv.Server)) metaParts.Add(srv.Server!);
         if (srv.Port > 0) metaParts.Add(":" + srv.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -622,19 +475,10 @@ public partial class AndroidApp
             },
         };
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
-        // Stay in Advanced + apply in place (shared with the Servers tab) —
-        // no bounce to Simple, no manual Stop+Start. See ApplyServerSelection.
         nameStack.PointerReleased += (_, _) => ApplyServerSelection(srv);
 
-        // Ping pill (Mobile.html `.ping.g/.o/.b/.muted`) — colored bg,
-        // white text, mono, min-width so the column doesn't jitter as
-        // latency strings change. ResolveLatencyDisplay still owns the
-        // value + color decision; we just wrap it in a styled Border.
         var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);
         var pingBgBrush = ResolveLatencyBadgeBackground(hasResult ? result : null, isTesting);
-        // White text rides solid-colour pills (success/warn/danger);
-        // the muted SurfaceSunken pill uses TextMuted so it stays low-
-        // contrast for the "no data yet" state.
         var pingHasData = hasResult && !isTesting && result is not null;
         var pingTextInside = new TextBlock
         {
@@ -679,9 +523,6 @@ public partial class AndroidApp
         ToolTip.SetTip(refreshBtn, Localization.SrvTipTestRow);
         refreshBtn.Click += async (_, _) => await TestSingleAggregatedServerAsync(srv);
 
-        // 4-col grid matches Mobile.html `.srv` exactly: radio · name+meta
-        // · ping pill · refresh. IP / port collapsed into the meta-line
-        // above, so this is one column narrower than the desktop layout.
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
@@ -709,8 +550,6 @@ public partial class AndroidApp
         };
     }
 
-    // ── Aggregated-list test-batch handlers ────────────────────────────
-
     private async Task OnSubsAggTestAllClicked()
     {
         var aggregated = _subs
@@ -721,14 +560,12 @@ public partial class AndroidApp
         if (aggregated.Count == 0) return;
         if (_subsAggTestAllCts is not null)
         {
-            try { _subsAggTestAllCts.Cancel(); } catch { /* swallow */ }
+            try { _subsAggTestAllCts.Cancel(); } catch { }
             return;
         }
 
         _subsAggTestAllCts = new CancellationTokenSource();
         var ct = _subsAggTestAllCts.Token;
-        // Pull a fresh snapshot from storage in case Servers tab tests
-        // mutated badges since this tab last activated.
         _subsAggResults = AndroidStorage.GetServerTestResults();
 
         try
@@ -751,7 +588,7 @@ public partial class AndroidApp
                     var result = await TcpTlsProbe.ProbeServerAsync(srv, ct);
                     ApplyAggregatedResult(srv, result);
                 }
-                catch (OperationCanceledException) { /* leave row */ }
+                catch (OperationCanceledException) { }
                 catch
                 {
                     ApplyAggregatedResult(srv,
@@ -779,7 +616,7 @@ public partial class AndroidApp
         {
             _subsAggTestingKeys.Clear();
             AndroidStorage.SetServerTestResults(_subsAggResults);
-            try { _subsAggTestAllCts?.Dispose(); } catch { /* swallow */ }
+            try { _subsAggTestAllCts?.Dispose(); } catch { }
             _subsAggTestAllCts = null;
             if (_subsAggTestAllBtn is not null)
                 _subsAggTestAllBtn.Content = Localization.AdvServersTestAll;
@@ -787,10 +624,6 @@ public partial class AndroidApp
         }
     }
 
-    /// <summary>Deep verify on Android = same TCP+TLS probe pass as Test
-    /// all (sing-box can't be spawned from the app sandbox — see
-    /// <c>OnSrvDeepVerifyClicked</c>). Tooltip on the button explains
-    /// the platform limitation.</summary>
     private async Task OnSubsAggDeepVerifyClicked() => await OnSubsAggTestAllClicked();
 
     private async Task TestSingleAggregatedServerAsync(VlessServerEntry srv)
@@ -828,30 +661,13 @@ public partial class AndroidApp
             LastTestedAt = DateTimeOffset.UtcNow,
             Error = result.Error,
         };
-        // Re-render the affected row by rebuilding the list, but COALESCE the
-        // burst: "Test all" delivers N results and a naive per-result
-        // Dispatcher.Post(RebuildAggregatedServerList) queues N full O(N)
-        // rebuilds = O(N^2) BuildAggregatedServerRow calls. Schedule a single
-        // debounced rebuild that picks up every result applied so far (final
-        // state still guaranteed by the finally-block RebuildAggregatedServerList
-        // in OnSubsAggTestAllClicked / TestSingleAggregatedServerAsync).
         ScheduleAggregatedServerListRebuild();
     }
 
-    /// <summary>
-    /// Coalesce a burst of per-result updates into a single aggregated-list
-    /// rebuild. ApplyAggregatedResult fires once per probe completion (up to 4
-    /// concurrently); the first call queues a Background-priority rebuild and
-    /// flips the flag, and every other call in the same burst is a no-op — the
-    /// queued rebuild reads the latest <c>_subsAggResults</c> /
-    /// <c>_subsAggTestingKeys</c> so it renders all results applied so far.
-    /// Turns O(N^2) into O(N) for "Test all". Mirrors
-    /// <see cref="ScheduleServerListRebuild"/> on the Servers tab.
-    /// </summary>
     private void ScheduleAggregatedServerListRebuild()
     {
         if (Interlocked.CompareExchange(ref _subsAggRebuildScheduled, 1, 0) != 0)
-            return; // a rebuild is already queued — it will include this result
+            return;
         Dispatcher.UIThread.Post(() =>
         {
             Interlocked.Exchange(ref _subsAggRebuildScheduled, 0);
@@ -865,21 +681,12 @@ public partial class AndroidApp
         _subsAggStatusText.Text = string.Format(Localization.SrvProgressFmt, done, total);
     }
 
-    /// <summary>
-    /// Re-seed Subscriptions tab state from persisted storage. Called by
-    /// the Advanced shell on tab activation. Replaces the old
-    /// OpenSubsOverlay path (overlay is gone in AND-MIGRATE-OVERLAYS).
-    /// </summary>
     private void ReseedSubscribeTabState()
     {
         _subs = AndroidStorage.GetSubscriptions();
         _refreshingIds.Clear();
         _pendingDeleteId = null;
         _editingId = null;
-        // Phase B: clear aggregated-list testing state on re-seed so a
-        // dangling spinner from a cancelled previous run doesn't survive
-        // tab navigation. Refresh the test-result mirror from storage so
-        // badges from a Test all run on Servers tab show through here.
         _subsAggTestingKeys.Clear();
         _subsAggResults = AndroidStorage.GetServerTestResults();
         if (_subsAggStatusText is not null) _subsAggStatusText.Text = string.Empty;
@@ -897,7 +704,6 @@ public partial class AndroidApp
         if (_subs.Count == 0)
         {
             _subsEmptyHint.IsVisible = true;
-            // Aggregated list also empties when there are no subs.
             RebuildAggregatedServerList();
             return;
         }
@@ -907,25 +713,11 @@ public partial class AndroidApp
         {
             _subsListStack.Children.Add(BuildSubCard(sub));
         }
-        // Subscription enable / refresh / delete all change which servers
-        // appear in the aggregated table — keep the two views in sync.
         RebuildAggregatedServerList();
     }
 
-    /// <summary>
-    /// Build a single subscription card. Layout mirrors desktop
-    /// <c>SubscribePage.axaml</c> lines 274-330 — the <c>srv-row</c>
-    /// template: transparent row (no card chrome), 6-column grid
-    /// <c>[chk · name+meta · spinner · ✎ · ↻ · ✕]</c>, monospace
-    /// SemiBold name + dot-separated muted metadata, ProgressBar
-    /// (40×3, indeterminate) where desktop has its <c>IsRefreshing</c>
-    /// indicator, and compact <c>srv-refresh</c>-style icon buttons
-    /// (no fixed 32×32 box). Editing toggles an inline TextBox pair.
-    /// </summary>
     private Control BuildSubCard(SubscriptionEntry sub)
     {
-        // ── Column 0: enabled checkbox (24-px column to match desktop's
-        //               v2.25.10 fix — narrower clips the indicator).
         var enabledChk = new Avalonia.Controls.CheckBox
         {
             IsChecked = sub.Enabled,
@@ -941,8 +733,6 @@ public partial class AndroidApp
             RebuildAggregatedServerList();
         };
 
-        // ── Column 1: name (srv-name) + metadata (srv-host).
-        //               Both monospace + ellipsis to match desktop.
         var nameText = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(sub.Name) ? "(no name)" : sub.Name,
@@ -962,7 +752,6 @@ public partial class AndroidApp
             TextWrapping = TextWrapping.NoWrap,
         };
         ToolTip.SetTip(metadataText, Localization.TipSubscriptionMetadata);
-        // P2 (2026-06-21): quota / days-left line from the Subscription-Userinfo header.
         var infoPanel = new StackPanel
         {
             Spacing = 1,
@@ -987,9 +776,6 @@ public partial class AndroidApp
                 });
             }
         }
-        // v2.32.0 (AND-4): wrap in a hit-test-friendly Border so the name
-        // area is tappable independently of the action buttons. Tap →
-        // open per-server testing overlay (drill-down).
         var nameStack = new Border
         {
             Background = Brushes.Transparent,
@@ -998,10 +784,6 @@ public partial class AndroidApp
         };
         nameStack.PointerReleased += (s, e) => OpenServerListOverlay(sub);
 
-        // ── Column 2: indeterminate ProgressBar (40×3) — same shape as
-        //               desktop's row spinner; only visible mid-refresh.
-        //               Fully qualified — Android.Widget.ProgressBar would
-        //               otherwise be a name collision in this assembly.
         var spinner = new Avalonia.Controls.ProgressBar
         {
             IsVisible = _refreshingIds.Contains(sub.Id),
@@ -1013,8 +795,6 @@ public partial class AndroidApp
             Foreground = GetBrush("AccentSolidBrush"),
         };
 
-        // ── Columns 3-5: ✎ edit / ↻ refresh / ✕ delete (srv-refresh
-        //                  micro-buttons — transparent, no fixed box).
         var editBtn = StyledRowActionButton("✎", Localization.TipEditSubscription);
         editBtn.Click += (s, e) => StartEditUrl(sub);
 
@@ -1022,8 +802,6 @@ public partial class AndroidApp
         refreshBtn.IsEnabled = !_refreshingIds.Contains(sub.Id);
         refreshBtn.Click += async (s, e) => await RefreshOneAsync(sub);
 
-        // 2-tap delete: first tap arms _pendingDeleteId, second tap
-        // commits. Auto-disarms after 4 s of inactivity.
         var deleteBtn = StyledRowActionButton("✕", Localization.TipRemoveSubscription);
         if (_pendingDeleteId == sub.Id)
         {
@@ -1052,9 +830,6 @@ public partial class AndroidApp
         topGrid.Children.Add(refreshBtn);
         topGrid.Children.Add(deleteBtn);
 
-        // Inline URL editor — only visible when this card is being edited.
-        // Indented to the name column so the editor visually nests under
-        // its row instead of competing with the chk gutter.
         Control? editorRow = null;
         if (_editingId == sub.Id)
         {
@@ -1114,9 +889,6 @@ public partial class AndroidApp
         };
         if (editorRow is not null) content.Children.Add(editorRow);
 
-        // Outer Border = desktop's srv-row: transparent, no border,
-        // RadiusXs, padding 8,5. The list visually exists via spacing
-        // between rows, not card chrome.
         return new Border
         {
             Background = Brushes.Transparent,
@@ -1127,12 +899,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Mirror of desktop's <c>SubscriptionViewModel.LastRefreshedDisplay</c>
-    /// + the multi-binding <c>{Url} · {N}s · {time}</c> from
-    /// SubscribePage.axaml lines 297-306. Truncates URL via TextTrimming
-    /// at the control level.
-    /// </summary>
     private static string FormatSubMetadata(SubscriptionEntry sub)
     {
         var url = sub.Url ?? string.Empty;
@@ -1150,18 +916,6 @@ public partial class AndroidApp
         return $"{url} · {nFmt} · {time}";
     }
 
-    /// <summary>
-    /// Mirrors desktop's <c>Button.srv-refresh</c> style (SubscribePage.axaml
-    /// lines 86-98) — transparent, borderless icon button sized to its
-    /// glyph + a small touch-friendly padding bump. Pre-rev1 used a fixed
-    /// 32×32 box which made the row look like a row of square chips
-    /// instead of the lightweight icon trio used on desktop.
-    /// <para>POL-1: glyph size + horizontal padding tightened to the
-    /// desktop spec — `FontSize="11" Padding="2"` (was 14 + 6,2 which made
-    /// each button noticeably larger than the corresponding desktop icon).
-    /// Tap target stays touch-friendly via the row Padding="8,5" parent
-    /// + the icon's intrinsic height.</para>
-    /// </summary>
     private Avalonia.Controls.Button StyledRowActionButton(string glyph, string? tooltip)
     {
         var btn = new Avalonia.Controls.Button
@@ -1192,8 +946,6 @@ public partial class AndroidApp
     private void OnDeleteSubClicked(SubscriptionEntry sub)
     {
         var now = DateTime.UtcNow;
-        // Re-arm if user was confirming a different card or the previous
-        // confirm timed out.
         var armedRecently = _pendingDeleteId == sub.Id
                             && (now - _lastDeleteTapAt).TotalSeconds < 4;
         if (!armedRecently)
@@ -1204,21 +956,12 @@ public partial class AndroidApp
             return;
         }
 
-        // Confirmed — actually remove.
         _pendingDeleteId = null;
         _subs.RemoveAll(s => string.Equals(s.Id, sub.Id, StringComparison.Ordinal));
         AndroidStorage.SetSubscriptions(_subs);
         RebuildSubsList();
     }
 
-    /// <summary>
-    /// Bug-AND-023 (2026-05-17) — QR-scan handler for the Subscribe-tab
-    /// Add form. Decoded text fills the _subsNewUrl field (the user
-    /// still needs to type a Name and tap Add — we don't auto-add
-    /// because subscription providers sometimes encode a vless URI in
-    /// the QR rather than a subscription URL, and the user may want
-    /// to cancel before saving).
-    /// </summary>
     private void OnSubscribeQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var activity = MainActivity.Instance;
@@ -1229,9 +972,6 @@ public partial class AndroidApp
             {
                 if (!success)
                 {
-                    // Bug-AND-023 v2 (2026-05-17) — see the Simple-page
-                    // handler in AndroidApp.axaml.cs for the cancelled-vs-
-                    // error rationale.
                     if (text == "cancelled") return;
                     var msg = text switch
                     {
@@ -1241,10 +981,6 @@ public partial class AndroidApp
                     ShowMenuFeedback(msg);
                     return;
                 }
-                // Bug-AND-023 v3 (2026-05-17) — same magic-1-step dispatch
-                // as the Simple-page button. Either button is now a
-                // single-tap "scan → connect" if the QR contains a usable
-                // vless:// URI or a subscription URL.
                 await ApplyScannedTextAsync(text);
             });
         };
@@ -1273,9 +1009,6 @@ public partial class AndroidApp
         if (_subsNewUrl is not null) _subsNewUrl.Text = string.Empty;
         RebuildSubsList();
 
-        // Mirror desktop AddSubscriptionAsync: immediately refresh the
-        // new entry so the user sees a server count appear without a
-        // separate ↻ tap.
         await RefreshOneAsync(entry);
     }
 
@@ -1327,8 +1060,6 @@ public partial class AndroidApp
                 }
                 catch
                 {
-                    // Per-entry failure already logged in fetcher; UI shows
-                    // last refresh time stays old. Continue with siblings.
                 }
             }));
         }
@@ -1354,13 +1085,9 @@ public partial class AndroidApp
                 _subsRefreshAllStatus.IsVisible = false;
             }
         }
-        catch { /* swallow */ }
+        catch { }
     }
 
-    /// <summary>
-    /// Refresh localized strings on language toggle. Called from
-    /// <see cref="ToggleLanguageAndRefresh"/>.
-    /// </summary>
     private void RefreshSubsLocalizedStrings()
     {
         if (_subsSectionLabel is not null) _subsSectionLabel.Text = Localization.SubscriptionsSection;
@@ -1375,8 +1102,6 @@ public partial class AndroidApp
             ToolTip.SetTip(_subsAutoSelectChk, Localization.AutoSelectBestServerTip);
         }
 
-        // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — aggregated server table
-        // headers + middle action row + empty hint.
         if (_subsAggColServer is not null) _subsAggColServer.Text = Localization.ColServer;
         if (_subsAggColPing is not null)
         {
@@ -1393,10 +1118,6 @@ public partial class AndroidApp
             ToolTip.SetTip(_subsAggDeepVerifyBtn, Localization.AdvServersDeepVerifyAndroidNote);
         }
 
-        // Card list: cheapest path is full rebuild — strings are per-card
-        // (Refreshing… spinner, refresh/delete tooltips, formatted
-        // timestamp uses "никогда"/"never"). Skip if Subscriptions tab is
-        // not currently mounted in the Advanced shell.
         if (_subsListStack is not null) RebuildSubsList();
     }
 }

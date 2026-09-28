@@ -6,16 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.45.0-r8 (2026-07-01): over a UDP-native AmneziaWG tunnel the DoH TLS
-/// handshake blackholes on the fixed 1280 WireGuard endpoint MTU — diag
-/// 20260701-122336 showed 548 DNS exchanges >=5s (cold DoH handshakes up to 56s),
-/// which made every Dota 2 region ping time out ("Задержка: ОШИБКА"). Two fixes:
-/// (1) vpn-dns resolves via PLAIN UDP inside the encrypted tunnel instead of DoH;
-/// (2) the TUN MTU is capped to the AWG endpoint MTU so oversized app packets
-/// can't blackhole either. Both are scoped to the UDP-native case — a VLESS/Reality
-/// TCP tunnel keeps DoH (TCP MSS auto-clamps) and its TUN MTU is left untouched.
-/// </summary>
 public sealed class AwgDnsAndMtuTests : IDisposable
 {
     private readonly bool? _previousAwgOverride;
@@ -28,8 +18,6 @@ public sealed class AwgDnsAndMtuTests : IDisposable
 
     public void Dispose() => SingBoxFeatures.OverrideAwg = _previousAwgOverride;
 
-    // ─── plain-UDP DNS (AmneziaWG) ────────────────────────────────────────────
-
     [Fact]
     public void Awg_BlockAdsOn_VpnDnsIsPlainUdpAdGuard()
     {
@@ -39,9 +27,9 @@ public sealed class AwgDnsAndMtuTests : IDisposable
         Assert.Equal("udp", vpnDns.Type);
         Assert.Equal("94.140.14.14", vpnDns.Server);
         Assert.Equal("proxy", vpnDns.Detour);
-        Assert.Null(vpnDns.DomainResolver);   // literal IP -> no DoH-hostname bootstrap
+        Assert.Null(vpnDns.DomainResolver);
         Assert.Null(vpnDns.Path);
-        Assert.Null(vpnDns.ServerPort);       // default 53 omitted
+        Assert.Null(vpnDns.ServerPort);
     }
 
     [Fact]
@@ -58,8 +46,6 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     [Fact]
     public void Awg_BlockAdsOff_HostnameVpnDnsFallsBackToGoogle()
     {
-        // A DoH *hostname* can't be a plain-UDP target (it would need resolving
-        // over the very tunnel we're bootstrapping). Fall back to a literal IP.
         var config = Generate(AwgSettings(blockAds: false, vpnDns: "https://dns.google/dns-query"));
 
         var vpnDns = Assert.Single(config.Dns.Servers, s => s.Tag == "vpn-dns");
@@ -70,27 +56,22 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     [Fact]
     public void Vless_VpnDnsStaysDoH()
     {
-        // The TCP tunnel keeps DoH — TCP MSS auto-clamps so the handshake survives,
-        // and DoH hides the queries from the exit. Unchanged from r7.
         var config = Generate(VlessSettings(vpnDns: "https://dns.google/dns-query"));
 
         var vpnDns = Assert.Single(config.Dns.Servers, s => s.Tag == "vpn-dns");
         Assert.Equal("https", vpnDns.Type);
         Assert.Equal("dns.google", vpnDns.Server);
         Assert.Equal("proxy", vpnDns.Detour);
-        Assert.NotNull(vpnDns.DomainResolver);   // DoH hostname still bootstraps
+        Assert.NotNull(vpnDns.DomainResolver);
     }
-
-    // ─── TUN MTU cap (AmneziaWG) ──────────────────────────────────────────────
 
     [Fact]
     public void Awg_TunMtuClampedToEndpointMtu()
     {
-        // A user MTU above the AWG endpoint MTU (1420) is capped to it.
         var config = Generate(AwgSettings(tunMtu: 1500));
 
         var tun = Assert.Single(config.Inbounds, i => i.Type == "tun");
-        Assert.Equal(ConfigGenerator.AwgEndpointMtu, tun.Mtu);   // 1420
+        Assert.Equal(ConfigGenerator.AwgEndpointMtu, tun.Mtu);
     }
 
     [Fact]
@@ -105,7 +86,6 @@ public sealed class AwgDnsAndMtuTests : IDisposable
     [Fact]
     public void Vless_TunMtuNotClamped()
     {
-        // A TCP tunnel MSS-clamps adaptively, so the larger TUN MTU is left as-is.
         var config = Generate(VlessSettings(tunMtu: 1337));
 
         var tun = Assert.Single(config.Inbounds, i => i.Type == "tun");
@@ -120,22 +100,15 @@ public sealed class AwgDnsAndMtuTests : IDisposable
         Assert.Equal(ConfigGenerator.AwgEndpointMtu, endpoint.Mtu);
     }
 
-    // ─── endpoint-independent (full-cone) NAT for relay/P2P game UDP ────────────
-
     [Fact]
     public void Tun_EndpointIndependentNat_Enabled_TransportIndependent()
     {
-        // r10: full-cone UDP NAT so Steam Datagram Relay (Dota/CS2) cross-relay
-        // replies aren't dropped. It's a TUN trait, so it must hold on EVERY
-        // transport — assert via VLESS to prove it's not AWG-specific.
         var vless = Assert.Single(Generate(VlessSettings()).Inbounds, i => i.Type == "tun");
         Assert.True(vless.EndpointIndependentNat);
 
         var awg = Assert.Single(Generate(AwgSettings()).Inbounds, i => i.Type == "tun");
         Assert.True(awg.EndpointIndependentNat);
     }
-
-    // ─── helpers ──────────────────────────────────────────────────────────────
 
     private static SingBoxConfig Generate(AppSettings settings) =>
         ConfigGenerator.Generate(

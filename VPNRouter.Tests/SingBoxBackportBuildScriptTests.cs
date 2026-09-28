@@ -3,12 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Source-invariant guard: both sing-box-lx build scripts (.ps1/.sh) must apply the two
-/// targeted upstream backports (TUN TCP NAT collision + DNS single-flight deadlock) from
-/// the exact immutable SagerNet SHAs and fail closed on source assertions, without
-/// rotating the pinned fork. Assertions target executable fragments, never comments.
-/// </summary>
 public sealed class SingBoxBackportBuildScriptTests
 {
     private const string UpstreamRepo = "https://github.com/SagerNet/sing-box.git";
@@ -22,7 +16,6 @@ public sealed class SingBoxBackportBuildScriptTests
         var ps1 = Normalize(File.ReadAllText(Path.Combine(repoRoot, "tools", "build-singbox-lx.ps1")));
         var sh = Normalize(File.ReadAllText(Path.Combine(repoRoot, "tools", "build-singbox-lx.sh")));
 
-        // PowerShell: assignments, fetch, cherry-picks and fail-closed gates.
         Assert.Contains($"$UPSTREAM_REPO = '{UpstreamRepo}'", ps1);
         Assert.Contains($"$TUN_BACKPORT = '{TunBackport}'", ps1);
         Assert.Contains($"$DNS_BACKPORT = '{DnsBackport}'", ps1);
@@ -34,7 +27,6 @@ public sealed class SingBoxBackportBuildScriptTests
         Assert.Contains("-not $dnsClient.Contains('cacheKey := transportCacheKey{Question: question, transportTag: transport.Tag()}')", ps1);
         Assert.Contains("if ($dnsClient.Contains('compatible.Map[dns.Question, chan struct{}]'))", ps1);
 
-        // Bash: same invariants in shell syntax (grep -Fq gates fail closed via set -e).
         Assert.Contains($"UPSTREAM_REPO=\"{UpstreamRepo}\"", sh);
         Assert.Contains($"TUN_BACKPORT=\"{TunBackport}\"", sh);
         Assert.Contains($"DNS_BACKPORT=\"{DnsBackport}\"", sh);
@@ -47,10 +39,6 @@ public sealed class SingBoxBackportBuildScriptTests
         Assert.Contains("if grep -Fq \"compatible.Map[dns.Question, chan struct{}]\" \"$SRC/dns/client.go\"; then", sh);
     }
 
-    /// <summary>
-    /// Strips PowerShell block comments plus full-line and trailing # comments before collapsing
-    /// whitespace, so commented-out commands cannot satisfy assertions.
-    /// </summary>
     private static string Normalize(string script)
     {
         script = Regex.Replace(script, @"(?s)<#.*?#>", "");

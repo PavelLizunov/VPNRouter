@@ -8,12 +8,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Tests for the audit-#4 fix: the pool fetcher now prefers the compressed
-/// pool.json.gz (~3.9 MB) over raw pool.json (~27 MB), with bounded
-/// decompression (bomb defense), validate-before-replace, and a raw fallback.
-/// Suite is sequential (xunit.runner.json) so OverrideDataDir is safe.
-/// </summary>
 public sealed class FreeConfigPoolFetcherTests
 {
     private const string SamplePool = @"{
@@ -44,8 +38,6 @@ public sealed class FreeConfigPoolFetcherTests
             => Task.FromResult(Responder(request));
     }
 
-    // --- decompression bounds (the new, risky code) ---
-
     [Fact]
     public async Task DecompressBounded_RoundTripsGzip()
     {
@@ -69,15 +61,12 @@ public sealed class FreeConfigPoolFetcherTests
     [Fact]
     public async Task DecompressBounded_RejectsBomb()
     {
-        // 4 MB of zeros compresses to a few KB; cap the expansion at 64 KB.
         var bomb = Gzip(new byte[4 * 1024 * 1024]);
         using var src = new MemoryStream(bomb);
         using var dst = new MemoryStream();
         await Assert.ThrowsAsync<InvalidDataException>(() =>
             FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: true, dst, 64 * 1024, default));
     }
-
-    // --- parse ---
 
     [Fact]
     public void ParsePool_Stream_ParsesServers()
@@ -105,8 +94,6 @@ public sealed class FreeConfigPoolFetcherTests
         Assert.Equal("/chat", entry.Path);
         Assert.Equal("US", entry.CountryCode);
     }
-
-    // --- end-to-end fetch via fake handler ---
 
     [Fact]
     public async Task FetchPool_PrefersGzip()
@@ -147,7 +134,7 @@ public sealed class FreeConfigPoolFetcherTests
                 Responder = req =>
                 {
                     if (req.RequestUri!.AbsoluteUri.EndsWith("pool.json.gz"))
-                        return new HttpResponseMessage(HttpStatusCode.NotFound);          // no gz on this release
+                        return new HttpResponseMessage(HttpStatusCode.NotFound);
                     if (req.RequestUri.AbsoluteUri.EndsWith("pool.json"))
                         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SamplePool) };
                     return new HttpResponseMessage(HttpStatusCode.NotFound);
@@ -170,11 +157,10 @@ public sealed class FreeConfigPoolFetcherTests
         {
             AppPaths.OverrideDataDir(dir);
             AppPaths.EnsureDirectories();
-            // seed a good last-known-good cache
             File.WriteAllText(Path.Combine(AppPaths.CacheDir, "pool.json"), SamplePool);
 
             var truncated = GzipText(SamplePool);
-            Array.Resize(ref truncated, truncated.Length / 2);      // corrupt the gz
+            Array.Resize(ref truncated, truncated.Length / 2);
             var handler = new FakeHandler
             {
                 Responder = req => req.RequestUri!.AbsoluteUri.EndsWith("pool.json.gz")
@@ -182,10 +168,9 @@ public sealed class FreeConfigPoolFetcherTests
                     : new HttpResponseMessage(HttpStatusCode.NotFound)
             };
             var fetcher = new FreeConfigPoolFetcher(SilentLog, handler);
-            var entries = await fetcher.FetchPoolAsync();   // gz corrupt, raw 404 -> local cache
+            var entries = await fetcher.FetchPoolAsync();
             Assert.NotNull(entries);
             Assert.Equal(2, entries!.Count);
-            // the good cache must survive the corrupt download
             Assert.Contains("1.2.3.4", File.ReadAllText(Path.Combine(AppPaths.CacheDir, "pool.json")));
         }
         finally { AppPaths.OverrideDataDir(previous); TryDelete(dir); }

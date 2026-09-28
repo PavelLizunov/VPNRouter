@@ -43,7 +43,6 @@ public class RevealInFileManagerTests
     {
         var malPath = Path.Combine(Path.GetTempPath(), "log_path_with spaces_\" & calc.exe & \"file.txt");
 
-        // Verify ProcessStartInfo pattern for OpenProbeLog
         var probePsi = new ProcessStartInfo
         {
             FileName = "notepad.exe",
@@ -56,7 +55,6 @@ public class RevealInFileManagerTests
         Assert.Single(probePsi.ArgumentList);
         Assert.Equal(malPath, probePsi.ArgumentList[0]);
 
-        // Verify ProcessStartInfo pattern for OpenLogs
         var logsPsi = new ProcessStartInfo
         {
             FileName = OperatingSystem.IsWindows() ? "explorer.exe" : "/usr/bin/open",
@@ -69,7 +67,6 @@ public class RevealInFileManagerTests
         Assert.Single(logsPsi.ArgumentList);
         Assert.Equal(malPath, logsPsi.ArgumentList[0]);
 
-        // Verify ProcessStartInfo pattern for RunHealthCheck report viewer
         var healthPsi = new ProcessStartInfo
         {
             FileName = OperatingSystem.IsWindows() ? "notepad.exe" : (OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open"),
@@ -88,7 +85,6 @@ public class RevealInFileManagerTests
     {
         var malExe = Path.Combine(Path.GetTempPath(), "app_path_with spaces_\" & calc.exe & \"app.exe");
 
-        // Verify ProcessStartInfo pattern for RestartInSafeMode (Linux and Windows/Other)
         var linuxPsi = new ProcessStartInfo
         {
             FileName = "/usr/bin/setsid",
@@ -121,26 +117,6 @@ public class RevealInFileManagerTests
 
 #if PLATFORM_WINDOWS
 
-/// <summary>
-/// v2.38.0-r6 — regression pins for the Explorer "route / unroute through VPN"
-/// shell verbs (<c>RouteAppFromShell</c> / <c>UnrouteAppFromShell</c>). The
-/// Heavy adversarial audit of r1→r5 found these defects in the UNtested
-/// ViewModel bridge (RoutingAppListEditorTests only covered the pure Core
-/// helper — every confirmed bug lived here):
-/// <list type="number">
-///   <item><b>Exclude-mode inversion</b> — the verbs must use include-list
-///   semantics regardless of the current in-app routing mode.</item>
-///   <item><b>False-success toast</b> — AddCustomApp early-returns on an
-///   existing-but-unchecked item, so nothing got routed while the toast claimed
-///   success. r6 fix: force the landed item checked + base the toast on the
-///   actual routed state.</item>
-///   <item><b>Unroute break</b> — removed only the FIRST group instance; a
-///   leftover in another group re-persisted and could re-route. r6 fix: remove
-///   EVERY instance.</item>
-/// </list>
-/// Windows-only — the verbs are <c>#if PLATFORM_WINDOWS</c> in the App, so this
-/// whole file is gated the same way (excluded from the Linux/Mac build).
-/// </summary>
 public class ShellVerbRoutingTests
 {
     private static MainWindowViewModel MakeVm() => new(new InMemorySettingsStore());
@@ -150,13 +126,10 @@ public class ShellVerbRoutingTests
             .GetField("_settings", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(vm)!;
 
-    // Mirror AppsModeTests: build a properly bridged AppItem (ReadMode/WriteMode
-    // wired to the VM's mode-aware helpers) via the private factory.
     private static AppItemViewModel Bridged(MainWindowViewModel vm, string proc)
     {
         var factory = typeof(MainWindowViewModel).GetMethod(
             "CreateBridgedAppItem", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        // signature: (string processName, bool legacyChecked, bool isCustom = false)
         return (AppItemViewModel)factory.Invoke(vm, new object[] { proc, false, true })!;
     }
 
@@ -167,8 +140,6 @@ public class ShellVerbRoutingTests
         s.App.RoutingAppsMode = "include";
         vm.RoutingAppsMode = "include";
     }
-
-    // ── r7: shell verbs are include-only regardless of routing mode ──
 
     [AvaloniaFact]
     public void ExcludeMode_Route_AddsToIncludeOnly()
@@ -202,8 +173,6 @@ public class ShellVerbRoutingTests
         Assert.Contains("Steam.exe", s.App.RoutingAppsExclude);
     }
 
-    // ── Include-mode happy paths ──
-
     [AvaloniaFact]
     public void IncludeMode_Route_AddsToInclude()
     {
@@ -216,8 +185,6 @@ public class ShellVerbRoutingTests
         Assert.Contains("Game.exe", s.App.RoutingAppsInclude);
         Assert.Empty(s.App.RoutingAppsExclude);
     }
-
-    // ── Finding #2: existing-but-unchecked item → false success ──
 
     [AvaloniaFact]
     public void IncludeMode_Route_ExistingUncheckedItem_ActuallyRoutes()
@@ -232,7 +199,6 @@ public class ShellVerbRoutingTests
             group = new AppGroupViewModel("Custom Apps", "", isChecked: true);
             vm.AppGroups.Add(group);
         }
-        // Present in the group but UNCHECKED (not in RoutingAppsInclude).
         var item = Bridged(vm, "Game.exe");
         group.Apps.Add(item);
         Assert.False(item.IsChecked);
@@ -240,12 +206,8 @@ public class ShellVerbRoutingTests
 
         vm.RouteAppFromShell("Game.exe");
 
-        // Pre-r6: AddCustomApp early-returned → nothing routed, toast lied.
-        // r6: the landed item is forced checked → actually routed.
         Assert.Contains("Game.exe", s.App.RoutingAppsInclude);
     }
-
-    // ── Finding #3: unroute must clear EVERY group instance ──
 
     [AvaloniaFact]
     public void IncludeMode_Unroute_RemovesFromAllGroupsAndList()
@@ -254,7 +216,6 @@ public class ShellVerbRoutingTests
         var s = Settings(vm);
         IncludeMode(vm, s);
 
-        // Same process name in TWO groups (Custom Apps + a named category).
         var g1 = new AppGroupViewModel("Custom Apps", "", isChecked: true);
         var g2 = new AppGroupViewModel("Games", "", isChecked: true) { IsCustomCategory = true };
         vm.AppGroups.Add(g1);
@@ -263,13 +224,11 @@ public class ShellVerbRoutingTests
         var i2 = Bridged(vm, "Game.exe");
         g1.Apps.Add(i1);
         g2.Apps.Add(i2);
-        i1.IsChecked = true; // → RoutingAppsInclude now has Game.exe
+        i1.IsChecked = true;
         Assert.Contains("Game.exe", s.App.RoutingAppsInclude);
 
         vm.UnrouteAppFromShell("Game.exe");
 
-        // Pre-r6: break removed only g1's instance; g2's leftover re-persisted
-        // and could re-route. r6: every instance gone + list scrubbed.
         Assert.DoesNotContain("Game.exe", s.App.RoutingAppsInclude);
         Assert.DoesNotContain(g1.Apps, a => a.ProcessName == "Game.exe");
         Assert.DoesNotContain(g2.Apps, a => a.ProcessName == "Game.exe");

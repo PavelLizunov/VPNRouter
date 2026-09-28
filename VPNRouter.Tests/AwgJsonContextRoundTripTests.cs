@@ -6,16 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.45.0-r3 sibling pin to <c>YamlStaticContextRoundTripTests</c>. The YAML
-/// static serializer dropped <see cref="AwgConfig"/> (emitted <c>awg: {}</c>)
-/// because the type was added to <see cref="VlessServerEntry.Awg"/> without
-/// registration. The JSON path uses the source-generated
-/// <see cref="AppJsonContext"/> for config-share + subscription server lists
-/// (<c>List&lt;VlessServerEntry&gt;</c>), so this verifies the SAME class of bug
-/// can't silently drop AWG keys there. If STJ's transitive type discovery ever
-/// stops covering the nested <c>AwgConfig</c>, this fails loudly.
-/// </summary>
 public class AwgJsonContextRoundTripTests
 {
     [Fact]

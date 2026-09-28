@@ -5,8 +5,6 @@ using VPNRouter.CLI.Commands;
 if (VPNRouter.Core.Services.UnixOwnedProcessSignal.TryHandleHelper(args, out var helperExitCode))
     return helperExitCode;
 
-// ─── Logging setup ────────────────────────────────────────────────────────────
-
 var logDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\logs");
 Directory.CreateDirectory(logDir);
 
@@ -21,13 +19,6 @@ Log.Logger = new LoggerConfiguration()
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level:u5}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
-// ─── CLI App ──────────────────────────────────────────────────────────────────
-
-// Bug fix 2026-06-03: pass a registrar that knows ISettingsStore. Without it,
-// Spectre 0.49.1's default activator picks the greediest ctor on the commands
-// that gained a DI ctor in Phase 4 Wave 19 (start, profiles list/show/update),
-// can't resolve ISettingsStore, and aborts with "Could not resolve type ...".
-// See SettingsAwareTypeRegistrar for the full write-up.
 var registrar = new VPNRouter.CLI.SettingsAwareTypeRegistrar();
 registrar.RegisterInstance(typeof(VPNRouter.Core.Services.ISettingsStore),
     VPNRouter.Core.Services.RealSettingsStore.Instance);
@@ -39,33 +30,25 @@ app.Configure(config =>
     config.SetApplicationVersion(VPNRouter.Core.AppVersion.Version);
     config.ValidateExamples();
 
-    // vpnrouter start
     config.AddCommand<StartCommand>("start")
         .WithDescription("Start VPN routing with a profile")
         .WithExample("start", "--profile", "Gaming_Full")
         .WithExample("start", "--profile", "Discord_Privacy,Work_Suite")
         .WithExample("start", "--profile", "Gaming_Full", "--dry-run");
 
-    // vpnrouter stop
     config.AddCommand<StopCommand>("stop")
         .WithDescription("Stop VPN routing");
 
-    // vpnrouter status
     config.AddCommand<StatusCommand>("status")
         .WithDescription("Show current VPN router status");
 
-    // vpnrouter doctor (v2.24.0 self-healing)
     config.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Health check: config, catalogue, binaries, state. Exit 0 = OK, 1 = warnings, 2 = errors");
 
-    // vpnrouter test-update — CI-only auto-update integration test driver
-    // (.github/workflows/test-windows-update.yml). Refuses to run unless
-    // VPNROUTER_CI=1 is set. Hidden from the help listing.
     config.AddCommand<TestUpdateCommand>("test-update")
         .WithDescription("CI-only: trigger the auto-update flow programmatically (gated by VPNROUTER_CI=1)")
         .IsHidden();
 
-    // vpnrouter service [install|uninstall|start|stop|status]
     config.AddBranch("service", svc =>
     {
         svc.SetDescription("Manage VPN Router as a Windows Service");
@@ -92,7 +75,6 @@ app.Configure(config =>
             .WithExample("service", "status");
     });
 
-    // vpnrouter profiles [list|show|update]
     config.AddBranch("profiles", profiles =>
     {
         profiles.SetDescription("Manage VPN profiles");

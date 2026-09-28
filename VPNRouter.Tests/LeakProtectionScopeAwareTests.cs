@@ -3,30 +3,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Bug-r10-F-D (2026-05-11) regression pin: <see cref="LeakProtection.ValidateConfig"/>
-/// scope-aware validation. Refines the post-r9 union-based defensive check
-/// (which let stas-class leaks pass) into a per-<c>config_mode</c> contract:
-///
-/// <list type="bullet">
-///   <item><c>generated</c> + enabled subscriptions → outbound MUST come from
-///     a subscription. Legacy <c>vless.servers[]</c> entries are NOT trusted.
-///     Mismatch is a critical Error.</item>
-///   <item><c>generated</c> + no subscriptions → fall back to
-///     <c>vless.servers[]</c> as allow-list (legacy direct VLESS). Mismatch
-///     is a Warning (existing behaviour).</item>
-///   <item><c>custom</c> → only check proxy outbound presence + well-formed
-///     <c>(server, server_port)</c>. Don't compare against
-///     <c>config.yaml</c> because user pasted the JSON directly.</item>
-/// </list>
-///
-/// <para>Reference: <c>plans/r10-stas-confirmed-and-apps-2mode.md</c> §1 Fix-D
-/// + <c>plans/stas-evidence-config.yaml</c> + <c>plans/stas-evidence-current.json</c>.</para>
-/// </summary>
 public sealed class LeakProtectionScopeAwareTests
 {
-    // ───────── helpers ────────────────────────────────────────────────────
-
     private static SingBoxConfig CreateValidConfig(
         string proxyServer = "1.2.3.4",
         int proxyPort = 443,
@@ -88,17 +66,11 @@ public sealed class LeakProtectionScopeAwareTests
         };
     }
 
-    /// <summary>
-    /// Stas-evidence fixture, distilled. Generated mode + one enabled
-    /// subscription with 2 real servers + legacy <c>vless.servers</c>
-    /// entries pointing at a placeholder dead IP.
-    /// </summary>
     private static AppSettings BuildStasLikeSettings()
     {
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
 
-        // Real subscription (de-01 + is-01 from stas's config).
         settings.App.Subscriptions.Add(new SubscriptionEntry
         {
             Name = "simple",
@@ -123,7 +95,6 @@ public sealed class LeakProtectionScopeAwareTests
             }
         });
 
-        // Legacy placeholder still floating in vless.servers[].
         settings.Vless.Server = "195.135.255.216";
         settings.Vless.Port = 443;
         settings.Vless.Uuid = "352714f4-7ecc-4c22-805f-ed5c5239f5bb";
@@ -142,16 +113,9 @@ public sealed class LeakProtectionScopeAwareTests
         return settings;
     }
 
-    // ───────── 1) generated + enabled subs: legacy IP → FAIL ──────────────
-
     [Fact]
     public void GeneratedMode_WithSubscription_LegacyVlessServerOutbound_FailsValidation()
     {
-        // Exact stas reproduction: generated mode, enabled subscription has
-        // working servers, but the outbound points at the legacy
-        // vless.servers[] placeholder. Pre-F-D the union-based check
-        // missed this (placeholder was in the union). F-D scopes the
-        // allow-list to subscription-only and elevates to Error.
         var settings = BuildStasLikeSettings();
         var config = CreateValidConfig(
             proxyServer: "195.135.255.216",
@@ -166,13 +130,10 @@ public sealed class LeakProtectionScopeAwareTests
             && (e.Contains("scope") || e.Contains("legacy") || e.Contains("subscription")));
     }
 
-    // ───────── 2) generated + enabled subs: matching IP → PASS ────────────
-
     [Fact]
     public void GeneratedMode_WithSubscription_ValidOutbound_Passes()
     {
         var settings = BuildStasLikeSettings();
-        // Outbound matches sub's de-01 entry exactly (server + port + uuid).
         var config = CreateValidConfig(
             proxyServer: "104.194.156.93",
             proxyPort: 443,
@@ -186,14 +147,9 @@ public sealed class LeakProtectionScopeAwareTests
             e.Contains("subscription"));
     }
 
-    // ───────── 3) generated + NO subs: legacy fallback allowed ────────────
-
     [Fact]
     public void GeneratedMode_NoSubscriptions_VlessServerOutbound_Passes()
     {
-        // Legacy direct-VLESS user (pre-subscription days). No enabled
-        // subscriptions → vless.servers is the only source of truth.
-        // Outbound matches a vless.servers entry → allowed.
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
         settings.Vless.Servers = new List<VlessServerEntry>
@@ -219,49 +175,32 @@ public sealed class LeakProtectionScopeAwareTests
             w.Contains("not in your VLESS server list"));
     }
 
-    // ───────── 4) custom mode — well-formed outbound passes ───────────────
-
     [Fact]
     public void CustomMode_WellFormedProxyOutbound_Passes()
     {
-        // User pasted full JSON via custom mode. We must NOT compare its
-        // server IP against config.yaml — that would force them to also
-        // register the server in the Servers tab (UX confusion + spurious
-        // false-positive flags).
         var settings = new AppSettings();
         settings.App.ConfigMode = "custom";
 
-        // Some random IP not in any vless.servers / subscriptions.
         var config = CreateValidConfig(
-            proxyServer: "203.0.113.42",  // TEST-NET-3
+            proxyServer: "203.0.113.42",
             proxyPort: 443,
             proxyUuid: "custom-uuid");
 
         var result = LeakProtection.ValidateConfig(config, settings);
 
-        // In custom mode we tolerate any server / port / uuid combo as
-        // long as the proxy outbound is well-formed. Some existing
-        // protocol-level validators may still flag the test-uuid in
-        // ValidateConcreteOutbound (e.g. VLESS uuid). The scope-aware
-        // path itself should NOT add errors here.
         Assert.DoesNotContain(result.Errors, e => e.Contains("scope")
             || e.Contains("legacy") || e.Contains("config_mode=custom"));
         Assert.DoesNotContain(result.Warnings, w =>
             w.Contains("not in your VLESS server list"));
     }
 
-    // ───────── 5) custom mode — missing proxy outbound → FAIL ─────────────
-
     [Fact]
     public void CustomMode_MissingProxyOutbound_Fails()
     {
-        // User pasted JSON without a proxy outbound. Route rules pointing
-        // at "proxy" would silently fail to direct → privacy leak.
         var settings = new AppSettings();
         settings.App.ConfigMode = "custom";
 
         var config = CreateValidConfig();
-        // Drop the proxy outbound entirely (keep direct only).
         config.Outbounds = new List<SingBoxOutbound>
         {
             new() { Type = "direct", Tag = "direct" },
@@ -289,13 +228,9 @@ public sealed class LeakProtectionScopeAwareTests
             e.Contains("config_mode=custom") && e.Contains("proxy"));
     }
 
-    // ───────── 6) custom mode — empty server in proxy → FAIL ──────────────
-
     [Fact]
     public void CustomMode_EmptyProxyServer_Fails()
     {
-        // proxy outbound exists but server field is empty — sing-box would
-        // refuse to start, but we catch it earlier with a clearer message.
         var settings = new AppSettings();
         settings.App.ConfigMode = "custom";
 
@@ -309,14 +244,9 @@ public sealed class LeakProtectionScopeAwareTests
             && (e.Contains("server") || e.Contains("empty")));
     }
 
-    // ───────── 7) scope-aware uuid mismatch on same IP → FAIL ─────────────
-
     [Fact]
     public void GeneratedMode_WithSubscription_SameIpDifferentUuid_FailsValidation()
     {
-        // Defense-in-depth: same IP, different uuid → probably a different
-        // physical server / placeholder. F-D matches on (server, port,
-        // uuid) tuple so this should fail.
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
         settings.App.Subscriptions.Add(new SubscriptionEntry
@@ -338,7 +268,7 @@ public sealed class LeakProtectionScopeAwareTests
         var config = CreateValidConfig(
             proxyServer: "104.194.156.93",
             proxyPort: 443,
-            proxyUuid: "00000000-0000-0000-0000-000000000000");  // wrong uuid
+            proxyUuid: "00000000-0000-0000-0000-000000000000");
 
         var result = LeakProtection.ValidateConfig(config, settings);
 
@@ -348,14 +278,9 @@ public sealed class LeakProtectionScopeAwareTests
             && (e.Contains("scope") || e.Contains("legacy")));
     }
 
-    // ───────── 8) cached subscription servers count as subscription scope ─
-
     [Fact]
     public void GeneratedMode_CachedSubscriptionServersAllowed()
     {
-        // SubscriptionResolver populates App.SubscriptionServers during
-        // offline startup. They're same-trust-tier as live subs and
-        // therefore part of the subscription-scope allow-list.
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
         settings.App.SubscriptionServers = new List<VlessServerEntry>
@@ -378,28 +303,11 @@ public sealed class LeakProtectionScopeAwareTests
         Assert.True(result.IsValid, string.Join("; ", result.Errors));
     }
 
-    // ─── G-1 (r10 r9 audit) brat-class union: generated + sub + non-placeholder vless.servers ───
-    //
-    // The r7 fix that unblocked brat (manual Free Config entry in
-    // generated mode with sub enabled) needs an explicit "what the user
-    // would check" assertion: their picked entry passes validation.
-    // Pre-r7 union returned ONLY subscription; brat's IP was rejected.
-    // r7 added: in generated mode, also include non-placeholder
-    // vless.servers entries in the allowed list. Stas-class placeholders
-    // are still rejected via VlessServersResolver.IsPlaceholderEntry.
-    //
-    // This test pins THAT specific behaviour (the
-    // GeneratedMode_WithSubscription_ValidOutbound_Passes test above
-    // happens to exercise the same path, but its setup uses subscription
-    // server as outbound — not a manual vless.servers entry. Brat's
-    // case uses a manual entry that ISN'T in any subscription, which is
-    // semantically different).
     [Fact]
     public void GeneratedMode_WithSubscription_NonPlaceholderManualVlessServer_Passes_BratRegression()
     {
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
-        // Subscription has 2 working servers
         settings.App.Subscriptions = new List<SubscriptionEntry>
         {
             new()
@@ -413,8 +321,6 @@ public sealed class LeakProtectionScopeAwareTests
                 }
             }
         };
-        // User added a Free Config manually — real IP, real pubkey, NOT
-        // in any subscription, NOT a placeholder.
         settings.Vless.Servers = new List<VlessServerEntry>
         {
             new()
@@ -440,31 +346,15 @@ public sealed class LeakProtectionScopeAwareTests
 
         var result = LeakProtection.ValidateConfig(config, settings);
 
-        // The whole point of r7 fix — should PASS, not Error
         Assert.True(result.IsValid, "Validation should pass for legitimate manual Free Config entry in generated mode. Errors: " + string.Join("; ", result.Errors));
         Assert.DoesNotContain(result.Errors, e =>
             e.Contains("193.233.217.174")
             && (e.Contains("scope") || e.Contains("legacy") || e.Contains("subscription")));
     }
 
-    // ─── DNS-tunnel (slipstream) loopback proxy outbound — exempt from scope ───
-    //
-    // v2.42.0 regression: the DNS-tunnel transport rewrites the proxy outbound
-    // to target the local slipstream-client front (127.0.0.1:7001); the REAL
-    // server is reached THROUGH that local client (validated by
-    // SlipstreamManager from the dns-tunnel profile, not by LeakProtection).
-    // Pre-fix the scope-aware check saw "127.0.0.1:7001 not in the active
-    // subscription scope" and hard-failed VpnEngine.StartAsync (user's exact
-    // "Latvia DNS ~main-brat" log, 2026-06-11). A loopback target can't carry
-    // traffic off-box, so it's a fail-closed local relay, never a remote leak —
-    // and is now exempt from the subscription-server allow-list.
-
     [Fact]
     public void GeneratedMode_WithSubscription_DnsTunnelLoopbackOutbound_Passes()
     {
-        // Reproduces the user's scenario: generated mode, an enabled
-        // subscription with real servers, but the proxy outbound is the
-        // DNS-tunnel local front (127.0.0.1:7001) carrying the real UUID.
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
         settings.App.Subscriptions.Add(new SubscriptionEntry
@@ -478,7 +368,6 @@ public sealed class LeakProtectionScopeAwareTests
             }
         });
 
-        // BuildDnsTunnelOutbound shape: vless over 127.0.0.1:7001, real uuid.
         var config = CreateValidConfig(
             proxyServer: "127.0.0.1",
             proxyPort: 7001,
@@ -495,15 +384,12 @@ public sealed class LeakProtectionScopeAwareTests
     }
 
     [Theory]
-    [InlineData("127.0.0.1")]   // IPv4 loopback (the dns-tunnel default)
-    [InlineData("127.5.6.7")]   // anywhere in 127.0.0.0/8
-    [InlineData("::1")]         // IPv6 loopback
-    [InlineData("localhost")]   // hostname form
+    [InlineData("127.0.0.1")]
+    [InlineData("127.5.6.7")]
+    [InlineData("::1")]
+    [InlineData("localhost")]
     public void GeneratedMode_WithSubscription_LoopbackVariants_AllExempt(string loopback)
     {
-        // Lock the IsLoopbackServer helper's coverage across every loopback
-        // spelling a local-front transport might emit, so none of them trips
-        // the subscription-scope leak error.
         var settings = new AppSettings();
         settings.App.ConfigMode = "generated";
         settings.App.Subscriptions.Add(new SubscriptionEntry
@@ -525,8 +411,6 @@ public sealed class LeakProtectionScopeAwareTests
             e.Contains("scope") || e.Contains("not in the active subscription"));
     }
 
-    // ─── AWG Endpoint scope validation ───
-
     [Fact]
     public void GeneratedMode_WithSubscription_AwgEndpointOutOfScope_FailsValidation()
     {
@@ -536,7 +420,6 @@ public sealed class LeakProtectionScopeAwareTests
             proxyPort: 443,
             proxyUuid: "9029d44f-232f-4283-b055-d39f8448f43b");
 
-        // Add AWG endpoint pointing to out-of-scope server
         config.Endpoints = new List<SingBoxEndpoint>
         {
             new()
@@ -568,7 +451,6 @@ public sealed class LeakProtectionScopeAwareTests
             proxyPort: 443,
             proxyUuid: "9029d44f-232f-4283-b055-d39f8448f43b");
 
-        // Add AWG endpoint pointing to in-scope server from BuildStasLikeSettings (104.194.156.93:443)
         config.Endpoints = new List<SingBoxEndpoint>
         {
             new()

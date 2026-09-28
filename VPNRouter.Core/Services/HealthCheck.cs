@@ -10,13 +10,6 @@ using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Shared health-check logic. Consumed by the CLI <c>doctor</c> command
-/// and the UI "Run Health Check" menu item. Output is a plain-text
-/// report suitable for pasting into a bug report.
-///
-/// v2.24.1 of plans/vpnrouter-self-healing.md.
-/// </summary>
 public static class HealthCheck
 {
     public enum Level { Ok, Warn, Err }
@@ -24,17 +17,11 @@ public static class HealthCheck
     public readonly record struct Result(Level Severity, string Message);
     public readonly record struct PathMtuProbeResult(int? BestPayload, bool PlainPingBlocked);
 
-    /// <summary>
-    /// Run all checks, return the ordered result list. No formatting,
-    /// no writing to disk — just the facts. Callers render / persist
-    /// as they wish.
-    /// </summary>
     public static List<Result> RunAll()
     {
         var results = new List<Result>();
         AppSettings? parsedSettings = null;
 
-        // ── Config ──
         var configPath = AppPaths.ConfigYamlPath;
         if (File.Exists(configPath))
         {
@@ -52,10 +39,6 @@ public static class HealthCheck
                     results.Add(new(Level.Err,
                         $"config.yaml is schema v{settings.SchemaVersion} but this VPNRouter only knows up to v{AppSettings.CurrentSchemaVersion} — upgrade VPNRouter or revert config.yaml"));
 
-                // Per-mode config validation. Subscribe mode stores servers under
-                // app.subscriptions[].servers (resolved into Vless.Servers at startup
-                // by SubscriptionResolver). Custom mode points at an external sing-box
-                // JSON file. Generated/legacy mode reads vless.servers directly.
                 var mode = settings.App?.ConfigMode?.ToLowerInvariant() ?? "generated";
                 var subscriptionServerCount = settings.App?.Subscriptions?
                     .Where(s => s.Enabled)
@@ -83,7 +66,7 @@ public static class HealthCheck
                             results.Add(new(Level.Ok, $"custom config at {customPath}"));
                         break;
 
-                    default: // "generated" and anything else falls through
+                    default:
                         if (!hasLegacyVless)
                             results.Add(new(Level.Warn, "VLESS config has no servers — VPN will not start"));
                         break;
@@ -100,7 +83,6 @@ public static class HealthCheck
                 $"config.yaml missing at {configPath} (will be created on first launch)"));
         }
 
-        // ── User profile catalogue ──
         var userCatalogue = Path.Combine(AppPaths.ProfilesDir, "default.json");
         if (File.Exists(userCatalogue))
         {
@@ -140,7 +122,6 @@ public static class HealthCheck
             results.Add(new(Level.Ok, "no user catalogue override (using bundled — recommended)"));
         }
 
-        // ── sing-box binary ──
         var singboxPath = AppPaths.SingBoxExePath;
         if (File.Exists(singboxPath))
         {
@@ -159,7 +140,6 @@ public static class HealthCheck
                     $"sing-box not found at {singboxPath} OR bundled at {bundled}"));
         }
 
-        // ── Update receipt ──
         var receipt = UpdateChecker.CheckInstallReceipt(VPNRouter.Core.AppVersion.Version);
         if (!string.IsNullOrEmpty(receipt))
             results.Add(new(Level.Warn, receipt));
@@ -168,13 +148,6 @@ public static class HealthCheck
         if (OperatingSystem.IsWindows() && parsedSettings != null)
             CheckPathMtu(results, parsedSettings.Tun?.Mtu ?? TunSettings.DefaultMtu);
 
-        // ── Linux: pkexec / polkit availability (v2.30 #3.3) ──
-        // Some minimal distros (Alpine, headless servers) ship without
-        // polkit. Without pkexec, the Stop escalation chain falls through
-        // to sudo -n (which fails fast unless NOPASSWD sudoers is set up),
-        // and the auto-update privilege escalation breaks. Detect at
-        // health-check time so the user can install policykit-1 BEFORE
-        // they hit the failure mid-Stop.
         if (OperatingSystem.IsLinux())
         {
             var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
@@ -197,20 +170,12 @@ public static class HealthCheck
             }
         }
 
-        // ── State / running indicator ──
-        // Parse state.json inline rather than referencing StateFile which
-        // lives in the CLI project. Structure: { "sing_box_pid": N, ... }.
         var statePath = AppPaths.StatePath;
         if (File.Exists(statePath))
         {
             try
             {
                 var json = File.ReadAllText(statePath);
-                // Phase 4 (2026-05-18): STJ JsonDocument inspection. The
-                // state.json can carry either snake_case (post-v2.32.0
-                // schema_version-marked) OR PascalCase (pre-v2.32.0
-                // legacy default Newtonsoft output) PID keys — read both
-                // verbatim, matching the pre-migration JObject lookup.
                 using var state = JsonDocument.Parse(json);
                 int pid = 0;
                 if (state.RootElement.TryGetProperty("sing_box_pid", out var p1)
@@ -256,11 +221,6 @@ public static class HealthCheck
             results.Add(new(Level.Ok, "no running-state file (app is stopped)"));
         }
 
-        // ── Lock file crash detection ──
-        // Note: calling DetectPreviousCrash here would consume (delete)
-        // the lock on every health check. For the doctor we want to
-        // observe, not consume. So we open the file non-destructively
-        // if it exists.
         var lockPath = Path.Combine(AppPaths.DataDir, "running.lock");
         if (File.Exists(lockPath))
         {
@@ -282,20 +242,9 @@ public static class HealthCheck
                     }
                 }
             }
-            catch { /* unreadable lockfile — tolerated */ }
+            catch { }
         }
 
-        // ── Process / Service ownership (v2.31.6-r20) ──
-        // User-reported pattern (spark-wraith 2026-05-04): "press disconnect,
-        // VPN turns back on after a second". Root cause: when the Windows
-        // Service is installed and running, it owns its own sing-box. The
-        // GUI / CLI sees the running sing-box via process scan and shows
-        // IsConnected=true, but its own _engine._singBox is null — so its
-        // Stop is a no-op. Service then keeps the tunnel up.
-        //
-        // Surface this state in doctor so users (and we, when triaging
-        // logs) can immediately tell whether a multi-owner conflict is
-        // happening before chasing other symptoms.
         try
         {
             var singboxProcs = Process.GetProcessesByName("sing-box");
@@ -326,7 +275,6 @@ public static class HealthCheck
             results.Add(new(Level.Warn, $"process inventory check failed: {ex.Message}"));
         }
 
-        // ── AppPaths directories ──
         foreach (var dir in new[] { AppPaths.DataDir, AppPaths.LogsDir, AppPaths.CacheDir, AppPaths.BinDir, AppPaths.ProfilesDir })
         {
             if (!Directory.Exists(dir))
@@ -353,8 +301,6 @@ public static class HealthCheck
         }
         catch
         {
-            // Health advice is best-effort; the main health report keeps the
-            // file-read failure details in the regular checks.
         }
 
         return BuildAdvice(settings, currentJson, singBoxLog);
@@ -687,13 +633,6 @@ public static class HealthCheck
         return null;
     }
 
-    /// <summary>
-    /// Windows-only: report whether the VPNRouter Service is installed and
-    /// running, and flag the multi-owner state where Service + GUI both
-    /// hold sing-box. Uses sc.exe query so we don't need a hard dependency
-    /// on System.ServiceProcess in Core (it's Windows-only and pulls in
-    /// extra closure mass on Linux/Mac builds).
-    /// </summary>
     [SupportedOSPlatform("windows")]
     private static void CheckWindowsServiceOwnership(
         List<Result> results, int singboxCount, int appCount)
@@ -714,15 +653,12 @@ public static class HealthCheck
             var stdout = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit(3000);
 
-            // sc.exe exits non-zero when the service doesn't exist (1060).
             if (proc.ExitCode != 0)
             {
                 results.Add(new(Level.Ok, "Windows Service not installed (running in user mode)"));
                 return;
             }
 
-            // STATE line is the canonical signal. Possible values:
-            // RUNNING / STOPPED / START_PENDING / STOP_PENDING / PAUSED
             var running = stdout.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
             var stopped = stdout.Contains("STOPPED", StringComparison.OrdinalIgnoreCase);
 
@@ -824,11 +760,6 @@ public static class HealthCheck
         return string.Empty;
     }
 
-    /// <summary>
-    /// Render results as plain-text suitable for a text file / bug report.
-    /// Uses ASCII markers (OK / WARN / ERR) rather than fancy unicode so
-    /// it opens cleanly in notepad.exe / gedit / any text viewer.
-    /// </summary>
     public static string FormatReport(IReadOnlyList<Result> results)
     {
         var sb = new StringBuilder();

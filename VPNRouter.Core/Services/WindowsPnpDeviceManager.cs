@@ -34,10 +34,6 @@ internal readonly record struct NativeNetworkConnectionRecord(
     string? Name,
     string? PnpInstanceId);
 
-/// <summary>
-/// Exact local-device removal for Windows builds whose pnputil predates
-/// /remove-device and /enum-devices (notably Windows 10 LTSC 2019).
-/// </summary>
 internal static class WindowsPnpDeviceManager
 {
     private const string NetworkConnectionsRegistryPath =
@@ -125,12 +121,6 @@ internal static class WindowsPnpDeviceManager
             return false;
         }
 
-        // The Network Connections key is the interface ConnectionId, while
-        // SWD\Wintun\{GUID} identifies the PnP devnode. Windows may assign
-        // different GUIDs to these two objects (observed on Windows 11 build
-        // 26200). Exact adapter-name matching plus a well-formed Wintun PnP ID
-        // is the ownership boundary; requiring GUID equality blocks a valid
-        // VPNRouter adapter and prevents every subsequent VPN start.
         return true;
     }
 
@@ -195,9 +185,6 @@ internal static class WindowsPnpDeviceManager
 
     internal static NativePnpPresenceResult QueryPresence(string instanceId)
     {
-        // PHANTOM includes non-present device records. Wintun can still reject
-        // a create while that record exists even though the live devnode is no
-        // longer configured, so NORMAL would make the settle gate fail open.
         var result = CMLocateDevNodeW(out _, instanceId, CmLocateDevNodePhantom);
         return result switch
         {

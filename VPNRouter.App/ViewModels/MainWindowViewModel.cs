@@ -3,10 +3,6 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-// Wave 12 Phase 3 (2026-05-18) — Avalonia 12 moved IClipboard.SetTextAsync /
-// TryGetTextAsync into the ClipboardExtensions static class in
-// Avalonia.Input.Platform. The legacy direct methods on IClipboard are gone;
-// add this using so the extension-method dispatch resolves.
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -23,8 +19,6 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
-// v2.31.6-r8: removed duplicate `using VPNRouter.Core.Platform;` (was line 21
-// and line 18 — compiler tolerates but flagged in the iter#4 audit).
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels.FreeConfigs;
 
@@ -32,36 +26,11 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
-    // v2.37.0-r8 — extracted timeout magic numbers per Phase 1 quality pass.
-    // Pre-r8 inline `Task.Delay(2000)` / `(5000)` at multiple sites obscured
-    // why the values are what they are. Named constants make the policy
-    // intent reviewable + tweakable in one place. Each comment explains
-    // the lower-bound rationale (what we'd break by going shorter).
-    //
-    // Rules toast (`SetRulesToast`): 2s lets users notice the message
-    // without it loitering through subsequent actions. Cancelled+reissued
-    // when a new toast arrives within the window.
     private const int RulesToastDurationMs = 2000;
-    // TgProxy settle window now runs only as a background late-exit recheck,
-    // after TgProxyManager's own 2s foreground watchdog has completed.
     private const int TgProxySettleDelayMs = 2000;
-    // Reconnect retry sleep when TUN lock stolen by Service: enough time
-    // for the Service's HealthMonitor to give up and release the lock on
-    // its own (default ~1.5s release window in Windows Service mode).
     private const int ServiceReleaseRetryDelayMs = 2000;
 
     private readonly VpnEngine _engine;
-    // v2.31.6-r12 (Phase H, iter#4 audit): Dispose-state guard.
-    // Pre-r12 the VM had no IDisposable surface — _runtimeStatusTimer
-    // (DispatcherTimer) and _subRefreshTimer (System.Threading.Timer)
-    // only stopped on the explicit Quit() / OnEngineStatus("Stopped")
-    // happy paths. On unhandled exit / X-button close / a future
-    // ReloadMainWindowForLocalization-style window rebuild, both timers
-    // would leak; FreeConfigsVm.Dispose() (which it implements) was
-    // never called either. r12 adds Dispose() that unhooks engine
-    // events, stops + disposes both timers, and disposes FreeConfigsVm.
-    // MainWindow.Closed should call this; until then it's still wired
-    // to Quit() so explicit-quit paths benefit immediately.
     private bool _disposed;
 #if PLATFORM_WINDOWS
     private ZapretManager? _zapret;
@@ -72,37 +41,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private Task? _tgProxyPostStartRecheckTask;
 #endif
     private readonly ILogger _logger;
-    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore seam for Load / Save /
-    // ConsumeRecoveryNotice / ConsumePlaceholderPruneNotice. Defaults to
-    // <see cref="RealSettingsStore.Instance"/> in the parameterless ctor —
-    // production paths see no behaviour change. Tests that want filesystem
-    // isolation can pass an <c>InMemorySettingsStore</c> via the chained
-    // overload below.
     private readonly ISettingsStore _settingsStore;
     private AppSettings _settings;
     private bool _isLoadingUI;
     private bool _appsLoaded;
     private System.Threading.Timer? _subRefreshTimer;
     private CancellationTokenSource? _subRefreshCts;
-    private const int SubRefreshIntervalMs = 3600_000; // 1 hour
+    private const int SubRefreshIntervalMs = 3600_000;
 
-    /// <summary>
-    /// Timestamp of the last UI-confirmed successful connect. Used by
-    /// <see cref="SyncConnectedWithVpnRuntime"/> to suppress false demotes
-    /// immediately after connect — on macOS the process enumeration used
-    /// by <see cref="RuntimeStatusDetector.IsVpnRunning"/> occasionally
-    /// returns false for the first 1–2 poll ticks after sing-box starts
-    /// (sudo launch handoff), which was flipping IsConnected back to false.
-    /// DateTime.MinValue = no recent connect.
-    /// </summary>
     private DateTime _lastSuccessfulConnectAt = DateTime.MinValue;
-
-    // ── Observable state ──
 
     [ObservableProperty] private string _statusText = Strings.NotConnected;
 
-    // W1.3: "True split active" badge — fed by VpnEngine.TrueSplitEngagedChanged (the kernel driver
-    // engaged, so excluded apps are bound past the TUN). Bound to a small status-zone badge + tooltip.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitStatusVisible))]
     [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
@@ -123,7 +73,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonBrush))]
     [NotifyPropertyChangedFor(nameof(SmpActiveServerLine))]
     [NotifyPropertyChangedFor(nameof(SmpHeroTitle))]
-    // v2.18.0 compact-design additions — status card / CTA / mini-badge
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOff))]
     [NotifyPropertyChangedFor(nameof(SimpleStatusTitle))]
@@ -131,7 +80,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
-    // Bug-r9-F-DEFENSIVE — active outbound display refresh on connect.
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundLine))]
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundIsSuspect))]
     [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundNormalVisible))]
@@ -160,19 +108,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty] private bool _isRussian;
 
-    /// <summary>
-    /// v2.29.0+ Layer 7 (UI surface for update receipt warning).
-    /// Populated at app startup from
-    /// <see cref="VPNRouter.Core.Services.UpdateChecker.CheckInstallReceipt"/>.
-    /// Non-empty value surfaces a dismissible banner at the top of
-    /// MainWindow. Empty when the previous update landed correctly OR
-    /// no update was attempted recently.
-    ///
-    /// <para>Catches the failure mode where the auto-update flow
-    /// completes (download + apply + restart) but the running binary
-    /// is not actually newer than before. Pre-r7 was logged via Serilog
-    /// only; users who don't tail the log never saw it.</para>
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasUpdateWarning))]
     private string _updateWarningText = string.Empty;
@@ -182,18 +117,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DismissUpdateWarning() => UpdateWarningText = string.Empty;
 
-    /// <summary>
-    /// v2.32.0 — settings-validator recovery banner. Populated in the
-    /// MainWindowViewModel constructor from
-    /// <see cref="SettingsLoader.ConsumeRecoveryNotice"/> when the
-    /// most recent <see cref="SettingsLoader.Load"/> rewrote defaults
-    /// over a structurally-valid but semantically-broken config.yaml
-    /// (typoed config_mode, port out of range, malformed subscription
-    /// URL, etc.). Dismissible without persisting — the underlying
-    /// notice was consumed once at startup so dismiss-on-close clears
-    /// it for this session and the user won't see the same message
-    /// again on next launch unless the corruption recurs.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSettingsRecoveryNotice))]
     private string _settingsRecoveryNoticeText = string.Empty;
@@ -204,14 +127,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DismissSettingsRecoveryNotice() =>
         SettingsRecoveryNoticeText = string.Empty;
-
-    // ── v2.32.3 (2026-05-17, Z:\kanareik incident) — placeholder-prune banner ──
-    // Populated by ConsumePlaceholderPruneNotice() reading SettingsMigrator's
-    // count from AppConfig. Sibling to SettingsRecoveryNoticeText but distinct
-    // because the message is specific (placeholder Reality keys, not a generic
-    // "we reset something") and the user needs different guidance: add a real
-    // vless:// URL or subscription instead of trying to recover the wiped
-    // entries (those entries were never real to begin with).
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasPlaceholderPruneNotice))]
@@ -224,13 +139,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissPlaceholderPruneNotice() =>
         PlaceholderPruneNoticeText = string.Empty;
 
-    // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
-    // Set when ToggleConnectionAsync catches ConflictingVpnException
-    // (thrown by VpnEngine.StartAsync via ConflictingVpnDetector). The
-    // banner names the specific process(es) so the user knows what to
-    // stop. Refresh re-runs detection so the user can dismiss after
-    // closing the other VPN; Dismiss hides until the next Connect attempt.
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasConflictingVpnWarning))]
     private string _conflictingVpnWarningText = string.Empty;
@@ -242,13 +150,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissConflictingVpnWarning() =>
         ConflictingVpnWarningText = string.Empty;
 
-    /// <summary>
-    /// v2.32.1-r4 (Bug-r10-A) — captured conflict list for the
-    /// <c>KillConflictingVpnCommand</c> to act on without re-running
-    /// detection (which could race with the user simultaneously
-    /// closing the other VPN themselves). Mirrors what
-    /// <see cref="ConflictingVpnException.Conflicts"/> would carry.
-    /// </summary>
     private System.Collections.Generic.IReadOnlyList<VPNRouter.Core.Services.ConflictingVpnDetector.ConflictingProcessInfo>
         _lastConflicts = System.Array.Empty<VPNRouter.Core.Services.ConflictingVpnDetector.ConflictingProcessInfo>();
 
@@ -268,31 +169,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             Strings.ConflictOtherVpnDetectedMessage(first.ProcessName, first.Pid);
     }
 
-    /// <summary>
-    /// v2.32.1-r5 (Bug-r10-B) + reconnect fix (2026-06-15) — session-scoped
-    /// opt-out from <see cref="ConflictingVpnDetector"/>. Set by
-    /// <see cref="IgnoreVpnConflictAndConnectAsyncCommand"/> and KEPT for the rest
-    /// of the app session so EVERY (re)start honours it: the primary Connect, the
-    /// subscription/server-switch reconnect, the Free Configs connect, and (via
-    /// <see cref="VpnEngine"/>) the internal AutoFailover re-entry.
-    ///
-    /// <para>Previously a one-shot reset right after the first Connect — so when a
-    /// subscription server was removed, the auto-reconnect / failover re-ran the
-    /// Phase 0 conflict pre-flight WITHOUT the user's ignore, threw
-    /// <c>ConflictingVpnException</c>, and the VPN never came back while a tolerated
-    /// VPN (AmneziaWG / WireGuard) was up. Persisting it for the session fixes that;
-    /// a fresh re-detect happens on the next app launch.</para>
-    /// </summary>
     private bool _skipVpnConflictThisSession;
 
-    /// <summary>
-    /// v2.32.1-r5 (Bug-r10-B) — «Игнорировать» button. Bypasses
-    /// ConflictingVpnDetector on THIS Connect (session-scoped), clears
-    /// banner, retries Connect. Use case: AmneziaVPN.exe sitting idle
-    /// in tray (process running but wintun not held — false positive).
-    /// Если юзер ошибся — sing-box упадёт с оригинальной wintun ошибкой
-    /// в downstream catch'е, recoverable.
-    /// </summary>
     [RelayCommand]
     private async Task IgnoreVpnConflictAndConnectAsync()
     {
@@ -305,20 +183,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.32.1-r4 (Bug-r10-A) — user-reported pain (2026-05-11): на
-    /// основной Win машине app требовал убить AmneziaVPN, но кнопки
-    /// kill не было — пришлось через Task Manager. Этот command
-    /// force-kills все processes из последней detection batch'и
-    /// (<see cref="_lastConflicts"/>). Используется через UI-кнопку
-    /// «Завершить» в conflict banner.
-    /// </summary>
     [RelayCommand]
     private async Task KillConflictingVpnAsync()
     {
         if (_lastConflicts.Count == 0)
         {
-            // Banner ещё видим но _lastConflicts пуст — refresh first.
             RefreshConflictingVpn();
             if (_lastConflicts.Count == 0) return;
         }
@@ -330,17 +199,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             try
             {
                 using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
-                // v2.32.1-r6 (Bug-r10-C): was Kill(entireProcessTree: true).
-                // entireProcessTree walks Win32_Process WMI for descendants
-                // and kills them too — on slow machines this can block the
-                // dispatcher for seconds AND can clobber unrelated processes
-                // that share a transient parent shell. User report: Kill
-                // visually cleared Zapret + TgProxy green badges even though
-                // the actual winws.exe / python.exe stayed alive — the
-                // status poll was returning stale results during the long
-                // WMI walk. Targeted Kill (single process, no tree) is the
-                // right scope here: known-VPN-client processes don't have
-                // meaningful descendants we need to clean up.
                 proc.Kill();
                 try { await proc.WaitForExitAsync(System.Threading.CancellationToken.None); } catch { }
                 killed++;
@@ -349,7 +207,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             catch (System.ArgumentException)
             {
-                // Process already gone — count as success.
                 killed++;
             }
             catch (Exception ex)
@@ -361,17 +218,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
 
-        // Re-run detection: any new instance started during kill?
-        // PIDs ушли, но user мог запустить второй процесс параллельно.
         RefreshConflictingVpn();
 
-        // v2.32.1-r6 (Bug-r10-C): force-refresh Zapret/TgProxy runtime
-        // status. The 2s polling timer adaptively throttles to 4–8s
-        // when nothing is running — if the throttle was at 8s when
-        // user clicked Kill, the green badges could appear stuck. A
-        // single synchronous re-poll resets the streak + writes fresh
-        // values immediately.
-        try { ForceRefreshRuntimeStatus(); } catch { /* defensive */ }
+        try { ForceRefreshRuntimeStatus(); } catch { }
 
         if (_lastConflicts.Count == 0)
         {
@@ -381,51 +230,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else if (failed > 0)
         {
-            // Some kills failed — surface a clearer message so user
-            // knows to retry as admin or manually via Task Manager.
             ConflictingVpnWarningText =
                 Strings.ConflictKillPartialFailure(killed, failed);
         }
     }
 
-    /// <summary>
-    /// One-shot adapter between <see cref="SettingsLoader.ConsumeRecoveryNotice"/>
-    /// and the bound <see cref="SettingsRecoveryNoticeText"/> property.
-    /// Lifted out of the constructor so the ctor stays compact (the
-    /// AppAutostartTgProxy regression pin walks the first 5000 chars
-    /// of the ctor body looking for the bootstrap fire-and-forget).
-    /// </summary>
     private void ConsumeSettingsRecoveryNotice()
     {
-        // Phase 4 Wave 19: route through the injected store so tests can
-        // seed a notice via InMemorySettingsStore.SeedRecoveryNotice instead
-        // of mutating SettingsLoader.LastRecoveryNotice statically.
         var recovery = _settingsStore.ConsumeRecoveryNotice();
         if (string.IsNullOrWhiteSpace(recovery)) return;
 
-        // Loader-supplied recovery line already includes the backup
-        // path; pass an empty path to Strings so we don't double up.
         SettingsRecoveryNoticeText =
             Strings.SettingsRecoveredFromBadConfig(string.Empty)
             + " (" + recovery + ")";
     }
 
-    /// <summary>
-    /// v2.32.3 (2026-05-17) — sibling of ConsumeSettingsRecoveryNotice for
-    /// the placeholder-prune banner. SettingsMigrator stamps a count + UTC
-    /// timestamp on AppConfig when it strips placeholder credentials; this
-    /// adapter reads them once via
-    /// <see cref="SettingsLoader.ConsumePlaceholderPruneNotice"/> and binds
-    /// the resulting human message to <see cref="PlaceholderPruneNoticeText"/>.
-    /// Two branches: at least one healthy server survives (normal banner)
-    /// vs nothing left in vless.servers + no subscriptions (allGone banner
-    /// that nudges the user to add a real server).
-    /// </summary>
     private void ConsumePlaceholderPruneNotice()
     {
-        // Phase 4 Wave 19: route through the injected store. Real semantics
-        // are the same (mutates _settings.App.PlaceholderPruneCount in place);
-        // the indirection matters only to test injection.
         var consumed = _settingsStore.ConsumePlaceholderPruneNotice(_settings);
         if (consumed.Count == 0) return;
 
@@ -438,10 +259,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             : Strings.PlaceholderPruneBannerAllGone;
     }
 
-    /// <summary>
-    /// True when the window should render the one-page SimplePage instead of
-    /// the full tabbed Advanced layout. Persisted via AppSettings.App.UiMode.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(UiModeToggleText))]
     [NotifyPropertyChangedFor(nameof(UiModeToggleTooltip))]
@@ -450,26 +267,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string UiModeToggleText   => IsSimpleMode ? Strings.SmpToggleToAdvanced : Strings.SmpToggleToSimple;
     public string UiModeToggleTooltip => Strings.SmpToggleTooltip;
 
-    // v2.21.0: Linux-specific flags for UI. Zapret (winws.exe) and TgProxy
-    // (Python embeddable) are Windows-only; their sub-sections of the Tools
-    // tab + related buttons are hidden on Linux. Expose both IsLinux and
-    // IsWindows so XAML can bind IsVisible without a converter.
     public bool IsLinuxPlatform   => OperatingSystem.IsLinux();
     public bool IsWindowsPlatform => OperatingSystem.IsWindows();
 
-    /// <summary>
-    /// v2.40.x (Fix #9) / v2.41.0 (Fix #1): whether the DNS-leak-lockdown toggle
-    /// does something on this OS. Windows: firewall DNS-port lockdown. macOS
-    /// (r3): MacDnsHardening pins the system resolver to the TUN gateway so
-    /// mDNSResponder stops leaking to the ISP. Linux: still a no-op (no DNS
-    /// hardening / nftables kill-switch yet) → toggle greyed + honesty note.
-    /// </summary>
     public bool IsDnsLeakLockdownAvailable => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
-    /// <summary>True when Zapret DPI bypass is available on the current OS (Windows only).</summary>
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
-    /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
     public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
-    /// <summary>Tools-tab visibility gate. Visible when ANY sub-tool is available.</summary>
     public bool IsToolsAvailable => Internals.ToolTabAvailability.ToolsTabVisible(
         IsZapretAvailable, IsTgProxyAvailable);
     [ObservableProperty]
@@ -482,36 +285,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
     private bool _isSubscribeMode = false;
 
-    /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
     public bool IsServerListMode => IsVlessMode || IsSubscribeMode;
 
-    // v2.31.6-r9 — removed `_configModeIndex` ObservableProperty +
-    // `ConfigModeItems` getter + `OnConfigModeIndexChanged` no-op partial.
-    // The ComboBox they backed was dropped from the UI in v2.5.0 and the
-    // empty handler had been parked as a no-op safety since. No XAML
-    // bindings left, no callers — iter#4 audit confirmed unused.
-
-    // Sync mode flags when tab changes. Saves on tab switch so Connect
-    // always uses the mode matching the visible tab.
     partial void OnSelectedTabIndexChanged(int value)
     {
         if (_isLoadingUI || _isReconnecting) return;
-        // v2.30.2-r1 diag: log every tab transition so the next repro of
-        // "Servers tab opened in wrong sub-state" is unambiguous.
         _logger?.Information(
             "[VM] OnSelectedTabIndexChanged tab={Tab} (was IsVlessMode={V}, IsSubscribeMode={S}, ServerModeIndex={I})",
             value, IsVlessMode, IsSubscribeMode, SelectedServerModeIndex);
-        if (value == 0) // Manual tab
+        if (value == 0)
         {
             IsVlessMode = true;
             IsSubscribeMode = false;
-            // v2.30.2-r1 Bug 1 fix: when navigating into the Servers tab,
-            // the sub-tab visual selection must match what the page is
-            // actually showing. If the user previously had ConfigMode=
-            // "subscribe" → "custom" → "subscribe" (peeking) → switch to
-            // Servers tab, the SelectedServerModeIndex could be stuck on
-            // 1 (Custom) from the peek, while the page now wants to
-            // show VLESS rows. Re-sync to the data-driven default.
             var hasManual = Servers.Count > 0;
             var hasCustom = CustomConfigs.Count > 0;
             var desiredSubTab = (hasManual || !hasCustom) ? 0 : 1;
@@ -523,27 +308,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 SelectedServerModeIndex = desiredSubTab;
             }
         }
-        else if (value == 1) // Subscribe tab
+        else if (value == 1)
         {
             IsSubscribeMode = true;
             IsVlessMode = false;
         }
-        else if (value == 5) // FreeConfigs tab
+        else if (value == 5)
         {
-            // v2.20.1: lazy-load the FreeConfigs snapshot on first visit.
-            // Users who never open this tab save ~6-7 MB of JSON
-            // deserialization + retained list. Subsequent visits are no-ops.
             try { FreeConfigsVm?.EnsureCacheLoaded(); }
             catch (Exception ex)
             {
                 _logger.Warning(ex, "[VM] FreeConfigs lazy-load failed");
             }
         }
-        // Tab 2 (Network), Tab 3 (Applications), Tab 4 (Tools) — no action
     }
     [ObservableProperty] private string _subscriptionUrl = string.Empty;
 
-    // Multiple subscriptions support (v2.12+)
     public ObservableCollection<SubscriptionViewModel> Subscriptions { get; } = new();
     [ObservableProperty] private string _newSubName = string.Empty;
     [ObservableProperty] private string _newSubUrl = string.Empty;
@@ -554,20 +334,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsTrueSplitRetryVisible))]
     private bool _isSplitTunnel = true;
 
-    /// <summary>
-    /// v2.25.10 fix: exposes the inverse of <see cref="IsSplitTunnel"/> as a
-    /// two-way bindable bool so the Full Tunnel RadioButton in Settings →
-    /// Routing can drive IsSplitTunnel directly (setting IsFullTunnel=true
-    /// sets IsSplitTunnel=false). Needed because RadioButton with
-    /// <c>{Binding !IsSplitTunnel}</c> is one-way only and cannot flip the
-    /// bool back on user click. Previously the Full RadioButton relied on
-    /// GroupName exclusivity to uncheck Split — that worked inside one
-    /// window but broke after ReloadMainWindowForLocalization briefly kept
-    /// both the old and new window's RadioButtons alive with the same
-    /// GroupName, letting the group manager cross-wire them. User symptom:
-    /// "VPN seemed to flip to Full by itself after language toggle and
-    /// Split would no longer apply".
-    /// </summary>
     public bool IsFullTunnel
     {
         get => !IsSplitTunnel;
@@ -578,13 +344,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.32 (r10) — Apps Include/Exclude 2-mode toggle. User feedback
-    /// "сделам 2 модм exclude и include". Backed by AM-1 chip's
-    /// AppSettings.App.RoutingAppsMode (schema v3 field). Default
-    /// "include" = legacy behaviour (selected apps -> VPN). "exclude"
-    /// inverts: selected apps -> direct, everything else -> VPN.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRoutingAppsModeInclude))]
     [NotifyPropertyChangedFor(nameof(IsRoutingAppsModeExclude))]
@@ -639,16 +398,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SelectedActiveAppGroup));
     }
 
-    /// <summary>True when <see cref="RoutingAppsMode"/> = "include". Two-way
-    /// bool for radio/segmented-toggle binding.</summary>
     public bool IsRoutingAppsModeInclude
     {
         get => string.Equals(RoutingAppsMode, "include", StringComparison.OrdinalIgnoreCase);
         set { if (value) RoutingAppsMode = "include"; }
     }
 
-    /// <summary>True when <see cref="RoutingAppsMode"/> = "exclude". Two-way
-    /// bool for radio/segmented-toggle binding.</summary>
     public bool IsRoutingAppsModeExclude
     {
         get => string.Equals(RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
@@ -663,11 +418,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings.App.RoutingAppsMode = canon;
         AppsListEditorMode = canon;
 
-        // AM-3 (2026-05-12): mode toggle keeps two independent selection
-        // states (RoutingAppsInclude vs RoutingAppsExclude). When the
-        // active mode flips, the checkbox UI must re-read every
-        // AppItem.IsChecked from the now-active list — even apps that
-        // haven't moved still need a notification so the binding refreshes.
         RefreshAppCheckboxes();
 
         try { SaveSettings(); }
@@ -678,12 +428,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         MarkRoutingSettingsChanged();
     }
 
-    /// <summary>
-    /// AM-3 — read this app's checked state from the list that matches
-    /// the currently-active <see cref="RoutingAppsMode"/>. Used by the
-    /// AppItem bridge as its ReadMode callback. Case-insensitive lookup;
-    /// missing list returns false.
-    /// </summary>
     internal bool IsAppCheckedInCurrentMode(string processName)
     {
         if (string.IsNullOrEmpty(processName)) return false;
@@ -693,16 +437,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// AM-3 — write this app's checked state into the list that matches
-    /// the currently-active <see cref="RoutingAppsMode"/>. Used by the
-    /// AppItem bridge as its WriteMode callback. Idempotent: adding an
-    /// already-present app is a no-op; removing a missing app is a
-    /// no-op. Persists eagerly via SaveSettings (sub-millisecond YAML
-    /// write) so toggles survive a Windows reboot even without an
-    /// explicit Apply — matches the Bug-r9-I auto-save contract for
-    /// AppGroup / AppItem changes.
-    /// </summary>
     internal void SetAppCheckedInCurrentMode(string processName, bool isChecked)
     {
         if (string.IsNullOrEmpty(processName)) return;
@@ -783,12 +517,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (editsActiveList) MarkRoutingSettingsChanged();
     }
 
-    /// <summary>
-    /// AM-3 — resolve the active list from the current mode. Defaults to
-    /// RoutingAppsInclude when the value is anything other than
-    /// "exclude" (safer default — the include path is the legacy one
-    /// users expect).
-    /// </summary>
     private List<string>? GetActiveAppList()
     {
         if (_settings?.App == null) return null;
@@ -808,11 +536,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private int _batchUpdateDepth;
     public bool IsBatchUpdating => _batchUpdateDepth > 0;
 
-    /// <summary>
-    /// Suppresses per-item <see cref="SaveSettings"/> calls during bulk operations
-    /// (e.g. Select All, Clear All, group toggles, Steam import). Persists settings
-    /// exactly once when the outermost batch scope disposes.
-    /// </summary>
     public IDisposable BeginBatchUpdate()
     {
         System.Threading.Interlocked.Increment(ref _batchUpdateDepth);
@@ -839,12 +562,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// AM-3 — re-fire <see cref="AppItemViewModel.IsChecked"/> change
-    /// notifications across every app so XAML CheckBoxes refresh from
-    /// the now-active mode list. Called from
-    /// <see cref="OnRoutingAppsModeChanged"/> after the mode flip.
-    /// </summary>
     private void RefreshAppCheckboxes()
     {
         foreach (var group in AppGroups.Concat(BypassAppGroups))
@@ -858,12 +575,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsBadComboWarningVisible))]
     private bool _bypassRussianTraffic = true;
 
-    /// <summary>v2.30.0-r17 — when true, custom rules win over global
-    /// toggles (BypassRussianTraffic + BlockAds). Default false (toggles
-    /// first, same as r1-r16). Mirrors AppSettings.App.CustomRulesPriority
-    /// "custom_first" / "toggles_first". User report 2026-04-29: «хочу
-    /// чтоб кастомные правила были выше или переключатель что брать в
-    /// приоритет».</summary>
     [ObservableProperty] private bool _customRulesAboveToggles;
 
     partial void OnCustomRulesAboveTogglesChanged(bool value)
@@ -874,52 +585,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         MarkRoutingSettingsChanged();
     }
 
-    /// <summary>
-    /// v2.30.0 — text-format mirror of <see cref="AppSettings.App.CustomRules"/>.
-    /// User edits this multi-line string in the Network → Routing →
-    /// "Custom rules (advanced)" textbox; SaveSettings parses it back
-    /// to the structured list via <see cref="CustomRulesParser"/>.
-    /// Errors during parse populate <see cref="CustomRulesErrorText"/>;
-    /// catch-all rule warnings populate <see cref="CustomRulesConflictText"/>.
-    ///
-    /// <para>v2.29.0 only had direct rules; v2.30 adds proxy + block.
-    /// CustomDirectRulesText kept as alias on first run after upgrade
-    /// — read once during cache load, then SaveSettings persists to
-    /// CustomRulesText.</para>
-    /// </summary>
     [ObservableProperty] private string _customRulesText = string.Empty;
 
-    /// <summary>v2.30.0 — error diagnostic shown below the textbox; empty
-    /// when all lines parsed cleanly.</summary>
     [ObservableProperty] private string _customRulesErrorText = string.Empty;
 
-    /// <summary>v2.30.0 — conflict warning (e.g. catch-all rule shadows
-    /// subsequent rules). Surfaced in a separate diagnostic block below
-    /// the parse-error block.</summary>
     [ObservableProperty] private string _customRulesConflictText = string.Empty;
 
-    // v2.30.0-r2 — structured row-table for Network → Rules section.
-    // Mirrors AppSettings.App.CustomRules. CustomRulesText (textbox) +
-    // CustomRulesList (rows) are TWO views of the SAME underlying data.
-    // Rebuilt on settings load + after each user edit (add/delete/toggle/
-    // textbox change). To avoid feedback loop, _isSyncingCustomRules
-    // suppresses cross-update during the rebuild.
     public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> CustomRulesList { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
     private bool _isSyncingCustomRules;
 
-    // v2.30.0-r4 — search filter + bulk actions for large rule sets.
-    // User concern: «обычно если импортирую какой-то список правил из
-    // git ок включает в себя 100 и более правил». Without virtualization
-    // + search, 100+ rows became painful: ItemsControl rendered all,
-    // no way to find specific rule, no bulk operations. r4 adds:
-    //   1. ListBox + VirtualizingStackPanel (handled in XAML).
-    //   2. CustomRulesSearchText filter — substring match across
-    //      action/type/value/comment.
-    //   3. FilteredCustomRulesList — view rebuilt on filter change,
-    //      bound by ListBox.ItemsSource.
-    //   4. CustomRulesCountText — "showing N of M" display.
-    //   5. Bulk action commands: Clear all, Enable all, Disable all.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CustomRulesCountText))]
     private string _customRulesSearchText = string.Empty;
@@ -927,7 +602,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> FilteredCustomRulesList { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
 
-    /// <summary>v2.30.0-r4 — "Showing 12 of 248 rules" display.</summary>
     public string CustomRulesCountText
     {
         get
@@ -945,18 +619,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>v2.30.0-r4 — apply CustomRulesSearchText to CustomRulesList,
-    /// repopulate FilteredCustomRulesList. Called on search-text change
-    /// + on every CustomRulesList change.</summary>
     private void RebuildFilteredCustomRulesList()
     {
         FilteredCustomRulesList.Clear();
         var query = (CustomRulesSearchText ?? string.Empty).Trim().ToLowerInvariant();
         var actionFilter = RulesActionFilter ?? "all";
 
-        // Per-action counts BEFORE filter — drives the segment-control
-        // counters next to each chip label (so the user can see how
-        // many rules of each type exist regardless of current filter).
         int total = 0, direct = 0, proxy = 0, block = 0;
 
         foreach (var vm in CustomRulesList)
@@ -969,7 +637,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 case "block":  block++;  break;
             }
 
-            // Apply both filters: action AND search.
             if (actionFilter != "all" &&
                 !string.Equals(vm.Action, actionFilter, System.StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -987,9 +654,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RulesFilterCountProxy  = proxy.ToString(System.Globalization.CultureInfo.InvariantCulture);
         RulesFilterCountBlock  = block.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-        // v2.30.0-r12 — keep Read-mode groups in sync. Cheap (O(N)
-        // single pass) and only meaningful when user is in Read view,
-        // but rebuilding always avoids stale data when they flip into it.
         RebuildReadModeGroups();
 
         OnPropertyChanged(nameof(CustomRulesCountText));
@@ -1010,11 +674,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _newRuleComment = string.Empty;
     [ObservableProperty] private string _newRuleValidationError = string.Empty;
 
-    // v2.30.0-r11 — live-validation per type for the Add-form Value field.
-    // typeMeta from RulesPage.html: each type has a placeholder, a hint,
-    // and a regex (or RegExp ctor for domain_regex). We translate the live
-    // regex check to NewRuleValueIsValid + NewRuleValueHint + a colored
-    // border. Empty value = neutral (hint shows the per-type guidance).
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NewRuleValueBorderColor))]
     private bool _newRuleValueIsValid = true;
@@ -1022,31 +681,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _newRuleValueHint = string.Empty;
     [ObservableProperty] private string _newRuleValuePlaceholder = ".corp.example";
 
-    /// <summary>True when the value is INVALID (Border-color converter
-    /// uses bool->Brush param "DangerBorder|SuccessBorder", so true means
-    /// danger). When the value is empty, kept false (= success/default).</summary>
     public bool NewRuleValueBorderColor => !NewRuleValueIsValid;
 
-    /// <summary>Live "this action does X" hint shown under the Action
-    /// ComboBox in the Add-form. Per design `updateActionColor` JS handler.
-    /// v2.30.6-r1 (UX-13): hints now spell out the concrete behavior so
-    /// users without sing-box background know what each action does.</summary>
     public string NewRuleActionHint => NewRuleAction switch
     {
-        // v2.37.0-r13 — localized text moved to Strings.cs.
         "direct" => Strings.RuleActionHintDirect,
         "proxy"  => Strings.RuleActionHintProxy,
         "block"  => Strings.RuleActionHintBlock,
         _ => string.Empty,
     };
 
-    /// <summary>Per-type guidance text shown under the Type ComboBox + as
-    /// the default Value-hint. From RulesPage.html `typeMeta[type].hint`.
-    /// v2.30.6-r1 (UX-13): every hint now embeds a concrete example so the
-    /// raw sing-box term ("domain_suffix") makes immediate sense.</summary>
     public string NewRuleTypeHint => NewRuleType switch
     {
-        // v2.37.0-r13 — localized text moved to Strings.cs.
         "domain"         => Strings.RuleTypeHintDomain,
         "domain_suffix"  => Strings.RuleTypeHintDomainSuffix,
         "domain_keyword" => Strings.RuleTypeHintDomainKeyword,
@@ -1061,9 +707,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _                => string.Empty,
     };
 
-    /// <summary>Compiled regex per type for live-validation of the Value
-    /// input. <c>domain_regex</c> uses runtime <c>new Regex(input)</c>
-    /// validity check instead of a fixed pattern.</summary>
     private static readonly System.Collections.Generic.Dictionary<string, System.Text.RegularExpressions.Regex> _typeValidatorMap = new()
     {
         ["domain"]         = new(@"^[a-z0-9.-]+\.[a-z]{2,}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
@@ -1073,24 +716,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ["port"]           = new(@"^\d{1,5}(\s*,\s*\d{1,5})*$", System.Text.RegularExpressions.RegexOptions.Compiled),
         ["port_range"]     = new(@"^\d{1,5}-\d{1,5}$", System.Text.RegularExpressions.RegexOptions.Compiled),
         ["network"]        = new(@"^(tcp|udp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
-        // r17: process_name accepts both with and without .exe (Mac/Linux
-        // process names are bare like "chrome", "discord"; Windows can be
-        // "chrome.exe" or "chrome"). sing-box matches case-sensitively
-        // against the executable file basename.
         ["process_name"]   = new(@"^[\w.\-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
-        // r17: process_path accepts Windows (C:\), Mac/Linux (/), and
-        // arbitrary segment characters (.app bundles need spaces).
         ["process_path"]   = new(@"^([A-Z]:\\|/).+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["geosite"]        = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["geoip"]          = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
     };
 
-    /// <summary>Per-type Value-input placeholder. Updates when user
-    /// changes Type. From RulesPage.html `typeMeta[type].ph`.</summary>
-    /// <summary>v2.30.0-r17 — OS-aware placeholders. process_name and
-    /// process_path differ between Windows and Mac/Linux (no .exe
-    /// extension on Unix; different path conventions). User report:
-    /// «пункт process_name предлагает .exe даже на Mac в примере».</summary>
     private string ResolveValuePlaceholder(string type) => type switch
     {
         "domain"         => "mail.example.com",
@@ -1114,7 +745,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnNewRuleTypeChanged(string value)
     {
         NewRuleValuePlaceholder = ResolveValuePlaceholder(value);
-        // Re-validate the existing value against the new type rules.
         ValidateNewRuleValue(NewRuleValue);
     }
 
@@ -1147,8 +777,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrWhiteSpace(val))
         {
-            // Empty = neutral state: show the type's default guidance,
-            // border stays default (not danger).
             NewRuleValueIsValid = true;
             NewRuleValueHint = NewRuleTypeHint;
             return;
@@ -1166,7 +794,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            ok = true; // Unknown type — don't block.
+            ok = true;
         }
 
         NewRuleValueIsValid = ok;
@@ -1175,7 +803,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             : (IsRussian ? $"✗ не подходит формату {NewRuleType}" : $"✗ wrong format for {NewRuleType}");
     }
 
-    // v2.30.0-r11 — Action filter chips state.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRulesFilterAll))]
     [NotifyPropertyChangedFor(nameof(IsRulesFilterDirect))]
@@ -1188,8 +815,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsRulesFilterProxy  => RulesActionFilter == "proxy";
     public bool IsRulesFilterBlock  => RulesActionFilter == "block";
 
-    /// <summary>Per-action counts shown in the filter chip secondary text.
-    /// Refreshed by <see cref="RebuildFilteredCustomRulesList"/>.</summary>
     [ObservableProperty] private string _rulesFilterCountAll    = string.Empty;
     [ObservableProperty] private string _rulesFilterCountDirect = string.Empty;
     [ObservableProperty] private string _rulesFilterCountProxy  = string.Empty;
@@ -1203,18 +828,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RebuildFilteredCustomRulesList();
     }
 
-    /// <summary>Static list of action options for the Add-rule ComboBox.</summary>
     public IReadOnlyList<string> AvailableRuleActions { get; }
         = new[] { "direct", "proxy", "block" };
 
-    /// <summary>Static list of type options for the Add-rule ComboBox.
-    /// Order matches the textbox grammar documentation for UX consistency.
-    /// <para>v2.31.0-r4 (AU-10): added <c>domain_regex</c> + <c>process_path</c>
-    /// so Cards-mode now exposes the same surface that the Edit-mode
-    /// validator (line ~951) already accepts. Pre-fix users could author
-    /// these rule types only via raw textbox grammar; the Add-form
-    /// ComboBox didn't list them, leading to a silent surface mismatch.</para>
-    /// </summary>
     public IReadOnlyList<string> AvailableRuleTypes { get; }
         = new[]
         {
@@ -1223,11 +839,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             "process_name", "process_path", "geosite", "geoip",
         };
 
-    // v2.31.6-r9 — removed CustomDirectRulesText / CustomDirectRulesErrorText
-    // aliases (v2.29.0-r4 transitional shim for cached XAML bindings).
-    // Iter#4 audit: no XAML reference remains anywhere; the only callers
-    // were the VM's own self-OnPropertyChanged announcements at lines
-    // 806-807 (also removed).
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TunMtuWarning))]
@@ -1243,9 +854,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
-    // Backlog A (2026-06-20): opt-in auto-select fastest reachable subscription
-    // server via sing-box urltest. Persisted to Vless.AutoSelectBestServer; takes
-    // effect on next connect/Apply (like BlockAds). Toggle on the Subscribe page.
     [ObservableProperty] private bool _autoSelectBestServer = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ConnectionIntentStatusText))]
@@ -1260,24 +868,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         3 => IsRussian ? "Авто: совместимость" : "Auto: compatibility",
         _ => IsRussian ? "Авто: обычный режим" : "Auto: general"
     };
-    // Wave 39 (v2.35.0-r5): firewall-level DNS lockdown. When ON, the
-    // FirewallManager adds outbound block rules for UDP/53, TCP/53, TCP/853
-    // on all non-TUN interfaces while VPN is active. Protects against the
-    // Windows DNS Client multi-resolver race that survives our existing
-    // SMHNR/ParallelAAAA registry hardening (some Win11 22H2+ paths query
-    // every configured resolver in parallel regardless of the registry
-    // settings). Default true for the property — Agent A's AppSettings
-    // change defaults the underlying setting to true for new installs and
-    // false for upgrades via SettingsMigrator. See
-    // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBadComboWarningVisible))]
     private bool _isDnsLeakLockdownEnabled = true;
 
-    /// <summary>
-    /// Legacy characterization/binding surface. RU bypass DNS now stays inside
-    /// the proxy, so DNS lockdown no longer conflicts and the banner stays hidden.
-    /// </summary>
     public bool IsBadComboWarningVisible => false;
 
     public string LblBadComboWarningTitle =>
@@ -1306,7 +900,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DisableBadComboRuBypass() => BypassRussianTraffic = false;
 
-    // Apply changes (hot-reload) UX state
     [ObservableProperty] private bool _hasPendingAppChanges;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanApplyAppChanges))]
@@ -1328,18 +921,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             HasPendingAppChanges = false;
     }
 
-    // Autostart
     [ObservableProperty] private bool _autostartVpn = false;
     [ObservableProperty] private bool _autostartZapret = false;
     [ObservableProperty] private bool _autostartTgProxy = false;
     [ObservableProperty] private bool _autostartUi = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDpiToggle))]
-    // v2.36.0-r8 — hero labels swap between Stopped/Running on this flag.
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(LblZapretMagicButton))]
-    // r34 — Hero quick-strategy row visibility.
     [NotifyPropertyChangedFor(nameof(HasZapretStrategiesForQuickStart))]
     private bool _zapretEnabled = false;
     [ObservableProperty]
@@ -1348,10 +938,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsCustomStrategy => ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
         && ZapretStrategies[ZapretStrategyIndex] == "custom";
     [ObservableProperty] private string _zapretCustomArgs = string.Empty;
-    // v2.37.0-r7 — uses Strings.Stopped (RU «Остановлен» / EN "Stopped")
-    // instead of hardcoded English literal. Pre-r7 the field default leaked
-    // English into RU UI on first launch. Re-init on language change handled
-    // by ReloadMainWindowForLocalization (window rebuild rebinds the VM).
     [ObservableProperty] private string _zapretStatus = Strings.Stopped;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDiscordHosts))]
@@ -1366,37 +952,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
 
-    /// <summary>
-    /// v2.37.0-r36 — strategy name + verification status badge for the
-    /// Hero quick-strategy mini-row. 1:1 indexed with <see cref="ZapretStrategies"/>,
-    /// so selection (via <see cref="ZapretStrategyIndex"/>) stays in sync.
-    /// Raw names are still used for execution; this is display-only.
-    ///
-    /// <para>Format:</para>
-    /// <list type="bullet">
-    ///   <item>Cached winner with score: <c>"general (ALT3)  ✓ 5/5"</c></item>
-    ///   <item>Cached winner without score (legacy v1 cache): <c>"general (ALT3)  ✓"</c></item>
-    ///   <item>Stale cached winner: <c>"general (ALT3)  ⚠ устарело"</c></item>
-    ///   <item>Other strategies: just the name (no probe data per-strategy yet)</item>
-    /// </list>
-    ///
-    /// <para>Future r37+: extend <see cref="ZapretProbeCache"/> to track
-    /// per-strategy results (not just the winner) so every entry can carry
-    /// a verification badge. For r36 we surface only the cached winner.</para>
-    /// </summary>
-    // r46 — changed element type from `string` to `ZapretStrategyDisplayItem`
-    // so the ComboBox ItemTemplate can color the glyph independently of the
-    // strategy name. Pre-r46 a single string carried "✓ general (ALT3)" and
-    // there was no way to color just "✓" green without inline RichText parsing.
     [ObservableProperty]
     private System.Collections.ObjectModel.ObservableCollection<ZapretStrategyDisplayItem> _zapretStrategiesDisplay = new();
 
-    /// <summary>r34 — controls visibility of the Hero quick-strategy
-    /// mini-row (ComboBox + ▶). Visible only when:
-    ///   - Strategies list is populated (Zapret installed and parsed)
-    ///   - Not currently probing (would be redundant during auto-probe)
-    ///   - Not currently running (already started)
-    /// Hidden when there's no quick-start to offer.</summary>
     public bool HasZapretStrategiesForQuickStart =>
         ZapretStrategies != null
         && ZapretStrategies.Count > 0
@@ -1404,27 +962,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         && !ZapretEnabled;
     [ObservableProperty] private bool _receivePrereleases = false;
 
-    // v2.36.0-r8 (cross-platform field) — suppress flag for Bug-r9-G AV toast
-    // during ZapretAutoStrategy probe loop. Declared at top-level (NOT inside
-    // #if PLATFORM_WINDOWS) because OnZapretImmediateExit is also cross-
-    // platform — Mac/Linux compile would fail otherwise (caught by r8 CI run
-    // 26371608493).
     private bool _suppressZapretAvToast = false;
 
-    // v2.36.0-r8 — ZapretOneTap design state. Three-axis state drives the
-    // hero card title/lede/chip visibility on DpiBypassPage:
-    //   _isZapretProbing  — true while ZapretAutoStrategy.ProbeAsync loops
-    //   _zapretProbeIndex / _zapretProbeTotal — for hero chip "Тестирую (i/N)"
-    //   _zapretProbeStrategy — current attempt name
-    //   _zapretWinningStrategy — set on Tier1 success; surfaces in air-pill
-    //   _isZapretFallback — set when all attempts fail; hero shows manual hint
-    // All flip together; NotifyPropertyChangedFor on the hero label
-    // computed properties picks up state transitions.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(IsZapretMagicButtonEnabled))]
-    // r34 — Hero quick-strategy row visibility.
     [NotifyPropertyChangedFor(nameof(HasZapretStrategiesForQuickStart))]
     private bool _isZapretProbing = false;
     [ObservableProperty]
@@ -1441,10 +984,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
     private string _zapretWinningStrategy = string.Empty;
 
-    // v2.37.0-r1 — multi-target probe score. Set by per-attempt progress
-    // reporter. Surfaces in hero lede ("Тестирую (1/3): general — 7/8 ok") +
-    // air-pill ("В эфире · general (ALT3) · 7/8") so the user can see
-    // confidence in the picked strategy.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
@@ -1454,43 +993,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
     private int _zapretProbeTotalCount = 0;
 
-    // r39 — last probe's log file path, surfaced in DpiBypassPage as a
-    // clickable "Open probe log" link. Lets users attach the log to bug
-    // reports without needing to know %ProgramData% / dig for the file.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasLastProbeLog))]
     private string? _lastProbeLogPath = null;
 
-    /// <summary>r39 — drives visibility of the "Open probe log" link.</summary>
     public bool HasLastProbeLog => !string.IsNullOrEmpty(LastProbeLogPath);
 
     public string LblOpenProbeLog =>
         IsRussian ? "Открыть лог проверки" : "Open probe log";
 
-    /// <summary>
-    /// r45 — legend for the strategy-badge glyphs in the Hero ComboBox.
-    /// Static localized string. Lives below the dropdown so users can
-    /// decode ✓/⚠/✗/◌/⏱ without hovering each item.
-    /// Kept for compatibility — r46+ uses per-label LblLegend* below
-    /// with colored mini-blocks instead of single line.
-    /// </summary>
     public string LblStrategyBadgeLegend =>
         IsRussian
             ? "✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело"
             : "✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale";
 
-    // r46 — per-label legend strings for the colored WrapPanel legend.
-    // (r50: legend now lives in ComboBox tooltip — see LblStrategyBadgeLegend
-    // above — but per-label strings kept for any future inline use.)
     public string LblLegendWorking  => IsRussian ? "работает"     : "working";
     public string LblLegendPartial  => IsRussian ? "частично"     : "partial";
     public string LblLegendFailed   => IsRussian ? "не работает"  : "failed";
     public string LblLegendUntested => IsRussian ? "не проверена" : "untested";
     public string LblLegendStale    => IsRussian ? "устарело"     : "stale";
 
-    // r50 — label for the Hero quick-strategy ▶ button. Pre-r50 was just
-    // a bare ▶ glyph; user feedback flagged it as an unlabeled fourth
-    // action without context.
     public string LblZapretRunSelected =>
         IsRussian ? "Запустить" : "Run";
 
@@ -1505,8 +1027,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         try
         {
-            // Open in default text editor (notepad on Windows, open/xdg-open on Mac/Linux)
-            // Security: Use ArgumentList with UseShellExecute=false to prevent argument injection
             ProcessStartInfo psi;
             if (OperatingSystem.IsWindows())
             {
@@ -1539,11 +1059,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     private bool _isZapretFallback = false;
 
-    // Bug-r9-G (2026-05-11) — Zapret AV-block toast. Set when
-    // ZapretManager.ImmediateExitDetected fires (winws.exe exited within
-    // < 2 s with non-zero code). Auto-clears after 8 s (longer than the
-    // 2-3 s rules toast pattern because the user needs time to read the
-    // whitelist path and click "Copy path"). Dismissable via X button.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasZapretAvBlockToast))]
     private string _zapretAvBlockToast = string.Empty;
@@ -1554,19 +1069,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void OnZapretImmediateExit()
     {
-        // v2.36.0-r8: during ZapretOneTap probing, fast-exits are EXPECTED
-        // (we deliberately try strategies that may not work) so we suppress
-        // the AV-block toast which would otherwise flash up for each
-        // failed attempt. ZapretAutoStrategy.ProbeAsync routes the immediate
-        // exit through its own per-attempt TaskCompletionSource and uses it
-        // to short-circuit the doomed strategy fast.
         if (_suppressZapretAvToast) return;
 
-        // Marshal to UI thread — Process.Exited fires on a threadpool.
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             ZapretAvBlockToast = Strings.ZapretAvBlockToast;
-            // Reset auto-hide timer.
             var oldCts = _zapretAvBlockToastCts;
             _zapretAvBlockToastCts = new System.Threading.CancellationTokenSource();
             var token = _zapretAvBlockToastCts.Token;
@@ -1586,11 +1093,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         });
     }
 
-    /// <summary>
-    /// Bug-r9-G — convenience for the toast's "Copy path" button.
-    /// Puts the canonical Zapret folder into the clipboard so the user
-    /// can paste it directly into their AV's exception list.
-    /// </summary>
     [RelayCommand]
     private async Task CopyZapretWhitelistPathAsync()
     {
@@ -1612,21 +1114,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void DismissZapretAvBlockToast() => ZapretAvBlockToast = string.Empty;
 
-    // Telegram proxy
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblTgProxyToggle))]
     [NotifyPropertyChangedFor(nameof(LblTgProxyMainAction))]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
-    // v2.36.0-r7: hero re-narrates between stopped/running states.
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
     private bool _tgProxyEnabled = false;
-    // v2.37.0-r7 — uses Strings.Stopped. Same bilingual-UI fix as
-    // ZapretStatus above. Window rebuild on language change re-instantiates
-    // the VM so this picks up the new Lang.
     [ObservableProperty] private string _tgProxyStatus = Strings.Stopped;
     [ObservableProperty]
-    // v2.36.0-r7: lede + air-pill template substitute live port.
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
     [NotifyPropertyChangedFor(nameof(LblTgProxyAirPill))]
     private int _tgProxyPort = 1443;
@@ -1641,55 +1137,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
     private bool _isTgProxyDownloading = false;
-    // v2.37.0-r15 — TgProxyStats now surfaced in TelegramPage air-pill.
-    // HasTgProxyStats is a computed boolean (non-empty after first parse)
-    // that gates the inline TextBlock IsVisible binding. Pre-r15 the field
-    // existed but no XAML consumer — pure dead plumbing.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTgProxyStats))]
     private string _tgProxyStats = "";
 
     public bool HasTgProxyStats => !string.IsNullOrEmpty(TgProxyStats);
 
-    /// <summary>
-    /// v2.31.6-r4 (BUG #3 fix): transient toast banner shown above
-    /// the persistent <see cref="TgProxyStatus"/>. Used by
-    /// <see cref="ShowTgProxyToast"/> to surface "Copied!", "Telegram
-    /// not installed", "New secret — restart proxy" and similar
-    /// confirmations without overwriting the runtime status field.
-    /// Auto-clears after 2.5 s; latest-write wins via a token guard.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTgProxyToast))]
     private string _tgProxyToast = string.Empty;
 
     public bool HasTgProxyToast => !string.IsNullOrEmpty(TgProxyToast);
 
-    /// <summary>
-    /// v2.36 (MVP one-button): non-blocking warning banner state.
-    /// True when the <c>tg://</c> URI scheme has no registered
-    /// handler at startup-time pre-flight, meaning Telegram Desktop
-    /// is missing or not associated with the scheme. The proxy still
-    /// starts (user might pair via QR code on another device or
-    /// copy the link manually), but the banner offers a fallback
-    /// (Copy link + download Telegram hint).
-    ///
-    /// <para>Pre-fix the check fired only inside the final deep-link
-    /// open path (<see cref="OpenTgProxyInTelegram"/>), so a fresh
-    /// user clicking the footer button got the OS-error dialog
-    /// "We can't open this 'tg' link" instead of a contextual
-    /// banner pointing at the cause + fallback.</para>
-    /// </summary>
     [ObservableProperty]
     private bool _isTelegramSchemeWarningVisible;
 
-    /// <summary>
-    /// v2.36 (MVP one-button): per-step status text shown during a
-    /// running download. Drives the existing
-    /// <see cref="TgProxyStatus"/> field today; isolated property
-    /// so a future UI iteration can split the persistent runtime
-    /// status from the transient download progress.
-    /// </summary>
     [ObservableProperty]
     private string _tgProxyDownloadStep = string.Empty;
 
@@ -1700,17 +1162,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasTgProxyDownloadStep));
     }
 
-    /// <summary>
-    /// v2.31.6-r1 (TelegramPage UX simplification): true when the
-    /// user has already set up the Telegram proxy at least once —
-    /// binary is downloaded AND a secret has been generated. Drives
-    /// the two-state TelegramPage layout: <c>false</c> shows the
-    /// onboarding "Set up Telegram proxy" CTA, <c>true</c> shows the
-    /// run/stop status surface. Power-user controls (port / secret /
-    /// version / folder / GitHub) live behind the Advanced expander
-    /// in both states so the page never overwhelms a first-time user
-    /// while keeping every existing knob reachable.
-    /// </summary>
     public bool IsTgProxySetUp =>
         !string.IsNullOrWhiteSpace(TgProxySecret)
         && !string.IsNullOrWhiteSpace(TgProxyVersionText);
@@ -1731,7 +1182,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsToolsTabSelected => SelectedTabIndex == 4;
     public bool IsFreeConfigsTabSelected => SelectedTabIndex == 5;
 
-    // Servers sub-tabs (VLESS / Custom Config)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVlessMode))]
     private int _selectedServerModeIndex;
@@ -1739,71 +1189,27 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnSelectedServerModeIndexChanged(int value)
     {
         if (_isLoadingUI) return;
-        // v2.30.2-r1 diag: trace sub-tab clicks so the SaveSettings r2
-        // guard activations are auditable from a single VM event.
         _logger?.Information(
             "[VM] OnSelectedServerModeIndexChanged value={V} (was IsVlessMode={IV}, IsSubscribeMode={IS})",
             value, IsVlessMode, IsSubscribeMode);
-        // Sync IsVlessMode with sub-tab index (0=VLESS, 1=Custom)
         IsVlessMode = value == 0;
         SaveSettings();
     }
 
-    /// <summary>v2.29.0 — auto-save when the user types in the Custom
-    /// Direct Rules textbox. Throttled by Avalonia's TextBox change-on-
-    /// commit (focus loss / Enter), so we don't spam SaveSettings on
-    /// every keystroke. Errors during parse populate the inline error
-    /// box but don't block save (valid lines persist).</summary>
-    /// <summary>v2.30.0 — auto-save when user edits the Custom Rules
-    /// textbox. Throttled by Avalonia's TextBox change-on-commit
-    /// (focus loss / Enter), so we don't spam SaveSettings on every
-    /// keystroke. Errors during parse populate the inline diagnostic
-    /// boxes but don't block save (valid lines persist).</summary>
     partial void OnCustomRulesTextChanged(string value)
     {
         if (_isLoadingUI) return;
         if (_isSyncingCustomRules) return;
         SaveSettings();
-        // SaveSettings writes parse errors + conflict warnings.
-        // Notify so the UI re-binds diagnostic blocks.
         OnPropertyChanged(nameof(CustomRulesErrorText));
         OnPropertyChanged(nameof(CustomRulesConflictText));
-        // v2.31.6-r9 — dropped the two legacy alias OnPropertyChanged
-        // calls (`CustomDirectRulesText`, `CustomDirectRulesErrorText`)
-        // along with the alias getters above. No remaining XAML refs.
 
-        // v2.30.0-r2: rebuild CustomRulesList rows from the parsed
-        // structured list so the structured view stays in sync with
-        // textbox edits.
         RebuildCustomRulesList();
 
-        // v2.30.0-r7: refresh dirty state of the Edit-mode buffer if Edit
-        // view is active. Apply commits EditedCustomRulesText → CustomRulesText
-        // which lands here, so dirty must clear naturally.
         OnPropertyChanged(nameof(RulesEditorIsDirty));
 
-        // v2.30.0-r17: rules-change-while-running surface (same as
-        // FlushCustomRulesListToSettings). Edit-mode Apply lands here.
         MarkRoutingSettingsChanged();
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // v2.30.0-r7 — Cards / Edit view-mode toggle (RulesExplorations.html
-    // design handoff). Replaces the old "Advanced (text format)" expander
-    // at the bottom of the section. Two modes:
-    //   1. Cards (▦) — structured row-table editor, default; same UI as
-    //      v2.30.0-r6.
-    //   2. Edit (✎) — full textarea editor with line-numbered gutter,
-    //      per-line errors, explicit Apply / Revert buttons (no auto-save
-    //      while typing — that was the OLD Advanced expander's behavior).
-    //
-    // Why the buffered Edit mode: power users editing 100+ rules in text
-    // form should see live error markers, but each intermediate keystroke
-    // shouldn't commit (e.g. typing "doma" → "domain_suffix" parses cleanly
-    // only at the final state). The buffer + Apply pattern lets the user
-    // make any-state edits, see errors, fix them, then commit atomically.
-    // Revert rolls back to the canonical CustomRulesText snapshot.
-    // ═══════════════════════════════════════════════════════════════
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRulesViewCards))]
@@ -1811,21 +1217,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsRulesViewEdit))]
     private string _rulesViewMode = "cards";
 
-    /// <summary>v2.30.0-r13 — true when the Rules pane is rendered in a
-    /// narrow viewport (&lt;540 px). Drives responsive template swaps:
-    /// Add-form 5-col -> 4-row stack, toolbar 3-col -> 2-row, etc.
-    /// Fed by NetworkPage.axaml.cs SizeChanged handler.</summary>
     [ObservableProperty] private bool _isRulesNarrow;
 
-    /// <summary>True when Cards view is active (default).</summary>
     public bool IsRulesViewCards => RulesViewMode == "cards";
 
-    /// <summary>True when Read (read-only grouped monospace) view is active.
-    /// v2.30.0-r12 — added per design RulesExplorations.html third
-    /// view-mode `▦ Cards · ☰ Read · ✎ Edit`.</summary>
     public bool IsRulesViewRead => RulesViewMode == "read";
 
-    /// <summary>True when Edit (text-mode) view is active.</summary>
     public bool IsRulesViewEdit => RulesViewMode == "edit";
 
     [RelayCommand]
@@ -1841,18 +1238,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void SetRulesViewEdit()
     {
-        // Snapshot current canonical text into edit buffer + recompute
-        // diagnostics + line-number gutter.
         EditedCustomRulesText = CustomRulesText;
         RulesViewMode = "edit";
         RecomputeRulesEditorState();
     }
 
-    // v2.30.0-r12 — Read view-mode grouped collections.
-    // Three filtered ObservableCollections drive the read-only view's
-    // 3-section layout (direct / proxy / block). Each section shows its
-    // header ("— direct (N) —") only when at least one rule of that
-    // action exists.
     public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeDirectRules { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
     public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeProxyRules { get; }
@@ -1864,10 +1254,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _readModeProxyHeader  = string.Empty;
     [ObservableProperty] private string _readModeBlockHeader  = string.Empty;
 
-    /// <summary>v2.30.0-r12 — rebuild the three Read-mode groups from
-    /// CustomRulesList. Called on view-mode flip + on every CustomRulesList
-    /// change (via RebuildCustomRulesList → RebuildFilteredCustomRulesList
-    /// chain that already runs after add/delete/toggle/import/etc).</summary>
     private void RebuildReadModeGroups()
     {
         ReadModeDirectRules.Clear();
@@ -1889,67 +1275,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ReadModeBlockHeader  = $"— block ({ReadModeBlockRules.Count}) —";
     }
 
-    /// <summary>Working buffer for the Edit-mode textarea. Decoupled from
-    /// CustomRulesText so intermediate states don't trigger SaveSettings
-    /// or CustomRulesList rebuilds. Apply commits, Revert rolls back.</summary>
     [ObservableProperty]
     private string _editedCustomRulesText = string.Empty;
 
     partial void OnEditedCustomRulesTextChanged(string value) => RecomputeRulesEditorState();
 
-    /// <summary>Multi-line string of line numbers for the gutter.
-    /// Bound to a TextBlock with same font + line-height as the textbox
-    /// so 1:1 line correspondence is preserved (text wrapping disabled
-    /// in Edit mode for this reason).</summary>
     [ObservableProperty] private string _rulesEditorLineNumbers = "1";
 
-    /// <summary>Status strip text: "N rules active · M errors".</summary>
     [ObservableProperty] private string _rulesEditorStatusText = string.Empty;
 
-    /// <summary>First 4 errors as a multi-line string for the red callout
-    /// below the editor: "line N: msg". Empty when there are no errors.</summary>
     [ObservableProperty] private string _rulesEditorErrorListText = string.Empty;
 
-    /// <summary>True when the buffer has at least one parse error. Apply
-    /// is disabled while this is true (button greyed in XAML).</summary>
     [ObservableProperty] private bool _rulesEditorHasErrors;
 
-    /// <summary>Active rule count (excludes commented + empty + errored
-    /// lines). Drives the Apply button label "Apply (N)".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RulesEditorApplyText))]
     private int _rulesEditorActiveCount;
 
-    /// <summary>Buffer differs from canonical → user has uncommitted
-    /// edits. Drives the "● unsaved changes" indicator.</summary>
     public bool RulesEditorIsDirty =>
         !string.Equals(EditedCustomRulesText ?? string.Empty,
                        CustomRulesText ?? string.Empty,
                        System.StringComparison.Ordinal);
 
-    /// <summary>Apply button label: "Apply (N)" / "Применить (N)".</summary>
     public string RulesEditorApplyText => IsRussian
         ? $"Применить ({RulesEditorActiveCount})"
         : $"Apply ({RulesEditorActiveCount})";
 
-    /// <summary>v2.30.0-r7 — recompute everything the Edit-mode UI binds:
-    /// line numbers (one per logical line), status strip, error list,
-    /// active count, has-errors flag, dirty flag.
-    ///
-    /// Validation grammar mirrors <see cref="CustomRulesParser"/> at a
-    /// surface level: action ∈ {direct, proxy, block}, type ∈ known set,
-    /// value present. Per-line; comments (lines starting with # or !)
-    /// are skipped without contributing to active count or errors.
-    ///
-    /// Note: this is a LIGHT pre-validator for fast UI feedback. The
-    /// authoritative parser still runs in <see cref="CustomRulesParser"/>
-    /// during Apply / SaveSettings; it can produce additional warnings
-    /// (e.g. catch-all rule conflicts) that the editor doesn't preview.</summary>
     private void RecomputeRulesEditorState()
     {
         var text = EditedCustomRulesText ?? string.Empty;
-        // Avalonia normalises CRLF to LF in TextBox; split on \n is fine
-        // for both \n-only and CRLF inputs.
         var lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
 
         var validActions = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -1971,11 +1325,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var raw = lines[i];
             var ln = raw.Trim();
             if (string.IsNullOrEmpty(ln)) continue;
-            // Comment / disabled line — skip without erroring.
             if (ln.StartsWith("#", System.StringComparison.Ordinal) ||
                 ln.StartsWith("!", System.StringComparison.Ordinal)) continue;
 
-            // Strip trailing inline comment "# ..."
             var hashIdx = ln.IndexOf('#');
             if (hashIdx >= 0) ln = ln.Substring(0, hashIdx).Trim();
             if (string.IsNullOrWhiteSpace(ln)) continue;
@@ -2008,7 +1360,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RulesEditorActiveCount = active;
         RulesEditorHasErrors = errors.Count > 0;
 
-        // Line-number gutter: one number per source line.
         var sbNums = new System.Text.StringBuilder();
         for (int i = 0; i < lines.Length; i++)
         {
@@ -2017,7 +1368,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         RulesEditorLineNumbers = sbNums.ToString();
 
-        // Status strip — "N rules active · M errors"
         var status = IsRussian
             ? $"{active} {(active == 1 ? "правило" : "правил")} активно"
             : $"{active} rule{(active == 1 ? "" : "s")} active";
@@ -2029,7 +1379,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         RulesEditorStatusText = status;
 
-        // Error list — first 4 errors with "line N: msg"
         if (errors.Count == 0)
         {
             RulesEditorErrorListText = string.Empty;
@@ -2060,22 +1409,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(RulesEditorApplyText));
     }
 
-    /// <summary>v2.30.0-r7 — commit the Edit-mode buffer to the canonical
-    /// CustomRulesText. The setter triggers OnCustomRulesTextChanged →
-    /// SaveSettings + RebuildCustomRulesList. Disabled while there are
-    /// parse errors (button greyed in XAML).</summary>
     [RelayCommand]
     private void ApplyEditedRules()
     {
         if (RulesEditorHasErrors) return;
         CustomRulesText = EditedCustomRulesText ?? string.Empty;
-        // OnCustomRulesTextChanged fires RulesEditorIsDirty notification —
-        // dirty becomes false because both buffers now match.
         RecomputeRulesEditorState();
     }
 
-    /// <summary>v2.30.0-r7 — discard buffer changes, restore to canonical
-    /// CustomRulesText snapshot.</summary>
     [RelayCommand]
     private void RevertEditedRules()
     {
@@ -2083,21 +1424,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RecomputeRulesEditorState();
     }
 
-    /// <summary>v2.30.0-r7 — sticky-dismiss for the Rules help banner.
-    /// Bound to the dismiss X button. Persists in-session only (banner
-    /// reappears on app restart — settings persistence is overkill for
-    /// a one-line dismissable bullet block).</summary>
     [ObservableProperty] private bool _isRulesHelpBannerDismissed;
 
     [RelayCommand]
     private void DismissRulesHelpBanner() => IsRulesHelpBannerDismissed = true;
 
-    /// <summary>v2.30.0-r2 — build CustomRulesList from
-    /// _settings.App.CustomRules. Called on settings load + after
-    /// textbox edits + after structured-row edits. The
-    /// _isSyncingCustomRules guard prevents feedback when this method
-    /// itself triggers OnCustomRulesTextChanged via SaveSettings.
-    /// v2.30.0-r4: also rebuilds FilteredCustomRulesList + count text.</summary>
     private void RebuildCustomRulesList()
     {
         if (_isSyncingCustomRules) return;
@@ -2117,19 +1448,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         RebuildFilteredCustomRulesList();
     }
 
-    /// <summary>v2.30.0-r4 → r18: bulk action: request clear-all
-    /// confirmation. Sets <see cref="ClearAllConfirmPending"/> = true
-    /// which surfaces the inline confirm bar above the list with
-    /// explicit Cancel + Delete buttons. The actual destructive action
-    /// runs in <see cref="ConfirmClearAllCustomRules"/>.
-    ///
-    /// <para>r18 user report: «Кнопка очистить все перестала работать,
-    /// видимо из-за того что после клика окошко закрывается а там
-    /// нужен дабл-клик». The pre-r18 two-click 5-s pattern broke when
-    /// the popover closed on first click — user couldn't make the
-    /// second click. r18 swaps to a non-popover confirm bar that
-    /// stays visible until the user explicitly Confirms or Cancels
-    /// (no time-based auto-dismiss).</para></summary>
     [RelayCommand]
     private void ClearAllCustomRules()
     {
@@ -2140,8 +1458,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             : $"Delete all rules ({CustomRulesList.Count})?";
     }
 
-    /// <summary>v2.30.0-r18 — actually clear after the user clicks the
-    /// confirm bar's Delete button.</summary>
     [RelayCommand]
     private void ConfirmClearAllCustomRules()
     {
@@ -2159,7 +1475,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ShowRulesToast(Strings.RulesAllDeleted);
     }
 
-    /// <summary>v2.30.0-r18 — dismiss the confirm bar without deleting.</summary>
     [RelayCommand]
     private void CancelClearAllCustomRules()
     {
@@ -2167,24 +1482,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ClearAllConfirmText = string.Empty;
     }
 
-    /// <summary>True while the inline confirm bar is shown (between
-    /// the popover-Click and the Delete/Cancel button click).</summary>
     [ObservableProperty] private bool _clearAllConfirmPending;
     [ObservableProperty] private string _clearAllConfirmText = string.Empty;
 
-    /// <summary>v2.30.0-r4 — bulk enable all rules.</summary>
     [RelayCommand]
     private void EnableAllCustomRules()
     {
         if (CustomRulesList.Count == 0) return;
         foreach (var vm in CustomRulesList) vm.Enabled = true;
-        // FlushCustomRulesListToSettings fires per-row via OnCustomRuleRowChanged;
-        // batch by setting _isSyncingCustomRules briefly... actually toggle
-        // the property normally — feedback loop is fine because
-        // _isSyncingCustomRules covers the row→settings sync.
     }
 
-    /// <summary>v2.30.0-r4 — bulk disable all rules.</summary>
     [RelayCommand]
     private void DisableAllCustomRules()
     {
@@ -2192,13 +1499,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         foreach (var vm in CustomRulesList) vm.Enabled = false;
     }
 
-    /// <summary>v2.30.0-r14/r17 — bulk-pop "Sort by type" action.
-    /// Stable-sorts CustomRulesList by Type alphabetically.
-    /// r17 fix: user report «сортировка непонятно работает». Two changes:
-    /// 1. Compare ALL items pre/post; if order is unchanged after sort,
-    ///    show a "уже отсортировано" toast instead of silently re-shuffling.
-    /// 2. Show a "✓ Sorted: N rules" toast for ~2 s on success so the
-    ///    user gets visible feedback that the action ran.</summary>
     [RelayCommand]
     private void SortCustomRulesByType()
     {
@@ -2238,9 +1538,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             : Strings.RulesAlreadySorted);
     }
 
-    /// <summary>v2.30.0-r17 — transient toast string shown above the
-    /// rule list for ~2 s after a bulk action (sort, etc.). Empty
-    /// string = no toast.</summary>
     [ObservableProperty] private string _rulesToastText = string.Empty;
 
     private System.Threading.CancellationTokenSource? _rulesToastCts;
@@ -2248,9 +1545,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void ShowRulesToast(string text)
     {
         RulesToastText = text;
-        // v2.31.0-r3 (VM-10): swap+dispose pattern — cancelling without
-        // disposing leaked one CancellationTokenSource per toast. Cumulative
-        // when toasts flicker (e.g. user mass-toggles rules on Network page).
         var oldCts = _rulesToastCts;
         _rulesToastCts = new System.Threading.CancellationTokenSource();
         var token = _rulesToastCts.Token;
@@ -2269,19 +1563,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }, System.Threading.Tasks.TaskScheduler.Default);
     }
 
-    /// <summary>v2.30.0-r2 — re-emit settings + textbox sync after
-    /// a structured-row property change (Action / Type / Value / Comment
-    /// / Enabled). Avoids RebuildCustomRulesList loop because the row
-    /// VM was already mutated in place; we just flush to settings +
-    /// regenerate the textbox view.</summary>
     private void OnCustomRuleRowChanged(CustomRuleViewModel _)
     {
         if (_isSyncingCustomRules || _isLoadingUI) return;
         FlushCustomRulesListToSettings();
     }
 
-    /// <summary>v2.30.0-r2 — handle row's Remove button. r4: also drop
-    /// from FilteredCustomRulesList so the visible list stays in sync.</summary>
     private void OnCustomRuleRowRemoveRequested(CustomRuleViewModel row)
     {
         if (_isLoadingUI) return;
@@ -2291,12 +1578,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         FlushCustomRulesListToSettings();
     }
 
-    /// <summary>v2.30.0-r2 — flush the in-memory CustomRulesList rows
-    /// to _settings.App.CustomRules + regenerate the CustomRulesText
-    /// textbox content so both views stay in sync. Triggered by
-    /// add / remove / property change on rows.
-    /// v2.30.0-r4: also rebuilds FilteredCustomRulesList + count text
-    /// (reapplies search filter to whatever's now in CustomRulesList).</summary>
     private void FlushCustomRulesListToSettings()
     {
         if (_isSyncingCustomRules) return;
@@ -2306,9 +1587,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _settings.App.CustomRules = CustomRulesList.Select(vm => vm.ToModel()).ToList();
             CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
                 .SerializeToText(_settings.App.CustomRules);
-            // Conflict detection re-runs on the serialized text via
-            // the next OnCustomRulesTextChanged path — but we suppressed
-            // that, so explicitly recompute here.
             var conflicts = VPNRouter.Core.Services.CustomRulesParser
                 .DetectConflicts(_settings.App.CustomRules);
             CustomRulesConflictText = conflicts.Count == 0
@@ -2319,18 +1597,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         finally { _isSyncingCustomRules = false; }
         RebuildFilteredCustomRulesList();
         SaveSettings();
-        // v2.30.0-r17: rules-change-while-running surface. User report
-        // «мне нужно делать полный перезапуск VPN чтоб правило сработало,
-        // тут не очень понятно». While the VPN is running, mark the
-        // change as pending so the Apply button + indicator surface
-        // (existing pattern from other settings).
         MarkRoutingSettingsChanged();
     }
 
-    /// <summary>v2.30.0-r3 — import rules from a CSV / JSON / sing-box-
-    /// native file. Auto-detects format by content sniff. Appends to
-    /// the existing list (preserves user's current rules). Surfaces
-    /// import warnings in NewRuleValidationError.</summary>
     [RelayCommand]
     private async Task ImportCustomRulesAsync()
     {
@@ -2376,7 +1645,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            // Append imported rules to the live list (preserve existing).
             foreach (var rule in result.Rules)
             {
                 CustomRulesList.Add(new CustomRuleViewModel(
@@ -2386,7 +1654,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             FlushCustomRulesListToSettings();
 
-            // Show success summary in the validation slot.
             var msg = Strings.RulesImported(result.Rules.Count, result.DetectedFormat.ToString());
             if (result.Warnings.Count > 0)
                 msg += Strings.RulesImportWithWarnings(result.Warnings.Count);
@@ -2401,11 +1668,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>v2.30.0-r3 — export current rules to a file. User picks
-    /// destination path; format determined by file extension (.csv = CSV,
-    /// .singbox.json = sing-box-native, anything else = our native JSON).
-    /// Disabled rules are still exported (with enabled=false) so the
-    /// user can round-trip a backup.</summary>
     [RelayCommand]
     private async Task ExportCustomRulesAsync()
     {
@@ -2450,7 +1712,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var path = file.TryGetLocalPath();
             if (string.IsNullOrEmpty(path)) return;
 
-            // Decide format from extension.
             var fmt = VPNRouter.Core.Services.CustomRulesImportExport.Format.VpnrouterJson;
             if (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
                 fmt = VPNRouter.Core.Services.CustomRulesImportExport.Format.Csv;
@@ -2470,9 +1731,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>v2.30.0-r2 — Add-form submit. Validates the new rule
-    /// via the parser (one-line text), prepends to the list, clears
-    /// the form. Validation errors surface in NewRuleValidationError.</summary>
     [RelayCommand]
     private void AddCustomRuleFromForm()
     {
@@ -2481,12 +1739,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             NewRuleValidationError = Strings.RulesEmptyValue;
             return;
         }
-        // v2.30.7 — also gate on the live type-regex validator that
-        // colours the Value border red. Pre-r1 the parser was more
-        // permissive than the live regex (e.g. "53" with type
-        // "domain_suffix" passed parser but failed live regex), so a
-        // user could submit with a red border and an invalid rule
-        // would land in the YAML. Now we honor IsValid first.
         if (!NewRuleValueIsValid)
         {
             NewRuleValidationError = IsRussian
@@ -2494,9 +1746,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 : $"Value doesn't match type \"{NewRuleType}\"";
             return;
         }
-        // Assemble a single-line rule and run it through the parser
-        // so all the type-specific validation we already wrote (CIDR,
-        // port range, geosite name format) gets re-used here.
         var commentSuffix = string.IsNullOrWhiteSpace(NewRuleComment)
             ? string.Empty
             : $"  # {NewRuleComment.Trim()}";
@@ -2512,13 +1761,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             NewRuleValidationError = "Failed to parse";
             return;
         }
-        // Append to list. New rules go to the END (lowest priority by
-        // default — user can reorder later via move-up/down in v2.31).
         CustomRulesList.Add(new CustomRuleViewModel(
             parsed.Rules[0],
             onChanged: OnCustomRuleRowChanged,
             onRemoveRequested: OnCustomRuleRowRemoveRequested));
-        // Clear form.
         NewRuleValue = string.Empty;
         NewRuleComment = string.Empty;
         NewRuleValidationError = string.Empty;
@@ -2528,10 +1774,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnAutostartUiChanged(bool value)
     {
         if (_isLoadingUI) return;
-        // v2.29.0: AutostartHelper became cross-platform (Mac LaunchAgent +
-        // Linux XDG autostart in addition to the existing Win HKCU\Run).
-        // Old `#if PLATFORM_WINDOWS` guard removed — helper handles platform
-        // dispatch internally, no-ops on unsupported OS (none currently).
         try
         {
             if (value)
@@ -2543,18 +1785,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SaveSettings();
     }
 
-    // v2.27 Bug B: re-fire PropertyChanged for SmpAutostartChecked whenever
-    // AutostartVpn flips — the Simple-mode checkbox is now a computed read
-    // of (ServiceVm.IsInstalled && ServiceVm.IsRunning && AutostartVpn),
-    // so any one of those changing must notify the binding. The matching
-    // ServiceVm.IsInstalled/IsRunning listener is wired in the constructor.
     partial void OnAutostartVpnChanged(bool value)
     {
-        // 2026-05-11: SaveSettings can throw UnauthorizedAccessException
-        // (test harness without admin, or AppData ACL drift). Match the
-        // Bug-r9-I pattern from OnAppGroupPropertyChanged / OnAppItemPropertyChanged
-        // — wrap in try/catch + log so the setter never propagates an IO
-        // failure to the binding pipeline.
         if (!_isLoadingUI)
         {
             try { SaveSettings(); }
@@ -2572,13 +1804,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (_isLoadingUI) return;
 
-        // v2.31.10-r5 — Generate secret on enable so the Service can
-        // autostart tgproxy at boot. Without this, toggling the box
-        // before ever clicking "Start" once left config.yaml's
-        // tg_proxy_secret empty → Service logged "TgProxy secret not
-        // configured, skipping" and silently returned → user saw
-        // "Auto launch with Windows for tgproxy doesn't work" with no
-        // UI feedback. Same RNG + format used by StartTgProxy below.
         if (value && string.IsNullOrWhiteSpace(TgProxySecret))
         {
             TgProxySecret = Convert.ToHexStringLower(
@@ -2589,14 +1814,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SaveSettings();
     }
 
-    // Wave 39 (v2.35.0-r5): persist DNS leak lockdown toggle immediately
-    // and surface the Apply pending state while VPN is connected so the
-    // change re-applies the firewall lockdown on the next Apply. Hot-reload
-    // is not enough — the lockdown lives in firewall rules, not sing-box
-    // config, so FirewallManager.EnableDnsLockdownAsync / DisableDnsLockdownAsync
-    // (Agent A) must run after the user toggles. The Apply path already
-    // invokes those after a successful sing-box reload. Pattern mirrors
-    // OnAutostartZapretChanged above (load-guard + try/catch on SaveSettings).
     partial void OnIsDnsLeakLockdownEnabledChanged(bool value)
     {
         if (_isLoadingUI) return;
@@ -2605,27 +1822,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         MarkRoutingSettingsChanged();
     }
 
-    // Zapret section navigator (master-detail).
-    // v2.31.6-r5 (ZAPRET-2): consolidated 7 sections → 5 per user
-    // feedback 2026-05-03 night («упростить ZAPRET страницу — где
-    // можно»). Audit findings:
-    //   • Diagnostics had ONE button («Run diagnostics») + an output
-    //     panel → merged into Status (lives below the warning banner;
-    //     diagnosing is the natural follow-up to seeing the status).
-    //   • Updates had TWO elements («Update IPSet list» + «Auto-check
-    //     Zapret updates» checkbox) → merged into Strategy where the
-    //     existing «Update Zapret» button already handles version
-    //     management, keeping all update-related controls together.
-    // Design handoff cell 7 specifies 7 sections, so this is a
-    // documented deviation per v2.31.6-r1/r3 lesson (Rule B4): walking
-    // each section through the live semantic UI verifier revealed
-    // 6 of 7 had ≤3 elements — the 7-section spread was over-architected
-    // for the actual content. Surface area per section now averages
-    // ~5 controls — denser without crowding.
-    // The IsZapret*Section flags below are kept as 5 contiguous indices;
-    // pre-r5 dead branches («IsZapretUpdatesSection», «IsZapretDiagnosticsSection»)
-    // are removed so the XAML can't accidentally bind to unreachable
-    // sections.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretStatusSection))]
     [NotifyPropertyChangedFor(nameof(IsZapretStrategySection))]
@@ -2640,7 +1836,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsZapretFiltersSection => SelectedZapretSectionIndex == 3;
     public bool IsZapretAdvancedSection => SelectedZapretSectionIndex == 4;
 
-    // Zapret tool state
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblFlowsealHosts))]
     private bool _flowsealHostsInstalled;
@@ -2652,10 +1847,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ? (FlowsealHostsInstalled ? "Убрать Flowseal hosts" : "Добавить Flowseal hosts")
         : (FlowsealHostsInstalled ? "Remove Flowseal hosts" : "Add Flowseal hosts");
 
-    // Settings section navigator (master-detail)
-    // v2.30.0-r2: added Rules as section index 1 (between Routing and
-    // Leak Protection — natural sibling to Routing, since both deal
-    // with traffic routing). Existing indexes shifted +1.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSettingsRoutingSelected))]
     [NotifyPropertyChangedFor(nameof(IsSettingsRulesSelected))]
@@ -2672,16 +1863,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsSettingsUpdatesSelected   => SelectedSettingsIndex == 4;
     public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 5;
 
-    // Tools sub-tabs
-    // Sub-tab order on the Tools page top strip:
-    //   0 = Zapret
-    //   1 = Telegram Proxy
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
     [NotifyPropertyChangedFor(nameof(IsTgProxyToolSelected))]
     private int _selectedToolIndex = Internals.ToolTabAvailability.DefaultToolIndex(
-        OperatingSystem.IsWindows(), // Zapret
-        OperatingSystem.IsWindows()); // Telegram proxy
+        OperatingSystem.IsWindows(),
+        OperatingSystem.IsWindows());
 
     public bool IsZapretToolSelected => SelectedToolIndex == 0;
     public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
@@ -2690,7 +1877,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
     private AppGroupViewModel? _selectedAppGroup;
 
-    // Detail editor state — independent of SelectedServer (left click sets active, right click opens detail)
     [ObservableProperty] private ServerViewModel? _detailServer;
     [ObservableProperty] private CustomConfigViewModel? _detailCustomConfig;
 
@@ -2706,22 +1892,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void OpenCustomConfigDetail(CustomConfigViewModel? cfg) => DetailCustomConfig = cfg;
 
-    // Phase 2B (Wave 8, 2026-05-18) - Version block (VersionText,
-    // AppVersionShortText, GetSingBoxVersion) moved to
-    // MainWindowViewModel.Settings.cs.
-
-        // Phase 2B (Wave 8, 2026-05-18) - Troubleshooting / About / Reset / Logs
-    // moved to MainWindowViewModel.Settings.cs:
-    //   - OpenLeakTest
-    //   - RunHealthCheck
-    //   - OpenAbout
-    //   - ResetConfigArmed / ResetConfigMenuHeader / OnResetConfigArmedChanged
-    //   - RestartInSafeMode / ResetConfig / _resetDisarmCts
-    //   - OpenLogs
-    // ── VLESS fields (for single-server quick edit) ──
     [ObservableProperty] private string _vlessUri = string.Empty;
 
-    // ── Collections ──
     public ObservableCollection<ServerViewModel> Servers { get; } = new();
     public ObservableCollection<CustomConfigViewModel> CustomConfigs { get; } = new();
     public ObservableCollection<ServerViewModel> SubscriptionServers { get; } = new();
@@ -2729,28 +1901,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public ObservableCollection<AppGroupViewModel> AppGroups { get; } = new();
     public ObservableCollection<AppGroupViewModel> BypassAppGroups { get; } = new();
 
-    // ── Selected items ──
     [ObservableProperty] private ServerViewModel? _selectedServer;
     [ObservableProperty] private CustomConfigViewModel? _selectedCustomConfig;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedActiveAppGroup))]
     private AppGroupViewModel? _selectedBypassAppGroup;
 
-    // ── Sub-ViewModels ──
     public UpdateNotificationViewModel UpdateVm { get; }
     public ServiceViewModel ServiceVm { get; }
     public FreeConfigsPageViewModel FreeConfigsVm { get; private set; } = null!;
 
     public MainWindowViewModel() : this(null) { }
 
-    /// <summary>
-    /// Phase 4 Wave 19 (v3.0 refactor) — ctor overload with explicit
-    /// <see cref="ISettingsStore"/> injection. Pass <c>null</c> (or use
-    /// the parameterless ctor) to fall back to
-    /// <see cref="RealSettingsStore.Instance"/>; tests pass
-    /// <c>InMemorySettingsStore</c> to keep the VM isolated from the
-    /// on-disk <c>config.yaml</c>.
-    /// </summary>
     public MainWindowViewModel(ISettingsStore? settingsStore)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
@@ -2763,21 +1925,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             .WriteTo.Console()
             .CreateLogger();
 
-        // v2.31.6-r16 (iter#7 / Phase 3): wire the static TcpTlsProbe logger
-        // so quick-probe runs (Servers/Subscribe Test all + Free Configs bulk)
-        // emit Debug-level entries to vpnrouter*.log. User feedback:
-        // «есть ли у проверки логи?» — pre-r16 the answer was no (zero log
-        // calls in TcpTlsProbe). r16 logs every probe target + outcome.
         TcpTlsProbe.Logger = _logger;
 
-        // v2.29.0-r7+ Layer 7 — pick up receipt-derived "previous update
-        // didn't land" warning that App.axaml.cs OnFrameworkInitialization
-        // stored before this VM was constructed. The HasUpdateWarning
-        // banner becomes visible immediately on first window paint.
         if (!string.IsNullOrWhiteSpace(Program.PendingUpdateWarning))
         {
             UpdateWarningText = Program.PendingUpdateWarning!;
-            Program.PendingUpdateWarning = null; // consume — don't re-set on hot-reload
+            Program.PendingUpdateWarning = null;
         }
 
         AppPaths.EnsureDirectories();
@@ -2786,46 +1939,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _engine = PlatformServices.CreateVpnEngine(_logger);
         _engine.StatusChanged += OnEngineStatus;
         _engine.Connected += OnEngineConnected;
-        // 2026-06-09 (rectuspc report): surface AutoFailover messages — the
-        // post-start probe finding the active server dead / no failover
-        // candidate. This event had NO subscriber in the GUI, so a
-        // "connected but the server is unreachable" looked like a silent,
-        // successful connect. Now it overwrites the connection status line
-        // with the honest warning.
         _engine.AutoFailoverTriggered += OnAutoFailoverMessage;
-        // W1.3: reflect the true-split driver's engaged state into the badge (marshalled to the UI
-        // thread — the driver raises this from its own control-plane thread).
         _engine.TrueSplitEngagedChanged += OnTrueSplitEngagedChanged;
         _engine.TrueSplitStateChanged += OnTrueSplitStateChanged;
 
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
-        // r10 r9 (Bug-r10-H): wire Servers.CollectionChanged → MarkOrphanServers
-        // so the "Не из подписки" badge stays consistent across all entry-add
-        // paths (Free Configs Use, paste, subscription rebuild). Must happen
-        // after _settings loads.
         WireServersOrphanTracking();
 
-        // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
-        // v2.27 Bug B: SmpAutostartChecked is a computed over ServiceVm state,
-        // so we need to re-fire PropertyChanged on Simple's checkbox binding
-        // every time the service transitions. Without this, an Advanced-mode
-        // "Enable background service" toggle that flips IsInstalled/IsRunning
-        // silently leaves Simple's UI stale until the user navigates away and
-        // back. Scoped to the two properties that actually feed the computed
-        // — ignores IsBusy / StatusMessage churn during install.
-        //
-        // v2.31.10 (autostart UX clarity): IsInstalled also feeds the
-        // per-component status badges (LblAutostart{Vpn,Zapret,TgProxy}Status
-        // + the IsAutostart*StatusGood/Warn/Bad triplet). When the user toggles
-        // the master service, all 12 of those bindings need a fresh read.
-        // IsRunning is intentionally not included for the new badges — the
-        // boot semantics depend on IsInstalled, not on whether SCM has a live
-        // process right now.
         ServiceVm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ServiceViewModel.IsInstalled)
@@ -2852,9 +1977,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         LoadSettingsIntoUI();
 
-        // v2.40.x (Fix #7): follow live OS appearance flips while the theme
-        // preference is "system". Wired once here (PlatformSettings is ready
-        // after LoadSettingsIntoUI's first ApplyTheme); torn down in Dispose.
         WireOsThemeFollow();
 
         var startBackgroundServices =
@@ -2863,69 +1985,27 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 out var backgroundServicesDisabled) ||
             !backgroundServicesDisabled;
 
-        // Detect VPN already running (e.g. started by Windows Service on boot)
         if (startBackgroundServices)
         {
             DetectServiceManagedVpn();
 
-            // Background update check (fire-and-forget, silent fail)
             _ = UpdateVm.CheckOnStartupAsync();
 
-            // Status dashboard (v2.15.0): poll VPN/Zapret/TgProxy every 2s
             StartRuntimeStatusPolling();
 
-            // v2.31.10 — App-side autostart bootstrap. Closes the gap where
-            // autostart_tgproxy / autostart_zapret in config.yaml were read
-            // into UI state but never spawned the daemons unless the Windows
-            // Service was installed. Defers to the Service when it's running
-            // (Service handles boot-spawn). See
-            // MainWindowViewModel.AutostartBootstrap.cs for the gating logic.
             _ = BootstrapAutostartAsync();
         }
 
-        // v2.32.0 — surface a SettingsValidator recovery banner if the
-        // most recent SettingsLoader.Load rewrote defaults over a
-        // structurally-valid but semantically-broken config.yaml.
-        // Called after the bootstrap fire-and-forget so the regression
-        // pin in AppAutostartTgProxyTests.Bootstrap_IsInvokedFromConstructor
-        // (5000-char ctor window) still locates the bootstrap call.
         ConsumeSettingsRecoveryNotice();
-        // v2.32.3 (Z:\kanareik incident) — placeholder-prune banner.
         ConsumePlaceholderPruneNotice();
     }
 
-    /// <summary>
-    /// Detect if VPN is already running via Windows Service (sing-box process alive).
-    /// Sets IsConnected so the UI reflects reality instead of showing "Not connected".
-    /// </summary>
-    /// <summary>Raised when the active server (green-dot) changes — views scroll to it.</summary>
     public event Action<ServerViewModel?>? ActiveServerChanged;
 
-    /// <summary>
-    /// Update IsActive flag on all ServerViewModels so the UI shows a green dot
-    /// next to the currently-active server (both VLESS and Subscription lists).
-    /// </summary>
     private void RefreshActiveIndicator()
     {
         var activeIp = _engine?.ActiveServerAddress;
 
-        // v2.30.1-r3 fix: gate the active dot by ConfigMode so a manual
-        // VLESS entry that happens to share an IP with a subscription
-        // server doesn't light up alongside the subscription one.
-        // v2.30.1-r6 fix: also disambiguate WITHIN each list — when two
-        // entries share an IP (e.g. port 443 + port 8443 on the same
-        // host, or VLESS + Hysteria2 on the same host), the previous
-        // IP-only match lit BOTH up. User report 2026-05-01: "у меня
-        // 2 конфига на 1 ip и при включения одного из них подсвечиваются
-        // оба, будто я включил не 1 а 2".
-        //
-        // Match priority:
-        //   1. Name == settings.Vless.ActiveServer (manual mode) /
-        //      App.ActiveSubscriptionServer (subscribe mode) — the
-        //      authoritative "which entry was picked" signal.
-        //   2. Fallback to IP match when no name is set (legacy entries).
-        //
-        // The name path picks exactly one row even if many share an IP.
         var configMode = _settings?.App?.ConfigMode ?? "generated";
         var isManualMode = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
         var isSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
@@ -2945,11 +2025,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (isActive) active = s;
         }
 
-        // v2.44.1-r6: under AutoSelectBestServer the "proxy" outbound is a
-        // urltest — there is no single stored active server, so the old
-        // ActiveSubscriptionServer/IP match lit NO row while traffic ran (user
-        // report 2026-06-23). Highlight the REAL member resolved from clash_api
-        // (_autoSelectedServer, refreshed by the ConnStats poll) instead.
         var autoSelect = isSubscribeMode && AutoSelectBestServer;
         foreach (var s in SubscriptionServers)
         {
@@ -2970,25 +2045,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ActiveServerChanged?.Invoke(active);
     }
 
-    /// <summary>
-    /// v2.30.1-r6: disambiguate "active" rows when two entries share
-    /// the same IP. If we have a known active-name (from
-    /// <c>Vless.ActiveServer</c> or <c>App.ActiveSubscriptionServer</c>),
-    /// only the row whose <c>Name</c> matches lights up. Otherwise we
-    /// fall back to the legacy IP-only match so settings.yaml files
-    /// from before this change still work.
-    /// </summary>
     private static bool IsRowActive(ServerViewModel row, string activeIp, string? activeName)
     {
         if (row.Server != activeIp)
             return false;
 
-        // No active-name available → legacy IP-only behaviour.
         if (string.IsNullOrWhiteSpace(activeName))
             return true;
 
-        // Active-name available → require an exact name match. This
-        // prevents two entries with the same IP from both lighting up.
         return string.Equals(row.Name, activeName, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -2996,34 +2060,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            // v2.26.1 — two-signal detection:
-            //   1. VPNRouter-OWNED sing-box process alive + TUN owned
-            //   2. TUN ownership semaphore held by SOMEONE
-            // Both must be true. Signal #1 alone had a false-positive
-            // window on startup: a sing-box that just exited but whose
-            // process record Windows hadn't reaped yet would still show
-            // up and we'd flip IsConnected=true only to demote it on the
-            // next poll. TUN-lock check gates that: once the owner releases
-            // (on Stop or death), the kernel releases the semaphore
-            // atomically so there's no stale window.
-            // P1.4 (audit 2026-07-09): signal #1 is the OWNERSHIP-FILTERED
-            // detector, not a bare process-name probe. RuntimeStatusDetector
-            // .IsVpnRunning delegates to ProcessOwnership.AnySingBoxOwned
-            // (image path under our bin dir or the registered custom exe;
-            // unverifiable path => not-owned, fail-closed), so a third-party/dev
-            // sing-box can never let the UI claim "Connected via service".
-            // Supersedes the v2.40.0-r3 bare ProcessQuery.AnyAlive("sing-box")
-            // probe; the detector is likewise handle-safe (disposes its Process[]).
             var singboxRunning = VPNRouter.Core.Services.RuntimeStatusDetector.IsVpnRunning();
             if (!singboxRunning) return;
 
             var tunOwned = TunOwnershipLock.IsOwnedByAnyone();
             if (!tunOwned)
             {
-                // sing-box.exe present but nobody holds the TUN semaphore
-                // — orphan / zombie from a previous run, not a live
-                // service-managed tunnel. Let OrphanCleanup reap it on
-                // the next cycle; don't adopt.
                 return;
             }
 
@@ -3048,18 +2090,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // ── Settings Load/Save ──
-
     private void LoadSettingsIntoUI()
     {
         _isLoadingUI = true;
         try
         {
-        // Language — v2.24.4: auto-detect from OS on first launch.
-        // Empty string in config means "never chose a language yet" →
-        // sniff the current UI culture and persist the choice so the
-        // menu toggle still works predictably. Russian locale → ru,
-        // everything else → en.
         var storedLang = _settings.App.Language ?? string.Empty;
         if (string.IsNullOrWhiteSpace(storedLang))
         {
@@ -3071,83 +2106,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IsRussian = storedLang.Equals("ru", StringComparison.OrdinalIgnoreCase);
         Strings.Lang = IsRussian ? "ru" : "en";
 
-        // Theme preference: "light" | "dark" | "system" (default "system" →
-        // follow the OS appearance). ApplyTheme resolves the effective variant
-        // and sets IsDarkTheme. v2.40.x (Fix #7).
         ThemePreference = NormalizeThemePref(_settings.App.Theme);
         ApplyTheme();
 
-        // UI complexity mode. v2.21.7: always start in Simple on launch —
-        // even if the user was in Advanced when they last quit. They can
-        // still flip to Advanced via the header pill; this just makes the
-        // landing screen predictably the compact one every time the app
-        // opens. Toggling via ToggleUiModeCommand still persists UiMode
-        // to settings for internal bookkeeping (FreeConfigsVm lazy-load,
-        // etc), it's only the ctor-side load that now ignores the
-        // persisted value.
         IsSimpleMode = true;
 
-        // v2.27 Bug B: SmpAutostartChecked is now a computed property over
-        // ServiceVm.IsInstalled/IsRunning + AutostartVpn, so we don't assign
-        // it here. The UI will read it on first bind, and re-reads fire from
-        // OnAutostartVpnChanged + the ServiceVm.PropertyChanged handler.
-
-        // Pre-fill Simple-mode input from existing settings so a user who
-        // already has a config doesn't stare at an empty 'Paste VLESS...'
-        // field. For subscriptions we show the first enabled URL; for
-        // single-VLESS we can't reconstruct the original URI, so leave
-        // empty — SmpToggleConnectAsync treats empty-input + existing
-        // Vless.Servers as 'just connect with what we have'.
         var firstEnabledSub = _settings.App.Subscriptions?
             .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
         if (firstEnabledSub != null)
             SmpInput = firstEnabledSub.Url;
 
-        // Config mode (three-way: generated / custom / subscribe)
-        // Mode is determined by which tab is active. On load, select the
-        // correct tab based on saved config_mode.
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
-        // v2.30.2-r1 Bug 1 fix: SelectedServerModeIndex init is now
-        // data-driven (defer to after Servers/CustomConfigs are populated
-        // — see section below). The legacy `IsVlessMode ? 0 : 1` mirror
-        // forced the Servers page to land on "Custom" sub-tab whenever
-        // the user was in Subscribe mode, even though the page would
-        // visually highlight "Custom" while the actual VLESS list was
-        // shown. User report 2026-05-01: «после открытия страницы
-        // сервер выделено Кастомные конфиги хотя открыто серверы».
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
-        // Set initial tab: 0=Manual, 1=Subscribe, 2=Network, 3=Applications
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
 
-        // Routing mode
         IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
 
-        // v2.32 (r10) — Apps Include/Exclude 2-mode. AM-1 chip added the
-        // field + schema v3 migration; this hydrates the VM observable.
-        // AppSettingsSane already canonicalises to lowercase + falls back
-        // to "include" on unknown values.
         RoutingAppsMode = (_settings.App.RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
 
-        // Russian geo bypass
         BypassRussianTraffic = _settings.App.BypassRussianTraffic;
-        // v2.30.0-r17: Custom-rules-priority. "custom_first" → checkbox on.
         CustomRulesAboveToggles = string.Equals(
             _settings.App.CustomRulesPriority,
             "custom_first",
             System.StringComparison.OrdinalIgnoreCase);
 
-        // v2.30.0 — full custom rules (direct/proxy/block) text format.
-        // Round-trip: SaveSettings serialises CustomRulesText back to
-        // _settings.App.CustomRules.
-        // Migration from v2.29 CustomDirectRules already happened in
-        // SettingsMigrator.Migrate_1_to_2 — at this point CustomRules
-        // holds whatever the user has, CustomDirectRules is empty.
-        // v2.30.0-r2: also rebuild the CustomRulesList structured rows
-        // (separate ListBox view in the new Network → Rules section).
-        // Both views (textbox + rows) drive the same _settings.App.CustomRules.
         _isSyncingCustomRules = true;
         try
         {
@@ -3157,22 +2142,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         finally { _isSyncingCustomRules = false; }
         RebuildCustomRulesList();
 
-        // Strict mode
         StrictMode = _settings.App.StrictMode;
         TunMtu = _settings.Tun.Mtu;
 
-        // IPv4 + DNS flush + Strict DNS
         ForceIpv4Only = _settings.App.ForceIpv4Only;
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
         AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
         ConnectionIntentIndex = IntentToIndex(_settings.App.ConnectionIntent);
-        // Wave 39 — DNS leak lockdown (firewall block of UDP/53, TCP/53,
-        // TCP/853 on non-TUN interfaces while VPN is active).
         IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
 
-        // Autostart
         AutostartVpn = _settings.App.AutostartVpn;
         AutostartZapret = _settings.App.AutostartZapret;
         AutostartTgProxy = _settings.App.AutostartTgProxy;
@@ -3181,7 +2161,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
         LoadZapretStrategies();
         ZapretCustomArgs = _settings.App.ZapretCustomArgs;
-        // Detect zapret state from actual process, not saved flag
         if (IsZapretRunning())
         {
             ZapretEnabled = true;
@@ -3197,10 +2176,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
         FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
 
-        // Self-heal hosts files written by older builds that duplicated the
-        // finland*.discord.media voice entries across BOTH the Discord and
-        // Flowseal blocks (~200 redundant lines). No-op once deduped; only
-        // the Flowseal copy is stripped, the native Discord block stays owner.
         if (DiscordHostsInstalled && FlowsealHostsInstalled)
         {
             try { VPNRouter.Core.Services.HostsManager.ReconcileDiscordDuplicates(_logger); }
@@ -3214,15 +2189,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretAutoUpdateCheck = VPNRouter.Core.Services.ZapretActions.IsAutoUpdateCheckEnabled();
         }
 
-        // Telegram proxy
         TgProxyPort = _settings.App.TgProxyPort > 0 ? _settings.App.TgProxyPort : 1443;
         TgProxySecret = _settings.App.TgProxySecret;
         TgProxyVersionText = TgProxyUpdater.IsInstalled()
             ? (TgProxyUpdater.GetLocalVersion() ?? "?")
             : (IsRussian ? "Не установлен" : "Not installed");
-        // Port is occupancy, never identity. Do not adopt foreign or unverified
-        // listeners merely because the port is in use. Only treat TgProxy as enabled if
-        // this process owns an active, running instance.
         if (_tgProxy?.IsRunning == true)
         {
             TgProxyEnabled = true;
@@ -3237,10 +2208,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 #endif
 
-        // Update channel
         ReceivePrereleases = _settings.Update.IsExperimental;
 
-        // Load servers + select the active one
         Servers.Clear();
         ServerViewModel? activeServer = null;
         foreach (var entry in _settings.Vless.GetEffectiveServers())
@@ -3251,18 +2220,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 entry.Name?.Equals(_settings.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase) == true)
                 activeServer = vm;
         }
-        ServerViewModel.RefreshUdpSiblingFlags(Servers); // r8 #6: "naive + hy2" only on a real sibling
-        ServerViewModel.RefreshProviderRiskFlags(Servers); // R3: subnet-risk flags from the store
+        ServerViewModel.RefreshUdpSiblingFlags(Servers);
+        ServerViewModel.RefreshProviderRiskFlags(Servers);
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
 
-        // v2.32 (r10, F-C) — flag legacy vless.servers entries that aren't
-        // in any enabled subscription. F-B migration strips these on load,
-        // but mark anyway for the rare cases (migration not yet fired,
-        // user manually re-added an entry) so ServersPage can show
-        // "Not in subscription" badge + tooltip.
         MarkOrphanServers();
 
-        // Migrate legacy single subscription → first entry in Subscriptions list
         if (_settings.App.Subscriptions.Count == 0
             && !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl))
         {
@@ -3278,15 +2241,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _logger.Information("[VM] Migrated legacy subscription_url → Subscriptions[0]");
         }
 
-        // Load subscriptions into VM
         Subscriptions.Clear();
         foreach (var entry in _settings.App.Subscriptions)
             Subscriptions.Add(new SubscriptionViewModel(entry));
 
-        // Rebuild aggregated server pool from all enabled subscriptions
         RebuildSubscriptionPool();
 
-        // Load custom configs
         CustomConfigs.Clear();
         CustomConfigViewModel? activeConfig = null;
         foreach (var entry in _settings.App.CustomConfigs ?? new())
@@ -3296,28 +2256,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             CustomConfigs.Add(vm);
             if (isActive) activeConfig = vm;
         }
-        // Ensure exactly one config is active. If none matched by name
-        // (first launch, or saved name deleted), activate the first one.
         if (activeConfig == null && CustomConfigs.Count > 0)
         {
             activeConfig = CustomConfigs[0];
             activeConfig.IsActive = true;
-            // Persist so engine reads the right config on Connect
             _settings.App.ActiveCustomConfig = activeConfig.Name;
         }
         SelectedCustomConfig = activeConfig;
 
-        // v2.30.2-r1 Bug 1 fix: data-driven sub-tab default. Now that
-        // both Servers + CustomConfigs are populated, pick the sub-tab
-        // that actually has content to show:
-        //   - Servers list non-empty (or CustomConfigs empty) → "Серверы" (0)
-        //   - Servers empty AND CustomConfigs non-empty → "Свои конфиги" (1)
-        //
-        // This matters because the Subscribe-mode user typically has zero
-        // CustomConfigs but does have manual VLESS rows in Servers — the
-        // pre-r1 logic mirrored ConfigMode and forced sub-tab=1 (Custom),
-        // which highlighted the wrong sub-tab visually while the page
-        // continued to render the VLESS list.
         var subTabHasManual = Servers.Count > 0;
         var subTabHasCustom = CustomConfigs.Count > 0;
         var subTabIndex = (subTabHasManual || !subTabHasCustom) ? 0 : 1;
@@ -3326,7 +2272,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             "[VM] Sub-tab init: ServerModeIndex={Idx} (manual={M}, custom={C}, configMode={CM})",
             subTabIndex, Servers.Count, CustomConfigs.Count, _settings.App.ConfigMode);
 
-        // Load apps from profiles + custom apps
         LoadApps();
 
         RefreshLocalization();
@@ -3337,53 +2282,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Phase 2B (Wave 8, 2026-05-18) - Apps / Profiles surface moved to
-    // MainWindowViewModel.Profiles.cs:
-    //   - LoadApps / CreateBridgedAppItem / ComputeLegacyEffectiveIncludeNames
-    //   - WireAppChangeTracking / UnwireAllAppGroups + 3 PropertyChanged handlers
-    //   - StripExe (static helper)
-    //   - AddCategory / RemoveCategory
-    //   - AddCustomApp / RemoveCustomApps / RemoveCustomApp
-    //   - DeployBundledProfiles
-
-    /// <summary>
-    /// True when sing-box is running but NOT started by this App instance —
-    /// i.e. the Windows Service owns the tunnel. Used by Apply to avoid a
-    /// silent-fail call into <see cref="VpnEngine.ApplyAsync"/> (which would
-    /// bail immediately because our local engine has no sing-box process).
-    /// </summary>
     private bool IsServiceManagedVpn => IsConnected && !(_engine?.IsRunning ?? false);
 
     [RelayCommand]
     private Task ApplyPendingChangesAsync() => ApplyPendingChangesInternalAsync(forceRestart: false);
 
-    /// <summary>
-    /// v2.29.0 — Apps page full-tunnel banner action. When user is in
-    /// full-tunnel mode the apps list is irrelevant (all traffic is
-    /// routed through VPN regardless of selection); previously the page
-    /// silently disabled the entire Grid which read as "broken" to a
-    /// Mac tester (2026-04-29 feedback). Now we show a banner with this
-    /// command as the action. Flips IsSplitTunnel + persists.
-    /// HasPendingAppChanges is set so the user sees the standard Apply
-    /// gating without us having to start a tunnel restart unilaterally
-    /// — the routing-mode change requires a forceRestart Apply, which
-    /// the user kicks off themselves via the Apply bar.
-    /// </summary>
     [RelayCommand]
     private void SwitchToSplitTunnel()
     {
-        if (IsSplitTunnel) return; // no-op if already split
+        if (IsSplitTunnel) return;
         IsSplitTunnel = true;
         MarkRoutingSettingsChanged();
         SaveSettings();
     }
 
-    /// <summary>
-    /// v2.20.4: shared Apply pipeline with a <c>forceRestart</c> switch.
-    /// Callers changing RoutingMode (split ↔ full) or other structural
-    /// sing-box config should pass true — hot-reload doesn't re-do the
-    /// TUN routing table, so the user sees no effect if we rely on it.
-    /// </summary>
     private async Task ApplyPendingChangesInternalAsync(bool forceRestart)
     {
         if (!CanApplyAppChanges) return;
@@ -3396,22 +2308,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (IsServiceManagedVpn)
             {
-                // v2.18.4: the sing-box process is owned by the Windows
-                // Service, so hot-reload via our local engine isn't an
-                // option — it has no sing-box to talk to. Pre-v2.18.4 we
-                // punted here with a "Stop and Start VPN to apply" hint,
-                // which forced the user to click Disconnect + Connect
-                // after every Split/Full or server change. Terrible UX.
-                //
-                // New behaviour: invoke the already-existing
-                // ServiceVm.RestartServiceCommand (stop → start cycle).
-                // The service re-reads config.yaml via SettingsLoader.Load
-                // on boot and spawns sing-box with the freshly-saved
-                // RoutingMode / ActiveProfile / subscription picks.
-                //
-                // Fallback to the old "please restart manually" text only
-                // if service isn't available at all (shouldn't happen when
-                // IsServiceManagedVpn is true, but belt-and-braces).
                 if (ServiceVm.IsAvailable)
                 {
                     StatusText = IsRussian
@@ -3419,10 +2315,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         : "Restarting service with new settings...";
                     await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
                     ClearPendingIfRevisionUnchanged(appliedRevision);
-                    // The 2-second SyncConnectedWithVpnRuntime poll in
-                    // RuntimeStatus will pick up the new service state and
-                    // refresh StatusText to the "connected via service
-                    // [mode]" line. No extra plumbing needed here.
                     return;
                 }
 
@@ -3452,7 +2344,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         finally { IsApplying = false; }
     }
 
-    /// <summary>Rebuild the "Connected [mode · tunnel] → server (ip)" status line after Apply.</summary>
     private void RestoreConnectedStatus()
     {
         if (!IsConnected) return;
@@ -3468,16 +2359,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         StatusText = Strings.Connected(modeLabel, serverName, serverIp);
     }
 
-    /// <summary>
-    /// v2.44.1-r6: derive the (name, ip) for the connected-status line, shared by
-    /// <see cref="RestoreConnectedStatus"/> + the OnEngineStatus "Connected"
-    /// handler so the two can't drift. When AutoSelectBestServer builds a urltest
-    /// "proxy" group the active member is chosen by sing-box at runtime, so show
-    /// the REAL server resolved from clash_api (<c>_autoSelectedServer</c>,
-    /// refreshed by the ConnStats poll) — or a generic auto-select label until
-    /// it's known — NOT the stale first-in-list that lit "Germany" while traffic
-    /// exited via Iceland (user report 2026-06-23).
-    /// </summary>
     private (string? name, string? ip) DeriveConnectedServerLabel()
     {
         var serverIp = _engine.ActiveServerAddress;
@@ -3499,46 +2380,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return (c?.Name, serverIp);
     }
 
-    /// <summary>
-    /// One-time: create /etc/sudoers.d/vpnrouter via osascript on UI thread
-    /// so the admin password dialog appears properly.
-    ///
-    /// <para>v2.28.6-r6: two bug fixes for the "sudo: a password is required"
-    /// failure on macOS that left users unable to start the VPN:</para>
-    /// <list type="number">
-    /// <item><b>Escape spaces in path</b>. The default install path is
-    /// <c>/Users/$USER/Library/Application Support/VPNRouter/bin/sing-box</c>
-    /// — sudoers' <c>Cmnd_Spec</c> grammar requires spaces to be escaped
-    /// with a backslash, otherwise the rule is malformed and sudo silently
-    /// falls back to password prompt → fails because no terminal.</item>
-    /// <item><b>Add <c>*</c> wildcard for arguments</b>. Without it, the rule
-    /// only matches a bare <c>sudo sing-box</c> call with NO arguments —
-    /// but we always invoke <c>sudo sing-box run -c &lt;path&gt;</c>. With
-    /// the wildcard, any argument list is allowed.</item>
-    /// </list>
-    /// <para>For users who already have a broken sudoers file from
-    /// v2.28.6-r1..r5 or older, the marker comment <c>SudoersFormatMarker</c>
-    /// flags whether the current rewrite has been applied; if absent, we
-    /// rewrite (which means the user gets a one-time osascript prompt
-    /// after upgrading).</para>
-    /// </summary>
     private const string SudoersFormatMarker = "# vpnrouter 2026-09-02 sudoers (sing-box + exact kill + networksetup DNS + pfctl kill-switch)";
 
     private void EnsureMacSudoAccess()
     {
         const string sudoersPath = "/etc/sudoers.d/vpnrouter";
 
-        // v2.28.6-r6: check the file's CONTENT, not just existence — older
-        // releases wrote a malformed file (spaces unescaped, no args
-        // wildcard) that exists on disk but doesn't grant NOPASSWD for
-        // our actual sudo invocation.
-        // v2.41.0-r5: authority is a USER-readable marker we write after a
-        // confirmed grant — NOT the /etc/sudoers.d file. That file is
-        // 0440 root:wheel; a normal admin user can't read it, so the old
-        // File.ReadAllText(sudoersPath) threw UnauthorizedAccessException and
-        // forced the "one-time" osascript prompt on EVERY connect. Reading our
-        // own marker never throws, so the prompt fires at most once per marker
-        // version (on first connect after an upgrade that bumps it).
         var sudoersMarkerPath = Path.Combine(AppPaths.DataDir, "macos-sudoers.marker");
         bool needsRewrite = true;
         try
@@ -3550,16 +2397,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             else if (File.Exists(sudoersPath))
             {
-                // Best-effort: if we CAN read the root file (dev box / wheel
-                // member), honour its marker too. Unreadable (the common 0440
-                // case) → swallow and fall through to one rewrite, which then
-                // writes the user marker so later launches take the fast path.
                 try
                 {
                     if (File.ReadAllText(sudoersPath).Contains(SudoersFormatMarker, StringComparison.Ordinal))
                         needsRewrite = false;
                 }
-                catch { /* 0440 unreadable → needsRewrite stays true */ }
+                catch { }
             }
         }
         catch { needsRewrite = true; }
@@ -3567,9 +2410,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         StatusText = IsRussian ? "Настройка sudo (один раз)..." : "Setting up sudo (one-time)...";
 
-        // v2.28.6-r6: escape spaces in the binary path for sudoers
-        // Cmnd_Spec syntax. Add ` *` wildcard so any arguments
-        // (`run -c <path>`) are allowed under NOPASSWD.
         var user = Environment.UserName;
         var singbox = AppPaths.SingBoxExePath;
         var singboxEscaped = singbox.Replace(" ", "\\ ");
@@ -3577,18 +2417,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         File.WriteAllText(tmpFile,
             $"{SudoersFormatMarker}\n" +
             $"{user} ALL=(root) NOPASSWD: {singboxEscaped} *\n" +
-            // SU-3-3: exact PID only; never grant a pattern-based process sweep.
             $"{user} ALL=(root) NOPASSWD: /bin/kill -KILL -- [0-9]*\n" +
-            // Fix #1 (v2.41.0 r3): macOS DNS-leak hardening needs to repoint the
-            // primary service's resolver to the TUN gateway + flush the cache.
             $"{user} ALL=(root) NOPASSWD: /usr/sbin/networksetup *\n" +
             $"{user} ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\n" +
             $"{user} ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\n" +
-            // r6: pf kill-switch (block_on_vpn_fail) loads/flushes a global
-            // egress-block ruleset via pfctl in full-tunnel mode.
             $"{user} ALL=(root) NOPASSWD: /sbin/pfctl *\n");
 
-        // Write a helper script
         var helperScript = Path.Combine(Path.GetTempPath(), "vpnrouter-setup.sh");
         File.WriteAllText(helperScript,
             $"#!/bin/bash\ncp \"{tmpFile}\" {sudoersPath}\nchmod 0440 {sudoersPath}\nchown root:wheel {sudoersPath}\nrm -f \"{tmpFile}\" \"{helperScript}\"\n");
@@ -3597,7 +2431,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
             UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
 
-        // Exact same osascript format that works for sing-box launch
         var cmd = $"\\\"{helperScript}\\\"";
         var psi = new ProcessStartInfo("/usr/bin/osascript")
         {
@@ -3626,13 +2459,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             osascriptExit, stdout, stderr);
         proc.Dispose();
 
-        // r9 (claude-code audit P1): only mark the grant configured when osascript
-        // actually SUCCEEDED (exit 0 = user approved + helper installed the current
-        // grants) AND a non-interactive probe of the newest grant works. A stale
-        // /etc/sudoers.d/vpnrouter from an old version makes File.Exists true even
-        // after a CANCELLED or FAILED prompt — so File.Exists alone would falsely
-        // write the marker, skip the prompt forever, and let runtime `sudo -n`
-        // calls (networksetup / pfctl) fail silently later.
         if (osascriptExit != 0)
         {
             _logger.Warning("sudoers setup: osascript exit {Exit} (cancelled/failed) — NOT writing marker; will re-prompt next time", osascriptExit);
@@ -3654,12 +2480,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex) { _logger.Warning(ex, "Failed to write sudoers marker — may re-prompt next launch"); }
     }
 
-    /// <summary>
-    /// Non-interactive probe that the pfctl NOPASSWD grant (the newest entry in
-    /// the r6 sudoers template) is actually active. <c>sudo -n /sbin/pfctl -s
-    /// info</c> exits 0 only when the grant is installed; a missing grant makes
-    /// sudo fail fast. macOS-only path.
-    /// </summary>
     private static bool ProbeSudoGrant()
     {
         try
@@ -3685,24 +2505,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch { return false; }
     }
 
-    // Phase 2B (Wave 8, 2026-05-18) - StripExe moved to MainWindowViewModel.Profiles.cs.
-
-    /// <summary>
-    /// v2.32 (r10, F-C) — mark each entry in <see cref="Servers"/> as orphan
-    /// if it doesn't belong to any enabled subscription. The badge in
-    /// ServersPage row template binds to <c>IsOrphanFromSubscription</c>.
-    ///
-    /// <para>Match by composite key <c>{server|port|uuid}</c> (case-insensitive)
-    /// so the same physical server can be identified across name renames.</para>
-    ///
-    /// <para>Called from <c>LoadSettingsIntoUI</c> after Servers is rebuilt,
-    /// and re-runs on subscription refresh via <c>RefreshSubscriptionAsync</c>
-    /// (added in callsite there).</para>
-    /// </summary>
     private void MarkOrphanServers()
     {
-        // r10 r9 (Bug-r10-H, 2026-05-12 brat screenshot) — null-safe guard
-        // for early calls during ctor wire-up before _settings lands.
         if (_settings == null) return;
 
         var hasEnabledSubs = _settings.App?.Subscriptions?
@@ -3727,35 +2531,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// r10 r9 (Bug-r10-H, 2026-05-12 brat screenshot) — listener wired
-    /// after <c>_settings</c> is loaded to keep <c>IsOrphanFromSubscription</c>
-    /// in sync on ANY mutation of <see cref="Servers"/>. Pre-r9 the badge
-    /// re-evaluation happened only in <c>LoadSettingsIntoUI</c> (initial
-    /// load) and <c>RemoveServerByEntry</c> (× click). Other paths —
-    /// Free Configs «Использовать» (<see cref="ApplyFreeConfigAsync"/>),
-    /// VLESS URI paste, subscription refresh-into-list — added entries
-    /// directly via <c>Servers.Add</c> and the badge state stayed at
-    /// the default <c>false</c>, so freshly-added orphans showed without
-    /// the «Не из подписки» badge while older orphans had it. User saw
-    /// is-01-hy2-test marked but ⚡ [EE] not, even though both are
-    /// non-subscription manual entries — inconsistent.
-    ///
-    /// <para>Guarded by <see cref="_isLoadingUI"/> so bulk reload's
-    /// per-Add CollectionChanged events don't trigger N redundant
-    /// MarkOrphanServers calls; the explicit single call at the end
-    /// of <c>LoadSettingsIntoUI</c> covers that path.</para>
-    /// </summary>
     private void WireServersOrphanTracking()
     {
         Servers.CollectionChanged += (_, _) =>
         {
             if (_isLoadingUI) return;
-            // r9 follow-up #1: keep the "naive + hy2" subtitle in sync on manual
-            // Add/Remove/row-delete/free-config-apply — not just load + sub rebuild.
             try { ServerViewModel.RefreshUdpSiblingFlags(Servers); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
-            try { ServerViewModel.RefreshProviderRiskFlags(Servers); } // R3
+            try { ServerViewModel.RefreshProviderRiskFlags(Servers); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshProviderRiskFlags on Servers change failed"); }
             try { MarkOrphanServers(); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
@@ -3764,10 +2547,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void SaveSettings()
     {
-        // Guard: don't save while LoadSettingsIntoUI is populating fields
         if (_isLoadingUI) return;
 
-        // Auto-backup current config.yaml before overwriting (rolling .bak)
         try
         {
             var configPath = AppPaths.ConfigYamlPath;
@@ -3776,23 +2557,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex) { _logger.Debug(ex, "[Settings] Backup failed"); }
 
-        // Config mode (three-way) — v2.28.2-r2 guard:
-        //
-        // The ServerModeIndex sub-tab handler (OnSelectedServerModeIndexChanged)
-        // flips IsVlessMode whenever the user clicks the "Custom" sub-tab,
-        // which would normally land here as ConfigMode = "custom". But if the
-        // user is just *peeking* at the Custom sub-tab without having actually
-        // imported / selected a custom JSON config, persisting "custom" is a
-        // foot-gun: on next StartAsync the engine reads ConfigMode="custom"
-        // + empty CustomConfig path → throws "Custom config not found" → VPN
-        // doesn't start. User reported this exact scenario after clicking
-        // through tabs (2026-04-26 field test).
-        //
-        // Guard: only persist "custom" if there's actually a custom config
-        // ready to use (either ActiveCustomConfig points at one OR the legacy
-        // CustomConfig path is set OR there's at least one entry in the
-        // CustomConfigs list). Otherwise fall back based on what's available:
-        // subscriptions present → "subscribe", else → "generated".
         var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
         var hasCustomConfig = !string.IsNullOrWhiteSpace(_settings.App.ActiveCustomConfig)
                               || !string.IsNullOrWhiteSpace(_settings.App.CustomConfig)
@@ -3802,33 +2566,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         if (wantsCustomMode && hasActiveSubscription)
         {
-            // v2.30.1-r2 regression fix: subscription wins over peeking
-            // at Custom sub-tab.
-            //
-            // The previous logic only fell back to "subscribe" when
-            // hasCustomConfig was false. If the user had EVER imported
-            // a custom config (so hasCustomConfig=true) AND was running
-            // a subscription, the sequence:
-            //
-            //   Subscribe tab (IsSubscribeMode=true) → Servers tab
-            //     (OnSelectedTabIndexChanged flips IsSubscribeMode=false,
-            //      IsVlessMode=true) → Custom sub-tab
-            //     (OnSelectedServerModeIndexChanged flips IsVlessMode=false
-            //      + calls SaveSettings)
-            //
-            // would persist ConfigMode="custom" — even though the user
-            // never explicitly chose to swap modes. The next Apply (e.g.
-            // from Rules / Network page) would then reconnect using the
-            // custom config branch instead of subscription.
-            //
-            // User report 2026-04-30: "я применил настройки и буд-то
-            // переподключилось не на подписку а на конфиг".
-            //
-            // Fix: when an active subscription exists, peeking at sub-
-            // tabs cannot flip ConfigMode away from "subscribe". To
-            // genuinely switch to custom mode, the user must disable
-            // every subscription first (the explicit Enabled checkbox
-            // on each subscription entry).
             _settings.App.ConfigMode = "subscribe";
             _logger?.Information(
                 "[Settings] Subscription is active — keeping ConfigMode=subscribe " +
@@ -3836,9 +2573,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else if (wantsCustomMode && !hasCustomConfig)
         {
-            // No custom config ready and no subscription either → pick
-            // the next best persistable mode so VPN can still start on
-            // restart.
             _settings.App.ConfigMode = "generated";
             _logger?.Information(
                 "[Settings] User clicked Custom sub-tab but no custom config is configured — keeping ConfigMode=generated instead of 'custom'");
@@ -3848,33 +2582,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
         }
 
-        // Persist all subscription entries (multi-subscription support)
         _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
 
-        // Active server name — from aggregated pool
         var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
         _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
 
-        // Clear legacy single-subscription fields (kept in model for read-only migration)
         _settings.App.SubscriptionUrl = string.Empty;
         _settings.App.SubscriptionServers = new();
 
-        // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
 
-        // v2.32 (r10) — Apps Include/Exclude 2-mode persist. Already
-        // persisted eagerly in OnRoutingAppsModeChanged but written here
-        // too so SaveSettings is the single source of truth on save.
         var appsModeCanon = (RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
         if (appsModeCanon != "include" && appsModeCanon != "exclude") appsModeCanon = "include";
         _settings.App.RoutingAppsMode = appsModeCanon;
 
-        // v2.30.0 — full custom rules (direct/proxy/block). Parse the
-        // textbox + persist the structured list + populate two diagnostic
-        // boxes (parse errors, conflict warnings). Valid lines still save
-        // even if some lines errored.
-        // CustomDirectRules legacy field is left empty; the migrator
-        // already moved any v2.29 entries to CustomRules.
         try
         {
             var parsed = VPNRouter.Core.Services.CustomRulesParser
@@ -3895,29 +2616,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _logger.Error(ex, "[VM] CustomRules parse failed");
         }
 
-        // Russian geo bypass
         _settings.App.BypassRussianTraffic = BypassRussianTraffic;
-        // v2.30.0-r17: persist priority too (set by OnCustomRulesAboveTogglesChanged
-        // already, but mirror here for safety in case the OnChanged didn't fire
-        // — e.g. during a programmatic load + immediate save).
         _settings.App.CustomRulesPriority = CustomRulesAboveToggles ? "custom_first" : "toggles_first";
 
-        // Strict mode
         _settings.App.StrictMode = StrictMode;
         var minimumTunMtu = _settings.Tun.Ipv6Enabled
             ? TunSettings.MinimumIpv6Mtu
             : TunSettings.MinimumMtu;
         _settings.Tun.Mtu = Math.Clamp(TunMtu, minimumTunMtu, TunSettings.MaximumMtu);
 
-        // IPv4 + DNS flush + Strict DNS
         _settings.App.ForceIpv4Only = ForceIpv4Only;
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
         _settings.Vless.AutoSelectBestServer = AutoSelectBestServer;
         _settings.App.ConnectionIntent = IntentFromIndex(ConnectionIntentIndex);
-        // Wave 39 — DNS leak lockdown setting (default flipped per
-        // SettingsMigrator: true for fresh installs, false for upgrades).
         _settings.App.DnsLeakLockdown = IsDnsLeakLockdownEnabled;
         _settings.App.AutostartVpn = AutostartVpn;
         _settings.App.AutostartZapret = AutostartZapret;
@@ -3931,23 +2644,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings.App.TgProxyPort = TgProxyPort;
         _settings.App.TgProxySecret = TgProxySecret;
 
-        // Update channel
         _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
 
-        // Theme & language. v2.40.x (Fix #7): persist the PREFERENCE
-        // ("light"/"dark"/"system"), not the resolved variant — otherwise a
-        // "system" choice would be flattened to whatever was showing.
         _settings.App.Theme = NormalizeThemePref(ThemePreference);
         _settings.App.Language = IsRussian ? "ru" : "en";
         _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
 
-        // Servers — save all + mark which one is active
         _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
         var activeVless = SelectedServer ?? Servers.FirstOrDefault();
         _settings.Vless.ActiveServer = activeVless?.Name ?? "";
         if (_settings.Vless.Servers.Count > 0)
         {
-            // Write active server to root fields for backward compat
             var entry = activeVless?.ToEntry() ?? _settings.Vless.Servers[0];
             _settings.Vless.Server = entry.Server;
             _settings.Vless.Port = entry.Port;
@@ -3957,14 +2664,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _settings.Vless.Reality = entry.Reality;
         }
 
-        // Custom configs
         _settings.App.CustomConfigs = CustomConfigs.Select(c => c.ToEntry()).ToList();
         var active = CustomConfigs.FirstOrDefault(c => c.IsActive);
         _settings.App.ActiveCustomConfig = active?.Name ?? "";
 
-        // Safety: only persist Apps tab data if LoadApps has actually run.
-        // Without this guard, an early SaveSettings (e.g. before user opens
-        // Apps tab) would wipe ActiveProfile and CustomApps from disk.
         if (_appsLoaded)
         {
             var activeProfileNames = AppGroups
@@ -3977,8 +2680,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 .Select(a => a.ProcessName)
                 .ToList() ?? new();
 
-            // Persist user-added apps for every default group (except Custom Apps / custom categories)
-            // F-02: only overwrite if default groups exist to protect against wiped profiles on deserialize errors
             var defaultGroupsCount = AppGroups.Count(g => g.Name != "Custom Apps" && !g.IsCustomCategory);
             if (defaultGroupsCount > 0)
             {
@@ -3993,7 +2694,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 _settings.CustomGroupApps = customGroupApps;
             }
 
-            // Persist user-created categories (full content)
             _settings.CustomCategories = AppGroups
                 .Where(g => g.IsCustomCategory)
                 .Select(g => new CustomCategory
@@ -4004,30 +2704,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 })
                 .ToList();
 
-            // Bug-r9-I (2026-05-11): persist per-app exclusions inside
-            // active default groups. Pre-r9-I the per-app checkbox was a
-            // transient view state — only the group-level IsChecked made
-            // it to disk. User reported (verbatim): «я каждый раз когда
-            // захожу отправляю фаерфокс в исключения... а когда перезапускаю
-            // винду галочка на нем опять стоит». Now an unchecked app
-            // inside an active group survives Save → reload → reboot via
-            // ExcludedApps + VpnEngine.RemoveExcludedApps.
-            //
-            // Custom Apps + IsCustomCategory groups are excluded from the
-            // sweep because they already model "off" by removing/disabling
-            // — no need for a parallel exclusion list there.
-            //
-            // AM-3 (2026-05-12): the sweep only runs in INCLUDE mode.
-            // AppItem.IsChecked is now bridged to the active mode list,
-            // so in exclude mode unchecked apps don't mean "exclude from
-            // VPN" — they mean "this app isn't on the user's exclude
-            // list", which is the opposite. Running the sweep in
-            // exclude mode would push every unchecked app into
-            // ExcludedApps and silently corrupt the legacy
-            // VpnEngine.RemoveExcludedApps fallback path. We keep the
-            // legacy field stable in exclude mode (leave existing
-            // entries as-is so Apply / restart paths that still read
-            // legacy data don't surprise the user).
             var sweepIsIncludeMode = !string.Equals(
                 _settings.App.RoutingAppsMode, "exclude",
                 StringComparison.OrdinalIgnoreCase);
@@ -4061,24 +2737,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
-    // Phase 2B (Wave 8, 2026-05-18) — Subscription tab commands +
-    // auto-refresh timer moved to MainWindowViewModel.Subscriptions.cs:
-    //   - RebuildSubscriptionPool
-    //   - AddSubscriptionAsync / RemoveSubscription
-    //   - RefreshSubscriptionAsync / RefreshAllSubscriptionsAsync
-    //   - SyncSubscriptionAsync / ClearSubscription
-    //   - StartSubRefreshTimer / StopSubRefreshTimer
-    //   - RefreshSubscriptionSilentAsync
-
-    /// <summary>Kill ALL winws.exe processes system-wide.</summary>
     private void KillAllZapret()
     {
 #if PLATFORM_WINDOWS
-        // v2.31.6-r12: Debug-log instead of swallowing silently.
         try { _zapret?.Stop(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] KillAllZapret: _zapret.Stop failed"); }
 
-        // Force kill by process name
         foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
         {
             try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
@@ -4089,10 +2753,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             finally { proc.Dispose(); }
         }
 
-        // Fallback: taskkill /F as last resort
         try
         {
-            // Security: Use ArgumentList instead of string concatenation to prevent argument injection/formatting issues
             var psi = new System.Diagnostics.ProcessStartInfo("taskkill")
             {
                 UseShellExecute = false,
@@ -4113,18 +2775,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
-    /// <summary>Check if winws.exe is running (from previous session or manual start).</summary>
     private bool IsZapretRunning()
     {
 #if PLATFORM_WINDOWS
-        // v2.40.0-r3 (audit P0 handle-leak sweep): handle-safe (was GetProcessesByName(...).Length).
         return VPNRouter.Core.Services.ProcessQuery.AnyAlive("winws");
 #else
         return false;
 #endif
     }
 
-    /// <summary>Load strategies from Flowseal .bat files + legacy built-ins.</summary>
     private void LoadZapretStrategies()
     {
         var names = new List<string>();
@@ -4142,20 +2801,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretVersionText = IsRussian ? "Не установлен" : "Not installed";
         }
 #endif
-        // r43: only add legacy stubs ("multisplit", "fake+multisplit") when
-        // there are NO parsed .bat strategies (i.e. Zapret not installed or
-        // freshly-empty install dir). These stubs have no .bat + no args, so
-        // picking them when a real strategy is available leads to:
-        //   "multisplit not in parsed list — using custom args path"
-        //   "Zapret Args: " (empty)
-        //   "Process exited (exit code: 1)"
-        // — surfaced as a false-positive AV warning. Removing them when real
-        // strategies exist forces the picker to a working option.
-        //
-        // r44 extension: also DON'T add stubs when Zapret IS installed but
-        // _parsedStrategies is still empty (install corrupted, .bat files
-        // missing/unreadable). Stubs would only mislead the user; instead
-        // log a diagnostic so we can surface "reinstall Zapret" toast later.
 #if PLATFORM_WINDOWS
         var zapretActuallyInstalled = VPNRouter.Core.Services.ZapretUpdater.IsInstalled();
 #else
@@ -4171,30 +2816,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _logger?.Warning(
                 "[VM] LoadZapretStrategies: Zapret install dir exists but ParseStrategies returned 0 — likely install corruption");
         }
-        // "custom" stays — represents the user's own args path (ZapretCustomArgs).
         names.Add("custom");
 
         ZapretStrategies = new System.Collections.ObjectModel.ObservableCollection<string>(names);
 
-        // v2.37.0-r36 — build display variant with verification badges from
-        // ZapretProbeCache. Currently only the cached winner gets a badge;
-        // future r37+ will extend the cache to per-strategy results so every
-        // entry can carry verified/failed status.
         RefreshZapretStrategiesDisplay();
 
-        // r39 follow-up — find the most-recent zapret-probe-*.log on disk
-        // and surface it as LastProbeLogPath so the "Open probe log" button
-        // shows up even on fresh app launch (not only after running a probe
-        // in the current session). Best-effort.
         TryRestoreLastProbeLog();
 
-        // Restore saved strategy index.
-        // r43: if saved value points to a now-removed stub ("multisplit" /
-        // "fake+multisplit") AND we have real parsed strategies — auto-migrate
-        // to the first parsed entry (typically "general" or similar). Users
-        // upgrading from a pre-r43 install where multisplit was a stub get
-        // a working pick on first run instead of a dropdown that skips them
-        // to "custom" (empty args).
         var saved = _settings.App.ZapretStrategy;
         var idx = names.IndexOf(saved);
         if (idx < 0
@@ -4210,12 +2839,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ZapretStrategyIndex = idx >= 0 ? idx : 0;
     }
 
-    /// <summary>
-    /// r39 follow-up — scan %ProgramData%\VPNRouter\logs\ for the most-recent
-    /// zapret-probe-*.log and surface its path so the "Open probe log" button
-    /// shows up on fresh app launch. Best-effort: any IO error → leave
-    /// LastProbeLogPath as null (button hidden).
-    /// </summary>
     private void TryRestoreLastProbeLog()
     {
         try
@@ -4237,12 +2860,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.37.0-r36 — rebuild <see cref="ZapretStrategiesDisplay"/> from the
-    /// raw <see cref="ZapretStrategies"/> + the cached probe winner (if any).
-    /// Call after a probe finishes or when a fresh cache load happens, so
-    /// the Hero mini-row ComboBox shows the latest "✓ N/N" badge.
-    /// </summary>
     private void RefreshZapretStrategiesDisplay()
     {
         var display = new System.Collections.ObjectModel.ObservableCollection<string>();
@@ -4262,28 +2879,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var passed = cached?.TargetsPassed ?? 0;
         var total = cached?.TargetsTotal ?? 0;
 
-        // r37: pull per-strategy probe results (each strategy tested in
-        // the last sweep gets a ✓/⚠/✗ badge based on its pass rate).
         var perStrategy = cached?.PerStrategyResults
             ?? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
 
-        // r46 — build a list of ZapretStrategyDisplayItem so the ComboBox
-        // ItemTemplate can color glyph and name independently. Glyph + score
-        // get a status-coloured Foreground (green/yellow/red/gray/orange) via
-        // style selectors; name stays default text colour.
-        //
-        // Glyph vocabulary (legend in DpiBypassPage):
-        //   ✓ green   — strategy passed verification
-        //   ⚠ yellow  — strategy partially passed (some targets failed)
-        //   ✗ red     — strategy failed verification (zero targets passed)
-        //   ◌ muted   — strategy never tested (no probe data)
-        //   ⏱ orange  — winner data is stale (>7 days old)
         var newDisplay = new System.Collections.ObjectModel.ObservableCollection<ZapretStrategyDisplayItem>();
         foreach (var name in ZapretStrategies)
         {
-            // Winner gets the most authoritative badge (✓/⏱ from main
-            // cache fields). Non-winners fall back to per-strategy probe
-            // data if we have it from the same sweep.
             if (!string.IsNullOrEmpty(winnerName)
                 && string.Equals(name, winnerName, StringComparison.Ordinal))
             {
@@ -4317,7 +2918,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 continue;
             }
 
-            // r37: non-winner badging from per-strategy sweep results.
             if (perStrategy.TryGetValue(name, out var result) && result.Total > 0)
             {
                 ZapretStrategyDisplayKind kind;
@@ -4346,9 +2946,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                // r45: "not tested" glyph (was bare name) — makes it obvious
-                // that probe simply hasn't reached this strategy yet vs.
-                // tested-and-passed.
                 newDisplay.Add(new ZapretStrategyDisplayItem
                 {
                     Glyph = "◌",
@@ -4370,7 +2967,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // Stop zapret if running
             if (ZapretEnabled || IsZapretRunning())
             {
                 KillAllZapret();
@@ -4391,8 +2987,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (VPNRouter.Core.Services.ZapretDownloadException zex)
         {
-            // Categorized error — use the already-human-readable message directly
-            // instead of wrapping with "Download error:" prefix (which adds noise).
             _logger.Warning("[VM] Zapret download failed: {Category} {Msg}", zex.Category, zex.Message);
             ZapretStatus = FormatZapretError(zex);
         }
@@ -4411,7 +3005,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
 #if PLATFORM_WINDOWS
-    /// <summary>Translate categorized Zapret errors to localized, actionable user messages.</summary>
     private string FormatZapretError(VPNRouter.Core.Services.ZapretDownloadException zex)
     {
         return zex.Category switch
@@ -4448,7 +3041,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task ToggleZapretAsync()
     {
 #if PLATFORM_WINDOWS
-        // If any winws process running → stop ALL
         if (ZapretEnabled || IsZapretRunning())
         {
             KillAllZapret();
@@ -4458,7 +3050,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Auto-download if not installed
         if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
             await UpdateZapretAsync();
@@ -4470,12 +3061,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (_zapret == null)
             {
                 _zapret = new ZapretManager(_logger);
-                // Bug-r9-G (2026-05-11): when winws.exe exits within < 2 s
-                // with non-zero code, almost always AV killed it. Stas's
-                // log: "[WRN] [Zapret] Wrapper exited (exit code: -1)"
-                // right after launch with no other diagnostics. The
-                // toast names the whitelist path explicitly so the user
-                // can paste it into their AV's exception list.
                 _zapret.ImmediateExitDetected += OnZapretImmediateExit;
             }
             var strategyName = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
@@ -4497,17 +3082,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     ZapretStatus = $"Strategy not found: {strategyName}";
                     return;
                 }
-                // Prefer the original .bat file — it runs Flowseal's prologue
-                // (service.bat load_user_lists, etc.) which is required for winws.exe.
-                // Silent wrapper: same prologue + winws.exe run directly (no `start`),
-                // so it inherits hidden parent window instead of appearing in taskbar.
                 if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
                     _zapret.StartFromBat(parsed.BatPath, parsed.Arguments);
                 else
                     _zapret.Start(parsed.Arguments);
             }
 
-            // Verify winws actually started (bat wrapper exits fast; check winws by name)
             await Task.Delay(1500);
             var winwsPid = ZapretManager.WinwsPid;
             if (_zapret.IsRunning || winwsPid != null)
@@ -4536,29 +3116,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-    // v2.36.0-r8 — ZapretOneTap orchestrator + hero label computed props
-    // ────────────────────────────────────────────────────────────────────────
-    //
-    // The hero card on DpiBypassPage binds to:
-    //   - LblZapretHeroTitle / LblZapretHeroLede  — state-driven title + lede
-    //   - LblZapretMagicButton                    — Start/Stop label
-    //   - LblZapretAirPill                        — running-state pill
-    //   - IsZapretMagicButtonEnabled              — disabled during probe/download
-    //   - ZapretOneClickCommand                   — the magic button itself
-    //
-    // The orchestrator runs three phases:
-    //   1. Optional download (UpdateZapretAsync if !IsInstalled)
-    //   2. Discord hosts ensure-installed (default ON)
-    //   3. Auto-probe loop via ZapretAutoStrategy.ProbeAsync — ALT3 → general → ALT
-    //
-    // On Tier1 win: winner stays running, ZapretWinningStrategy set, hero
-    // re-narrates to "Активна стратегия: …". On all-fail: IsZapretFallback=true,
-    // hero re-narrates to "Стратегия не подобрана", last-tried winws.exe is
-    // STOPPED (in contrast to the research doc — research left it running, but
-    // a not-working strategy running is noise; safer to leave clean).
-
-    /// <summary>Hero title — flips between Stopped, Probing, Running, Fallback states.</summary>
     public string LblZapretHeroTitle
     {
         get
@@ -4571,9 +3128,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Hero lede — flips with the four states. v2.37: probing lede
-    /// embeds live per-target score "(2/3): general (ALT3) — 7/8 ok" so the
-    /// user can see exactly what's passing.</summary>
     public string LblZapretHeroLede
     {
         get
@@ -4581,9 +3135,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (IsZapretProbing && ZapretProbeTotal > 0)
             {
                 var name = string.IsNullOrEmpty(ZapretProbeStrategy) ? "..." : ZapretProbeStrategy;
-                // Once we have a probe count, show it — earlier in the attempt
-                // (during Starting/Soaking phases) ZapretProbeTotalCount=0 and
-                // we fall back to the no-score variant.
                 if (ZapretProbeTotalCount > 0)
                     return Strings.ZapretOneTapLedeProbingScored(
                         ZapretProbeIndex + 1, ZapretProbeTotal, name,
@@ -4597,18 +3148,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Magic-button label — Start when stopped, Stop when running.</summary>
     public string LblZapretMagicButton => ZapretEnabled
         ? Strings.ZapretOneTapStopButton
         : Strings.ZapretOneTapStartButton;
 
-    /// <summary>Disable button during download + probing to prevent double-spawn.</summary>
     public bool IsZapretMagicButtonEnabled => !IsZapretDownloading && !IsZapretProbing;
 
-    /// <summary>Air pill text when running. v2.37: shows probe score
-    /// "general (ALT3) · 7/8" when we have the count, otherwise falls back
-    /// to PID. Score conveys confidence ("7 of 8 targets confirmed") which
-    /// is more user-meaningful than the PID number.</summary>
     public string LblZapretAirPill
     {
         get
@@ -4621,38 +3166,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>L_ getter for the "Тонкая настройка" expander header.</summary>
     public string L_ZapretOneTapTune => Strings.ZapretOneTapTune;
 
-    /// <summary>L_ getters for the 3-step chip labels in the hero card.</summary>
     public string L_ZapretOneTapStep1 => Strings.ZapretOneTapStep1;
     public string L_ZapretOneTapStep2 => Strings.ZapretOneTapStep2;
     public string L_ZapretOneTapStep3 => Strings.ZapretOneTapStep3;
 
-    /// <summary>v2.37.0-r11 — L_ getters for the cache-control buttons
-    /// inside the Tools expander.</summary>
     public string L_ZapretForceFreshProbeButton => Strings.ZapretForceFreshProbeButton;
     public string L_ZapretClearCacheButton => Strings.ZapretClearCacheButton;
 
-    /// <summary>v2.37.0-r24 — L_ getters for the Hero strategy summary card.
-    /// The card sits below the main "Включить обход блокировок" button and
-    /// shows what's currently cached + 2 action buttons.</summary>
     public string L_ZapretReverifyButton => Strings.ZapretReverifyButton;
     public string L_ZapretReverifyHint => Strings.ZapretReverifyHint;
     public string L_ZapretSummaryDetailsButton => Strings.ZapretSummaryDetailsButton;
     public string L_ZapretSummaryStaleHint => Strings.ZapretSummaryStaleHint;
     public string L_ZapretCancelProbeButton => Strings.ZapretCancelProbeButton;
 
-    /// <summary>v2.37.0-r25 — TabControl tab-header L_ getters for TgProxy
-    /// (Telegram-прокси) page. 3 tabs: Settings, Version, Help. Replaces
-    /// the prior "Тонкая настройка" Expander block.</summary>
     public string L_TgProxyTabSettings => Strings.TgProxyTabSettings;
     public string L_TgProxyTabVersion  => Strings.TgProxyTabVersion;
     public string L_TgProxyTabHelp     => Strings.TgProxyTabHelp;
 
-    /// <summary>v2.37.0-r25 — drives the TgProxy page tab swap. r29 reads
-    /// this to swap visible ScrollViewer in the manual tab strip + Panel
-    /// implementation. 3 tabs: 0=Settings, 1=Version, 2=Help.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTgProxyTab0))]
     [NotifyPropertyChangedFor(nameof(IsTgProxyTab1))]
@@ -4670,17 +3202,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             TgProxyActiveTabIndex = idx;
     }
 
-    /// <summary>
-    /// One-button magic Zapret orchestrator. Runs on the magic button click
-    /// in the new DpiBypassPage hero card. Replaces ToggleZapretAsync for the
-    /// hero path; ToggleZapretAsync stays callable from the legacy footer and
-    /// for autostart bootstrap.
-    /// </summary>
     [RelayCommand]
     private async Task ZapretOneClickAsync()
     {
 #if PLATFORM_WINDOWS
-        // Already running? → toggle Stop and reset hero state.
         if (ZapretEnabled || IsZapretRunning())
         {
             KillAllZapret();
@@ -4694,11 +3219,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Phase 1 — install if missing OR if upstream has a newer release.
-        // r37: auto-update on every start. RemoteVersionChecker uses a 6-hour
-        // TTL cache so we don't hammer GitHub on rapid restarts. If the check
-        // fails (network down, rate-limit, etc.) we gracefully fall back to
-        // "install only if missing" — never breaks the start flow.
         if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
             ZapretStatus = Strings.ZapretOneTapDownloading;
@@ -4732,10 +3252,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
 
-        // Phase 2a — Discord hosts ensure-installed (default ON for one-tap).
-        // Skip if already installed to avoid UAC fatigue on returning users.
-        // ToggleDiscordHosts is INSTALL-if-not-installed (we gated above),
-        // and it's synchronous (writes hosts file + flushes DNS inline).
         if (!DiscordHostsInstalled)
         {
             try
@@ -4749,10 +3265,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
 
-        // Phase 2b — r34: Flowseal hosts ensure-installed. User asked
-        // «проставляються хосты?» — previously only Discord hosts were
-        // auto-installed by magic. Flowseal hosts add YouTube + other
-        // Cloudflare overrides needed for full DPI bypass coverage.
         if (!FlowsealHostsInstalled)
         {
             try
@@ -4765,12 +3277,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
 
-        // Phase 2c — r34: Set GameFilter=All on first-time magic if user
-        // hasn't configured it. Without this, the strategy works for
-        // browsers but UDP game traffic (1024-65535) bypasses DPI bypass
-        // → games connect-fail. All is safe default; power users can
-        // change in Тонкая настройка → Фильтры and that overrides
-        // (IsGameFilterConfigured becomes true → magic stops touching it).
         if (!ZapretActions.IsGameFilterConfigured)
         {
             try
@@ -4785,36 +3291,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
 
-        // Phase 3 — auto-probe loop.
         await ProbeAndStartZapretAsync();
 #endif
     }
 
-    // ── v2.37.0-r10 — Zapret probe-cache UI controls ───────────────────────
-    //
-    // r6 added the cache silently — it works for happy-path users but
-    // power users who want to re-probe after a network move or wipe the
-    // cache for testing had no surface. r10 adds:
-    //   - LblZapretCacheStatus: bilingual one-liner surfacing cache state
-    //   - ClearZapretCacheCommand: wipes the JSON file (idempotent)
-    //   - ForceFreshProbeCommand: sets _forceFreshProbe + runs probe
-    //   - _forceFreshProbe transient flag honored by ProbeAndStartZapretAsync
-    //
-    // r19 (2026-05-25) — moved members OUTSIDE `#if PLATFORM_WINDOWS` because
-    // DpiBypassPage.axaml is compiled once (no per-platform XAML) and Avalonia
-    // resolves bindings via reflection on the type's full public surface.
-    // Pre-r19 the Linux/Mac builds (build-linux.yml, build-mac.yml on push)
-    // failed with `AVLN2000: Unable to resolve property or method of name
-    // 'LblZapretCacheStatus'`. Inner bodies still guarded by OS check where
-    // they touch Windows-only state (ZapretEnabled, IsZapretRunning, etc.).
-    // ZapretProbeCache itself is cross-platform (just JSON file in CacheDir).
-
     private bool _forceFreshProbe;
 
-    // v2.37.0-r21 — probe progress info richness fix. User feedback:
-    // «мало информативно что происходит при проверке». Adds an elapsed
-    // counter that ticks every second + ETA estimate from elapsed/index.
-    // Wired into LblZapretHeroLede via NotifyPropertyChangedFor.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(LblZapretProbeElapsed))]
@@ -4823,9 +3305,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private DateTime _zapretProbeStartTime;
     private System.Threading.Timer? _zapretProbeElapsedTimer;
 
-    /// <summary>v2.37.0-r21 — live elapsed/ETA chip shown under the
-    /// probe ProgressBar. Computes ETA only after at least 1 config has
-    /// completed (so the per-config ETA estimate is calibrated).</summary>
     public string LblZapretProbeElapsed
     {
         get
@@ -4835,7 +3314,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             int? etaSec = null;
             if (ZapretProbeIndex > 0 && ZapretProbeTotal > 0)
             {
-                // Time-per-completed-config × remaining configs.
                 var perConfig = (double)ZapretProbeElapsedSeconds / Math.Max(1, ZapretProbeIndex);
                 var remaining = Math.Max(0, ZapretProbeTotal - ZapretProbeIndex);
                 etaSec = (int)(perConfig * remaining);
@@ -4844,15 +3322,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>L_ getter for the new "Start with this strategy" button.</summary>
     public string L_ZapretStartSelectedStrategyButton => Strings.ZapretStartSelectedStrategyButton;
     public string L_ZapretStartSelectedStrategyHint => Strings.ZapretStartSelectedStrategyHint;
 
-    /// <summary>v2.37.0-r21 — apply the strategy currently picked in the
-    /// "Тонкая настройка" ComboBox directly, without running the auto-probe.
-    /// For users who already know which strategy works on their ISP and
-    /// don't want to wait 2-7 minutes for the Flowseal sweep every restart.
-    /// </summary>
     [RelayCommand]
     private async Task StartZapretWithSelectedStrategyAsync()
     {
@@ -4870,18 +3342,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Stop any running probe / zapret first.
         if (IsZapretProbing)
         {
             _logger.Information("[VM] StartZapretWithSelectedStrategy: a probe is already running — refusing");
             return;
         }
-        // r44 — unconditional reap. Pre-r44 we only KillAllZapret when
-        // `ZapretEnabled || IsZapretRunning()` was true. But if a recent probe
-        // left orphan winws.exe processes (which CleanupOrphanWinws couldn't
-        // reach because it was canceled / crashed mid-probe), they'd survive
-        // and conflict with the new winws we're about to spawn (port collision,
-        // duplicate filter rules). Always kill before spawn.
         KillAllZapret();
         if (ZapretEnabled || IsZapretRunning())
         {
@@ -4900,14 +3365,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // Resolve to parsed strategy entry (BatPath + Arguments).
             var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategyName);
             if (parsed == null)
             {
-                // r44 — same class as r43 stub fix: if user picked "custom"
-                // (or any non-parsed name) AND ZapretCustomArgs is empty,
-                // we'd spawn winws with no args and it would exit 1 → false
-                // AV warning. Guard explicitly and surface a clear status.
                 if (string.IsNullOrWhiteSpace(ZapretCustomArgs))
                 {
                     _logger.Warning(
@@ -4941,9 +3401,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 IsZapretFallback = false;
                 var pid = winwsPid ?? _zapret.Pid ?? 0;
                 ZapretStatus = Strings.ZapretRunningSelected(strategyName, pid);
-                // Persist as a cache success so warm-start kicks in next time.
                 VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(strategyName, _logger);
-                // r36: refresh display badges after manual start success.
                 RefreshZapretStrategiesDisplay();
                 SaveSettings();
             }
@@ -4961,16 +3419,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         NotifyZapretSummaryChanged();
 #else
-        // Zapret is Windows-only. On Mac/Linux the button stays bound for
-        // XAML compile but pressing it is a no-op.
         await Task.CompletedTask;
 #endif
     }
 
 #if PLATFORM_WINDOWS
-    // M1 (v2.45.0): named TgProxy stats handler so it can be detached in Dispose().
-    // TgProxy is Windows-only, so the handler is gated too (keeps the Linux
-    // member-set — and its characterization hash — unchanged).
     private void OnTgProxyStats(string stats)
         => Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
 #endif
@@ -4982,7 +3435,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _zapretProbeElapsedTimer?.Dispose();
         _zapretProbeElapsedTimer = new System.Threading.Timer(_ =>
         {
-            if (_disposed) return; // M3 (v2.45.0): a tick after Dispose() is a no-op
+            if (_disposed) return;
             try
             {
                 var elapsed = (int)(DateTime.UtcNow - _zapretProbeStartTime).TotalSeconds;
@@ -5005,13 +3458,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ZapretProbeElapsedSeconds = 0;
     }
 
-    /// <summary>
-    /// One-liner surfacing the current Zapret probe cache state. Used in
-    /// the Tools expander as a hint near the Force-fresh / Clear-cache
-    /// buttons so the user knows what's persisted. Cross-platform — Zapret
-    /// cache file lives in the shared CacheDir on every OS, even though
-    /// the probe itself only runs on Windows today.
-    /// </summary>
     public string LblZapretCacheStatus
     {
         get
@@ -5023,27 +3469,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // ───── r24 — Hero strategy summary card ──────────────────────────────
-    //
-    // Shown directly under the main "Включить обход блокировок" button so
-    // the user knows what's cached without opening Тонкую настройку:
-    //
-    //   ✓ Стратегия «general» работает
-    //   4 из 5 целей · проверено 12 мин назад
-    //   [Перепроверить эту] [Подробнее]
-    //
-    // States (driven by ZapretProbeCacheEntry):
-    //   - fresh + reliable   → "✓ работает" green
-    //   - stale (>7 days)    → "⚠ устарела" warning
-    //   - missing / empty    → "◌ не проверена" muted (card hidden,
-    //                          replaced by hint to run probe)
-    //
-    // All 4 properties are derived from a single TryLoad call cached in
-    // _zapretSummaryEntryCached so the file isn't re-read for each XAML
-    // binding. Call OnPropertyChanged(nameof(IsZapretSummaryVisible))
-    // (and friends) whenever the cache changes — see UpdateZapretSummary.
-
-    /// <summary>True when there's a cache entry to render. Card hidden when false.</summary>
     public bool IsZapretSummaryVisible
     {
         get
@@ -5053,10 +3478,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// True when cache exists but is older than 7 days. Used to switch
-    /// the card icon ✓ → ⚠ and tint subtext warning-colored.
-    /// </summary>
     public bool IsZapretCacheStale
     {
         get
@@ -5066,10 +3487,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// Localized header line, e.g. "Стратегия «general» работает".
-    /// Empty string when there's no cache (card hidden anyway).
-    /// </summary>
     public string LblZapretSummaryHeader
     {
         get
@@ -5082,11 +3499,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// Localized subtext line, e.g. "4 из 5 целей · проверено 12 мин назад".
-    /// Score part is omitted for v1 legacy cache entries (TargetsTotal=0);
-    /// the relative-time part is always present.
-    /// </summary>
     public string LblZapretSummarySubtext
     {
         get
@@ -5100,11 +3512,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// Convert a UTC timestamp to a short relative-time string in the
-    /// user's current language. Granularity: minutes for &lt;1h, hours
-    /// for &lt;24h, days for &lt;30d, weeks for &lt;52w, else "месяцы назад".
-    /// </summary>
     private string FormatRelativeTime(DateTime utcWhen)
     {
         var delta = DateTime.UtcNow - utcWhen;
@@ -5124,17 +3531,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var d = Math.Max(1, (int)delta.TotalDays);
             return Strings.RelativeTimeDays(d);
         }
-        // Beyond 30 days we don't bother with weeks — by that point the
-        // user is already past the stale threshold (7d) and the card is
-        // showing the "⚠ устарела" badge anyway.
         return Strings.RelativeTimeLongAgo;
     }
 
-    /// <summary>
-    /// Fire OnPropertyChanged for every Hero-card property in one place
-    /// so cache mutations propagate to UI atomically. Called whenever
-    /// the cache file is written or cleared.
-    /// </summary>
     private void NotifyZapretSummaryChanged()
     {
         OnPropertyChanged(nameof(IsZapretSummaryVisible));
@@ -5144,15 +3543,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(LblZapretCacheStatus));
     }
 
-    /// <summary>
-    /// r25 — replaces the r24 IsZapretTuneExpanded boolean. r29 (manual
-    /// tab strip + Panel + per-tab ScrollViewer) reads this to swap
-    /// which ScrollViewer is visible. Tabs are zero-indexed:
-    ///   0 — Strategy   (default — winner ComboBox + direct-start + IPSet)
-    ///   1 — Hosts      (Discord + Flowseal hostfile installers)
-    ///   2 — Filters    (Game filter + IPSet filter)
-    ///   3 — Tools      (Diagnostics + cache + service + folder/GitHub)
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretTab0))]
     [NotifyPropertyChangedFor(nameof(IsZapretTab1))]
@@ -5160,14 +3550,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsZapretTab3))]
     private int _zapretActiveTabIndex;
 
-    // r33: Zapret probe cancellation. Created in ProbeAndStartZapretAsync,
-    // cancelled by CancelZapretProbeCommand (Cancel button on Hero card
-    // visible during IsZapretProbing). Also used by early-winner detection.
     private CancellationTokenSource? _zapretProbeCts;
 
-    /// <summary>r33 — Cancel button on Hero card during probe. User can
-    /// stop the 2-7 min sweep at any time. Cancellation triggers
-    /// proc.Kill in ZapretAutoStrategy + restores ipset if needed.</summary>
     [RelayCommand]
     private void CancelZapretProbe()
     {
@@ -5182,19 +3566,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>r29 — per-tab IsChecked/IsVisible getters for the manual
-    /// tab strip (RadioButton group) + tab content Panel (ScrollViewers
-    /// gated by IsVisible). Drives both the active-tab highlight and
-    /// which scrollable content panel renders.</summary>
     public bool IsZapretTab0 => ZapretActiveTabIndex == 0;
     public bool IsZapretTab1 => ZapretActiveTabIndex == 1;
     public bool IsZapretTab2 => ZapretActiveTabIndex == 2;
     public bool IsZapretTab3 => ZapretActiveTabIndex == 3;
 
-    /// <summary>r29 — bound to each tab strip button via Command +
-    /// CommandParameter="0..3". Sets the active index; the
-    /// NotifyPropertyChangedFor on _zapretActiveTabIndex causes all
-    /// 4 IsZapretTabN getters to refresh, swapping visible content.</summary>
     [RelayCommand]
     private void SetZapretTab(string indexStr)
     {
@@ -5202,17 +3578,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretActiveTabIndex = idx;
     }
 
-    /// <summary>
-    /// r25 — "Подробнее" button on the Hero summary card navigates to the
-    /// Tools tab (index 3), where cache controls + diagnostics + service
-    /// management live. The Strategy tab is the default landing because
-    /// it's what most users will tweak; Tools is the deep-cuts surface
-    /// the Hero card explicitly invites the user into.
-    /// </summary>
     [RelayCommand]
     private void ExpandZapretTuneSection()
     {
-        ZapretActiveTabIndex = 3; // Tools
+        ZapretActiveTabIndex = 3;
     }
 
     [RelayCommand]
@@ -5234,7 +3603,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task ForceFreshProbeAsync()
     {
 #if PLATFORM_WINDOWS
-        // Stop any running zapret first so the probe starts from clean state.
         if (ZapretEnabled || IsZapretRunning())
         {
             KillAllZapret();
@@ -5255,21 +3623,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             NotifyZapretSummaryChanged();
         }
 #else
-        // Non-Windows: Zapret probe path doesn't exist — return cleanly so
-        // the binding stays callable but no-ops. The button stays visible
-        // because XAML can't conditionally include it, but pressing it
-        // does nothing meaningful on Mac/Linux (Zapret is Windows-only).
         await Task.CompletedTask;
 #endif
     }
 #if PLATFORM_WINDOWS
 
-    /// <summary>
-    /// Run ZapretAutoStrategy probe loop. Stays in PROBING state while
-    /// iterating; on Tier1 success leaves the winner running and sets
-    /// ZapretWinningStrategy + ZapretEnabled. On all-fail sets
-    /// IsZapretFallback=true and stops cleanly.
-    /// </summary>
     private async Task ProbeAndStartZapretAsync()
     {
         if (_zapret == null)
@@ -5281,50 +3639,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IsZapretProbing = true;
         IsZapretFallback = false;
         ZapretWinningStrategy = string.Empty;
-        // Suppress Bug-r9-G AV toast during probing — the loop is supposed to
-        // try multiple strategies; fast-exits are EXPECTED, not user-facing
-        // alarms. Re-enable on probe completion.
         _suppressZapretAvToast = true;
-        // r21 — start the live elapsed-time ticker so the hero shows
-        // "Прошло 0:25 · осталось ~3:40" under the progress bar.
         StartZapretProbeElapsedTimer();
 
         try
         {
-            // v2.37.0-r3 (user feedback "у тебя прошел очень быстро, через
-            // bat файл занимает минуты времени"): delegate the actual probe
-            // to Flowseal's `utils/test zapret.ps1` mode 2 (DPI checker) —
-            // the canonical, slow, accurate path. It does TCP-byte-level
-            // analysis detecting the "16-20 freeze" pattern that's a real
-            // DPI signature, not just "is HTTP HEAD reachable" like r1/r2.
-            //
-            // The script self-iterates ALL 20 configs (mirrors
-            // service.bat 11 -> 2 -> 1), runs DPI checks per config,
-            // prints "Best config: <name>" at the end. We:
-            //   1. Spawn powershell hidden (CreateNoWindow + WindowStyle.Hidden)
-            //   2. Pipe stdin "2\n1\n" to auto-answer prompts
-            //   3. Stream stdout, parse "[N/M] strategy" → hero progress chip
-            //   4. Parse final "Best config: X" → winner
-            //   5. Apply that strategy ourselves via ZapretManager.StartFromBat
-            //
-            // Wall-time: 2-7 minutes typical for a full sweep — that's the
-            // cost of accuracy. User can cancel by clicking Stop in footer
-            // (cancellation kills the powershell process tree).
-            //
-            // The script auto-switches ipset to 'any' for accurate DPI tests
-            // and restores it on completion via its own trap. Our cancellation
-            // path may leave ipset switched — script's trap handles SIGINT but
-            // not Process.Kill. Acceptable trade-off; user can manually flip
-            // ipset back via expander if they cancel mid-sweep.
             var zapretDir = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
 
-            // r4 Part B (startup-side check): if a prior probe was killed
-            // mid-sweep, the script's `ipset_switched.flag` would still be on
-            // disk and `ipset-all.txt` would be in "any" mode. Clean up
-            // proactively before starting a fresh probe so the new run
-            // begins from a known-good ipset state — and so the user isn't
-            // silently wide-open if the probe-trigger happens minutes after
-            // an interrupted sweep.
             try
             {
                 if (VPNRouter.Core.Services.ZapretAutoStrategy.HasOrphanedIpsetFlag(zapretDir))
@@ -5337,16 +3658,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 _logger.Warning(ex, "[VM] Pre-probe ipset cleanup failed (continuing anyway)");
             }
 
-            // r6 — warm-start from cache. If the last successful sweep was
-            // recent (<7d) and the strategy has at least 1 confirmed success
-            // with <3 consecutive failures, skip the 2-7 min Flowseal sweep
-            // and apply the cached winner directly. On failure of cache hit,
-            // fall through to the full sweep automatically.
-            //
-            // r10 — _forceFreshProbe (set by ForceFreshProbeCommand) bypasses
-            // the cache entirely. Used by the Tools-expander "Re-probe
-            // strategy" button when the user wants a fresh sweep regardless
-            // of cache state (e.g. after a network/ISP change).
             var cached = _forceFreshProbe
                 ? null
                 : VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
@@ -5362,20 +3673,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 var hit = await TryApplyCachedWinnerAsync(cached.Strategy);
                 if (hit)
                 {
-                    // r24 — preserve the existing score so the Hero card
-                    // keeps rendering "X из Y целей" across warm-start hits.
-                    // The score came from the most recent FULL sweep that
-                    // chose this strategy; warm-starts don't re-probe
-                    // targets so there's no new score to write.
                     VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
                         cached.Strategy, cached.TargetsPassed, cached.TargetsTotal, _logger);
                     return;
                 }
                 else
                 {
-                    // Cache hit didn't pan out — record failure and proceed
-                    // to full sweep. After 3 consecutive failures the cache
-                    // entry stops being "reliable" automatically.
                     VPNRouter.Core.Services.ZapretProbeCache.RecordFailure(cached.Strategy, _logger);
                     _logger.Information("[VM] Cache miss path — running full sweep");
                 }
@@ -5389,12 +3692,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
             {
-                // r4 Part A — distinguish "new config header" vs "score-only update".
-                // New header carries a non-empty StrategyName + resets counts to 0;
-                // score-only update carries empty StrategyName + non-zero TotalChecks.
                 if (!string.IsNullOrEmpty(p.StrategyName))
                 {
-                    ZapretProbeIndex = p.CurrentIndex - 1;  // FlowsealProgress is 1-based
+                    ZapretProbeIndex = p.CurrentIndex - 1;
                     ZapretProbeTotal = p.TotalCount;
                     ZapretProbeStrategy = p.StrategyName;
                     ZapretProbePassCount = 0;
@@ -5404,15 +3704,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 }
                 else if (p.TotalChecks > 0)
                 {
-                    // Score-only update — keep strategy + index, refresh score.
-                    // Triggers ZapretOneTapLede recompute so the UI lede shows
-                    // «Тестирую (5/20): general (ALT3) — 12/18 ok» live.
-                    //
-                    // r5 — log every 6th score update so post-sweep log review
-                    // can confirm the per-test parser is firing without
-                    // spamming the log (Flowseal emits ~99 status lines per
-                    // config × 20 configs = ~2000 events/sweep). Throttled
-                    // by simple modulo on TotalChecks since it's monotonic.
                     ZapretProbePassCount = p.OkCount;
                     ZapretProbeTotalCount = p.TotalChecks;
                     if (p.TotalChecks % 6 == 0)
@@ -5424,9 +3715,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 }
             });
 
-            // r33: cancellable probe via _zapretProbeCts. CancelZapretProbeCommand
-            // (Cancel button on Hero) triggers cts.Cancel(). Also used by
-            // early-winner detection inside ZapretAutoStrategy.
             _zapretProbeCts?.Dispose();
             _zapretProbeCts = new CancellationTokenSource();
             ZapretAutoStrategy.FlowsealSweepResult sweep;
@@ -5441,9 +3729,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 _zapretProbeCts = null;
             }
 
-            // r39 — surface the probe log path so the UI can offer
-            // "Open probe log" click-through. Also log explicit
-            // early-winner status so users understand why sweep stopped.
             LastProbeLogPath = sweep.ProbeLogPath;
             if (sweep.EarlyWinner)
             {
@@ -5455,13 +3740,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (sweep.Winner != null)
             {
-                // Apply the winning strategy.
-                // r53: tolerant match. The winner string comes from Flowseal
-                // stdout ("Best config: general (ALT9).bat" → "general (ALT9)")
-                // and could differ from the parsed-catalogue name by trailing
-                // whitespace, casing, or a stray ".bat" suffix. Exact `==`
-                // matching produced false "Winner X not found in strategy
-                // list" reports (Z:\zapret 2026-05-28). Normalise both sides.
                 static string NormStrategy(string? s) =>
                     (s ?? string.Empty).Trim().TrimEnd().Replace(".bat", "",
                         StringComparison.OrdinalIgnoreCase).Trim();
@@ -5486,7 +3764,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         return;
                     }
 
-                    // Wait briefly for winws.exe to appear, then verify alive.
                     await Task.Delay(1500);
                     var winwsPid = ZapretManager.WinwsPid;
                     if (_zapret.IsRunning || winwsPid != null)
@@ -5500,18 +3777,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
                         var idx = ZapretStrategies.IndexOf(sweep.Winner);
                         if (idx >= 0) ZapretStrategyIndex = idx;
-                        // r6 — persist this winner so the next probe warm-starts.
-                        // r24 — also persist the target-pass score (captured
-                        // by the FlowsealProgress callback during the sweep).
-                        // The last score we saw belongs to the winner because
-                        // Flowseal returns on first qualifier and breaks.
-                        // If the score data is missing (parser failure /
-                        // sweep aborted just before pass-count update), the
-                        // overload defaults to 0/0 and the Hero card
-                        // gracefully omits the "X из Y" line.
-                        // r37: record ALL per-strategy results from the sweep
-                        // (not just the winner), so the Hero ComboBox can badge
-                        // every probed strategy with ✓/⚠/✗ from this run.
                         var perStrategy = sweep.PerStrategyResults != null
                             ? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(
                                 sweep.PerStrategyResults, StringComparer.Ordinal)
@@ -5522,9 +3787,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                             ZapretProbeTotalCount,
                             perStrategy,
                             _logger);
-                        // r36: refresh Hero ComboBox display so the ✓ N/M badge
-                        // shows up next to the just-verified winner immediately.
-                        // r37: also picks up per-strategy badges from the same cache load.
                         RefreshZapretStrategiesDisplay();
                         NotifyZapretSummaryChanged();
                         SaveSettings();
@@ -5550,12 +3812,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 IsZapretFallback = true;
                 ZapretEnabled = false;
-                // r4 C.3 + C.4 — diagnostic-aware fallback messaging. If
-                // the sweep short-circuited for a known reason (not_admin,
-                // sweep_timeout, missing_script, canceled), surface that
-                // specific cause instead of the generic "no strategy
-                // matched" so the user knows what to fix. Otherwise fall
-                // back to the generic toast.
                 ZapretStatus = sweep.Diagnostic switch
                 {
                     "not_admin" => IsRussian
@@ -5573,9 +3829,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     _ => Strings.ZapretOneTapAllFailedToast,
                 };
 
-                // Log surface for any [ERROR]/[WARN] lines the script
-                // emitted — keeps the diagnostic searchable in Serilog
-                // without spamming the toast.
                 if (sweep.ErrorLines is { Count: > 0 })
                 {
                     foreach (var errLine in sweep.ErrorLines)
@@ -5592,12 +3845,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            // r4 Part B (post-sweep ipset cleanup): regardless of how the
-            // sweep ended (winner / cancel / timeout / exception), check
-            // for and restore an orphan ipset switch. Idempotent — no-op
-            // if no flag exists. Catches the "killed mid-sweep" case while
-            // the user's session is still open instead of letting the
-            // wide-open ipset linger until the next probe.
             try
             {
                 var zd = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
@@ -5613,22 +3860,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretProbeIndex = 0;
             ZapretProbeTotal = 0;
             ZapretProbeStrategy = string.Empty;
-            // r21 — stop the live elapsed-time ticker.
             StopZapretProbeElapsedTimer();
-            // Don't clear ZapretProbePass/TotalCount here — they're the
-            // persisted score for the winning strategy and must survive
-            // the orchestrator's cleanup so the air-pill keeps showing
-            // "7/8" while the proxy is running. Cleared on Stop instead.
         }
     }
 
-    /// <summary>
-    /// r6 — warm-start path. Apply cached winning strategy directly and
-    /// verify via short multi-target HEAD probe (8 endpoints, 5 s timeout
-    /// each ≈ 5-7 s wall-time vs 2-7 min full Flowseal sweep). Returns
-    /// true on confirmed success (winws.exe alive AND >=70% targets pass),
-    /// false on any failure (caller falls through to full sweep).
-    /// </summary>
     private async Task<bool> TryApplyCachedWinnerAsync(string strategy)
     {
         try
@@ -5641,14 +3876,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
 
             ZapretProbeStrategy = strategy;
-            // 1. Start the strategy.
             if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
                 _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
             else
                 _zapret!.Start(parsed.Arguments);
 
-            // 2. Wait briefly for winws.exe; Bug-r9-G fast-exit would
-            //    show up here as a missing PID after ~150 ms.
             await Task.Delay(1500);
             var winwsPid = ZapretManager.WinwsPid;
             if (!_zapret.IsRunning && winwsPid == null)
@@ -5657,9 +3889,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 return false;
             }
 
-            // 3. Multi-target HEAD probe — fast sanity, not the full
-            //    Flowseal DPI checker. If a strategy was good 6 days ago
-            //    and isn't immediately broken, this is enough confidence.
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(7) };
             var targets = VPNRouter.Core.Services.ZapretAutoStrategy.LoadTargets(_logger);
             var report = await VPNRouter.Core.Services.ZapretAutoStrategy.ProbeAllTargetsAsync(
@@ -5671,8 +3900,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (passPercent >= VPNRouter.Core.Services.ZapretAutoStrategy.Tier2MinPassPercent)
             {
-                // Treat Tier1+Tier2 as "good enough" — same threshold the
-                // original ZapretAutoStrategy probe uses.
                 ZapretWinningStrategy = strategy;
                 ZapretEnabled = true;
                 ZapretProbePassCount = report.PassCount;
@@ -5687,23 +3914,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 return true;
             }
 
-            // Probe under threshold — strategy stopped working since last
-            // sweep. Stop the misfire so the full sweep starts clean.
             _logger.Warning("[VM] Cache warm-start probe under threshold — stopping for fresh sweep");
-            try { _zapret?.Stop(); } catch { /* defensive */ }
+            try { _zapret?.Stop(); } catch { }
             return false;
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[VM] TryApplyCachedWinnerAsync threw");
-            try { _zapret?.Stop(); } catch { /* defensive */ }
+            try { _zapret?.Stop(); } catch { }
             return false;
         }
     }
 
 #endif
-
-    // ── Zapret tools (diagnostics, Discord cache, hosts, service menu) ──
 
     [ObservableProperty] private bool _isZapretActionRunning;
     [ObservableProperty] private string _zapretActionTitle = string.Empty;
@@ -5754,8 +3977,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ZapretActionOutput.Clear();
         try
         {
-            // Stream enumeration on background thread — sub-processes (sc, netsh)
-            // should not block UI thread.
             await Task.Run(async () =>
             {
                 await foreach (var line in action(CancellationToken.None))
@@ -5802,7 +4023,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
         await RunZapretActionAsync(IsRussian ? "Обновить IPSet" : "Update IPSet list",
             ct => ZapretActions.UpdateIpSetListAsync(ct));
-        // Refresh IpSetModeIndex after update (list content may have changed)
         IpSetModeIndex = (int)ZapretActions.GetIpSetMode();
 #endif
     }
@@ -5874,8 +4094,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
-    // ── Telegram proxy commands ──
-
     [RelayCommand]
     private async Task UpdateTgProxyAsync()
     {
@@ -5906,10 +4124,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // Updating files underneath a live Python process can mix old and
-            // new modules or make the atomic directory move fail. Stop first;
-            // a previously running proxy is restarted only after validation
-            // and activation have completed successfully.
             if (wasRunning)
             {
                 manager?.Stop();
@@ -5927,14 +4141,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_disposed) return;
-                    // v2.36 (MVP one-button task A): per-step messages
-                    // from TgProxyUpdater carry "Step N/3:" prefix.
-                    // Mirror them into both the persistent status banner
-                    // (for backward-compatible logs / older bindings)
-                    // and the new TgProxyDownloadStep property that the
-                    // page banner can render distinctly. Non-step
-                    // messages (e.g. final "Installed v1.6.5") clear
-                    // the step badge naturally.
                     TgProxyStatus = s;
                     TgProxyDownloadStep = s.StartsWith("Step ") ? s : string.Empty;
                 });
@@ -6021,7 +4227,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private async Task ToggleTgProxyCoreAsync()
     {
 #if PLATFORM_WINDOWS
-        // If running → stop
         TgProxyManager? currentManager;
         lock (_tgProxyStateGate) currentManager = _tgProxy;
 
@@ -6042,15 +4247,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 TgProxyStatus = Strings.Stopped;
                 TgProxyStats = "";
             }
-            // v2.36.0-r7 (task #63 / MCP test r6 finding): wrap SaveSettings
-            // in try/catch. Pre-r7 a concurrent reader of config.yaml (AV scan,
-            // Dropbox sync, another shell briefly reading the file) would
-            // surface as an IOException here that propagated uncaught from
-            // this async-void path and fatally killed the GUI process. Crash
-            // report shipped 2026-05-24 18:16:14 reproduced this exact path.
-            // Settings save is best-effort: the in-memory state stays correct,
-            // next Save attempt (e.g. on app shutdown or next toggle) will
-            // persist. Logging surfaces the failure for diagnosis.
             try { SaveSettings(); }
             catch (System.IO.IOException ex)
             {
@@ -6059,20 +4255,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // v2.31.10: Service-side AutostartTgProxyAsync logs entry/decision
-        // breadcrumbs with the same shape as below. When the App-side
-        // AutostartTgProxyAsync from the DBG-2 sister task lands, lift this
-        // structured log pattern verbatim (entry → IsInstalled(_logger) →
-        // secret-len + port → ResilientStarter → outcome) so manual-start
-        // logs and autostart logs share grep'able prefixes.
-        // TODO(DBG-2 sister): once VPNRouter.App has its own
-        // AutostartTgProxyAsync, mirror the [Service] AutostartTgProxyAsync
-        // entry/decision logs in VPNRouterService.cs:331+ exactly.
         _logger.Information("[VM] ToggleTgProxyAsync: start path entered");
 
-        // Install or repair the VPNRouter-tested runtime. Do not adopt an
-        // arbitrary newer upstream source during a user click: its dependency
-        // contract may have changed and must first ship with VPNRouter tests.
         if (!TgProxyUpdater.IsInstalled(_logger))
         {
             await UpdateTgProxyCoreAsync();
@@ -6081,7 +4265,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // Generate secret if empty
             if (string.IsNullOrWhiteSpace(TgProxySecret))
             {
                 TgProxySecret = Convert.ToHexStringLower(
@@ -6099,17 +4282,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 if (_tgProxy == null)
                 {
                     _tgProxy = new TgProxyManager(_logger);
-                    // M1 (v2.45.0): subscribe ONCE per manager lifetime via a named
-                    // handler. The old `+= lambda` ran on EVERY toggle start with no
-                    // matching `-=`, so handlers accumulated (duplicate UI updates) and
-                    // rooted the VM; Dispose() now detaches it + disposes the manager.
                     _tgProxy.StatsUpdated += OnTgProxyStats;
                 }
                 manager = _tgProxy;
             }
-            // TgProxyManager.Start owns the single bounded 2s early-exit
-            // watchdog. Publish readiness as soon as it succeeds instead of
-            // adding a second foreground settle delay.
             var port = TgProxyPort;
             var secret = TgProxySecret;
             manager.Start(port, secret);
@@ -6120,12 +4296,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            // v2.36 (MVP one-button task C): pre-flight scheme check
-            // after spawn succeeded but BEFORE the user is told to
-            // open Telegram. Banner is non-blocking — proxy keeps
-            // running. The check is cheap (registry probe) and
-            // returns true on non-Windows + on any registry error
-            // (defensive — don't show false-positive banner).
             IsTelegramSchemeWarningVisible = !TgProxyManager.IsTelegramSchemeRegistered();
 
             if (manager.IsRunning)
@@ -6134,9 +4304,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", port, secret);
                 TgProxyStatus = $"{Strings.StatusRunning} (PID {manager.Pid})";
 
-                // Preserve the old 2-4s failure-detection window without
-                // delaying the ready UI. A user Stop or manager replacement
-                // makes this stale recheck a no-op.
                 _tgProxyPostStartRecheckTask = VerifyTgProxyAfterStartAsync(manager, port);
             }
             else
@@ -6144,11 +4311,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 TgProxyEnabled = false;
                 TgProxyStatus = Strings.TgProxyExitedImmediately;
             }
-            // v2.36.0-r7 (task #63): same defensive wrap as the Stop branch
-            // above. The outer try/catch at line ~4605 would catch IOException
-            // here today, but routing it as "TgProxy start failed" is
-            // misleading — Start actually succeeded, only persistence didn't.
-            // Explicit narrow catch keeps the user's runtime state intact.
             try { SaveSettings(); }
             catch (System.IO.IOException ex)
             {
@@ -6157,11 +4319,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (TgProxyPortConflictException portEx)
         {
-            // v2.36 (MVP one-button task B): typed port-conflict
-            // exception thrown by TgProxyManager.Start before the
-            // python spawn. Surface the cause + owner hint so the
-            // user knows whether to close another app or change
-            // the port in settings.
             _logger.Warning(portEx,
                 "[VM] TgProxy start blocked: port {Port} busy (owner hint: {Owner})",
                 portEx.Port, portEx.OwnerProcessHint ?? "<unknown>");
@@ -6207,14 +4364,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrEmpty(TgProxyLink)) return;
         CopyToClipboard(TgProxyLink);
-        // v2.31.6-r4 (BUG #3 fix): don't overwrite TgProxyStatus.
-        // Pre-r4 we set it to "Copied!" which persistently shadowed
-        // the real status (Stopped / Running / Error) until the next
-        // status-mutating event. Computer-use audit on r2/r3 confirmed
-        // the field never auto-reverted, so user saw stale "Copied!"
-        // 30 minutes after click. The clipboard side-effect is its
-        // own feedback channel; we trust users to know the click
-        // landed without us hijacking the status banner.
         ShowTgProxyToast(Strings.TgProxyCopied);
     }
 
@@ -6223,8 +4372,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrEmpty(TgProxySecret)) return;
 
-        // v2.31.6-r4 (BUG #1 fix): if no app is registered for the
-        // tg:// URI scheme, surface the cause instead of invoking the OS.
         if (!TgProxyManager.IsTelegramSchemeRegistered())
         {
             ShowTgProxyToast(Strings.TgProxyTelegramNotInstalled);
@@ -6234,29 +4381,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
     }
 
-    /// <summary>
-    /// v2.31.6-r1 (TelegramPage UX simplification): one-click
-    /// onboarding for Telegram proxy. Wraps the three things a
-    /// first-time user needs into a single CTA:
-    ///   1. Download the tg-ws-proxy binary if not already installed.
-    ///   2. Start the proxy (which auto-generates a secret if empty).
-    ///   3. Open Telegram with the deep-link so the client adds the
-    ///      proxy to its Settings → Advanced → Connection type list.
-    /// On subsequent visits <see cref="IsTgProxySetUp"/> flips to
-    /// true and the page swaps to the simpler Connect/Disconnect
-    /// surface — at which point this command is no longer reachable
-    /// from the UI but stays callable defensively.
-    /// </summary>
     [RelayCommand]
     private async Task SetupTgProxyAsync()
     {
 #if PLATFORM_WINDOWS
         if (IsTgProxyDownloading) return;
 
-        // Step 1+2: ToggleTgProxyAsync handles "download → generate
-        // secret → start" already. Re-using it keeps the start path
-        // single-sourced and avoids drift if the toggle logic
-        // evolves later (port retry, secret rotation policy, etc.).
         if (!TgProxyEnabled)
         {
             await ToggleTgProxyAsync();
@@ -6268,16 +4398,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (postStartRecheck != null)
             await postStartRecheck;
 
-        // Step 3: open Telegram with the deep-link. Skip if the
-        // start above failed for some reason (no binary, port
-        // collision, etc.) — Status text already explains why.
-        // v2.31.6-r5: route through OpenTgProxyInTelegram (the command
-        // body, not the relay wrapper) so the BUG #1 toast guard for
-        // missing Telegram desktop fires here too. Pre-r5 this branch
-        // called TgProxyManager.OpenInTelegram directly and bypassed
-        // the registry probe — first-time Linux/macOS-style users
-        // without Telegram desktop saw the OS dialog instead of the
-        // download-link toast.
         if (TgProxyEnabled && !string.IsNullOrEmpty(TgProxySecret))
         {
             if (!TgProxyManager.IsTelegramSchemeRegistered())
@@ -6290,25 +4410,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
-    /// <summary>
-    /// v2.31.6-r5 (TG-2): unified main-action command wired to the
-    /// TelegramPage footer button. Branches on current state:
-    /// <list type="bullet">
-    ///   <item>Stopped → fires <see cref="SetupTgProxyAsync"/> (download
-    ///     binary if needed, start the proxy, open Telegram with
-    ///     deep-link to auto-add the entry — single click).</item>
-    ///   <item>Running → fires <see cref="ToggleTgProxyAsync"/> which
-    ///     stops the proxy.</item>
-    /// </list>
-    /// User feedback 2026-05-03 night surfaced that the pre-r5 layout
-    /// had two visually distant buttons (body «Open in Telegram» +
-    /// footer «Start Telegram proxy») that conceptually belonged
-    /// together on first run. Folding the start+open chain into the
-    /// footer, demoting the body button to a secondary «re-pair»
-    /// fallback, removes the «click body, then click footer» two-step
-    /// without competing visually with the global Start VPN footer
-    /// (per v2.25.6 design intent — footer keeps its secondary style).
-    /// </summary>
     [RelayCommand]
     private async Task TgProxyMainActionAsync()
     {
@@ -6328,11 +4429,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
-    /// <summary>
-    /// v2.36 (MVP one-button task C): dismiss the non-blocking scheme-
-    /// missing warning banner. Banner re-shows next start if the
-    /// scheme is still unregistered (user re-installed Telegram, etc.).
-    /// </summary>
     [RelayCommand]
     private void DismissTelegramSchemeWarning()
     {
@@ -6365,17 +4461,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static void OpenFolderInExplorer(string path)
     {
-        // v2.31.6-r11: Debug-log instead of swallowing silently. Iter#4
-        // audit P2: user-action paths (Open folder / Open URL / Copy to
-        // clipboard) shouldn't fail invisibly — add at least a Debug
-        // line so postmortem from logs is possible. We don't escalate
-        // to Warning because the failure modes are usually benign
-        // (folder doesn't exist, no shell associated with the URL).
         try
         {
             if (Directory.Exists(path))
             {
-                // Security: Use ArgumentList with UseShellExecute=false to prevent argument injection
                 ProcessStartInfo psi;
                 if (OperatingSystem.IsWindows())
                 {
@@ -6407,7 +4496,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            // Security: validate absolute URI with http or https scheme only
             if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
                 (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
@@ -6429,7 +4517,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrEmpty(TgProxySecret)) return;
         CopyToClipboard(TgProxySecret);
-        // v2.31.6-r4 (BUG #3): toast not status — see CopyTgProxyLink.
         ShowTgProxyToast(Strings.TgProxyCopied);
     }
 
@@ -6449,11 +4536,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
         SaveSettings();
 
-        // v2.31.6-r4 (BUG #4 fix): if the proxy was running when the
-        // secret got rotated, the existing Telegram client connection
-        // is now using a stale secret and will silently keep failing
-        // until the user restarts the proxy AND re-pairs Telegram.
-        // Make this consequence explicit instead of silent.
         if (wasRunning)
         {
             ShowTgProxyToast(IsRussian
@@ -6466,22 +4548,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.31.6-r4: transient toast surface for TgProxy actions that
-    /// pre-r4 hijacked TgProxyStatus (Copied! / Installed v… / similar).
-    /// Sets <see cref="TgProxyToast"/>, schedules a 2500 ms revert,
-    /// and bails the revert if a newer toast races in. Page binds
-    /// the toast separately from the status banner so the runtime
-    /// status (Stopped / Running / Error) is never shadowed by
-    /// a transient confirmation.
-    /// </summary>
     private void ShowTgProxyToast(string message)
     {
         TgProxyToast = message;
         var token = ++_tgProxyToastToken;
         _ = Task.Delay(2500).ContinueWith(_ =>
         {
-            // Only clear if no newer toast has fired in the meantime.
             if (token == _tgProxyToastToken)
             {
                 Dispatcher.UIThread.Post(() =>
@@ -6496,10 +4568,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void CopyToClipboard(string text)
     {
-        // v2.31.6-r12: Debug-log instead of swallowing silently. Iter#4
-        // audit P2: clipboard failures (no clipboard service available
-        // in headless test, app exited mid-copy, etc.) should leave a
-        // forensic trace.
         try
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -6513,13 +4581,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Parse stats line into short summary for UI display.
-    /// v2.37.0-r16 \u2014 localized "Active:" and "Total:" prefixes (were
-    /// hardcoded English pre-r16; mixed inside an otherwise-Russian
-    /// air-pill, violating the bilingual-UI invariant).</summary>
     private static string ParseStatsShort(string statsLine)
     {
-        // Input: "stats: total=10 active=2 ws=8 tcp_fb=1 cf=0 bad=1 ..."
         var parts = new Dictionary<string, string>();
         foreach (System.Text.RegularExpressions.Match m in
             System.Text.RegularExpressions.Regex.Matches(statsLine, @"(\w+)=(\S+)"))
@@ -6546,7 +4609,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var rawInput = (VlessUri ?? string.Empty).Trim();
         var addedAny = false;
 
-        // Support direct pasting of AmneziaWG / WireGuard .conf files ([Interface] + [Peer])
         if (ServerUriParser.IsWireGuardConf(rawInput))
         {
             try
@@ -6568,9 +4630,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var lines = rawInput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var line in lines)
             {
-                // v2.30.1-r3: dispatch by scheme via ServerUriParser instead
-                // of hard-coded vless:// prefix check. Pasting Hysteria2 /
-                // TUIC / Shadowsocks / AmneziaWG links lands in the same Servers list.
                 if (!ServerUriParser.IsSupportedScheme(line))
                     continue;
 
@@ -6606,46 +4665,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             RemoveServerByEntry(SelectedServer);
     }
 
-    /// <summary>
-    /// Per-row delete (the × button on each VLESS server row). Removes
-    /// the specific entry passed as the parameter without changing
-    /// selection — clicking the × on row N must NOT trigger
-    /// OnSelectedServerChanged (which would auto-reconnect to row N
-    /// when VPN is running). v2.30.1-r3 fix: user reported "при каждом
-    /// клике на другие конфиги для удаления, оно запускались, так как
-    /// я на них кликал, только потом я их удалял".
-    /// </summary>
     [RelayCommand]
     private void RemoveServerByEntry(ServerViewModel? entry)
     {
         if (entry == null) return;
-        // Don't change SelectedServer — the row's × button removes the
-        // row directly. If the entry being removed is the active one,
-        // clear SelectedServer too so the now-empty radio doesn't
-        // dangle on a freed row.
         var wasSelected = ReferenceEquals(SelectedServer, entry);
         Servers.Remove(entry);
         if (wasSelected)
             SelectedServer = Servers.FirstOrDefault();
 
-        // v2.32.1-r6 (Bug-r10-D): user-reported pain — user deleted a
-        // VLESS server entry that the F-C orphan badge suggested
-        // removing, but after app restart the entry reappeared because
-        // the row removal only mutated the in-memory ObservableCollection
-        // and never wrote back to YAML. SaveSettings (line ~3686) does
-        // rebuild _settings.Vless.Servers from this collection, but the
-        // function wasn't called for row-level mutations — only on
-        // Apply / connect transitions. Now we persist immediately on
-        // any × click so the deletion sticks through restart.
         SaveSettings();
         _logger?.Information(
             "[VM] RemoveServerByEntry: persisted deletion of '{Name}' ({Server}:{Port}) — {Remaining} servers remain",
             entry.Name, entry.Server, entry.Port, Servers.Count);
 
-        // F-C marker on remaining entries needs refresh — the deleted
-        // entry might have been the only orphan; or the previously
-        // active server may have been the deleted one and we need to
-        // re-mark the new selection.
         MarkOrphanServers();
         RefreshActiveIndicator();
     }
@@ -6681,14 +4714,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             var configName = Path.GetFileNameWithoutExtension(sourcePath);
 
-            // Check duplicate
             if (CustomConfigs.Any(c => c.Name.Equals(configName, StringComparison.OrdinalIgnoreCase)))
             {
                 StatusText = Strings.ConfigExists(configName);
                 return;
             }
 
-            // Validate
             var json = await File.ReadAllTextAsync(sourcePath);
             var (isValid, errors) = CustomConfigInjector.Validate(json);
             if (!isValid)
@@ -6697,7 +4728,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            // Copy to app support
             var destPath = CustomConfigInjector.CopyToProgramData(sourcePath, configName);
             var entry = new CustomConfigEntry { Name = configName, Path = destPath };
 
@@ -6705,7 +4735,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var vm = new CustomConfigViewModel(entry, isFirst);
             CustomConfigs.Add(vm);
 
-            // Auto-select and save
             SelectedCustomConfig = vm;
             SaveSettings();
             StatusText = IsRussian
@@ -6729,7 +4758,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var wasActive = SelectedCustomConfig.IsActive;
         CustomConfigs.Remove(SelectedCustomConfig);
 
-        // If removed the active one, activate the first remaining
         if (wasActive && CustomConfigs.Count > 0)
         {
             CustomConfigs[0].IsActive = true;
@@ -6752,32 +4780,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private bool _isReconnecting;
 
-    /// <summary>
-    /// v2.30.2-r1: tells <see cref="ReconnectAsync"/> which mode the
-    /// reconnect is FOR. The legacy single-arg call defaulted to "follow
-    /// VM flags", which could leave ConfigMode stuck on "subscribe" if
-    /// the user clicked a manual VLESS row after sub-tab peeking. The
-    /// explicit hint lets the reconnect path force the correct mode
-    /// regardless of stale flag state.
-    /// </summary>
     private enum ReconnectIntent
     {
-        /// <summary>Follow VM flags (legacy behaviour).</summary>
         Follow,
-        /// <summary>User clicked a manual VLESS server in the Servers list.</summary>
         ManualVless,
-        /// <summary>User clicked a subscription server in the Subscriptions tab.</summary>
         Subscription,
-        /// <summary>User clicked a custom config in the Custom sub-tab.</summary>
         CustomConfig
     }
 
-    // Subscribe: selecting a subscription server = choosing which to route through.
     partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
-        if (value.IsActive) return; // already active server, no-op
-        // v2.30.2-r1 diag: trace every subscription-row selection.
+        if (value.IsActive) return;
         _logger?.Information(
             "[VM] OnSelectedSubscriptionServerChanged name={N} ip={Ip} IsConnected={C} IsSubscribeMode={S} IsConnecting={IC}",
             value.DisplayName, value.Server, IsConnected, IsSubscribeMode, IsConnecting);
@@ -6788,16 +4802,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // VLESS: selecting a server = choosing which server to route through.
     partial void OnSelectedServerChanged(ServerViewModel? value)
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
 
-        // v2.30.2-r1 diag: trace every manual-row selection.
         _logger?.Information(
             "[VM] OnSelectedServerChanged name={N} ip={Ip} IsConnected={C} IsVlessMode={V} IsSubscribeMode={S} IsConnecting={IC}",
             value.DisplayName, value.Server, IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
-        // If connected in VLESS mode → reconnect with newly selected server
         if (IsConnected && IsVlessMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
@@ -6805,17 +4816,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Auto-activate config when selected in the list (left-click = switch).
-    // If VPN is already running, auto-reconnect with the new config.
     partial void OnSelectedCustomConfigChanged(CustomConfigViewModel? value)
     {
         if (_isLoadingUI || value == null) return;
-        if (value.IsActive) return; // already active, no-op
-        if (_isReconnecting) return; // don't re-enter during reconnect
+        if (value.IsActive) return;
+        if (_isReconnecting) return;
 
         SetActiveCustomConfig(value);
 
-        // If connected in custom mode → reconnect with new config
         if (IsConnected && !IsVlessMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.Name); return; }
@@ -6823,14 +4831,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// Service-managed VPN can't be reconnected from the app — the local
-    /// engine doesn't own the sing-box process, so Stop() is a no-op and
-    /// StartAsync() would fight TUN ownership. We still save the new
-    /// selection to config.yaml so the next Stop+Start cycle picks it up,
-    /// and we surface a clear message so the user isn't confused about
-    /// why the connection didn't switch.
-    /// </summary>
     private void WarnServiceManagedReconnect(string newServerName)
     {
         try { SaveSettings(); } catch { }
@@ -6849,9 +4849,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ? $"Переключение на {configName}..."
             : $"Switching to {configName}...";
 
-        // v2.30.2-r1 diag: log every reconnect with full context so the
-        // next repro distinguishes a "should-be-manual but is-subscribe"
-        // vs other ordering bugs.
         _logger?.Information(
             "[VM] ReconnectAsync target={Target} intent={Intent} ConfigMode={CM} IsVlessMode={V} IsSubscribeMode={S}",
             configName, intent,
@@ -6862,17 +4859,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var applyInPlace = _engine.IsRunning;
             if (!applyInPlace)
             {
-                // Stop current VPN when this VM is not the live engine owner.
                 await Task.Run(() => _engine.Stop());
             }
 
-            // v2.30.2-r1 Bug 2C fix: when the user explicitly clicked a
-            // manual VLESS row, force the VM flags to manual mode BEFORE
-            // SaveSettings so the on-disk ConfigMode persists as
-            // "generated" — even if a subscription is enabled (which the
-            // r2 guard would otherwise prefer to keep as "subscribe").
-            // The r2 guard's purpose is to defend against accidental
-            // sub-tab "peeks"; an explicit server-row click is NOT a peek.
             if (intent == ReconnectIntent.ManualVless)
             {
                 IsSubscribeMode = false;
@@ -6889,12 +4878,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 IsVlessMode = false;
             }
 
-            // Save + reload settings with the new active config
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
-            // v2.30.2-r1 diag: log effective settings after Save+Reload
-            // so the engine-side decision is auditable from the VM log.
             _logger?.Information(
                 "[VM] ReconnectAsync after Save+Reload: ConfigMode={CM} VlessActive={VA} SubActive={SA} VlessServers={N}",
                 _settings.App.ConfigMode,
@@ -6902,16 +4888,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 _settings.App.ActiveSubscriptionServer,
                 _settings.Vless.Servers?.Count ?? 0);
 
-            // Subscribe mode: aggregate enabled subscriptions → feed into engine
             var aggregated = _settings.App.Subscriptions
                 .Where(s => s.Enabled)
                 .SelectMany(s => s.Servers)
                 .ToList();
 
-            // v2.30.2-r1 Bug 2C fix: branch on caller intent, not just on
-            // VM flag state. ManualVless overrides any subscription
-            // pollution that may have leaked into _settings.Vless.Servers
-            // from a prior reconnect cycle.
             if (intent == ReconnectIntent.ManualVless)
             {
                 _settings.App.ConfigMode = "generated";
@@ -6926,23 +4907,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 _settings.Vless.Servers = aggregated;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                // v2.30.2-r2 Bug 2A fix: do NOT force ConfigMode=generated
-                // here. The legacy code did this so VlessServersResolver
-                // wouldn't re-aggregate (since we already did). But it
-                // also broke RefreshActiveIndicator's ConfigMode gate —
-                // with ConfigMode=generated the indicator loop only paints
-                // the manual Servers list, leaving the Subscriptions list
-                // dot dark even after a successful subscribe-mode connect.
-                // User report 2026-05-01:
-                // «Зеленый кружочек в подписках не появляеться, хотя к
-                //  кликнутому конфигу есть подключение».
-                //
-                // Keeping ConfigMode="subscribe" is harmless to the engine:
-                // VlessServersResolver re-aggregates idempotently (same
-                // content as we just wrote into Vless.Servers), and the
-                // engine reads Vless.Servers + Vless.ActiveServer the same
-                // way regardless of ConfigMode. RefreshActiveIndicator can
-                // now correctly identify the active subscription row.
                 _logger?.Information(
                     "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
                     aggregated.Count, _settings.Vless.ActiveServer);
@@ -6967,26 +4931,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 await Task.Run(() => _engine.Stop());
             }
 
-            // Start with new config. Retry up to 3 times because Windows Service
-            // may briefly grab the TUN lock between our Stop and Start.
             const int maxRetries = 3;
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
                 try
                 {
-                    // v2.35.2 Stage 2 (PinkuDani 2026-05-21): two-phase start
-                    // timer. Same Phase A (60s) + Phase B (20s) budgets as
-                    // the main ToggleConnectionAsync — with up to 3 retries
-                    // worst-case wall-clock is 3 × 80s = 240s, but only on
-                    // TunOwnershipException (Service stealing the TUN
-                    // handle).
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
                     var startTask = Task.Run(
-                        // Reconnect (subscription/server change) must carry the
-                        // session "ignore conflict" decision — else it re-throws
-                        // ConflictingVpnException while a tolerated VPN is up.
                         () => _engine.StartAsync(_settings, cts.Token, _skipVpnConflictThisSession),
                         cts.Token);
 
@@ -7026,28 +4979,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         ConnectButtonText = Strings.StartVPN;
                         return;
                     }
-                    // StartTaskCompleted / Connected / Cancelled: surface
-                    // any exception from startTask. Throws (e.g.
-                    // TunOwnershipException) re-enter the outer catch which
-                    // triggers the retry loop.
                     await startTask;
-                    break; // success
+                    break;
                 }
                 catch (TunOwnershipException) when (attempt < maxRetries)
                 {
                     _logger.Warning("[VM] Reconnect: TUN lock stolen by service, retry {A}/{M}", attempt, maxRetries);
-                    await Task.Delay(ServiceReleaseRetryDelayMs); // wait for service to release
+                    await Task.Delay(ServiceReleaseRetryDelayMs);
                 }
             }
 
-            // v2.30.2-r1 Bug 2A fix: refresh the active-row indicator
-            // after the engine has actually settled on a new ActiveServer.
-            // The legacy flow relied on RefreshActiveIndicator firing from
-            // some other status callback, but the timing was racy after a
-            // subscription→subscription click chain — the green dot would
-            // stay on the old row (or vanish entirely). Forcing a refresh
-            // here, with the just-applied _settings, makes the UI match
-            // the engine's view.
             try { RefreshActiveIndicator(); }
             catch (Exception ex) { _logger?.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
         }
@@ -7083,19 +5024,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Phase 2B (Wave 8, 2026-05-18) - Apps/Profiles commands moved to
-    // MainWindowViewModel.Profiles.cs:
-    //   - _newCategoryName + AddCategory / RemoveCategory
-    //   - AddCustomApp / RemoveCustomApps / RemoveCustomApp
-
-    // Phase 2B (Wave 8, 2026-05-18) - Theme / Language / UI-mode / Settings
-    // commands moved to MainWindowViewModel.Settings.cs:
-    //   - ToggleTheme / ToggleLanguage
-    //   - SetThemeLight / SetThemeDark
-    //   - SetLanguageRussian / SetLanguageEnglish
-    //   - ToggleUiMode / OpenAutostartSettings / InstallServiceForAutostart
-    //   - ApplySettings / ShowWindow
-
     [RelayCommand]
     private void Quit()
     {
@@ -7104,10 +5032,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         StopSubRefreshTimer();
 
-        // Kill zapret on app exit
         KillAllZapret();
 
-        // Stop tg-ws-proxy on app exit
 #if PLATFORM_WINDOWS
         try { _tgProxy?.Stop(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Quit: _tgProxy.Stop failed"); }
@@ -7115,29 +5041,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         SaveSettings();
 
-        // v2.31.6-r12 (Phase H): release IDisposable resources so a
-        // subsequent app reopen / future ReloadMainWindowForLocalization
-        // doesn't leak this VM's timers / event subscriptions.
         Dispose();
 
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.Shutdown();
     }
 
-    /// <summary>
-    /// v2.31.6-r12 (Phase H, iter#4 audit): IDisposable surface for the
-    /// VM. Ensures both timers (`_runtimeStatusTimer`, `_subRefreshTimer`),
-    /// the engine event handlers, and the FreeConfigs sub-VM all get
-    /// torn down cleanly when the VM is no longer needed. Pre-r12 these
-    /// only stopped on the explicit Quit() / OnEngineStatus("Stopped")
-    /// paths; an unhandled exit or a future window-rebuild path would
-    /// leak them.
-    ///
-    /// <para>Idempotent — safe to call multiple times. Exceptions during
-    /// individual cleanup steps are swallowed-with-debug-log so the
-    /// rest of the chain still runs (we'd rather leak ONE thing than
-    /// leak everything because the first cleanup threw).</para>
-    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -7148,12 +5057,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: TgProxy cancellation failed"); }
 #endif
 
-        // 0. Drop the OS-appearance follow subscription (Fix #7) so the VM
-        // isn't held alive by PlatformSettings after disposal.
         try { UnwireOsThemeFollow(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: UnwireOsThemeFollow failed"); }
 
-        // 1. Stop polling timers.
         try
         {
             _runtimeStatusTimer?.Stop();
@@ -7164,29 +5070,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try { StopSubRefreshTimer(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: StopSubRefreshTimer failed"); }
 
-        // 2. Unhook engine events. _engine itself is owned by the host
-        // (App / Service) so we don't dispose it here — just unhook
-        // our handlers so a stale VM doesn't continue to receive
-        // status updates after disposal.
         try
         {
             _engine.StatusChanged -= OnEngineStatus;
             _engine.Connected -= OnEngineConnected;
             _engine.AutoFailoverTriggered -= OnAutoFailoverMessage;
-            _engine.TrueSplitEngagedChanged -= OnTrueSplitEngagedChanged;   // W1.3 (bug-hunt): don't leak a recreated VM
+            _engine.TrueSplitEngagedChanged -= OnTrueSplitEngagedChanged;
             _engine.TrueSplitStateChanged -= OnTrueSplitStateChanged;
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: engine StatusChanged unhook failed"); }
 
-        // 3. Dispose the FreeConfigs sub-VM (it owns its own timers +
-        // HttpClient + cache write FileStream).
         try
         {
             FreeConfigsVm?.Dispose();
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: FreeConfigsVm.Dispose failed"); }
 
-        // 4. Cancel + dispose the subscription-refresh CTS if active.
         try
         {
             var cts = _subRefreshCts;
@@ -7199,9 +5098,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _subRefreshCts cleanup failed"); }
 
-        // 5. Dispose the clash_api live-stats client (owns an HttpClient). It is
-        // normally disposed on disconnect (OnIsConnectedChanged false), but a quit
-        // while still connected never flips IsConnected, so close it here too.
         try
         {
             _statsApi?.Dispose();
@@ -7209,13 +5105,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _statsApi cleanup failed"); }
 
-        // The X-close path calls Dispose() directly (not Quit()), so the manager
-        // events / probe timer / toast continuations below would otherwise keep
-        // this disposed VM rooted and post UI mutations after disposal (M1–M4).
-
 #if PLATFORM_WINDOWS
-        // 6. M1: detach the TgProxy stats handler + dispose the manager.
-        // (_tgProxy / _zapret are Windows-only fields — guard the whole block.)
         try
         {
             TgProxyManager? manager;
@@ -7232,7 +5122,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _tgProxy cleanup failed"); }
 
-        // 7. M2: detach the Zapret immediate-exit handler + dispose the manager.
         try
         {
             if (_zapret != null)
@@ -7245,12 +5134,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _zapret cleanup failed"); }
 #endif
 
-        // 8. M3: stop the Zapret probe-elapsed timer (its callback captures the VM).
         try { StopZapretProbeElapsedTimer(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: StopZapretProbeElapsedTimer failed"); }
 
-        // 9. M4: cancel + dispose active toast CTS and invalidate the TgProxy toast
-        // token so a pending delayed continuation no-ops instead of posting to a dead VM.
         try
         {
             _zapretAvBlockToastCts?.Cancel();
@@ -7264,19 +5150,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: toast CTS cleanup failed"); }
     }
 
-    // ── Theme ──
-
     private void ApplyTheme()
     {
         if (Application.Current != null)
         {
-            // v2.40.x (Fix #7): resolve the effective variant from the
-            // preference. "system" follows the OS appearance: we set
-            // RequestedThemeVariant=Default so Avalonia tracks the platform,
-            // but we ALSO read the OS variant explicitly because our custom
-            // ThemeDictionaries (Light/Dark) don't reliably repaint on Default
-            // alone — IsDarkTheme + the C#-resolved brush getters need a
-            // concrete Light/Dark to read against.
             ThemeVariant effective;
             if (IsSystemThemePref)
             {
@@ -7291,12 +5168,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             IsDarkTheme = effective == ThemeVariant.Dark;
         }
 
-        // DynamicResource bindings in XAML auto-update when the theme variant
-        // changes — no manual refresh needed for those. But any brush
-        // property that resolves from Application.Resources in C# (our
-        // runtime-status badges + ServerViewModel.StatusDotBrush) is cached
-        // in a read-only getter; we must re-fire PropertyChanged so the
-        // binding re-reads the resolved value.
         OnPropertyChanged(nameof(VpnBadgeBrush));
         OnPropertyChanged(nameof(ZapretBadgeBrush));
         OnPropertyChanged(nameof(TgProxyBadgeBrush));
@@ -7305,13 +5176,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         foreach (var s in SubscriptionServers) s.NotifyThemeChanged();
     }
 
-    /// <summary>
-    /// v2.40.x (Fix #7): read the OS appearance (Light/Dark) via Avalonia's
-    /// PlatformSettings. Maps the platform-native signal — Windows registry
-    /// AppsUseLightTheme, macOS NSAppearance, Linux freedesktop color-scheme —
-    /// to a concrete <see cref="ThemeVariant"/>. Falls back to Light if the
-    /// platform can't be queried (very early startup / headless).
-    /// </summary>
     private static ThemeVariant ReadOsThemeVariant()
     {
         try
@@ -7325,11 +5189,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.40.x (Fix #7): coerce a persisted/raw theme string to one of the
-    /// three canonical preferences. Unknown / null / legacy values fall back to
-    /// "system" so fresh installs (and corrupted values) follow the OS.
-    /// </summary>
     internal static string NormalizeThemePref(string? raw)
     {
         if (string.Equals(raw, "dark", StringComparison.OrdinalIgnoreCase)) return "dark";
@@ -7337,25 +5196,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return "system";
     }
 
-    /// <summary>
-    /// v2.40.x (Fix #7): live OS appearance flip handler. Only re-applies while
-    /// the preference is "system" — an explicit Light/Dark choice ignores OS
-    /// changes. Marshalled to the UI thread because ApplyTheme touches
-    /// Application.Current + raises PropertyChanged for the brush getters.
-    /// </summary>
     private void OnPlatformColorValuesChanged(object? sender, PlatformColorValues e)
     {
         if (!IsSystemThemePref) return;
         Dispatcher.UIThread.Post(ApplyTheme);
     }
 
-    // Held so Dispose can unsubscribe cleanly (avoids the leaked-handler /
-    // double-fire class of bug the project already hit with DataContextChanged).
     private IPlatformSettings? _wiredPlatformSettings;
 
     private void WireOsThemeFollow()
     {
-        if (_wiredPlatformSettings != null) return;   // wire exactly once
+        if (_wiredPlatformSettings != null) return;
         try
         {
             var ps = Application.Current?.PlatformSettings;
@@ -7385,8 +5236,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // ── Localization refresh ──
-
     private void RefreshLocalization()
     {
         ThemeToggleText = IsDarkTheme ? Strings.ThemeLight : Strings.ThemeDark;
@@ -7394,10 +5243,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (!IsConnected && !IsConnecting)
             StatusText = Strings.NotConnected;
 
-        // Notify all properties — refreshes every Lbl* and other localized binding
         OnPropertyChanged(string.Empty);
 
-        // Propagate to child view models — they have their own property notifiers
         foreach (var group in AppGroups.Concat(BypassAppGroups))
             group.NotifyDisplayNameChanged();
         foreach (var server in Servers)
@@ -7405,15 +5252,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         foreach (var server in SubscriptionServers)
             server.NotifyLocalizationChanged();
 
-        // v2.30.7-r3 — UpdateVm.CheckLinkText is computed from Strings;
-        // it doesn't auto-refresh on lang change because OnPropertyChanged("")
-        // only fires on the parent VM, not on child VMs.
         UpdateVm?.NotifyLangChanged();
     }
-
-    // ── Helpers ──
-    // Phase 2B (Wave 8, 2026-05-18) - DeployBundledProfiles moved to
-    // MainWindowViewModel.Profiles.cs.
 
     private static Window? GetMainWindow()
     {
@@ -7422,8 +5262,4 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return null;
     }
 
-    // Phase 2B (Wave 8, 2026-05-18) — Free Configs apply path moved to
-    // MainWindowViewModel.FreeConfigs.cs:
-    //   - ApplyFreeConfigAsync
-    //   - ShowFreeConfigSecurityWarningAsync
 }

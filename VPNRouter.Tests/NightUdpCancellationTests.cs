@@ -50,7 +50,6 @@ public sealed class NightUdpCancellationTests
             }
             catch
             {
-                // observe probeTask
             }
         }
     }
@@ -100,7 +99,6 @@ public sealed class NightUdpCancellationTests
             }
             catch
             {
-                // observe probeTask
             }
         }
     }
@@ -149,7 +147,6 @@ public sealed class NightUdpCancellationTests
             }
             catch
             {
-                // observe probeTask
             }
         }
     }
@@ -209,7 +206,6 @@ public sealed class NightUdpCancellationTests
             }
             catch
             {
-                // observe probeTask
             }
         }
     }
@@ -265,36 +261,29 @@ public sealed class NightUdpCancellationTests
 
         var methodBody = cleanSource[probeUdpDef..methodEnd];
 
-        // 1. Entry cancellation check before validation
         var entryCancelIdx = methodBody.IndexOf("ct.ThrowIfCancellationRequested();", StringComparison.Ordinal);
         var validationIdx = methodBody.IndexOf("if (string.IsNullOrWhiteSpace(host)", StringComparison.Ordinal);
         Assert.True(entryCancelIdx >= 0 && entryCancelIdx < validationIdx,
             "ct.ThrowIfCancellationRequested() must be called at entry before host/port validation");
 
-        // 2. Elimination of redundant Task.Delay / Task.WhenAny
         Assert.DoesNotContain("Task.WhenAny", methodBody);
         Assert.DoesNotContain("Task.Delay", methodBody);
 
-        // 3. Direct await of udp.ReceiveAsync(cts.Token)
         Assert.Contains("await udp.ReceiveAsync(cts.Token);", methodBody);
 
-        // 4. Cancellation-aware SendAsync overload with linked token
         Assert.Contains("await udp.SendAsync(probe, endpoint, cts.Token);", methodBody);
 
-        // 5. Post-receive cancellation check before latency
         var receiveIdx = methodBody.IndexOf("await udp.ReceiveAsync(cts.Token);", StringComparison.Ordinal);
         var postReceiveCancelIdx = methodBody.IndexOf("ct.ThrowIfCancellationRequested();", receiveIdx, StringComparison.Ordinal);
         var latencyCalcIdx = methodBody.IndexOf("var latencyMs =", receiveIdx, StringComparison.Ordinal);
         Assert.True(postReceiveCancelIdx >= 0 && postReceiveCancelIdx < latencyCalcIdx,
             "ct.ThrowIfCancellationRequested() must be called after receive before calculating latency");
 
-        // 6. External OCE explicitly caught and rethrown before broadcatch
         var externalOceCatchIdx = methodBody.IndexOf("catch (OperationCanceledException) when (ct.IsCancellationRequested)", StringComparison.Ordinal);
         var broadCatchIdx = methodBody.IndexOf("catch (Exception ex)", StringComparison.Ordinal);
         Assert.True(externalOceCatchIdx >= 0 && externalOceCatchIdx < broadCatchIdx,
             "External OCE catch must rethrow before broadcatch (catch (Exception ex))");
 
-        // 7. DNS catch rethrows external cancellation
         var dnsTryIdx = methodBody.IndexOf("Dns.GetHostAddressesAsync", StringComparison.Ordinal);
         var dnsCatchIdx = methodBody.IndexOf("catch (OperationCanceledException) when (ct.IsCancellationRequested)", dnsTryIdx, StringComparison.Ordinal);
         Assert.True(dnsCatchIdx >= 0 && dnsCatchIdx < receiveIdx,

@@ -26,21 +26,6 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    // ── v2.32.0 (AND-PROFILES, 2026-05-08) Profiles overlay ─────────────
-    //
-    // Fullscreen Border layered over the main ScrollViewer (same pattern as
-    // Settings / Free Configs / Server list overlays). Top: title bar with
-    // close ✕. Body: scrolling StackPanel of profile cards rebuilt on each
-    // open so the active-profile indicator reflects the latest persisted
-    // state.
-    //
-    // Tap-to-apply semantics: tapping any card calls ApplyProfile() which
-    // routes through ProfileApplication.Plan() (Core, unit-tested) → writes
-    // to AndroidStorage → refreshes per-app form count + form radios →
-    // closes overlay → surfaces feedback toast. Per the prompt scope
-    // (view + apply only; edit deferred), there's no "edit profile" /
-    // "duplicate" / "delete" surface — those become a follow-up chip.
-
     private Border BuildProfilesOverlay()
     {
         _profilesOverlayTitle = new TextBlock
@@ -95,10 +80,6 @@ public partial class AndroidApp
         };
         _profilesOverlayIntro.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
-        // Body StackPanel — populated on each ShowProfilesOverlay() call so
-        // the active-state highlight reflects the current AndroidStorage
-        // value without an event-bus subscription. Idempotent: rebuilding
-        // 8 cards is essentially free.
         _profilesList = new StackPanel
         {
             Spacing = 10,
@@ -133,17 +114,8 @@ public partial class AndroidApp
         return overlay;
     }
 
-    /// <summary>
-    /// Build a single profile card. <paramref name="profile"/> = null →
-    /// the "No profile" pseudo-card that clears the active selection
-    /// and switches back to full-tunnel.
-    /// </summary>
     private Border BuildProfileCard(VPNRouter.Core.Models.Profile? profile, string? activeName)
     {
-        // Determine active state — null active ↔ null profile is the
-        // "No profile" highlight; otherwise compare names case-insensitively
-        // (storage uses the original casing but a stale lower-cased entry
-        // shouldn't break the highlight).
         bool isActive;
         if (profile is null)
         {
@@ -176,9 +148,6 @@ public partial class AndroidApp
         };
         descBlock.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
-        // Active-state header pill (rendered when this card is the
-        // currently-applied profile). Uses Success accent so the user can
-        // spot the active card at a glance even when scrolled.
         TextBlock? activeBadge = null;
         if (isActive)
         {
@@ -192,8 +161,6 @@ public partial class AndroidApp
             activeBadge.BindToken(TextBlock.ForegroundProperty, "SuccessFgBrush");
         }
 
-        // Metadata chips — apps count + DNS mode + (optional) block-on-fail.
-        // Hidden for the "No profile" pseudo-card (no metadata to show).
         var chipRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
@@ -239,10 +206,6 @@ public partial class AndroidApp
         card.BindToken(Border.BackgroundProperty, isActive ? "AccentBgSubtleBrush" : "SurfaceBaseBrush");
         card.BindToken(Border.BorderBrushProperty, isActive ? "BorderAccentBrush" : "BorderSubtleBrush");
 
-        // Tap anywhere on the card → apply. PointerPressed fires before
-        // PointerReleased on Avalonia's mobile pointer pipeline; using
-        // Pressed feels snappier and matches the radio-card / checkbox-
-        // card pattern in the Settings overlay.
         card.PointerPressed += (_, __) => ApplyProfile(profile);
 
         return card;
@@ -278,15 +241,9 @@ public partial class AndroidApp
     {
         if (_profilesOverlay is null || _profilesList is null) return;
 
-        // Rebuild the card list each open so the active-profile highlight
-        // reflects whatever's currently in storage. Cheap (8 entries) and
-        // avoids a manual invalidate-on-storage-change wiring.
         _profilesList.Children.Clear();
         var active = AndroidStorage.GetActiveProfile();
 
-        // "No profile" pseudo-card first — provides a clear escape hatch
-        // back to full-tunnel without forcing the user to find the form's
-        // tunnel-mode radio.
         _profilesList.Children.Add(BuildProfileCard(null, active));
 
         var catalog = VPNRouter.Core.Services.BuiltInAndroidProfiles.Get();
@@ -303,14 +260,6 @@ public partial class AndroidApp
         if (_profilesOverlay is not null) _profilesOverlay.IsVisible = false;
     }
 
-    /// <summary>
-    /// Apply the user's profile pick. Routes through
-    /// <see cref="VPNRouter.Core.Services.ProfileApplication.Plan"/> (pure
-    /// function, unit-tested) so the storage writes here are the only
-    /// Android-side concern. Refreshes the form's per-app count + tunnel-
-    /// mode radios so the user sees the new state on close, and surfaces
-    /// a feedback banner so the apply isn't invisible.
-    /// </summary>
     private void ApplyProfile(VPNRouter.Core.Models.Profile? profile)
     {
         var plan = VPNRouter.Core.Services.ProfileApplication.Plan(profile);
@@ -327,17 +276,11 @@ public partial class AndroidApp
         if (plan.BlockOnVpnFail is not null)
             AndroidStorage.SetBlockOnVpnFail(plan.BlockOnVpnFail.Value);
 
-        // Form radios may be visible behind the overlay — re-seed so
-        // dismissing reveals the right state. Settings overlay re-seeds
-        // its own controls in ShowSettings, so no work needed there.
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
         if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
         UpdatePerAppFormCountLabel();
 
-        // Toast feedback. Profile name embedded verbatim — catalog names
-        // are ASCII underscore-separated (Discord_Privacy / Work_Suite)
-        // so the localized format string still reads cleanly in RU/EN.
         var msg = profile is null
             ? Localization.ProfilesClearedToast
             : string.Format(Localization.ProfilesAppliedToast, profile.Name);

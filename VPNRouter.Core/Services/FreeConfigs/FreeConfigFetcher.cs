@@ -7,10 +7,6 @@ using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-/// <summary>
-/// Downloads raw source text and extracts vless:// lines.
-/// Handles plain text AND base64-encoded subscription format.
-/// </summary>
 public sealed class FreeConfigFetcher
 {
     private readonly IHttpClient _http;
@@ -28,10 +24,6 @@ public sealed class FreeConfigFetcher
         _http = http ?? throw new ArgumentNullException(nameof(http));
     }
 
-    /// <summary>
-    /// Fetches one source and returns list of raw vless:// URIs (deduped, trimmed).
-    /// Returns empty on transport, timeout, HTTP, or size failure; caller cancellation propagates.
-    /// </summary>
     public async Task<List<string>> FetchAsync(FreeConfigSource source, CancellationToken ct = default)
     {
         if (!source.Enabled) return new List<string>();
@@ -90,15 +82,11 @@ public sealed class FreeConfigFetcher
 
     private static string ShortMsg(string s) => s.Length > 120 ? s[..120] + "…" : s;
 
-    /// <summary>
-    /// Extract vless:// URIs from text. If text is one-line base64 blob, decode first.
-    /// </summary>
     internal static List<string> ExtractVlessLines(string body)
     {
         if (string.IsNullOrWhiteSpace(body))
             return new List<string>();
 
-        // Try base64 decode if body looks like one blob (>80% valid base64 chars, no whitespace).
         var maybeDecoded = TryDecodeBase64(body);
         if (!string.IsNullOrEmpty(maybeDecoded))
             body = maybeDecoded;
@@ -145,13 +133,10 @@ public sealed class FreeConfigFetcher
     {
         var trimmed = body.Trim();
 
-        // Raw already contains supported schemes — not base64.
         if (ContainsSupportedScheme(trimmed)) return null;
 
-        // Heuristic: length divisible by 4 (or close), no weird chars.
         if (trimmed.Length < 60) return null;
 
-        // Restore padding.
         var padded = trimmed.Replace("\n", "").Replace("\r", "").Replace(" ", "");
         var pad = (4 - padded.Length % 4) % 4;
         padded += new string('=', pad);
@@ -165,7 +150,6 @@ public sealed class FreeConfigFetcher
         }
         catch
         {
-            // Not valid base64 — leave body as-is.
         }
 
         return null;

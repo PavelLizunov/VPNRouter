@@ -6,20 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins <see cref="ProcessImagePath"/> — the QueryFullProcessImageName-based
-/// resolver that replaced <c>Process.MainModule.FileName</c> in
-/// <see cref="FirewallManager"/> after the latter was found to return null for
-/// every routed process when VPNRouter runs in session 0 (Windows Service /
-/// SYSTEM autostart), silently turning the <c>block_on_vpn_fail</c> kill-switch
-/// into a fail-OPEN. See the type remarks on <see cref="ProcessImagePath"/>.
-///
-/// <para>Windows-only: the API and the defect are Windows-specific, so these
-/// skip on Linux/macOS CI (matching the FirewallManager netsh tests). The
-/// cross-session property itself (session-0 reader → user-session target) is
-/// proven by the live windows-brat gate, not unit tests — here we pin the
-/// in-process correctness + null-safety contract.</para>
-/// </summary>
 public class ProcessImagePathTests
 {
     [Fact]
@@ -29,8 +15,6 @@ public class ProcessImagePathTests
             "QueryFullProcessImageName is Windows-only");
 
         using var self = Process.GetCurrentProcess();
-        // In-process, MainModule always succeeds (no cross-session boundary),
-        // so it is the ground-truth the native resolver must agree with.
         var expected = self.MainModule!.FileName;
 
         var actual = ProcessImagePath.TryGetByPid(self.Id);
@@ -43,7 +27,7 @@ public class ProcessImagePathTests
     [Theory]
     [InlineData(-1)]
     [InlineData(0)]
-    [InlineData(0x7FFFFFF0)] // a PID that will not exist
+    [InlineData(0x7FFFFFF0)]
     public void TryGetByPid_InvalidPid_ReturnsNull(int pid)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only");
@@ -56,7 +40,7 @@ public class ProcessImagePathTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only");
 
         using var self = Process.GetCurrentProcess();
-        var name = self.ProcessName + ".exe"; // e.g. "testhost.exe"
+        var name = self.ProcessName + ".exe";
 
         var path = ProcessImagePath.ResolveRunningPath(name);
 
@@ -71,9 +55,6 @@ public class ProcessImagePathTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only");
 
         using var self = Process.GetCurrentProcess();
-        // The kill-switch passes names with .exe, but the resolver must also
-        // accept a bare base name (only a trailing ".exe" is stripped — NOT via
-        // Path.GetFileNameWithoutExtension, which would mangle dotted names).
         var path = ProcessImagePath.ResolveRunningPath(self.ProcessName);
 
         Assert.False(string.IsNullOrEmpty(path));
@@ -86,15 +67,9 @@ public class ProcessImagePathTests
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows-only");
 
         using var self = Process.GetCurrentProcess();
-        // Only exercises the hazard if the test host name actually contains an
-        // internal dot — it does ("VPNRouter.Tests"). Guard so the test stays
-        // honest if the host name ever changes.
         Assert.SkipUnless(self.ProcessName.Contains('.'),
             $"test host '{self.ProcessName}' has no internal dot to exercise");
 
-        // "<Name>.exe" must strip ONLY the trailing .exe — Path.GetFileNameWithout-
-        // Extension would truncate "VPNRouter.Tests" to "VPNRouter" and the
-        // process would never be found (the bug this resolver deliberately avoids).
         var path = ProcessImagePath.ResolveRunningPath(self.ProcessName + ".exe");
 
         Assert.False(string.IsNullOrEmpty(path));

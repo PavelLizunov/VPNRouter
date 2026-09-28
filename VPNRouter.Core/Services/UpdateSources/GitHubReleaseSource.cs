@@ -1,16 +1,3 @@
-// Phase 3 — 3F (v3.0 refactor): desktop concrete IUpdateSource impl.
-//
-// Wraps the GitHub Releases API discovery + asset-pick flow that lived
-// inline in UpdateChecker.CheckForUpdateAsync pre-3F. The download +
-// apply paths still go through UpdateChecker (which owns the
-// platform-specific helper.cmd / ditto / pkexec dance — too much
-// platform surface to fold cleanly into an interface for one phase),
-// so DownloadAsync / ApplyAsync here delegate to a caller-supplied
-// IUpdateChecker shim. The interface boundary stays clean: callers
-// don't need to know about the GitHub JSON shape.
-//
-// Brief: plans/phase3-3F-android-updatesource-2026-05-18.md.
-
 #nullable enable
 
 using System;
@@ -27,21 +14,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services.UpdateSources;
 
-/// <summary>
-/// Desktop default <see cref="IUpdateSource"/>. Hits the GitHub Releases
-/// API for a tagged release strictly newer than the running version,
-/// picks the per-platform asset (<c>VPNRouter-v*-win.zip</c> /
-/// <c>-mac.zip</c> / <c>-linux.tar.gz</c>), and fetches the matching
-/// <c>.sha256</c> companion file so the caller can pin the asset.
-///
-/// <para>
-/// Download + apply are wired through an <see cref="IDesktopInstaller"/>
-/// adapter rather than re-implementing the helper.cmd / detached-bash
-/// dance here. The legacy <see cref="UpdateChecker"/> is the canonical
-/// adapter for now (Phase 3F+ moves more logic into this class once
-/// the contract has settled).
-/// </para>
-/// </summary>
 public sealed class GitHubReleaseSource : IUpdateSource
 {
     private readonly IHttpClient _http;
@@ -49,26 +21,16 @@ public sealed class GitHubReleaseSource : IUpdateSource
     private readonly string _currentVersion;
     private readonly IDesktopInstaller _installer;
 
-    /// <summary>Platform-suffix mapping: matches the build-script naming
-    /// convention (see <c>build.ps1</c> / <c>build-mac.sh</c> /
-    /// <c>build-linux</c>).</summary>
     private static readonly string PlatformSuffix =
         OperatingSystem.IsMacOS() ? "-mac" :
         OperatingSystem.IsLinux() ? "-linux" :
         "-win";
 
-    /// <summary>Linux ships as .tar.gz; everything else ships as .zip.</summary>
     private static readonly string AssetExtension =
         OperatingSystem.IsLinux() ? ".tar.gz" : ".zip";
 
-    /// <inheritdoc />
     public string SourceId => "github";
 
-    /// <summary>
-    /// Production ctor — caller supplies the shared
-    /// <see cref="PolicyHttpClient"/> + an installer adapter (today's
-    /// <see cref="UpdateChecker"/> implements it).
-    /// </summary>
     public GitHubReleaseSource(
         UpdateSettings settings,
         string currentVersion,
@@ -81,14 +43,11 @@ public sealed class GitHubReleaseSource : IUpdateSource
         _installer = installer ?? throw new ArgumentNullException(nameof(installer));
     }
 
-    /// <inheritdoc />
     public async Task<UpdateSourceInfo?> CheckAsync(CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_settings.GitHubRepo))
             return null;
 
-        // v2.21.10: rolling-rN aware parser. Tags with non-rN suffixes
-        // (e.g. "v1.0.0-mac") return false and are skipped.
         if (!UpdateChecker.TryParseSemVer(_currentVersion, out var current))
             return null;
 
@@ -118,8 +77,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
             if (asset == null)
                 continue;
 
-            // Companion .sha256 is required. Missing digest skips this
-            // release rather than offering an unverifiable extract.
             var sha = await FetchChecksumAsync(candidate.Release.Assets, asset, ct)
                 .ConfigureAwait(false);
             if (!IsValidSha256(sha))
@@ -143,7 +100,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return null;
     }
 
-    /// <inheritdoc />
     public async Task<IReadOnlyList<UpdateSourceInfo>> ListStableAsync(
         int maxCount,
         CancellationToken ct = default)
@@ -199,7 +155,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return result;
     }
 
-    /// <inheritdoc />
     public Task<string> DownloadAsync(
         UpdateSourceInfo info,
         IProgress<DownloadProgress>? progress = null,
@@ -209,7 +164,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return _installer.DownloadAndStageAsync(info, progress, ct);
     }
 
-    /// <inheritdoc />
     public Task<bool> ApplyAsync(
         UpdateSourceInfo info,
         string stagedPath,
@@ -265,13 +219,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
     private static bool IsValidSha256(string? value) =>
         value is { Length: 64 } && value.All(Uri.IsHexDigit);
 
-    // ─── Asset matching ──────────────────────────────────────────────────
-
-    /// <summary>
-    /// Find the full install asset for the current desktop platform.
-    /// Mirrors <see cref="UpdateChecker"/>'s legacy private
-    /// <c>FindFullAsset</c> — single source of truth lives here now.
-    /// </summary>
     private static GitHubAsset? FindFullAsset(GitHubAsset[]? assets, string expectedVersion)
     {
         if (assets == null) return null;
@@ -281,7 +228,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
             string.Equals(a.Name, expectedName, StringComparison.OrdinalIgnoreCase));
         if (newFormat != null) return newFormat;
 
-        // Legacy (Windows only): VPNRouter-install-v*.zip
         if (OperatingSystem.IsWindows())
         {
             var legacyName = $"VPNRouter-install-v{expectedVersion}.zip";
@@ -291,8 +237,6 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return null;
     }
 
-    /// <summary>Find the .sha256 companion asset for a given install
-    /// asset (naming: <c>{name}.sha256</c>).</summary>
     private static GitHubAsset? FindChecksumAsset(GitHubAsset[]? assets, GitHubAsset? zipAsset)
     {
         if (assets == null || zipAsset == null) return null;
@@ -301,38 +245,16 @@ public sealed class GitHubReleaseSource : IUpdateSource
             string.Equals(a.Name, target, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Phase 4 (2026-05-18) — STJ options shared by every GitHub Releases
-    /// API parse in this assembly. Case-insensitive so any GitHub API
-    /// quirk (extremely unlikely but harmless to allow) doesn't break
-    /// parse; <c>JsonNumberHandling.AllowReadingFromString</c> covers
-    /// any future field GitHub starts emitting as a string instead of a
-    /// number.
-    /// </summary>
     internal static readonly JsonSerializerOptions GitHubReleaseJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
-        // Phase 5 — Wave 25 AOT-2 (2026-05-18): GitHubRelease + GitHubAsset +
-        // GitHubRelease[] are registered in AppJsonContext so the GitHub
-        // Releases API parse routes through generated JsonTypeInfo on AOT
-        // builds. Compose with DefaultJsonTypeInfoResolver so callers
-        // passing this options instance for any other DTO (none today)
-        // still work via reflection. Phase 6 retires the reflective
-        // fallback once PublishAot lands.
         TypeInfoResolver = JsonTypeInfoResolver.Combine(
             AppJsonContext.Default,
             new DefaultJsonTypeInfoResolver()),
     };
 }
 
-/// <summary>
-/// Phase 4 (2026-05-18) — explicit DTO mirroring the subset of the GitHub
-/// Releases API response we consume. Pre-Phase-4 the code used
-/// <see cref="System.Object"/>-typed anonymous templates via Newtonsoft's
-/// <c>DeserializeAnonymousType</c>; this typed shape is the STJ equivalent
-/// and is pinned by Phase3StjJsonRoundTripTests.
-/// </summary>
 internal sealed class GitHubRelease
 {
     [JsonPropertyName("tag_name")]
@@ -366,24 +288,13 @@ internal sealed class GitHubAsset
     public string Name { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Adapter the desktop <see cref="GitHubReleaseSource"/> uses to defer
-/// platform-specific download + helper-dispatch logic. Today's sole
-/// implementation is <see cref="UpdateChecker"/>; Phase 4 could split
-/// it further (e.g. <c>WindowsInstaller</c> / <c>MacInstaller</c> /
-/// <c>LinuxInstaller</c>) without changing the source contract.
-/// </summary>
 public interface IDesktopInstaller
 {
-    /// <summary>Stream the asset bytes to disk + verify checksum +
-    /// extract. Returns the extracted directory path.</summary>
     Task<string> DownloadAndStageAsync(
         UpdateSourceInfo info,
         IProgress<DownloadProgress>? progress,
         CancellationToken ct);
 
-    /// <summary>Hand the extracted directory to the platform helper
-    /// (helper.cmd / ditto / pkexec).</summary>
     Task<bool> ApplyStagedAsync(
         UpdateSourceInfo info,
         string stagedPath,

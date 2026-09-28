@@ -19,8 +19,6 @@ public sealed class MainWindowViewModelModeCoherenceTests
         using var vm = new MainWindowViewModel(store);
         Assert.True(vm.IsSubscribeMode);
 
-        // Reproduce the field flow: view a subscription, open Servers/Custom,
-        // then return to the simple UI without explicitly changing config.
         vm.SelectedTabIndex = 0;
         vm.SelectedServerModeIndex = 1;
 
@@ -29,13 +27,10 @@ public sealed class MainWindowViewModelModeCoherenceTests
         Assert.Equal("subscribe", store.Load(AppPaths.ConfigYamlPath).App.ConfigMode);
         Assert.StartsWith(Strings.SmpCfgSubscribe, vm.SimpleConfigModeSummary, StringComparison.Ordinal);
 
-        // Background refresh follows the configured tunnel, not the page that
-        // happened to be open when the user left Advanced mode.
         Invoke(vm, "StartSubRefreshTimer");
         Assert.NotNull(GetField<System.Threading.Timer>(vm, "_subRefreshTimer"));
         Invoke(vm, "StopSubRefreshTimer");
 
-        // The status badge likewise returns to the configured source.
         vm.IsSimpleMode = false;
         vm.NavigateToVpnCommand.Execute(null);
         Assert.Equal(1, vm.SelectedTabIndex);

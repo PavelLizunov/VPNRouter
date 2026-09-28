@@ -5,26 +5,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// v2.30.0-r3 — import/export of <see cref="CustomRule"/> lists across
-/// three formats:
-///
-/// <list type="bullet">
-/// <item><b>CSV</b> — simple flat-table format (header row +
-/// action,type,value,comment,enabled). Easy for spreadsheet edits.</item>
-/// <item><b>VPNRouter JSON</b> — System.Text.Json over List&lt;CustomRule&gt;.
-/// Native, lossless. Default for export.</item>
-/// <item><b>sing-box-native</b> — sing-box <c>route.rules</c> JSON
-/// fragment as exported by NekoBox / Hiddify. Cross-import from those
-/// apps. Lossy: sing-box rules can have multiple match types per rule
-/// (e.g. domain_suffix + network), our schema is one-match-per-rule —
-/// we explode such rules into multiple entries.</item>
-/// </list>
-///
-/// <para>Format auto-detection: file extension (.csv / .json) +
-/// content sniffing (presence of "outbound" or "action" keys vs
-/// "action" + "type" keys distinguishes sing-box-native from ours).</para>
-/// </summary>
 public static class CustomRulesImportExport
 {
     public enum Format
@@ -40,9 +20,6 @@ public static class CustomRulesImportExport
         List<string> Warnings,
         Format DetectedFormat);
 
-    /// <summary>Import rules from text content. <paramref name="format"/>
-    /// = Auto auto-detects via content sniff. Returns parsed rules +
-    /// any per-line warnings (lossy conversions, skipped entries).</summary>
     public static ImportResult ImportFromText(string text, Format format = Format.Auto)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -58,7 +35,6 @@ public static class CustomRulesImportExport
         };
     }
 
-    /// <summary>Export rules to text. Default = VpnrouterJson.</summary>
     public static string ExportToText(IReadOnlyList<CustomRule> rules, Format format = Format.VpnrouterJson)
     {
         return format switch
@@ -70,15 +46,11 @@ public static class CustomRulesImportExport
         };
     }
 
-    /// <summary>Detect the format from a content fragment.</summary>
     public static Format Detect(string text)
     {
         var trimmed = text.TrimStart();
         if (trimmed.StartsWith("[") || trimmed.StartsWith("{"))
         {
-            // JSON-like. Distinguish ours (rules with "action"+"type"+"value")
-            // from sing-box-native (rules with match-fields like "domain_suffix"
-            // and "outbound" or "action":"reject").
             if (trimmed.Contains("\"outbound\":") ||
                 trimmed.Contains("\"domain_suffix\":") ||
                 trimmed.Contains("\"ip_cidr\":") ||
@@ -88,11 +60,8 @@ public static class CustomRulesImportExport
             }
             return Format.VpnrouterJson;
         }
-        // Otherwise assume CSV.
         return Format.Csv;
     }
-
-    // ─── CSV ──────────────────────────────────────────────────────────────
 
     private static ImportResult ImportCsv(string text)
     {
@@ -104,8 +73,6 @@ public static class CustomRulesImportExport
         {
             var line = lines[i].Trim();
             if (line.Length == 0 || line.StartsWith("#")) continue;
-            // Skip header row if it looks like one (case-insensitive
-            // "action" first token).
             if (isFirst)
             {
                 isFirst = false;
@@ -165,7 +132,6 @@ public static class CustomRulesImportExport
             {
                 if (c == '"')
                 {
-                    // Escaped "" inside quoted = literal ".
                     if (i + 1 < line.Length && line[i + 1] == '"')
                     {
                         cur.Append('"');
@@ -202,13 +168,6 @@ public static class CustomRulesImportExport
         return v == "true" || v == "1" || v == "yes" || v == "y";
     }
 
-    // ─── VPNRouter JSON (native) ──────────────────────────────────────────
-
-    // Phase 6 — .NET 10 ships with
-    // JsonSerializerIsReflectionEnabledByDefault=false. Without a
-    // TypeInfoResolver, serialization throws at first call. Combine the
-    // source-gen context with the reflective fallback so List<CustomRule>
-    // round-trips on both .NET 8 and .NET 10 runtimes.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -223,12 +182,6 @@ public static class CustomRulesImportExport
         var warnings = new List<string>();
         try
         {
-            // v2.30.0-r20 — accept either a bare array `[ {...} ]` (default
-            // export shape) OR a wrapping object `{ "rules": [...] }` (user
-            // edits, sample files with $schema metadata, etc.). Pre-r20 only
-            // accepted the bare array; user report «example-rules.json
-            // выдаёт ошибки» because the sample shipped with a wrapping
-            // object.
             using var doc = JsonDocument.Parse(text);
             var root = doc.RootElement;
             JsonElement arr;
@@ -247,14 +200,6 @@ public static class CustomRulesImportExport
                 warnings.Add("JSON: expected an array of rules, or an object with a \"rules\" array");
                 return new ImportResult(new(), warnings, Format.VpnrouterJson);
             }
-            // Phase 7 Wave 34: JsonTypeInfo<T> overload (AOT-clean).
-            // NOTE: AppJsonContext sets PropertyNamingPolicy=null at the
-            // [JsonSourceGenerationOptions] level (the default), while the
-            // local JsonOptions had PropertyNamingPolicy=SnakeCaseLower for
-            // the import/export wire format. The CustomRule type carries
-            // [JsonPropertyName("...")] attributes per field, so snake_case
-            // is preserved by the attributes regardless of the policy on
-            // options. Verified via the existing CustomRulesImportExportTests.
             var rules = JsonSerializer.Deserialize(arr.GetRawText(), VPNRouter.Core.Json.AppJsonContext.Default.ListCustomRule)
                 ?? new List<CustomRule>();
             return new ImportResult(rules, warnings, Format.VpnrouterJson);
@@ -268,26 +213,9 @@ public static class CustomRulesImportExport
 
     private static string ExportVpnrouterJson(IReadOnlyList<CustomRule> rules)
     {
-        // Phase 7 Wave 34: JsonTypeInfo<T> overload (AOT-clean). See
-        // ImportVpnrouterJson note about snake_case + [JsonPropertyName]
-        // preserving wire format independent of PropertyNamingPolicy.
         return JsonSerializer.Serialize(rules.ToList(), VPNRouter.Core.Json.AppJsonContext.Default.ListCustomRule);
     }
 
-    // ─── sing-box-native JSON ─────────────────────────────────────────────
-
-    /// <summary>
-    /// Import a sing-box <c>route.rules</c> array fragment. Each rule may
-    /// have multiple match fields (e.g. domain_suffix + network); we
-    /// explode such rules into multiple <see cref="CustomRule"/> entries
-    /// (one per match field) since our schema is one-match-per-rule.
-    /// Action mapping:
-    /// <list type="bullet">
-    /// <item><c>"outbound":"direct"</c> ⇒ direct</item>
-    /// <item><c>"outbound":"proxy"</c> (or any non-direct/dns-out) ⇒ proxy</item>
-    /// <item><c>"action":"reject"</c> ⇒ block</item>
-    /// </list>
-    /// </summary>
     private static ImportResult ImportSingBoxJson(string text)
     {
         var rules = new List<CustomRule>();
@@ -305,8 +233,6 @@ public static class CustomRulesImportExport
             return new ImportResult(rules, warnings, Format.SingBoxJson);
         }
 
-        // Accept either a bare rules array OR a wrapping {"route":{"rules":[...]}}
-        // OR {"rules":[...]} object.
         JsonElement rulesArray;
         if (root.ValueKind == JsonValueKind.Array)
         {
@@ -341,7 +267,6 @@ public static class CustomRulesImportExport
             idx++;
             if (rule.ValueKind != JsonValueKind.Object) continue;
 
-            // Determine action.
             string action;
             if (rule.TryGetProperty("action", out var actionEl) &&
                 actionEl.GetString()?.Equals("reject", StringComparison.OrdinalIgnoreCase) == true)
@@ -354,10 +279,9 @@ public static class CustomRulesImportExport
                 if (string.IsNullOrEmpty(outbound) || outbound == "direct")
                     action = "direct";
                 else if (outbound == "block" || outbound == "reject") action = "block";
-                else action = "proxy"; // any other tag = through-VPN
+                else action = "proxy";
             }
 
-            // Iterate match fields, emit one CustomRule per match.
             var matchFields = new[]
             {
                 ("domain", "domain"),
@@ -368,7 +292,7 @@ public static class CustomRulesImportExport
                 ("port_range", "port_range"),
                 ("network", "network"),
                 ("process_name", "process_name"),
-                ("rule_set", "geosite"),  // best-guess; user can flip to geoip
+                ("rule_set", "geosite"),
             };
 
             int matchCount = 0;
@@ -376,7 +300,6 @@ public static class CustomRulesImportExport
             {
                 if (!rule.TryGetProperty(jsonKey, out var matchEl)) continue;
 
-                // Values can be string, number, or array.
                 var values = new List<string>();
                 if (matchEl.ValueKind == JsonValueKind.Array)
                 {
@@ -390,8 +313,6 @@ public static class CustomRulesImportExport
                 }
                 if (values.Count == 0) continue;
 
-                // For rule_set, strip any "user-geosite-" / "user-geoip-" /
-                // "vpnrouter-geo*-" prefix that we add on export.
                 if (jsonKey == "rule_set")
                 {
                     var cleaned = values.Select(v =>
@@ -428,8 +349,6 @@ public static class CustomRulesImportExport
         return new ImportResult(rules, warnings, Format.SingBoxJson);
     }
 
-    /// <summary>Export rules as a sing-box <c>route.rules</c> array.
-    /// Each <see cref="CustomRule"/> becomes one entry.</summary>
     private static string ExportSingBoxJson(IReadOnlyList<CustomRule> rules)
     {
         var entries = new List<object>();
@@ -443,7 +362,6 @@ public static class CustomRulesImportExport
 
             var entry = new Dictionary<string, object>();
 
-            // Match field.
             switch ((r.Type ?? "domain_suffix").ToLowerInvariant())
             {
                 case "domain": entry["domain"] = values; break;
@@ -472,7 +390,6 @@ public static class CustomRulesImportExport
                 default: continue;
             }
 
-            // Action.
             switch ((r.Action ?? "direct").ToLowerInvariant())
             {
                 case "direct":
@@ -491,30 +408,6 @@ public static class CustomRulesImportExport
 
             entries.Add(entry);
         }
-        // Phase 6 — Wave 31b (2026-05-19): retire the inline
-        // `new JsonSerializerOptions { WriteIndented = true }` duplicate.
-        // Reuse the file's existing JsonOptions field (also
-        // WriteIndented=true; PropertyNamingPolicy=SnakeCaseLower is a
-        // no-op here because the serialised payload is
-        // List<object>/Dictionary<string,object> — naming policy only
-        // applies to property names, and these structures expose no
-        // typed properties to the serializer. Dictionary keys + nested
-        // List<string>/List<int>/string/int values pass through verbatim.
-        //
-        // Note: this is the one branch in this file that the AOT
-        // source-gen cannot pin via AppJsonContext — the
-        // object/Dictionary recursion is fundamentally reflective.
-        // Wave 31b leaves it on the reflective fallback path; a
-        // future wave will restructure the export DTO to a concrete
-        // record tree (one record per match-type + one wrapper) to
-        // make it AOT-clean. For now, the duplicate-options cleanup
-        // is enough — and the existing test
-        // `SingBoxJson_ExportProducesValidImportableForm` pins the
-        // wire format byte-equivalent.
-        //
-        // (Supersedes the e3b3ef4 hotfix's separate SingBoxNativeOptions
-        // field — that was a defensive guard before Wave 31b's analysis
-        // showed JsonOptions covers this case fine.)
         return JsonSerializer.Serialize(entries, JsonOptions);
     }
 }

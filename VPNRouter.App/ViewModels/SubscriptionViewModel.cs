@@ -4,9 +4,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// UI wrapper around SubscriptionEntry with observable properties and display helpers.
-/// </summary>
 public partial class SubscriptionViewModel : ObservableObject
 {
     private readonly SubscriptionEntry _entry;
@@ -24,23 +21,12 @@ public partial class SubscriptionViewModel : ObservableObject
     [ObservableProperty] private int _lastServerCount;
     [ObservableProperty] private bool _isRefreshing;
 
-    // v2.38.0-r7 — set true when the most recent refresh fetch failed / returned
-    // 0 (network down, provider DPI-blocked, transient). The cached servers are
-    // preserved (RefreshEntryAsync keeps them on empty), so this drives an honest
-    // "couldn't refresh — showing cached" badge instead of letting the card read
-    // as "configs lost / banned". See Z:\surito 2026-05-29.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusBadge))]
     private bool _lastRefreshFailed;
 
-    /// <summary>The actually-cached server count (survives a failed refresh +
-    /// app restart — persisted via SubscriptionEntry.Servers YAML alias).</summary>
     public int CachedServerCount => _entry.Servers?.Count ?? 0;
 
-    /// <summary>v2.38.0-r7 — honest one-line badge for the card. Empty on the
-    /// happy path (the normal "URL · Ns · time" line shows). On a failed refresh
-    /// it explains WHY (cached vs provider-unreachable) so a DPI-flap doesn't
-    /// look like data loss.</summary>
     public string StatusBadge =>
         !LastRefreshFailed ? string.Empty
         : CachedServerCount > 0 ? VPNRouter.Core.Localization.Strings.SubRefreshFailedCached
@@ -50,15 +36,12 @@ public partial class SubscriptionViewModel : ObservableObject
     {
         get
         {
-            // Treat null and MinValue (YamlDotNet default for missing nullable) as "never"
             if (LastRefreshedAt == null || LastRefreshedAt.Value.Year < 2000)
                 return "—";
             return LastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         }
     }
 
-    /// <summary>P2 (2026-06-21) — quota / days-left from the provider's
-    /// Subscription-Userinfo header; empty string when the provider doesn't send it.</summary>
     public string UserInfoDisplay
     {
         get
@@ -68,7 +51,6 @@ public partial class SubscriptionViewModel : ObservableObject
         }
     }
 
-    /// <summary>True when <see cref="UserInfoDisplay"/> has something to show (drives IsVisible).</summary>
     public bool HasUserInfo => UserInfoDisplay.Length > 0;
 
     public SubscriptionViewModel(SubscriptionEntry entry)
@@ -81,7 +63,6 @@ public partial class SubscriptionViewModel : ObservableObject
         _lastServerCount = entry.LastServerCount;
     }
 
-    /// <summary>Sync UI values back to the underlying model before save.</summary>
     public SubscriptionEntry ToEntry()
     {
         _entry.Name = Name;
@@ -94,8 +75,6 @@ public partial class SubscriptionViewModel : ObservableObject
 
     public SubscriptionEntry UnderlyingEntry => _entry;
 
-    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers (was
-    /// leaking "VPNRouter.App.ViewModels.SubscriptionViewModel").</summary>
     public override string ToString()
     {
         var enabledTag = Enabled ? string.Empty : " (off)";

@@ -4,11 +4,6 @@ using Avalonia.Controls;
 
 namespace VPNRouter.App.Controls;
 
-/// <summary>
-/// Defers instantiation of heavy UserControls until the page is first made active
-/// (e.g. when its tab is selected). Once instantiated, the page remains cached in
-/// <see cref="ContentControl.Content"/> to preserve user state and avoid re-allocating.
-/// </summary>
 public class DeferredPage : ContentControl
 {
     public static readonly StyledProperty<bool> IsActiveProperty =

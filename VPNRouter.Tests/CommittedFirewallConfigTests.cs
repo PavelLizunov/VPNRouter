@@ -12,10 +12,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Architectural and contract tests for the <see cref="ICommittedFirewallConfig"/> capability
-/// introduced for NIGHT-05 runtime freshness.
-/// </summary>
 public sealed class CommittedFirewallConfigTests
 {
 
@@ -27,7 +23,6 @@ public sealed class CommittedFirewallConfigTests
     [Fact]
     public void LinuxFirewallManager_CommittedMethod_NeverReadsCurrentConfigPath()
     {
-        // Set _currentConfigPath to a non-existent path
         var nonExistentPath = Path.Combine(Path.GetTempPath(), $"non-existent-{Guid.NewGuid():N}.json");
         var fake = new FakeProcessRunner();
         var sut = new LinuxFirewallManager(
@@ -46,7 +41,6 @@ public sealed class CommittedFirewallConfigTests
         }
         """;
 
-        // Must succeed without touching nonExistentPath
         ((ICommittedFirewallConfig)sut).UpdateCommittedConfig(committedJson, enabledForFullTunnel: true);
         Assert.Equal(new[] { "192.0.2.1" }, sut.ServerIps);
     }
@@ -74,7 +68,6 @@ public sealed class CommittedFirewallConfigTests
         }
         """;
 
-        // Must succeed without touching nonExistentPath
         ((ICommittedFirewallConfig)sut).UpdateCommittedConfig(committedJson, enabledForFullTunnel: true);
         Assert.Equal(new[] { "192.0.2.2" }, sut.ServerIps);
     }

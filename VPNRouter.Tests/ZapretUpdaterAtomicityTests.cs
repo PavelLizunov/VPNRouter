@@ -1,6 +1,4 @@
 #nullable enable
-// P10 (ZAP-1) regression pins: CopyDirectoryOverwrite bool aggregation + a
-// source-pin for the version-marker gate in DownloadAndExtractAsync.
 
 using System.Text.RegularExpressions;
 using Serilog;
@@ -44,7 +42,6 @@ public sealed class ZapretUpdaterAtomicityTests : IDisposable
         bool allCopied;
         if (OperatingSystem.IsWindows())
         {
-            // Real ZAP-1 scenario: in-use file holds FileShare.None.
             using (new FileStream(lockedDest, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             {
                 allCopied = ZapretUpdater.CopyDirectoryOverwrite(src, dest, SilentLogger);
@@ -53,7 +50,6 @@ public sealed class ZapretUpdaterAtomicityTests : IDisposable
         }
         else
         {
-            // FileShare.None is a no-op on POSIX; collide dest path with a directory.
             File.Delete(lockedDest);
             Directory.CreateDirectory(lockedDest);
             allCopied = ZapretUpdater.CopyDirectoryOverwrite(src, dest, SilentLogger);
@@ -64,9 +60,6 @@ public sealed class ZapretUpdaterAtomicityTests : IDisposable
         Assert.Equal("new-free", File.ReadAllText(Path.Combine(dest, "free.txt")));
     }
 
-    // DownloadAndExtractAsync mutates ProgramData and kills processes, so the
-    // marker gate is pinned by source shape instead of a behaviour test. Fails
-    // if the unconditional pre-gate version write (the ZAP-1 defect) is restored.
     [Fact]
     public void MarkerGate_VersionWriteOnlyInSuccessBranch_SourcePin()
     {

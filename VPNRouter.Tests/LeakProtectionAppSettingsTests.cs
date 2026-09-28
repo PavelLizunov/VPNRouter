@@ -2,22 +2,7 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// LeakProtection.ValidateAppSettings (F-12 / parity audit P0, 2026-05-09)
-// ═══════════════════════════════════════════════════════════════════════════════
 
-/// <summary>
-/// F-12 (parity audit P0, 2026-05-09): defense-in-depth backstop for silent
-/// ConfigMode flips. <see cref="LeakProtection.ValidateAppSettings"/> sits
-/// at the model level and is run by <see cref="VpnEngine.StartAsync"/> +
-/// <see cref="VpnEngine.ApplyAsync"/> before any sing-box config generation.
-///
-/// <para>If a future UI change re-introduces a silent <c>ConfigMode</c>
-/// flip without populating <c>Subscriptions</c> / <c>Vless.Servers</c>,
-/// the engine throws here instead of generating a leaky sing-box config
-/// with empty proxy outbounds. Same failure class as v2.28.2 silent leak
-/// — see <c>plans/session-night-shift-2026-04-25.md</c>.</para>
-/// </summary>
 public class LeakProtectionAppSettingsTests
 {
     [Fact]
@@ -50,10 +35,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Generated_AwgActiveServer_EmptyServerSnapshot_Passes()
     {
-        // v2.45.0-r2 (AWG live-test regression): a generated-mode config whose
-        // active server is AmneziaWG — with Vless.Servers empty at this pre-resolve
-        // guard — must NOT be rejected "no VLESS server configured". The
-        // VlessServersResolver populates the pool one step later in the pipeline.
         var settings = new AppSettings
         {
             App = new AppConfig { ConfigMode = "generated" },
@@ -72,8 +53,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Generated_NothingConfigured_NoActiveServer_StillFails()
     {
-        // The genuine empty case stays caught: no servers, no legacy scalar, no
-        // enabled sub with servers, AND no active-server selection.
         var settings = new AppSettings
         {
             App = new AppConfig { ConfigMode = "generated", ActiveSubscriptionServer = "" },
@@ -89,10 +68,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Subscribe_WithoutAnySubscriptions_Fails()
     {
-        // The F-12 silent-flip scenario: ConfigMode says "subscribe" but
-        // there are no subscription entries at all. Pre-fix this would
-        // generate a config with empty proxy outbounds and the engine
-        // would silently fall through to direct.
         var settings = new AppSettings
         {
             App = new AppConfig
@@ -133,24 +108,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Subscribe_EnabledSubButNoServers_DefersToResolverFallback()
     {
-        // BR-1 (brat 2026-05-19) — softened F-12: ConfigMode=subscribe
-        // with an enabled sub that has no servers yet is no longer a
-        // pre-generation invariant violation. VlessServersResolver runs
-        // RIGHT AFTER this validation in StartupPipeline.ExecuteAsync
-        // (line ~518) and already emits a clear warning + falls back to
-        // manual Vless.Servers / Vless.Server, OR throws on truly empty
-        // aggregate via the ConfigGenerator empty-servers hard guard.
-        //
-        // Before BR-1: this test asserted IsValid=false with a "Refresh"
-        // hint. brat's r5 logs at 21:39:47.920 showed F-12 firing for this
-        // exact case while v2.32.2 successfully connected by falling
-        // through to the resolver's manual-fallback log line:
-        //   [WRN] [VlessServersResolver] config_mode=subscribe but no
-        //   enabled subscription has servers. Falling back to manually-
-        //   configured Vless.Servers / Vless.Server.
-        //
-        // The defense-in-depth net was preempting the resolver's own
-        // intended behaviour. Now we trust the resolver to handle it.
         var settings = new AppSettings
         {
             App = new AppConfig
@@ -180,9 +137,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Subscribe_NoServersButManualFallbackPresent_Passes()
     {
-        // If the user has manually added a VLESS server (Vless.Servers),
-        // we treat that as a fallback and don't fail the subscribe-mode
-        // invariant — the engine can route through the manual entry.
         var settings = new AppSettings
         {
             App = new AppConfig
@@ -250,7 +204,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Custom_AlwaysSkipped()
     {
-        // Custom mode loads JSON from disk — out of scope for this check.
         var settings = new AppSettings
         {
             App = new AppConfig { ConfigMode = "custom" }
@@ -272,26 +225,6 @@ public class LeakProtectionAppSettingsTests
     [Fact]
     public void Subscribe_BratScenarioTwoSubsBothEmpty_DefersToResolverFallback()
     {
-        // BR-1 pin (brat 2026-05-19) — reproduces the exact AppSettings
-        // shape that triggered v2.35.0-r5's incorrect F-12 fire at the
-        // moment brat clicked "Ignore conflict, retry" after his LAN
-        // subscription started returning 0 servers:
-        //
-        // - configMode = subscribe (his standard mode)
-        // - 2 subscriptions, BOTH enabled, BOTH with empty Servers
-        //   (the user's primary sub had momentarily-empty servers in
-        //   memory due to the same-cycle SaveSettings flow, and the
-        //   LAN sub was permanently empty because his self-hosted
-        //   endpoint returns "JSON response has no 'config' field")
-        // - No manual Vless.Servers list (subscribe mode = empty list)
-        // - No legacy Vless.Server scalar (cleared)
-        //
-        // Pre-BR-1: F-12 fired, user got "ConfigMode=subscribe but no
-        // subscription has fetched any servers" and had to roll back.
-        // Post-BR-1: validation passes, VlessServersResolver runs next
-        // and either falls back (manual entry exists somewhere) or the
-        // ConfigGenerator empty-servers hard guard throws with a
-        // clearer message ("VLESS servers list is empty").
         var settings = new AppSettings
         {
             App = new AppConfig

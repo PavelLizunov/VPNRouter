@@ -9,40 +9,11 @@ using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// P6 (2026-06-21) — tolerant Clash / Clash-Meta / Mihomo YAML subscription parser.
-///
-/// <para>A large slice of real-world providers (Hiddify, Clash-Meta ecosystem,
-/// many CN/IR panels) ship their subscription as a Clash YAML document with a
-/// <c>proxies:</c> sequence instead of the base64 URI list
-/// <see cref="SubscriptionFetcher.ParseBody"/> already understands. Before this,
-/// such a body decoded to neither valid base64 nor a vless:// line list, so the
-/// whole import silently yielded zero servers.</para>
-///
-/// <para><strong>Strategy:</strong> rather than re-implement every protocol's
-/// field mapping into <c>VlessServerEntry</c>, this maps each Clash proxy map to
-/// the equivalent share-link URI string (vless:// / hysteria2:// / tuic:// /
-/// ss://) and hands it back to the caller, which feeds it through the
-/// battle-tested <see cref="ServerUriParser"/> (and its placeholder guard). One
-/// mapping layer, zero duplicated protocol logic.</para>
-///
-/// <para><strong>Tolerant by design:</strong> proxy types VPNRouter doesn't
-/// support (trojan, vmess, ...) and individual malformed entries are skipped, not
-/// thrown — one bad node never kills the rest of the list. Mirrors the lossy
-/// philosophy of <c>ParseBody</c>.</para>
-/// </summary>
 internal static class ClashYamlParser
 {
-    /// <summary>
-    /// Heuristic: does this body look like a Clash YAML document? Cheap check so
-    /// the hot path (base64 / URI list) isn't burdened with a YAML parse attempt.
-    /// A <c>proxies:</c> key at line start is the canonical Clash marker.
-    /// </summary>
     internal static bool LooksLikeClashYaml(string body)
     {
         if (string.IsNullOrWhiteSpace(body)) return false;
-        // "proxies:" as a top-level (column-0) mapping key. Guard against the word
-        // appearing inside a base64 blob by requiring it at the start of a line.
         foreach (var raw in body.Split('\n'))
         {
             var line = raw.TrimEnd();
@@ -51,18 +22,10 @@ internal static class ClashYamlParser
         return false;
     }
 
-    /// <summary>
-    /// Parse a Clash YAML body into a list of share-link URIs (one per supported
-    /// proxy). Returns an empty list on any structural failure — never throws.
-    /// </summary>
     internal static List<string> ParseProxiesToUris(string body, ILogger? logger = null)
     {
         var uris = new List<string>();
 
-        // DoS guard: the body comes from a user-added subscription URL, but a
-        // compromised/malicious provider could ship an oversized YAML to OOM the
-        // refresh. Cap the raw size (a legit Clash list of even ~20k servers is
-        // well under 8 MB). Mirrors the JSON MaxDepth guards elsewhere in Core.
         const int MaxBodyChars = 8 * 1024 * 1024;
         if (body.Length > MaxBodyChars)
         {
@@ -107,8 +70,6 @@ internal static class ClashYamlParser
         return uris;
     }
 
-    // ── per-protocol mapping ─────────────────────────────────────────────────
-
     private static string? MapProxyToUri(Dictionary<string, object> p)
     {
         var type = Str(p, "type")?.ToLowerInvariant();
@@ -123,7 +84,7 @@ internal static class ClashYamlParser
             "hysteria2" or "hy2" => MapHysteria2(p, server!, port!, name),
             "tuic" => MapTuic(p, server!, port!, name),
             "ss" or "shadowsocks" => MapShadowsocks(p, server!, port!, name),
-            _ => null, // trojan / vmess / unknown — VPNRouter doesn't support; skip
+            _ => null,
         };
     }
 
@@ -135,7 +96,6 @@ internal static class ClashYamlParser
         var network = Str(p, "network") ?? "tcp";
         q.Add(("type", network));
 
-        // security: reality > tls > none
         var reality = SubMap(p, "reality-opts");
         bool tls = Bool(p, "tls");
         if (reality is not null)
@@ -155,7 +115,6 @@ internal static class ClashYamlParser
         var alpn = StrList(p, "alpn");
         if (alpn is not null) q.Add(("alpn", alpn));
 
-        // transport opts
         if (network == "ws")
         {
             var ws = SubMap(p, "ws-opts");
@@ -207,13 +166,10 @@ internal static class ClashYamlParser
     {
         var cipher = Str(p, "cipher") ?? "";
         var password = Str(p, "password") ?? "";
-        // SIP002: ss://base64url(method:password)@host:port#tag
         var userInfo = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{cipher}:{password}"))
                               .TrimEnd('=').Replace('+', '-').Replace('/', '_');
         return $"ss://{userInfo}@{server}:{port}#{Enc(name)}";
     }
-
-    // ── YAML helpers (YamlDotNet untyped maps are Dictionary<object,object>) ──
 
     private static Dictionary<string, object>? ToStringMap(object? o)
     {
@@ -237,7 +193,6 @@ internal static class ClashYamlParser
         => d.TryGetValue(key, out var v) && v is not null
            && bool.TryParse(v.ToString(), out var b) && b;
 
-    /// <summary>alpn can be a YAML list (<c>[h3, h2]</c>) or a scalar; join with commas.</summary>
     private static string? StrList(Dictionary<string, object> d, string key)
     {
         if (!d.TryGetValue(key, out var v) || v is null) return null;

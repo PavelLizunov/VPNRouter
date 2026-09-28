@@ -1,74 +1,3 @@
-// Task #49 (2026-05-21) — Hot-reload Apply lifecycle characterization tests
-// on a RUNNING engine, completing Agent C's Task #36-C Group 3 deferred
-// coverage.
-//
-// Background: Task #36-C (commit 681b61c, Group 3) shipped 2 hot-reload
-// tests but punted on the "Apply on running engine drives hot-reload"
-// case. Agent C's brief documented the gap:
-//
-//   > Group 3 partially compromised. The brief asked for "Apply on a
-//   > running engine regenerates config — engine doesn't kill sing-box
-//   > (hot-reload preferred), Apply returns true." Driving Apply through
-//   > a running engine to a successful Clash API hot-reload requires
-//   > either (a) faking out the Clash API's PUT /configs?force=true 200
-//   > response via FakeSingBoxApi, OR (b) using reflection to lie about
-//   > IsRunning() and bypass the idle-engine guard. Both are uglier than
-//   > the existing test surface deserves.
-//
-// What Agent C missed: we DON'T need a successful hot-reload to test the
-// running-engine Apply path. We can:
-//   1. Start the engine via StartHappyPathAsync (Group 1's existing fake-
-//      process pipeline) — sing-box is "alive" via FakeProcessHandle.
-//   2. Call engine.ApplyAsync(settings) — guard `_singBox.IsRunning()`
-//      returns true (FakeProcessHandle.HasExited=false) so the pipeline
-//      proceeds.
-//   3. The pipeline runs HotReload mode → regenerates config JSON →
-//      VpnEngine.ApplyAsync calls `_singBox.TryReloadConfigJson(json)`.
-//   4. TryReloadConfigJson → TryHotReload → HTTP PUT to 127.0.0.1:65535
-//      (unused port) → connection refused fast → returns false.
-//   5. Falls back to `_singBox.ReloadConfigJson(json, forceRestart=false)`.
-//   6. ReloadConfigJson tries TryHotReload AGAIN (same failure) → Restart().
-//   7. Restart kills the old handle, spawns a new one via FakeProcessRunner
-//      → new "alive" handle.
-//   8. ApplyAsync returns true.
-//
-// This is the FULL running-engine Apply pipeline exercised deterministically.
-// No FakeSingBoxApi needed (the HTTP refused-fast IS deterministic — port
-// 65535 has no listener); no IsRunning reflection lying needed (the fake
-// handle reports alive truthfully).
-//
-// ── Scope realised ───────────────────────────────────────────────────────
-//
-// 3 tests, Windows-only (same SkipUnless gating as Task #36-C Group 1):
-//
-//   1. Apply_OnRunningEngine_RunsHotReloadFallbackToRestart — full path:
-//      running engine → Apply → hot-reload HTTP fails → restart fallback.
-//      Pins ApplyAsync returns true, engine still running after the dust
-//      settles, second sing-box handle spawned.
-//
-//   2. Apply_OnRunningEngine_DoesNotMutateDnsHardening — defence pin:
-//      Apply on running engine should NOT touch DNS hardening (phase 7+8
-//      skipped in HotReload mode). Mirrors Group 3's HotReload-pipeline
-//      direct-drive test from the engine-lifecycle angle.
-//
-//   3. Apply_OnRunningEngine_PreservesFirewallAndMonitorReferences — Apply
-//      does NOT replace _firewall or _etw on the engine (those stayed
-//      from initial Start). Confirms the lifecycle distinction:
-//      ReloadConfig restarts sing-box but does NOT re-do phases 6/8.
-//
-// ── Refuse-to-proceed analysis ───────────────────────────────────────────
-//
-// Per Task #49 brief: "If existing seam is sufficient → write 2-3 tests.
-// If new seam needed → STOP and report." Result: existing seams ARE
-// sufficient (SingBoxManager.Runner static seam + FakeProcessRunner +
-// the HTTP-refused-fast determinism of an unused port). No production
-// code change needed. Tests use the same scaffolding as Task #36-C
-// Group 1 + an extra OnStart factory that produces a fresh handle per
-// spawn (so Restart's second Start gets a fresh "alive" handle, not the
-// killed one from the prior cycle).
-//
-// Brief: plans/phase4-lifecycle-test-gaps-task49-2026-05-21.md.
-
 #nullable enable
 
 using VPNRouter.Core;
@@ -79,20 +8,8 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization tests for <see cref="VpnEngine.ApplyAsync"/> on a
-/// RUNNING engine. Companion to <see cref="VpnEngineLifecycleTests"/>'s
-/// Group 3 (idle-engine guard + HotReload pipeline source pin).
-///
-/// <para>Cross-references:
-/// <see cref="VpnEngineLifecycleTests"/> (Group 3 idle-engine guard tests),
-/// <see cref="VpnEngineSplitTunnelLifecycleTests"/> (Task #49 split-tunnel tests),
-/// <see cref="WindowsDnsHardeningInjectionTests"/> (DNS-hardening seam wiring).</para>
-/// </summary>
 public sealed class VpnEngineHotReloadLifecycleTests
 {
-    // ─── Inline stubs (mirrors VpnEngineLifecycleTests pattern) ──────────
-
     private sealed class StubProcessScanner : IProcessScanner
     {
         public ScanResult ScanForProfile(Profile profile) =>
@@ -127,8 +44,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
         public void Dispose() => DisposeCount++;
     }
 
-    // ─── Engine + Settings factories ─────────────────────────────────────
-
 #pragma warning disable CS0618
     private static VpnEngine BuildEngine(
         IWindowsDnsHardening dnsHardening,
@@ -148,12 +63,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
     }
 #pragma warning restore CS0618
 
-    /// <summary>
-    /// Same shape as <see cref="VpnEngineLifecycleTests"/>'s helper but
-    /// using <c>RoutingMode="full"</c> to bypass the bundled-profile
-    /// catalogue lookup (this test class focuses on hot-reload Apply
-    /// behaviour; profile-resolution is covered by the split-tunnel sibling).
-    /// </summary>
     private static AppSettings BuildHappyPathSettings(string singBoxExePath) =>
         new()
         {
@@ -195,7 +104,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
             SingBox = new SingBoxSettings
             {
                 ExecutablePath = singBoxExePath,
-                ClashApi = "127.0.0.1:65535",   // unused port → HTTP refused fast
+                ClashApi = "127.0.0.1:65535",
             },
             Monitoring = new MonitoringSettings
             {
@@ -240,18 +149,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
                     Duration: TimeSpan.FromMilliseconds(1),
                     TimedOut: false));
 
-    /// <summary>
-    /// FakeProcessRunner that produces a FRESH FakeProcessHandle per
-    /// spawn. Critical for hot-reload tests: <see cref="SingBoxManager.Restart"/>
-    /// calls StopInternal (kills the current handle) then LaunchProcess
-    /// (spawns a fresh one via the Runner.Start matcher). If the matcher
-    /// returned the SAME handle every time, the killed-from-Stop handle
-    /// would resurface and engine.IsRunning() would lie ("HasExited=true"
-    /// → "not running" → test asserts fail).
-    ///
-    /// <para>Tracks all spawned handles in <c>spawnedHandles</c> so the
-    /// test can assert on N spawns + verify the latest handle is alive.</para>
-    /// </summary>
     private static (FakeProcessRunner runner, List<FakeProcessHandle> spawnedHandles)
         BuildFreshHandleSpawnFake(int startPid = 99301)
     {
@@ -349,34 +246,20 @@ public sealed class VpnEngineHotReloadLifecycleTests
         {
             if (_disposed) return;
             _disposed = true;
-            try { _engine.Stop(); } catch { /* best-effort */ }
-            try { _engine.Dispose(); } catch { /* best-effort */ }
+            try { _engine.Stop(); } catch { }
+            try { _engine.Dispose(); } catch { }
             SingBoxManager.Runner = _prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
             AppPaths.OverrideDataDir(_previousDataDir);
-            try { Directory.Delete(_tempDataDir, recursive: true); } catch { /* best-effort */ }
-            try { File.Delete(_stubExe); } catch { /* best-effort */ }
+            try { Directory.Delete(_tempDataDir, recursive: true); } catch { }
+            try { File.Delete(_stubExe); } catch { }
         }
     }
-
-    // ─── Tests ───────────────────────────────────────────────────────────
 
     [Fact]
     public async Task Apply_OnRunningEngine_RunsHotReloadFallbackToRestart()
     {
-        // Drive Apply against the running engine. Hot-reload (HTTP PUT
-        // to 127.0.0.1:65535) will fail-fast (port unused → connection
-        // refused), causing ReloadConfigJson to fall back to Restart().
-        // The fresh-handle Runner factory provides a new alive handle
-        // for the restart's Start() call, so the engine stays "running"
-        // after the dust settles.
-        //
-        // Pins:
-        //  • ApplyAsync returns true (the restart-fallback path succeeded).
-        //  • At least 2 handles were spawned (initial Start + Restart).
-        //  • The latest spawned handle is alive (engine IsRunning).
-        //  • The initial handle was killed (Restart's StopInternal fired).
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart prerequisite + SingBoxManager.Restart's Windows-specific TUN cleanup are Windows-only.");
 
@@ -384,27 +267,20 @@ public sealed class VpnEngineHotReloadLifecycleTests
             await StartHappyPathAsync();
         using var _ = cleanup;
 
-        // Pre-Apply baseline.
         Assert.True(engine.IsRunning);
         Assert.Single(spawnedHandles);
         var initialHandle = spawnedHandles[0];
         Assert.False(initialHandle.HasExited);
 
-        // Drive Apply.
         var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.True(ok);
 
-        // The initial handle was killed by Restart's StopInternal.
         Assert.True(initialHandle.HasExited);
 
-        // At least one additional handle was spawned by Restart.
-        // (May be more than 2 if any other path in the pipeline races —
-        // but in practice we expect exactly 2: initial Start + Restart.)
         Assert.True(spawnedHandles.Count >= 2,
             $"Expected at least 2 spawned handles (Start + Restart), got {spawnedHandles.Count}");
 
-        // The most recent handle is alive — engine is running again.
         var latestHandle = spawnedHandles[^1];
         Assert.False(latestHandle.HasExited);
         Assert.True(engine.IsRunning);
@@ -435,16 +311,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
     [Fact]
     public async Task Apply_OnRunningEngine_DoesNotMutateDnsHardening()
     {
-        // Defence pin: ApplyAsync on a running engine must NOT call
-        // _dnsHardening.Apply or .Restore. The HotReload pipeline mode
-        // skips phases 5-8 (where Apply lives — phase 8). Restore is
-        // gated to engine.Stop(), not Apply.
-        //
-        // Mirrors VpnEngineLifecycleTests's
-        // Apply_HotReloadPipeline_DoesNotTouchDnsHardening_SourcePin
-        // but from a real running-engine lifecycle angle (not direct
-        // StartupPipeline drive). Catches any future refactor that
-        // accidentally wires phase 7/8 into HotReload mode.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart prerequisite is Windows-only.");
 
@@ -452,33 +318,15 @@ public sealed class VpnEngineHotReloadLifecycleTests
             await StartHappyPathAsync();
         using var _ = cleanup;
 
-        // Phase 8 from initial Start fired Apply once. Baseline.
         Assert.Equal(1, dnsHardening.ApplyCount);
         Assert.Equal(0, dnsHardening.RestoreCount);
 
         var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
         Assert.True(ok);
 
-        // Apply should NOT have touched the DNS hardening Apply/Restore
-        // seams. ApplyCount must still be 1 (no second Phase 8); RestoreCount
-        // must still be 0 (no Stop yet).
-        //
-        // NB: dnsHardening.EnableLockdownCount is intentionally NOT pinned
-        // here. The warmup probe (ScheduleWarmupProbe inside Phase 7) is
-        // fire-and-forget; if the dev/CI machine has working internet it
-        // may complete + fire EnableLockdownIfConfigured at any time
-        // (before, during, or after ApplyAsync). The lockdown branch is
-        // unrelated to ApplyAsync's contract — pinning it would make this
-        // test racy on machines with working network.
         Assert.Equal(1, dnsHardening.ApplyCount);
         Assert.Equal(0, dnsHardening.RestoreCount);
     }
-
-    // ─── ApplyAsync lifecycle-gate pins (audit batch-1 #1, 2026-07-09) ───
-    // ApplyAsync now runs under _lifecycleGate with a session-token check:
-    // Stop() cancels _sessionCts before taking the gate, so an Apply that
-    // acquires the gate after a Stop must bail — never hot-reload a torn-down
-    // sing-box or re-engage the true-split driver after Disconnect.
 
     [Fact]
     public async Task Apply_AfterStop_ReturnsFalse_AndDoesNotRespawn()
@@ -496,7 +344,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
         var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.False(ok);
-        // The load-bearing pin: Apply after disconnect must not respawn sing-box.
         Assert.Equal(handlesAfterStop, spawnedHandles.Count);
         Assert.False(engine.IsRunning);
     }
@@ -504,11 +351,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
     [Fact]
     public async Task Apply_ConcurrentWithStop_NeverResurrectsTunnel()
     {
-        // Race invariant (either interleaving is legal, resurrection is not):
-        //  • Apply wins the gate → reload/restart completes → Stop tears down.
-        //  • Stop wins the gate → Apply sees the cancelled session → false.
-        // Pre-gate, Apply could pass IsRunning, lose the race to a full Stop,
-        // then restart sing-box AFTER teardown — a live tunnel post-Disconnect.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart prerequisite is Windows-only.");
 
@@ -519,7 +361,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         var applyTask = Task.Run(() => engine.ApplyAsync(settings, CancellationToken.None));
         var stopTask = Task.Run(() => engine.Stop());
         await stopTask;
-        await applyTask; // outcome depends on interleaving; the invariant doesn't:
+        await applyTask;
 
         Assert.False(engine.IsRunning);
         Assert.True(spawnedHandles[^1].HasExited,
@@ -529,14 +371,6 @@ public sealed class VpnEngineHotReloadLifecycleTests
     [Fact]
     public async Task Apply_OnRunningEngine_PreservesFirewallAndMonitorReferences()
     {
-        // Lifecycle invariant: ApplyAsync does NOT re-create firewall
-        // or ETW monitor. Phase 6 (firewall setup) + Phase 8 (ETW + DNS)
-        // are skipped on HotReload, so the same _firewall and _etw
-        // references from the initial ColdStart must still be active.
-        //
-        // We assert by checking that the firewall + monitor capture
-        // counters do NOT receive additional Start invocations during
-        // Apply — same instances stayed wired.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart prerequisite is Windows-only.");
 
@@ -544,23 +378,16 @@ public sealed class VpnEngineHotReloadLifecycleTests
             await StartHappyPathAsync();
         using var _ = cleanup;
 
-        // Initial Phase 8 fired etw.Start() exactly once.
         Assert.Equal(1, monitor.StartCount);
 
-        // FullTunnel synthetic profile has BlockOnVpnFail=false → Phase 6
-        // didn't call CreateBlockRules. Baseline.
         Assert.Equal(0, firewall.CreateBlockRulesCount);
 
-        // Drive Apply.
         var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
         Assert.True(ok);
 
-        // After Apply: monitor.Start was NOT called again (HotReload
-        // doesn't recreate ETW). firewall.CreateBlockRules also not
-        // called again. Counters stay at their post-ColdStart values.
         Assert.Equal(1, monitor.StartCount);
-        Assert.Equal(0, monitor.StopCount);   // monitor.Stop is Stop-only, not Apply
+        Assert.Equal(0, monitor.StopCount);
         Assert.Equal(0, firewall.CreateBlockRulesCount);
-        Assert.Equal(0, firewall.DeleteAllRulesCount);   // delete is Stop-only
+        Assert.Equal(0, firewall.DeleteAllRulesCount);
     }
 }

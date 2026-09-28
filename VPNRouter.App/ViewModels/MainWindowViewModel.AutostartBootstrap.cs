@@ -8,79 +8,17 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// v2.31.10 — App-side autostart bootstrap. Mirrors the Service-side
-/// <c>AutostartTgProxyAsync</c> / <c>AutostartZapretAsync</c> in
-/// <c>VPNRouterService.cs</c> so the <c>autostart_tgproxy</c> /
-/// <c>autostart_zapret</c> flags in <c>config.yaml</c> take effect when
-/// only the desktop App is auto-launched at login (HKCU\Run via
-/// <see cref="VPNRouter.Core.Platform.AutostartHelper"/>) — without the
-/// Windows Service installed.
-///
-/// <para><b>Bug being fixed (App-side gap):</b> pre-r1 the App read the
-/// flags into bound properties (<c>LoadSettingsIntoUI</c> at
-/// <c>MainWindowViewModel.cs:2431-2433</c>) and persisted them
-/// (<c>SaveSettings</c> at <c>MainWindowViewModel.cs:3163-3165</c>) but
-/// never invoked <see cref="TgProxyManager.Start"/> /
-/// <see cref="ZapretManager.Start"/> based on them. So a user who enabled
-/// "Autostart Telegram proxy" in Settings, then closed the App, then
-/// logged out/in (App auto-relaunches via HKCU\Run) saw the toggle ticked
-/// but no proxy running. Same for Zapret. The flags only worked when the
-/// Windows Service was installed.</para>
-///
-/// <para><b>Service-vs-App ownership:</b> if the Windows Service is
-/// running we defer to it — the Service's
-/// <c>VPNRouterService.AutostartTgProxyAsync</c> / <c>AutostartZapretAsync</c>
-/// already handle the spawn at boot and the App is just a UI shell. The
-/// <c>!ServiceVm.IsRunning</c> guard prevents the App from spawning a
-/// duplicate that would race with the Service's instance over the bound
-/// port (TgProxy) or for ownership of <c>winws.exe</c> (Zapret).</para>
-///
-/// <para><b>AutostartVpn intentionally NOT bootstrapped here.</b>
-/// AutostartVpn has the same App-side gap on paper, but in normal UI
-/// flow Simple-mode's "Start with Windows" toggle ties VPN-autostart to
-/// Service install (see
-/// <see cref="MainWindowViewModel.SmpAutostartChecked"/>), so the gap
-/// only manifests for power users who manually edit <c>config.yaml</c>.
-/// Adding an App-side VPN bootstrap would require <c>VpnEngine</c> +
-/// subscription-resolver wiring at startup that races with Service if
-/// installed, file-locks on <c>current.json</c>, and TUN ownership
-/// arbitration — strictly higher risk than this Tg+Zapret fix and
-/// deserves its own iteration. Tracked in the plan doc as a follow-up.</para>
-///
-/// <para><b>Idempotent:</b> re-checks <see cref="TgProxyManager.IsAnyRunning"/>
-/// / <see cref="ZapretManager.IsWinwsRunning"/> before spawning so a
-/// stale-from-previous-session daemon (already detected by
-/// <c>LoadSettingsIntoUI</c>) and a second App instance both short-circuit
-/// without double-spawn.</para>
-/// </summary>
 public partial class MainWindowViewModel
 {
-    // v2.37.0-r8 — magic-number extraction (Autostart bootstrap timings).
-    // Settle window for TgProxy spawn — matches sibling `TgProxySettleDelayMs`
-    // in main `MainWindowViewModel.cs`. Kept distinct here because the bootstrap
-    // path runs at app start (different load profile vs warm interactive Start),
-    // so we may want to tune independently in the future.
     private const int BootstrapSettleDelayMs = 2000;
 
-    /// <summary>
-    /// Entry point called from the constructor. Fire-and-forget; failures
-    /// are logged and never propagate to the UI thread.
-    /// </summary>
     private async Task BootstrapAutostartAsync()
     {
 #if PLATFORM_WINDOWS
         try
         {
-            // Short delay so ServiceVm.IsRunning settles. ServiceVm.Refresh()
-            // ran synchronously in its ctor, but a concurrent Service start
-            // by Windows at login is still possible — give the SCM a beat
-            // to publish the running state before we decide whether to
-            // defer. 500 ms is short enough to be invisible to the user
-            // and long enough to avoid a flapping race in CI / fresh logon.
             await Task.Delay(500).ConfigureAwait(false);
 
-            // Re-poll the SCM directly in background without blocking the UI thread with synchronous sc.exe queries.
             await Task.Run(() => ServiceVm.Refresh()).ConfigureAwait(false);
 
             if (ServiceVm.IsRunning)
@@ -91,8 +29,6 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // Run sequentially; both spawn separate daemons and the
-            // sequencing keeps log output legible.
             await TryAutostartTgProxyAsync().ConfigureAwait(false);
             await TryAutostartZapretAsync().ConfigureAwait(false);
         }
@@ -106,14 +42,6 @@ public partial class MainWindowViewModel
     }
 
 #if PLATFORM_WINDOWS
-    /// <summary>
-    /// Bootstraps the Telegram proxy (tg-ws-proxy) when
-    /// <see cref="AutostartTgProxy"/> is true and the Windows Service
-    /// isn't running. Mirrors <c>VPNRouterService.AutostartTgProxyAsync</c>
-    /// (VPNRouterService.cs:331-380): same install / secret / port checks,
-    /// then calls <see cref="TgProxyManager.Start"/> with the persisted
-    /// secret + port.
-    /// </summary>
     private async Task TryAutostartTgProxyAsync()
     {
         if (_disposed) return;
@@ -135,8 +63,6 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // Port is occupancy, never identity. If the port is already in use,
-            // fail closed and skip spawn. Never claim ownership or set TgProxyEnabled = true.
             if (TgProxyManager.IsAnyRunning(TgProxyPort))
             {
                 _logger.Information(
@@ -145,8 +71,6 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // Mirror manual-start behavior at MainWindowViewModel.cs:4354-4358:
-            // generate a secret if missing rather than refusing to start.
             if (string.IsNullOrWhiteSpace(TgProxySecret))
             {
                 var generatedSecret = Convert.ToHexStringLower(
@@ -185,10 +109,6 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // v2.37.0-r8 — extracted to named constant. Same 2s settle
-            // window as the manual Toggle path (sibling
-            // `MainWindowViewModel.cs` `TgProxySettleDelayMs` const).
-            // Proxy needs ~1.5s to bind the port and serve requests.
             await Task.Delay(BootstrapSettleDelayMs, _tgProxyLifetimeCts.Token)
                 .ConfigureAwait(false);
 
@@ -238,13 +158,6 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>
-    /// Bootstraps Zapret (winws.exe) when <see cref="AutostartZapret"/>
-    /// is true and the Windows Service isn't running. Mirrors
-    /// <c>VPNRouterService.AutostartZapretAsync</c> (VPNRouterService.cs:270-328):
-    /// resolves the strategy, prefers the Flowseal .bat wrapper when
-    /// available (so service.bat prologue runs).
-    /// </summary>
     private async Task TryAutostartZapretAsync()
     {
         try
@@ -305,10 +218,6 @@ public partial class MainWindowViewModel
                     _zapret.Start(parsed.Arguments);
             }
 
-            // Same 1.5 s settle window as the manual Toggle path
-            // (MainWindowViewModel.cs:4074) — winws.exe via .bat has a
-            // launcher prologue that runs briefly before the daemon is
-            // visible by name.
             await Task.Delay(1500).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>

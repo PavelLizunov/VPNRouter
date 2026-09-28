@@ -5,11 +5,6 @@ using System.Linq;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Regression pins for the split-tunnel double-start crash:
-/// ReconnectAsync + ToggleConnectionAsync must not race a second sing-box
-/// launch into a live/starting TUN.
-/// </summary>
 public sealed class SplitTunnelDoubleStartGuardTests
 {
     [Fact]
@@ -119,7 +114,7 @@ public sealed class SplitTunnelDoubleStartGuardTests
         var start = src.IndexOf("private async Task ReconnectAsync", System.StringComparison.Ordinal);
         Assert.True(start >= 0, "ReconnectAsync method not found");
 
-        var end = src.IndexOf("// Phase 2B", start, System.StringComparison.Ordinal);
+        var end = src.IndexOf("private void Quit()", start, System.StringComparison.Ordinal);
         Assert.True(end > start, "ReconnectAsync boundary not found");
 
         var method = src.Substring(start, end - start);

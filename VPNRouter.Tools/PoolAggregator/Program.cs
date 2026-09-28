@@ -7,12 +7,6 @@ using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.Tools.PoolAggregator;
 
-// VPNRouter — Free Configs Pool Aggregator
-// Runs in GitHub Actions every 6 hours. Fetches public sources,
-// parses (multi-protocol), dedups via composite SHA-256, enriches with GeoIP (offline MMDB / online),
-// and writes pool.json metadata file.
-// NO validation (TCP/TLS/HTTP) — that happens client-side in user's network.
-
 var output = "/tmp/pool.json";
 string? mmdbPath = null;
 
@@ -42,7 +36,6 @@ else
 
 var geoIp = new FreeConfigGeoIp(logger, mmdb);
 
-// ─── Stage 1: fetch all sources in parallel ─────────────────────────────────
 var sources = FreeConfigSources.Default.Where(s => s.Enabled).ToList();
 logger.Information("Fetching {n} sources...", sources.Count);
 
@@ -53,7 +46,6 @@ var fetchResults = await Task.WhenAll(sources.Select(async s =>
     return (source: s, raws);
 }));
 
-// ─── Stage 2: parse + dedup ─────────────────────────────────────────────────
 var byId = new Dictionary<string, PoolEntry>(StringComparer.OrdinalIgnoreCase);
 var parseErrors = 0;
 
@@ -100,9 +92,6 @@ logger.Information("Parsed {ok} unique entries ({err} parse errors)", byId.Count
 
 var entries = byId.Values.ToList();
 
-// ─── Stage 3: GeoIP enrich ──────────────────────────────────────────────────
-// Build temporary FreeConfigEntry list to use existing GeoIp service, then
-// copy back country + resolved_ip into PoolEntry.
 var geoEntries = entries.Select(e => new FreeConfigEntry
 {
     Id = e.Id,
@@ -134,7 +123,6 @@ foreach (var e in entries)
 var withCountry = entries.Count(e => !string.IsNullOrEmpty(e.Country));
 logger.Information("GeoIP done: {with}/{total} have country codes", withCountry, entries.Count);
 
-// ─── Stage 4: write pool.json ───────────────────────────────────────────────
 var pool = new PoolFile
 {
     UpdatedAt = DateTime.UtcNow,
@@ -147,7 +135,6 @@ var pool = new PoolFile
 var jsonOpts = new JsonSerializerOptions
 {
     WriteIndented = false,
-    // camelCase to match client-side FreeConfigPoolFetcher.ParsePool expectations
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
 };
@@ -157,7 +144,6 @@ await File.WriteAllTextAsync(output, JsonSerializer.Serialize(pool, jsonOpts));
 var size = new FileInfo(output).Length;
 logger.Information("Wrote {count} entries to {path} ({sizeKb} KB)", entries.Count, output, size / 1024);
 
-// ─── Sanity check ───────────────────────────────────────────────────────────
 if (entries.Count < 1000)
 {
     logger.Warning("Pool has only {n} entries (expected >= 1000). Sources may be degraded.", entries.Count);
@@ -181,8 +167,6 @@ static string BuildDeduplicationId(VlessServerEntry entry)
     var hash = SHA256.HashData(Encoding.UTF8.GetBytes(composite));
     return Convert.ToHexString(hash, 0, 16).ToLowerInvariant();
 }
-
-// ─── DTOs ───────────────────────────────────────────────────────────────────
 
 public sealed class PoolFile
 {

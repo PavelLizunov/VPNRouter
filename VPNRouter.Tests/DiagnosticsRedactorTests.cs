@@ -3,14 +3,8 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Cardinal safety tests for the diagnostics redactor. A miss here is a
-/// credential leak, so these prove that known secrets never survive redaction
-/// while genuinely-diagnostic values are preserved.
-/// </summary>
 public sealed class DiagnosticsRedactorTests
 {
-    // Distinctive planted secrets — easy to assert absence of.
     private const string Uuid = "2d54442d-158f-49e2-b225-67ba1a5b77f4";
     private const string Password = "superSecretPass123";
     private const string ShortId = "0123abcd";
@@ -51,8 +45,6 @@ vless:
   ""route"": {{ ""rules"": [ {{ ""process_name"": ""Discord.exe"", ""outbound"": ""proxy"" }} ], ""final"": ""direct"" }}
 }}";
 
-    // ── YAML ──
-
     [Fact]
     public void Yaml_RedactsAllKnownSecrets()
     {
@@ -68,12 +60,12 @@ vless:
     public void Yaml_KeepsDiagnosticValues()
     {
         var outp = DiagnosticsRedactor.RedactConfigYaml(Yaml);
-        Assert.Contains("1.2.3.4", outp);               // server host
-        Assert.Contains("www.microsoft.com", outp);     // server_name
-        Assert.Contains("443", outp);                   // port
-        Assert.Contains("subscribe", outp);             // config_mode
-        Assert.Contains(PublicKey, outp);               // reality public_key is public-by-design
-        Assert.Contains("ninitux.com", outp);           // url host kept (token dropped)
+        Assert.Contains("1.2.3.4", outp);
+        Assert.Contains("www.microsoft.com", outp);
+        Assert.Contains("443", outp);
+        Assert.Contains("subscribe", outp);
+        Assert.Contains(PublicKey, outp);
+        Assert.Contains("ninitux.com", outp);
     }
 
     [Fact]
@@ -88,13 +80,11 @@ app:
   routing_mode: split
   uuid: " + Uuid;
         var outp = DiagnosticsRedactor.RedactConfigYaml(yaml);
-        Assert.Contains("include", outp);          // mode kept
-        Assert.Contains("Discord.exe", outp);      // app list kept (diagnostic, non-secret)
+        Assert.Contains("include", outp);
+        Assert.Contains("Discord.exe", outp);
         Assert.Contains("chrome.exe", outp);
-        Assert.DoesNotContain(Uuid, outp);         // sibling secret still redacted
+        Assert.DoesNotContain(Uuid, outp);
     }
-
-    // ── JSON ──
 
     [Fact]
     public void Json_RedactsAllKnownSecrets()
@@ -110,10 +100,10 @@ app:
         var outp = DiagnosticsRedactor.RedactSingboxJson(Json);
         Assert.Contains("1.2.3.4", outp);
         Assert.Contains("www.microsoft.com", outp);
-        Assert.Contains("xtls-rprx-vision", outp);      // flow
-        Assert.Contains("Discord.exe", outp);           // process_name (routing diagnostic)
-        Assert.Contains(PublicKey, outp);               // public_key kept
-        Assert.Contains("\"final\"", outp);             // route structure kept
+        Assert.Contains("xtls-rprx-vision", outp);
+        Assert.Contains("Discord.exe", outp);
+        Assert.Contains(PublicKey, outp);
+        Assert.Contains("\"final\"", outp);
     }
 
     [Fact]
@@ -137,29 +127,22 @@ app:
     [Fact]
     public void Json_NumericSecretValues_AreRedacted_NotPassedThroughAsNumbers()
     {
-        // Regression (v2.39.0 audit): a Reality short_id is hex and can be ALL
-        // digits ("01234567"), and a Trojan/SS/TUIC password can be a numeric
-        // PIN. The _numberLike fast-path must NOT pass these string values
-        // through as "just a number" — they are credentials. A legitimate
-        // numeric port under a non-secret key must still survive.
         var outp = DiagnosticsRedactor.RedactSingboxJson(
             @"{ ""short_id"": ""01234567"", ""password"": ""86753099"", ""server_port"": 443 }");
-        Assert.DoesNotContain("01234567", outp);   // numeric short_id redacted
-        Assert.DoesNotContain("86753099", outp);   // numeric password redacted
-        Assert.Contains("443", outp);              // legitimate numeric port kept
+        Assert.DoesNotContain("01234567", outp);
+        Assert.DoesNotContain("86753099", outp);
+        Assert.Contains("443", outp);
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
 
     [Fact]
     public void Json_NonAllowlistedKeyWithNumericString_IsRedacted()
     {
-        // Unlisted string keys containing all-digit string values (e.g. auth_token: "12345678", pin: "9999")
-        // must be redacted as *** and not passed through as "numbers".
         var outp = DiagnosticsRedactor.RedactSingboxJson(
             @"{ ""auth_token"": ""12345678"", ""pin"": ""9999"", ""server_port"": 443 }");
         Assert.DoesNotContain("12345678", outp);
         Assert.DoesNotContain("9999", outp);
-        Assert.Contains("443", outp); // allowlisted key server_port kept
+        Assert.Contains("443", outp);
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
 
@@ -172,18 +155,13 @@ app:
         Assert.DoesNotContain(SubToken, outp);
     }
 
-    // ── fail-closed ──
-
     [Fact]
     public void Json_ParseFailure_OmitsRatherThanLeaks()
     {
-        // Invalid JSON containing a secret-looking token must NOT pass through raw.
         var outp = DiagnosticsRedactor.RedactSingboxJson("{ broken json " + SubToken);
         Assert.DoesNotContain(SubToken, outp);
         Assert.Equal(DiagnosticsRedactor.OmittedOnParseFailure, outp);
     }
-
-    // ── logs ──
 
     [Fact]
     public void Logs_ScrubProxyUrisAndUuids()
@@ -197,8 +175,6 @@ app:
     [Fact]
     public void Logs_RedactKeyValueSecrets_TheShapeScrubberMisses()
     {
-        // short secrets in a key=value / key: value shape that ScrubSecrets
-        // (uri/uuid/base64 only) would not catch.
         var outp = DiagnosticsRedactor.RedactLogText(
             "[DBG] auth password=hunter2 ok\n[DBG] reality short_id: abcd1234 set\n" +
             "[DBG] reality sid=78ca7952 set\n[INF] token=ZsecretTok99");
@@ -206,7 +182,7 @@ app:
         Assert.DoesNotContain("abcd1234", outp);
         Assert.DoesNotContain("78ca7952", outp);
         Assert.DoesNotContain("ZsecretTok99", outp);
-        Assert.Contains("password=", outp);  // key kept for context
+        Assert.Contains("password=", outp);
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
 
@@ -221,36 +197,29 @@ app:
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
 
-    // ── v2.40.0 review fixes (M1/M2/M3) ──
-
     [Fact]
     public void Yaml_NumericObfsPassword_IsRedacted()
     {
-        // M1: obfs_password (Hysteria2 Salamander, flat YAML alias) can be an
-        // all-digit passphrase. It must NOT take the numeric fast-path.
         var outp = DiagnosticsRedactor.RedactConfigYaml(
             "vless:\n  servers:\n  - server: 1.2.3.4\n    obfs_password: 86753099\n    plugin_opts: 12345678\n");
         Assert.DoesNotContain("86753099", outp);
         Assert.DoesNotContain("12345678", outp);
-        Assert.Contains("1.2.3.4", outp);              // host kept (diagnostic)
+        Assert.Contains("1.2.3.4", outp);
     }
 
     [Fact]
     public void Url_WithUserInfo_DropsCredentials()
     {
-        // M2: basic-auth userinfo in a subscription URL must not survive.
         var outp = DiagnosticsRedactor.RedactSingboxJson(
             @"{ ""url"": ""https://user:p4ssw0rd@ninitux.com/api/v1/config/abc"" }");
         Assert.DoesNotContain("p4ssw0rd", outp);
         Assert.DoesNotContain("user:", outp);
-        Assert.Contains("ninitux.com", outp);          // host still kept
+        Assert.Contains("ninitux.com", outp);
     }
 
     [Fact]
     public void Logs_RedactAuthorizationHeaderTokens()
     {
-        // M3: the token AFTER the scheme word (Bearer/Basic) must be redacted,
-        // and `Authorization:` itself must be caught (the bare \bauth\b can't).
         var outp = DiagnosticsRedactor.RedactLogText(
             "[DBG] Authorization: Bearer mySecretValue123 sent\n" +
             "[DBG] proxy-authorization: Basic dXNlcjpwYXNzd29yZA== ok");
@@ -261,9 +230,6 @@ app:
     [Fact]
     public void Logs_RedactPrefixedSecretKeys()
     {
-        // Prefixed secret keys like access_token, refresh_token, client_secret, auth_token,
-        // secret_key, tg_proxy_secret, access_key, enc_key, encryption_key, auth_key,
-        // session_key, client_key, app_key, and user_key must be redacted in key=value or key: value form.
         var outp = DiagnosticsRedactor.RedactLogText(
             "[DBG] access_token=mySecretAccess123\n" +
             "[DBG] refresh_token: mySecretRefresh456\n" +
@@ -301,9 +267,6 @@ app:
     [Fact]
     public void Logs_RedactSeparatorlessSecretKeys()
     {
-        // Separatorless secret keys like clientsecret, clientpassword, clientpass,
-        // refreshtoken, and accesstoken must be redacted, while non-secret flags
-        // like bypass=true or bypass_russian_traffic=true are preserved.
         var outp = DiagnosticsRedactor.RedactLogText(
             "[DBG] clientsecret=mySecretClientNoSep123\n" +
             "[DBG] clientpassword: mySecretClientPass456\n" +
@@ -324,8 +287,6 @@ app:
         Assert.Contains("bypass_russian_traffic=true", outp);
     }
 
-    // AmneziaWG keys are credentials. The allowlist redacts them by default (not in
-    // SafeKeys); these lock that in so a future SafeKeys change can't leak them.
     [Fact]
     public void RedactConfigYaml_RedactsAwgSecrets_KeepsHostPort()
     {
@@ -336,8 +297,8 @@ app:
         var outp = DiagnosticsRedactor.RedactConfigYaml(yaml);
         Assert.DoesNotContain("SECRETAWGPRIV", outp);
         Assert.DoesNotContain("SECRETAWGPSK", outp);
-        Assert.Contains("1.2.3.4", outp);  // server host kept (safe key)
-        Assert.Contains("51820", outp);    // port kept (number)
+        Assert.Contains("1.2.3.4", outp);
+        Assert.Contains("51820", outp);
     }
 
     [Fact]
@@ -348,7 +309,7 @@ app:
                    "\"peers\":[{\"address\":\"1.2.3.4\",\"port\":51820,\"public_key\":\"PUBOK\"}]}]}";
         var outp = DiagnosticsRedactor.RedactSingboxJson(json);
         Assert.DoesNotContain("SECRETAWGPRIV", outp);
-        Assert.Contains("1.2.3.4", outp);  // peer address (host) kept
+        Assert.Contains("1.2.3.4", outp);
     }
 
     [Fact]
@@ -365,13 +326,11 @@ app:
 
         var outp = DiagnosticsRedactor.RedactConfigYaml(malformedYaml);
 
-        // Verify all secrets are redacted
         Assert.DoesNotContain(SubToken, outp);
         Assert.DoesNotContain(Uuid, outp);
         Assert.DoesNotContain(Password, outp);
         Assert.DoesNotContain(PrivKey, outp);
 
-        // Verify diagnostic structure and safe keys are preserved
         Assert.Contains("routing_mode: split", outp);
         Assert.Contains("ninitux.com", outp);
         Assert.Contains("bad_line: ***", outp);

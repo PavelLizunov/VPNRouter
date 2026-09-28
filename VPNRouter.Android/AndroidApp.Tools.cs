@@ -9,31 +9,8 @@ using Avalonia.Media;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// F-13 (2026-05-09) — Android Tools partial. Originally hosted a
-/// fullscreen overlay with a sub-tab strip (DPI bypass + Telegram proxy)
-/// that mirrored desktop's <c>ToolsPage.axaml</c>.
-///
-/// <para>AND-MIGRATE-OVERLAYS (2026-05-09) split those two sub-tabs into
-/// top-level Advanced-shell tabs (DPI bypass / Telegram), retiring the
-/// combined hub. Only the Telegram-tab body builder + the shared Zapret
-/// status-label helper remain here — the DPI bypass tab uses
-/// <see cref="BuildDpiBypassTabContent"/> from
-/// <c>AndroidApp.DpiBypass.cs</c>.</para>
-///
-/// <para>Both underlying engines (Zapret winws.exe, TgProxy daemon) are
-/// not ported on Android — DPI bypass uses sing-box's native tls_fragment
-/// inside the tunnel, TgProxy is fully unported. The Telegram tab
-/// therefore renders an explainer banner with a GitHub link rather than
-/// a daemon control surface.</para>
-/// </summary>
 public partial class AndroidApp
 {
-    /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Telegram
-    /// tab inside the Advanced shell. Mirrors the old Tools overlay's
-    /// TgProxy section: title + info banner + description + GitHub link.
-    /// </summary>
     private Control BuildTelegramTabContent()
     {
         var bg          = GetBrush("SurfaceAppBrush");
@@ -109,7 +86,7 @@ public partial class AndroidApp
                 intent.SetFlags(global::Android.Content.ActivityFlags.NewTask);
                 global::Android.App.Application.Context.StartActivity(intent);
             }
-            catch { /* user has no browser — non-fatal */ }
+            catch { }
         };
 
         var tgSectionTitle = new TextBlock
@@ -139,11 +116,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Lookup string used by the DPI bypass tab status bar + footer label.
-    /// Reads the persisted DPI-bypass mode value and returns the matching
-    /// localized status caption.
-    /// </summary>
     private static string ZapretStatusLabelForCurrentMode()
     {
         return AndroidStorage.GetDpiBypassMode() switch
@@ -154,41 +126,13 @@ public partial class AndroidApp
         };
     }
 
-    // ── AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E ─────────────────────
-    //
-    // Merged Tools tab. Mirrors desktop ToolsPage.axaml (sub-tab strip
-    // hosting Zapret + Telegram proxy detail pages). Phase A will replace
-    // the AdvancedTab.{DpiBypass,Telegram} pair with a single
-    // AdvancedTab.Tools enum value and dispatch here. Until Phase A
-    // lands this method coexists with the standalone DPI bypass + Telegram
-    // top-level tabs — the standalone surfaces stay live so users can
-    // still reach the engine controls during the parallel-safe rollout.
-    //
-    // Platform-impossible substitutions (per plan):
-    //   • Zapret on desktop = winws.exe Cygwin process with 5-section
-    //     side-nav (Status / Strategy / Hosts / Filters / Advanced).
-    //     Android has no winws.exe — uses sing-box's native tls_fragment
-    //     outbound. We render an explainer + mode picker (off / standard
-    //     / aggressive) + footer toggle. Mode flips drive
-    //     AndroidDpiBypassInjector via the existing AndroidStorage key.
-    //   • Telegram proxy on desktop = full TgProxy daemon. Android routes
-    //     Telegram via the main VPN tunnel — no daemon. We render an
-    //     explainer + "Open Telegram" deep-link (intent for
-    //     org.telegram.messenger, falling through to the Play Store
-    //     listing if Telegram isn't installed).
-
-    private int _toolsSelectedSubTab; // 0 = Zapret, 1 = Telegram
+    private int _toolsSelectedSubTab;
 
     private Avalonia.Controls.Button? _toolsSubTabZapret;
     private Avalonia.Controls.Button? _toolsSubTabTelegram;
     private Control? _toolsZapretBody;
     private Control? _toolsTelegramBody;
 
-    // Zapret body widgets — kept distinct from BuildDpiBypassTabContent's
-    // _dpi* fields so the two surfaces (top-level DPI tab + merged Tools
-    // sub-tab) can coexist without cross-binding. Both write to the same
-    // AndroidStorage key, so flipping mode on either surface immediately
-    // reflects on the other on its next reseed.
     private Avalonia.Controls.RadioButton? _toolsZapretModeOff;
     private Avalonia.Controls.RadioButton? _toolsZapretModeStandard;
     private Avalonia.Controls.RadioButton? _toolsZapretModeAggressive;
@@ -196,16 +140,8 @@ public partial class AndroidApp
     private TextBlock? _toolsZapretFooterText;
     private Avalonia.Controls.Button? _toolsZapretFooterToggleBtn;
 
-    // Tracks "user is mutating storage" so the radio change handler doesn't
-    // fight itself when ReseedToolsTabState restores values from storage.
     private bool _toolsLoading;
 
-    /// <summary>
-    /// AND-ADV-TOOLS-PUBLIC (2026-05-10) — body content for the merged
-    /// Tools tab inside the Advanced shell. Returns the inner sub-tab
-    /// strip (Zapret | Telegram proxy) + bodies. The shell provides the
-    /// title bar / close button / outer chrome.
-    /// </summary>
     private Control BuildToolsTabContent()
     {
         var bg          = GetBrush("SurfaceAppBrush");
@@ -216,12 +152,6 @@ public partial class AndroidApp
         var accentOnSolid = GetBrush("AccentOnSolidBrush");
         var textS       = GetBrush("TextSecondaryBrush");
 
-        // ── Sub-tab strip (Zapret | Telegram proxy) ──────────────────────
-        // POL-1: matches desktop ToolsPage.axaml lines 14-27 (`ListBox
-        // Padding="6,2"` + `ListBoxItem Padding="10,4" FontSize="11"`).
-        // Pre-POL-1 used the kebab MakeSegmentButton helper which gave each
-        // chip Padding="0,6" + FontSize=12 + RadiusXs — visually heavier
-        // than the desktop sub-tab pills.
         _toolsSubTabZapret   = MakeAdvancedSubTabButton(Localization.AdvToolsSubTabZapret,   active: true,
                                                         (_, _) => SelectToolsSubTab(0));
         _toolsSubTabTelegram = MakeAdvancedSubTabButton(Localization.AdvToolsSubTabTelegram, active: false,
@@ -258,14 +188,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Zapret sub-tab body: platform-impossible explainer banner + mode
-    /// picker (off / standard / aggressive radios mirroring
-    /// AndroidDpiBypassInjector.Mode) + footer toggle (Turn on / Turn off
-    /// flips between off and the last-non-off mode). Layout mirrors the
-    /// simplified Android DPI bypass surface — the desktop's 5-section
-    /// side-nav doesn't apply since there's no winws.exe.
-    /// </summary>
     private Control BuildToolsZapretBody(
         IBrush bg, IBrush sunken, IBrush defaultB,
         IBrush accentSolid, IBrush accentOnSolid,
@@ -276,9 +198,6 @@ public partial class AndroidApp
         var card     = GetBrush("SurfaceBaseBrush");
         var subtle   = GetBrush("BorderSubtleBrush");
 
-        // Explainer banner. Mirrors the Status section blurb pattern from
-        // BuildDpiBypassTabContent but with a wider, more prominent "this
-        // is platform-different on Android" framing.
         var explainerTitle = new TextBlock
         {
             Text = Localization.AdvToolsSubTabZapret,
@@ -295,12 +214,6 @@ public partial class AndroidApp
             Foreground = textS,
             TextWrapping = TextWrapping.Wrap,
         };
-        // POL-1: explainer + mode picker use desktop's per-card sunken
-        // pattern — DpiBypassPage.axaml lines 96-110 (Status warning) +
-        // 226-244 (Hosts cards) all wrap in `SurfaceSunkenBrush` Border
-        // with `Padding="10,8" CornerRadius="RadiusSm"`. Pre-POL-1 used
-        // `SurfaceBaseBrush` + 12,10 padding which read as full white-card
-        // chrome rather than the sunken inset desktop uses.
         var explainerCard = new Border
         {
             Padding = new Thickness(10, 8),
@@ -315,8 +228,6 @@ public partial class AndroidApp
             },
         };
 
-        // Mode picker (radios). Bound to a single GroupName so flipping
-        // one un-checks the others, just like a desktop RadioButton group.
         var currentMode = AndroidStorage.GetDpiBypassMode();
         _toolsZapretModeOff = MakeToolsZapretRadio(
             Localization.SettingsDpiBypassOff,        currentMode == "off",        textP);
@@ -325,11 +236,6 @@ public partial class AndroidApp
         _toolsZapretModeAggressive = MakeToolsZapretRadio(
             Localization.SettingsDpiBypassAggressive, currentMode == "aggressive", textP);
 
-        // Wave 23 (2026-05-18) — Avalonia 12 collapsed
-        // RadioButton.Checked / .Unchecked into a single
-        // ToggleButton.IsCheckedChanged event. The same handler runs once
-        // per state flip; OnToolsZapretModeChanged is already idempotent
-        // (reads .IsChecked off the sender) so semantics are preserved.
         _toolsZapretModeOff.IsCheckedChanged        += OnToolsZapretModeChanged;
         _toolsZapretModeStandard.IsCheckedChanged   += OnToolsZapretModeChanged;
         _toolsZapretModeAggressive.IsCheckedChanged += OnToolsZapretModeChanged;
@@ -371,10 +277,6 @@ public partial class AndroidApp
             Background = bg,
         };
 
-        // Footer (Apply bar). Mirrors BuildDpiBypassTabContent's footer:
-        // status indicator (dot + label) on the left, toggle button on the
-        // right. Tap the button to flip between off and the last-non-off
-        // mode (defaults to standard for first-time toggles).
         _toolsZapretFooterDot = new Ellipse
         {
             Width = 8,
@@ -460,12 +362,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Telegram sub-tab body: platform-impossible explainer banner +
-    /// "Open Telegram" deep-link button (intent for org.telegram.messenger,
-    /// falling through to the Play Store if Telegram isn't installed) +
-    /// GitHub credit footer.
-    /// </summary>
     private Control BuildToolsTelegramBody(
         IBrush bg, IBrush sunken, IBrush defaultB, double radiusSm, IBrush textS)
     {
@@ -493,10 +389,6 @@ public partial class AndroidApp
             Foreground = textS,
             TextWrapping = TextWrapping.Wrap,
         };
-        // POL-1: explainer wraps in sunken card to match Zapret sub-tab +
-        // desktop DpiBypassPage section card pattern. Pre-POL-1 used
-        // SurfaceBase / 12,10 — read as a lifted card instead of the
-        // inset block desktop uses for explainers.
         var explainerCard = new Border
         {
             Padding = new Thickness(10, 8),
@@ -549,7 +441,7 @@ public partial class AndroidApp
                 intent.SetFlags(global::Android.Content.ActivityFlags.NewTask);
                 global::Android.App.Application.Context.StartActivity(intent);
             }
-            catch { /* user has no browser — non-fatal */ }
+            catch { }
         };
 
         var bodyStack = new StackPanel
@@ -576,9 +468,6 @@ public partial class AndroidApp
         _toolsSelectedSubTab = index;
         if (_toolsZapretBody   is not null) _toolsZapretBody.IsVisible   = index == 0;
         if (_toolsTelegramBody is not null) _toolsTelegramBody.IsVisible = index == 1;
-        // POL-1: re-styled via StyleAdvShellTab (matches the outer tab
-        // strip + sibling sub-tab strips). Pre-POL-1 used StyleSegmentButton
-        // — kebab segment shape, not the desktop sub-tab pill shape.
         if (_toolsSubTabZapret is not null)
             StyleAdvShellTab(_toolsSubTabZapret, index == 0);
         if (_toolsSubTabTelegram is not null)
@@ -588,8 +477,6 @@ public partial class AndroidApp
     private void OnToolsZapretModeChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_toolsLoading) return;
-        // Only react to the radio that was just checked — the others fire
-        // Unchecked which we don't bind to.
         string mode = "off";
         if (_toolsZapretModeStandard?.IsChecked == true)        mode = "standard";
         else if (_toolsZapretModeAggressive?.IsChecked == true) mode = "aggressive";
@@ -597,10 +484,6 @@ public partial class AndroidApp
 
         AndroidStorage.SetDpiBypassMode(mode);
 
-        // Mirror the change into the existing Settings overlay's ComboBox
-        // and the standalone DPI Bypass tab's ComboBox so all surfaces
-        // stay in sync. _settingsLoading + _toolsLoading guards prevent
-        // change-handler ping-pong while we update each peer.
         var index = mode switch
         {
             "standard"   => 1,
@@ -620,8 +503,6 @@ public partial class AndroidApp
 
         UpdateZapretChipFromState();
         UpdateToolsZapretFooterState();
-        // Keep the standalone DPI tab's footer in lockstep too — it reads
-        // the same AndroidStorage key and renders status text.
         UpdateDpiFooterState();
     }
 
@@ -675,12 +556,6 @@ public partial class AndroidApp
                 : Localization.AndroidDpiBypassFooterToggleOn;
     }
 
-    /// <summary>
-    /// Re-seed Tools sub-tab state from persistent storage. Called on tab
-    /// activation by the AdvancedShell switcher so values stay fresh when
-    /// the user mutates DPI bypass mode from the kebab Settings card or
-    /// the standalone DPI bypass tab between Tools-tab visits.
-    /// </summary>
     private void ReseedToolsTabState()
     {
         var mode = AndroidStorage.GetDpiBypassMode();
@@ -695,16 +570,6 @@ public partial class AndroidApp
         UpdateToolsZapretFooterState();
     }
 
-    /// <summary>
-    /// Open the Telegram app. Intent priority:
-    ///   1) `PackageManager.GetLaunchIntentForPackage("org.telegram.messenger")`
-    ///      — opens the installed Telegram client.
-    ///   2) Fallback to `market://details?id=org.telegram.messenger` — opens
-    ///      the Play Store listing (or the user's preferred app store via
-    ///      ActionView for the market URI).
-    ///   3) If neither succeeds (no Play Store either — rare on AOSP roms),
-    ///      surface a toast so the user understands why nothing happened.
-    /// </summary>
     private void OnToolsOpenTelegramClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         try
@@ -719,7 +584,6 @@ public partial class AndroidApp
                 return;
             }
 
-            // Fallback — Play Store listing.
             ShowMenuFeedback(Localization.AdvToolsTelegramNotInstalled);
             var marketIntent = new global::Android.Content.Intent(
                 global::Android.Content.Intent.ActionView,
@@ -729,8 +593,6 @@ public partial class AndroidApp
         }
         catch
         {
-            // Both attempts failed — non-fatal. The toast above already
-            // explains the situation if the launch intent was null.
         }
     }
 }

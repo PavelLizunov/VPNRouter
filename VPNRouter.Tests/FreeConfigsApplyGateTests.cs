@@ -7,13 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.40.0 (interaction-contracts B4 #4): the desktop Free Configs "Apply"
-/// command is connectable-gated — only a deep-Verified row may be adopted +
-/// connected. A TCP/TLS-only (Ok) candidate, or a row whose last check failed,
-/// must be rejected without invoking the apply callback (which would start the
-/// VPN toward an unverified endpoint). Mirrors the Android ApplyFcConnectGate.
-/// </summary>
 public class FreeConfigsApplyGateTests
 {
     private static ILogger SilentLogger => new LoggerConfiguration().CreateLogger();
@@ -49,7 +42,7 @@ public class FreeConfigsApplyGateTests
 
         await vm.ApplySelectedCommand.ExecuteAsync(null);
 
-        Assert.False(applyCalled[0]); // gate blocked the non-Verified row
+        Assert.False(applyCalled[0]);
         Assert.Equal(VPNRouter.App.Localization.Strings.FcConnectNeedsVerify, vm.StatusText);
     }
 
@@ -64,11 +57,9 @@ public class FreeConfigsApplyGateTests
 
         await vm.ApplySelectedCommand.ExecuteAsync(null);
 
-        Assert.True(applyCalled[0]); // verified row passes the gate
+        Assert.True(applyCalled[0]);
     }
 
-    // v2.40.0 (review L5): pin F1 (B1) — Apply is a no-op while a search/recheck
-    // owns the operation (IsBusy), even for an otherwise-connectable Verified row.
     [Fact]
     public async Task ApplySelected_WhileBusy_DoesNotInvokeApply()
     {
@@ -77,10 +68,10 @@ public class FreeConfigsApplyGateTests
         {
             Status = FreeConfigStatus.Verified, Host = "1.2.3.4", Port = 443, Uuid = "u",
         });
-        vm.IsBusy = true; // a search/recheck is in flight
+        vm.IsBusy = true;
 
         await vm.ApplySelectedCommand.ExecuteAsync(null);
 
-        Assert.False(applyCalled[0]); // B1: blocked during an active operation
+        Assert.False(applyCalled[0]);
     }
 }

@@ -8,26 +8,9 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Serializes the fork-feature test classes (they mutate the process-global
-/// <see cref="SingBoxFeatures"/> overrides). A real definition — not just
-/// xunit.runner.json's parallelism-off — so the serialization survives any
-/// future re-enable of test parallelization.
-/// </summary>
 [CollectionDefinition("SingBoxFeaturesSerial", DisableParallelization = true)]
 public sealed class SingBoxFeaturesSerialCollection { }
 
-/// <summary>
-/// bug-hunt P0 (2026-06-28): fork-only protocols (awg:// / amneziawg:// and a VLESS
-/// type=xhttp transport) MUST be refused at intake on an official sing-box build, else a
-/// hostile / stale subscription line produces an `endpoints` wireguard block / `xhttp`
-/// transport that upstream sing-box FATALs at config load — bricking the user's tunnel.
-/// These tests simulate an official build (<see cref="SingBoxFeatures"/> overrides set
-/// false) and assert the gate is closed, that ordinary protocols are unaffected, and that
-/// a plain config carries NO fork artifacts (the dormancy invariant). Also pins the two P2
-/// redaction gaps the hunt found. Shares the serial collection with the fork tests so the
-/// static overrides never race.
-/// </summary>
 [Collection("SingBoxFeaturesSerial")]
 public sealed class SingBoxFeaturesGateTests : IDisposable
 {
@@ -53,7 +36,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     {
         Assert.False(ServerUriParser.IsSupportedScheme("awg://x@1.2.3.4:51820"));
         Assert.False(ServerUriParser.IsSupportedScheme("amneziawg://x@1.2.3.4:51820"));
-        // ordinary schemes are unaffected by the AWG gate
         Assert.True(ServerUriParser.IsSupportedScheme("vless://x@1.2.3.4:443"));
         Assert.True(ServerUriParser.IsSupportedScheme("hysteria2://x@1.2.3.4:443"));
     }
@@ -70,7 +52,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     [Fact]
     public void Parse_PlainVless_StillWorks_WhenForkUnavailable()
     {
-        // the xhttp gate must not regress ordinary transports
         var e = VlessUriParser.Parse(
             "vless://11111111-1111-1111-1111-111111111111@example.com:443?security=reality" +
             "&pbk=KEY&sid=01ab&type=ws&path=%2Fws&host=cdn.example.com&sni=example.com#X");
@@ -81,8 +62,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     [Fact]
     public void Generate_PlainVlessConfig_HasNoForkArtifacts()
     {
-        // Dormancy invariant: a plain (non-AWG, non-xhttp) config must gain NONE
-        // of the lx-only JSON keys, so byte-for-byte it stays an official config.
         var cfg = ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), PlainVlessSettings());
         Assert.Null(cfg.Endpoints);
@@ -96,20 +75,15 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     [Fact]
     public void Prewarm_WithOverridesSet_NoOps_AndDoesNotThrow()
     {
-        // P2 (2026-07-10): the ctor set both overrides, so Prewarm must NOT spawn
-        // `sing-box version` (it would race the override + waste a process); it
-        // just returns. The reads still honour the overrides afterwards.
         var ex = Record.Exception(() => SingBoxFeatures.Prewarm());
         Assert.Null(ex);
-        Assert.False(SingBoxFeatures.AwgAvailable);   // override wins, no probe
+        Assert.False(SingBoxFeatures.AwgAvailable);
         Assert.False(SingBoxFeatures.XhttpAvailable);
     }
 
     [Fact]
     public void ScrubSecrets_CollapsesAwgUri_HidingPrivateKey()
     {
-        // bug-hunt P2: the proxy-URI scrubber was missing amneziawg|awg, so an
-        // awg:// URI carrying a (short, non-base64) private_key would survive.
         var scrubbed = CrashReporter.ScrubSecrets(
             "active server awg://PEER@1.2.3.4:51820?private_key=shortpriv99&address=10.0.0.2/32");
         Assert.DoesNotContain("shortpriv99", scrubbed);
@@ -118,7 +92,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     [Fact]
     public void RedactLogText_RedactsPresharedKey()
     {
-        // bug-hunt P2: \bpsk\b never matched "preshared_key"; add the alternative.
         var redacted = DiagnosticsRedactor.RedactLogText("peer preshared_key=shortpsk42 configured");
         Assert.DoesNotContain("shortpsk42", redacted);
     }
@@ -126,11 +99,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     [Fact]
     public void Generate_PersistedAwgServer_Refused_WhenForkUnavailable()
     {
-        // bug-hunt 2nd-pass P0: the intake gate doesn't cover a PERSISTED
-        // amneziawg server (stale/hand-edited config.yaml, resolver aggregation)
-        // reaching config-gen. The BuildOutbounds backstop must drop it on an
-        // official build; the only server gone -> empty pool -> fail-closed guard
-        // throws, instead of emitting an endpoints block upstream sing-box FATALs.
         Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), AwgOnlySettings()));
     }
@@ -138,7 +106,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     [Fact]
     public void Generate_PersistedXhttpServer_Refused_WhenForkUnavailable()
     {
-        // same backstop for a persisted VLESS server with a type=xhttp transport.
         Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), XhttpOnlySettings()));
     }

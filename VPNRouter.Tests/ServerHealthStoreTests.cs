@@ -7,11 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins <see cref="ServerHealthStore"/> (urltest R5): identity-keyed persisted
-/// verdicts with a freshness TTL. Isolated per-test via AppPaths.OverrideDataDir
-/// so nothing touches the real ProgramData cache.
-/// </summary>
 public class ServerHealthStoreTests : IDisposable
 {
     private readonly string _prevDataDir;
@@ -29,7 +24,7 @@ public class ServerHealthStoreTests : IDisposable
     {
         ServerHealthStore.ResetForTests();
         AppPaths.OverrideDataDir(_prevDataDir);
-        try { Directory.Delete(_tempDir, recursive: true); } catch { /* best-effort */ }
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
     private static VlessServerEntry Entry(string server = "1.2.3.4", int port = 443,
@@ -47,8 +42,6 @@ public class ServerHealthStoreTests : IDisposable
     [Fact]
     public void Key_IsNameIndependent_SubscriptionRefreshSafe()
     {
-        // Subscription refresh recreates entries with new names — the verdict
-        // must survive because identity = server:port:protocol.
         ServerHealthStore.Record(Entry(name: "old-name"), ServerHealthVerdict.Healthy);
         Assert.Equal(ServerHealthVerdict.Healthy,
             ServerHealthStore.GetFresh(Entry(name: "renamed-after-refresh")));
@@ -78,7 +71,7 @@ public class ServerHealthStoreTests : IDisposable
     public void SurvivesReload_FromDisk()
     {
         ServerHealthStore.Record(Entry(), ServerHealthVerdict.TcpOpenProtocolUntested);
-        ServerHealthStore.ResetForTests();   // drop in-memory cache → forces file read
+        ServerHealthStore.ResetForTests();
         Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested,
             ServerHealthStore.GetFresh(Entry()));
     }
@@ -90,8 +83,8 @@ public class ServerHealthStoreTests : IDisposable
         File.WriteAllText(Path.Combine(AppPaths.CacheDir, "server_health.json"), "{ not json !!");
         ServerHealthStore.ResetForTests();
 
-        Assert.Null(ServerHealthStore.GetFresh(Entry()));                       // no throw
-        ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);         // still writable
+        Assert.Null(ServerHealthStore.GetFresh(Entry()));
+        ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);
         ServerHealthStore.ResetForTests();
         Assert.Equal(ServerHealthVerdict.Healthy, ServerHealthStore.GetFresh(Entry()));
     }
@@ -104,8 +97,6 @@ public class ServerHealthStoreTests : IDisposable
         Assert.Null(ServerHealthStore.GetFresh(Entry(protocol: "hysteria2")));
     }
 
-    // ── R3: provider key persistence ─────────────────────────────────────────
-
     [Fact]
     public void ProviderKey_RoundTrips_AndSurvivesKeylessOverwrite()
     {
@@ -113,8 +104,6 @@ public class ServerHealthStoreTests : IDisposable
             providerKey: "net:1.2.3.0/24");
         Assert.Equal("net:1.2.3.0/24", ServerHealthStore.GetFreshRecord(Entry())!.ProviderKey);
 
-        // A later verdict written WITHOUT a key (e.g. before the background DNS
-        // resolve lands) must not wipe the established grouping key.
         ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);
         var rec = ServerHealthStore.GetFreshRecord(Entry())!;
         Assert.Equal(ServerHealthVerdict.Healthy, rec.Verdict);

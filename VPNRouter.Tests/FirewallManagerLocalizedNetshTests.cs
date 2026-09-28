@@ -3,18 +3,11 @@ using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
-/// <summary>v2.31.0-r1 (CO-5 audit fix): netsh output parser must NOT match
-/// `Description:` lines on localized Windows. Only the FIRST colon-line per
-/// blank-separated rule block is treated as the rule name.</summary>
 public class FirewallManagerLocalizedNetshTests
 {
     [Fact]
     public void DescriptionLine_StartingWithPrefix_DoesNotMatch()
     {
-        // Simulated `netsh advfirewall firewall show rule name=all dir=out`
-        // output on RU Windows. The user has an UNRELATED rule whose
-        // Description happens to start with "VPNRouter_Block_". The previous
-        // parser would falsely match it.
         var simulated = @"
 Имя правила:                          Allow Some Application
 Описание:                             VPNRouter_Block_Discord description leak
@@ -25,8 +18,6 @@ public class FirewallManagerLocalizedNetshTests
 Действие:                             Block
 ".Replace("\r\n", "\n");
 
-        // Apply same parser logic as FirewallManager.FindRulesByPrefix:
-        // first colon-line per blank-separated block.
         var prefix = "VPNRouter_Block_";
         var matches = new List<string>();
         var inNewBlock = true;
@@ -43,8 +34,6 @@ public class FirewallManagerLocalizedNetshTests
                 matches.Add(value);
         }
 
-        // Should match ONLY the second block's "VPNRouter_Block_Telegram" —
-        // the first block's Description leak must NOT appear.
         Assert.Single(matches);
         Assert.Equal("VPNRouter_Block_Telegram", matches[0]);
     }
@@ -52,7 +41,6 @@ public class FirewallManagerLocalizedNetshTests
     [Fact]
     public void EnglishLocale_StillMatchesCorrectly()
     {
-        // Sanity: the new block-aware parser still works on English Windows.
         var simulated = @"
 Rule Name:                            VPNRouter_Block_Discord
 Description:                          Auto-generated
@@ -116,6 +104,6 @@ Description:                          Ignore me
         Assert.Contains("VPNRouter_Allow_Direct", matches);
         Assert.Contains("VPNRouter-DnsLockdown-Rule1", matches);
         Assert.DoesNotContain("UnrelatedRule", matches);
-        Assert.Single(fake.RunCalls); // Confirms single-pass execution
+        Assert.Single(fake.RunCalls);
     }
 }

@@ -8,24 +8,6 @@
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
-    <!--
-      v2.18.0 — Compact Simple mode (Variant A · Calm).
-      Layout sourced from "VPNRouter Design System 2/handoff/SimpleMode.html".
-      The page owns its own mini-header (logo + brand + status chips + ⋯ menu),
-      so the big MainWindow header is hidden in Simple mode. Three states —
-      on / warn / off — each shown via IsVisible on mutually-exclusive VM
-      flags (SimpleStatusIsOn / IsWarn / IsOff, same for CTA).
-      Don't re-introduce a red destructive CTA for "Disconnect" — per design
-      it's a benign toggle, accent-solid.
-    -->
-    <!-- v2.19.0: Mini-header moved to MainWindow level, so the converters
-         the header used (BoolToStatusColorConverter, BoolToLangConverter)
-         are no longer needed in this file. SimplePage is now pure body
-         content. -->
-
-    <!-- v2.28.4-r8: same r7 pattern — push horizontal padding from
-         ScrollViewer to inner Grid Margin so the centered Grid doesn't
-         shift when the scrollbar appears on resize. -->
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
                   AllowAutoHide="False"
@@ -34,14 +16,6 @@
         <Grid MaxWidth="420" HorizontalAlignment="Center">
             <StackPanel Spacing="14">
 
-                <!-- ═══ Mini-header removed in v2.19.0 ═══
-                     The compact logo + brand + VPN/Zapret/TG chips + ⋯ menu
-                     now live at the MainWindow level (MainWindow.axaml Row=0),
-                     shared by both Simple and Advanced modes. This keeps
-                     total header height identical when the user flips modes
-                     and avoids duplicating the bindings across two files. -->
-
-                <!-- ═══ Status card — 3 variants via IsVisible on SimpleStatusIs* ═══ -->
                 <Border BorderThickness="1"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         Background="{DynamicResource SurfaceBaseBrush}"
@@ -49,7 +23,6 @@
                         Padding="14">
                     <StackPanel Spacing="8">
                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <!-- Status dot — only one visible at a time -->
                             <icons:Pictogram Id="status" Width="20" Height="20" VerticalAlignment="Center"
                                      Foreground="{DynamicResource SuccessSolidBrush}"
                                      IsVisible="{Binding SimpleStatusIsOn}"/>
@@ -70,7 +43,6 @@
                                    TextWrapping="Wrap"
                                    Margin="20,0,0,0"
                                    LineHeight="15"/>
-                        <!-- Desktop STATS parity (live up/down + conn, clash_api-polled) -->
                         <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding ConnectionStatsText}"
                                    IsVisible="{Binding HasConnectionStats}"
                                    FontSize="10"
@@ -81,13 +53,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ v2.37.0-r36 — Bad-combo warning banner ═══
-                     Surfaces when user has both DnsLeakLockdown and
-                     BypassRussianTraffic enabled. The two settings are
-                     architecturally incompatible (firewall blocks DNS on
-                     the physical NIC that RU-bypass needs) and routinely
-                     break user-perceived internet for RU domains. Banner
-                     offers 1-click disable for either side. -->
                 <Border IsVisible="{Binding IsBadComboWarningVisible}"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource WarningBorderBrush}"
@@ -123,11 +88,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ Config row — tappable, opens the inline form ═══
-                     v2.31.6-r9 A11y: same card-as-button pattern as the
-                     Advanced settings card below. Bind Name to the
-                     L_SmpConfigRowLabel («Конфиг» / «Config») which is
-                     also the visible header inside the button. -->
                 <Button Command="{Binding OpenConfigPickerCommand}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
@@ -138,7 +98,6 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         AutomationProperties.Name="{Binding L_SmpConfigRowLabel}">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,8">
-                        <!-- Flag-like icon -->
                         <Border Grid.Column="0" Width="24" Height="24"
                                 CornerRadius="{StaticResource RadiusXs}"
                                 Background="{DynamicResource AccentBgSubtleBrush}"
@@ -155,13 +114,6 @@
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                        FontFamily="Consolas, 'Segoe UI Mono', monospace"/>
-                            <!-- Bug-r9-F-DEFENSIVE (2026-05-11) - active outbound surfaced
-                                 directly so a stale Custom Config Mode placeholder pointing
-                                 at a dead / hostile IP is visible at a glance. Mutually
-                                 exclusive normal vs suspect variants share the same source
-                                 string but render in different brushes - red + a small
-                                 warning glyph when the IP is not in any registered
-                                 subscription / manual server list. -->
                             <TextBlock Text="{Binding SimpleActiveOutboundLine}"
                                        IsVisible="{Binding SimpleActiveOutboundNormalVisible}"
                                        FontSize="9"
@@ -181,11 +133,6 @@
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </StackPanel>
-                        <!-- v2.31.0-r4 (F-3 / UX-2): chevron now flips with
-                             SmpFormExpanded so users can tell the section is
-                             open vs collapsed at a glance. Pre-fix the static
-                             `›` glyph was identical in both states and looked
-                             like a glitch on the first accidental click. -->
                         <TextBlock Grid.Column="2"
                                    icons:PictogramText.Icons="chevron-down,chevron-right" icons:PictogramText.Text="{Binding SmpFormExpanded,
                                           Converter={x:Static conv:BoolToChevronConverter.Instance},
@@ -196,8 +143,6 @@
                     </Grid>
                 </Button>
 
-                <!-- ═══ Collapsible detail form (input · mode · autostart).
-                     Bound to SmpFormExpanded. The config row above toggles it. ═══ -->
                 <Border IsVisible="{Binding SmpFormExpanded}"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -205,7 +150,6 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         Padding="12">
                     <StackPanel Spacing="14">
-                        <!-- Input -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="{Binding L_SmpInputLabel}"
                                        FontSize="11" FontWeight="SemiBold"
@@ -226,7 +170,6 @@
                                        TextWrapping="Wrap"/>
                         </StackPanel>
 
-                        <!-- Tunnel mode -->
                         <StackPanel Spacing="4" IsEnabled="{Binding !IsApplying}">
                             <TextBlock Text="{Binding L_SmpTunnelModeLabel}"
                                        FontSize="11" FontWeight="SemiBold"
@@ -259,15 +202,6 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- Autostart link-card (v2.27.0-r2) — old Simple
-                             checkbox was a parallel toggle to the Advanced
-                             master that needed a three-input computed to
-                             stay in sync. User feedback (r1): "а как его
-                             отключить?" + constant Running status were the
-                             symptoms. Dropped the mirror; Simple now opens
-                             Advanced → Autostart via OpenAutostartSettings
-                             Command. Status pill keeps Simple informative
-                             ("service running" / "configure autostart"). -->
                         <Button Command="{Binding OpenAutostartSettingsCommand}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
@@ -296,12 +230,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ CTA — three mutually-exclusive variants ═══
-                     v2.31.6-r9 A11y: each variant binds AutomationProperties.Name
-                     to SimpleCtaText so screen readers announce the state-
-                     appropriate verb ("Connect" / "Disconnect" / "Cancel").
-                     Same string drives Content visually + Name for a11y. -->
-                <!-- ON: Disconnect — accent-solid, NOT red (per design) -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SimpleCtaText}"
                         IsVisible="{Binding SimpleCtaIsConnected}"
@@ -314,7 +242,6 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
-                <!-- WARN: Cancel — sunken, progress cursor -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SimpleCtaText}"
                         IsVisible="{Binding SimpleCtaIsConnecting}"
@@ -328,7 +255,6 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
-                <!-- OFF: Connect — outlined, accent fg -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SimpleCtaText}"
                         IsVisible="{Binding SimpleCtaIsDisconnected}"
@@ -342,13 +268,6 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
-                <!-- ═══ Advanced settings card ═══
-                     v2.31.6-r9 A11y: this is a Button rendered as a card; the
-                     Content is composed of inner Grid + TextBlocks rather than
-                     a plain string label, so screen readers can't fall back
-                     to a default name. Bind Name to L_SmpAdvCardTitle so the
-                     announcement matches the visible primary text «Advanced
-                     settings» / «Расширенные настройки». -->
                 <Button Command="{Binding ToggleUiModeCommand}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"

@@ -5,12 +5,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P6 (2026-06-21) — Clash / Clash-Meta YAML subscription parsing. Verifies the
-/// <see cref="ClashYamlParser"/> proxy→URI mapping and the end-to-end path through
-/// <see cref="SubscriptionFetcher.ParseBody"/> (the real import flow). Tolerant:
-/// unsupported proxy types and malformed entries are skipped, not thrown.
-/// </summary>
 public class ClashYamlParserTests
 {
     private const string MixedClashYaml = @"
@@ -62,9 +56,8 @@ proxy-groups:
     public void LooksLikeClashYaml_RejectsNonClashBodies()
     {
         Assert.False(ClashYamlParser.LooksLikeClashYaml("vless://uuid@host:443?security=reality#n"));
-        Assert.False(ClashYamlParser.LooksLikeClashYaml("dmxlc3M6Ly91dWlkQGhvc3Q6NDQz")); // base64-ish
+        Assert.False(ClashYamlParser.LooksLikeClashYaml("dmxlc3M6Ly91dWlkQGhvc3Q6NDQz"));
         Assert.False(ClashYamlParser.LooksLikeClashYaml(""));
-        // "proxies" inside a base64 blob (not at line start) must not trip it.
         Assert.False(ClashYamlParser.LooksLikeClashYaml("Zm9vproxies:bar"));
     }
 
@@ -73,7 +66,6 @@ proxy-groups:
     {
         var uris = ClashYamlParser.ParseProxiesToUris(MixedClashYaml);
 
-        // vless + hysteria2 + ss mapped; trojan skipped.
         Assert.Equal(3, uris.Count);
         Assert.Contains(uris, u => u.StartsWith("vless://"));
         Assert.Contains(uris, u => u.StartsWith("hysteria2://"));
@@ -141,9 +133,6 @@ proxies:
     [Fact]
     public void ParseProxiesToUris_OversizedBody_ReturnsEmpty()
     {
-        // DoS guard (v2.44.1): a body over the 8 MB cap is rejected before the
-        // (unbounded) YAML deserialize, so a malicious/compromised provider can't
-        // OOM the refresh with a giant document.
         var huge = "proxies:\n" + new string('x', 8 * 1024 * 1024 + 16);
         Assert.Empty(ClashYamlParser.ParseProxiesToUris(huge));
     }
@@ -151,10 +140,6 @@ proxies:
     [Fact]
     public void ParseBody_ClashYaml_SsPasswordWithBase64UrlChars_RoundTrips()
     {
-        // Regression (v2.44.1): the emitter writes base64URL ss userinfo ('-'/'_');
-        // a password whose "cipher:password" base64 contains '+'/'/' becomes '-'/'_'
-        // in the URI. Before the ServerUriParser base64url fix the entry was silently
-        // dropped (plain base64 decode threw). base64("aes-256-gcm:secret~?>>") has '+'.
         const string ssYaml = @"
 proxies:
   - name: ""SS-special""

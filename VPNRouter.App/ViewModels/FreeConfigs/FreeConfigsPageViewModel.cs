@@ -9,10 +9,6 @@ using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels.FreeConfigs;
 
-/// <summary>
-/// ViewModel for the "Free Configs" page.
-/// Owns the aggregator, the displayed list, filters, and the Apply command.
-/// </summary>
 public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 {
     private readonly FreeConfigAggregator _aggregator;
@@ -20,43 +16,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     private readonly ILogger _logger;
     private readonly Func<FreeConfigEntry, Task<bool>> _applyAsync;
     private readonly Func<VPNRouter.Core.Models.AppSettings>? _getSettings;
-    // Phase 4 Wave 19 (v3.0 refactor): settings-persistence seam for the
-    // Add/RemoveUserSource commands. Defaults to
-    // <see cref="VPNRouter.Core.Services.RealSettingsStore.Instance"/> for
-    // back-compat with the pre-3G-1 static-loader path; tests can pass
-    // <c>InMemorySettingsStore</c>.
     private readonly VPNRouter.Core.Services.ISettingsStore _settingsStore;
     private readonly FreeConfigCache _savedCache;
     private HashSet<string>? _lastCountryCodes;
 
     private List<FreeConfigEntry> _allConfigs = new();
 
-    /// <summary>
-    /// v2.28.6 Phase 1: persistent all-time-verified set (the future
-    /// "Сохранённые" tab source). Built from the on-disk cache at
-    /// <see cref="EnsureCacheLoaded"/> time, then accumulates entries
-    /// from each search session (deduped by <see cref="FreeConfigEntry.Id"/>).
-    /// Persisted back to <c>free_configs.json</c> after a search ends.
-    ///
-    /// <para>Phase 1 keeps this list parallel to <see cref="_allConfigs"/>
-    /// without changing the displayed UI; Phase 2 introduces a separate
-    /// "Сохранённые" tab that surfaces it.</para>
-    /// </summary>
     private List<FreeConfigEntry> _savedConfigs = new();
 
     private CancellationTokenSource? _refreshCts;
     private bool _disposed;
 
-    /// <summary>
-    /// v2.20.1 lazy-load flag. The FreeConfigs cache can hold ~25k entries
-    /// (~6-7 MB heap) once the user runs the aggregator. Before v2.20.1 we
-    /// deserialized that cache inside the VM ctor — and since the VM is
-    /// constructed at app startup, users who never even open the FreeConfigs
-    /// tab were paying the memory cost anyway. Now we defer until
-    /// <see cref="EnsureCacheLoaded"/> is called from
-    /// MainWindowViewModel.OnSelectedTabIndexChanged the first time the
-    /// user navigates to the tab.
-    /// </summary>
     private bool _cacheLoaded;
 
     public FreeConfigsPageViewModel(
@@ -68,28 +38,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         _logger = logger;
         _applyAsync = applyAsync;
         _getSettings = getSettings;
-        // Phase 4 Wave 19: default to the real store; tests can pass an
-        // <c>InMemorySettingsStore</c> to keep AddUserSource / RemoveUserSource
-        // isolated from <c>%ProgramData%\VPNRouter\config.yaml</c>.
         _settingsStore = settingsStore ?? VPNRouter.Core.Services.RealSettingsStore.Instance;
         _savedCache = new FreeConfigCache(logger, Path.Combine(VPNRouter.Core.AppPaths.DataDir, "free_configs_saved.json"));
         _aggregator = new FreeConfigAggregator(logger);
         _aggregator.OnStageChanged += OnAggregatorStage;
         _aggregator.OnTestProgress  += OnAggregatorProgress;
         _deepVerifier = new FreeConfigDeepVerifier(logger);
-        ReloadUserSources(); // v2.14.4
+        ReloadUserSources();
 
-        // v2.20.1: cache load deferred to EnsureCacheLoaded. Ctor stays
-        // cheap — no 6-7 MB JSON deserialization unless the user opens
-        // the FreeConfigs tab.
         StatusText = Strings.FcStatusEmpty;
     }
 
-    /// <summary>
-    /// Load the FreeConfigs cache snapshot from disk on first access.
-    /// Called from MainWindowViewModel when the FreeConfigs tab becomes
-    /// selected. Idempotent — subsequent calls are no-ops.
-    /// </summary>
     public void EnsureCacheLoaded()
     {
         if (_cacheLoaded || _disposed) return;
@@ -103,7 +62,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 .Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now))
                 .ToList();
 
-            // Migration: if saved cache was empty and file does not exist, check pool / legacy cache
             if (kept.Count == 0 && !File.Exists(_savedCache.FilePath))
             {
                 var legacyFile = _aggregator.Cache.Load();
@@ -139,17 +97,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.Warning(ex, "[FreeConfigs] EnsureCacheLoaded failed");
-            // Leave _allConfigs empty; user can still Refresh from scratch.
         }
     }
 
-    /// <summary>
-    /// v2.20.1: unsubscribe the aggregator handlers this VM owns.
-    /// The aggregator instance lives at the VM scope too, so this is mostly
-    /// belt-and-braces — but if the main VM is ever recreated (e.g.
-    /// ReloadMainWindowForLocalization), the old VM's closures stop
-    /// retaining references to the old aggregator.
-    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -159,7 +109,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             _aggregator.OnStageChanged -= OnAggregatorStage;
             _aggregator.OnTestProgress  -= OnAggregatorProgress;
         }
-        catch { /* aggregator may already be torn down */ }
+        catch { }
 
         try { _refreshCts?.Cancel(); _refreshCts?.Dispose(); }
         catch { }
@@ -167,9 +117,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private ObservableCollection<FreeConfigItemViewModel> _displayedConfigs = new();
 
-    /// <summary>v2.28.6 Phase 2: source for the Сохранённые tab list.
-    /// Rebuilt from <see cref="_savedConfigs"/> by
-    /// <see cref="RebuildSavedDisplayList"/> on every modification.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSavedEmpty))]
     private ObservableCollection<FreeConfigItemViewModel> _displayedSavedConfigs = new();
@@ -190,10 +137,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
     public bool HasSelection => SelectedItem != null;
 
-    /// <summary>v2.28.6 Phase 1: which Free Configs sub-tab is selected.
-    /// 0 = Поиск (default, search-tab as today). 1 = Сохранённые (Phase 2
-    /// will surface the persistent saved list here). Phase 1 keeps this
-    /// property scaffolded but unused by the XAML — UI tabs land in Phase 2.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSearchTab))]
     [NotifyPropertyChangedFor(nameof(IsSavedTab))]
@@ -202,28 +145,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     public bool IsSearchTab => SelectedFreeTabIndex == 0;
     public bool IsSavedTab  => SelectedFreeTabIndex == 1;
 
-    /// <summary>v2.28.6 Phase 1: count for the Сохранённые-tab badge.</summary>
     public int SavedConfigsCount => _savedConfigs.Count;
 
-    /// <summary>v2.28.6 Phase 2: localised "★ Сохранённые (N)" header
-    /// (or just "★ Сохранённые" when count is 0).</summary>
     public string SavedTabHeaderText => SavedConfigsCount > 0
         ? Strings.FcTabSavedWithCount(SavedConfigsCount)
         : Strings.FcTabSaved;
 
-    /// <summary>v2.28.6 Phase 2/3: count of saved entries that the user
-    /// might want to bulk-recheck — older than 24 h since last verify, or
-    /// failed-last-check.
-    /// <para>v2.31.4-r1 (F-25 follow-up): also include Verified entries
-    /// with <c>LatencyMs &lt;= 0</c>. Those are the ones healed by the
-    /// v2.31.3 cache migration (<see cref="FreeConfigCache"/>) — their
-    /// <c>LastTestedAt</c> may still be recent so the time-based check
-    /// misses them, but the UI shows "— ✓✓" instead of a real ping and
-    /// the user wants to re-probe to get a real number. Without this
-    /// branch the "↻ Recheck" button hides immediately after a successful
-    /// recheck even though the displayed Saved tab is full of unverified
-    /// rows.</para>
-    /// </summary>
     public int StaleSavedCount
     {
         get
@@ -240,8 +167,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>v2.28.6 Phase 2: localised "↻ Recheck (N)" button label.
-    /// When N=0 the bulk button is hidden via <see cref="HasStaleSaved"/>.</summary>
     public string SavedRecheckStaleButtonText => Strings.FcSavedRecheckStaleBtn(StaleSavedCount);
 
     public bool HasStaleSaved => StaleSavedCount > 0;
@@ -251,88 +176,46 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
 
-    // v2.40.0 (review L3): re-filter the displayed Search list the moment the user
-    // toggles ExcludeRu, mirroring OnSelectedCountryChanged. Without this, RU rows
-    // surfaced by a search run before the user opted in stayed visible + selectable
-    // until the next search / country change.
     partial void OnExcludeRuChanged(bool value) => ApplyFiltersAndStats();
 
-    /// <summary>How many Verified configs to hunt for in a deep-verify session.
-    /// v2.30.7-r2 (VM-6 audit fix): switched from int to int? to be NumericUpDown-safe
-    /// per the NumericUpDown nullable-value rule in VPNRouter.App/AGENTS.md. The field isn't currently
-    /// bound in XAML but the planned design (free-configs-v2.14-roadmap.md) shows
-    /// a NumericUpDown — defensive rewrite ahead of that.</summary>
     [ObservableProperty] private int? _deepVerifyTargetCount = 5;
 
-    /// <summary>If true, skip Russian-country configs during deep-verify (user is bypassing RU blocks).</summary>
     [ObservableProperty] private bool _excludeRu = true;
 
-    /// <summary>v2.13.17: if true, Refresh stops early once N configs matching the latency criterion are found.
-    /// v2.28.3: default flipped true so the Simple-only UI (no toggle) gets early-stop out of the box.
-    /// Without this, Refresh would TCP-test all 30k+ pool entries — minutes of wait for first-time users.
-    /// Target=100/maxPing=300ms is a reasonable "find me a few good ones" goal that finishes in ~30s.
-    ///
-    /// v2.28.3-r4 — switched from int to int? to fix the NumericUpDown binding crash:
-    /// Avalonia's NumericUpDown.Value is decimal? and pushes null when the user clears
-    /// the input box; binding to a non-nullable int threw
-    /// "InvalidCastException: Could not convert '(null)' to System.Int32" and rendered
-    /// the binding error as visible UI text. Nullable property accepts the transient
-    /// null and the `?? fallback` in usage sites preserves a sane default.</summary>
     [ObservableProperty] private bool _useLatencyGoal = true;
-    /// <summary>v2.28.4-r4: default flipped 100 → 10 because the Simple-flow target user wants
-    /// to press one button and walk away with a handful of working configs, not a 100-entry list.
-    /// 10 entries match the Refresh's batch-style early stop and a typical Deep Verify finishes
-    /// in ~30 sec. Power users can still raise it via the Advanced Settings expander.</summary>
     [ObservableProperty] private int? _latencyGoalTarget = 10;
-    /// <summary>v2.28.4-r4: default 300 → 400 ms. 300 ms was too aggressive for users not on
-    /// fiber — many real-world working configs sit in 250-400 ms range from RU/CIS endpoints.</summary>
     [ObservableProperty] private int? _latencyGoalMaxPingMs = 400;
 
-    /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.
-    /// v2.28.3: default flipped true so first-run aggregator doesn't wait minutes for full TLS validation.
-    /// Server-side pool.json already pre-validates TLS every 6h (cron in build-free-pool.yml), so client-side
-    /// TLS recheck on first refresh adds delay without much extra signal. Power users can disable via CLI/yaml.</summary>
     [ObservableProperty] private bool _fastScanMode = true;
 
-    // v2.14.3 — Deep Verify presets (ping + bandwidth goals)
-    /// <summary>Preset index: 0=Gaming, 1=Streaming, 2=Chat, 3=BestEffort, 4=Custom.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCustomPreset))]
     [NotifyPropertyChangedFor(nameof(MeasureBandwidth))]
-    private int _deepVerifyPresetIndex = 3; // BestEffort default
+    private int _deepVerifyPresetIndex = 3;
 
-    /// <summary>Custom preset: max acceptable ping in ms.
-    /// v2.30.7-r2 (VM-6 audit fix): nullable for NumericUpDown safety.</summary>
     [ObservableProperty] private int? _customMaxPingMs = 200;
-    /// <summary>Custom preset: min acceptable download throughput in Mbps.
-    /// v2.30.7-r2 (VM-7 audit fix): nullable for NumericUpDown safety.</summary>
     [ObservableProperty] private int? _customMinBandwidthMbps = 5;
 
     public bool IsCustomPreset => DeepVerifyPresetIndex == 4;
 
-    /// <summary>Whether bandwidth measurement is needed for the current preset.</summary>
     public bool MeasureBandwidth => DeepVerifyPresetIndex switch
     {
-        0 or 1 or 2 or 4 => true,  // Gaming/Streaming/Chat/Custom all use bw threshold
-        _ => false,                 // BestEffort skips bw test (faster)
+        0 or 1 or 2 or 4 => true,
+        _ => false,
     };
 
-    /// <summary>Resolved (maxPing, minBwMbps) for current preset. null = no limit.</summary>
     public (int? maxPing, int? minBw) ResolvedGoal => DeepVerifyPresetIndex switch
     {
-        0 => (60, 2),    // Gaming
-        1 => (250, 10),  // Streaming
-        2 => (300, 1),   // Chat / web
-        3 => (null, null), // Best effort
-        4 => (CustomMaxPingMs ?? 200, CustomMinBandwidthMbps ?? 5), // Custom (?? fallback for nullable)
+        0 => (60, 2),
+        1 => (250, 10),
+        2 => (300, 1),
+        3 => (null, null),
+        4 => (CustomMaxPingMs ?? 200, CustomMinBandwidthMbps ?? 5),
         _ => (null, null),
     };
 
-    /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
     public bool IsEmpty => _allConfigs.Count == 0;
-    /// <summary>True when filters hide everything but cache isn't empty.</summary>
     public bool IsFilteredEmpty => _allConfigs.Count > 0 && DisplayedConfigs.Count == 0;
-    /// <summary>True when there is data to show in the list (not empty and not filtered out).</summary>
     public bool IsListVisible => !IsEmpty && !IsFilteredEmpty;
 
     [ObservableProperty] private string _statusText = string.Empty;
@@ -342,39 +225,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     public bool HasProgress => ProgressTotal > 0;
     partial void OnProgressTotalChanged(int value) => OnPropertyChanged(nameof(HasProgress));
 
-    /// <summary>
-    /// v2.28.5-r2: batched fetch + per-batch test + per-batch deep verify.
-    ///
-    /// <para>Old flow (replaced): fetch full pool ~25k → test all 25k →
-    /// hand entire Ok subset to Deep Verify → trim. Mid-search peak was
-    /// large because all 25k <see cref="FreeConfigEntry"/> sat in memory
-    /// at once, plus the testing infrastructure (parallel tasks,
-    /// SocketsHttpHandlers) ran across the whole pool.</para>
-    ///
-    /// <para>New flow:</para>
-    /// <list type="number">
-    /// <item>Fetch raw pool (no testing) via <see cref="FreeConfigAggregator.FetchPoolAsync"/>.</item>
-    /// <item>For each ~500-entry batch from the pool, in priority order:
-    ///   <list type="bullet">
-    ///   <item>TCP+TLS test the batch (parallel, semaphore-capped).</item>
-    ///   <item>For each Ok / Verified entry in the batch, spawn a sing-box
-    ///         and run <see cref="FreeConfigDeepVerifier.VerifyOneAsync"/>
-    ///         (real HTTPS through the proxy + bandwidth measurement).</item>
-    ///   <item>If the entry meets target ping + bandwidth thresholds, add
-    ///         to the running Verified list and update the displayed list
-    ///         immediately so the user sees progress trickling in.</item>
-    ///   <item>If we hit the target count or the user cancels, break out.</item>
-    ///   </list>
-    /// </item>
-    /// <item>After the loop, the pool reference goes out of scope and GC
-    ///       reclaims everything except the small Verified list.</item>
-    /// </list>
-    ///
-    /// <para>Memory benefit: at any given moment only the current ~500-entry
-    /// batch + the small Verified list (typically ≤ 50 entries) are
-    /// retained. The 25k pool is released after the loop ends; mid-search
-    /// peak drops by roughly 80–90 % compared to the v2.28.5-r1 flow.</para>
-    /// </summary>
     [RelayCommand]
     private async Task RefreshAsync()
     {
@@ -383,47 +233,23 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         _refreshCts = new CancellationTokenSource();
         var ct = _refreshCts.Token;
 
-        // Defaults pulled out so they're consistent for the whole run.
-        // v2.40.0 (contracts G5 #7): clamp to the documented bounds — target
-        // [1,50] (>50 deep-verifies ~forever), user max-ping [50,2000] ms.
-        // Matches the Android click-handler clamp; the "no cap" sentinel branch
-        // (UseLatencyGoal off) is intentionally left uncapped.
         var target = Math.Clamp(LatencyGoalTarget ?? 10, 1, 50);
         var maxPing = (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
             ? Math.Clamp(LatencyGoalMaxPingMs.Value, 50, 2000)
-            : 1000; // sentinel: no real ping cap
+            : 1000;
 
-        // Verified list is the only thing surviving the search. Build it up
-        // incrementally so the UI shows progress as soon as the first config
-        // is verified rather than waiting for the whole search to end.
         var verifiedList = new List<FreeConfigEntry>();
 
         try
         {
-            // v2.13.18: apply fast scan toggle before any test runs.
             _aggregator.RequireTlsHandshake = !FastScanMode;
-            // v2.28.5-r2: always measure bandwidth in the batched flow so the
-            // list shows speed alongside latency. The min-bandwidth gate is
-            // intentionally lenient (1 Mbps); we want to *display* bw, not
-            // aggressively filter on it. Truly dead servers fail < 1 Mbps and
-            // get excluded.
             _deepVerifier.MeasureBandwidth = true;
 
-            // v2.14.4: merge user-provided sources with the built-in 14.
             var sources = FreeConfigSources.GetAll(_getSettings?.Invoke());
 
-            // ── Stage 1: fetch raw pool (no testing) ──
             var pool = await Task.Run(() => _aggregator.FetchPoolAsync(sources, ct));
             ct.ThrowIfCancellationRequested();
 
-            // Pull cached Verified entries to the front of the queue so they
-            // re-test first (lowest cost; mostly retain status). Existing-
-            // verified-not-in-fresh-pool are also surfaced via FetchPoolAsync's
-            // internal MergeWithCache.
-            // v2.39.0 (audit #7): apply the RU-exclusion to BOTH queue halves.
-            // Previously only the "fresh" half was filtered, so a cached RU
-            // Verified row was prepended and bypassed the user's ExcludeRu opt-in
-            // (an ordinary repeated-search path, not a rare edge case).
             bool CountryAllowed(FreeConfigEntry c) =>
                 !ExcludeRu || !string.Equals(
                     c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase);
@@ -435,19 +261,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var cachedVerifiedIds = new HashSet<string>(
                 cachedVerified.Select(c => c.Id), StringComparer.OrdinalIgnoreCase);
 
-            // Build the ordered queue: cached Verified first, then everything else.
             var queue = cachedVerified
                 .Concat(pool.Where(c =>
                     !cachedVerifiedIds.Contains(c.Id) && CountryAllowed(c)))
                 .ToList();
 
-            // v2.28.5-r4: progress bar tracks "found / target" instead of
-            // "processed / queue". The user's mental model is "I want N
-            // working configs"; the bar fills from 0 to N as each Verified
-            // is added. Previously the bar updated only once per ~500-entry
-            // batch — visible freezes for 30-90 s during deep-verify made
-            // it look like the app had hung. Now it ticks within seconds
-            // of each Verified finding.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 StatusText = Strings.FcStatusBatchedSearchStart(target, pool.Count);
@@ -457,20 +275,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ProgressDone = 0;
             });
 
-            // ── Stage 2: cross-batch overlapping pipeline (v2.29.0-r3) ──
-            // Pre-r3 each batch ran TCP+TLS → deep-verify sequentially, with
-            // batch N+1 starting only after batch N finished. With cross-
-            // batch overlap, batch N+1's TCP+TLS runs in parallel with batch
-            // N's deep-verify (TCP is network-IO-light; deep-verify spawns
-            // sing-box). Hides ~10s of TCP wall-clock per batch behind the
-            // already-running deep-verify. Mac tester request 2026-04-29:
-            // "вот это можно делать ассинхронно — не последовательно
-            // отправлять по 1 запросу а хуярить сразу пачку запросов".
-            //
-            // v2.29.0-r3 (5c): adaptive deep-verify concurrency cap.
-            // Pre-r3: hardcoded 5 sing-box spawns. On 8+core machines that
-            // leaves ~60% CPU idle during deep-verify. Now scales with
-            // Environment.ProcessorCount: 1-3 cores=3, 4-7=5, 8+=8.
             var deepCap = ComputeAdaptiveDeepCap();
             _logger.Information("[FreeConfigs] adaptive deep-verify cap = {cap} (CPU cores: {cpu})",
                 deepCap, Environment.ProcessorCount);
@@ -479,20 +283,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var processedCount = 0;
             var totalBatches = (queue.Count + batchSize - 1) / batchSize;
 
-            // In-flight deep-verify tracking, ACROSS batches. Each entry is
-            // the task that completes when batch K's deep-verify wave is
-            // fully drained (all sub-tasks drained or cancellation observed).
             var inFlightBatches = new List<Task>();
-            // Cap on how many batches are simultaneously in any phase
-            // (TCP+TLS or deep-verify). 2 is enough to hide TCP wall-clock
-            // behind deep-verify; 3+ would put more sing-box pressure
-            // without much extra wall-clock saving (deep-verify dominates).
             const int MaxBatchesInFlight = 2;
 
-            // Pre-test result of the next batch's TCP+TLS, executed in
-            // parallel with the previous batch's deep-verify. Nullable —
-            // first iteration has no prefetch; following iterations use
-            // it instead of running TCP synchronously.
             Task<List<FreeConfigEntry>>? prefetchedTcp = null;
 
             for (int i = 0; i < queue.Count; i += batchSize)
@@ -501,7 +294,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
                 var currentBatchNum = (i / batchSize) + 1;
 
-                // Acquire batch — either from prefetch or run TCP synchronously.
                 List<FreeConfigEntry> batch;
                 if (prefetchedTcp != null)
                 {
@@ -534,8 +326,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
                 if (ct.IsCancellationRequested) break;
 
-                // Kick off the NEXT batch's TCP+TLS now (cross-batch overlap).
-                // Don't await; deep-verify of THIS batch will run in parallel.
                 var nextStart = i + batchSize;
                 if (nextStart < queue.Count && verifiedList.Count < target)
                 {
@@ -550,11 +340,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                                 target, verifiedList, ct);
                         }
                         catch (OperationCanceledException) { throw; }
-                        // Logged inside RunTcpTlsBatchAsync; re-throw bubbles to await above.
                     }, ct);
                 }
 
-                // Deep-verify Ok subset of THIS batch.
                 var okSubset = batch
                     .Where(c => c.Status == FreeConfigStatus.Ok
                              || c.Status == FreeConfigStatus.Verified)
@@ -568,31 +356,18 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                         okSubset.Count);
                 });
 
-                // Wrap the entire batch's deep-verify wave in a single Task
-                // so we can track "batch N is still in flight" at the outer
-                // level. Inner tasks share `deepSem` across batches — the
-                // adaptive cap is GLOBAL, not per-batch.
                 var batchVerifyTask = DeepVerifyBatchAsync(
                     okSubset, verifiedList, deepSem, target, maxPing, ct);
                 inFlightBatches.Add(batchVerifyTask);
                 processedCount += batch.Count;
 
-                // Drop refs ASAP so GC can reclaim. The batchVerifyTask owns
-                // its own copy of okSubset; original list refs are dropped here.
                 batch = null!;
                 okSubset = null!;
 
-                // Cap in-flight batches. Wait for one to finish before
-                // queueing more. With MaxBatchesInFlight=2 we have at most
-                // 2 batches' worth of deep-verify tasks queued (each gated
-                // by deepSem so total sing-box concurrency = deepCap, NOT
-                // 2 * deepCap).
                 if (inFlightBatches.Count >= MaxBatchesInFlight)
                 {
                     var finished = await Task.WhenAny(inFlightBatches);
                     inFlightBatches.Remove(finished);
-                    // If it threw inside, the await on Task.WhenAny doesn't
-                    // observe — observe explicitly so we don't lose errors.
                     try { await finished; }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
@@ -602,24 +377,21 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 }
             }
 
-            // Drain any remaining in-flight batch waves.
             if (inFlightBatches.Count > 0)
             {
                 try { await Task.WhenAll(inFlightBatches); }
                 catch (OperationCanceledException) { throw; }
-                catch { /* per-task warnings already logged */ }
+                catch { }
             }
             inFlightBatches.Clear();
 
-            // Cancel and observe any prefetch we left in flight (best-effort).
             if (prefetchedTcp != null)
             {
                 try { await prefetchedTcp; }
-                catch { /* ignored on cancel/error */ }
+                catch { }
                 prefetchedTcp = null;
             }
 
-            // ── Stage 3: finalise ──
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _allConfigs = new List<FreeConfigEntry>(verifiedList);
@@ -633,11 +405,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ProgressDone = 0;
             });
 
-            // v2.28.6 Phase 1: persist the all-time saved set, not just
-            // this session's results. _savedConfigs already absorbed every
-            // newly-verified entry via UpsertSavedConfig during the loop,
-            // so cache file now holds the cumulative history (capped at
-            // SavedConfigsRetentionDays at next load).
             try
             {
                 var file = _aggregator.Cache.Load();
@@ -650,9 +417,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 _logger.Warning(ex, "[FreeConfigs] Cache save failed (non-fatal)");
             }
 
-            // Drop the local pool / queue references explicitly so the GC
-            // sees them eligible immediately, then run the v2.28.5-r5
-            // post-search reclaim sequence.
             queue = null!;
             pool = null!;
             cachedVerified = null!;
@@ -668,8 +432,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ApplyFiltersAndStats();
                 StatusText = Strings.FcStatusCancelled;
             });
-            // Save the saved-set (carries any partial verifies absorbed
-            // before cancellation; see Phase 1 note in success path).
             try
             {
                 var file = _aggregator.Cache.Load();
@@ -696,24 +458,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>v2.29.0-r3: adaptive deep-verify concurrency cap based on
-    /// CPU count. Pre-r3 was hardcoded 5 (matching the original sing-box
-    /// spawn cost on a quad-core dev box). On 8+ core machines that
-    /// leaves ~60% CPU idle during deep-verify; on 1-2 core VMs
-    /// 5 simultaneous sing-box can starve the OS scheduler.
-    ///
-    /// <list type="bullet">
-    /// <item>1-3 cores: cap = 3 (conservative — sing-box spawn + Reality
-    /// TLS handshake is CPU-heavy).</item>
-    /// <item>4-7 cores: cap = 5 (pre-r3 default — proven safe).</item>
-    /// <item>8+ cores: cap = 8 (room to scale on modern desktops).</item>
-    /// </list>
-    ///
-    /// <para>Each sing-box instance uses ~50 MB RSS + 2 ports (SOCKS local
-    /// + Clash API) + outgoing TLS connections. cap=8 ⇒ ~400 MB peak
-    /// memory + ~30+ ephemeral sockets per instance — well within the
-    /// 16 k ephemeral-port pool on Windows / Linux / Mac.</para>
-    /// </summary>
     private static int ComputeAdaptiveDeepCap()
     {
         var cpu = Environment.ProcessorCount;
@@ -722,10 +466,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         return 8;
     }
 
-    /// <summary>v2.29.0-r3: extracted from inline in the batched RefreshAsync
-    /// loop so it can be called synchronously OR via Task.Run (cross-batch
-    /// prefetch). Performs TCP+TLS test of the slice with throttled UI
-    /// status updates (~5/sec).</summary>
     private async Task<List<FreeConfigEntry>> RunTcpTlsBatchAsync(
         List<FreeConfigEntry> slice,
         int batchNum,
@@ -737,8 +477,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         var lastStatusUpdate = DateTime.MinValue;
         var batchProgress = new Progress<(int done, int total)>(p =>
         {
-            // Throttle UI updates to ~5/sec so we don't spam the dispatcher
-            // when 80 parallel TCP probes finish at once.
             var now = DateTime.UtcNow;
             if ((now - lastStatusUpdate).TotalMilliseconds < 200) return;
             lastStatusUpdate = now;
@@ -755,10 +493,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         return slice;
     }
 
-    /// <summary>v2.29.0-r3: extracted from inline in the batched RefreshAsync
-    /// loop so cross-batch overlap can wrap each batch's deep-verify wave
-    /// in a single Task. Internal cap-of-deepCap (semaphore-shared with
-    /// other in-flight batches) on simultaneous sing-box spawns.</summary>
     private async Task DeepVerifyBatchAsync(
         List<FreeConfigEntry> okSubset,
         List<FreeConfigEntry> verifiedList,
@@ -768,12 +502,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         CancellationToken ct)
     {
         var deepTasks = new List<Task>();
-        // In-flight cap matches the semaphore cap. The semaphore is the
-        // hard ceiling on simultaneous sing-box spawns (shared across all
-        // in-flight batches when cross-batch overlap is on); inFlightCap
-        // here is the soft cap on TASK objects we have queued at the
-        // batch level, to keep deepTasks from growing unbounded for
-        // huge ok-subsets.
         var inFlightCap = ComputeAdaptiveDeepCap();
         foreach (var cfg in okSubset)
         {
@@ -795,15 +523,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         {
             try { await Task.WhenAll(deepTasks); }
             catch (OperationCanceledException) { throw; }
-            catch { /* per-verify failures are non-fatal at the batch level */ }
+            catch { }
         }
     }
 
-    /// <summary>v2.28.5-r2: deep-verify a single config and, if it passes
-    /// the user's target thresholds (ping + bandwidth), append to the
-    /// shared verified list and refresh the displayed list. Throttled by
-    /// a shared <paramref name="sem"/> so we don't spawn unbounded sing-box
-    /// instances.</summary>
     private async Task VerifyOneAndAppendAsync(
         FreeConfigEntry cfg,
         List<FreeConfigEntry> verifiedList,
@@ -815,40 +538,18 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         await sem.WaitAsync(ct);
         try
         {
-            // v2.28.5-r6: per-probe status update so the UI doesn't appear
-            // frozen during the deep-verify phase. Each probe takes 3-5 s,
-            // 5 run in parallel, so this fires every 600-1000 ms — enough
-            // visible motion that ADHD-leaning / TikTok-pace users don't
-            // mistake the wait for a hang.
             var probedHost = cfg.Host;
             var probedPort = cfg.Port;
             var probedCc = string.IsNullOrEmpty(cfg.CountryCode) ? "??" : cfg.CountryCode;
             var startedFound = 0;
             lock (verifiedList) startedFound = verifiedList.Count;
 
-            // Fire-and-forget UI update; don't await so probe can start
-            // immediately. Dispatcher batches these 5 parallel pokes and
-            // only the latest one wins as visible status — that's exactly
-            // what we want.
             Dispatcher.UIThread.Post(() =>
             {
                 StatusText = Strings.FcStatusBatchedProbing(
                     startedFound, target, probedHost, probedPort, probedCc);
             });
 
-            // v2.29.0 Phase 3C: skip Deep Verify if this entry was verified
-            // within the last 6 hours AND we already have a TCP ping number
-            // for it. Saves 5-15 s per already-known-working config on the
-            // cached re-test pass. The skip preserves Status=Verified +
-            // LatencyMs + MeasuredBandwidthMbps as-is; downstream Append
-            // logic still gates on Status==Verified + LatencyMs<=maxPing,
-            // so behaviour is identical to a fresh successful verify.
-            //
-            // Why 6h: Verified entries have already passed real HTTP round-
-            // trip + TLS handshake. The most likely failure mode in a 6h
-            // window is server going down (caught by next-day refresh) or
-            // SNI/cert rotation (rare for stable VLESS+Reality endpoints).
-            // 6h trades a small staleness risk for noticeable UX speedup.
             var skipDeep = cfg.Status == FreeConfigStatus.Verified
                 && cfg.LastDeepVerifyAt.HasValue
                 && (DateTime.UtcNow - cfg.LastDeepVerifyAt.Value) < TimeSpan.FromHours(6)
@@ -859,11 +560,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 await _deepVerifier.VerifyOneAsync(cfg, ct);
             }
 
-            // Only "fully working" entries reach the displayed list:
-            //   Verified (real HTTP round-trip succeeded)
-            //   AND ping under the user's threshold.
-            // Bandwidth is recorded but not gated on (>=1 Mbps would only
-            // exclude truly dead links).
             if (cfg.Status == FreeConfigStatus.Verified &&
                 cfg.LatencyMs > 0 && cfg.LatencyMs <= maxPing)
             {
@@ -883,24 +579,16 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
                         _allConfigs = snapshot;
-                        // v2.28.6: also merge the freshly-verified entry
-                        // into the persistent saved list (Id-deduped) and
-                        // rebuild the Saved-tab list so the badge counter
-                        // and the Saved view stay live during the search.
                         UpsertSavedConfig(cfg);
                         ApplyFiltersAndStats();
                         RebuildSavedDisplayList();
-                        // v2.28.5-r4: tick progress bar each time a Verified
-                        // entry is appended. ProgressTotal=target, so the bar
-                        // fills 0→target as configs trickle in. This is what
-                        // the user sees as "search is making progress".
                         ProgressDone = Math.Min(snapshot.Count, ProgressTotal);
                         StatusText = Strings.FcStatusBatchedFound(snapshot.Count, target);
                     });
                 }
             }
         }
-        catch (OperationCanceledException) { /* swallow — propagated by ct */ }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[FreeConfigs] VerifyOneAndAppend failed for {host}:{port}",
@@ -912,17 +600,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.28.6 Phase 1: insert <paramref name="entry"/> into
-    /// <see cref="_savedConfigs"/> if it's not already there (by
-    /// <see cref="FreeConfigEntry.Id"/>); otherwise replace the existing
-    /// row so the saved list reflects the freshest test results
-    /// (LatencyMs, MeasuredBandwidthMbps, LastTestedAt). Notifies
-    /// <see cref="SavedConfigsCount"/> for the future tab badge.
-    ///
-    /// <para>Called from the search flow on every newly-Verified entry.
-    /// Phase 2's per-row Recheck will reuse this same helper.</para>
-    /// </summary>
     private void UpsertSavedConfig(FreeConfigEntry entry)
     {
         if (entry == null || string.IsNullOrEmpty(entry.Id)) return;
@@ -939,11 +616,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         NotifySavedTabBindings();
     }
 
-    /// <summary>v2.28.6 Phase 2: rebuild <see cref="DisplayedSavedConfigs"/>
-    /// from <see cref="_savedConfigs"/>. Sort: fresh < ageing < stale <
-    /// failed; secondary by latency. Wraps each entry in a fresh
-    /// <see cref="FreeConfigItemViewModel"/> so the freshness label / opacity
-    /// reflect <c>DateTime.UtcNow</c> at build time.</summary>
     private void RebuildSavedDisplayList()
     {
         try
@@ -968,9 +640,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>v2.28.6 Phase 2: fire all derived saved-tab bindings.
-    /// Called after every <see cref="_savedConfigs"/> mutation so the tab
-    /// header badge / "Recheck (N)" label / IsSavedEmpty all stay coherent.</summary>
     private void NotifySavedTabBindings()
     {
         OnPropertyChanged(nameof(SavedConfigsCount));
@@ -981,9 +650,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsSavedEmpty));
     }
 
-    /// <summary>v2.28.6 Phase 2: persist <see cref="_savedConfigs"/> to
-    /// <c>free_configs.json</c>. Wraps the cache write in a try/catch
-    /// because cache I/O failures shouldn't break the in-memory list.</summary>
     private void SaveSavedConfigsToCache()
     {
         try
@@ -1001,17 +667,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>v2.28.6 Phase 3: re-verify a single saved entry. Mirrors the
-    /// search-flow VerifyOneAndAppendAsync, but operates on an already-saved
-    /// entry and preserves last-good Latency/Bandwidth on failure (the user
-    /// can still see "this used to work at 15 ms / 50 Mbps" with a "failed"
-    /// badge on top).</summary>
     [RelayCommand]
     private async Task RecheckOneAsync(FreeConfigItemViewModel? item)
     {
         if (item == null || IsBusy) return;
 
-        // Snapshot last-good values before the verifier mutates them.
         var entry = item.Entry;
         var prior = FreeConfigFreshness.RecheckSnapshot.Capture(entry);
 
@@ -1031,19 +691,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             _deepVerifier.MeasureBandwidth = true;
             try
             {
-                // v2.28.6-r5: refresh raw TCP ping FIRST so cfg.LatencyMs
-                // reflects current network RTT to the proxy server (not the
-                // 5-7-RTT-inflated HTTP roundtrip the deep verifier writes).
-                // Quick: TCP-only, ~500 ms - 1.5 s typical.
                 await _aggregator.Tester.TcpPingOnlyAsync(entry, ct);
                 await _deepVerifier.VerifyOneAsync(entry, ct);
-                // v2.40.0 (review M4): VerifyOneAsync SWALLOWS the user-cancel OCE
-                // internally (its catch has no `when` filter + doesn't rethrow), so
-                // a cancel during the multi-second deep-verify would otherwise fall
-                // through to MergeRecheckResult and — because no fresh
-                // LastDeepVerifyAt was stamped — be recorded as a spurious
-                // "failed last check". Re-detect the cancel here so the catch below
-                // runs RestorePriorState instead (cancel != failure).
                 ct.ThrowIfCancellationRequested();
                 FreeConfigFreshness.MergeRecheckResult(entry, prior, DateTime.UtcNow);
                 _logger.Information("[Recheck] {host}:{port} → {result} ({ping} ms)",
@@ -1053,12 +702,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             }
             catch (OperationCanceledException)
             {
-                // v2.28.6-r2 cancel safety: restore the entry to prior
-                // state. Without this, a cancelled recheck would leave
-                // Status = TlsFailed (or whatever the verifier mutated to)
-                // and the retention filter would drop the entry on next
-                // cache load. Don't set LastVerifyFailedAt — cancel isn't
-                // a failure event.
                 FreeConfigFreshness.RestorePriorState(entry, prior);
                 throw;
             }
@@ -1075,7 +718,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     : Strings.FcStatusRecheckAllDone(1, 0);
             });
         }
-        catch (OperationCanceledException) { /* swallow */ }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[FreeConfigs] RecheckOne failed for {host}:{port}",
@@ -1089,14 +732,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>v2.28.6 Phase 3: re-verify all saved entries that are stale
-    /// (older than 24 h, or failed-last-check). 5-permit semaphore on
-    /// sing-box spawns matches the search-flow concurrency. Cancellable.
-    /// <para>v2.31.4-r1: also re-verify Verified entries with LatencyMs&lt;=0
-    /// (post-migration "needs re-verify" state) — keep the predicate in
-    /// sync with <see cref="StaleSavedCount"/> so the button label and the
-    /// command's actual work agree.</para>
-    /// </summary>
     [RelayCommand]
     private async Task RecheckAllStaleAsync()
     {
@@ -1137,13 +772,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 var prior = FreeConfigFreshness.RecheckSnapshot.Capture(cfg);
                 try
                 {
-                    // v2.28.6-r5: see RecheckOneAsync — refresh TCP ping
-                    // so LatencyMs is raw network RTT, not HTTP RTT.
                     await _aggregator.Tester.TcpPingOnlyAsync(cfg, ct);
                     await _deepVerifier.VerifyOneAsync(cfg, ct);
-                    // v2.40.0 (review M4): re-detect a cancel swallowed inside
-                    // VerifyOneAsync so the catch runs RestorePriorState instead of
-                    // recording a spurious "failed last check" via the merge.
                     ct.ThrowIfCancellationRequested();
                     FreeConfigFreshness.MergeRecheckResult(cfg, prior, DateTime.UtcNow);
                     if (cfg.LastVerifyFailedAt.HasValue) Interlocked.Increment(ref failed);
@@ -1158,7 +788,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 }
                 catch (OperationCanceledException)
                 {
-                    // v2.28.6-r2 cancel safety — see RecheckOneAsync above.
                     FreeConfigFreshness.RestorePriorState(cfg, prior);
                     throw;
                 }
@@ -1206,9 +835,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>v2.28.6 Phase 3: drop a single entry from the persistent
-    /// saved list. No confirmation — the entry is re-discoverable on the
-    /// next search if the upstream pool still has it.</summary>
     [RelayCommand]
     private void RemoveFromSaved(FreeConfigItemViewModel? item)
     {
@@ -1218,7 +844,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
         _savedConfigs.RemoveAll(c =>
             string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase));
-        // Drop selection too if the user removed the row they had selected.
         if (SelectedItem == item) SelectedItem = null;
 
         SaveSavedConfigsToCache();
@@ -1226,9 +851,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         NotifySavedTabBindings();
     }
 
-    /// <summary>v2.28.6 Phase 3: wipe the entire saved list. No
-    /// confirmation per the plan — saved entries are re-discoverable via
-    /// next search.</summary>
     [RelayCommand]
     private void ClearAllSaved()
     {
@@ -1240,25 +862,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         NotifySavedTabBindings();
     }
 
-    /// <summary>
-    /// v2.28.5: trim <see cref="_allConfigs"/> to entries we want to keep
-    /// across sessions (Verified + Ok), save the trimmed list to cache,
-    /// and force a gen-2 GC so the user sees the working-set drop in task
-    /// manager immediately instead of waiting minutes for a natural
-    /// gen-2 collection.
-    ///
-    /// <para>The full pool fetch produces ~25k <see cref="FreeConfigEntry"/>
-    /// objects (~12 MB managed heap). Of those, after a default search
-    /// only ~10 reach Verified (deep-verified) and a few hundred Ok
-    /// (TCP+TLS-passed). The rest are dead statuses (Timeout, Unreachable,
-    /// TlsFailed, Implausible, ParseError) that the displayed list filters
-    /// out anyway — they sit in memory contributing nothing but bloat
-    /// until the next search overwrites <see cref="_allConfigs"/>.</para>
-    ///
-    /// <para>Idempotent: safe to call after a no-op refresh, after a
-    /// cancelled deep-verify, after a successful pipeline. Only trims +
-    /// saves when there's actually something to drop.</para>
-    /// </summary>
     private void TrimAndReclaim()
     {
         try
@@ -1279,9 +882,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             _logger.Information("[FreeConfigs] TrimAndReclaim: {before} → {after} entries ({freed} dropped)",
                 beforeCount, afterCount, freed);
 
-            // Save trimmed cache so the next session starts lean (the r4
-            // EnsureCacheLoaded already prunes non-Verified at load, but
-            // saving lean now means the cache file on disk shrinks too).
             try
             {
                 var file = _aggregator.Cache.Load();
@@ -1302,52 +902,27 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.28.5-r5: aggressive post-search reclaim. Called after the batched
-    /// flow finishes (success / cancel / exception) and from
-    /// <see cref="TrimAndReclaim"/> in the legacy path.
-    ///
-    /// <para>Three steps, in order:</para>
-    /// <list type="number">
-    /// <item><b>Schedule LOH compaction</b> (`GCSettings.LargeObjectHeapCompactionMode`
-    ///   = `CompactOnce`). Without this, large objects (e.g. the multi-MB
-    ///   `pool.json` byte buffer the fetcher allocated) live in the LOH
-    ///   indefinitely; gen-2 GC sweeps them but doesn't compact, so
-    ///   working set stays elevated even after the references are dead.</item>
-    /// <item><b>Force gen-2 GC</b> (blocking, compacting). Releases the
-    ///   freshly-marked-dead pool entries + the LOH buffers in one pass.
-    ///   Blocking is fine here — search just ended, user is looking at
-    ///   results, sub-second hitch is acceptable for a working-set drop.</item>
-    /// <item><b>Skia.PurgeAllCaches</b> — drops native font atlases and
-    ///   GPU texture caches. User report on memory-research plan: a single
-    ///   `PurgeAllCaches` call dropped ~40 MB working set in a long-lived
-    ///   Avalonia app. The 60-s `RuntimeStatus` purge is amortised; this
-    ///   one happens at the exact moment the user expects "memory should
-    ///   drop now".</item>
-    /// </list>
-    /// </summary>
     private static void ReclaimPostSearchMemory()
     {
         try
         {
             GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         }
-        catch { /* not supported on all runtimes; non-fatal */ }
+        catch { }
 
         try
         {
             GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
             GC.WaitForPendingFinalizers();
-            // Second pass — sweep finalized objects this round picked up.
             GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
         }
-        catch { /* GC.Collect can be no-op if disallowed; non-fatal */ }
+        catch { }
 
         try
         {
             SkiaSharp.SKGraphics.PurgeAllCaches();
         }
-        catch { /* native-side failures are not fatal */ }
+        catch { }
     }
 
     [RelayCommand]
@@ -1389,7 +964,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         _refreshCts?.Cancel();
     }
 
-    /// <summary>Remove configs with clearly-dead status (TlsFailed/Timeout/Unreachable/Implausible).</summary>
     [RelayCommand]
     private void ClearFailed()
     {
@@ -1405,7 +979,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         StatusText = Strings.FcStatusCleared(before - _allConfigs.Count, _allConfigs.Count);
     }
 
-    /// <summary>Keep only ✓✓ Verified configs — discard everything else.</summary>
     [RelayCommand]
     private void KeepVerifiedOnly()
     {
@@ -1417,7 +990,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         StatusText = Strings.FcStatusCleared(before - _allConfigs.Count, _allConfigs.Count);
     }
 
-    /// <summary>Wipe the entire cache.</summary>
     [RelayCommand]
     private void ClearAll()
     {
@@ -1437,12 +1009,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         _aggregator.Cache.Save(file);
     }
 
-    /// <summary>
-    /// Reload _allConfigs from the on-disk cache and refresh UI.
-    /// Used on OperationCanceledException so the user sees their partial test progress
-    /// (which the aggregator saves every 50 tests / 5s during the test stage) instead of
-    /// the stale pre-refresh state.
-    /// </summary>
     private async Task ReloadFromCacheAsync(string statusText)
     {
         try
@@ -1463,7 +1029,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Open the logs folder in Explorer so the user can see per-config deep-verify outcomes.</summary>
     [RelayCommand]
     private void OpenLogs()
     {
@@ -1472,7 +1037,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var logsDir = VPNRouter.Core.AppPaths.LogsDir;
             Directory.CreateDirectory(logsDir);
 
-            // Security: Use ArgumentList instead of string concatenation to prevent argument injection
             System.Diagnostics.ProcessStartInfo psi;
             if (OperatingSystem.IsWindows())
             {
@@ -1499,15 +1063,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ── v2.14.4: User-provided source management ──
-
-    /// <summary>Input for adding a new user source.</summary>
     [ObservableProperty] private string _newUserSourceName = string.Empty;
     [ObservableProperty] private string _newUserSourceUrl = string.Empty;
 
     public System.Collections.ObjectModel.ObservableCollection<VPNRouter.Core.Models.UserFreeSource> UserSources { get; } = new();
 
-    /// <summary>Reload user sources from _getSettings into the local ObservableCollection.</summary>
     public void ReloadUserSources()
     {
         UserSources.Clear();
@@ -1525,7 +1085,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             StatusText = Strings.FcUserSrcEmptyUrl;
             return;
         }
-        // Security: enforce absolute URI validation restricted to http and https schemes
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -1536,7 +1095,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         var settings = _getSettings?.Invoke();
         if (settings == null) return;
 
-        // Dedup by URL
         if (settings.App.UserFreeSources.Any(s => string.Equals(s.Url, url, StringComparison.OrdinalIgnoreCase)))
         {
             StatusText = Strings.FcUserSrcDuplicate;
@@ -1551,10 +1109,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             AddedAt = DateTime.UtcNow,
         });
 
-        // Persist via the injected store (Phase 4 Wave 19). Default
-        // RealSettingsStore.Instance routes to SettingsLoader.Save, preserving
-        // the pre-3G-1 behaviour. The settings accessor still points to
-        // MainWindowViewModel._settings — only the persistence boundary changed.
         _settingsStore.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
 
         ReloadUserSources();
@@ -1573,21 +1127,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         settings.App.UserFreeSources.RemoveAll(s =>
             string.Equals(s.Url, src.Url, StringComparison.OrdinalIgnoreCase));
 
-        // Phase 4 Wave 19: persist via injected store (see AddUserSourceAsync above).
         _settingsStore.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
         ReloadUserSources();
         StatusText = Strings.FcUserSrcRemoved;
     }
 
-    /// <summary>Detect whether the main (TUN-mode) sing-box process is running.</summary>
     private static bool IsMainVpnActive()
     {
         try
         {
-            // There will usually be our temporary verifier sing-box instances running during
-            // deep-verify, but THIS check is made BEFORE we spawn any — so any sing-box we see
-            // is the user's main VPN.
-            // v2.40.0-r3 (audit P0 handle-leak sweep): ProcessQuery disposes the Process[].
             return VPNRouter.Core.Services.ProcessQuery.AnyAlive("sing-box");
         }
         catch
@@ -1596,23 +1144,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>
-    /// Goal-seeking deep verification: iterate through all candidates (in priority order)
-    /// until we find <see cref="DeepVerifyTargetCount"/> Verified configs, or exhaust the
-    /// list, or user cancels. No hidden limit — user said "find at least a few definitely
-    /// working configs, no matter if it takes 5 min or 1 hour".
-    /// </summary>
     [RelayCommand]
     private async Task DeepVerifyTopAsync()
     {
         if (IsBusy) return;
 
-        // Warn if main VPN is active — it transparently proxies test traffic.
         if (IsMainVpnActive())
         {
             StatusText = Strings.FcStatusMainVpnActive;
             _logger.Warning("[DV] Main sing-box.exe is running — deep verify will route test traffic through it, results unreliable");
-            // Proceed anyway — but user has been warned.
         }
 
         IsBusy = true;
@@ -1621,9 +1161,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
         try
         {
-            // Priority: Verified first (cheap recheck), then TCP+TLS-passed, then those with
-            // only TCP, then even the "failed" ones because our pre-test may be wrong when
-            // the user's VPN is active. Within each group: non-RU first, then by latency.
             int Priority(FreeConfigStatus s) => s switch
             {
                 FreeConfigStatus.Verified    => 0,
@@ -1636,16 +1173,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 _                             => 7,
             };
 
-            // v2.16.8 fix: pre-filter dead candidates. Timeout/Unreachable mean the
-            // endpoint never even accepted a TCP connection during Refresh — no
-            // point wasting 6-12 s of sing-box spawn on them. Keep:
-            //   Verified / Ok / Slow    — most likely to succeed
-            //   Implausible              — might be local-intercept false positive
-            //   TlsFailed                — Reality endpoints can present a mismatched
-            //                              cert to the front SNI; Deep Verify tunnels
-            //                              through the proxy so it may still work
-            //   Unknown                  — never tested, give it a shot
-            // If the filter leaves an empty pool, fall back to everything non-RU.
             var promising = _allConfigs
                 .Where(c => !ExcludeRu ||
                             !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))
@@ -1670,7 +1197,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var target = Math.Max(1, DeepVerifyTargetCount ?? 5);
             StatusText = Strings.FcStatusDeepVerifyStart(target);
 
-            // v2.14.3 — apply preset's bandwidth measurement toggle + ping/bw goals
             _deepVerifier.MeasureBandwidth = MeasureBandwidth;
             var (maxPing, minBw) = ResolvedGoal;
 
@@ -1678,7 +1204,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var tested = 0;
             var lastSaveAt = DateTime.UtcNow;
 
-            // Limit concurrency inside the goal-seeking loop so we can stop as soon as target is reached.
             var sem = new SemaphoreSlim(5);
             var runningTasks = new List<Task>();
 
@@ -1697,7 +1222,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
                     Interlocked.Increment(ref tested);
 
-                    // v2.14.3: count only entries that pass preset's ping+bw thresholds.
                     var meetsPreset =
                         cfg.Status == FreeConfigStatus.Verified &&
                         (maxPing == null || cfg.LatencyMs > 0 && cfg.LatencyMs <= maxPing.Value) &&
@@ -1714,7 +1238,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                         StatusText = Strings.FcStatusDeepVerifyProgress(foundVerified, target, tested, candidates.Count);
                     });
 
-                    // Incremental cache save every 15s.
                     if ((DateTime.UtcNow - lastSaveAt).TotalSeconds > 15)
                     {
                         lastSaveAt = DateTime.UtcNow;
@@ -1737,7 +1260,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     if (Volatile.Read(ref foundVerified) >= target) break;
 
                     runningTasks.Add(TestOneWithUI(cfg));
-                    // Keep tasks list trimmed to concurrency window.
                     if (runningTasks.Count >= 20)
                     {
                         var done = await Task.WhenAny(runningTasks);
@@ -1747,12 +1269,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 await Task.WhenAll(runningTasks);
             });
 
-            // v2.28.5: trim non-keep entries before final persist so the cache
-            // file on disk and `_allConfigs` in memory both shrink to the
-            // useful subset (Verified + Ok). See TrimAndReclaim docstring.
             await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim);
 
-            // Final persist (post-trim — cache now lean).
             var finalFile = _aggregator.Cache.Load();
             finalFile.Configs = _allConfigs;
             _aggregator.Cache.Save(finalFile);
@@ -1767,11 +1285,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
-            // v2.28.5: trim before save on cancel too — keeps the cache lean
-            // even when the user aborts mid-deep-verify.
             await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim);
 
-            // Save whatever we have so far (post-trim).
             var file = _aggregator.Cache.Load();
             file.Configs = _allConfigs;
             _aggregator.Cache.Save(file);
@@ -1786,9 +1301,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         {
             _logger.Warning(ex, "DeepVerify failed");
             StatusText = Strings.FcStatusFailed(ex.Message);
-            // v2.28.5: even on unexpected exception, trim what we have so
-            // the user's working set drops back even if the deep verify
-            // chain didn't complete cleanly.
             try { await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim); } catch { }
         }
         finally
@@ -1806,12 +1318,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         if (sel == null) return;
         if (IsBusy) return;
 
-        // v2.40.0 (contracts B4 #4): connectable ⇔ Status==Verified. A public
-        // config that only passed the weaker TCP/TLS gate (or whose last check
-        // failed) is not connectable until deep verify confirms it. Mirrors the
-        // Android ApplyFcConnectGate. The Search list is Verified-filtered and
-        // Saved retains only Verified, so this is normally unreachable — it's
-        // the explicit guard layer (UI → VM → Core) the framework requires.
         if (sel.Entry.Status != FreeConfigStatus.Verified)
         {
             StatusText = Strings.FcConnectNeedsVerify;
@@ -1873,7 +1379,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var filterCountry = SelectedCountry;
             var isAllCountry = string.IsNullOrEmpty(filterCountry) || string.Equals(filterCountry, "All", StringComparison.OrdinalIgnoreCase);
 
-            // Single pass O(N) over _allConfigs
             for (var i = 0; i < _allConfigs.Count; i++)
             {
                 var c = _allConfigs[i];
@@ -1892,7 +1397,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     uniqueCountries.Add(c.CountryCode);
                 }
 
-                // Filter predicates (display Search tab only shows Verified)
                 if (c.Status != FreeConfigStatus.Verified)
                     continue;
 
@@ -1905,7 +1409,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 if (maxPing.HasValue && (c.LatencyMs <= 0 || c.LatencyMs > maxPing.Value))
                     continue;
 
-                // Host deduplication: keep best entry per host (lowest LatencySortKey)
                 var host = c.Host ?? string.Empty;
                 if (bestByHost.TryGetValue(host, out var existing))
                 {
@@ -1928,7 +1431,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             TimeoutCount     = timeout;
             UnreachableCount = unreachable;
 
-            // Only update Countries collection if the unique set actually changed
             if (_lastCountryCodes == null || !_lastCountryCodes.SetEquals(uniqueCountries))
             {
                 _lastCountryCodes = uniqueCountries;
@@ -1938,17 +1440,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     SelectedCountry = "All";
             }
 
-            // Sort only the deduped unique host entries (<= 300 items)
             var items = bestByHost.Values
                 .OrderBy(FreeConfigItemViewModel.SortKeyFor)
-                .Take(300) // cap at 300 visible to keep ListBox responsive with emoji flags
+                .Take(300)
                 .Select(c => new FreeConfigItemViewModel(c))
                 .ToList();
 
             var prevSelectedId = SelectedItem?.Id;
             DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
 
-            // Restore selection by Id if still in the list, otherwise auto-select first item
             SelectedItem = (!string.IsNullOrEmpty(prevSelectedId)
                 ? DisplayedConfigs.FirstOrDefault(c => c.Id == prevSelectedId)
                 : null)
@@ -1967,10 +1467,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
-    // v2.30.4-r1 (UX-61 fix): localize the age string instead of hardcoding
-    // English. Pre-r1 the Free Configs subtitle said "Обновлено 1d ago" —
-    // mixing RU "Обновлено" with EN "1d ago". Now uses the same Lang
-    // signal as Strings to pick the matching locale.
     private static string FormatAge(TimeSpan t)
     {
         var ru = string.Equals(VPNRouter.App.Localization.Strings.Lang, "ru", StringComparison.OrdinalIgnoreCase);

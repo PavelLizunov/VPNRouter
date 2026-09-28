@@ -1,14 +1,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// SingBoxManager.TryColocateCronet — v2.41.1-r3
-//
-// brat-reported: a NaiveProxy server made sing-box FATAL "cronet: library not
-// found". sing-box runs from %ProgramData%\VPNRouter\bin\ but libcronet ships in
-// the app dir; sing-box dlopens Cronet from its OWN directory. This helper copies
-// the Cronet lib next to the runtime sing-box at every launch (Win/Linux only).
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class SingBoxManagerCronetTests
 {
@@ -33,7 +25,7 @@ public class SingBoxManagerCronetTests
 
             if (libName == null)
             {
-                Assert.False(ok); // macOS: no upstream Cronet → no-op
+                Assert.False(ok);
                 return;
             }
             Assert.True(ok);
@@ -41,18 +33,17 @@ public class SingBoxManagerCronetTests
             Assert.True(File.Exists(dest), "libcronet was not co-located next to sing-box");
             Assert.Equal("CRONET-BYTES", File.ReadAllText(dest));
 
-            // Idempotent — second call no-ops (same size) and still reports present.
             Assert.True(SingBoxManager.TryColocateCronet(singBox, bundled, null));
         }
-        finally { try { Directory.Delete(root, true); } catch { /* best-effort */ } }
+        finally { try { Directory.Delete(root, true); } catch { } }
     }
 
     [Fact]
     public void TryColocateCronet_NoBundledLib_ReturnsFalseWithoutThrowing()
     {
-        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) return; // macOS covered above
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) return;
         var root = Path.Combine(Path.GetTempPath(), "vpnr-cronet-nb-" + Guid.NewGuid().ToString("N"));
-        var bundled = Path.Combine(root, "app"); // intentionally empty — no libcronet
+        var bundled = Path.Combine(root, "app");
         var binDir = Path.Combine(root, "bin");
         Directory.CreateDirectory(bundled);
         Directory.CreateDirectory(binDir);
@@ -62,6 +53,6 @@ public class SingBoxManagerCronetTests
             File.WriteAllText(singBox, "stub");
             Assert.False(SingBoxManager.TryColocateCronet(singBox, bundled, null));
         }
-        finally { try { Directory.Delete(root, true); } catch { /* best-effort */ } }
+        finally { try { Directory.Delete(root, true); } catch { } }
     }
 }

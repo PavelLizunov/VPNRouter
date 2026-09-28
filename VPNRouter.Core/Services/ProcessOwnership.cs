@@ -35,12 +35,6 @@ internal readonly record struct RuntimeOwnerRecordRead(
     RuntimeOwnerRecordKind Kind,
     RuntimeOwnerRecord? Record);
 
-/// <summary>
-/// Identifies the sing-box process that belongs to the live VPNRouter tunnel.
-/// A v2 durable record pins executable path, PID, and process start identity;
-/// configured YAML is only a fresh discovery hint and never grants trust to an
-/// external executable by itself.
-/// </summary>
 internal static class ProcessOwnership
 {
     private const int CurrentOwnerSchema = 2;
@@ -51,12 +45,6 @@ internal static class ProcessOwnership
     private static string OwnerRecordPath => Path.Combine(AppPaths.DataDir, OwnerFileName);
     private static string? _configuredExePath;
 
-    /// <summary>
-    /// The executable selected by the process that is starting the real tunnel.
-    /// SingBoxManager sets this before launch. It is deliberately separate from
-    /// config.yaml candidate discovery; only the current TUN owner may turn it
-    /// into a durable child identity.
-    /// </summary>
     internal static string? ConfiguredExePath
     {
         get => Volatile.Read(ref _configuredExePath);
@@ -120,11 +108,6 @@ internal static class ProcessOwnership
         }
     }
 
-    /// <summary>
-    /// Destructively trusted paths are limited to VPNRouter's complete bin tree,
-    /// or to an external path pinned by a currently matching durable identity.
-    /// A config-only candidate never reaches this predicate.
-    /// </summary>
     internal static bool IsTrustedRuntimePath(
         string? processPath,
         string? trustedBinDir,
@@ -135,10 +118,6 @@ internal static class ProcessOwnership
     public static bool IsOwnedSingBox(Process process) =>
         TryReadOwnedSingBoxIdentity(process) is not null;
 
-    /// <summary>
-    /// Read one exact process capability snapshot without granting ownership.
-    /// Callers must apply their own trusted identity before any destructive use.
-    /// </summary>
     internal static OwnedProcessIdentity? TryReadProcessIdentity(Process process) =>
         TryReadIdentity(process);
 
@@ -187,19 +166,11 @@ internal static class ProcessOwnership
     public static bool AnySingBoxOwned()
         => FindOwnedSingBox(ReadConfiguredExecutablePath(AppPaths.ConfigYamlPath)) is not null;
 
-    /// <summary>
-    /// Locates the actual tunnel child. A present v2 record is authoritative:
-    /// if its exact PID/start/path is not live, no other trusted-bin verifier is
-    /// allowed to substitute for it. WMI/command-line inspection is confined to
-    /// the v1 compatibility branch.
-    /// </summary>
     internal static OwnedProcessIdentity? FindOwnedSingBox(string? configuredCandidate)
     {
         var owner = ReadRuntimeOwnerRecord(OwnerRecordPath);
         if (owner.Kind == RuntimeOwnerRecordKind.CurrentV2 && owner.Record is { } v2)
         {
-            // Fast path for authoritative v2 runtime records: verify exact owner and child PIDs directly
-            // without triggering full system process enumeration via GetProcessesByName.
             var liveOwner = TryReadIdentityByPid(v2.OwnerPid);
             if (liveOwner is not { } ownerIdentity || !MatchesOwnerIdentity(v2, ownerIdentity))
                 return null;
@@ -246,8 +217,6 @@ internal static class ProcessOwnership
                 MatchesLegacyRecord(v1, candidate, commandLineReader, currentConfigPath));
         }
 
-        // A malformed durable record is fail-closed. Falling back here would
-        // allow an unrelated verifier under bin/ to impersonate its dead child.
         if (owner.Kind == RuntimeOwnerRecordKind.Malformed) return null;
 
         foreach (var candidate in candidates)
@@ -284,7 +253,6 @@ internal static class ProcessOwnership
             }
             catch
             {
-                // Malformed candidates contribute no process name.
             }
         }
     }
@@ -313,7 +281,6 @@ internal static class ProcessOwnership
         }
         catch
         {
-            // Missing or malformed config contributes no discovery candidate.
             return null;
         }
     }
@@ -448,13 +415,9 @@ internal static class ProcessOwnership
             || !MatchesOwnerIdentity(record, ownerIdentity))
             return false;
 
-        // One-sided ordering only: state may legitimately be written minutes
-        // after launch. It must simply not predate the child it claims.
         if (stateWrittenAtUtc.ToUniversalTime().Ticks < record.ChildStartedAtUtcTicks)
             return false;
 
-        // No process at the exact recorded PID means the precisely identified
-        // CLI child crashed. A live reused PID must still match path + start.
         return live is null || MatchesCurrentRecord(record, live.Value);
     }
 
@@ -528,7 +491,6 @@ internal static class ProcessOwnership
             }
             catch
             {
-                // A failed process-name query contributes no candidates.
             }
             finally
             {
@@ -538,8 +500,6 @@ internal static class ProcessOwnership
             }
         }
 
-        // v2 records are resolved by exact PID as well as derived name. This
-        // avoids platform name truncation and does not inspect command lines.
         var owner = ReadRuntimeOwnerRecord(OwnerRecordPath);
         if (owner.Kind == RuntimeOwnerRecordKind.CurrentV2 && owner.Record is { } v2)
         {
@@ -630,7 +590,6 @@ internal static class ProcessOwnership
         }
         catch
         {
-            // Parent identity is optional outside the Windows publication gate.
         }
 
         return null;

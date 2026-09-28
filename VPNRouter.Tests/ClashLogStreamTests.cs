@@ -12,12 +12,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// B0b: pins the testable surface of the Clash /logs stream — URL→ws conversion
-/// with the loopback guard, the {type,payload} JSON parse, and message routing into
-/// ConnectionHealthState. The live WebSocket receive/reconnect loop is verified by a
-/// smoke test on the test machine (needs a running sing-box), not here.
-/// </summary>
 public sealed class ClashLogStreamTests
 {
     private const string EofJson =
@@ -26,8 +20,6 @@ public sealed class ClashLogStreamTests
         "{\"type\":\"error\",\"payload\":\"+0300 2026-06-19 15:56:18 ERROR [2130031130 26m27s] connection: connection upload closed: raw read: An existing connection was forcibly closed by the remote host.\"}";
     private const string DnsJson =
         "{\"type\":\"info\",\"payload\":\"+0300 2026-06-19 01:34:57 INFO [1 4ms] dns: exchanged A example.com. 14 IN A 203.0.113.5\"}";
-
-    // ---- BuildLogsUri: scheme conversion + loopback guard ----
 
     [Theory]
     [InlineData("http://127.0.0.1:9090", "ws://127.0.0.1:9090/logs?level=info")]
@@ -38,8 +30,8 @@ public sealed class ClashLogStreamTests
         => Assert.Equal(expected, ClashLogStream.BuildLogsUri(baseUrl).ToString());
 
     [Theory]
-    [InlineData("http://1.2.3.4:9090")]      // non-loopback — security guard
-    [InlineData("http://192.168.0.10:9090")] // LAN host — refused
+    [InlineData("http://1.2.3.4:9090")]
+    [InlineData("http://192.168.0.10:9090")]
     public void BuildLogsUri_RejectsNonLoopback(string baseUrl)
         => Assert.Throws<System.ArgumentException>(() => ClashLogStream.BuildLogsUri(baseUrl));
 
@@ -47,11 +39,9 @@ public sealed class ClashLogStreamTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("ftp://127.0.0.1:9090")]
-    [InlineData("127.0.0.1:9090")] // missing scheme
+    [InlineData("127.0.0.1:9090")]
     public void BuildLogsUri_RejectsInvalid(string baseUrl)
         => Assert.Throws<System.ArgumentException>(() => ClashLogStream.BuildLogsUri(baseUrl));
-
-    // ---- BuildLogsUri token parameter encoding & empty handling ----
 
     [Theory]
     [InlineData(null)]
@@ -72,7 +62,6 @@ public sealed class ClashLogStreamTests
         var expectedEscaped = Uri.EscapeDataString(secret);
         Assert.Equal($"ws://127.0.0.1:9090/logs?level=info&token={expectedEscaped}", uri.AbsoluteUri);
         Assert.Contains($"&token={expectedEscaped}", uri.AbsoluteUri);
-        // Unencoded reserved query delimiter '&' from within secret must not split queries
         Assert.DoesNotContain("&word=", uri.AbsoluteUri);
     }
 
@@ -85,10 +74,8 @@ public sealed class ClashLogStreamTests
         var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", secret);
         var expectedEscaped = Uri.EscapeDataString(secret);
         Assert.Equal($"ws://127.0.0.1:9090/logs?level=info&token={expectedEscaped}", uri.AbsoluteUri);
-        Assert.DoesNotContain(secret, uri.AbsoluteUri); // Raw non-ASCII characters are percent-encoded
+        Assert.DoesNotContain(secret, uri.AbsoluteUri);
     }
-
-    // ---- TryExtractPayload ----
 
     [Fact]
     public void TryExtractPayload_ValidMessage_ReturnsPayload()
@@ -100,13 +87,11 @@ public sealed class ClashLogStreamTests
     [Theory]
     [InlineData("")]
     [InlineData("not json")]
-    [InlineData("{\"type\":\"info\"}")]            // no payload field
-    [InlineData("{\"type\":\"info\",\"payload\":\"\"}")] // empty payload
-    [InlineData("{\"type\":\"info\",\"payload\":123}")]  // non-string payload
+    [InlineData("{\"type\":\"info\"}")]
+    [InlineData("{\"type\":\"info\",\"payload\":\"\"}")]
+    [InlineData("{\"type\":\"info\",\"payload\":123}")]
     public void TryExtractPayload_MalformedOrMissing_ReturnsFalse(string json)
         => Assert.False(ClashLogStream.TryExtractPayload(json, out _));
-
-    // ---- HandleMessage routes classified events into the state ----
 
     private static (ClashLogStream stream, ConnectionHealthState state) NewStream()
     {
@@ -152,8 +137,6 @@ public sealed class ClashLogStreamTests
         stream.HandleMessage("");
     }
 
-    // ---- OBS-1: RedactLogsUri strips ?token= from logged URI ----
-
     [Fact]
     public void RedactLogsUri_StripsQuery()
     {
@@ -194,8 +177,6 @@ public sealed class ClashLogStreamTests
         Assert.DoesNotContain("Information(\"[ConnHealth] Clash /logs stream connected ({Uri})\", _logsUri)", src);
     }
 
-    // ---- NIGHT-12: Source guard for TryStartConnectionHealthStream ----
-
     [Fact]
     public void TryStartConnectionHealthStream_PassesClashApiSecret_CommentsStripped()
     {
@@ -217,7 +198,6 @@ public sealed class ClashLogStreamTests
 
         var fullSrc = File.ReadAllText(vpnEnginePath);
 
-        // Bound to the actual TryStartConnectionHealthStream method
         const string methodSignature = "void TryStartConnectionHealthStream(AppSettings settings)";
         var methodIdx = fullSrc.IndexOf(methodSignature, StringComparison.Ordinal);
         Assert.True(methodIdx >= 0, "TryStartConnectionHealthStream method not found in VpnEngine.cs");
@@ -244,15 +224,12 @@ public sealed class ClashLogStreamTests
 
         var methodSrc = fullSrc.Substring(methodIdx, closeBraceIdx - methodIdx + 1);
 
-        // Strip comments (block and line) while preserving quoted string literals (e.g. "http://...")
-        // to ensure dummy comments cannot satisfy the guard and URLs aren't truncated.
         var commentsStripped = Regex.Replace(
             methodSrc,
             @"(@""(?:""""|[^""])*""|""(?:\\.|[^""\\])*"")|(/\*[\s\S]*?\*/|//.*$)",
             m => m.Groups[1].Success ? m.Groups[1].Value : string.Empty,
             RegexOptions.Multiline);
 
-        // Bounded actual constructor instantiation requiring real secret argument (not dummy comment)
         var constructorIdx = commentsStripped.IndexOf("new ClashLogStream(", StringComparison.Ordinal);
         Assert.True(constructorIdx >= 0, "new ClashLogStream constructor call not found in stripped method body");
 
@@ -262,8 +239,6 @@ public sealed class ClashLogStreamTests
         var constructorArgs = commentsStripped.Substring(constructorIdx, closeParenIdx - constructorIdx + 1);
         Assert.Contains("secret: settings.SingBox.ClashApiSecret", constructorArgs);
     }
-
-    // ---- NIGHT-12: Synthetic Serilog sink proof for LogStreamFailure ----
 
     [Theory]
     [InlineData("simpleSecret123")]
@@ -276,7 +251,6 @@ public sealed class ClashLogStreamTests
         var rawUri = uri.ToString();
         var encodedSecret = Uri.EscapeDataString(secret);
 
-        // Nested exception chain simulating transport failure where raw URI and token are embedded
         var innerException = new InvalidOperationException($"Transport connection failed for {rawUri} (token={secret})");
         var outerException = new System.Net.WebSockets.WebSocketException(
             $"WebSocket handshake failed on {rawUri} with secret {secret}",
@@ -287,10 +261,8 @@ public sealed class ClashLogStreamTests
         var logEvent = Assert.Single(sink.Events);
         Assert.Equal(LogEventLevel.Debug, logEvent.Level);
 
-        // Exception object MUST NOT be passed to logger (no stack trace or exception message leakage)
         Assert.Null(logEvent.Exception);
 
-        // Structured properties verify safe type name only and retry seconds
         Assert.True(logEvent.Properties.TryGetValue("ErrorType", out var errorTypeVal));
         var errorType = Assert.IsType<ScalarValue>(errorTypeVal).Value?.ToString();
         Assert.Equal(nameof(System.Net.WebSockets.WebSocketException), errorType);
@@ -299,7 +271,6 @@ public sealed class ClashLogStreamTests
         var sec = Convert.ToDouble(Assert.IsType<ScalarValue>(secVal).Value);
         Assert.Equal(5.0, sec);
 
-        // Render proof: rendered message includes safe type name and retry seconds, never secrets or raw uri
         var rendered = logEvent.RenderMessage();
         Assert.Contains(nameof(System.Net.WebSockets.WebSocketException), rendered);
         Assert.Contains("5", rendered);
@@ -310,7 +281,6 @@ public sealed class ClashLogStreamTests
         Assert.DoesNotContain(outerException.Message, rendered, StringComparison.Ordinal);
         Assert.DoesNotContain(innerException.Message, rendered, StringComparison.Ordinal);
 
-        // Properties proof: no property value leaks token or raw uri
         foreach (var kvp in logEvent.Properties)
         {
             var propText = kvp.Value.ToString();
@@ -319,8 +289,6 @@ public sealed class ClashLogStreamTests
             Assert.DoesNotContain(rawUri, propText, StringComparison.Ordinal);
         }
     }
-
-    // ---- NIGHT-12: Source guard for RunAsync catch block and LogStreamFailure ----
 
     [Fact]
     public void RunAsync_CatchBlock_PinsSafeTypeNameAndNoExceptionLog_CommentsStripped()
@@ -342,7 +310,6 @@ public sealed class ClashLogStreamTests
 
         var fullSrc = File.ReadAllText(streamPath);
 
-        // 1. Bound to RunAsync method
         const string runAsyncSig = "async Task RunAsync(CancellationToken ct)";
         var runIdx = fullSrc.IndexOf(runAsyncSig, StringComparison.Ordinal);
         Assert.True(runIdx >= 0, "RunAsync method not found in ClashLogStream.cs");
@@ -368,16 +335,13 @@ public sealed class ClashLogStreamTests
             m => m.Groups[1].Success ? m.Groups[1].Value : string.Empty,
             RegexOptions.Multiline);
 
-        // Disallow exception-bearing logger overloads in RunAsync
         Assert.DoesNotContain("Debug(ex,", runStripped);
         Assert.DoesNotContain("_logger.Debug(ex,", runStripped);
         Assert.DoesNotContain("_logger.Error(ex,", runStripped);
         Assert.DoesNotContain("_logger.Warning(ex,", runStripped);
 
-        // Catch block must delegate to LogStreamFailure
         Assert.Contains("LogStreamFailure(_logger, ex, backoff)", runStripped);
 
-        // 2. Bound to LogStreamFailure method
         const string helperSig = "void LogStreamFailure(ILogger logger, Exception ex, TimeSpan backoff)";
         var helperIdx = fullSrc.IndexOf(helperSig, StringComparison.Ordinal);
         Assert.True(helperIdx >= 0, "LogStreamFailure method not found in ClashLogStream.cs");
@@ -403,13 +367,11 @@ public sealed class ClashLogStreamTests
             m => m.Groups[1].Success ? m.Groups[1].Value : string.Empty,
             RegexOptions.Multiline);
 
-        // Must pin safe type name only and structured ErrorType / Sec
         Assert.Contains("ex.GetType().Name", helperStripped);
         Assert.Contains("{ErrorType}", helperStripped);
         Assert.Contains("{Sec}", helperStripped);
         Assert.Contains("backoff.TotalSeconds", helperStripped);
 
-        // Must NOT log exception object, message, or ToString
         Assert.DoesNotContain("Debug(ex,", helperStripped);
         Assert.DoesNotContain("ex.Message", helperStripped);
         Assert.DoesNotContain("ex.ToString", helperStripped);

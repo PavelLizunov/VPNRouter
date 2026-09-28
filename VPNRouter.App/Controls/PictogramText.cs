@@ -7,8 +7,6 @@ using Avalonia.Media;
 
 namespace VPNRouter.App.Controls;
 
-/// <summary>Opt-in presentation of catalog symbols at known UI consumers only.
-/// Shared localization, numeric values, commands and stored user text remain unchanged.</summary>
 public sealed class PictogramText : AvaloniaObject
 {
     public static readonly AttachedProperty<string?> TextProperty =
@@ -61,8 +59,6 @@ public sealed class PictogramText : AvaloniaObject
         TextBlock.FontSizeProperty.Changed.AddClassHandler<TextBlock>((control, _) => Update(control));
     }
 
-    // Semantic ids are explicit per consumer. Equal old glyphs (delete/close,
-    // refresh/apply/retest, search/play) must never select semantics globally.
     private static readonly IReadOnlyDictionary<string, string[]> Symbols = new Dictionary<string, string[]>
     {
         ["add"] = ["+"], ["add-circle"] = ["\u2295"], ["apply"] = ["\u21bb"],
@@ -93,14 +89,10 @@ public sealed class PictogramText : AvaloniaObject
         {
             string? id = null;
             var length = 0;
-            // Connected(mode, name, ip) has one structural arrow after the
-            // closing mode bracket. Never scan the subsequent server name.
             var connectionArrow = allowed.Contains("arrow-right") &&
                 (source.StartsWith("Connected [", StringComparison.Ordinal) ||
                  source.StartsWith("Подключено [", StringComparison.Ordinal)) &&
                 i == source.IndexOf("] → ", StringComparison.Ordinal) + 2 && i > 1;
-            // FcStatusDeepVerifyDone is a generated count-only summary;
-            // its trailing verification marker is not user-controlled content.
             var verifiedSummary = allowed.Contains("verified") &&
                 (source.StartsWith("Готово: найдено ", StringComparison.Ordinal) ||
                  source.StartsWith("Done: ", StringComparison.Ordinal)) &&
@@ -117,8 +109,6 @@ public sealed class PictogramText : AvaloniaObject
             if (id is null) continue;
             if (i > start) inlines.Add(new Run(source[start..i]));
             var icon = new Pictogram { Id = id, Width = control.FontSize, Height = control.FontSize };
-            // Explicit observable binding also works before inline logical attachment;
-            // theme and status class changes repaint without rebuilding geometry.
             icon.Bind(Pictogram.ForegroundProperty, control.GetObservable(TextBlock.ForegroundProperty));
             inlines.Add(new InlineUIContainer { Child = icon, BaselineAlignment = BaselineAlignment.Center });
             i += length - 1;

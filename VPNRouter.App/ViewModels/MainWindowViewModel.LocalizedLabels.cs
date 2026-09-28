@@ -26,7 +26,6 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    // ── Localized labels (proxies to Strings.cs, refreshed on language toggle) ──
     public string LblTabServers => Strings.TabServers;
     public string LblTabManual => Strings.TabServers;
     public string LblTabSubscribe => Strings.ModeSubscribe;
@@ -72,19 +71,13 @@ public partial class MainWindowViewModel
     public string BlockAdsHint => IsRussian
         ? "AdGuard DNS + adblock rule_set (~300K доменов)"
         : "AdGuard DNS + adblock rule_set (~300K domains)";
-    // Backlog A (2026-06-20): opt-in urltest auto-select toggle (Subscribe page).
-    // urltest R5 (2026-07-09): forward to the shared Core strings so desktop and
-    // Android carry the SAME honest wording ("quick web test", not "best server") —
-    // the R5 brat live gate caught these stale duplicated literals.
     public string L_AutoSelectBest => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServer;
     public string L_AutoSelectBestTip => global::VPNRouter.Core.Localization.Strings.AutoSelectBestServerTip
         + (IsRussian ? " Применяется при следующем подключении." : " Applies on next connect.");
 
-    // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
     public string LblTabFreeConfigs => Strings.TabFreeConfigs;
     public string LblSettingsRouting => Strings.SectionRouting;
-    // LblSettingsRules lives in MainWindowViewModel.Localization.cs (v2.30.0-r2).
     public string LblSettingsLeak => Strings.SectionLeakProtection;
     public string LblSettingsContent => Strings.SectionContent;
     public string LblSettingsUpdates => Strings.SectionUpdates;
@@ -94,21 +87,6 @@ public partial class MainWindowViewModel
     public string LblAutostartTgProxy => Strings.AutostartTgProxy;
     public string LblAutostartUi => Strings.AutostartUi;
 
-    // v2.31.10 (autostart UX clarity): per-component status badge. Each
-    // CheckBox in the Section A "Components to auto-start with the service"
-    // block now shows a small label that names the actual delivery channel
-    // (Windows Service at boot vs App-side login bootstrap vs nothing) so a
-    // user can't tick a toggle that doesn't fire. Status is computed from
-    // (ServiceVm.IsInstalled, HasAppBootstrap{Vpn,Zapret,TgProxy}); the
-    // ServiceVm.PropertyChanged subscription in the constructor already
-    // re-fires PropertyChanged for these labels on every IsInstalled flip.
-    //
-    // Currently HasAppBootstrap* return false for all three components —
-    // the App.axaml.cs OnFrameworkInitializationCompleted path doesn't run
-    // any of VpnEngine/ZapretManager/TgProxyManager at user login. The
-    // sister DBG-2 task adds App-side bootstrap; flipping the corresponding
-    // flag to true at that point switches affected components from the red
-    // ⛔ "won't fire" badge to the amber ⚠ "fires after App login" badge.
     internal const bool HasAppBootstrapVpn = false;
     internal const bool HasAppBootstrapZapret = false;
     internal const bool HasAppBootstrapTgProxy = false;
@@ -132,12 +110,6 @@ public partial class MainWindowViewModel
     public bool IsAutostartTgProxyStatusWarn => !ServiceVm.IsInstalled && HasAppBootstrapTgProxy;
     public bool IsAutostartTgProxyStatusBad => !ServiceVm.IsInstalled && !HasAppBootstrapTgProxy;
 
-    /// <summary>
-    /// Pure-function status dispatch — extracted as <c>internal static</c>
-    /// so it can be unit-tested without instantiating MainWindowViewModel
-    /// (which spins up file I/O, logger, etc.). Three branches matching
-    /// the three badge states surfaced in the Autostart sub-tab.
-    /// </summary>
     internal static string ComputeAutostartStatus(bool isServiceInstalled, bool hasAppBootstrap)
     {
         if (isServiceInstalled) return Strings.AutostartStatusBoot;
@@ -150,10 +122,6 @@ public partial class MainWindowViewModel
     public string LblToolZapret => Strings.TabZapret;
     public string LblToolTgProxy => Strings.TabTgWsProxy;
     public string LblDpiBypassTab => Strings.TabZapret;
-    // v2.30.7 — UX-44 followup: the v2.30.5 fix dropped the "(zapret от
-    // Flowseal)" parenthetical from RU only. EN side kept "(zapret by
-    // Flowseal)". Symmetric drop here — Flowseal credit lives in the
-    // GitHub link in the Advanced section.
     public string LblDpiDescription => IsRussian
         ? "Обход блокировок провайдера. Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
         : "Bypass ISP blocking. Works with Discord, YouTube, and other blocked services. If a strategy doesn't work — try another.";
@@ -176,50 +144,24 @@ public partial class MainWindowViewModel
     public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
 
-    // Telegram proxy labels
     public string LblTabTelegram => Strings.TabTgWsProxy;
     public string LblTgProxyDescription => Strings.TgProxyDescription;
     public string LblTgProxySetupHint => Strings.TgProxySetupHint;
     public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;
 
-    /// <summary>
-    /// v2.31.6-r5 (TG-2): label for the unified footer action introduced
-    /// per user feedback 2026-05-03 night. When stopped, footer fires the
-    /// full SetupTgProxy chain (download → start → open Telegram), so
-    /// label reads «Запустить и открыть Telegram» / «Start &amp; open
-    /// Telegram». When running, footer reverts to the existing «Stop»
-    /// semantics. Bound to <see cref="TgProxyMainActionCommand"/>.
-    /// </summary>
     public string LblTgProxyMainAction => TgProxyEnabled
         ? Strings.TgProxyStop
         : Strings.TgProxyStartAndOpen;
 
-    // v2.31.6-r9 — purged 5 unused L_TgProxySetup* / L_TgProxyClientAutoHint
-    // / L_TgProxyAdvanced getters added in v2.31.6-r1's two-state cascade
-    // but orphaned by r3's design-aligned redo. Iter#4 audit confirmed no
-    // XAML bindings. Only L_TgProxyReopenInTelegram is still used (body
-    // «Reopen in Telegram» button).
     public string L_TgProxyReopenInTelegram => Strings.TgProxyReopenInTelegram;
-    // v2.30.7-r4 — F-17 fix: button label "Обновить" / "Update" alone
-    // is ambiguous — the page has multiple things that can be updated
-    // (binary version, secret, port). Prefix with "TgProxy" so the
-    // action is unambiguous: "Обновить TgProxy" / "Update TgProxy".
     public string LblUpdateTgProxy => IsRussian
         ? (TgProxyUpdater.IsInstalled() ? "Обновить TgProxy" : "Скачать TgProxy")
         : (TgProxyUpdater.IsInstalled() ? "Update TgProxy" : "Download TgProxy");
 
-    // v2.36 (MVP one-button task C): non-blocking scheme-missing
-    // banner. Bound from TelegramPage.axaml; visibility controlled
-    // by IsTelegramSchemeWarningVisible.
     public string L_TgProxySchemeMissingWarning => Strings.TgProxySchemeMissingWarning;
     public string L_TgProxyDismiss => IsRussian ? "Скрыть" : "Dismiss";
     public string L_TgProxyCopyLink => IsRussian ? "Копировать ссылку" : "Copy link";
 
-    // v2.36.0-r7 — TgProxyOneTap design hero labels. Switch on running
-    // state so the body re-narrates after Start: "Включить Telegram" →
-    // "Telegram через MTProto", lede updates with live port. Bind these
-    // and they re-fetch via NotifyPropertyChangedFor on TgProxyEnabled
-    // (see _tgProxyEnabled / _tgProxyPort fields).
     public string LblTgProxyHeroTitle => TgProxyEnabled
         ? Strings.TgProxyOneTapTitleRunning
         : Strings.TgProxyOneTapTitleStopped;

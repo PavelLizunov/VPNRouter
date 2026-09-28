@@ -4,13 +4,6 @@ using VPNRouter.Core.Services;
 namespace VPNRouter.Tests;
 public class BoolToChevronConverterTests
 {
-    /// <summary>
-    /// v2.31.0-r4 (F-3): the Simple-mode "Конфиг·Режим" card chevron now
-    /// flips ▽ ↔ › via <see cref="VPNRouter.App.BoolToChevronConverter"/>
-    /// with a parameter. The pre-fix converter only returned ▲/▼ — the
-    /// regression test ensures both default + parameter paths stay correct
-    /// so a refactor doesn't silently break F-3 again.
-    /// </summary>
     [Fact]
     public void DefaultParameter_ReturnsArrowGlyphs()
     {

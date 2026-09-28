@@ -7,15 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P0.1 Local Network Invariant (audit handoff Android P0.1 / macOS+Windows shared).
-/// Local/private ranges must NEVER be captured by the TUN, regardless of split/full
-/// mode — the generated sing-box config's <c>route_exclude_address</c> must carry
-/// every mandatory range, and the custom-config injector must merge them in without
-/// dropping a user-supplied one. This is the Core-level gate the Android runtime
-/// materialises through libbox TunOptions (device e2e is separate — see
-/// tools/android-e2e-test.sh LAN checks).
-/// </summary>
 public class LocalNetworkInvariantConfigTests
 {
     private static readonly string[] Mandatory = TunSettings.MandatoryLocalRouteExcludeAddress;
@@ -68,8 +59,6 @@ public class LocalNetworkInvariantConfigTests
         return new();
     }
 
-    // ── Generated config carries every mandatory range (full AND split) ──────
-
     [Theory]
     [InlineData("full")]
     [InlineData("split")]
@@ -84,15 +73,11 @@ public class LocalNetworkInvariantConfigTests
             Assert.Contains(range, excludes);
     }
 
-    // ── Custom config injection preserves them + a user-supplied one ─────────
-
     [Fact]
     public void CustomConfigInjection_MergesMandatoryRanges_AndKeepsUserRange()
     {
-        // A custom config whose TUN already excludes one user range; injection must
-        // ADD every mandatory range without dropping the user's.
         const string userRange = "10.9.1.0/24";
-        var raw = /*lang=json*/ """
+        var raw =  """
             {
               "inbounds": [
                 { "type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30"],
@@ -117,10 +102,8 @@ public class LocalNetworkInvariantConfigTests
 
         foreach (var range in Mandatory)
             Assert.Contains(range, excludes);
-        Assert.Contains(userRange, excludes);   // user's own exclusion survived
+        Assert.Contains(userRange, excludes);
     }
-
-    // ── The mandatory set itself is complete (guards accidental deletion) ────
 
     [Fact]
     public void MandatorySet_CoversV4AndV6PrivateAndLinkLocal()

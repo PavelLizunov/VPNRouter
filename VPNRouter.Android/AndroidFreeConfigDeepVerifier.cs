@@ -17,63 +17,14 @@ using Exception = System.Exception;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// Bug #1 (v3.0 android-alpha r5+, 2026-05-11) — Android-side counterpart
-/// of <see cref="FreeConfigDeepVerifier"/>. Same semantics, different
-/// engine: instead of spawning <c>sing-box.exe</c> as a child process
-/// (impossible on Android — there's no exec privilege from a normal app),
-/// we call into <c>AndroidDeepVerifyBox.verifyConfigSync</c> in Java,
-/// which uses the in-process <c>libbox.aar</c> already shipped for the
-/// main VPN tunnel.
-///
-/// <para>The Java side handles libbox lifecycle (box creation, SOCKS
-/// inbound bind, HTTP probe through SOCKS, box close). C# is responsible
-/// for parsing the <c>vless://</c> URI, building the minimal sing-box
-/// JSON via <see cref="FreeConfigDeepVerifier.BuildSingleOutboundConfig"/>,
-/// picking a free SOCKS port, marshaling the call, and parsing the
-/// returned result JSON.</para>
-///
-/// <para><b>Java bridge</b>: we don't write a manual JNI binding for the
-/// helper class. Instead we use <see cref="Java.Lang.Class.ForName(string)"/>
-/// + <c>getMethod()</c> + <c>invoke()</c>. Slower than a direct binding
-/// (~200&#x202F;µs overhead per call) but cheap relative to the multi-second
-/// verify itself, and saves a maintenance hazard — the Java surface here is
-/// one static method.</para>
-///
-/// <para><b>Fallback</b>: if libbox throws / verify times out / the bridge
-/// is unavailable, we leave the entry's Status untouched (stays Ok with
-/// single&#x202F;✓). The orchestrator's deep-verify pass swallows our
-/// exceptions and logs them — Bug #1's worst case is "we don't upgrade to
-/// ✓✓", same UX as pre-fix.</para>
-/// </summary>
 internal sealed class AndroidFreeConfigDeepVerifier
 {
-    /// <summary>Primary probe URL — Cloudflare's trace endpoint (multiline
-    /// key=value, includes ip= which we check is non-private).</summary>
     private const string ProbeUrl = "https://www.cloudflare.com/cdn-cgi/trace";
 
-    /// <summary>Bug-AND-022 (2026-05-17, user-reported "Находит мёртвые
-    /// конфиги"): a single Cloudflare probe was a permissive gate.
-    /// Reality configs with a cosmetically-correct handshake but
-    /// broken routing could pass the one-shot probe yet drop user
-    /// traffic the moment the tunnel actually came up. Verifying
-    /// against a SECOND independent endpoint (also Cloudflare-fronted
-    /// but a different host + TLS fingerprint surface) catches most
-    /// of those false positives without adding much per-config cost.
-    ///
-    /// <para>Chose <c>1.1.1.1/cdn-cgi/trace</c> over a third-party
-    /// host (httpbin / google) because (a) it's Cloudflare-side too —
-    /// no risk of upstream-blocking-by-country and (b) the response
-    /// shape matches the primary probe so we can reuse the parse
-    /// path.</para></summary>
     private const string SecondaryProbeUrl = "https://1.1.1.1/cdn-cgi/trace";
 
-    /// <summary>Overall per-config timeout, including libbox spin-up.</summary>
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(12);
 
-    /// <summary>How many configs to verify in parallel.
-    /// libbox's concurrent-box support is uncharted territory — we cap at 1
-    /// for safety. The orchestrator will run verifications sequentially.</summary>
     public int MaxConcurrency { get; set; } = 1;
 
     private readonly ILogger _logger;
@@ -86,26 +37,12 @@ internal sealed class AndroidFreeConfigDeepVerifier
         _logger = logger;
     }
 
-    /// <summary>
-    /// Verify a single config. Mutates the entry in place:
-    /// <list type="bullet">
-    ///   <item>Success → <see cref="FreeConfigStatus.Verified"/>,
-    ///   <see cref="FreeConfigEntry.LastDeepVerifyAt"/> stamped.</item>
-    ///   <item>Failure → Status unchanged (caller's TCP+TLS verdict stands),
-    ///   <see cref="FreeConfigEntry.LastError"/> updated for diagnostics.</item>
-    /// </list>
-    ///
-    /// <para>Never throws — the caller's loop should be safe to run
-    /// unconditionally. If the bridge isn't available (test rig, missing
-    /// libbox.aar, JNI failure), we log once and become a no-op.</para>
-    /// </summary>
     public async Task VerifyOneAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
         if (cfg is null) return;
 
         if (!EnsureBridgeLoaded())
         {
-            // Bridge unavailable — never retry within this process.
             return;
         }
 
@@ -124,11 +61,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
         try
         {
             socksPort = FindFreePort();
-            // We deliberately reuse the desktop verifier's config builder —
-            // single source of truth for the minimal SOCKS+VLESS config the
-            // verify pass needs. clashPort=null omits the experimental.clash_api
-            // block (we don't hot-reload the verify box, and a hardcoded port
-            // would collide with the main VPN's :9090 when both run).
             var vless = ServerUriParser.Parse(cfg.RawUri);
             configJson = FreeConfigDeepVerifier.BuildSingleOutboundConfig(
                 vless, socksPort, clashPort: null);
@@ -147,10 +79,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
             using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             overallCts.CancelAfter(OverallTimeout);
 
-            // libbox's start() can block for ~1-2 s on cold call. Run on a
-            // pool thread so we don't pin the orchestrator's caller (the
-            // search loop on Avalonia's UI thread when invoked from the
-            // tap handler — see AndroidApp.FreeConfigs.OnFreeConfigsFindClicked).
             string? resultJson = await Task.Run(() =>
             {
                 try
@@ -160,8 +88,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
                 }
                 catch (Exception ex)
                 {
-                    // Surface via logcat too — the Serilog logger has no
-                    // sink configured on Android today.
                     global::Android.Util.Log.Warn("VpnRouter.DV",
                         $"Java invocation threw: {ex.GetType().Name}: {ex.Message}");
                     return null;
@@ -176,7 +102,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
                 return;
             }
 
-            // Parse {"ok":bool,"latencyMs":int,"err":"…"}.
             JsonNode? root;
             try { root = JsonNode.Parse(resultJson); }
             catch (Exception ex)
@@ -193,19 +118,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
 
             if (ok)
             {
-                // Bug-AND-022 (2026-05-17): primary probe (cloudflare.com)
-                // passed. Run a SECOND probe to 1.1.1.1 over the SAME
-                // box session — catches configs that survive one round
-                // trip but drop the second. The Java side reuses the
-                // already-running BoxService when called within the same
-                // bridge invocation, so this is just an extra HTTP RTT
-                // (typically +1-2 s).
-                //
-                // Note: verifyConfigSync builds a fresh BoxService per
-                // call, so we have to invoke the bridge a second time
-                // with a different probeUrl and the original config.
-                // This doubles the libbox spin-up cost (~2 s extra).
-                // Acceptable trade for false-positive reduction.
                 var sw2 = Stopwatch.StartNew();
                 int socksPort2;
                 string configJson2;
@@ -254,8 +166,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
                     cfg.Status = FreeConfigStatus.Verified;
                     cfg.LastDeepVerifyAt = DateTime.UtcNow;
                     cfg.LastError = null;
-                    // Mirror desktop's policy: keep TCP-ping latency for
-                    // the badge.
                     if (cfg.LatencyMs <= 0 && latencyMs > 0)
                         cfg.LatencyMs = latencyMs;
                     _logger.Information("[Android.DV] {host}:{port} [{cc}] ✓✓ VERIFIED (both probes ok, total {total}ms)",
@@ -263,8 +173,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
                 }
                 else
                 {
-                    // Primary ok but secondary failed — false positive.
-                    // Don't mark Verified, surface the secondary error.
                     cfg.LastError = $"primary ok, secondary {secondErr ?? "failed"}";
                     _logger.Information("[Android.DV] {host}:{port} [{cc}] ✗ false-positive: {err} (total {total}ms)",
                         cfg.Host, cfg.Port, cc, cfg.LastError, sw.ElapsedMilliseconds + sw2.ElapsedMilliseconds);
@@ -291,17 +199,10 @@ internal sealed class AndroidFreeConfigDeepVerifier
         }
     }
 
-    /// <summary>
-    /// Resolve the static Java <c>AndroidDeepVerifyBox.verifyConfigSync</c>
-    /// method once and cache the reflective handle. Called the first time
-    /// <see cref="VerifyOneAsync"/> is invoked; if the lookup fails (libbox
-    /// missing, Java class not in the APK), the verifier becomes a no-op
-    /// and a warning is logged exactly once.
-    /// </summary>
     private bool EnsureBridgeLoaded()
     {
         if (_verifyMethod is not null) return true;
-        if (_bridgeProbed) return false; // failed once already
+        if (_bridgeProbed) return false;
 
         _bridgeProbed = true;
         try
@@ -309,12 +210,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
             _verifierClass = Java.Lang.Class.ForName("com.ninitux.vpnrouter.AndroidDeepVerifyBox");
             if (_verifierClass is null) return false;
 
-            // Java reflection: getMethod needs Java Class peers for the
-            // parameter types, not C# Class.FromType(typeof(string)) — the
-            // latter resolves to System.String's peer, which has a different
-            // descriptor than java.lang.String and makes the method lookup
-            // fail with NoSuchMethodException. Use Class.ForName for the
-            // canonical Java class names instead.
             var stringClass = Java.Lang.Class.ForName("java.lang.String");
             var contextClass = Java.Lang.Class.ForName("android.content.Context");
             if (stringClass is null || contextClass is null) return false;
@@ -355,9 +250,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
     {
         if (_verifyMethod is null) return null;
 
-        // null target → static method. Args are auto-boxed by the Mono.Android
-        // reflection layer; int → Integer, string → java.lang.String.
-        // The return value comes back as Java.Lang.String and we ToString it.
         var args = new Java.Lang.Object[]
         {
             ctx,
@@ -370,9 +262,6 @@ internal sealed class AndroidFreeConfigDeepVerifier
         return result?.ToString();
     }
 
-    /// <summary>Find a random free TCP port on loopback — same trick as the
-    /// desktop verifier uses, just in C# rather than handing the port
-    /// allocation to Java.</summary>
     private static int FindFreePort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

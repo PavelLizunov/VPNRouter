@@ -5,54 +5,16 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests.Fakes;
 
-/// <summary>
-/// Thread-safe in-memory fake of <see cref="IFileSystem"/> for unit tests.
-/// Storage is a <see cref="ConcurrentDictionary{TKey, TValue}"/> keyed by
-/// the canonicalised path. Records the full access trail in
-/// <see cref="AccessLog"/> so tests can assert "the service touched
-/// %ProgramData%/VPNRouter/config.yaml exactly once".
-///
-/// <para>
-/// Path canonicalisation: paths are compared using
-/// <see cref="StringComparer.OrdinalIgnoreCase"/> on Windows (where the
-/// real file system is case-insensitive) and the same here for
-/// cross-platform test stability. Forward and back slashes are normalised
-/// to <see cref="Path.DirectorySeparatorChar"/>.
-/// </para>
-/// </summary>
 public sealed class InMemoryFileSystem : IFileSystem
 {
-    /// <summary>
-    /// Stored files. Key = normalised path. Value = raw bytes (matches
-    /// real on-disk representation). All access goes through this
-    /// dictionary's thread-safe operations.
-    /// </summary>
     private readonly ConcurrentDictionary<string, FileEntry> _files = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Stored directories (separate from files because a directory can
-    /// exist without containing any file). Key = normalised path.
-    /// </summary>
     private readonly ConcurrentDictionary<string, byte> _directories = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Held lock tags — used by <see cref="TryAcquireExclusiveLockAsync"/>
-    /// to detect contention. Disposing the returned handle removes the
-    /// entry. Key = normalised path.
-    /// </summary>
     private readonly ConcurrentDictionary<string, byte> _heldLocks = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Append-only log of operations for test assertions. Synchronised
-    /// via <see cref="ConcurrentQueue{T}"/> — no manual locking needed.
-    /// </summary>
     public ConcurrentQueue<string> AccessLog { get; } = new();
 
-    /// <summary>
-    /// Retry interval used by <see cref="TryAcquireExclusiveLockAsync"/>.
-    /// Tests can tune this lower than the real 100ms to speed up timeout
-    /// scenarios; default mirrors <see cref="RealFileSystem"/>.
-    /// </summary>
     public TimeSpan LockRetryDelay { get; set; } = TimeSpan.FromMilliseconds(20);
 
     public Task<string> ReadAllTextAsync(string path, CancellationToken ct = default)
@@ -133,8 +95,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         if (!_files.TryGetValue(key, out var entry))
             throw new FileNotFoundException($"File not found: {path}", path);
         var text = Encoding.UTF8.GetString(entry.Bytes);
-        // Mirror File.ReadAllLines: split on any line separator, drop the
-        // single final empty entry caused by a trailing newline.
         var parts = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         if (parts.Length > 0 && parts[^1].Length == 0)
             return parts[..^1];
@@ -186,8 +146,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         var key = Norm(path);
         AccessLog.Enqueue($"DirectoryExists({key})");
         if (_directories.ContainsKey(key)) return true;
-        // A directory also "exists" if any file under it does (matches
-        // real FS behaviour where CreateDirectory is implicit via writes).
         var prefix = key + Path.DirectorySeparatorChar;
         foreach (var f in _files.Keys)
         {
@@ -201,8 +159,6 @@ public sealed class InMemoryFileSystem : IFileSystem
     {
         var key = Norm(path);
         AccessLog.Enqueue($"CreateDirectory({key})");
-        // mkdir -p: register every parent too so DirectoryExists works
-        // for them.
         var cur = key;
         while (!string.IsNullOrEmpty(cur))
         {
@@ -244,8 +200,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         {
             if (!f.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
             var rel = f[prefix.Length..];
-            // Non-recursive: skip anything containing a path separator
-            // after the prefix.
             if (!recursive && rel.Contains(Path.DirectorySeparatorChar)) continue;
             var name = Path.GetFileName(f);
             if (matcher.IsMatch(name)) yield return f;
@@ -258,8 +212,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         AccessLog.Enqueue($"OpenRead({key})");
         if (!_files.TryGetValue(key, out var entry))
             throw new FileNotFoundException($"File not found: {path}", path);
-        // MemoryStream over a defensive copy so callers can't mutate
-        // backing store. Length is supported natively (no workaround).
         return new MemoryStream((byte[])entry.Bytes.Clone(), writable: false);
     }
 
@@ -268,7 +220,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         var key = Norm(path);
         AccessLog.Enqueue($"OpenWrite({key})");
         EnsureParentDir(key);
-        // Capturing stream that writes back on dispose.
         return new CapturingStream(this, key);
     }
 
@@ -284,8 +235,6 @@ public sealed class InMemoryFileSystem : IFileSystem
             if (_heldLocks.TryAdd(key, 0))
             {
                 EnsureParentDir(key);
-                // Create the lock file so DetectPreviousCrash-style code
-                // can read its contents.
                 _files.TryAdd(key, new FileEntry(Array.Empty<byte>(), DateTimeOffset.UtcNow));
                 return new LockHandle(this, key);
             }
@@ -294,30 +243,15 @@ public sealed class InMemoryFileSystem : IFileSystem
         }
     }
 
-    // ── Test-only inspection helpers ──
-
-    /// <summary>
-    /// Direct-set a file's content. Bypasses the access log — handy for
-    /// "seed the test environment with config.yaml" without polluting the
-    /// log used by assertions.
-    /// </summary>
     public void Seed(string path, string content)
         => _files[Norm(path)] = new FileEntry(Encoding.UTF8.GetBytes(content), DateTimeOffset.UtcNow);
 
-    /// <summary>Direct-set a file's raw bytes. See <see cref="Seed(string,string)"/>.</summary>
     public void Seed(string path, byte[] content)
         => _files[Norm(path)] = new FileEntry((byte[])content.Clone(), DateTimeOffset.UtcNow);
 
-    /// <summary>Number of stored files (for sanity assertions in tests).</summary>
     public int FileCount => _files.Count;
 
-    /// <summary>
-    /// Snapshot of all stored paths. Returns a defensive copy so callers
-    /// can iterate without worrying about concurrent mutation.
-    /// </summary>
     public IReadOnlyList<string> AllPaths => _files.Keys.ToList();
-
-    // ── Internals ──
 
     private static string Norm(string path)
     {
@@ -337,8 +271,6 @@ public sealed class InMemoryFileSystem : IFileSystem
 
     private static System.Text.RegularExpressions.Regex WildcardToRegex(string pattern)
     {
-        // Convert "*" -> ".*", "?" -> ".". Anchored so "*.txt" doesn't
-        // match "a.txt.bak".
         var rx = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
             .Replace("\\*", ".*")
             .Replace("\\?", ".") + "$";
@@ -353,11 +285,6 @@ public sealed class InMemoryFileSystem : IFileSystem
 
     private sealed record FileEntry(byte[] Bytes, DateTimeOffset LastWriteTimeUtc);
 
-    /// <summary>
-    /// Lock-handle returned from <see cref="TryAcquireExclusiveLockAsync"/>.
-    /// Mirrors the real impl: dispose releases the lock AND deletes the
-    /// underlying file, so a follow-up acquire sees a clean slate.
-    /// </summary>
     private sealed class LockHandle : IDisposable
     {
         private readonly InMemoryFileSystem _fs;
@@ -377,11 +304,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         }
     }
 
-    /// <summary>
-    /// Memory-backed write stream that flushes its content into the
-    /// in-memory store on dispose. Supports Length natively via the
-    /// underlying <see cref="MemoryStream"/>.
-    /// </summary>
     private sealed class CapturingStream : MemoryStream
     {
         private readonly InMemoryFileSystem _fs;

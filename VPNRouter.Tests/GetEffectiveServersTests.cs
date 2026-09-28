@@ -2,9 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// GetEffectiveServers
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class GetEffectiveServersTests
 {

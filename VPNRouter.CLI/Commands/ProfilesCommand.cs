@@ -5,12 +5,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.CLI.Commands;
 
-// ─── profiles list ────────────────────────────────────────────────────────────
-
 public class ProfilesListCommand : AsyncCommand
 {
-    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection. Default
-    // <see cref="RealSettingsStore.Instance"/> preserves pre-3G-1 behaviour.
     private readonly ISettingsStore _settingsStore;
 
     public ProfilesListCommand() : this(null) { }
@@ -70,8 +66,6 @@ public class ProfilesListCommand : AsyncCommand
     }
 }
 
-// ─── profiles show ────────────────────────────────────────────────────────────
-
 public class ProfilesShowSettings : CommandSettings
 {
     [CommandArgument(0, "<profile>")]
@@ -81,7 +75,6 @@ public class ProfilesShowSettings : CommandSettings
 
 public class ProfilesShowCommand : AsyncCommand<ProfilesShowSettings>
 {
-    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection.
     private readonly ISettingsStore _settingsStore;
 
     public ProfilesShowCommand() : this(null) { }
@@ -130,11 +123,8 @@ public class ProfilesShowCommand : AsyncCommand<ProfilesShowSettings>
     }
 }
 
-// ─── profiles update ──────────────────────────────────────────────────────────
-
 public class ProfilesUpdateCommand : AsyncCommand
 {
-    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection.
     private readonly ISettingsStore _settingsStore;
 
     public ProfilesUpdateCommand() : this(null) { }

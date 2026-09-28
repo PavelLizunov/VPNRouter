@@ -10,23 +10,6 @@ using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.CLI.Commands;
 
-// CI-only test harness for the auto-update path. Driven by
-// .github/workflows/test-windows-update.yml. Gated behind the env var
-// VPNROUTER_CI=1 so it can never be invoked accidentally on a real install.
-//
-// Background: v2.31.7-r10 helper.cmd had a CMD parser bug
-// (`set /a SVC_TRIES` referenced before EnableDelayedExpansion was set,
-// see UpdateChecker.cs ~line 441). It went undetected for ~7 days because
-// no automated test exercised the helper.cmd cmd.exe path — unit tests
-// only see the C# string template, not the runtime parser. This command
-// is the entry point for integration tests that drive the real helper.
-//
-// Phase 4 (Wave 18, 2026-05-18): migrated from UpdateChecker.CheckForUpdateAsync
-// to IUpdateSource.CheckAsync — same GitHub API + asset pick + version
-// compare flow underneath, but routed through the platform-neutral
-// IUpdateSource contract that the rest of v3.0 uses. UpdateChecker still
-// owns the staging + helper.cmd dispatch via IDesktopInstaller.
-
 public class TestUpdateSettings : CommandSettings
 {
     [CommandOption("--target <VERSION>")]
@@ -49,10 +32,6 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, TestUpdateSettings settings)
     {
-        // Hard CI gate. This command writes to %ProgramData%\VPNRouter and
-        // launches a detached cmd.exe that overwrites the running app dir —
-        // not something we want a curious user invoking from a working
-        // install.
         var ciEnv = Environment.GetEnvironmentVariable("VPNROUTER_CI");
         if (!string.Equals(ciEnv, "1", StringComparison.Ordinal))
         {
@@ -77,14 +56,9 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
         var updateSettings = new UpdateSettings
         {
             GitHubRepo = settings.Repo,
-            // Always experimental in CI — we may be testing prerelease -rN tags.
             Channel = "experimental",
         };
 
-        // Phase 4 migration — UpdateChecker stays as the IDesktopInstaller
-        // adapter (staging + helper.cmd dispatch) and supplies the legacy
-        // event stream we log here. The new entry point is IUpdateSource;
-        // it shares the same UpdateChecker instance under the hood.
         var checker = new UpdateChecker(updateSettings, AppVersion.Version);
         var source = PlatformServices.CreateUpdateSource(
             updateSettings,
@@ -95,7 +69,6 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
         var lastLoggedPercent = -1;
         checker.DownloadProgress += p =>
         {
-            // Throttle to every 10% so we don't spam CI logs.
             if (p / 10 != lastLoggedPercent / 10)
             {
                 Log.Information("[update] download {Pct}%", p);
@@ -167,15 +140,6 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
 
         try
         {
-            // ApplyAsync writes helper.cmd to %TEMP%, launches it detached,
-            // and returns immediately. The helper waits for THIS process
-            // (the CLI) to exit before doing the file copy. So we exit
-            // promptly — the CI workflow then polls update.log for completion.
-            //
-            // When --staged-dir was supplied we don't have a real
-            // UpdateSourceInfo; synthesize a minimal one with the target
-            // version so the installer logs receipt with the correct
-            // version stamp.
             info ??= new UpdateSourceInfo(
                 Version: settings.TargetVersion,
                 ReleaseUrl: string.Empty,

@@ -16,12 +16,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// NIGHT-06 regression tests: AutoFailover lifecycle and settings intent synchronization.
-/// Verifies that failover pool and restart closure reflect the active user intent,
-/// resets occur on public Start and successful Apply, stale delegate invocations are aborted
-/// before teardown or persistence, and routine wire calls preserve tried cycle state.
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class NightFailoverIntentTests
 {
@@ -159,7 +153,6 @@ public sealed class NightFailoverIntentTests
 
         Assert.Same(instanceA1, instanceA2);
 
-        // Mutate tried set in instanceA1 to verify routine wire calls do not reset cycle state
         var tried = (HashSet<string>)GetField(instanceA1, "_tried")!;
         tried.Add("server-a1");
 
@@ -182,24 +175,19 @@ public sealed class NightFailoverIntentTests
         var instanceA = host.WireFailover(sanity);
         Assert.Same(instanceA, GetField(engine, "_failover"));
 
-        // Commit intent B
         var settingsB = CreateTestSettings("server-b1", "server-b2");
         engine.ResetFailoverContext(settingsB);
 
-        // 1. Immediately lazy null and updated context
         Assert.Null(GetField(engine, "_failover"));
         Assert.Same(settingsB, GetField(engine, "_failoverSettingsContext"));
 
-        // 2. New wire creates fresh instance with pool B and captured settings B
         var instanceB = host.WireFailover(sanity);
         Assert.NotSame(instanceA, instanceB);
         Assert.Same(instanceB, GetField(engine, "_failover"));
 
-        // Pool B identity
         var pool = GetField(instanceB, "_settings") as AppSettings;
         Assert.Same(settingsB, pool);
 
-        // Restart delegate captured settings B and generation 2
         var restartDelegate = GetField(instanceB, "_restart") as Func<CancellationToken, Task<bool>>;
         Assert.NotNull(restartDelegate);
         Assert.NotNull(restartDelegate.Target);
@@ -249,7 +237,6 @@ public sealed class NightFailoverIntentTests
         SetField(engine, "_singBox", singBox);
         engine.EnterPostStartPhase();
 
-        // Stale failover engine for intent A
         var sanity = new ConfigSanityCheck();
         var staleFailoverA = new AutoFailoverEngine(
             settingsA,
@@ -258,7 +245,6 @@ public sealed class NightFailoverIntentTests
             logger: null,
             store: store);
 
-        // Engine switches to intent B
         var settingsB = CreateTestSettings("server-b1", "server-b2");
         engine.ResetFailoverContext(settingsB);
 
@@ -266,21 +252,16 @@ public sealed class NightFailoverIntentTests
         {
             var outcome = await staleFailoverA.HandleDeadConfigAsync("dead config probe", CancellationToken.None);
 
-            // Stale failover invocation returns false and rolls back in-memory selectors
             Assert.False(outcome.Switched);
             Assert.Null(outcome.NewActiveServer);
 
-            // Teardown did NOT run
             Assert.Equal(0, dns.RestoreCount);
 
-            // Fake manager reference retained
             Assert.Same(singBox, GetField(engine, "_singBox"));
 
-            // No runner calls made
             Assert.Empty(runner.StartCalls);
             Assert.Empty(runner.RunCalls);
 
-            // Store not updated (no persistence on false)
             Assert.Equal(saveCountBefore, store.SaveCount);
             Assert.Equal("server-a1", settingsA.Vless.ActiveServer);
         }
@@ -306,7 +287,6 @@ public sealed class NightFailoverIntentTests
         var settingsA = CreateTestSettings("server-a1", "server-a2");
         var settingsB = CreateTestSettings("server-b1", "server-b2");
 
-        // pre-start phase: _postStartPhase is false
         engine.ResetFailoverContext(settingsB);
 
         var result = await engine.ExecuteFailoverRestartAsync(settingsA, CancellationToken.None);
@@ -337,7 +317,6 @@ public sealed class NightFailoverIntentTests
         SetField(engine, "_singBox", singBox);
         engine.EnterPostStartPhase();
 
-        // 1. Wire oldA with initial settings
         var settings = CreateTestSettings("server-a1", "server-a2");
         engine.ResetFailoverContext(settings);
 
@@ -348,28 +327,21 @@ public sealed class NightFailoverIntentTests
         var oldRestart = GetField(failoverOld, "_restart") as Func<CancellationToken, Task<bool>>;
         Assert.NotNull(oldRestart);
 
-        // 2. Reset SAME AppSettings object for new intent (e.g. Apply / Start reuses existing instance)
         settings.Vless.ActiveServer = "server-a2";
         engine.ResetFailoverContext(settings);
 
-        // Verify settings reference is indeed the exact SAME object (ReferenceEquals alone would pass)
         Assert.Same(settings, GetField(engine, "_failoverSettingsContext"));
 
         try
         {
-            // 3. Invoke old _restart closure from previous intent
             var result = await oldRestart(CancellationToken.None);
 
-            // Stale generation must cause restart to abort
             Assert.False(result);
 
-            // Teardown did NOT run (RestoreCount is 0)
             Assert.Equal(0, dns.RestoreCount);
 
-            // Fake manager reference retained
             Assert.Same(singBox, GetField(engine, "_singBox"));
 
-            // No runner calls made
             Assert.Empty(runner.StartCalls);
             Assert.Empty(runner.RunCalls);
         }
@@ -389,7 +361,6 @@ public sealed class NightFailoverIntentTests
         var fakeDriver = new FakeSplitTunnelDriver();
         using var engine = BuildEngine(dns, fakeDriver);
 
-        // Pre-start: _postStartPhase is false
         var settings = CreateTestSettings("server-a1", "server-a2");
         engine.ResetFailoverContext(settings);
 
@@ -400,7 +371,6 @@ public sealed class NightFailoverIntentTests
         var oldRestart = GetField(failoverOld, "_restart") as Func<CancellationToken, Task<bool>>;
         Assert.NotNull(oldRestart);
 
-        // Reset SAME object with new intent
         settings.Vless.ActiveServer = "server-a2";
         engine.ResetFailoverContext(settings);
 

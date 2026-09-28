@@ -12,14 +12,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Wire-shape + safety coverage for the Linux nft kill-switch (counterpart to
-/// <see cref="MacFirewallManagerTests"/>). LinuxFirewallManager is pure
-/// IProcessRunner orchestration, so the exact nft command shapes — the part where
-/// a wrong ruleset / missing teardown bricks the user's network — are pinned here
-/// on the Windows build. Live block / reconnect / no-brick behaviour is verified
-/// on a real Linux host (the kill-9 gate).
-/// </summary>
 public class LinuxFirewallManagerTests : IDisposable
 {
     private readonly string _testDir =
@@ -86,13 +78,9 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.CreateBlockRules(new[] { "Discord", "chrome" }, isFullTunnel: false);
         sut.EnableBlockRules();
 
-        Assert.Empty(fake.RunCalls); // never armed → no nft at all (full-tunnel-only)
+        Assert.Empty(fake.RunCalls);
     }
 
-    // P1 regression (2026-07-10): a SPLIT-tunnel process scan that TIMED OUT
-    // returns an empty list. Pre-fix an empty list meant "full tunnel" → the
-    // whole host's egress was dropped on a crash. Arming is now by the explicit
-    // routing intent, so split-with-empty-list must STILL disarm.
     [Fact]
     public void SplitTunnel_emptyList_scanTimeout_still_disarms()
     {
@@ -100,10 +88,10 @@ public class LinuxFirewallManagerTests : IDisposable
         var fake = OkRunner();
         var sut = CreateSut(fake);
 
-        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: false); // split scan returned nothing
+        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: false);
         sut.EnableBlockRules();
 
-        Assert.Empty(fake.RunCalls); // must NOT global-block a split-tunnel user
+        Assert.Empty(fake.RunCalls);
     }
 
     [Fact]
@@ -121,7 +109,7 @@ public class LinuxFirewallManagerTests : IDisposable
         Assert.NotNull(load);
         var rules = File.ReadAllText(load!.Arguments.Last());
         Assert.Contains("policy drop", rules);
-        Assert.Contains("104.194.156.93", rules); // server pass → sing-box can reconnect
+        Assert.Contains("104.194.156.93", rules);
     }
 
     [Fact]
@@ -134,13 +122,13 @@ public class LinuxFirewallManagerTests : IDisposable
         var sut = CreateSut(fake);
 
         sut.CreateBlockRules(Array.Empty<string>());
-        sut.EnableBlockRules(); // fail-safe: load failed → NOT blocking, no brick
+        sut.EnableBlockRules();
 
-        Assert.False(File.Exists(_marker)); // never engaged → no sentinel
+        Assert.False(File.Exists(_marker));
 
         var before = fake.RunCalls.Count;
         sut.DisableBlockRules();
-        Assert.Equal(before, fake.RunCalls.Count); // not loaded → Disable no-op
+        Assert.Equal(before, fake.RunCalls.Count);
     }
 
     [Fact]
@@ -179,7 +167,7 @@ public class LinuxFirewallManagerTests : IDisposable
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
         var sut = CreateSut(fake);
-        sut.CreateBlockRules(Array.Empty<string>()); // armed but never enabled
+        sut.CreateBlockRules(Array.Empty<string>());
 
         sut.DisableBlockRules();
 
@@ -192,7 +180,7 @@ public class LinuxFirewallManagerTests : IDisposable
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
         var sut = CreateSut(fake);
-        sut.CreateBlockRules(Array.Empty<string>()); // armed but never enabled
+        sut.CreateBlockRules(Array.Empty<string>());
 
         sut.Dispose();
 
@@ -217,7 +205,6 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         var rules = LinuxFirewallManager.BuildRuleset(new List<string>());
         Assert.Contains("policy drop", rules);
-        // No "ip daddr { } accept" with an empty server set (would be invalid nft).
         Assert.DoesNotContain("ip daddr {  }", rules);
     }
 
@@ -226,8 +213,6 @@ public class LinuxFirewallManagerTests : IDisposable
     {
         var rules = LinuxFirewallManager.BuildRuleset(new List<string> { "1.2.3.4", "2001:db8::1" });
 
-        // Unchanged IPv4 rule + new IPv6 ip6-daddr rule; the IPv6 literal must
-        // not ride a malformed IPv4-family rule.
         Assert.Contains("add rule inet vpnrouter_ks output ip daddr { 1.2.3.4 } accept", rules);
         Assert.Contains("add rule inet vpnrouter_ks output ip6 daddr { 2001:db8::1 } accept", rules);
         Assert.DoesNotContain("ip daddr { 2001:db8::1 }", rules);
@@ -240,7 +225,6 @@ public class LinuxFirewallManagerTests : IDisposable
             { ""type"": ""vless"", ""server"": ""example.com"" },
             { ""type"": ""vless"", ""server"": ""5.6.7.8"" } ] }");
         var fake = OkRunner();
-        // resolver returns nothing for the hostname → only the literal IP survives
         var sut = CreateSut(fake, hostResolver: _ => Array.Empty<string>());
 
         sut.CreateBlockRules(Array.Empty<string>());
@@ -254,8 +238,6 @@ public class LinuxFirewallManagerTests : IDisposable
     [Fact]
     public void ReadServerIps_resolves_hostname_server_to_ip()
     {
-        // Hostname server → must be RESOLVED into the pass-list, else the
-        // kill-switch blocks crash-reconnect → bricked host.
         File.WriteAllText(_cfg, @"{ ""outbounds"": [
             { ""type"": ""vless"", ""server"": ""proxy.example.com"" } ] }");
         var fake = OkRunner();
@@ -280,16 +262,16 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.CreateBlockRules(Array.Empty<string>());
 
         sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));   // engaged → crash-recovery sentinel present
+        Assert.True(File.Exists(_marker));
 
         sut.DisableBlockRules();
-        Assert.False(File.Exists(_marker));  // clean teardown → sentinel gone
+        Assert.False(File.Exists(_marker));
     }
 
     [Fact]
     public void CleanupOrphanedRules_with_marker_deletes_table_and_clears_marker()
     {
-        File.WriteAllText(_marker, "engaged"); // simulate a prior hard kill while engaged
+        File.WriteAllText(_marker, "engaged");
         var fake = OkRunner();
         var sut = CreateSut(fake);
 
@@ -304,18 +286,16 @@ public class LinuxFirewallManagerTests : IDisposable
     public void CleanupOrphanedRules_without_marker_is_noop()
     {
         var fake = OkRunner();
-        var sut = CreateSut(fake); // no marker file
+        var sut = CreateSut(fake);
 
         sut.CleanupOrphanedRules(null);
 
-        Assert.Empty(fake.RunCalls); // a normal launch must never touch nft
+        Assert.Empty(fake.RunCalls);
     }
 
     [Fact]
     public void Enable_WritesRulesetToConfiguredPath_NotSharedTemp()
     {
-        // FW-02: verify that LinuxFirewallManager writes rulesets into private AppPaths.DataDir
-        // or the explicitly configured ruleset path, never world-writable /tmp.
         WriteConfig("9.9.9.9");
         var customRuleset = Path.Combine(_testDir, "custom-ruleset-" + Guid.NewGuid().ToString("N") + ".conf");
         var fake = OkRunner();
@@ -352,11 +332,9 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.EnableBlockRules();
         Assert.True(File.Exists(_marker));
 
-        // Failed Disable must retain marker and loaded recovery state
         sut.DisableBlockRules();
         Assert.True(File.Exists(_marker));
 
-        // Retry after recovery successfully removes table and marker
         allowDelete = true;
         sut.DisableBlockRules();
         Assert.False(File.Exists(_marker));
@@ -374,11 +352,9 @@ public class LinuxFirewallManagerTests : IDisposable
         fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("list"), Fail("sudoers denied"));
         var sut = CreateSut(fake);
 
-        // Failed delete during orphan cleanup must not delete marker
         sut.CleanupOrphanedRules(null);
         Assert.True(File.Exists(_marker));
 
-        // Later recovered command on the same instance succeeds and clears marker
         allowDelete = true;
         sut.CleanupOrphanedRules(null);
         Assert.False(File.Exists(_marker));
@@ -401,11 +377,9 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.EnableBlockRules();
         Assert.True(File.Exists(_marker));
 
-        // Failed DeleteAllRules keeps marker for future recovery
         sut.DeleteAllRules();
         Assert.True(File.Exists(_marker));
 
-        // Repeat DeleteAllRules succeeds and clears marker
         allowDelete = true;
         sut.DeleteAllRules();
         Assert.False(File.Exists(_marker));
@@ -428,17 +402,14 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.EnableBlockRules();
         Assert.True(File.Exists(_marker));
 
-        // First Dispose fails delete → retains marker and _loaded
         sut.Dispose();
         Assert.True(File.Exists(_marker));
 
-        // Repeat Dispose with recovered command cleans up and clears marker
         allowDelete = true;
         sut.Dispose();
         Assert.False(File.Exists(_marker));
         Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
 
-        // Subsequent Dispose is idempotent no-op
         sut.Dispose();
         Assert.Equal(2, fake.RunCalls.Count(c => c.Arguments.Contains("delete")));
     }
@@ -458,11 +429,9 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.CreateBlockRules(Array.Empty<string>());
 
-        // 1. Enable with timed-out exit 0 must not engage or write marker
         sut.EnableBlockRules();
         Assert.False(File.Exists(_marker));
 
-        // 2. Successful Enable followed by timed-out exit 0 on Disable must retain marker
         loadShouldTimeout = false;
         sut.EnableBlockRules();
         Assert.True(File.Exists(_marker));
@@ -470,7 +439,6 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.DisableBlockRules();
         Assert.True(File.Exists(_marker));
 
-        // 3. Orphan cleanup with timed-out exit 0 must retain marker
         sut.CleanupOrphanedRules(null);
         Assert.True(File.Exists(_marker));
     }
@@ -491,7 +459,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Proved absent via inventory -> success, marker deleted
         Assert.False(File.Exists(_marker));
         Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("delete"));
         Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-j") && c.Arguments.Contains("list") && c.Arguments.Contains("tables"));
@@ -565,7 +532,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Target table is present -> failure retained, marker kept
         Assert.True(File.Exists(_marker));
     }
 
@@ -585,7 +551,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Inventory command error -> failure retained, marker kept
         Assert.True(File.Exists(_marker));
     }
 
@@ -605,7 +570,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Malformed JSON -> failure retained, marker kept
         Assert.True(File.Exists(_marker));
     }
 
@@ -625,7 +589,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Missing nftables array -> failure retained, marker kept
         Assert.True(File.Exists(_marker));
     }
 
@@ -646,42 +609,25 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Timed out inventory -> failure retained, marker kept
         Assert.True(File.Exists(_marker));
     }
 
     [Theory]
-    // Missing family (e.g. {nftables:[{table:{name:'vpnrouter_ks'}}]})
     [InlineData(@"{""nftables"":[{""table"":{""name"":""vpnrouter_ks""}}]}")]
-    // Missing name
     [InlineData(@"{""nftables"":[{""table"":{""family"":""inet""}}]}")]
-    // Wrong family type (number)
     [InlineData(@"{""nftables"":[{""table"":{""family"":123,""name"":""vpnrouter_ks""}}]}")]
-    // Wrong name type (number)
     [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":456}}]}")]
-    // Wrong family type (null)
     [InlineData(@"{""nftables"":[{""table"":{""family"":null,""name"":""vpnrouter_ks""}}]}")]
-    // Wrong name type (null)
     [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":null}}]}")]
-    // Empty family string
     [InlineData(@"{""nftables"":[{""table"":{""family"":"""",""name"":""vpnrouter_ks""}}]}")]
-    // Whitespace family string
     [InlineData(@"{""nftables"":[{""table"":{""family"":""   "",""name"":""vpnrouter_ks""}}]}")]
-    // Empty name string
     [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":""""}}]}")]
-    // Whitespace name string
     [InlineData(@"{""nftables"":[{""table"":{""family"":""inet"",""name"":""   ""}}]}")]
-    // Wrong table type (string instead of object)
     [InlineData(@"{""nftables"":[{""table"":""not_an_object""}]}")]
-    // Wrong table type (null instead of object)
     [InlineData(@"{""nftables"":[{""table"":null}]}")]
-    // Wrong table type (array instead of object)
     [InlineData(@"{""nftables"":[{""table"":[]}]}")]
-    // Unknown node type
     [InlineData(@"{""nftables"":[{""unknown"":{}}]}")]
-    // Non-object entry in nftables array
     [InlineData(@"{""nftables"":[123]}")]
-    // Non-object metainfo
     [InlineData(@"{""nftables"":[{""metainfo"":""not_an_object""}]}")]
     public void Delete_fails_and_inventory_malformed_entry_retains_failure(string malformedInventoryJson)
     {
@@ -698,7 +644,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.DisableBlockRules();
 
-        // Malformed inventory entry -> failure retained, marker kept
         Assert.True(File.Exists(_marker));
     }
 
@@ -974,12 +919,10 @@ public class LinuxFirewallManagerTests : IDisposable
     [Fact]
     public void UpdateCommittedConfig_StaleFileOrNoFile_EmitsOnlyCommittedPeersV4V6()
     {
-        // Stale fileA on disk with 198.51.100.1
         WriteConfig("198.51.100.1");
         var fake = OkRunner();
         var sut = CreateSut(fake);
 
-        // Committed config B with different v4 outbound and v6 wireguard peer
         var committedJsonB = """
         {
           "outbounds": [
@@ -996,7 +939,6 @@ public class LinuxFirewallManagerTests : IDisposable
         }
         """;
 
-        // Call capability via interface forwarding to internal method
         ((ICommittedFirewallConfig)sut).UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
         Assert.True(sut.IsArmed);
@@ -1064,7 +1006,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
-        // Active refresh MUST NOT delete table or disable/unblock first
         Assert.DoesNotContain(fake.RunCalls.Skip(callsBefore), c => c.Arguments.Contains("delete"));
         var refreshCall = Assert.Single(fake.RunCalls.Skip(callsBefore), c =>
             c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("nft") && c.Arguments.Contains("-f"));
@@ -1112,7 +1053,6 @@ public class LinuxFirewallManagerTests : IDisposable
         failRefresh = true;
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
-        // Failed refresh keeps old cache/loaded/marker and proves fail executed
         Assert.Equal(1, injections);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
         Assert.True(sut.IsLoaded);
@@ -1122,7 +1062,6 @@ public class LinuxFirewallManagerTests : IDisposable
         failRefresh = false;
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: true);
 
-        // Retry succeeds: cacheB updated, one reload, no unblock/delete, marker stays
         Assert.Equal(1, injections);
         Assert.Equal(new[] { "203.0.113.99" }, sut.ServerIps);
         Assert.True(sut.IsLoaded);
@@ -1142,10 +1081,8 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
 
-        // Malformed committed JSON
         sut.UpdateCommittedConfig("{ invalid json content", enabledForFullTunnel: true);
 
-        // Retains prior list, does not turn parse exception into empty cache
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
@@ -1173,7 +1110,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.UpdateCommittedConfig(committedJsonB, enabledForFullTunnel: false);
 
-        // Disabled mode disarms, deletes table, lifts rules, deletes marker, retains prior unused cache
         Assert.False(sut.IsArmed);
         Assert.False(sut.IsLoaded);
         Assert.False(File.Exists(_marker));
@@ -1195,7 +1131,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         int callsBefore = fake.RunCalls.Count;
 
-        // Malformed JSON with disabled branch must still lift rules and disarm without throwing
         sut.UpdateCommittedConfig("{ not valid json content", enabledForFullTunnel: false);
 
         Assert.False(sut.IsArmed);
@@ -1227,7 +1162,6 @@ public class LinuxFirewallManagerTests : IDisposable
         }
         """;
 
-        // Must not throw, zero DNS queries invoked when disabled
         sut.UpdateCommittedConfig(committedJsonWithHost, enabledForFullTunnel: false);
 
         Assert.False(sut.IsArmed);
@@ -1274,7 +1208,6 @@ public class LinuxFirewallManagerTests : IDisposable
 
         sut.UpdateCommittedConfig(malformedRoot, enabledForFullTunnel: true);
 
-        // Retains prior list on non-object root shape
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
     }
 
@@ -1288,7 +1221,6 @@ public class LinuxFirewallManagerTests : IDisposable
         sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
         Assert.Equal(new[] { "198.51.100.1" }, sut.ServerIps);
 
-        // Empty JSON object is valid committed config, clears server IPs without leak policy regression
         sut.UpdateCommittedConfig("{}", enabledForFullTunnel: true);
 
         Assert.Empty(sut.ServerIps);

@@ -7,22 +7,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Service;
 
-/// <summary>
-/// Windows Service implementation.
-/// On cold start: waits for network, then auto-starts VPN/Zapret/TgProxy
-/// based on config flags. Defers to desktop UI if it's running.
-///
-/// <para><b>v2.27 §4.6 C2 — config.yaml write invariant:</b> the Service
-/// MUST NOT write to <c>config.yaml</c>. The desktop App is the single
-/// authoritative writer; the Service is a pure reader + <c>FileSystem
-/// Watcher</c>-driven reconciler (see <see cref="SettingsLoader.Load"/>
-/// callers below). Enforced by convention, verified by a grep audit on
-/// every v2.27.x release — breaking this would reintroduce the race
-/// between App's <c>SaveSettings()</c> and a Service write that was
-/// called out in the plan. If a future feature needs Service-side
-/// persistence, add a separate <c>service-state.json</c> file instead
-/// of touching <c>config.yaml</c>.</para>
-/// </summary>
 public class VPNRouterService : BackgroundService
 {
     private readonly ILogger<VPNRouterService> _logger;
@@ -31,11 +15,6 @@ public class VPNRouterService : BackgroundService
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
 
-    // v2.26.0 — current in-memory settings snapshot. Was a local in
-    // ExecuteAsync; promoted to a field so the SettingsLoader watcher
-    // callback can mutate it and any post-startup flow (crash-restart,
-    // hot-reload) uses up-to-date values instead of the stale copy we
-    // read once at service boot.
     private AppSettings? _currentSettings;
 
     private readonly TaskCompletionSource _startupComplete = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -46,10 +25,6 @@ public class VPNRouterService : BackgroundService
     public VPNRouterService(ILogger<VPNRouterService> logger, ISettingsStore? store = null)
     {
         _logger = logger;
-        // 3G-1 (v3.0 refactor): ISettingsStore seam. Service host doesn't
-        // register one with DI today, so the default RealSettingsStore is
-        // the back-compat path. Tests that drive this class through the
-        // ServiceAppCoexistenceTests harness can inject InMemorySettingsStore.
         _store = store ?? RealSettingsStore.Instance;
         EnsureEventSource();
     }
@@ -64,11 +39,6 @@ public class VPNRouterService : BackgroundService
             var settings = _currentSettings;
             _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
 
-            // v2.32.0 — surface a SettingsValidator recovery, if any, to
-            // the Windows Event Log. Service has no UI surface so this
-            // is the only operator-visible signal that a bad config was
-            // rewritten with defaults at boot. Consumed (cleared) so a
-            // subsequent in-process reload doesn't re-emit the same line.
             var recovery = _store.ConsumeRecoveryNotice();
             if (!string.IsNullOrWhiteSpace(recovery))
             {
@@ -76,21 +46,12 @@ public class VPNRouterService : BackgroundService
                 WriteEventLog(recovery, EventLogEntryType.Warning);
             }
 
-            // v2.26.0 — watch config.yaml for changes made by the desktop
-            // UI (or anyone else) and reconcile into in-memory state + a
-            // running sing-box if we own one. Closes the gap where a user
-            // changed routing_mode / subscription / apps in the UI but
-            // the service's cached settings stayed stale, so any
-            // subsequent crash-restart used outdated values.
             _store.StartWatching(onReload: OnConfigChanged);
 
-            // ── Step 0: Self-migrate pre-v2.14.12 installs (add boot dependencies) ──
             TryMigrateDependencies();
 
-            // ── Step 1: Wait for network (cold boot — NIC may not be up yet) ──
             await WaitForNetworkAsync(stoppingToken, TimeSpan.FromSeconds(30));
 
-            // ── Step 2: Auto-start VPN ──
             if (settings.App.AutostartVpn)
             {
                 await AutostartVpnAsync(settings, stoppingToken);
@@ -101,19 +62,16 @@ public class VPNRouterService : BackgroundService
                 _startupComplete.TrySetResult();
             }
 
-            // ── Step 3: Auto-start Zapret (independent, parallel) ──
             if (settings.App.AutostartZapret)
             {
                 _ = AutostartZapretAsync(settings, stoppingToken);
             }
 
-            // ── Step 4: Auto-start TgProxy (independent, parallel) ──
             if (settings.App.AutostartTgProxy)
             {
                 _ = AutostartTgProxyAsync(settings, stoppingToken);
             }
 
-            // Keep service alive until stop is requested
             await Task.Delay(Timeout.Infinite, stoppingToken);
         }
         catch (OperationCanceledException)
@@ -132,12 +90,6 @@ public class VPNRouterService : BackgroundService
         }
     }
 
-    /// <summary>
-    /// Upgrade path: if service was installed by a pre-v2.14.12 binary, it
-    /// lacks Tcpip/Dnscache/Dhcp dependencies. Add them now so next reboot
-    /// uses the proper start order. Running as LocalSystem, so sc config
-    /// succeeds without UAC prompt.
-    /// </summary>
     private void TryMigrateDependencies()
     {
         try
@@ -146,7 +98,7 @@ public class VPNRouterService : BackgroundService
             if (current != null &&
                 current.Any(d => string.Equals(d, "Tcpip", StringComparison.OrdinalIgnoreCase)))
             {
-                return;  // Already migrated
+                return;
             }
 
             _logger.LogInformation("[Service] Migrating: adding Tcpip/Dnscache/Dhcp dependencies");
@@ -161,12 +113,10 @@ public class VPNRouterService : BackgroundService
         }
         catch (Exception ex)
         {
-            // Non-fatal: continue boot even if self-migration fails
             _logger.LogWarning(ex, "[Service] Dependency migration failed (non-fatal)");
         }
     }
 
-    /// <summary>Wait for network adapter to become available (max timeout).</summary>
     private async Task WaitForNetworkAsync(CancellationToken ct, TimeSpan timeout)
     {
         if (NetworkInterface.GetIsNetworkAvailable())
@@ -189,14 +139,8 @@ public class VPNRouterService : BackgroundService
             _logger.LogWarning("[Service] Network still unavailable after timeout, proceeding anyway");
     }
 
-    /// <summary>Start VPN connection with subscription refresh + UI deference.</summary>
     private async Task AutostartVpnAsync(AppSettings settings, CancellationToken ct)
     {
-        // 3G-4 (v3.0 refactor): use the PlatformServices factory instead of
-        // direct construction. On Windows the produced wiring is identical
-        // to the prior hand-wired one (ProcessScanner, FirewallManager,
-        // EtwProcessMonitor) — but kept in a single place so future
-        // platform additions (Mac, Linux) don't drift between caller sites.
         _engine = VPNRouter.Core.Platform.PlatformServices
             .CreateVpnEngine(Serilog.Log.Logger);
 
@@ -207,33 +151,12 @@ public class VPNRouterService : BackgroundService
         _engine.Warning += msg =>
             _logger.LogWarning("[Service] {Warn}", msg);
 
-        // Subscription mode: refresh + aggregate via shared resolver so Service,
-        // CLI and GUI use the same bootstrap path. Mutates settings in place
-        // (flips ConfigMode → "generated" when at least one server is resolved).
         await SubscriptionResolver.ResolveAsync(
             settings,
             refreshFromNetwork: true,
             Serilog.Log.Logger,
             ct);
 
-        // v2.26.1 — Pre-flight: check the TUN ownership lock BEFORE trying
-        // to start sing-box. If some other VPNRouter process (desktop App,
-        // CLI session, leftover from a previous run) already owns it,
-        // transition to watcher mode immediately instead of entering a
-        // 30-second retry loop that burns CPU on every tick.
-        //
-        // Why TunLock beats the old `Process.GetProcessesByName("VPNRouter.App")`
-        // check:
-        //   1. Catches ALL sing-box owners — CLI and external instances
-        //      too, not just the GUI process name.
-        //   2. Atomic: the kernel releases the semaphore the instant the
-        //      holder dies, so we can't race a ghost process.
-        //   3. Free to poll — no Process enumeration overhead.
-        //
-        // Watcher mode: release startup completion, then park. The file-
-        // watcher on config.yaml is still active and can hot-reload, so
-        // the user's settings changes still land on the service even
-        // though the service isn't the one running sing-box.
         if (TunOwnershipLock.IsOwnedByAnyone())
         {
             _logger.LogInformation(
@@ -243,10 +166,6 @@ public class VPNRouterService : BackgroundService
             return;
         }
 
-        // ResilientStarter handles transient failures (5/10/20/40s backoff).
-        // If TunOwnershipException bubbles up (someone grabbed the lock
-        // between our peek above and our start), we still catch it and
-        // transition to watcher mode rather than looping.
         var vpnStarted = false;
         try
         {
@@ -268,9 +187,6 @@ public class VPNRouterService : BackgroundService
         }
         catch (TunOwnershipException)
         {
-            // Race with another VPNRouter process between our IsOwnedByAnyone
-            // pre-check and sing-box startup. Accept the loss silently —
-            // they're serving the user just fine, we'll watch.
             _logger.LogInformation(
                 "[Service] TUN adapter acquired by another process mid-start — " +
                 "entering watcher mode.");
@@ -286,7 +202,6 @@ public class VPNRouterService : BackgroundService
         }
     }
 
-    /// <summary>Start Zapret DPI bypass (independent of VPN).</summary>
     private async Task AutostartZapretAsync(AppSettings settings, CancellationToken ct)
     {
         try
@@ -339,7 +254,6 @@ public class VPNRouterService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // Service stopping — swallow
         }
         catch (Exception ex)
         {
@@ -347,28 +261,11 @@ public class VPNRouterService : BackgroundService
         }
     }
 
-    /// <summary>Start TgProxy Telegram proxy (independent of VPN).</summary>
     private async Task AutostartTgProxyAsync(AppSettings settings, CancellationToken ct)
     {
-        // v2.31.10 — explicit entry breadcrumb. Pre-fix the autostart could
-        // exit silently down any of three early-return branches (not
-        // installed, no secret, exception) and the only Service log we got
-        // was "TgProxy not installed" with no path / no scope, leaving us
-        // unable to tell whether the method even fired.
         _logger.LogInformation("[Service] AutostartTgProxyAsync: entered");
         try
         {
-            // v2.31.10-r5 (DBG-1 + DBG-4) — combined fix:
-            // (a) Probe with structured logging via the new IsInstalled(logger)
-            //     overload — emits paths + per-component existence so a missing
-            //     dir (proxy/ removed by user, Python never finished install) is
-            //     visible immediately in Service log.
-            // (b) ALSO surface the skip reason to Windows Event Log (Source:
-            //     VPNRouter). Pre-r5 these warnings only landed in the file log,
-            //     so users reporting "autostart doesn't work" had no signal in
-            //     Event Viewer pointing at the actual cause. App-side fix in r5
-            //     generates the secret on toggle, but legacy installs may still
-            //     hit IsInstalled=false.
             if (!TgProxyUpdater.IsInstalled(Serilog.Log.Logger))
             {
                 _logger.LogWarning("[Service] TgProxy not installed, skipping autostart");
@@ -421,7 +318,6 @@ public class VPNRouterService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            // Service stopping — swallow
         }
         catch (Exception ex)
         {
@@ -429,12 +325,6 @@ public class VPNRouterService : BackgroundService
         }
     }
 
-    /// <summary>
-    /// v2.26.0 — FileSystemWatcher callback triggered on every external
-    /// config.yaml write (with 2 s debounce built into SettingsLoader).
-    /// Desktop UI is the primary writer; this method delivers the new
-    /// settings to the live service without a service restart.
-    /// </summary>
     private void OnConfigChanged(AppSettings newSettings)
     {
         try
@@ -442,10 +332,6 @@ public class VPNRouterService : BackgroundService
             _currentSettings = newSettings;
             _logger.LogInformation("[Service] config.yaml changed → settings reconciled");
 
-            // If we're currently holding sing-box, hot-reload with the
-            // fresh settings. VpnEngine.ApplyAsync tries Clash API first
-            // (TUN stays up) and falls back to full restart only when the
-            // change requires it (routing_mode flip, bypass-ru toggle).
             if (_engine != null && _engine.IsRunning)
             {
                 _ = Task.Run(async () =>
@@ -475,9 +361,6 @@ public class VPNRouterService : BackgroundService
         _logger.LogInformation("[Service] Stopping...");
         WriteEventLog("VPN Router service stopping", EventLogEntryType.Information);
 
-        // v2.26.0 — release the FileSystemWatcher before tearing everything
-        // else down, so a last-second config.yaml write during shutdown
-        // doesn't queue an ApplyAsync against a disposed _engine.
         try { _store.StopWatching(); } catch { }
 
         try
@@ -486,11 +369,6 @@ public class VPNRouterService : BackgroundService
         }
         catch (OperationCanceledException) { }
 
-        // v2.31.6-r9 — preserve the "all components must be stopped even if
-        // one throws" invariant but log the swallowed exception instead of
-        // discarding silently. Pre-r9 a sing-box stuck on Kill() during
-        // shutdown produced an empty-catch swallow + zero diagnostics; now
-        // operators can see what failed in Event Log.
         try { _engine?.Stop(); }
         catch (Exception ex) { _logger.LogWarning(ex, "[Service] _engine.Stop failed (non-fatal)"); }
         try { _engine?.Dispose(); }
