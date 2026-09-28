@@ -479,7 +479,7 @@ public sealed class IUpdateSourceContractTests
             sb.Append("{")
               .Append($"\"tag_name\":{JsonStr(r.Tag)},")
               .Append($"\"body\":{JsonStr(r.Body)},")
-              .Append($"\"html_url\":{JsonStr($"https:
+              .Append($"\"html_url\":{JsonStr($"https://github.com/foo/bar/releases/tag/{r.Tag}")},")
               .Append($"\"draft\":{(r.Draft ? "true" : "false")},")
               .Append($"\"prerelease\":{(r.Prerelease ? "true" : "false")},")
               .Append("\"assets\":[");

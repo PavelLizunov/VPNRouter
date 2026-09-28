@@ -41,6 +41,12 @@ Revert the PR.
   literals identical to base; two independent lexers).
 - A first run left 16 comment lines after an interpolated raw string
   (`$"""`); both lexers were fixed and the strip rerun from the base.
+- First CI run failed to compile: both lexers treated `//` inside a quoted
+  string nested in an interpolation hole (`$"...{F("http://...")}"`) as a
+  comment, so the shared-lexer verifier could not see it. The lexers now parse
+  interpolation holes and nested literals, and an independent line check flags
+  cuts not preceded by whitespace or leaving unbalanced quotes; it catches both
+  affected lines on the broken version and reports 0 on the rerun.
 - Scan of source-guard assertions found no test asserting removed comment text
   (one false positive checked by hand). Exact-head CI recorded on PR #330.
 - An earlier agent-based rewrite attempt was discarded; the delegated agent had

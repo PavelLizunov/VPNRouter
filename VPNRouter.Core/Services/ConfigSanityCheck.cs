@@ -150,7 +150,7 @@ public sealed class ConfigSanityCheck
             return new ProbeResult(true, $"invalid Clash API port {clashApiPort}", 0);
 
         var url = $"http://127.0.0.1:{clashApiPort}/proxies/proxy/delay" +
-                  $"?url={Uri.EscapeDataString("http:
+                  $"?url={Uri.EscapeDataString("http://www.gstatic.com/generate_204")}" +
                   $"&timeout=5000";
 
         int lastDelay = 0;
