@@ -8,7 +8,6 @@ packaging/linux/vpnrouter-update-helper            text eol=lf
 packaging/linux/com.vpnrouter.update.policy        text eol=lf
 packaging/linux/VPNRouter.sh                       text eol=lf
 packaging/linux/vpnrouter.desktop                  text eol=lf
-build-linux.sh                                     text eol=lf
 build-mac.sh                                       text eol=lf
 
 # Windows batch / PowerShell — keep CRLF.

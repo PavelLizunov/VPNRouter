@@ -1,7 +1,7 @@
 # APP — Applications routing (Include / Exclude / Full Tunnel)
 
 Contract for the per-app routing policy. Source theory:
-`plans/user-interaction-boundaries-and-edge-case-verification-framework-2026-06-02.md`.
+`git show 6491be4c:plans/user-interaction-boundaries-and-edge-case-verification-framework-2026-06-02.md`.
 Audit basis: `plans/applications-page-audit-2026-06-01.md`.
 
 **User intent:** choose which applications go through the VPN — route only

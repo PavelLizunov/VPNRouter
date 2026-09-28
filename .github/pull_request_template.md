@@ -16,7 +16,6 @@
   - [ ] Test fails on fresh clone WITHOUT the fix applied
   - [ ] No duplicate with existing test
   - [ ] Test file has `[Category(...)]` / `[Trait(...)]` attribute (§3)
-  - [ ] Logged in test inventory if Android (`plans/android-test-inventory.md`)
 
 ## Performance
 

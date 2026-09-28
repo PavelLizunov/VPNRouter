@@ -6,8 +6,8 @@ name: dotnet test
 #   765 tests live in VPNRouter.Tests but until now only ran locally. Any
 #   commit could break the suite undetected until a developer happened to
 #   run `dotnet test` on their machine. Phase 2 god-file splits cannot
-#   begin safely without this CI gate. See plans/ci-audit-2026-05-17.md
-#   "Key findings: NO test workflow" and plans/v3.0-refactor-roadmap.md
+#   begin safely without this CI gate. See git show 6491be4c:plans/ci-audit-2026-05-17.md
+#   "Key findings: NO test workflow" and git show 6491be4c:plans/v3.0-refactor-roadmap.md
 #   Phase 1 #8.
 #
 # Triggers: every push to main / v3.0-prep and every PR targeting either.

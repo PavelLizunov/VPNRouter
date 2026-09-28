@@ -12,7 +12,7 @@
 
     When -AndroidAlso is supplied the script also attempts a local APK build
     after the Windows artifacts. APK builds normally happen on CI
-    (build-android.yml, see plans/vpnrouter-android-platform-parity-roadmap.md
+    (build-android.yml, see git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md
     Phase A); -AndroidAlso is a contributor convenience for sanity-checking
     Android-side changes before pushing a tag.
 .PARAMETER Version
@@ -115,7 +115,7 @@ if ($Upload) {
 # start. Mismatch -> abort with a clear remediation hint. Catches the
 # entire class of "compiled wrong source tree" bugs in 0 seconds.
 #
-# See plans/vpnrouter-update-reliability-strategy.md Layer 1.
+# See git show 6491be4c:plans/vpnrouter-update-reliability-strategy.md Layer 1.
 $appVersionFile = Join-Path $Root "VPNRouter.Core\AppVersion.cs"
 if (-not (Test-Path $appVersionFile)) {
     throw "ABORT: AppVersion.cs not found at $appVersionFile. Are you running build.ps1 from the wrong directory?"

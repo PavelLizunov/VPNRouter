@@ -2,7 +2,7 @@
 
 **Status:** active
 
-**Audience:** DSH sessions executing `plans/v3.0-refactor-roadmap.md`
+**Audience:** DSH sessions executing `git show 6491be4c:plans/v3.0-refactor-roadmap.md`
 
 **Reading order:** `docs/agent-contract.md` -> this document -> roadmap -> task brief
 

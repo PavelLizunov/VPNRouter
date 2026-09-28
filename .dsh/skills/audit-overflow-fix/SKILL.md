@@ -6,7 +6,7 @@ whenToUse: User reports "вылазиет за экран", "не помещае
 
 # Audit & fix UI overflow on narrow windows
 
-VPNRouter targets 520px window width. Bare-string CheckBox/Button content
+VPNRouter opens at 520px width with MinWidth 360px (`MainWindow.axaml`); verify at 360px too. Bare-string CheckBox/Button content
 binds set parent min-width to widest localised label → push past
 ScrollViewer right edge.
 

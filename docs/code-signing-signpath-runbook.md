@@ -2,7 +2,7 @@
 
 Closes the last OPEN-DEFECTS P1 ("disappears after a reboot" = AV quarantine of
 UNSIGNED binaries that do TUN/process-scan/firewall). Recommendation + rationale:
-`plans/research-seamless-update-findings-2026-07-09.md` §4. Cost: **$0** (SignPath
+`git show 6491be4c:plans/research-seamless-update-findings-2026-07-09.md` §4. Cost: **$0** (SignPath
 Foundation is free for OSS). VPNRouter qualifies: public repo + GPL-3.0 + verifiable
 builds.
 
@@ -76,8 +76,8 @@ gh run watch <run-id> --exit-status
 
 The workflow checks out `github.sha` on a GitHub-hosted Windows runner, proves
 `HEAD == run SHA == remote tag commit` and full AppVersion equals the requested
-version, then builds sing-box-lx and both Windows ZIPs
-from source, and passes that immutable Actions artifact ID directly to SignPath.
+version, then builds both Windows ZIPs from source with the pinned
+`sing-box-vpnctl` release, and passes that immutable Actions artifact ID directly to SignPath.
 Approve the request in the SignPath UI. Before any release mutation, a separate
 Windows job extracts both results and checks all 18 required App/GUI/CLI/
 Service/Core/sing-box signatures, certificate subject and thumbprint.

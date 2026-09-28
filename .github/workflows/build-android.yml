@@ -7,7 +7,7 @@ name: Build Android APK
 # Mirrors the build-mac.yml / build-linux.yml shape so a single tag push
 # kicks off all platform builds in parallel. After this workflow lands,
 # release assets become 14 (was 12 = 4 Win + 2 Mac + 6 Linux). See
-# plans/vpnrouter-android-platform-parity-roadmap.md Phase A for context.
+# git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md Phase A for context.
 on:
   push:
     tags:
@@ -128,7 +128,7 @@ jobs:
 
       # JDK 17 is the minimum for current AndroidX + .NET Android 8 build
       # tools. Temurin matches the developer-VM toolchain documented in
-      # plans/vpnrouter-android-handbook.md §3.5.
+      # git show 6491be4c:plans/vpnrouter-android-handbook.md §3.5.
       - name: Setup JDK 17 (Temurin)
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
         with:
@@ -162,7 +162,7 @@ jobs:
       # can pull a newer Android workload version than what the .NET 10
       # SDK ships locally; the --skip flag pins to the SDK's bundled
       # manifest (matches the developer-VM toolchain documented in the
-      # Phase 5 ship report `plans/phase5-android-net10-2026-05-18.md`).
+      # Phase 5 ship report `git show 6491be4c:plans/phase5-android-net10-2026-05-18.md`).
       - name: Install .NET Android workload
         run: dotnet workload install android --skip-manifest-update
 

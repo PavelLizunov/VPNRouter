@@ -14,8 +14,9 @@ for the SDK, owning `.csproj` files for frameworks/packages, and platform build
 scripts/workflows for bundled runtime versions; do not infer one version for all targets.
 
 All repository zones are owned by Pavel Lizunov (`PavelLizunov`) and may be
-edited. `tools/zapret/` is a tracked bundled runtime payload and must be
-preserved. Generated upstream source/build caches such as `tools/singbox-cache/`
+edited. `tools/zapret/` is a legacy vendored Zapret copy: the app downloads
+Zapret on demand and no build or test consumes these files; do not delete it
+without an owner decision. Generated upstream source/build caches such as `tools/singbox-cache/`
 remain untracked.
 
 Read the relevant zone document before changing that area:
@@ -61,7 +62,7 @@ Read the relevant zone document before changing that area:
 - Make a concrete, low-risk assumption when scope is clear. Ask only for a real
   semantic choice, new authority or a destructive action whose target cannot be
   proven.
-- For v3.0 work or changes over 30 lines, use `phase-task-launcher`. User-reported
+- For changes over 30 lines, use `phase-task-launcher`. User-reported
   release hotfixes use `ship-rolling-candidate` only after explicit ship
   authorization. Run `bug-hunt` after non-trivial features and before stable.
 

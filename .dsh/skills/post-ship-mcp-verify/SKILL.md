@@ -189,7 +189,7 @@ powershell -ExecutionPolicy Bypass -File tools/brat-verify.ps1 -Action uia -Name
 - UIA requires a logged-on interactive session on brat; the
   script fails closed otherwise.
 
-**End-to-end rule (AGENTS.md #13):** walk the FULL user scenario to the
+**End-to-end rule (`docs/agent-contract.md`, Release and WINBRAT contract):** walk the FULL user scenario to the
 element reported, not "tab rendered": (a) invoke the target element,
 (b) check ALL interactive elements in its scope, (c) cover the bottom of the
 viewport in the isolated headless screenshot, (d) confirm the exact strings a

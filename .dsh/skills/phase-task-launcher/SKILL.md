@@ -11,7 +11,7 @@ Read `docs/agent-contract.md`, the relevant zone document and `docs/execution-me
 ## Required lifecycle
 
 1. Create a `dsh/` task branch from the accepted base. Never work directly on `main`, regardless of phase or apparent risk.
-2. Create or complete `plans/phaseN-<slug>-<date>.md` with Why, What, How, risk, rollback, tests and six tailored gates. Commit the brief first on that task branch.
+2. Create or complete `plans/phase-<slug>-YYYY-MM-DD.md` with Why, What, How, risk, rollback, tests and six tailored gates. Commit the brief first on that task branch.
 3. Implement the smallest scoped change. Behavior changes require tests; god-file splits require a pre-change characterization baseline.
 4. Verify all applicable gates. For instruction-only changes, use the scoped checks in `docs/agent-contract.md` and PR CI; record non-applicable runtime gates with reasons. Do not claim unavailable independent review as a pass:
    - Release solution build, zero errors;

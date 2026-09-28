@@ -1,7 +1,7 @@
 # FC — Public Configs (search / recheck / apply)
 
 Contract for the Free / Public Configs feature. Source theory:
-`plans/user-interaction-boundaries-and-edge-case-verification-framework-2026-06-02.md`.
+`git show 6491be4c:plans/user-interaction-boundaries-and-edge-case-verification-framework-2026-06-02.md`.
 Audit basis: `plans/public-configs-pipeline-audit-and-hardening-plan-2026-06-02.md`.
 
 **User intent:** find working public VLESS servers, keep a verified shortlist,

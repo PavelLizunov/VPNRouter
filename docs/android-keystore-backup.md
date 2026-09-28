@@ -118,4 +118,4 @@ the full version string.
 - `.github/workflows/sign-android.yml` (signs with the secret),
   `build-android.ps1` (local signed build),
   `.github/workflows/CLAUDE.md` (secret inventory),
-  `plans/android-ci-distribution-roadmap-2026-05-31.md`.
+  `git show 6491be4c:plans/android-ci-distribution-roadmap-2026-05-31.md`.
