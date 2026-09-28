@@ -143,6 +143,8 @@ regression checks, so they stay free of real credentials.
 
 For desktop installation commands and Android APK instructions, see [Install](#install). Download the latest stable build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest); rolling candidates are listed under [all releases](https://github.com/PavelLizunov/VPNRouter/releases).
 
+Published version tags are permanent source references; older candidate downloads may be retired separately. See [tag and release retention](docs/tag-retention-policy.md) for preservation rules and service exceptions.
+
 | File | Platform | What it is |
 |---|---|---|
 | `VPNRouter-v{version}-win.zip` | 🪟 Windows | Full installer (first install) |

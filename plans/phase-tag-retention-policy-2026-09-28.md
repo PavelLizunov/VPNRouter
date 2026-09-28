@@ -44,15 +44,33 @@ published tags. Historical deletion candidates are outside this task.
 ## Six gates
 
 1. Build: N/A locally, Markdown-only; no control-plane SDK/build provisioning.
-2. Tests: PENDING documentation checks and exact-head Linux/Windows PR CI.
-3. Documentation: PENDING one policy owner and consistent consumer links.
+2. Tests: PASS scoped checks; final exact-head Linux/Windows PR CI is pending.
+3. Documentation: PASS one policy owner, 38 local links across nine Markdown
+   files, two unchanged three-key skill frontmatters and release-command pins.
 4. Independent review: PENDING explicitly routed single Opus; no self-review PASS.
 5. UI/runtime: N/A, no product behavior or release/deployment.
-6. Integration: PENDING base/head identity, green main after authorized merge and
-   proof that tag refs remain unchanged. No mechanical source split.
+6. Integration: PENDING green main after authorized merge and unchanged tag refs.
+   No mechanical source split.
 
-## Outcome
+## Outcome checkpoint
 
-Planning checkpoint only. No policy implementation, tag mutation or release
-cleanup has occurred. Final acceptance receipts will be recorded on the PR after
-merge so verification metadata does not require another product change.
+- Added docs/tag-retention-policy.md; linked the contract, documentation index,
+  release strategy, both release skills and English/Russian READMEs.
+- The 30-day candidate-page grace period starts at verified supersession, not
+  publication alone. The two verified candidates and in-flight/incident/rollback
+  exclusions are a minimum, not a cap or automatic deletion rule.
+- Both release skills now show annotated tag creation; remote provenance still
+  resolves the peeled commit. The sole-candidate-page wording was removed.
+- Brief head a5e54fbcb331cd1eaf82c0b449aed0ceaa82e659 passed all four checks in
+  run 36427224870 plus grep 36427224885 before implementation.
+- Whitespace, links, ASCII policy text and skill checks passed. A disposable Git
+  fixture confirmed annotated tag type, peeled SHA and rejection of duplicate
+  names. It created no tag in VPNRouter and was removed automatically.
+- The first new-file whitespace command returned git diff --no-index status 1
+  for an added file, with no diagnostics; the corrected check distinguished that
+  expected status from whitespace errors. No failure was ignored.
+- Baseline remote refs: 276 tags. SHA256 of sorted (ref, object-SHA) pairs encoded
+  as compact JSON: e194b7a8e622211247b1978a58725f11ee0b4234c5625bd1027b5e68b51f3b3f.
+- No existing tags/releases, GitHub settings or executable files changed. Final
+  review, exact-head CI and post-merge receipts belong on PR #325, so acceptance
+  metadata does not itself require another product change.

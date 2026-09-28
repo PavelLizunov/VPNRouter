@@ -9,6 +9,8 @@ whenToUse: The user explicitly authorizes a rolling candidate release. Never tag
 Read `docs/agent-contract.md` first. This skill grants no release authority: an
 explicit owner command is required for every candidate, and stable cut is never
 autonomous. Use `cut-stable` only after a separate explicit stable command.
+Read [tag and release retention](../../../docs/tag-retention-policy.md) before
+creating tags or proposing cleanup; release approval is not deletion approval.
 
 ## Hard preconditions
 
@@ -43,7 +45,7 @@ match accepted GitHub `main` and AppVersion to match the full version. Create
 and push only this new tag; never replace an existing tag:
 
 ```powershell
-git tag $tag $sha
+git tag -a $tag $sha -m "Release $tag"
 git push origin "refs/tags/$tag"
 $remoteSha = gh api "repos/PavelLizunov/VPNRouter/commits/$tag" --jq '.sha'
 if ($LASTEXITCODE -ne 0 -or $remoteSha -ne $sha) { throw 'Remote tag SHA mismatch.' }
@@ -130,9 +132,9 @@ gh workflow run publish-apt.yml --ref $tag -f tag=$tag
 
 Candidate APT runs verify provenance and reindex the latest published stable;
 they do not add candidates to APT. Homebrew notification is suppressed during
-draft staging and candidates must not notify the stable tap. Delete a
-superseded candidate release page only after the new candidate passes the
-post-ship gate; retain immutable tags.
+draft staging and candidates must not notify the stable tap. Retention is a
+separate owner-approved action under the linked policy, not a ship step.
+Preserve the candidate safety net, grace period and immutable tags.
 
 ## Mandatory post-ship gate
 
