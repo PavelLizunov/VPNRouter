@@ -224,7 +224,8 @@ Only after final stable verification:
 2. Verify Homebrew, APT, Android download page and canonical Windows URLs.
 3. Keep releases under the linked retention policy. Any candidate-page retirement
    needs separate exact-target approval; do not delete stable or candidate tags.
-4. Update `CURRENT_STATE.md` to stable `vX.Y.Z` with no in-flight candidate.
+4. Update `CURRENT_STATE.md` to stable `vX.Y.Z` with no in-flight candidate, and
+   the `build.ps1 -Version` / `build-mac.sh` examples in both READMEs.
 5. Record the exact test, CI, asset, WINBRAT and cleanup evidence in the handoff.
 
 The user report must list PASS/FAIL per platform, exact asset count, live-update

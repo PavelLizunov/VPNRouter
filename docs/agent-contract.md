@@ -73,8 +73,10 @@ Read the relevant zone document before changing that area:
    [Tag and release retention](tag-retention-policy.md) owns naming, preservation,
    service exceptions and separately authorized cleanup. No automatic tag pruning.
 2. Canonical remote is `origin` (GitHub). Forgejo is a mirror synchronized only
-   after an accepted merge or release. Avoid broad fetches when remote auxiliary
-   refs are unhealthy; prefer `gh api` or targeted refs.
+   after an accepted merge or release. Push only the current task branch with
+   `git push -u origin HEAD`; never add, rename or rewrite remotes automatically.
+   Avoid broad fetches when remote auxiliary refs are unhealthy; prefer `gh api`
+   or targeted refs.
 3. Never use `--no-verify` or `--no-gpg-sign` without an explicit owner request.
    Fix failing hooks instead of bypassing them.
 4. Preserve user changes in a dirty worktree. Do not use destructive reset,
