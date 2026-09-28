@@ -27,3 +27,7 @@ PR CI green.
 - One test assertion pinned a usage comment in `verify-release-integrity.yml`
   (`--ref "$TAG"` dispatch example); removed, the procedure lives in the release
   skills. Nine other literal matches were coincidental.
+- First CI run: `VpnctlPackagingCharacterizationTests` and one
+  `ReleaseToolingContractTests` case sliced `build.ps1` / `install.ps1` between
+  comment section headers. Re-anchored on the first code line after each former
+  header (all unique), so the executed slices cover the same code.

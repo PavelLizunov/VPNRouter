@@ -246,7 +246,7 @@ public sealed class ReleaseToolingContractTests
     public void WindowsInstaller_KeepsCallerValuesOutOfElevatedSource()
     {
         var script = Read("packaging", "windows", "install.ps1");
-        var elevation = script[..script.IndexOf("# From here on: admin rights confirmed.", StringComparison.Ordinal)];
+        var elevation = script[..script.IndexOf("Say \"VPNRouter installer running as Administrator\"", StringComparison.Ordinal)];
         const string launch = "Start-Process -FilePath $WindowsPowerShell -Verb RunAs -ArgumentList \"-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedBootstrap\"";
 
         Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(elevation, System.Text.RegularExpressions.Regex.Escape(launch)).Count);
