@@ -596,6 +596,31 @@ public static class ZapretAutoStrategy
         return best;
     }
 
+    internal static System.Diagnostics.ProcessStartInfo BuildFlowsealProbeStartInfo(
+        string zapretInstallDir, string scriptPath)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            WorkingDirectory = zapretInstallDir,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+            // Keep UTF-8 decoding for Flowseal status lines.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(scriptPath);
+        return psi;
+    }
+
     /// <summary>
     /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
     /// configs=all), parse stdout for per-config progress + final winner.
@@ -643,24 +668,7 @@ public static class ZapretAutoStrategy
                 Diagnostic: "missing_script", ErrorLines: Array.Empty<string>());
         }
 
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-            WorkingDirectory = zapretInstallDir,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            UseShellExecute = false,
-            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-            // r38: force UTF-8 decode of Flowseal stdout. Without this we
-            // default to the user's OEM codepage (often 866 on RU Windows),
-            // which can corrupt status lines and cause "false fails" because
-            // the parser can't match `status=OK` on garbled bytes.
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8,
-        };
+        var psi = BuildFlowsealProbeStartInfo(zapretInstallDir, scriptPath);
 
         // r38: per-probe persistent log file. Captures EVERY stdout/stderr
         // line with a timestamp so the user can grep for "what did probe see

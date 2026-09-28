@@ -42,6 +42,24 @@ upgrades. Continue the explicitly authorized one-Opus review process for the
 bounded remaining PR set. Do not merge red CI or turn cleanup into an unrequested
 major dependency migration.
 
+## Integration decisions before edits
+
+- Preserve #315 Actions pins and #316 non-Spectre package updates; retain the old
+  Spectre, SkiaSharp and xunit versions. The owner approved closing #317/#318 after
+  recording reasons and recovery evidence.
+- Preserve #319's ArgumentList fix only. Keep OS/admin/existence checks intact;
+  extract a pure ProcessStartInfo factory and test arguments without creating
+  invalid Windows paths or starting PowerShell. Do not falsely close OpenServiceMenu.
+- Preserve #322's HTTP(S) guard with generic refusal logging; test no request and
+  absence of malformed token/source data in captured events.
+- #320/#321 lack a demonstrated new reachable attack and meaningful no-launch
+  regression coverage. Do not import their weak tests or widen helpers solely for them;
+  retain source snapshots in the backup and record the rejection rationale.
+- User explicitly excluded Omarchy #296: do not close its PR, delete its branch,
+  change its original worktree or move its untracked files. Prepare only a handoff.
+- Use a separate clean main checkout for the next task. A new user-visible chat
+  cannot be created with the exposed session tools; do not simulate it with a worker.
+
 ## Unknowns
 
 Branch count alone is not deletion evidence. Retain exact tip identities and a

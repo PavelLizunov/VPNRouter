@@ -16,6 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### PR cleanup review 2026-09-28
+
+- [ ] **P2** - PR324-TEST-INIT: independent Opus review found assignment to init-only FreeConfigSource.Url after construction in FetchAsync_AcceptsHttpAndHttps. Confirmed against FreeConfigModels.cs:156. Replace with an object initializer before pushing the integration snapshot. Target PR #324.
+- [ ] **P2** - PR322-INVALID-URL-LOG: candidate `65a5ee6c` logs CanaryPolicy.RedactUrl on malformed source.Url; the helper returns delimiter-free malformed text unchanged (CanaryPolicy.cs:73-87), so a pasted token can be logged. Preserve the HTTP guard but omit URL/source values from its refusal event; regression must inspect captured events. Candidate-only, not an established main regression. Target PR #324.
+- [ ] **P2** - PR319-TEST-AND-LEDGER: candidate `c2b1fd35` creates Windows-invalid quote/pipe temp directories before its assertion and marks OpenServiceMenu resolved although the same cmd string remains. Preserve only the ArgumentList improvement with pure no-launch tests; existing OpenServiceMenu debt must stay open. Target PR #324.
+- [ ] **P2** - PR316-SPECTRE-COMPILE: candidate `0739ab12` upgrades Spectre without adapting Command/AsyncCommand CancellationToken overrides; Windows CLI compilation fails in check 108308297482. Preserve non-Spectre updates under separate green integration CI; defer the CLI migration. Target PR #324.
+
 ### Agent instruction refresh 2026-09-28
 
 - [x] **P2 RESOLVED / UNMERGED (documentation only)** - AGENT-STALE-SOURCE-CLAIMS: Android instructions and canonical filter named removed AndroidAppCharacterizationTests; review prompt hardcoded sing-box 1.13 despite desktop pin 1.14.0-vpnctl.5. Removed the nonexistent filter and false hash guarantee; dependency review now reads platform build pins. Baseline evidence: `VPNRouter.Android/AGENTS.md:14-16,41`, `docs/agent-contract.md:91`, `docs/REVIEW_AGENT_PROMPT.md:70`, `build.ps1:51` at `ab97905d`. PR #323; September 16 test-prune coverage debt remains open.

@@ -36,11 +36,19 @@ public sealed class FreeConfigFetcher
     {
         if (!source.Enabled) return new List<string>();
 
+        if (string.IsNullOrWhiteSpace(source.Url) ||
+            !Uri.TryCreate(source.Url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            _logger.Warning("FreeConfigFetcher: refused non-http(s) or malformed source URL");
+            return new List<string>();
+        }
+
         try
         {
             var request = new HttpRequest(
                 HttpMethod.Get,
-                new Uri(source.Url, UriKind.Absolute),
+                uri,
                 Timeout: PerAttemptTimeout,
                 RetryCount: 1)
             {
