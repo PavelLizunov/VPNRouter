@@ -114,7 +114,7 @@ public sealed class SplitTunnelDoubleStartGuardTests
         var start = src.IndexOf("private async Task ReconnectAsync", System.StringComparison.Ordinal);
         Assert.True(start >= 0, "ReconnectAsync method not found");
 
-        var end = src.IndexOf("// Phase 2B", start, System.StringComparison.Ordinal);
+        var end = src.IndexOf("private void Quit()", start, System.StringComparison.Ordinal);
         Assert.True(end > start, "ReconnectAsync boundary not found");
 
         var method = src.Substring(start, end - start);

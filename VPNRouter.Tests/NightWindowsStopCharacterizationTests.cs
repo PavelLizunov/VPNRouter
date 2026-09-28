@@ -114,7 +114,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 {
                     currentTestInstance.Dispose();
                 }
-                catch {  }
+                catch { }
             }
             s_tunOwnershipLockInstanceField?.SetValue(null, _savedTunOwnershipLockInstance);
         }
@@ -125,7 +125,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (Directory.Exists(_testDataDir))
                 Directory.Delete(_testDataDir, recursive: true);
         }
-        catch {  }
+        catch { }
     }
 
     [Theory]
@@ -742,7 +742,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         {
             Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
         }
-        catch {  }
+        catch { }
     }
 
     private static string? GetAppPathsDataDir()
@@ -790,7 +790,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 pendingTask.GetAwaiter().GetResult();
             }
         }
-        catch {  }
+        catch { }
     }
 
     private static bool IsLockOwned(TunOwnershipLock lockInstance)

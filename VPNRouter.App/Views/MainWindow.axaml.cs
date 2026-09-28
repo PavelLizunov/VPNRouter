@@ -14,7 +14,7 @@ public partial class MainWindow : Window
         Opened += (_, _) =>
         {
             try { LaunchFailureCounter.MarkStable(); }
-            catch {  }
+            catch { }
         };
 
         if (System.OperatingSystem.IsLinux())
@@ -25,7 +25,7 @@ public partial class MainWindow : Window
                     new System.Uri("avares://VPNRouter.App/Assets/penguin_mascot_tile.png"));
                 this.Icon = new WindowIcon(stream);
             }
-            catch {  }
+            catch { }
         }
 
         Closed += (_, _) =>
@@ -33,7 +33,7 @@ public partial class MainWindow : Window
             if (DataContext is MainWindowViewModel vm)
             {
                 try { vm.Dispose(); }
-                catch {  }
+                catch { }
             }
         };
     }

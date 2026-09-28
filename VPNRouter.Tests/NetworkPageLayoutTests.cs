@@ -21,8 +21,8 @@ public sealed class NetworkPageLayoutTests
     private static string ReadModeSection()
     {
         var src = File.ReadAllText(FindNetworkPage());
-        var start = src.IndexOf("Read view (read-only grouped monospace)", StringComparison.Ordinal);
-        var end = src.IndexOf("Edit view (Text mode)", StringComparison.Ordinal);
+        var start = src.IndexOf("IsVisible=\"{Binding IsRulesViewRead}\"", StringComparison.Ordinal);
+        var end = src.IndexOf("IsVisible=\"{Binding IsRulesViewEdit}\"", StringComparison.Ordinal);
         Assert.True(start >= 0 && end > start, "NetworkPage.axaml read-mode section markers not found.");
         return src.Substring(start, end - start);
     }

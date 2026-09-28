@@ -50,10 +50,10 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
             var batPath = Path.Combine(ZapretUpdater.BinDir, "_vpnrouter_launch.bat");
             if (File.Exists(batPath))
             {
-                try { File.Delete(batPath); } catch {  }
+                try { File.Delete(batPath); } catch { }
             }
         }
-        catch {  }
+        catch { }
     }
 
     private bool SeededOrRealExe() =>
@@ -260,7 +260,7 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { Directory.Delete(tempDir, recursive: true); } catch {  }
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
 }

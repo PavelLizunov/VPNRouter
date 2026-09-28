@@ -447,7 +447,7 @@ public class HealthMonitor : IDisposable
                 ct = _restartCts.Token;
                 if (oldCts != null)
                 {
-                    try { oldCts.Cancel(); } catch (ObjectDisposedException) {  }
+                    try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
                     oldCts.Dispose();
                 }
 

@@ -45,7 +45,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -70,7 +70,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -106,7 +106,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -136,7 +136,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -173,7 +173,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -203,7 +203,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -234,7 +234,7 @@ public sealed class SingBoxManagerTunOrphanRecoveryTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 }

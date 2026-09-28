@@ -24,7 +24,7 @@ public class ServerHealthStoreTests : IDisposable
     {
         ServerHealthStore.ResetForTests();
         AppPaths.OverrideDataDir(_prevDataDir);
-        try { Directory.Delete(_tempDir, recursive: true); } catch {  }
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
     private static VlessServerEntry Entry(string server = "1.2.3.4", int port = 443,

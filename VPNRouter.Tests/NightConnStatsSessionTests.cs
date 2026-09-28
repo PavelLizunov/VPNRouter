@@ -76,7 +76,7 @@ public sealed class NightConnStatsSessionTests
 
     private static async Task DrainUiQueueAsync()
     {
-        await Dispatcher.UIThread.InvokeAsync(() => {  }, DispatcherPriority.Background);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
     }
 
     private static async Task InvokePollAsync(MainWindowViewModel vm)

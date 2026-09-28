@@ -177,7 +177,7 @@ public partial class MainWindowViewModel
                 return false;
             }
 
-            try { await startTask; } catch {  }
+            try { await startTask; } catch { }
             IsConnected = true;
             IsConnecting = false;
             _lastSuccessfulConnectAt = DateTime.UtcNow;

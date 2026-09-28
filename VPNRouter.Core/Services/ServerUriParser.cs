@@ -106,7 +106,7 @@ public static class ServerUriParser
         {
             if (SingBoxFeatures.AwgAvailable)
             {
-                try { result.Add(ParseWireGuardConf(text)); } catch {  }
+                try { result.Add(ParseWireGuardConf(text)); } catch { }
             }
             return result;
         }
@@ -116,7 +116,7 @@ public static class ServerUriParser
             var trimmedSpan = lineSpan.Trim();
             if (trimmedSpan.IsEmpty || !IsSupportedScheme(trimmedSpan)) continue;
             var trimmed = trimmedSpan.ToString();
-            try { result.Add(Parse(trimmed)); } catch {  }
+            try { result.Add(Parse(trimmed)); } catch { }
         }
         return result;
     }

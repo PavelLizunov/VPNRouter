@@ -75,13 +75,13 @@ public sealed class ProcessRunner : IProcessRunner
         }
 
         try { process.WaitForExit(StreamDrainTimeoutMs); }
-        catch {  }
+        catch { }
 
         sw.Stop();
 
         var exitCode = -1;
         try { exitCode = process.ExitCode; }
-        catch {  }
+        catch { }
 
         return new ProcessResult(
             ExitCode: exitCode,
@@ -128,7 +128,7 @@ public sealed class ProcessRunner : IProcessRunner
         {
             if (!p.HasExited) p.Kill(entireProcessTree: true);
         }
-        catch {  }
+        catch { }
     }
 }
 
@@ -195,7 +195,7 @@ internal sealed class ProcessHandle : IProcessHandle
         {
             if (!_process.HasExited) _process.Kill(entireProcessTree: entireProcessTree);
         }
-        catch {  }
+        catch { }
     }
 
     public ProcessSnapshot? TryGetSnapshot()
@@ -225,17 +225,17 @@ internal sealed class ProcessHandle : IProcessHandle
 
     public void SuppressExitedEvent()
     {
-        try { _process.EnableRaisingEvents = false; } catch {  }
+        try { _process.EnableRaisingEvents = false; } catch { }
     }
 
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-        try { _process.EnableRaisingEvents = false; } catch {  }
+        try { _process.EnableRaisingEvents = false; } catch { }
 
         Kill(entireProcessTree: true);
 
-        try { _process.Dispose(); } catch {  }
+        try { _process.Dispose(); } catch { }
     }
 }

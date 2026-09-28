@@ -393,6 +393,6 @@ public partial class AndroidApp
                 _menuFeedback.IsVisible = false;
             }
         }
-        catch {  }
+        catch { }
     }
 }

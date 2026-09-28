@@ -13,13 +13,11 @@ public sealed class ApplyFreeConfigReadinessTests
         Assert.Contains("if (outcome != Internals.TwoPhaseStartOutcome.Connected)", src);
         Assert.Contains("IsConnected = false;", src);
 
-        var connectedBlock = src.IndexOf("try { await startTask; } catch { /* event-side Connected is authoritative */ }", StringComparison.Ordinal);
-        Assert.True(connectedBlock >= 0, "Connected-path await startTask pin missing");
-        var after = src[connectedBlock..];
-        Assert.Contains("IsConnected = true;", after);
-
-        var falseGreen = "try { await startTask; } catch { }\n            IsConnected = true;";
-        Assert.DoesNotContain(falseGreen, src.Replace("\r\n", "\n"));
+        var guard = src.IndexOf("if (outcome != Internals.TwoPhaseStartOutcome.Connected)", StringComparison.Ordinal);
+        var earlyReturn = src.IndexOf("return false;", guard, StringComparison.Ordinal);
+        var green = src.IndexOf("IsConnected = true;", earlyReturn, StringComparison.Ordinal);
+        Assert.True(guard >= 0 && earlyReturn > guard, "Non-Connected outcomes must return before greening");
+        Assert.True(green > earlyReturn, "IsConnected = true must follow the non-Connected early return");
     }
 
     [Fact]

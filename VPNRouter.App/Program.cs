@@ -62,7 +62,7 @@ sealed class Program
                         System.IO.File.Copy(cfg, backup);
                 }
             }
-            catch {  }
+            catch { }
         }
 
         if (args.Contains("--reset"))
@@ -165,7 +165,7 @@ sealed class Program
                 catch { }
             }
         }
-        catch {  }
+        catch { }
 
         try
         {
@@ -244,7 +244,7 @@ sealed class Program
                                     installDir,
                                     cleanupGeneration);
                             }
-                            catch {  }
+                            catch { }
                         });
                     }
                 }
@@ -326,7 +326,7 @@ sealed class Program
                 catch { }
             }
         }
-        catch {  }
+        catch { }
 #endif
 
         try
@@ -338,7 +338,7 @@ sealed class Program
                 catch { }
             }
         }
-        catch {  }
+        catch { }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

@@ -208,7 +208,7 @@ public partial class ServerViewModel : ViewModelBase
         {
             ServerHealthRecordDto? rec = null;
             try { if (vm._originalEntry != null) rec = ServerHealthStore.GetFreshRecord(vm._originalEntry); }
-            catch {  }
+            catch { }
             withRecs.Add((vm, rec));
         }
 
@@ -309,7 +309,7 @@ public partial class ServerViewModel : ViewModelBase
             var persisted = ServerHealthStore.GetFresh(entry);
             if (persisted.HasValue) _healthVerdict = persisted.Value;
         }
-        catch {  }
+        catch { }
         Name = entry.Name;
         Server = entry.Server;
         Port = entry.Port;

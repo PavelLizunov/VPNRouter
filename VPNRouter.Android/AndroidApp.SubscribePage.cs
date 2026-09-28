@@ -560,7 +560,7 @@ public partial class AndroidApp
         if (aggregated.Count == 0) return;
         if (_subsAggTestAllCts is not null)
         {
-            try { _subsAggTestAllCts.Cancel(); } catch {  }
+            try { _subsAggTestAllCts.Cancel(); } catch { }
             return;
         }
 
@@ -588,7 +588,7 @@ public partial class AndroidApp
                     var result = await TcpTlsProbe.ProbeServerAsync(srv, ct);
                     ApplyAggregatedResult(srv, result);
                 }
-                catch (OperationCanceledException) {  }
+                catch (OperationCanceledException) { }
                 catch
                 {
                     ApplyAggregatedResult(srv,
@@ -616,7 +616,7 @@ public partial class AndroidApp
         {
             _subsAggTestingKeys.Clear();
             AndroidStorage.SetServerTestResults(_subsAggResults);
-            try { _subsAggTestAllCts?.Dispose(); } catch {  }
+            try { _subsAggTestAllCts?.Dispose(); } catch { }
             _subsAggTestAllCts = null;
             if (_subsAggTestAllBtn is not null)
                 _subsAggTestAllBtn.Content = Localization.AdvServersTestAll;
@@ -1085,7 +1085,7 @@ public partial class AndroidApp
                 _subsRefreshAllStatus.IsVisible = false;
             }
         }
-        catch {  }
+        catch { }
     }
 
     private void RefreshSubsLocalizedStrings()

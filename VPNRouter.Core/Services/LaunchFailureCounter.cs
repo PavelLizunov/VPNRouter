@@ -113,7 +113,7 @@ public static class LaunchFailureCounter
     public static void Reset(string? path = null)
     {
         var p = path ?? DefaultPath;
-        try { if (File.Exists(p)) File.Delete(p); } catch {  }
+        try { if (File.Exists(p)) File.Delete(p); } catch { }
     }
 
     private static bool WithinCooldown(string isoStamp, DateTime now, TimeSpan window)

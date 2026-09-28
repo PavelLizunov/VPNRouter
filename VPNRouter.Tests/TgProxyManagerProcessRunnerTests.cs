@@ -57,7 +57,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
                 }
             }
         }
-        catch {  }
+        catch { }
     }
 
     private void SkipIfNotSeeded()

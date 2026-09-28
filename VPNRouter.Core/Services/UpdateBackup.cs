@@ -251,7 +251,7 @@ public static class UpdateBackup
             {
                 if (Directory.Exists(stage))
                 {
-                    try { Directory.Delete(stage, recursive: true); } catch {  }
+                    try { Directory.Delete(stage, recursive: true); } catch { }
                 }
 
                 if (Directory.Exists(app))
@@ -263,11 +263,11 @@ public static class UpdateBackup
 
             moveDirectory(bak, app);
             try { File.Delete(generationPath); }
-            catch {  }
+            catch { }
 
             if (Directory.Exists(stage))
             {
-                try { Directory.Delete(stage, recursive: true); } catch {  }
+                try { Directory.Delete(stage, recursive: true); } catch { }
             }
 
             return new RestoreResult(true,
@@ -361,7 +361,7 @@ public static class UpdateBackup
         if (string.IsNullOrWhiteSpace(installDir)) return;
         var marker = Path.Combine(installDir, "app", FailureMarkerName);
         try { if (File.Exists(marker)) File.Delete(marker); }
-        catch {  }
+        catch { }
     }
 
     public static string ReadFailureMarker(string installDir)
@@ -393,7 +393,7 @@ public static class UpdateBackup
                     if ((attr & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
                         File.SetAttributes(dst, attr & ~FileAttributes.ReadOnly);
                 }
-                catch {  }
+                catch { }
             }
 
             File.Copy(file, dst, overwrite: true);

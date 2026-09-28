@@ -81,7 +81,7 @@ internal static class AndroidDiagnosticsExporter
         }
         finally
         {
-            try { Directory.Delete(staging, recursive: true); } catch {  }
+            try { Directory.Delete(staging, recursive: true); } catch { }
         }
     }
 
@@ -139,7 +139,7 @@ internal static class AndroidDiagnosticsExporter
             File.WriteAllText(Path.Combine(staging, name), content);
             entries.Add(name);
         }
-        catch {  }
+        catch { }
     }
 
     private static void AddLogTail(string staging, string? sourcePath, string outName,

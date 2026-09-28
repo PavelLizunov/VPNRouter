@@ -363,7 +363,7 @@ public class TgProxyManager : IDisposable
 
             if (alreadyExited)
             {
-                try { _handle.Dispose(); } catch {  }
+                try { _handle.Dispose(); } catch { }
                 _handle = null;
                 _activeSecret = string.Empty;
                 return;
@@ -404,7 +404,7 @@ public class TgProxyManager : IDisposable
 
             if (confirmedExited)
             {
-                try { handle.Dispose(); } catch {  }
+                try { handle.Dispose(); } catch { }
                 _handle = null;
                 _activeSecret = string.Empty;
                 _logger.Information("[TgProxy] Stopped");

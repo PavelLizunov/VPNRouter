@@ -36,7 +36,7 @@ public final class AndroidDeepVerifyBox {
     private static final String LOG_TAG = "VpnRouter.DV";
     private static final AtomicBoolean libboxSetupDone = new AtomicBoolean(false);
 
-    private AndroidDeepVerifyBox() {  }
+    private AndroidDeepVerifyBox() { }
 
     public static String verifyConfigSync(
             Context ctx,
@@ -248,8 +248,8 @@ public final class AndroidDeepVerifyBox {
 
         @Override public boolean useProcFS() { return false; }
         @Override public boolean usePlatformAutoDetectInterfaceControl() { return false; }
-        @Override public void autoDetectInterfaceControl(int fd) {  }
-        @Override public void clearDNSCache() {  }
+        @Override public void autoDetectInterfaceControl(int fd) { }
+        @Override public void clearDNSCache() { }
 
         @Override
         public NetworkInterfaceIterator getInterfaces() {
@@ -393,10 +393,10 @@ public final class AndroidDeepVerifyBox {
         }
 
         @Override
-        public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) {  }
+        public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) { }
 
         @Override
-        public void sendNotification(io.nekohasekai.libbox.Notification notification) {  }
+        public void sendNotification(io.nekohasekai.libbox.Notification notification) { }
 
         @Override
         public int findConnectionOwner(int ipProtocol, String sa, int sp, String da, int dp) {

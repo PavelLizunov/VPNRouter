@@ -110,7 +110,7 @@ public sealed class FreeConfigPoolFetcher
             }
             finally
             {
-                try { if (File.Exists(tmp)) File.Delete(tmp); } catch {  }
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -212,7 +212,7 @@ public sealed class FreeConfigPoolFetcher
                 if (!string.IsNullOrEmpty(entry.Id) && !string.IsNullOrEmpty(entry.RawUri))
                     result.Add(entry);
             }
-            catch {  }
+            catch { }
         }
         return result;
     }

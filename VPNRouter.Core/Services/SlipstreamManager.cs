@@ -270,11 +270,11 @@ public class SlipstreamManager : IDisposable
                 var path = AppPaths.SlipstreamLogPath;
                 if (!File.Exists(path)) return;
                 var prev = path + ".prev";
-                try { if (File.Exists(prev)) File.Delete(prev); } catch {  }
+                try { if (File.Exists(prev)) File.Delete(prev); } catch { }
                 File.Move(path, prev);
             }
         }
-        catch {  }
+        catch { }
     }
 
     private static void AppendTransportLog(string line)
@@ -292,7 +292,7 @@ public class SlipstreamManager : IDisposable
                     $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {StripAnsi(line)}{Environment.NewLine}");
             }
         }
-        catch {  }
+        catch { }
     }
 
     private static string StripAnsi(string s)
@@ -305,7 +305,7 @@ public class SlipstreamManager : IDisposable
 
         if (handle.HasExited)
         {
-            try { handle.Dispose(); } catch {  }
+            try { handle.Dispose(); } catch { }
             _handle = null;
             CleanActiveCert();
             return;
@@ -329,7 +329,7 @@ public class SlipstreamManager : IDisposable
         }
         finally
         {
-            try { handle.Dispose(); } catch {  }
+            try { handle.Dispose(); } catch { }
             _handle = null;
             CleanActiveCert();
             LocalPort = 0;
@@ -421,7 +421,7 @@ public class SlipstreamManager : IDisposable
                 }
             }
         }
-        catch {  }
+        catch { }
         return result;
     }
 
@@ -519,7 +519,7 @@ public class SlipstreamManager : IDisposable
                 catch { return $"PID {pid}"; }
             }
         }
-        catch {  }
+        catch { }
         return null;
     }
 

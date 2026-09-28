@@ -563,9 +563,9 @@ public partial class AndroidApp
         }
 
         try { ReloadServerListFromStorage(); }
-        catch {  }
+        catch { }
         try { RefreshConfigModeUiFromStorage(); }
-        catch {  }
+        catch { }
 
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
@@ -624,7 +624,7 @@ public partial class AndroidApp
         try
         {
         }
-        catch {  }
+        catch { }
     }
 
     internal void RefreshConfigShareLocalization()

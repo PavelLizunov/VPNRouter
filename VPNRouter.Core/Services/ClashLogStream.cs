@@ -82,13 +82,13 @@ public sealed class ClashLogStream : IDisposable
 
     public void Stop()
     {
-        try { _cts?.Cancel(); } catch {  }
+        try { _cts?.Cancel(); } catch { }
     }
 
     public void Dispose()
     {
         Stop();
-        try { _cts?.Dispose(); } catch {  }
+        try { _cts?.Dispose(); } catch { }
         _cts = null;
     }
 

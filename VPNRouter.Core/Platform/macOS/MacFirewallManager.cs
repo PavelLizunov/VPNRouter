@@ -254,7 +254,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                     ReleaseEnable();
                 }
             }
-            catch {  }
+            catch { }
 
             if (!_loaded && string.IsNullOrEmpty(_enableToken))
             {
@@ -547,13 +547,13 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_markerPath)!);
             System.IO.File.WriteAllText(_markerPath, mode);
         }
-        catch {  }
+        catch { }
     }
 
     private void TryDeleteMarker()
     {
         try { if (System.IO.File.Exists(_markerPath)) System.IO.File.Delete(_markerPath); }
-        catch {  }
+        catch { }
     }
 
     internal enum MarkerState
@@ -647,7 +647,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
 
     public static void TryCleanupOrphanedRulesSafe(ILogger? logger)
     {
-        try { new MacFirewallManager(logger).CleanupOrphanedRules(logger); } catch {  }
+        try { new MacFirewallManager(logger).CleanupOrphanedRules(logger); } catch { }
     }
 
     internal static string? ParsePfToken(string? stderr)

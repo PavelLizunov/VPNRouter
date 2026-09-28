@@ -302,10 +302,10 @@ public class UpdateChecker : IDesktopInstaller
                     if (Directory.GetLastWriteTimeUtc(dir) < cutoff)
                         Directory.Delete(dir, true);
                 }
-                catch {  }
+                catch { }
             }
         }
-        catch {  }
+        catch { }
     }
 
     public void ApplyUpdate(string extractedDir) =>
@@ -344,7 +344,7 @@ public class UpdateChecker : IDesktopInstaller
                     Path.Combine(bootstrapSubDir, "VPNRouter.GUI.exe"),
                     overwrite: true);
             }
-            catch {  }
+            catch { }
             extractedDir = bootstrapSubDir;
         }
 
@@ -373,7 +373,7 @@ public class UpdateChecker : IDesktopInstaller
         var tempDir = Path.GetTempPath();
         var helperPath = Path.Combine(tempDir, $"vpnrouter-update-{parentPid}.cmd");
         var logsDir = AppPaths.LogsDir;
-        try { Directory.CreateDirectory(logsDir); } catch {  }
+        try { Directory.CreateDirectory(logsDir); } catch { }
         var helperLog = Path.Combine(logsDir, "update.log");
 
         var skipRelaunchForCi =
@@ -543,7 +543,7 @@ public class UpdateChecker : IDesktopInstaller
             chmodPsi.ArgumentList.Add(scriptPath);
             Process.Start(chmodPsi)?.WaitForExit(5000);
         }
-        catch {  }
+        catch { }
 
         var bashPsi = new ProcessStartInfo
         {

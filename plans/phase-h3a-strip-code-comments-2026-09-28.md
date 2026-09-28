@@ -47,6 +47,14 @@ Revert the PR.
   interpolation holes and nested literals, and an independent line check flags
   cuts not preceded by whitespace or leaving unbalanced quotes; it catches both
   affected lines on the broken version and reports 0 on the rerun.
+- Second CI run: code compiled; 8 failures in 7 source-reading tests that used
+  comments as section markers or asserted comment text. Re-anchored on code
+  (method and element names, the non-Connected early return) or dropped the
+  comment-only assertion (`BR-6a`, `<!-- Tunnel mode -->`). The
+  `ApplyFreeConfigReadinessTests` pin had distinguished the correct branch only
+  by comment text; it now checks that `IsConnected = true` follows the
+  non-Connected `return false`.
+- 264 `catch {  }` spacing artifacts from removed inline comments normalized.
 - Scan of source-guard assertions found no test asserting removed comment text
   (one false positive checked by hand). Exact-head CI recorded on PR #330.
 - An earlier agent-based rewrite attempt was discarded; the delegated agent had

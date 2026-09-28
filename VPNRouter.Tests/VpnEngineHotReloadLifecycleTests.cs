@@ -246,14 +246,14 @@ public sealed class VpnEngineHotReloadLifecycleTests
         {
             if (_disposed) return;
             _disposed = true;
-            try { _engine.Stop(); } catch {  }
-            try { _engine.Dispose(); } catch {  }
+            try { _engine.Stop(); } catch { }
+            try { _engine.Dispose(); } catch { }
             SingBoxManager.Runner = _prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
             AppPaths.OverrideDataDir(_previousDataDir);
-            try { Directory.Delete(_tempDataDir, recursive: true); } catch {  }
-            try { File.Delete(_stubExe); } catch {  }
+            try { Directory.Delete(_tempDataDir, recursive: true); } catch { }
+            try { File.Delete(_stubExe); } catch { }
         }
     }
 

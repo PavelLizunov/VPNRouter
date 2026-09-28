@@ -40,13 +40,13 @@ public static class AndroidStorageSane
             {
                 if (!string.Equals(match, raw, StringComparison.Ordinal))
                 {
-                    try { set(spec.Key, match); } catch {  }
+                    try { set(spec.Key, match); } catch { }
                 }
                 continue;
             }
 
-            try { quarantine?.Invoke(spec.Key, raw); } catch {  }
-            try { set(spec.Key, spec.DefaultValue); } catch {  }
+            try { quarantine?.Invoke(spec.Key, raw); } catch { }
+            try { set(spec.Key, spec.DefaultValue); } catch { }
             changes.Add(
                 $"setting '{spec.Key}' had unknown value '{raw}'; reset to '{spec.DefaultValue}'");
         }

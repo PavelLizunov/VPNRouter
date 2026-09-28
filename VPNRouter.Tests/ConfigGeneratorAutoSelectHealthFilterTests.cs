@@ -26,7 +26,7 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
     {
         ServerHealthStore.ResetForTests();
         AppPaths.OverrideDataDir(_prevDataDir);
-        try { Directory.Delete(_tempDir, recursive: true); } catch {  }
+        try { Directory.Delete(_tempDir, recursive: true); } catch { }
     }
 
     private static VlessServerEntry Vless(string name, string server) => new()

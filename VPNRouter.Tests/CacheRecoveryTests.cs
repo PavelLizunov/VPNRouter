@@ -500,7 +500,7 @@ public sealed class CacheRecoveryTests
         public void Dispose()
         {
             try { Directory.Delete(Root, recursive: true); }
-            catch {  }
+            catch { }
         }
     }
 }

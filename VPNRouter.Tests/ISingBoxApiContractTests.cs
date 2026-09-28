@@ -166,7 +166,7 @@ public sealed class ISingBoxApiContractTests
         public void Stop()
         {
             _running = false;
-            try { _listener.Stop(); } catch {  }
+            try { _listener.Stop(); } catch { }
             try { _listener.Close(); } catch { }
             try { _thread.Join(1000); } catch { }
         }
@@ -182,7 +182,7 @@ public sealed class ISingBoxApiContractTests
                 catch { return; }
 
                 try { HandleRequest(ctx); }
-                catch {  }
+                catch { }
             }
         }
 

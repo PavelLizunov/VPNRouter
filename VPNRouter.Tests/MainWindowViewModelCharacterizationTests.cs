@@ -44,7 +44,7 @@ public class MainWindowViewModelCharacterizationTests
                 Environment.GetEnvironmentVariable("GITHUB_WORKSPACE") ?? Environment.CurrentDirectory,
                 ".git-suggested-hash-bump.txt");
             try { File.WriteAllText(sentinel, $"PinnedHashLinux={hash}\n"); }
-            catch {  }
+            catch { }
             return;
         }
 
@@ -101,7 +101,7 @@ public class MainWindowViewModelCharacterizationTests
                 Environment.GetEnvironmentVariable("GITHUB_WORKSPACE") ?? Environment.CurrentDirectory,
                 ".git-suggested-hash-bump.txt");
             try { File.WriteAllText(sentinel, $"PinnedHashLinux={preChangeHash}\n"); }
-            catch {  }
+            catch { }
             return;
         }
 

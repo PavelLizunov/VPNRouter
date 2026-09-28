@@ -134,7 +134,7 @@ public sealed class SideloadSource : IUpdateSource
             }
             if (!string.Equals(actual, info.AssetSha256, StringComparison.Ordinal))
             {
-                try { File.Delete(apkPath); } catch {  }
+                try { File.Delete(apkPath); } catch { }
                 throw new InvalidOperationException(
                     "APK checksum mismatch — download is corrupted or tampered. " +
                     $"Expected: {info.AssetSha256}\nGot:      {actual}");

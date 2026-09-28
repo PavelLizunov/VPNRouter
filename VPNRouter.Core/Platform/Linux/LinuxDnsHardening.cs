@@ -172,7 +172,7 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_statePath)!);
             System.IO.File.WriteAllText(_statePath, JsonSerializer.Serialize(state));
         }
-        catch {  }
+        catch { }
     }
 
     private LinuxDnsState? LoadState()
@@ -184,7 +184,7 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
     private void TryDeleteState()
     {
         try { if (System.IO.File.Exists(_statePath)) System.IO.File.Delete(_statePath); }
-        catch {  }
+        catch { }
     }
 
     internal sealed class LinuxDnsState

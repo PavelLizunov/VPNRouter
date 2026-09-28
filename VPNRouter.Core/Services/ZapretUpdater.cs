@@ -430,7 +430,7 @@ public class ZapretUpdater
                         _logger.Debug("[ZapretUpdater] Cleaned stale temp {File}", Path.GetFileName(f));
                     }
                 }
-                catch {  }
+                catch { }
             }
 
             foreach (var d in Directory.GetDirectories(tempRoot, "vpnr-zapret-extract-*"))

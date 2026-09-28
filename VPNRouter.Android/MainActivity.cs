@@ -188,7 +188,7 @@ public class MainActivity : AvaloniaMainActivity
             {
                 foreach (var f in System.IO.Directory.GetFiles(cacheDir.AbsolutePath, "qr_scan_*.jpg"))
                 {
-                    try { System.IO.File.Delete(f); } catch {  }
+                    try { System.IO.File.Delete(f); } catch { }
                 }
             }
         }
@@ -331,7 +331,7 @@ public class MainActivity : AvaloniaMainActivity
     {
         if (_tunnelReceiver is not null)
         {
-            try { UnregisterReceiver(_tunnelReceiver); } catch {  }
+            try { UnregisterReceiver(_tunnelReceiver); } catch { }
             _tunnelReceiver = null;
         }
         if (ReferenceEquals(Instance, this))
@@ -1033,10 +1033,10 @@ public class MainActivity : AvaloniaMainActivity
                 {
                     var path = System.IO.Path.Combine(ext.AbsolutePath, name);
                     try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); }
-                    catch {  }
+                    catch { }
                 }
             }
         }
-        catch {  }
+        catch { }
     }
 }

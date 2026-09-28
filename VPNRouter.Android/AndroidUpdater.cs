@@ -45,7 +45,7 @@ internal static class AndroidUpdater
             ?? throw new InvalidOperationException("Application cache directory unavailable.");
         var apkPath = Path.Combine(cacheDir.AbsolutePath, UpdateApkFileName);
 
-        try { if (File.Exists(apkPath)) File.Delete(apkPath); } catch {  }
+        try { if (File.Exists(apkPath)) File.Delete(apkPath); } catch { }
 
         using var resp = await _httpDownload.GetAsync(
             info.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);

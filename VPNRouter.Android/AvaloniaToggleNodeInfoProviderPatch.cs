@@ -61,6 +61,6 @@ internal static class AvaloniaToggleNodeInfoProviderPatch
     private static void LogWarn(string msg)
     {
         try { global::Android.Util.Log.Warn("VpnRouter.A11y", $"DEFCT-001: {msg}"); }
-        catch {  }
+        catch { }
     }
 }

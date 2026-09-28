@@ -246,12 +246,12 @@ public sealed class VpnEngineLifecycleTests
         {
             if (_disposed) return;
             _disposed = true;
-            try { _engine.Stop(); } catch {  }
-            try { _engine.Dispose(); } catch {  }
+            try { _engine.Stop(); } catch { }
+            try { _engine.Dispose(); } catch { }
             SingBoxManager.Runner = _prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-            try { File.Delete(_stubExe); } catch {  }
+            try { File.Delete(_stubExe); } catch { }
         }
     }
 
@@ -423,12 +423,12 @@ public sealed class VpnEngineLifecycleTests
         }
         finally
         {
-            try { engine.Stop(); } catch {  }
-            try { engine.Dispose(); } catch {  }
+            try { engine.Stop(); } catch { }
+            try { engine.Dispose(); } catch { }
             SingBoxManager.Runner = prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = prevTunDiagRunner;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-            try { File.Delete(stubExe); } catch {  }
+            try { File.Delete(stubExe); } catch { }
         }
     }
 

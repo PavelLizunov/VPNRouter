@@ -42,7 +42,7 @@ public sealed class UpdateNotificationViewModelTests
         var vm = new UpdateNotificationViewModel(DefaultSettings(), DefaultLogger(), fake);
 
         await vm.CheckOnStartupAsync();
-        await Dispatcher.UIThread.InvokeAsync(() => {  });
+        await Dispatcher.UIThread.InvokeAsync(() => { });
 
         Assert.Equal(1, fake.CheckCallCount);
         Assert.True(vm.IsVisible, "Banner must be visible after non-null IUpdateSource result.");

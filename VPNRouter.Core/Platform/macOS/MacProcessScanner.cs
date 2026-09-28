@@ -101,7 +101,7 @@ public class MacProcessScanner : IProcessScanner
             var readTask = System.Threading.Tasks.Task.Run(() => proc.StandardOutput.ReadToEnd());
             if (!proc.WaitForExit(5000))
             {
-                try { proc.Kill(entireProcessTree: true); } catch {  }
+                try { proc.Kill(entireProcessTree: true); } catch { }
                 _logger.Warning("[MacProcessScanner] /bin/ps did not exit within 5s — killed; process tree may be incomplete this scan");
                 return tree;
             }

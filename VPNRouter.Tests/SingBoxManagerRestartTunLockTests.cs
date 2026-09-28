@@ -51,7 +51,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         ReleaseSingletonTunLockBestEffort();
         VPNRouter.Core.AppPaths.OverrideDataDir(_savedDataDir);
-        try { Directory.Delete(_testDataDir, recursive: true); } catch {  }
+        try { Directory.Delete(_testDataDir, recursive: true); } catch { }
     }
 
     [Fact]
@@ -714,7 +714,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         {
             Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
         }
-        catch {  }
+        catch { }
     }
 
     private static string? GetAppPathsDataDir()

@@ -257,13 +257,13 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         {
             if (_disposed) return;
             _disposed = true;
-            try { _engine.Stop(); } catch {  }
-            try { _engine.Dispose(); } catch {  }
+            try { _engine.Stop(); } catch { }
+            try { _engine.Dispose(); } catch { }
             SingBoxManager.Runner = _prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             StartupPipeline.WarmupHttp = _prevWarmupHttp;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-            try { File.Delete(_stubExe); } catch {  }
+            try { File.Delete(_stubExe); } catch { }
         }
     }
 

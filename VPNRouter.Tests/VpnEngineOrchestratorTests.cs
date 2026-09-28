@@ -233,8 +233,6 @@ public sealed class VpnEngineOrchestratorTests
         Assert.True(hmIdx < sbIdx,
             "BR-6a invariant violated: HealthMonitor must be torn down BEFORE sing-box. " +
             $"Got _healthMonitor at {hmIdx}, _singBox at {sbIdx}.");
-
-        Assert.Contains("BR-6a", src);
     }
 
     [Fact]

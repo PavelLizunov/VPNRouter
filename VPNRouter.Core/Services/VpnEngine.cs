@@ -639,7 +639,7 @@ public class VpnEngine : IDisposable
             if (OperatingSystem.IsWindows())
                 TunAdapterDiagnostics.LogAdapterState(_logger, "VpnEngine.after-stop");
         }
-        catch {  }
+        catch { }
 
         OnStatus("Stopped");
         _logger?.Information("[VpnEngine] Stopped");
@@ -1215,7 +1215,7 @@ public class VpnEngine : IDisposable
                             probe.Reason);
                     }
                 }
-                catch (OperationCanceledException) {  }
+                catch (OperationCanceledException) { }
                 catch (Exception ex)
                 {
                     _engine._logger?.Debug(ex,

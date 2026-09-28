@@ -125,7 +125,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
             var stderrTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(10000))
             {
-                try { proc.Kill(entireProcessTree: true); } catch {  }
+                try { proc.Kill(entireProcessTree: true); } catch { }
                 Assert.Fail($"sing-box check timed out for {label} after 10 seconds.");
             }
 
@@ -137,7 +137,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
         }
         finally
         {
-            try { File.Delete(tempPath); } catch {  }
+            try { File.Delete(tempPath); } catch { }
         }
     }
 

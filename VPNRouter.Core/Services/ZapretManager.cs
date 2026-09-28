@@ -216,7 +216,7 @@ public class ZapretManager : IDisposable
         }
         finally
         {
-            try { handle.Dispose(); } catch {  }
+            try { handle.Dispose(); } catch { }
             _handle = null;
             _logger.Information("[Zapret] Stopped");
         }

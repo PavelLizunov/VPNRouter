@@ -299,7 +299,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private void BestEffortResetAndCloseLocked()
     {
         StopPumpLocked();
-        try { if (_device is { IsInvalid: false }) TryResetLocked(); } catch {  }
+        try { if (_device is { IsInvalid: false }) TryResetLocked(); } catch { }
         CloseDeviceLocked();
         _engaged = false;
     }
@@ -804,8 +804,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 await Task.Delay(NetChangeDebounce, fresh.Token).ConfigureAwait(false);
                 await ReRegisterIfChangedAsync(fresh.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) {  }
-            catch (ObjectDisposedException) {  }
+            catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
             catch (Exception ex) { _log.Debug(ex, "[SplitTunnel] NetworkChange handler error (ignored)"); }
         });
     }

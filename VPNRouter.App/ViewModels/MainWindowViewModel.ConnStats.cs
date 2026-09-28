@@ -30,7 +30,7 @@ public partial class MainWindowViewModel
     {
         var oldApi = _statsApi;
         _statsApi = null;
-        try { oldApi?.Dispose(); } catch {  }
+        try { oldApi?.Dispose(); } catch { }
 
         _statsPrevAt = null;
         _statsPrevDown = 0;

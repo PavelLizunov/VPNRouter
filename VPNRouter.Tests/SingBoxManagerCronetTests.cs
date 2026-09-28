@@ -35,7 +35,7 @@ public class SingBoxManagerCronetTests
 
             Assert.True(SingBoxManager.TryColocateCronet(singBox, bundled, null));
         }
-        finally { try { Directory.Delete(root, true); } catch {  } }
+        finally { try { Directory.Delete(root, true); } catch { } }
     }
 
     [Fact]
@@ -53,6 +53,6 @@ public class SingBoxManagerCronetTests
             File.WriteAllText(singBox, "stub");
             Assert.False(SingBoxManager.TryColocateCronet(singBox, bundled, null));
         }
-        finally { try { Directory.Delete(root, true); } catch {  } }
+        finally { try { Directory.Delete(root, true); } catch { } }
     }
 }

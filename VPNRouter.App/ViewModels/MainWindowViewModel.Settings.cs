@@ -281,7 +281,7 @@ public partial class MainWindowViewModel
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
             Environment.Exit(0);
         }
-        catch {  }
+        catch { }
     }
 
     private System.Threading.CancellationTokenSource? _resetDisarmCts;
@@ -353,7 +353,7 @@ public partial class MainWindowViewModel
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
             Environment.Exit(0);
         }
-        catch {  }
+        catch { }
     }
 
     [RelayCommand]
@@ -385,7 +385,7 @@ public partial class MainWindowViewModel
             }
             System.Diagnostics.Process.Start(psi);
         }
-        catch {  }
+        catch { }
     }
 
     [ObservableProperty]
@@ -430,7 +430,7 @@ public partial class MainWindowViewModel
             var psi = VPNRouter.App.Services.FileManagerHelper.BuildRevealStartInfo(filePath);
             System.Diagnostics.Process.Start(psi);
         }
-        catch {  }
+        catch { }
     }
 
     [RelayCommand]

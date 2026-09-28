@@ -56,7 +56,7 @@ public static class ServerHealthStore
                 };
                 SaveLocked(map);
             }
-            catch {  }
+            catch { }
         }
     }
 
@@ -103,7 +103,7 @@ public static class ServerHealthStore
                             map[r.Key] = r;
             }
         }
-        catch {  }
+        catch { }
 
         _cache = map;
         _cachePath = path;

@@ -210,10 +210,10 @@ public sealed class TgProxyOwnershipCharacterizationTests
             : src.IndexOf("private void LoadSettingsIntoUI()", StringComparison.Ordinal);
         Assert.True(loadSettingsStart >= 0, "Expected LoadSettingsIntoUI in MainWindowViewModel.cs");
 
-        var start = src.IndexOf("// Telegram proxy", loadSettingsStart, StringComparison.Ordinal);
-        Assert.True(start >= 0, "Expected '// Telegram proxy' marker inside LoadSettingsIntoUI");
-        var end = src.IndexOf("// Update channel", start, StringComparison.Ordinal);
-        Assert.True(end > start, "Expected '// Update channel' marker after '// Telegram proxy'");
+        var start = src.IndexOf("TgProxyPort = _settings.App.TgProxyPort", loadSettingsStart, StringComparison.Ordinal);
+        Assert.True(start >= 0, "Expected the Telegram proxy block inside LoadSettingsIntoUI");
+        var end = src.IndexOf("ReceivePrereleases = _settings.Update.IsExperimental;", start, StringComparison.Ordinal);
+        Assert.True(end > start, "Expected the update-channel assignment after the Telegram proxy block");
 
         var section = StripLineComments(src[start..end]);
 

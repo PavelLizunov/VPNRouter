@@ -227,7 +227,7 @@ public partial class AndroidApp : Avalonia.Application
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
                     $"RepairAllOnLoad in OnFrameworkInitialization failed: {ex.GetType().Name}: {ex.Message}");
             }
-            catch {  }
+            catch { }
         }
 
         try
@@ -287,7 +287,7 @@ public partial class AndroidApp : Avalonia.Application
                     if (!string.IsNullOrEmpty(MainActivity.LaunchCounterPath))
                         VPNRouter.Core.Services.LaunchFailureCounter.MarkStable(MainActivity.LaunchCounterPath);
                 }
-                catch {  }
+                catch { }
 
                 try { ConsumeAndSurfaceRecoveryNotice(); }
                 catch (Exception ex)
@@ -1420,7 +1420,7 @@ public partial class AndroidApp : Avalonia.Application
                     System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(reportPath)!);
                     System.IO.File.WriteAllText(reportPath, formatted);
                 }
-                catch {  }
+                catch { }
 
                 return formatted;
             });
@@ -1461,7 +1461,7 @@ public partial class AndroidApp : Avalonia.Application
         try
         {
             try { AndroidStorage.SetSafeModeOnNextLaunch(true); }
-            catch {  }
+            catch { }
 
             var ctx = global::Android.App.Application.Context;
             var pkg = ctx.PackageName;

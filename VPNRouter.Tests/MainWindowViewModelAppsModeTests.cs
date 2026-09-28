@@ -424,7 +424,6 @@ public class MainWindowViewModelAppsModeTests
             "VPNRouter.App", "Views", "Pages", "SimplePage.axaml"));
 
         Assert.True(applications.Split("IsEnabled=\"{Binding !IsApplying}\"").Length - 1 >= 2);
-        Assert.Contains("<!-- Tunnel mode -->", simple);
         Assert.Contains("<StackPanel Spacing=\"4\" IsEnabled=\"{Binding !IsApplying}\">", simple);
     }
 

@@ -85,7 +85,7 @@ public static class ProcessQuery
         foreach (var p in procs)
         {
             try { p.Dispose(); }
-            catch {  }
+            catch { }
         }
     }
 }

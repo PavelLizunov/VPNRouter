@@ -38,7 +38,7 @@ public sealed record SubscriptionUserInfo(long Upload, long Download, long Total
                     if (n > 0)
                     {
                         try { expire = DateTimeOffset.FromUnixTimeSeconds(n); any = true; }
-                        catch {  }
+                        catch { }
                     }
                     break;
             }

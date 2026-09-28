@@ -106,7 +106,7 @@ public partial class AndroidApp
                 AndroidStorage.SetVlessUri(uri);
                 AndroidStorage.SetSubscriptionUrl(null);
             }
-            catch {  }
+            catch { }
         }
 
         ShowMenuFeedback(Localization.SmpQrConnecting);
@@ -209,7 +209,7 @@ public partial class AndroidApp
                 if (!string.IsNullOrWhiteSpace(host)) return host;
             }
         }
-        catch {  }
+        catch { }
         return fallback;
     }
 }

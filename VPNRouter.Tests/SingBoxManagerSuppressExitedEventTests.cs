@@ -40,7 +40,7 @@ public sealed class SingBoxManagerSuppressExitedEventTests
     {
         var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
 
-        var linuxBranch = src.IndexOf("v2.28.0: Linux capability-mode path", StringComparison.Ordinal);
+        var linuxBranch = src.IndexOf("if (OperatingSystem.IsLinux() && !_linuxUsedPkexec)", StringComparison.Ordinal);
         Assert.True(linuxBranch >= 0, "Linux capability path landmark missing");
 
         var nextCatch = src.IndexOf("catch (Exception ex)", linuxBranch, StringComparison.Ordinal);

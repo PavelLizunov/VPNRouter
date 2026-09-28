@@ -242,7 +242,7 @@ public static class HealthCheck
                     }
                 }
             }
-            catch {  }
+            catch { }
         }
 
         try

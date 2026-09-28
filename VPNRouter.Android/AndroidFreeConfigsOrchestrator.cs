@@ -221,7 +221,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
                 file.LastAggregatedAt = DateTime.UtcNow;
                 _cache.Save(file);
             }
-            catch {  }
+            catch { }
 
             OnStatus?.Invoke(Localization.FcStatusCancelled);
             OnFinished?.Invoke(verifiedThisRun.Count);
@@ -243,7 +243,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
     public void Cancel()
     {
         try { _cts?.Cancel(); }
-        catch {  }
+        catch { }
     }
 
     public void RemoveSaved(FreeConfigEntry entry)

@@ -177,7 +177,7 @@ public sealed class MacDnsHardening : IUnixDnsHardening
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_statePath)!);
             System.IO.File.WriteAllText(_statePath, JsonSerializer.Serialize(state));
         }
-        catch {  }
+        catch { }
     }
 
     private MacDnsState? LoadState()
@@ -189,7 +189,7 @@ public sealed class MacDnsHardening : IUnixDnsHardening
     private void TryDeleteState()
     {
         try { if (System.IO.File.Exists(_statePath)) System.IO.File.Delete(_statePath); }
-        catch {  }
+        catch { }
     }
 
     internal sealed class MacDnsState

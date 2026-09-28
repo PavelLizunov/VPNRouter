@@ -25,7 +25,7 @@ public sealed class ZapretProbeCacheTests : IDisposable
     {
         AppPaths.OverrideDataDir(_originalDataDir);
         try { Directory.Delete(_tempDataDir, recursive: true); }
-        catch {  }
+        catch { }
     }
 
     [Fact]

@@ -72,7 +72,7 @@ public static class DiagnosticsExporter
         }
         finally
         {
-            try { Directory.Delete(staging, recursive: true); } catch {  }
+            try { Directory.Delete(staging, recursive: true); } catch { }
         }
     }
 

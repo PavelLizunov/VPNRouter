@@ -101,7 +101,7 @@ internal static class TwoPhaseStartCoordinator
                 }
                 finally
                 {
-                    try { phaseACts.Cancel(); } catch {  }
+                    try { phaseACts.Cancel(); } catch { }
                 }
             }
 
@@ -147,14 +147,14 @@ internal static class TwoPhaseStartCoordinator
                 }
                 finally
                 {
-                    try { phaseBCts.Cancel(); } catch {  }
+                    try { phaseBCts.Cancel(); } catch { }
                 }
             }
         }
         finally
         {
-            try { unsubStarted?.Invoke(); } catch {  }
-            try { unsubConnected?.Invoke(); } catch {  }
+            try { unsubStarted?.Invoke(); } catch { }
+            try { unsubConnected?.Invoke(); } catch { }
         }
     }
 }

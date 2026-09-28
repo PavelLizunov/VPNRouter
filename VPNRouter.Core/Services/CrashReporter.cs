@@ -38,7 +38,7 @@ public static class CrashReporter
                     $"      For ungraceful (Kill/OOM) shutdowns this file is absent.{Environment.NewLine}";
                 File.WriteAllText(path, content);
             }
-            catch {  }
+            catch { }
         };
     }
 
@@ -91,7 +91,7 @@ public static class CrashReporter
                     }
                 }
             }
-            catch {  }
+            catch { }
 
             File.WriteAllText(path, sb.ToString());
             return path;

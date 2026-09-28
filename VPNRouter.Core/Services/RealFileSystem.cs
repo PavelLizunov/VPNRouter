@@ -120,8 +120,8 @@ public sealed class RealFileSystem : IFileSystem
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            try { _stream.Dispose(); } catch {  }
-            try { if (File.Exists(_path)) File.Delete(_path); } catch {  }
+            try { _stream.Dispose(); } catch { }
+            try { if (File.Exists(_path)) File.Delete(_path); } catch { }
         }
     }
 }

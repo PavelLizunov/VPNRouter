@@ -489,13 +489,13 @@ public sealed class LinuxFirewallManager : IFirewallManager, ICommittedFirewallC
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_markerPath)!);
             System.IO.File.WriteAllText(_markerPath, "engaged");
         }
-        catch {  }
+        catch { }
     }
 
     private void TryDeleteMarker()
     {
         try { if (System.IO.File.Exists(_markerPath)) System.IO.File.Delete(_markerPath); }
-        catch {  }
+        catch { }
     }
 
     internal void CleanupOrphanedRules(ILogger? logger)
@@ -525,7 +525,7 @@ public sealed class LinuxFirewallManager : IFirewallManager, ICommittedFirewallC
 
     public static void TryCleanupOrphanedRulesSafe(ILogger? logger)
     {
-        try { new LinuxFirewallManager(logger).CleanupOrphanedRules(logger); } catch {  }
+        try { new LinuxFirewallManager(logger).CleanupOrphanedRules(logger); } catch { }
     }
 
     private (bool ok, string stdout, string stderr) RunSudo(string[] args)

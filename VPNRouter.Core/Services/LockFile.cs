@@ -97,7 +97,7 @@ public sealed class LockFile
             }
 
             Process? proc = null;
-            try { proc = Process.GetProcessById(pid); } catch {  }
+            try { proc = Process.GetProcessById(pid); } catch { }
 
             if (proc == null)
             {

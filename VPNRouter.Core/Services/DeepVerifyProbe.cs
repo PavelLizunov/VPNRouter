@@ -51,7 +51,7 @@ internal static class DeepVerifyProbe
                 var completed = await Task.WhenAny(connectTask, Task.Delay(200, ct));
                 if (completed == connectTask && c.Connected) return true;
             }
-            catch {  }
+            catch { }
             await Task.Delay(100, ct);
         }
         return false;
@@ -149,7 +149,7 @@ internal static class DeepVerifyProbe
                 return (true, mbps, null);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch {  }
+            catch { }
         }
         return (false, 0, "all bandwidth URLs failed");
     }

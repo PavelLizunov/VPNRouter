@@ -23,7 +23,7 @@ public static class SingBoxFeatures
     public static void Prewarm()
     {
         if (OverrideAwg.HasValue && OverrideXhttp.HasValue) return;
-        _ = Task.Run(() => { try { _ = Probe(); } catch {  } });
+        _ = Task.Run(() => { try { _ = Probe(); } catch { } });
     }
 
     internal static void ResetForTests()
@@ -72,7 +72,7 @@ public static class SingBoxFeatures
                 OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
             if (File.Exists(bundled)) return bundled;
         }
-        catch {  }
+        catch { }
         return AppPaths.SingBoxExePath;
     }
 
@@ -93,7 +93,7 @@ public static class SingBoxFeatures
         var errTask = p.StandardError.ReadToEndAsync();
         if (!p.WaitForExit(5000))
         {
-            try { p.Kill(true); } catch {  }
+            try { p.Kill(true); } catch { }
             return string.Empty;
         }
         string stdout;

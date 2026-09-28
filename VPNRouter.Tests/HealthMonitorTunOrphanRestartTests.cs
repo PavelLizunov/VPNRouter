@@ -121,7 +121,7 @@ public sealed class HealthMonitorTunOrphanRestartTests
         finally
         {
             TunAdapterDiagnostics.Runner = previousTunRunner;
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -164,7 +164,7 @@ public sealed class HealthMonitorTunOrphanRestartTests
         finally
         {
             TunAdapterDiagnostics.Runner = previousTunRunner;
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 }

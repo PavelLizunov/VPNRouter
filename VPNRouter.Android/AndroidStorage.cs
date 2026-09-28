@@ -250,7 +250,7 @@ public static class AndroidStorage
                             sub?.Servers?.Any(srv =>
                                 string.Equals(srv?.Name, selectedName, System.StringComparison.OrdinalIgnoreCase)) == true) ?? false;
                     }
-                    catch {  }
+                    catch { }
                 }
                 if (!stillExists)
                 {
@@ -872,7 +872,7 @@ public static class AndroidStorage
         {
             global::Android.Util.Log.Warn("VpnRouter.SelfRepair", message);
         }
-        catch {  }
+        catch { }
 
         lock (_recoveryLock)
         {
@@ -913,7 +913,7 @@ public static class AndroidStorage
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
                     $"quarantine of '{key}' failed: {ex.GetType().Name}: {ex.Message}");
             }
-            catch {  }
+            catch { }
         }
     }
 
@@ -948,7 +948,7 @@ public static class AndroidStorage
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
                     $"RepairAllOnLoad failed: {ex.GetType().Name}: {ex.Message}");
             }
-            catch {  }
+            catch { }
             return 0;
         }
     }
@@ -961,7 +961,7 @@ public static class AndroidStorage
     {
         if (!GetBool(KeySafeModeBannerPending, defaultValue: false)) return false;
         try { SetBool(KeySafeModeBannerPending, false); }
-        catch {  }
+        catch { }
         return true;
     }
 
@@ -974,7 +974,7 @@ public static class AndroidStorage
     {
         if (!GetBool(KeySafeModeOnNextLaunch, defaultValue: false)) return false;
         try { SetBool(KeySafeModeOnNextLaunch, false); }
-        catch {  }
+        catch { }
         return true;
     }
 

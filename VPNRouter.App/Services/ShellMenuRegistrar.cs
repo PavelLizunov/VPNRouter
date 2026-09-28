@@ -36,7 +36,7 @@ public static class ShellMenuRegistrar
     private static void NotifyShellAssocChanged()
     {
         try { SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero); }
-        catch {  }
+        catch { }
     }
 
     public static void Register(IReadOnlyList<string>? categories = null, ILogger? logger = null)
@@ -72,7 +72,7 @@ public static class ShellMenuRegistrar
                         $@"Software\Classes\{cls}\shell\{VerbKey}",
                         throwOnMissingSubKey: false);
                 }
-                catch {  }
+                catch { }
 
                 using var verb = Registry.CurrentUser.CreateSubKey(
                     $@"Software\Classes\{cls}\shell\{VerbKey}");
@@ -112,7 +112,7 @@ public static class ShellMenuRegistrar
                         $@"Software\Classes\{cls}\shell\{UnverbKey}",
                         throwOnMissingSubKey: false);
                 }
-                catch {  }
+                catch { }
 
                 using var un = Registry.CurrentUser.CreateSubKey(
                     $@"Software\Classes\{cls}\shell\{UnverbKey}");

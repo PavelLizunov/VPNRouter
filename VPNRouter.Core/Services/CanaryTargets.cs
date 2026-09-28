@@ -44,7 +44,7 @@ public static class CanaryTargets
                 if (dto is { Count: > 0 }) return dto;
             }
         }
-        catch {  }
+        catch { }
         return BuiltIn;
     }
 }

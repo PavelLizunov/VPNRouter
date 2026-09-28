@@ -62,7 +62,7 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -99,7 +99,7 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -134,7 +134,7 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 

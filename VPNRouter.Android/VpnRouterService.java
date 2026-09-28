@@ -1461,7 +1461,7 @@ public final class VpnRouterService extends VpnService {
             try {
                 String[] packages = service.getPackageManager().getPackagesForUid(uid);
                 if (packages != null && packages.length > 0) return packages[0];
-            } catch (Exception ignore) {  }
+            } catch (Exception ignore) { }
             return "uid=" + uid;
         }
 

@@ -40,7 +40,7 @@ public sealed class DiagnosticsExporterTailBoundedTests
                 "tail text exceeded the read cap — the whole file was likely read");
             Assert.DoesNotContain("line 00000000", tail);
         }
-        finally { try { File.Delete(path); } catch {  } }
+        finally { try { File.Delete(path); } catch { } }
     }
 
     [Fact]
@@ -54,6 +54,6 @@ public sealed class DiagnosticsExporterTailBoundedTests
             Assert.Contains("alpha", tail);
             Assert.Contains("gamma", tail);
         }
-        finally { try { File.Delete(path); } catch {  } }
+        finally { try { File.Delete(path); } catch { } }
     }
 }

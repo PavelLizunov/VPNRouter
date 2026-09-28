@@ -62,7 +62,7 @@ public sealed class NightDurableReadinessTests
 
     private static async Task DrainUiQueueAsync()
     {
-        await Dispatcher.UIThread.InvokeAsync(() => {  }, DispatcherPriority.Background);
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
     }
 
     private static (VpnEngine engine, SingBoxManager manager, FakeProcessHandle handle, CancellationTokenSource sessionCts) CreateFakeEngine(int pid = 12345)

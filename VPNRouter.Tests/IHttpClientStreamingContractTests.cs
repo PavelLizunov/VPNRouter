@@ -98,7 +98,7 @@ public sealed class IHttpClientStreamingContractTests
             var buffer = new byte[64];
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             {
-                while (await resp.Body.ReadAsync(buffer, cts.Token) > 0) {  }
+                while (await resp.Body.ReadAsync(buffer, cts.Token) > 0) { }
             });
         }
         finally

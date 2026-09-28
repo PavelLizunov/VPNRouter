@@ -33,7 +33,7 @@ public static class SettingsLoader
                     $"[SettingsLoader] FATAL: Load(\"{path ?? DefaultConfigPath}\") threw " +
                     $"{ex.GetType().Name}: {ex.Message}. Returning defaults.");
             }
-            catch {  }
+            catch { }
             return CreateDefaults().EnsureSane();
         }
     }
@@ -128,7 +128,7 @@ public static class SettingsLoader
 
             var defaults = CreateDefaults();
             try { Save(defaults, configPath); }
-            catch {  }
+            catch { }
 
             var noticeLine = backup != null
                 ? $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; backup at {backup}; reset to defaults"
@@ -148,7 +148,7 @@ public static class SettingsLoader
                 Save(parsed, configPath);
             }
         }
-        catch {  }
+        catch { }
 
         try
         {
@@ -167,7 +167,7 @@ public static class SettingsLoader
                 $"active_vless='{parsed.Vless?.ActiveServer ?? string.Empty}'";
             Console.Error.WriteLine(line);
             try { Serilog.Log.Logger?.Information(line); }
-            catch {  }
+            catch { }
         }
         catch
         {
@@ -255,7 +255,7 @@ public static class SettingsLoader
                 from: settings.SchemaVersion,
                 to: AppSettings.CurrentSchemaVersion);
             try { Save(settings); }
-            catch {  }
+            catch { }
         }
 
         var pruneCount = SettingsMigrator.PruneKnownPlaceholders(settings, null);
@@ -265,7 +265,7 @@ public static class SettingsLoader
             settings.App.PlaceholderPruneAtUtc_Str =
                 DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
             try { Save(settings); }
-            catch {  }
+            catch { }
         }
 
         return settings;
@@ -319,7 +319,7 @@ public static class SettingsLoader
         }
         finally
         {
-            try { if (File.Exists(tmp)) File.Delete(tmp); } catch {  }
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
         }
     }
 
@@ -378,7 +378,7 @@ public static class SettingsLoader
                 var settings = Load(configPath);
                 _reloadCallback?.Invoke(settings);
             }
-            catch {  }
+            catch { }
         };
         _debounceTimer.Start();
     }

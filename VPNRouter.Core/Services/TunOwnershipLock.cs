@@ -220,7 +220,7 @@ public sealed class TunOwnershipLock : IDisposable
             var gotIt = probe.WaitOne(0);
             if (gotIt)
             {
-                try { probe.Release(); } catch {  }
+                try { probe.Release(); } catch { }
                 return TunOwnershipStatus.Free;
             }
             return TunOwnershipStatus.Owned;

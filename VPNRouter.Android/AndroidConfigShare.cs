@@ -182,10 +182,10 @@ public static class AndroidConfigShare
             for (int i = 5; i < existing.Length; i++)
             {
                 try { existing[i].Delete(); }
-                catch {  }
+                catch { }
             }
         }
-        catch {  }
+        catch { }
 
         return path;
     }

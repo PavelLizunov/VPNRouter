@@ -220,7 +220,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         RefreshConflictingVpn();
 
-        try { ForceRefreshRuntimeStatus(); } catch {  }
+        try { ForceRefreshRuntimeStatus(); } catch { }
 
         if (_lastConflicts.Count == 0)
         {
@@ -2402,7 +2402,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     if (File.ReadAllText(sudoersPath).Contains(SudoersFormatMarker, StringComparison.Ordinal))
                         needsRewrite = false;
                 }
-                catch {  }
+                catch { }
             }
         }
         catch { needsRewrite = true; }
@@ -3915,13 +3915,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
 
             _logger.Warning("[VM] Cache warm-start probe under threshold — stopping for fresh sweep");
-            try { _zapret?.Stop(); } catch {  }
+            try { _zapret?.Stop(); } catch { }
             return false;
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[VM] TryApplyCachedWinnerAsync threw");
-            try { _zapret?.Stop(); } catch {  }
+            try { _zapret?.Stop(); } catch { }
             return false;
         }
     }

@@ -527,7 +527,7 @@ public partial class AndroidApp
                 global::Android.Util.Log.Warn("VpnRouter.Lang",
                     $"Advanced-tab language rebuild failed: {ex.GetType().Name}: {ex.Message}");
             }
-            catch {  }
+            catch { }
         }
     }
 

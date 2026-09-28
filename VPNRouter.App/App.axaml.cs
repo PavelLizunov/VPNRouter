@@ -28,7 +28,7 @@ public partial class App : Application
                 SkiaSharp.SKGraphics.SetFontCacheLimit(4 * 1024 * 1024);
                 SkiaSharp.SKGraphics.SetFontCacheCountLimit(64);
             }
-            catch {  }
+            catch { }
 
             try
             {
@@ -40,7 +40,7 @@ public partial class App : Application
                     Program.PendingUpdateWarning = receiptWarn;
                 }
             }
-            catch {  }
+            catch { }
 
             if (Program.SafeMode)
                 Serilog.Log.Warning(
@@ -57,7 +57,7 @@ public partial class App : Application
 
                 VPNRouter.Core.Services.LockFile.Acquire(Serilog.Log.Logger);
             }
-            catch {  }
+            catch { }
 
             _viewModel = new MainWindowViewModel();
             var mainWindow = new MainWindow { DataContext = _viewModel };

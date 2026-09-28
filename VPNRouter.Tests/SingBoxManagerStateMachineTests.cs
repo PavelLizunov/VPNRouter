@@ -91,8 +91,8 @@ public sealed class SingBoxManagerStateMachineTests
             {
                 if (!_p.HasExited) _p.Kill(entireProcessTree: true);
             }
-            catch {  }
-            try { _p.Dispose(); } catch {  }
+            catch { }
+            try { _p.Dispose(); } catch { }
         }
     }
 
@@ -260,7 +260,7 @@ public sealed class SingBoxManagerStateMachineTests
         {
             Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
         }
-        catch {  }
+        catch { }
 
         var result = manager.TryReloadConfigJson("{\"log\":{\"level\":\"info\"}}");
 

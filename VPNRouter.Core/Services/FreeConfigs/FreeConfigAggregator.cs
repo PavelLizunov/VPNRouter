@@ -87,7 +87,7 @@ public sealed class FreeConfigAggregator
                 OnStageChanged?.Invoke($"Fetching sources ({done}/{enabledSources.Count})...");
                 return (s, raws);
             }
-            finally {  }
+            finally { }
         });
         var fetched = await Task.WhenAll(fetchTasks);
 

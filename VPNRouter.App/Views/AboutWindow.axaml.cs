@@ -105,7 +105,7 @@ public partial class AboutWindow : Window
                     logPath,
                     $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {ex.Message}\n");
             }
-            catch {  }
+            catch { }
 
             return $"err: {ex.GetType().Name}";
         }

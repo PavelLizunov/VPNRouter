@@ -9,7 +9,7 @@ import com.google.zxing.integration.android.IntentResult;
 
 public final class QrScanLauncher {
 
-    private QrScanLauncher() {  }
+    private QrScanLauncher() { }
 
     public static final int REQUEST_CODE = IntentIntegrator.REQUEST_CODE;
 

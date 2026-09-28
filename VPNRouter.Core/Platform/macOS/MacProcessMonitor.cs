@@ -116,7 +116,7 @@ public class MacProcessMonitor : IProcessMonitor
                         ParentProcessId = 0
                     };
                 }
-                catch {  }
+                catch { }
             }
         }
         finally

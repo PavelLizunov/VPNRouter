@@ -14,7 +14,7 @@ try
     if (!EventLog.SourceExists(EventSource))
         EventLog.CreateEventSource(EventSource, EventLogName);
 }
-catch {  }
+catch { }
 
 void WriteEvent(string msg, EventLogEntryType type = EventLogEntryType.Information)
 {

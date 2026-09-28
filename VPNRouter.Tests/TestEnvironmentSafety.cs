@@ -46,6 +46,6 @@ internal static class TestEnvironmentSafety
     {
         var path = _testDataDir;
         if (string.IsNullOrWhiteSpace(path)) return;
-        try { Directory.Delete(path, recursive: true); } catch {  }
+        try { Directory.Delete(path, recursive: true); } catch { }
     }
 }

@@ -333,7 +333,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         }
         finally
         {
-            try { File.Delete(tempPath); } catch {  }
+            try { File.Delete(tempPath); } catch { }
         }
     }
 

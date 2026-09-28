@@ -678,7 +678,7 @@ public partial class AndroidApp
 
     private void StopServersTabBackgroundWork()
     {
-        try { _srvTestAllCts?.Cancel(); } catch {  }
+        try { _srvTestAllCts?.Cancel(); } catch { }
     }
 
     private void RebuildServerList()
@@ -1004,7 +1004,7 @@ public partial class AndroidApp
         if (sub is null || sub.Servers.Count == 0) return;
         if (_srvTestAllCts is not null)
         {
-            try { _srvTestAllCts.Cancel(); } catch {  }
+            try { _srvTestAllCts.Cancel(); } catch { }
             return;
         }
 
@@ -1064,7 +1064,7 @@ public partial class AndroidApp
         {
             _srvTestingKeys.Clear();
             AndroidStorage.SetServerTestResults(_srvResults);
-            try { _srvTestAllCts?.Dispose(); } catch {  }
+            try { _srvTestAllCts?.Dispose(); } catch { }
             _srvTestAllCts = null;
             if (_srvTestAllBtn is not null)
                 _srvTestAllBtn.Content = Localization.AdvServersTestAll;

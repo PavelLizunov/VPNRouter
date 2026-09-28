@@ -145,7 +145,7 @@ public class EtwProcessMonitor : IProcessMonitor
         if (_disposed) return;
         _disposed = true;
         Stop();
-        try { _sessionReady.Dispose(); } catch {  }
+        try { _sessionReady.Dispose(); } catch { }
     }
 }
 #endif

@@ -227,7 +227,7 @@ public partial class AndroidApp
                     global::Android.Util.Log.Warn("VpnRouter.Theme",
                         $"Advanced-shell theme refresh failed: {ex.GetType().Name}: {ex.Message}");
                 }
-                catch {  }
+                catch { }
             }
         }, Avalonia.Threading.DispatcherPriority.Background);
 
@@ -273,7 +273,7 @@ public partial class AndroidApp
                     global::Android.Util.Log.Warn("VpnRouter.Theme",
                         $"Restore Advanced shell after theme rebuild failed: {ex.GetType().Name}: {ex.Message}");
                 }
-                catch {  }
+                catch { }
             }
         }
     }

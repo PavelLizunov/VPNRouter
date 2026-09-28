@@ -95,7 +95,7 @@ internal static class ProcessImagePath
                 foreach (var p in procs)
                 {
                     try { p.Dispose(); }
-                    catch {  }
+                    catch { }
                 }
         }
     }
@@ -147,7 +147,7 @@ internal static class ProcessImagePath
         finally
         {
             try { proc?.Dispose(); }
-            catch {  }
+            catch { }
         }
     }
 

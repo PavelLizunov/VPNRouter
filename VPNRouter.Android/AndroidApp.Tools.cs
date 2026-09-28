@@ -86,7 +86,7 @@ public partial class AndroidApp
                 intent.SetFlags(global::Android.Content.ActivityFlags.NewTask);
                 global::Android.App.Application.Context.StartActivity(intent);
             }
-            catch {  }
+            catch { }
         };
 
         var tgSectionTitle = new TextBlock
@@ -441,7 +441,7 @@ public partial class AndroidApp
                 intent.SetFlags(global::Android.Content.ActivityFlags.NewTask);
                 global::Android.App.Application.Context.StartActivity(intent);
             }
-            catch {  }
+            catch { }
         };
 
         var bodyStack = new StackPanel

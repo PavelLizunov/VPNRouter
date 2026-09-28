@@ -29,7 +29,7 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_tempRoot, recursive: true); }
-        catch {  }
+        catch { }
     }
 
     [Fact]

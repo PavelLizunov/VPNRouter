@@ -109,7 +109,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             _aggregator.OnStageChanged -= OnAggregatorStage;
             _aggregator.OnTestProgress  -= OnAggregatorProgress;
         }
-        catch {  }
+        catch { }
 
         try { _refreshCts?.Cancel(); _refreshCts?.Dispose(); }
         catch { }
@@ -381,14 +381,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             {
                 try { await Task.WhenAll(inFlightBatches); }
                 catch (OperationCanceledException) { throw; }
-                catch {  }
+                catch { }
             }
             inFlightBatches.Clear();
 
             if (prefetchedTcp != null)
             {
                 try { await prefetchedTcp; }
-                catch {  }
+                catch { }
                 prefetchedTcp = null;
             }
 
@@ -523,7 +523,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         {
             try { await Task.WhenAll(deepTasks); }
             catch (OperationCanceledException) { throw; }
-            catch {  }
+            catch { }
         }
     }
 
@@ -588,7 +588,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 }
             }
         }
-        catch (OperationCanceledException) {  }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[FreeConfigs] VerifyOneAndAppend failed for {host}:{port}",
@@ -718,7 +718,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     : Strings.FcStatusRecheckAllDone(1, 0);
             });
         }
-        catch (OperationCanceledException) {  }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[FreeConfigs] RecheckOne failed for {host}:{port}",
@@ -908,7 +908,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         {
             GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         }
-        catch {  }
+        catch { }
 
         try
         {
@@ -916,13 +916,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             GC.WaitForPendingFinalizers();
             GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
         }
-        catch {  }
+        catch { }
 
         try
         {
             SkiaSharp.SKGraphics.PurgeAllCaches();
         }
-        catch {  }
+        catch { }
     }
 
     [RelayCommand]

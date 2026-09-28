@@ -40,7 +40,7 @@ public static class AutostartHelper
             try { File.SetUnixFileMode(desktopPath,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite |
                 UnixFileMode.GroupRead | UnixFileMode.OtherRead); }
-            catch {  }
+            catch { }
         }
     }
 
@@ -57,13 +57,13 @@ public static class AutostartHelper
         {
             var plistPath = MacPlistPath();
             TryLaunchctl("unload", "-w", plistPath);
-            try { File.Delete(plistPath); } catch {  }
+            try { File.Delete(plistPath); } catch { }
             return;
         }
 
         if (OperatingSystem.IsLinux())
         {
-            try { File.Delete(LinuxDesktopPath()); } catch {  }
+            try { File.Delete(LinuxDesktopPath()); } catch { }
         }
     }
 
@@ -187,7 +187,7 @@ public static class AutostartHelper
                 try { p.Kill(true); } catch { }
             }
         }
-        catch {  }
+        catch { }
     }
 
     private static string LinuxDesktopPath()

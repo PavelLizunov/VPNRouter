@@ -124,7 +124,7 @@ public partial class MainWindowViewModel
             {
                 _lastSkiaPurgeAt = DateTime.UtcNow;
                 try { SkiaSharp.SKGraphics.PurgeAllCaches(); }
-                catch {  }
+                catch { }
             }
         }
         catch
@@ -181,7 +181,7 @@ public partial class MainWindowViewModel
                 if (_engine?.IsRunning == true)
                     return;
             }
-            catch {  }
+            catch { }
 
             IsConnected = false;
             ConnectButtonText = Strings.StartVPN;

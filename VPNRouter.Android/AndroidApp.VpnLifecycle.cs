@@ -97,7 +97,7 @@ public partial class AndroidApp
                     _statusCard.Subtitle = subtitle;
                 }
             }
-            catch {  }
+            catch { }
         });
     }
 

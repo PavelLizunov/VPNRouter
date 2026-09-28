@@ -30,7 +30,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
     public void Dispose()
     {
         AppPaths.OverrideDataDir(_previousDataDir);
-        try { Directory.Delete(_tempDataDir, recursive: true); } catch {  }
+        try { Directory.Delete(_tempDataDir, recursive: true); } catch { }
     }
 
     private static SingBoxSettings DefaultSettings(string exePath) => new()
@@ -93,7 +93,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -122,7 +122,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -152,7 +152,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -183,7 +183,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -209,7 +209,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -247,7 +247,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -312,7 +312,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 
@@ -340,7 +340,7 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
         finally
         {
-            try { File.Delete(exe); } catch {  }
+            try { File.Delete(exe); } catch { }
         }
     }
 }

@@ -124,8 +124,8 @@ public static class VlessUriParser
                 continue;
             var trimmed = trimmedSpan.ToString();
             try { entries.Add(Parse(trimmed)); }
-            catch (FormatException) {  }
-            catch (PlaceholderConfigException) {  }
+            catch (FormatException) { }
+            catch (PlaceholderConfigException) { }
         }
 
         return entries;

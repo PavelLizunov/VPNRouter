@@ -32,7 +32,7 @@ public class ProcessScanner : IProcessScanner
             foreach (var p in allProcesses)
             {
                 try { runningNow.Add(p.ProcessName + ".exe"); }
-                catch {  }
+                catch { }
             }
 
             foreach (var rule in profile.Processes)
@@ -76,7 +76,7 @@ public class ProcessScanner : IProcessScanner
                     {
                         if (string.Equals(p.ProcessName + ".exe", ruleName, StringComparison.OrdinalIgnoreCase))
                         {
-                            try { rootPids.Add(p.Id); } catch {  }
+                            try { rootPids.Add(p.Id); } catch { }
                         }
                     }
                 }

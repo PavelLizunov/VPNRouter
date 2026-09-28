@@ -48,7 +48,7 @@ public static class ConflictingVpnDetector
                 {
                     string fullPath = "";
                     try { fullPath = p.MainModule?.FileName ?? ""; }
-                    catch {  }
+                    catch { }
 
                     matches.Add(new ConflictingProcessInfo(
                         ProcessName: name,

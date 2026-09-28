@@ -217,7 +217,7 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
             try { await Body.DisposeAsync().ConfigureAwait(false); }
-            catch {  }
+            catch { }
 
             try { _response.Dispose(); } catch { }
             try { _request.Dispose(); } catch { }

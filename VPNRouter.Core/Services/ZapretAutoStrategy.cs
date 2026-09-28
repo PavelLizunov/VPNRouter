@@ -169,7 +169,7 @@ public static class ZapretAutoStrategy
                 logger?.Warning("[ZapretAutoStrategy] NoSignal — likely offline, abort sweep");
                 progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Stopping,
                     probeReport.PassCount, targets.Count));
-                try { await stopStrategy().ConfigureAwait(false); } catch {  }
+                try { await stopStrategy().ConfigureAwait(false); } catch { }
                 progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Failed));
                 return new SweepResult(null, tier, probeReport.PassCount, targets.Count, attempts, NoSignal: true);
             }
@@ -504,7 +504,7 @@ public static class ZapretAutoStrategy
                         probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
                     }
                 }
-                catch {  }
+                catch { }
             }
 
             var m = configHeaderRx.Match(line);
@@ -629,7 +629,7 @@ public static class ZapretAutoStrategy
                             probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [STDERR] {args.Data}");
                         }
                     }
-                    catch {  }
+                    catch { }
                 }
             }
         };
@@ -684,7 +684,7 @@ public static class ZapretAutoStrategy
                     proc.Kill(entireProcessTree: true);
                 }
             }
-            catch {  }
+            catch { }
         }))
         {
             try
