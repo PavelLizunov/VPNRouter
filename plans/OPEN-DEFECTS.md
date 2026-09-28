@@ -16,6 +16,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Agent instruction refresh 2026-09-28
+
+- [ ] **P2** - AGENT-ROUTING-POLICY: review prompt, bug-hunt and methodology prescribe generic model-inheriting subagents without the current global model-route check; methodology also permits workflow based on task size alone. Source: `docs/REVIEW_AGENT_PROMPT.md:3-9`, `.dsh/skills/bug-hunt/SKILL.md:18-21`, `plans/v3.0-execution-methodology.md:120-121` at main `ab97905d`. Target: `plans/phase-agent-instructions-2026-09-28.md`.
+- [ ] **P2** - AGENT-CI-DOCUMENTATION: canonical post-push command assumes Windows PowerShell, unlike the existing documented no-PowerShell PR-check path; hook guidance omits that post-push is not a native Git hook and task-branch pre-push exits before its watcher. Source: `docs/agent-contract.md:112-119`, `.githooks/AGENTS.md:9-11`, `.githooks/post-push:16-20`, `.githooks/pre-push:46-48`. Target: instruction correction only, no hook implementation change.
+
 ### Mass review 2026-09-16 (HEAD `b101a7e2`, AppVersion 2.50.0-r9)
 
 Lead-verified against current source after Gemini/Opus/Grok swarms. Skills: bug-hunt, security-review, codebase-audit, change-verification, ponytail-review/audit/debt, audit-overflow-fix. Artifacts: `.dsh/security-review-report.md`, `.dsh/codebase-audit-scorecard-2026-09-16.md`. No product edits. `dotnet` not run on this host.
