@@ -3,7 +3,7 @@
 # source. Runs on Mac (mm4.local) via SSH. Phase 1.1 of Android port.
 #
 # Methodology ref: docs/android-development-methodology.md §7 Phase 1
-# Plan ref:        plans/android-phase-1-libbox-build.md
+# Plan ref:        git show 6491be4c:plans/android-phase-1-libbox-build.md
 #
 # Usage:
 #   bash tools/build-libbox-aar.sh                  # default pinned version

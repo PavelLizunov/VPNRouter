@@ -66,13 +66,13 @@ STOP. There is no unsigned fallback when signing fails.
 - Signed path: `gh workflow run sign-windows.yml --ref $tag -f version=$version`.
   Wait for the exact-tag source build, owner signing approval and signature
   verification before accepting its draft ZIPs and sidecars.
-- Only when all SignPath settings are absent, build the custom sing-box-lx on
-  the authorized exact-SHA worker and stage unsigned Windows assets:
+- Only when all SignPath settings are absent, stage unsigned Windows assets on
+  the authorized exact-SHA worker. `build.ps1 -Upload` downloads the pinned
+  `sing-box-vpnctl` release, verifies its SHA256 and bundles the split-tunnel
+  driver; `-SingBoxPath` is for local builds only and is rejected with `-Upload`:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/build-singbox-lx.ps1
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version `
-  -SingBoxPath "publish/sing-box-lx.exe" -Upload
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version -Upload
 ```
 
 Unsigned staging requires `HEAD == accepted main == tag SHA`, an existing

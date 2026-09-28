@@ -72,7 +72,7 @@ Look for:
 
 **Red flags in logs:**
 - `[SingBoxManager] sing-box crashed (exit code: -1)` immediately after start → inspect `singbox.log`.
-- `[VpnEngine] Apply: validation failed, skipping reload` → rejected invalid JSON.
+- `[VpnEngine] Apply skipped — no active session (stopped or never started)` → nothing to apply.
 - `[VpnEngine] Full-tunnel mode — ignoring ActiveProfile` → check routing_mode.
 - `Subscription returned 0 servers, keeping cached` → empty provider response.
 

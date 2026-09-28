@@ -71,7 +71,7 @@ done, Phase 1 next». Реальная проверка проекта пока�
 ### libbox build path (canonical for FUTURE rebuilds)
 
 When sing-box version bumps require new AAR — use
-`plans/android-phase-1-libbox-build.md` + `tools/build-libbox-aar.sh`.
+`git show 6491be4c:plans/android-phase-1-libbox-build.md` + `tools/build-libbox-aar.sh`.
 Key learnings documented there:
 - Use sagernet/gomobile fork v0.1.12, NOT upstream golang.org/x/mobile
 - Curated tag set: `with_gvisor,with_quic,with_utls,with_wireguard,with_clash_api,badlinkname,tfogo_checklinkname0`
@@ -605,10 +605,10 @@ debt accumulation (Avalonia App CLAUDE.md rule E2).
 
 ## Cross-references
 
-- `plans/vpnrouter-android-research.md` — initial Phase 0 research (historical)
-- `plans/vpnrouter-android-handbook.md` — toolchain setup details (per memory)
-- `plans/vpnrouter-android-platform-parity-roadmap.md` — Phase A keystore + signing
-- `plans/r10-test-coverage-audit.md` — desktop test audit (template for Android-side audit)
+- `git show 6491be4c:plans/vpnrouter-android-research.md` — initial Phase 0 research (historical)
+- `git show 6491be4c:plans/vpnrouter-android-handbook.md` — toolchain setup details (per memory)
+- `git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md` — Phase A keystore + signing
+- `git show 6491be4c:plans/r10-test-coverage-audit.md` — desktop test audit (template for Android-side audit)
 - `VPNRouter.Tests/CLAUDE.md` — test infrastructure docs
 
 ## Changelog для этого документа

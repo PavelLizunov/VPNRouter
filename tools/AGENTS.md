@@ -15,7 +15,7 @@
 
 ## Tracked payloads and generated caches
 
-- `tools/zapret/` is a tracked bundled runtime payload; preserve its committed binaries and support files.
+- `tools/zapret/` is a legacy vendored Zapret copy; the app downloads Zapret on demand and nothing consumes these files. Do not delete it without an owner decision.
 - Generated source/build caches such as `tools/singbox-cache/` remain untracked. Do not commit or broadly clean generated caches without exact owner approval.
 
 ## Zone checks

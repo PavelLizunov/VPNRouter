@@ -4,7 +4,7 @@
 
 ## Key workflows
 
-- Platform builds/signing: macOS DMG/ZIP (`build-mac.yml`), Linux DEB/AppImage/tarball (`build-linux.yml`), Android ARM64 APK (`build-android.yml`, `sign-android.yml`), and Windows SignPath (`sign-windows.yml`).
+- Platform builds/signing: macOS DMG/ZIP (`build-mac.yml`), Linux DEB/AppImage/tarball (`build-linux.yml`), Android ARM64 APK (`build-android.yml`; `sign-android.yml` is retired and always fails), and Windows SignPath (`sign-windows.yml`).
 - Automation & verification: C# regression suite (`test.yml`), CodeQL (`codeql.yml`), placeholder fingerprint guard (`grep-placeholder-fingerprints.yml`), release integrity (`verify-release-integrity.yml`), public config pool aggregation (`build-free-pool.yml`), APT publishing (`publish-apt.yml`), and Windows update smoke tests (`test-windows-update.yml`).
 
 ## Release asset contract

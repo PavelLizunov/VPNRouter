@@ -40,9 +40,10 @@ AppVersion must match the complete tag version, including `-rN`.
    the signed path: `gh workflow run sign-windows.yml --ref TAG -f version=VERSION`.
    It builds exact-tag Windows sources and verifies signatures before staging.
    Missing enrollment or failed signing means STOP, never unsigned fallback.
-4. Only with all SignPath settings absent, build the custom sing-box-lx on the
-   authorized exact-SHA worker, then run `build.ps1 -Version VERSION
-   -SingBoxPath publish/sing-box-lx.exe -Upload`. Upload only stages unsigned
+4. Only with all SignPath settings absent, run `build.ps1 -Version VERSION
+   -Upload` on the authorized exact-SHA worker; it bundles the pinned
+   `sing-box-vpnctl` release (`-SingBoxPath` is local-only and rejected with
+   `-Upload`). Upload only stages unsigned
    Windows ZIPs/sidecars to the existing correct-channel draft; it requires
    `HEAD == accepted main == tag SHA`, never creates/publishes, and never clobbers.
 5. Wait for tag-triggered `build-mac.yml`, `build-linux.yml`, `build-android.yml`,
@@ -155,5 +156,5 @@ sidecars. Replace `X.Y.Z` with the full version, including `-rN` when applicable
 Android production signing uses the long-lived `ANDROID_KEYSTORE_BASE64` and
 `ANDROID_KEYSTORE_PASSWORD` secrets. Preserve that keystore: changing it blocks
 installed APK upgrades. Enrollment/backup guidance remains in
-`plans/vpnrouter-android-platform-parity-roadmap.md` Phase A. Windows enrollment
+`git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md` Phase A. Windows enrollment
 is documented in `docs/code-signing-signpath-runbook.md`.

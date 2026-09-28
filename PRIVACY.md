@@ -33,7 +33,10 @@ VPNRouter never transmits any of these to the author or any third party.
   from that URL (the provider you chose).
 - **Free Configs** — if you use that tab, a pre-aggregated `pool.json` is
   fetched from this project's GitHub releases, and candidate servers may be
-  probed (TCP/TLS) to test reachability.
+  probed (TCP/TLS) to test reachability. If `pool.json` is unavailable, the app
+  fetches the public source lists directly and may send the candidate servers'
+  IP addresses to `ip-api.com` (plain HTTP batch endpoint) to look up their
+  countries; that service sees your IP address.
 - **Zapret / Telegram proxy** — if you enable these, their binaries are
   downloaded on demand from their upstream GitHub releases.
 

@@ -170,7 +170,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 
 - **Windows 10/11 x64** — права Администратора (TUN, firewall, ETW)
 - **macOS 12+** — Apple Silicon (arm64). Intel пока не собирается. Нужна одноразовая настройка sudoers при первом запуске (с подсказкой)
-- **Linux x86_64** — ядро 5.6+ (TUN/wireguard), `glibc` 2.31+. Протестировано на Ubuntu 22.04 / 24.04 и Debian 12. `iptables` или `nftables` для firewall-правил.
+- **Linux x86_64** — ядро 5.6+ (TUN/wireguard), `glibc` 2.31+. Протестировано на Ubuntu 22.04 / 24.04 и Debian 12. `nftables` (`nft`) для kill switch.
 - **Android 6.0+** (API 23+), ARM64 — использует `VpnService`, root не требуется. Камера запрашивается только для сканирования QR-кода.
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — включён в установщик
 - Сервер VLESS+Reality, или используйте вкладку Free Configs с публичными серверами
@@ -233,7 +233,7 @@ VPNRouter.sln
 
 ### Ключевые сервисы
 
-Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box 1.13 JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderGuard` (v2.32.3 — фильтр known-bad credentials), плюс подсистемы для Zapret, Telegram proxy, подписок, free configs.
+Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderDefense` (фильтр known-bad credentials), плюс подсистемы для Zapret, Telegram proxy, подписок, free configs.
 
 > **Примечание**: Desktop-сборки (Windows, macOS, Linux) по умолчанию используют официальные релизные артефакты `PavelLizunov/sing-box-vpnctl` `v1.14.0-vpnctl.5`. Android по решению владельца сохраняет legacy-тулинг sing-box 1.13.10 (`libbox.aar`, Android 6.0+ / API 23+), а не мигрирует целиком на vpnctl.
 
@@ -276,7 +276,7 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 Публичные VLESS config-агрегаторы, используемые вкладкой Free Configs (14 источников):
 [zieng2/wl](https://github.com/zieng2/wl) · [EtoNeYaProject](https://github.com/EtoNeYaProject/etoneyaproject.github.io) · [igareck/vpn-configs-for-russia](https://github.com/igareck/vpn-configs-for-russia) · [CidVpn](https://github.com/CidVpn/cid-vpn-config) · [ByeWhiteLists2](https://github.com/ByeWhiteLists/ByeWhiteLists2) · [nowmeow.pw](https://nowmeow.pw) · [sevcator/5ubscrpt10n](https://github.com/sevcator/5ubscrpt10n) · [ebrasha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list) · [barry-far/V2ray-config](https://github.com/barry-far/V2ray-config) · [kort0881/vpn-vless-configs-russia](https://github.com/kort0881/vpn-vless-configs-russia) · [Epodonios/v2ray-configs](https://github.com/Epodonios/v2ray-configs) · [MatinGhanbari/v2ray-configs](https://github.com/MatinGhanbari/v2ray-configs) · [V2RayRoot/V2RayConfig](https://github.com/V2RayRoot/V2RayConfig) · [etoneya.a9fm.site зеркало](https://etoneya.a9fm.site)
 
-GeoIP-обогащение для серверного pool-агрегатора: [ip-api.com](https://ip-api.com) (бесплатный тариф, batch endpoint, API-ключ не требуется).
+GeoIP-обогащение: серверный pool-агрегатор использует MaxMind GeoLite2 (`build-free-pool.yml`); fallback в приложении, только когда `pool.json` недоступен, обращается к [ip-api.com](https://ip-api.com).
 
 ## Лицензия
 

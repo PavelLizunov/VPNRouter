@@ -1,13 +1,15 @@
 # Current state
 
 Canonical live-facts summary. For contract and architecture rules see `docs/agent-contract.md`
-and `AGENTS.md`; for worker details see `docs/test-workers.md`; for history see `plans/`.
+and `AGENTS.md`; for worker details see `docs/test-workers.md`; for history see `git show 6491be4c:plans/<file>`.
 When release or platform facts change, update this file.
 
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **In-flight candidate:** none.
+- **Latest published candidate:** v2.50.0-r9 (prerelease, 2026-09-13), not
+  promoted to stable. Main carries later product fixes and still declares
+  `AppVersion` 2.50.0-r9, so the next candidate needs a version bump.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.

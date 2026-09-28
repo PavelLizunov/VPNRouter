@@ -1,5 +1,5 @@
 {
-  "_comment": "v3.0 Android profile catalog. Same 9 categories as default.json (Win), default-macos.json, default-linux.json — but uses android_packages (reverse-DNS package IDs) instead of process_name. Android VpnService.Builder.addAllowedApplication takes package names; sing-box process_name rules don't apply at the OS sandbox layer. Mapping table sourced from Google Play / F-Droid metadata as of 2026-04. Verify per-app: `pm list packages | grep -i <vendor>` on a device with the app installed.",
+  "_comment": "v3.0 Android profile catalog. Same categories as default.json (Win), default-macos.json and default-linux.json except Virtualization (8 of 9) — but uses android_packages (reverse-DNS package IDs) instead of process_name. Android VpnService.Builder.addAllowedApplication takes package names; sing-box process_name rules don't apply at the OS sandbox layer. Mapping table sourced from Google Play / F-Droid metadata as of 2026-04. Verify per-app: `pm list packages | grep -i <vendor>` on a device with the app installed.",
   "profiles": [
     {
       "name": "Discord_Privacy",

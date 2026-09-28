@@ -35,6 +35,6 @@ Several components fetch or run executable code under the user's account, so int
 
 ## 1.14 readiness
 
-No pin changes here authorize a migration. The evidence and mandatory desktop, Android, AWG 3.1, and DNS gates are recorded in `plans/sing-box-lx-1.14-readiness-2026-09-01.md`.
+No pin changes here authorize a migration. The evidence and mandatory desktop, Android, AWG 3.1, and DNS gates are recorded in `git show 6491be4c:plans/sing-box-lx-1.14-readiness-2026-09-01.md`.
 
 sing-box and libbox are GPL-3.0; Zapret and tg-ws-proxy carry their own upstream licenses (see `NOTICE.md`).

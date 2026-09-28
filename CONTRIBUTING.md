@@ -45,8 +45,9 @@ See `AGENTS.md` and `docs/agent-contract.md` for contract and architecture rules
 - Conventional-commit subjects (`feat:`, `fix:`, `docs:`, `ci:`, `build:`, ...),
   under 72 characters; the body explains the why.
 - Keep changes focused; add or adjust tests for behavior changes.
-- CI builds the solution and runs the full test suite on macOS and Linux — make
-  sure `dotnet build -c Release` and `dotnet test` are green locally first.
+- CI builds the test project and runs a filtered suite on Linux plus a Windows
+  characterization subset (`.github/workflows/test.yml`); run the relevant
+  `dotnet build -c Release` and `dotnet test` locally first.
 
 ## Security issues
 

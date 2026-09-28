@@ -12,6 +12,10 @@ demand or bundled with the installer, not statically linked into the managed cod
 | Component | Used for | Source | License |
 |---|---|---|---|
 | sing-box | Core VPN/proxy engine (TUN, VLESS+Reality, DNS) | https://github.com/SagerNet/sing-box | GPL-3.0 |
+| sing-box-vpnctl | sing-box fork bundled with desktop builds (pinned release in `build.ps1`) | https://github.com/PavelLizunov/sing-box-vpnctl | GPL-3.0 (sing-box derivative) |
+| libcronet.dll | naive outbound transport on Windows, from the sing-box release | https://github.com/SagerNet/sing-box/releases | see upstream release (Chromium components) |
+| Mullvad win-split-tunnel driver | Windows per-app split tunneling (exclude mode) | https://github.com/mullvad/win-split-tunnel | GPL-3.0-or-later / MPL-2.0 (see `LICENSE.split-tunnel`) |
+| slipstream-client | DNS-tunnel transport bundled on Windows | https://github.com/Mygod/slipstream-rust | see upstream repository |
 | libbox.aar | sing-box gomobile binding (Android) | https://github.com/SagerNet/sing-box (experimental/libbox) | GPL-3.0 |
 | Zapret / winws | DPI bypass (Discord / YouTube) | https://github.com/Flowseal/zapret-discord-youtube , https://github.com/bol-van/zapret | see upstream repositories |
 | Telegram proxy (tg-ws-proxy) | Telegram proxy | fetched on demand from its upstream GitHub release (see `TgProxyUpdater`) | see upstream repository |
@@ -29,10 +33,10 @@ Authoritative license + version are in each package and in the `.csproj` files.
 | YamlDotNet | MIT |
 | Spectre.Console, Spectre.Console.Cli | MIT |
 | Serilog + sinks (Console, File, Extensions.*) | Apache-2.0 |
-| ZXing.Net | Apache-2.0 |
 | xunit.v3, xunit.runner.visualstudio | Apache-2.0 / MIT |
 | Microsoft.* and System.* (Extensions.Hosting, Diagnostics.Tracing.TraceEvent, Management, Win32.SystemEvents, NET.Test.Sdk, ...) | MIT |
 | Xamarin.AndroidX.* | MIT / Apache-2.0 |
+| zxing-android-embedded 4.3.0, ZXing core 3.5.3 (bundled Android jars in `VPNRouter.Android/Lib/`) | Apache-2.0 |
 
 ## Notes
 

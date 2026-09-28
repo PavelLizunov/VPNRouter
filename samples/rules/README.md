@@ -9,8 +9,6 @@ Examples for `Network → Rules → Import`. Two tiers:
 | `example-rules.csv` | CSV with header `action,type,value,comment,enabled` | Spreadsheet-friendly, easy to edit |
 | `example-rules.json` | VPNRouter native bare array | Lossless, default Export shape |
 | `example-rules-singbox.json` | sing-box `route.rules` | NekoBox / Hiddify import |
-| `example-rules-minimal.csv` | CSV (3 rules) | Quick smoke test |
-| `example-rules.txt` | Plain-text Edit-mode | **Paste into Text mode**, NOT Import |
 
 ## Tier 2 — Real-world configs
 

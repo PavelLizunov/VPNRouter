@@ -124,12 +124,11 @@ Follow `ship-rolling-candidate`'s exact-tag staging and recovery procedure with
 the stable version: inspect SignPath settings first. Any configured setting,
 including partial enrollment, requires `sign-windows.yml --ref $tag
 -f version=$version`; signing failure has no unsigned fallback. Only when all
-settings are absent, build the custom sing-box-lx and stage unsigned ZIPs:
+settings are absent, stage unsigned ZIPs with the pinned `sing-box-vpnctl`
+release (`-SingBoxPath` is local-only and rejected with `-Upload`):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/build-singbox-lx.ps1
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version `
-  -SingBoxPath "publish/sing-box-lx.exe" -Upload
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version -Upload
 ```
 
 `-Upload` only stages to an existing correct-channel draft at the exact accepted

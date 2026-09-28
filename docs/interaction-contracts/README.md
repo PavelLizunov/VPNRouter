@@ -1,7 +1,7 @@
 # Interaction contracts
 
 Per-feature behavior contracts derived from the framework in
-`plans/user-interaction-boundaries-and-edge-case-verification-framework-2026-06-02.md`.
+`git show 6491be4c:plans/user-interaction-boundaries-and-edge-case-verification-framework-2026-06-02.md`.
 
 Each contract documents a feature's **User Interaction Envelope**: states,
 actions, allowed/forbidden transitions, durable-data ownership, failure +

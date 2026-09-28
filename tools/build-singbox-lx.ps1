@@ -14,7 +14,7 @@
 
     NOTE: this is a third-party fork built from source. Vet the diff (it is thin:
     XHTTP + AWG2) and keep the pins below in sync with the implementation plan
-    (plans/amneziawg-fork-implementation-plan-2026-06-27.md). Requires Go (>=1.24).
+    (git show 6491be4c:plans/amneziawg-fork-implementation-plan-2026-06-27.md). Requires Go (>=1.24).
 .PARAMETER OutputPath
     Where to write the built sing-box.exe. Default: .\publish\sing-box-lx.exe
 .PARAMETER WorkDir
@@ -150,7 +150,7 @@ $allocNew = 'if controlSize > 0 { msgs[i].OOB = make([]byte, controlSize) }'
 # 2026-07-02, config=OK anyrelay=Failed). WSAENOBUFS is transient (the send
 # buffer drains in µs as the NIC transmits), so retry the same datagram a few
 # times with a tiny backoff instead of dropping. errors+syscall already imported;
-# time added below. Full RCA: plans/sdr-research-realtime-games-nat-2026-07-02.md.
+# time added below. Full RCA: git show 6491be4c:plans/sdr-research-realtime-games-nat-2026-07-02.md.
 $timeOld = "`t`"syscall`""
 $timeNew = "`t`"syscall`"`n`t`"time`""
 $sendOld = '_, _, err = conn.WriteMsgUDP(msg.Buffers[0], msg.OOB, msg.Addr.(*net.UDPAddr))'

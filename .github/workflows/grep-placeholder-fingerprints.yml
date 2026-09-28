@@ -5,7 +5,7 @@ name: grep placeholder fingerprints
 # Single-source-of-truth gate for the v2.32.3 stas-class placeholder
 # fingerprint trio. Phase 3D consolidated every placeholder-defense layer
 # into `VPNRouter.Core/Services/PlaceholderDefense.cs` (see
-# `plans/phase3-3D-placeholder-defense-consolidation-2026-05-18.md`); this
+# `git show 6491be4c:plans/phase3-3D-placeholder-defense-consolidation-2026-05-18.md`); this
 # workflow makes the consolidation enforceable by failing any push/PR that
 # reintroduces the fingerprints into production code outside the single
 # declaration.
@@ -34,7 +34,7 @@ name: grep placeholder fingerprints
 # it shipped with the literal pubkey/short_id/server. Wave 25 (Phase 5
 # AOT-1, 2026-05-18) swapped them for REPLACE_ME_* tokens so the file no
 # longer contains any placeholder fingerprint and the allow-list shrank
-# by one entry. See plans/phase5-config-example-aot-prep-2026-05-18.md.
+# by one entry. See git show 6491be4c:plans/phase5-config-example-aot-prep-2026-05-18.md.
 #
 # Triggers: every push/PR to main + v3.0-prep, matching the same surface
 # as `test.yml`. Workflow_dispatch added so an operator can re-run after
@@ -100,7 +100,7 @@ jobs:
               echo "Add this constant to PlaceholderDefense.KnownFingerprints"
               echo "(VPNRouter.Core/Services/PlaceholderDefense.cs) and reference"
               echo "it from there instead of hardcoding. See"
-              echo "plans/phase3-3D-placeholder-defense-consolidation-2026-05-18.md"
+              echo "git show 6491be4c:plans/phase3-3D-placeholder-defense-consolidation-2026-05-18.md"
               echo "for the consolidation rationale."
               exit 1
             fi

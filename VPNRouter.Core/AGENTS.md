@@ -61,7 +61,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - Deduplicate process lists using `StringComparer.OrdinalIgnoreCase`, but preserve original casing to maintain compatibility with sing-box Go map lookups.
 
 ### SingBoxManager Lifecycle & Graceful Stop
-- Before calling `Kill()` or disposing a sing-box process handle in `SingBoxManager.cs`, set `EnableRaisingEvents = false` on the process handle.
+- Before calling `Kill()` or disposing a sing-box process handle, call `IProcessHandle.SuppressExitedEvent()` (it sets `EnableRaisingEvents = false` in `ProcessRunner.cs`).
 - This prevents process exit callbacks (`Exited`) from executing on the thread pool as unexpected crash events during intentional stops or restarts.
 
 ### sing-box DNS Direct Route Constraint
