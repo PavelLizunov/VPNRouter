@@ -450,6 +450,28 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    // ── 12d. OpenHostsEditHelpers: throws ArgumentException when paths contain disallowed characters ──
+
+    [Theory]
+    [InlineData("temp\rpath", "valid_hosts")]
+    [InlineData("temp\npath", "valid_hosts")]
+    [InlineData("temp\"path", "valid_hosts")]
+    [InlineData("valid_temp", "hosts\rpath")]
+    [InlineData("valid_temp", "hosts\npath")]
+    [InlineData("valid_temp", "hosts\"path")]
+    public void OpenHostsEditHelpers_PathWithDisallowedCharacters_ThrowsArgumentException(string tempPath, string hostsPath)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath));
+        Assert.Contains("contains disallowed characters", ex.Message);
+    }
+
+    [Fact]
+    public void OpenHostsEditHelpers_NullPaths_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers(null!, "valid_hosts"));
+        Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers("valid_temp", null!));
+    }
+
     // ── 13. Strategy parser: handles ^ line continuation + var substitution ──
 
     [Fact]
