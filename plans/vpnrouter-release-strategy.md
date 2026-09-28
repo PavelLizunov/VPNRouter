@@ -3,10 +3,10 @@
 ## Rolling candidates and stable cuts
 
 Work on `X.Y.Z` ships as successive `vX.Y.Z-r1`, `vX.Y.Z-r2`, etc.
-This policy replaced repeated patch releases during one testing cycle. Keep
-one active candidate release page alongside the current stable Latest. Remove
-a superseded candidate page only after its replacement passes full post-ship
-verification and retention is authorized; preserve immutable tags as history.
+This policy replaced repeated patch releases during one testing cycle.
+[Tag and release retention](../docs/tag-retention-policy.md) owns permanent tag
+history, the verified-candidate safety net, retirement windows and service
+exceptions. Publication does not authorize deleting older releases or tags.
 
 The experimental updater channel discovers prereleases; the stable channel
 ignores them. `UpdateChecker` orders `X.Y.Z-r1 < X.Y.Z-r2 < X.Y.Z`, so
@@ -29,7 +29,7 @@ AppVersion must match the complete tag version, including `-rN`.
 
 1. Obtain release authorization. Record the accepted main commit SHA, require a
    clean checkout at that SHA and exact full AppVersion, then create/push only
-   the new immutable version tag. Resolve the remote tag to its peeled commit
+   the new annotated, immutable tag. Resolve the remote tag to its peeled commit
    and compare it with the accepted SHA before creating a release.
 2. Create a draft using `gh release create TAG --verify-tag --draft
    --latest=false` with release notes. Add `--prerelease` for a candidate.

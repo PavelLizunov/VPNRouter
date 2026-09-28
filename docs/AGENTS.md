@@ -6,6 +6,7 @@ This directory owns repository contracts, worker guidance and review prompts.
 ## Owners
 
 - [agent-contract.md](agent-contract.md): project safety, Git, tests and release gates.
+- [tag-retention-policy.md](tag-retention-policy.md): tag naming, retention and service exceptions.
 - [test-workers.md](test-workers.md): worker roles, preflight and resource constraints.
 - [REVIEW_AGENT_PROMPT.md](REVIEW_AGENT_PROMPT.md): bounded reviewer brief and evidence requirements.
 

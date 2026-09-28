@@ -8,6 +8,8 @@ whenToUse: The latest -rN passed all hard gates and the user explicitly said cut
 
 Promote `vX.Y.Z-rN` to a new immutable `vX.Y.Z` tag. Do not merely change
 the prerelease flag and never force-update a published stable tag.
+Read [tag and release retention](../../../docs/tag-retention-policy.md) before
+creating tags or proposing cleanup; release approval is not deletion approval.
 
 ## Hard preconditions
 
@@ -107,7 +109,7 @@ no-suffix AppVersion. With explicit owner authorization, create and push the
 new immutable stable tag, verify its remote peeled SHA, then create the draft:
 
 ```powershell
-git tag $tag $sha
+git tag -a $tag $sha -m "Release $tag"
 git push origin "refs/tags/$tag"
 $remoteSha = gh api "repos/PavelLizunov/VPNRouter/commits/$tag" --jq '.sha'
 if ($LASTEXITCODE -ne 0 -or $remoteSha -ne $sha) { throw 'Remote tag SHA mismatch.' }
@@ -221,8 +223,8 @@ Only after final stable verification:
 
 1. Publish complete release notes and verify `vX.Y.Z` remains Latest.
 2. Verify Homebrew, APT, Android download page and canonical Windows URLs.
-3. Remove superseded rolling release pages according to retention policy; do
-   not delete the stable tag.
+3. Keep releases under the linked retention policy. Any candidate-page retirement
+   needs separate exact-target approval; do not delete stable or candidate tags.
 4. Update `CURRENT_STATE.md` to stable `vX.Y.Z` with no in-flight candidate.
 5. Record the exact test, CI, asset, WINBRAT and cleanup evidence in the handoff.
 

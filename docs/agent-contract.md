@@ -68,9 +68,10 @@ Read the relevant zone document before changing that area:
 
 ## Safety and Git
 
-1. `main` is protected. Never push directly or force-push it. Stable tags are
-   immutable after publication; prefer a new `-rN` candidate over rewriting a
-   published prerelease.
+1. `main` is protected. Never push directly or force-push it. Published stable
+   and candidate tags are immutable; fixes use a new version, not a rewritten tag.
+   [Tag and release retention](tag-retention-policy.md) owns naming, preservation,
+   service exceptions and separately authorized cleanup. No automatic tag pruning.
 2. Canonical remote is `origin` (GitHub). Forgejo is a mirror synchronized only
    after an accepted merge or release. Avoid broad fetches when remote auxiliary
    refs are unhealthy; prefer `gh api` or targeted refs.
