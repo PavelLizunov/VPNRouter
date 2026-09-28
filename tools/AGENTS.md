@@ -10,8 +10,8 @@
 
 ## WINBRAT remote testing constraint
 
-- All remote VPN, install, launch, connect, UIA, and live log verification operations must target ONLY the dedicated test VM `WINBRAT` (`100.115.182.0`) via `tools/brat-verify.ps1`.
-- Never install, run, or verify VPNRouter on the local development workstation under `C:\Program Files\VPNRouter`.
+All live verification goes through `tools/brat-verify.ps1` against the fixed WINBRAT
+target defined in the "Release and WINBRAT contract" section of `docs/agent-contract.md`.
 
 ## Tracked payloads and generated caches
 

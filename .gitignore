@@ -56,10 +56,6 @@ tools/*
 !tools/brat-route-plan.ps1
 !tools/brat-stability.ps1
 !tools/post-ship-verify.ps1
-# Re-include: pve-guest-exec.ps1 (run commands in a Linux test VM via guest-agent).
-!tools/pve-guest-exec.ps1
-# Re-include: smoke-update.ps1 (v2.29.0-r7 ship-time pre-tag verification).
-!tools/smoke-update.ps1
 # Re-include: build-singbox-lx.ps1 (reproducible AmneziaWG sing-box-lx builder).
 !tools/build-singbox-lx.ps1
 # Re-include: build-singbox-lx.sh (darwin/linux port — Mac/Linux AWG+XHTTP core).
@@ -84,8 +80,6 @@ tools/*
 !tools/build-libbox-aar.sh
 # v2.43.0: Windows companion build script (Go 1.25 + -checklinkname=0 + -javapkg).
 !tools/build-libbox-aar.ps1
-# v2.43.0: realistic on-device Android e2e harness (CPU/leak/speed/stability).
-!tools/android-e2e-test.sh
 # v2.37.0-r19: pre-ship CI gate — verify previous commit is green.
 !tools/verify-last-commit-ci.ps1
 # v2.31.1 follow-up: the recursive re-include above also pulled in this
@@ -117,7 +111,7 @@ publish/
 release-notes-*.md
 
 # UI test screenshots (regenerated on every `dotnet test` run; inspection
-# artefact, not versioned content). See plans/ui-testing-workflow.md.
+# artefact, not versioned content).
 # Exception: screenshots/baseline/ holds pinned PNGs for VisualDiffTests
 # regression — those ARE versioned and refreshed only when a page change
 # is intentional (see VisualDiffTests doc-comment for the workflow).

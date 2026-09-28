@@ -65,8 +65,7 @@ public sealed class AgentContextContractTests
             "merge-design-handoff",
             "phase-task-launcher",
             "post-ship-mcp-verify",
-            "ship-rolling-candidate",
-            "update-readme-versions"
+            "ship-rolling-candidate"
         };
 
         Assert.True(Directory.Exists(skillsRoot), "Native .dsh/skills directory is missing.");
@@ -200,12 +199,10 @@ public sealed class AgentContextContractTests
         var activeFiles = new List<string>
         {
             "AGENTS.md",
-            "AGENTS.local.md",
             "docs/agent-contract.md",
             "docs/test-workers.md",
             "docs/REVIEW_AGENT_PROMPT.md",
             ".github/SECRETS.md",
-            "docs/project-cheatsheet.md",
             "docs/execution-methodology.md",
             "VPNRouter.Core/AGENTS.md",
             "VPNRouter.App/AGENTS.md",

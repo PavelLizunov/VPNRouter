@@ -41,4 +41,17 @@ Revert the PR.
 
 ## Outcome
 
-Pending.
+- Removed `AGENTS.local.md`, `docs/project-cheatsheet.md` and the
+  `update-readme-versions` skill (3 files). The contract now owns "push only the
+  current task branch" and "never add or rewrite remotes"; both release skills
+  carry the README build-example sync step.
+- `audit-overflow-fix` rewritten in English (143 -> 70 lines); its width facts,
+  token names, `radio-card` styles and test classes were checked against source.
+- `tools/AGENTS.md` links the WINBRAT rule to the contract instead of copying it;
+  root bootstrap drops the local overlay pointer and the v3.0 trigger.
+- `.gitignore` loses re-include rules for three deleted scripts and a pointer to
+  a removed plan; artifact rules asserted by tests are unchanged.
+- `AgentContextContractTests`: skill list 9 -> 8; active-file list drops the two
+  removed files. Root bootstrap stays within the 8-25 line pin (22 lines).
+- Checks: every edit matched exactly once; no broken relative Markdown link; no
+  reference to removed files outside historical plans; exact-head CI on PR #329.

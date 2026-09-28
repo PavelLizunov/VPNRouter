@@ -16,7 +16,6 @@ This directory owns repository contracts, worker guidance and review prompts.
 - [interaction-contracts/README.md](interaction-contracts/README.md): Free Configs and Applications contracts.
 - [android-development-methodology.md](android-development-methodology.md) and
   [android-keystore-backup.md](android-keystore-backup.md): Android workflow and signing-key backup.
-- [project-cheatsheet.md](project-cheatsheet.md): quick project reference.
 
 ## Editing
 
