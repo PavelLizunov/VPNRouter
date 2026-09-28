@@ -1,13 +1,17 @@
 # VPNRouter agent contract
 
-This is the single canonical repository contract for DeepSeek Harness (DSH) and other
-coding agents. Root `AGENTS.md` contains entry points and skill routing. If a local
-file duplicates or conflicts with this file, fix the local file and follow this file.
+This file owns VPNRouter repository rules. Root `AGENTS.md` contains entry points
+and task routing; zone files add local details without duplicating this contract.
+System, developer, direct user instructions and global Harness safety/model-routing
+rules still apply. Resolve conflicting project guidance within the authorized task;
+this document does not grant tools, permissions or authority beyond that scope.
 
 ## Project and ownership
 
 VPNRouter is a process-based split-tunnel VPN router for Windows, macOS, Linux
-and Android. Desktop code uses .NET 10 / SDK 10.0.301, Avalonia and sing-box.
+and Android. Desktop code uses .NET, Avalonia and sing-box. Read `global.json`
+for the SDK, owning `.csproj` files for frameworks/packages, and platform build
+scripts/workflows for bundled runtime versions; do not infer one version for all targets.
 
 All repository zones are owned by Pavel Lizunov (`PavelLizunov`) and may be
 edited. `tools/zapret/` is a tracked bundled runtime payload and must be
@@ -19,7 +23,10 @@ Read the relevant zone document before changing that area:
 | Area | Zone document |
 |---|---|
 | Core, sing-box, subscriptions, public configs | `VPNRouter.Core/AGENTS.md` |
-| Avalonia desktop UI and ViewModels | `VPNRouter.App/AGENTS.md` |
+| Core lifecycle and service entry points | `VPNRouter.Core/Services/AGENTS.md` |
+| OS adapters, firewall and DNS boundaries | `VPNRouter.Core/Platform/AGENTS.md` |
+| Avalonia desktop UI | `VPNRouter.App/AGENTS.md` |
+| ViewModels and connection-state ownership | `VPNRouter.App/ViewModels/AGENTS.md` |
 | Android | `VPNRouter.Android/AGENTS.md` |
 | CLI | `VPNRouter.CLI/AGENTS.md` |
 | Windows service | `VPNRouter.Service/AGENTS.md` |
@@ -37,6 +44,14 @@ Read the relevant zone document before changing that area:
 
 ## Working model
 
+- Record intent, scope, invariants, verification and material unknowns under `plans/`
+  before edits. Reuse the task record and applicable global `sdd` guidance.
+- Follow global Harness model-routing rules and live tool permissions. Repository
+  skills cannot authorize implicit self-spawning, recursive worker delegation or
+  an unavailable tool. Report missing independent review instead of claiming it.
+- Treat architecture maps and dated plans as snapshot-bound navigation. Verify
+  claims against current source and the defect ledger; do not import another
+  branch's components or resolved findings into the current contract.
 - Work autonomously inside a task branch through a green pull request. Normal
   code edits, tests, commits, branch pushes and PR updates need no intermediate
   approval.
@@ -74,8 +89,10 @@ Read the relevant zone document before changing that area:
 
 ## Test oracle
 
-Use the smallest relevant slice while iterating, then the full gate before
-handoff. Commands assume the SDK pinned by `global.json`. On `harness-test`,
+Use the smallest relevant slice while iterating, then the applicable full gate
+before handoff. For instruction-only changes, check links, referenced test names,
+skill frontmatter and the scoped diff, and observe PR CI; do not claim these checks
+prove runtime behavior. Commands assume the SDK pinned by `global.json`. On `harness-test`,
 coordinate these commands on an authorized exact-SHA worker only after the
 read-only identity/job/CPU/RAM/disk/SDK preflight; do not provision the control
 plane.
@@ -88,7 +105,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~MainWindowViewModelCharacterizationTests|FullyQualifiedName~MainWindowViewModelAppsModeTests|FullyQualifiedName~MainWindowViewModelTests"
 
 # Android shared behavior (APK build still requires the Android workload)
-dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidAppCharacterizationTests|FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
 
 # CLI and service contracts
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~CliVersionSourceTests|FullyQualifiedName~P07CliStopSourceGuardTests|FullyQualifiedName~ServiceAppCoexistenceTests|FullyQualifiedName~AutostartContractTests"
@@ -116,7 +133,13 @@ powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1
 ```
 
   Exit 0 permits the next block. Any in-progress or red result means stop and
-  wait/fix. Never accumulate known-red commits.
+  wait/fix. Never accumulate known-red commits. If PowerShell is unavailable,
+  use `gh pr checks <number> --watch` for the task PR and confirm its `headRefOid`
+  equals local `git rev-parse HEAD` with `gh pr view <number> --json headRefOid`.
+  Missing expected checks, a different head or unavailable evidence is not green.
+  This is a development-check path, not a substitute for strict release gates.
+  Git has no native post-push hook; ordinary task-branch pushes do not run the
+  optional `.githooks/post-push` watcher. Do not assume it verified CI.
 - At session start and before a candidate ship, inspect recent commit checks and
   `.git-suggested-hash-bump.txt`. Fix any red check before new product work.
 - Every audit/review/research finding goes into `plans/OPEN-DEFECTS.md` before it

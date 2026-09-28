@@ -1,37 +1,30 @@
-# plans/ — DSH Agent Instructions
+# Planning instructions
 
-Roadmaps, post-mortems, handoff documents, and architecture plans for VPNRouter. All planning `.md` files reside here under `./plans/`.
+Follow [the project contract](../docs/agent-contract.md) and root [AGENTS.md](../AGENTS.md).
+Keep task briefs, outcomes, roadmaps and durable project notes under `plans/`.
 
-Before taking actions under `plans/`, review [`docs/agent-contract.md`](../docs/agent-contract.md) (the canonical project contract) and root [`AGENTS.md`](../AGENTS.md).
+## Task records
 
-## Naming Convention
+- Use `phase-<slug>-YYYY-MM-DD.md` for a task brief; update the same record through delivery.
+- Record intent, scope, invariants, verification, unknowns and observed outcomes.
+- Use `vpnrouter-vX.Y.Z-<topic>.md` for release roadmaps and
+  `session-handoff-YYYY-MM-DD.md` for handoffs. Release-note drafts remain gitignored.
+- Preserve historical records. A dated plan, map or test receipt is evidence for
+  its named snapshot, not a current contract, open-defect status or release approval.
 
-```
-vpnrouter-vX.Y.Z-<short-topic>.md       ← version roadmap
-vpnrouter-<feature>.md                   ← feature plan across versions
-session-handoff-YYYY-MM-DD.md            ← historical session handoff
-session-night-shift-YYYY-MM-DD.md        ← autonomous session post-mortem
-release-notes-vX.Y.Z[-rN].md             ← draft release notes (.gitignored)
-```
+## References
 
-## Active Plans & Ledgers
+- [OPEN-DEFECTS.md](OPEN-DEFECTS.md): release-gating ledger; record verified findings and their disposition.
+- [v3.0-refactor-roadmap.md](v3.0-refactor-roadmap.md): refactor roadmap and task ownership.
+- [v3.0-execution-methodology.md](v3.0-execution-methodology.md): task lifecycle and verification.
+- [interaction-contracts/README.md](interaction-contracts/README.md): Free Configs and Applications interaction contracts.
+- [vpnrouter-release-strategy.md](vpnrouter-release-strategy.md): rolling-candidate policy.
+- [cut-stable-checklist.md](cut-stable-checklist.md): fixed-WINBRAT live-update gate.
+- [macos-parity-leak-dns-firewall-update-qa-plan-2026-06-04.md](macos-parity-leak-dns-firewall-update-qa-plan-2026-06-04.md): macOS QA follow-ups; recheck current status.
+- [code-signing-signpath-runbook-2026-07-10.md](code-signing-signpath-runbook-2026-07-10.md): signing runbook; recheck prerequisites.
 
-| File | Status |
-|---|---|
-| `interaction-contracts/README.md` | adopted framework (FC + APP page interaction contracts) |
-| `OPEN-DEFECTS.md` | release-gating defect ledger |
-| `v3.0-refactor-roadmap.md` | long-running refactor roadmap and task ownership |
-| `v3.0-execution-methodology.md` | active execution methodology for v3.0 |
-| `macos-parity-leak-dns-firewall-update-qa-plan-2026-06-04.md` | macOS runtime parity and QA follow-ups |
-| `code-signing-signpath-runbook-2026-07-10.md` | Windows code-signing enrollment |
-| `vpnrouter-release-strategy.md` | rolling-rN policy reference |
-| `cut-stable-checklist.md` | fixed-WINBRAT pre-cut live-update gate |
+## Boundaries
 
-Historical plan documents and session handoffs are preserved for context and historical provenance.
-
-## Workflow & Tooling Equivalents
-
-- **Zone Contract**: `plans/AGENTS.md`.
-- **Skills**: Use DSH skills (`.dsh/skills/` or DSH skill catalog: `bug-hunt`, `cut-stable`, `ship-rolling-candidate`, `phase-task-launcher`, etc.).
-- **Subagents & Orchestration**: Use DSH `subagent` for bounded delegation. Use `workflow` only when the user explicitly requests workflow-style or large scripted orchestration.
-- **Worker Configuration**: `docs/test-workers.md` is the single worker source of truth for test VMs and worker target topology. Do not hard-code machine credentials or IPs.
+Use matching project skills and the global Harness delegation policy. Do not
+hardcode model routes, worker credentials or volatile host addresses in plans.
+Worker roles and preflight belong to [docs/test-workers.md](../docs/test-workers.md).

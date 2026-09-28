@@ -1,69 +1,48 @@
-# Phase N — <Task name>
+# Phase N - <Task name>
 
-**Owner**: DSH session-id <id>
-**Branch**: dsh/phN-<slug>-<seq>
-**Roadmap ref**: plans/v3.0-refactor-roadmap.md §<section>
-**Effort**: <X min/hour/day>
-**Risk**: LOW / MEDIUM / HIGH
-**Blast radius**: <files touched> · <LOC delta> · <runtime impact>
-**Rollback**: `git revert <commit>` / branch delete
+- Owner: <session or task owner>
+- Branch: dsh/<task-slug>
+- Base: <full commit SHA>
+- Roadmap: <applicable section or N/A>
+- Risk: <LOW / MEDIUM / HIGH, with reason>
+- Blast radius: <files, consumers, runtime impact>
+- Rollback: <task-specific revert or recovery>
 
 ## Why
-<one paragraph: what problem this solves, what value it adds>
+
+<Problem and expected result.>
 
 ## What
-<concrete change list — files, line ranges, before/after sketches>
 
-```diff
-- /* before snippet */
-+ /* after snippet */
-```
+<Files and behavior in scope, invariants, exclusions and material unknowns.>
 
 ## How
-<step-by-step plan>
 
-1. Step 1
-2. Step 2
-3. ...
+<Implementation sequence and dependencies. Reuse this record through delivery.>
 
-### Tests written
-- `<TestClass>.<TestMethod>` — what it verifies
-- `<TestClass>.<TestMethod>` — edge case X
+## Verification
 
-### Verification approach
-<how we know it works: full test suite, characterization snapshot, isolated headless screenshot and fixed-WINBRAT post-ship scenario, etc.>
+Record PASS, FAIL, BLOCKED or N/A with evidence and reasons. Do not pre-fill passes.
+Use authorized, preflighted workers for builds and tests; never provision the control plane.
 
-## Verification gate
-Check off each as you complete:
+1. Build: Release solution build; Android changes also need the owning zone's APK build.
+2. Tests: focused and full applicable suites, regressions or characterization baseline.
+3. Docs: owning documentation updated and Outcome complete.
+4. Review: applicable procedure, evidence and independence. `bug-hunt` requires a
+   permitted model route; unavailable required independent review is BLOCKED,
+   not a self-review pass. Justify N/A for a trivial no-behavior change.
+5. UI: isolated `PageScreenshotTests`/`VisualDiffTests` when applicable. After an
+   explicitly authorized ship, use `tools/post-ship-verify.ps1` on
+   WINBRAT @ `100.115.182.0`; missing VM/WinRM is BLOCKED, with
+   no developer-machine fallback.
+6. Characterization: compare pre/post surfaces for mechanical splits; otherwise N/A.
 
-- [ ] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` → 0 errors. (For Android: also `-p:EnableAndroidTarget=true`.)
-- [ ] **Gate 2 — Tests green**: all discovered tests pass. New tests included.
-- [ ] **Gate 3 — Docs**: brief Outcome filled. README + AGENTS.md updated if user-facing / architecture change.
-- [ ] **Gate 4 — Self-review**: `bug-hunt` ran with simplicity/security lenses where applicable. Note "N/A" only for a trivial no-behavior change.
-- [ ] **Gate 5 — UI verify**: if UI changed, run isolated `PageScreenshotTests`/`VisualDiffTests`; after an explicitly authorized ship, run the full scenario through `tools/post-ship-verify.ps1` on WINBRAT @ `100.115.182.0`. VM/WinRM unavailable → BLOCKED after ship, with no developer-machine fallback. "N/A" only if no UI surface.
-- [ ] **Gate 6 — Characterization diff**: pre-split snapshot matches post-split (god-file splits only). "N/A" otherwise.
+## Outcome
 
-## Outcome (filled before final handoff)
-
-**Status**: PASS / PARTIAL / BLOCKED
-**Commits**: `<hash1>` `<hash2>`
-**Pushed**: task branch to origin, commit `<hash>`, PR `<url>`
-**Test deltas**: +<new> / -<removed>
-**Files changed**: <count> · <total LOC delta>
-
-**Gate results:**
-- [x] Gate 1: <output e.g. "0 errors, 140 warnings (pre-existing)">
-- [x] Gate 2: <all discovered tests passing>
-- [x] Gate 3: <e.g. "README updated, AGENTS.md unchanged">
-- [x] Gate 4: <e.g. "bug-hunt: no P0/P1 survivors">
-- [-] Gate 5: <e.g. "N/A — Core-only change">
-- [-] Gate 6: <e.g. "N/A — not a god-file split">
-
-**Surprises encountered**:
-- <list non-obvious finds>
-
-**Follow-ups spawned**:
-- <task chip refs or new plans/ entries>
-
-**Lessons for methodology doc** (if any):
-- <suggested updates to v3.0-execution-methodology.md>
+- Status: <PASS / PARTIAL / BLOCKED>
+- Changed files and delta: <observed result>
+- Checks: <commands, snapshot, exit status and evidence>
+- Review: <confirmed/rejected findings, fixes, remaining limitations>
+- Git: <commits, task branch to origin, PR URL, exact-head check status>
+- Follow-ups: <ledger references, remaining work and next step>
+- Cleanup: <task-owned artifacts removed or intentionally retained>

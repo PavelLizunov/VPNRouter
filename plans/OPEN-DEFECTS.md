@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Agent instruction refresh 2026-09-28
+
+- [x] **P2 RESOLVED / UNMERGED (documentation only)** - AGENT-STALE-SOURCE-CLAIMS: Android instructions and canonical filter named removed AndroidAppCharacterizationTests; review prompt hardcoded sing-box 1.13 despite desktop pin 1.14.0-vpnctl.5. Removed the nonexistent filter and false hash guarantee; dependency review now reads platform build pins. Baseline evidence: `VPNRouter.Android/AGENTS.md:14-16,41`, `docs/agent-contract.md:91`, `docs/REVIEW_AGENT_PROMPT.md:70`, `build.ps1:51` at `ab97905d`. PR #323; September 16 test-prune coverage debt remains open.
+- [x] **P2 RESOLVED / UNMERGED (documentation only)** - AGENT-ROUTING-POLICY: review prompt, bug-hunt and methodology prescribed model-inheriting subagents; methodology allowed workflow based on size alone. Replaced with global-policy/live-schema checks, explicit orchestration authority and unavailable-review reporting. Baseline evidence: `docs/REVIEW_AGENT_PROMPT.md:3-9`, `.dsh/skills/bug-hunt/SKILL.md:18-21`, `plans/v3.0-execution-methodology.md:120-121` at `ab97905d`. PR #323; no claim of executable Host enforcement.
+- [x] **P2 RESOLVED / UNMERGED (documentation only)** - AGENT-CI-DOCUMENTATION: canonical command assumed Windows PowerShell; hook guidance omitted that post-push is not native and task-branch pre-push exits before its watcher. Documented exact-head PR checks on hosts without PowerShell and actual watcher limits. Baseline evidence: `docs/agent-contract.md:112-119`, `.githooks/AGENTS.md:9-11`, `.githooks/post-push:16-20`, `.githooks/pre-push:46-48` at `ab97905d`. PR #323; no hook implementation change or release-gate waiver.
+
 ### Mass review 2026-09-16 (HEAD `b101a7e2`, AppVersion 2.50.0-r9)
 
 Lead-verified against current source after Gemini/Opus/Grok swarms. Skills: bug-hunt, security-review, codebase-audit, change-verification, ponytail-review/audit/debt, audit-overflow-fix. Artifacts: `.dsh/security-review-report.md`, `.dsh/codebase-audit-scorecard-2026-09-16.md`. No product edits. `dotnet` not run on this host.
