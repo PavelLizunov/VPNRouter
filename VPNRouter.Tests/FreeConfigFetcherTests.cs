@@ -77,6 +77,55 @@ public sealed class FreeConfigFetcherTests
     }
 
     [Theory]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/configs.txt")]
+    [InlineData("gopher://example.com/123")]
+    [InlineData("malformed-secret-sentinel")]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData(null)]
+    public async Task FetchAsync_InvalidUrlDoesNotSendOrLogInput(string? invalidUrl)
+    {
+        var sink = new CapturingSink();
+        using var logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
+        var http = new FakeHttpClient();
+        var fetcher = new FreeConfigFetcher(logger, http);
+        var source = new FreeConfigSource
+        {
+            Name = "source-secret-sentinel",
+            Url = invalidUrl!,
+            Enabled = true,
+        };
+
+        Assert.Empty(await fetcher.FetchAsync(source));
+        Assert.Empty(http.SentRequests);
+        var entry = Assert.Single(sink.Events);
+        Assert.Equal("FreeConfigFetcher: refused non-http(s) or malformed source URL", entry.RenderMessage());
+        Assert.Empty(entry.Properties);
+        Assert.Null(entry.Exception);
+    }
+
+    [Theory]
+    [InlineData("http://configs.example/subscription")]
+    [InlineData("HTTPS://configs.example/subscription")]
+    public async Task FetchAsync_AcceptsHttpAndHttps(string url)
+    {
+        using var logger = new LoggerConfiguration().CreateLogger();
+        var absoluteUrl = new Uri(url).AbsoluteUri;
+        var http = new FakeHttpClient().Setup(absoluteUrl, Vless);
+        var source = new FreeConfigSource { Name = "test-source", Url = url, Enabled = true };
+
+        Assert.Equal(new[] { Vless }, await new FreeConfigFetcher(logger, http).FetchAsync(source));
+        Assert.Equal(absoluteUrl, Assert.Single(http.SentRequests).Uri.AbsoluteUri);
+    }
+
+    private sealed class CapturingSink : Serilog.Core.ILogEventSink
+    {
+        public System.Collections.Generic.List<Serilog.Events.LogEvent> Events { get; } = new();
+        public void Emit(Serilog.Events.LogEvent logEvent) => Events.Add(logEvent);
+    }
+
+    [Theory]
     [InlineData(404)]
     [InlineData(503)]
     public async Task FetchAsync_HttpFailureReturnsEmpty(int statusCode)

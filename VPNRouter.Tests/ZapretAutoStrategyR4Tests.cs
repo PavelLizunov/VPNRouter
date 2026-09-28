@@ -239,6 +239,40 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
 
     // ── FlowsealMaxSweepTime sanity ─────────────────────────────────────────
 
+    [Theory]
+    [InlineData("script with spaces.ps1")]
+    [InlineData("script&with%characters^.ps1")]
+    [InlineData("script\"quoted.ps1")]
+    [InlineData("script\r\nline.ps1")]
+    public void BuildFlowsealProbeStartInfo_KeepsScriptAsOneArgument(string scriptPath)
+    {
+        var psi = ZapretAutoStrategy.BuildFlowsealProbeStartInfo("install directory", scriptPath);
+
+        Assert.Equal("powershell.exe", psi.FileName);
+        Assert.Equal("install directory", psi.WorkingDirectory);
+        Assert.Equal(new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath }, psi.ArgumentList);
+        Assert.Empty(psi.Arguments);
+        Assert.False(psi.UseShellExecute);
+        Assert.True(psi.CreateNoWindow);
+        Assert.True(psi.RedirectStandardInput);
+        Assert.True(psi.RedirectStandardOutput);
+        Assert.True(psi.RedirectStandardError);
+        Assert.Equal(System.Text.Encoding.UTF8, psi.StandardOutputEncoding);
+        Assert.Equal(System.Text.Encoding.UTF8, psi.StandardErrorEncoding);
+        Assert.Equal(System.Diagnostics.ProcessWindowStyle.Hidden, psi.WindowStyle);
+    }
+
+    [Fact]
+    public async Task RunFlowsealProbeAsync_NonWindowsPreservesDiagnostic()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        var result = await ZapretAutoStrategy.RunFlowsealProbeAsync(
+            "directory&with%shell^characters", null, null, CancellationToken.None);
+
+        Assert.Equal("not_windows", result.Diagnostic);
+    }
+
     [Fact]
     public void FlowsealMaxSweepTime_IsTenMinutes()
     {
