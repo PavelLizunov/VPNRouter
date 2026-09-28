@@ -1,18 +1,3 @@
-# Setup-Hooks.ps1 — one-time install of VPNRouter v3.0 git hooks.
-#
-# Usage:
-#   pwsh ./Setup-Hooks.ps1
-#
-# What it does:
-#   1. Sets `git config core.hooksPath .githooks` so hooks in the tracked
-#      `.githooks/` directory are used instead of `.git/hooks/` (which is
-#      untracked + per-clone).
-#   2. Ensures `.githooks/pre-commit` + `.githooks/commit-msg` are executable
-#      on Unix-like environments (git-bash, WSL, real Linux/Mac).
-#   3. Smoke-tests by running each hook with `--help`-equivalent (just exit 0
-#      path) to confirm shell + tooling present.
-#
-# Idempotent: safe to re-run. Reports state vs changes.
 
 [CmdletBinding()]
 param(
@@ -31,7 +16,6 @@ Write-Host "VPNRouter Setup-Hooks — git hook installation" -ForegroundColor Cy
 Write-Host "─────────────────────────────────────────────"
 Write-Host ""
 
-# Step 1 — verify we're in a git repo
 try {
     $gitRoot = git rev-parse --show-toplevel 2>$null
     if (-not $gitRoot) { throw "Not inside a git repo" }
@@ -41,7 +25,6 @@ try {
     exit 1
 }
 
-# Step 2 — verify .githooks/ directory exists and has expected files
 $hookDir = Join-Path $gitRoot '.githooks'
 if (-not (Test-Path $hookDir)) {
     Write-Host "❌ .githooks/ directory missing. Are you on the right branch?" -ForegroundColor Red
@@ -59,7 +42,6 @@ foreach ($h in $expectedHooks) {
     }
 }
 
-# Step 3 — set core.hooksPath
 $currentPath = git config --local --get core.hooksPath
 if ($currentPath -eq '.githooks') {
     Write-Status "core.hooksPath already set to '.githooks'" 'Gray'
@@ -72,7 +54,6 @@ if ($currentPath -eq '.githooks') {
     }
 }
 
-# Step 4 — chmod +x on Unix-like (no-op on Windows, but git records mode bit)
 if ($IsLinux -or $IsMacOS -or (Test-Path '/bin/bash')) {
     foreach ($h in $expectedHooks) {
         $hookPath = Join-Path $hookDir $h
@@ -92,13 +73,11 @@ if ($IsLinux -or $IsMacOS -or (Test-Path '/bin/bash')) {
     }
 }
 
-# Step 5 — smoke test: stage a doc-only change, dry-run commit message check
 Write-Host ""
 Write-Host "Smoke test:" -ForegroundColor Cyan
 $tempBranch = "dsh/setup-hooks-smoke-$(Get-Random)"
 $cleanupNeeded = $false
 try {
-    # Verify hook scripts have valid bash syntax
     if (Test-Path '/bin/bash' -or $IsLinux -or $IsMacOS) {
         & /bin/bash -n .githooks/pre-commit
         if ($LASTEXITCODE -eq 0) {

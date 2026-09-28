@@ -1,11 +1,3 @@
-# VPNRouter YouTube diagnostic (FULL-TUNNEL configs only)
-# One-liner:  iwr -useb https://vpn.ninitux.com/diagnose.ps1 | iex
-#
-# Run this WHILE the VPN is connected on a *full-tunnel* config. It walks the
-# YouTube path layer by layer (TUN -> proxy -> DNS -> TCP -> QUIC -> HTTP ->
-# egress -> live conns) and prints OK/FAIL per layer + a best-guess verdict.
-# Read-only: it never changes settings and never uploads anything - it saves a
-# text report you send back. Secrets (uuid / keys / sub-token) are not printed.
 
 $ErrorActionPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -34,7 +26,6 @@ Line ("VPNRouter YouTube diagnostic  ($stamp)")
 $ver = (Get-Item 'C:\Program Files\VPNRouter\app\VPNRouter.App.exe' -EA SilentlyContinue).VersionInfo.ProductVersion
 if ($ver) { Line ("app build: $ver") }
 
-# ---------- Layer 0: config ----------
 Sec 'Config'
 $routingMode = 'unknown'; $strictDns = $false; $lockdown = $false; $blockQuic = $true
 if (Test-Path $cfgYaml) {
@@ -50,7 +41,6 @@ if ($routingMode -ne 'full') {
     Verdict 'config' $null "routing_mode is '$routingMode', not 'full' - this test is built for full-tunnel; results may be partial."
 }
 
-# current.json: proxy type, dns.final, quic-reject rule, clash api addr
 $clashAddr = '127.0.0.1:9090'; $proxyTypes = @(); $dnsFinal = '?'; $quicReject = $false; $hasUdpProxy = $false
 if (Test-Path $curJson) {
     try {
@@ -68,7 +58,6 @@ if (Test-Path $curJson) {
 Line ("proxy outbound(s) = " + ($(if ($proxyTypes) { $proxyTypes -join ',' } else { 'none?' })) + " | dns.final=$dnsFinal | quic-reject-rule=$quicReject")
 $clashBase = "http://$clashAddr"
 
-# ---------- Layer 1: VPN / TUN ----------
 Sec 'VPN / TUN'
 $sb = Get-Process -Name 'sing-box' -EA SilentlyContinue
 Verdict 'sing-box' ([bool]$sb) ($(if ($sb) { "running (PID $($sb.Id))" } else { 'NOT running - connect the VPN first, then re-run' }))
@@ -79,7 +68,6 @@ try { $v = Invoke-RestMethod "$clashBase/version" -TimeoutSec 4; $clashOk = [boo
 catch { Verdict 'Clash API' $false "$clashBase not responding" }
 if (-not $sb) { Line ''; Line 'VPN is not running - stop here, connect, and re-run.'; $report -join "`r`n" | Out-File $outFile -Encoding utf8; Line "saved: $outFile"; return }
 
-# ---------- Layer 2: proxy reachability ----------
 Sec 'Proxy reachability'
 $delay = $null
 try {
@@ -89,7 +77,6 @@ try {
 } catch {}
 Verdict 'proxy delay' ([bool]$delay) ($(if ($delay) { "$delay ms (server reachable through the tunnel)" } else { 'proxy could NOT reach the test URL - the selected server is dead/slow' }))
 
-# ---------- Layer 3: DNS ----------
 Sec 'DNS (resolves through the tunnel in full-tunnel)'
 $ytIp = $null; $gvIp = $null
 foreach ($h in 'www.youtube.com','youtube.com','rr1---sn-4g5e6nzz.googlevideo.com') {
@@ -100,7 +87,6 @@ foreach ($h in 'www.youtube.com','youtube.com','rr1---sn-4g5e6nzz.googlevideo.co
     Verdict "dns $h" $ok ($(if ($ok) { "$($t.Result)  ($($t.Ms) ms)" } else { "no answer ($($t.Ms) ms) - DNS via tunnel failing" }))
 }
 
-# ---------- Layer 4: TCP 443 ----------
 Sec 'TCP 443'
 foreach ($pair in @(@('youtube', $ytIp), @('googlevideo', $gvIp))) {
     $nm = $pair[0]; $ip = $pair[1]
@@ -109,7 +95,6 @@ foreach ($pair in @(@('youtube', $ytIp), @('googlevideo', $gvIp))) {
     Verdict "tcp $nm" ([bool]$t.Result) ("$ip`:443  ($($t.Ms) ms)")
 }
 
-# ---------- Layer 5: QUIC / HTTP-3 (the classic 'endless loading') ----------
 Sec 'QUIC / HTTP-3'
 if ($hasUdpProxy) {
     Verdict 'quic' $true "proxy carries UDP (hysteria2/tuic) - QUIC works natively, no block needed"
@@ -120,11 +105,6 @@ if ($hasUdpProxy) {
         $(if ($blockQuic) { "'Block QUIC' is ON in settings but the rule is missing from current.json - reconnect to regenerate." } else { "Turn ON 'Block QUIC on TCP-only proxy' in Leak protection." }))
 }
 
-# ---------- Layer 6: HTTP round-trip ----------
-# Any HTTP status back = the server answered = reachability OK (even a 404).
-# Only a timeout / no-response (null) is a real FAIL. Works on PS 5.1 (throws
-# System.Net.WebException) and PS 7 (HttpResponseException) - both expose
-# .Exception.Response.StatusCode.
 Sec 'HTTP round-trip (through the tunnel)'
 foreach ($url in 'http://www.gstatic.com/generate_204','https://www.youtube.com','https://www.youtube.com/generate_204') {
     $t = Timed {
@@ -140,10 +120,6 @@ foreach ($url in 'http://www.gstatic.com/generate_204','https://www.youtube.com'
     Verdict "http $lbl" $ok ($(if ($ok) { "HTTP $code  ($($t.Ms) ms)" } else { "no response / timeout ($($t.Ms) ms)" }))
 }
 
-# ---------- Layer 6.5: Throughput (enough bandwidth for video?) ----------
-# 'YouTube response is very slow' usually = the page loads (small) but video
-# buffers (sustained). This measures the actual download speed through the
-# tunnel. HD YouTube needs ~0.5-3 MB/s; below ~1 MB/s video will spin.
 Sec 'Throughput (sustained download through the tunnel)'
 $mbs = $null
 $tmp = Join-Path $env:TEMP 'vpnr-speed.bin'
@@ -164,14 +140,8 @@ if ($mbs -ne $null) {
     Verdict 'download' $false 'speed test failed/timed out (very slow tunnel)'
 }
 
-# ---------- Layer 6.6: Browser-grade HTTP/2 (curl) ----------
-# Chrome uses HTTP/2 (and tries QUIC) to YouTube; the IWR probe above is HTTP/1.1
-# and too lenient (it got 200 where the browser shows ERR_CONNECTION_CLOSED).
-# curl --http2 reproduces the browser path - if the browser fails, this should too.
 Sec 'Browser-grade HTTP/2 (curl --http2)'
 $h2YoutubeFailed = $false
-# Prefer the Windows-shipped curl (System32) so `-o NUL` is the null device and
-# the HTTP/2 stack is the OS one; fall back to whatever curl.exe is on PATH.
 $curlExe = Join-Path $env:SystemRoot 'System32\curl.exe'
 if (-not (Test-Path $curlExe)) { $curlExe = (Get-Command curl.exe -EA SilentlyContinue | Select-Object -First 1).Source }
 if (-not $curlExe -or -not (Test-Path $curlExe)) {
@@ -188,10 +158,6 @@ if (-not $curlExe -or -not (Test-Path $curlExe)) {
     Verdict 'h1 youtube' ($h1 -match '^[2-4]\d\d$') ("HTTP/1.1 $h1  (control: h1 ok + h2 FAIL => HTTP/2 / MTU)")
 }
 
-# ---------- Layer 6.7: MTU ----------
-# Classic 'curl works, browser RSTs through a VPN': big browser packets (large TLS
-# ClientHello, HTTP/2 frames) exceed the path MTU and, if ICMP/PMTUD is blocked,
-# the connection is reset -> ERR_CONNECTION_CLOSED. Small IWR requests squeak through.
 Sec 'MTU (fragmentation -> ERR_CONNECTION_CLOSED on big packets)'
 $tunMtu = $null
 Get-NetIPInterface -AddressFamily IPv4 -EA SilentlyContinue |
@@ -205,24 +171,17 @@ if ($tunMtu) {
     Verdict 'tun mtu' $okM ("$tunMtu" + $(if ($tunMtu -gt 1420) { " - high; may break VPN/proxy paths (try 1420, then 1400/1380)" } elseif ($tunMtu -lt 1332) { " - low; may break Steam SDR games (Dota 2 / CS2 / TF2)" } else { " - normal" }))
 }
 
-# ---------- Layer 6.8: IPv6 ----------
 Sec 'IPv6'
-# Exclude fe80 (link-local), ::1 (loopback) AND fc/fd (ULA fc00::/7 - the v6
-# equivalent of 10.x/192.168.x, NOT globally routable so it can't leak around
-# a v4 tunnel). Only 2000::/3 (starts 2 or 3) is real global unicast. A docker/
-# Hyper-V host commonly carries an fd58:... ULA that previously false-flagged.
 $v6 = @(Get-NetIPAddress -AddressFamily IPv6 -EA SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(fe80|fc|fd|::1)' -and $_.PrefixOrigin -ne 'WellKnown' -and $_.SuffixOrigin -ne 'Link' })
 $ytAAAA = @(Resolve-DnsName 'youtube.com' -Type AAAA -EA SilentlyContinue | Where-Object { $_.IPAddress })
 $v6risk = ($v6.Count -gt 0 -and $ytAAAA.Count -gt 0)
 Verdict 'ipv6' (-not $v6risk) ($(if ($v6.Count -gt 0) { "host has global IPv6 ($($v6[0].IPAddress)); youtube AAAA=$($ytAAAA.Count -gt 0)" + $(if ($v6risk) { " - browser may use IPv6 OUTSIDE the v4 tunnel -> reset" }) } else { 'no global IPv6 (fine for a v4-only tunnel)' }))
 
-# ---------- Layer 7: egress IP ----------
 Sec 'Egress IP (should be the VPN server, not your ISP)'
 $eip = $null
 foreach ($svc in 'https://api.ipify.org','https://ifconfig.me/ip') { if (-not $eip) { try { $eip = (Invoke-WebRequest $svc -UseBasicParsing -TimeoutSec 10).Content.Trim() } catch {} } }
 Verdict 'egress ip' ([bool]$eip) ($(if ($eip) { $eip } else { 'could not determine - outbound HTTP is failing' }))
 
-# ---------- Layer 8: live connections ----------
 Sec 'Live connections (Clash)'
 try {
     $conns = (Invoke-RestMethod "$clashBase/connections" -TimeoutSec 6).connections
@@ -235,7 +194,6 @@ try {
     } else { Line 'no active youtube/googlevideo connections right now (open a video, then re-run while it spins)' }
 } catch { Line "couldn't read /connections" }
 
-# ---------- Verdict ----------
 Sec 'BEST GUESS'
 if (-not $delay) {
     Line 'Server is unreachable through the tunnel -> the selected server is dead/slow. Switch servers and retest.'

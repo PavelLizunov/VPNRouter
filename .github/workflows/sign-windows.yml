@@ -1,8 +1,3 @@
-# Build Windows release ZIPs from the requested immutable tag, submit that exact
-# GitHub Actions artifact to SignPath, verify every required Authenticode
-# signature on Windows, then upload only to an existing DRAFT release.
-#
-# Enrollment: docs/code-signing-signpath-runbook.md
 
 name: Sign Windows (SignPath)
 

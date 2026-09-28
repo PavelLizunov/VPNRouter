@@ -1,20 +1,10 @@
 #!/usr/bin/env bash
-# vpn-diag.sh — VPNRouter network diagnostic suite (Linux/macOS).
-#
-# Runs a battery of connectivity/latency/throughput/reachability checks and prints
-# a readable report. Run it once WITHOUT the VPN (baseline) and once WITH the VPN
-# connected, then diff the two — that's how we quantify what the tunnel changes
-# (e.g. the full-tunnel ChatGPT failure). Degrades gracefully when a tool is absent.
-#
-# Usage:  ./vpn-diag.sh [label]      # label tags the report, e.g. "baseline" / "vpn-full"
-# Output: human report to stdout; machine summary to ./vpn-diag-<label>-<ts>.txt
 set -u
 
 LABEL="${1:-run}"
 TS="$(date +%Y%m%d-%H%M%S)"
 OUT="vpn-diag-${LABEL}-${TS}.txt"
 
-# Targets the user cares about (the ChatGPT-in-full-tunnel case + general).
 HTTP_TARGETS=(
   "https://chatgpt.com/"
   "https://chat.openai.com/"
@@ -38,7 +28,6 @@ log " VPNRouter diagnostic — label='${LABEL}'  $(date -Is)"
 log " host=$(hostname)  os=$(uname -sr)"
 log "============================================================"
 
-# 1) Egress IP + geo -------------------------------------------------------------
 hr; log "[1] Egress IP + geolocation"
 geo="$(curl -s -m 8 https://ipinfo.io/json 2>/dev/null)"
 if [ -n "$geo" ]; then
@@ -51,7 +40,6 @@ else
   log "    FAILED to reach ipinfo.io (no egress / DNS down)"
 fi
 
-# 2) DNS resolution (timed) ------------------------------------------------------
 hr; log "[2] DNS resolution (timed)"
 for d in "${DNS_TARGETS[@]}"; do
   t0=$(date +%s%3N)
@@ -62,7 +50,6 @@ for d in "${DNS_TARGETS[@]}"; do
   else log "    $(printf '%-22s' "$d") RESOLVE FAILED"; fi
 done
 
-# 3) ICMP ping (RTT + loss) ------------------------------------------------------
 hr; log "[3] ICMP ping (10 pkts: avg RTT + loss)"
 for p in "${PING_TARGETS[@]}"; do
   res=$(ping -c 10 -w 12 "$p" 2>/dev/null)
@@ -71,7 +58,6 @@ for p in "${PING_TARGETS[@]}"; do
   log "    $(printf '%-10s' "$p") loss=${loss:-n/a}  rtt(min/avg/max/mdev)=${rtt:-n/a} ms"
 done
 
-# 4) TCP connect latency :443 ----------------------------------------------------
 hr; log "[4] TCP+TLS connect latency :443 (3 tries each)"
 for hp in "${TCP_TARGETS[@]}"; do
   host="${hp%%:*}"; port="${hp##*:}"
@@ -88,7 +74,6 @@ for hp in "${TCP_TARGETS[@]}"; do
   fi
 done
 
-# 5) HTTP reachability (the key check) ------------------------------------------
 hr; log "[5] HTTP reachability — status + TTFB + total + bytes"
 for u in "${HTTP_TARGETS[@]}"; do
   r=$(curl -s -A 'Mozilla/5.0 vpn-diag' -m 20 -o /dev/null \
@@ -103,10 +88,6 @@ for u in "${HTTP_TARGETS[@]}"; do
   fi
 done
 
-# 6) Throughput -----------------------------------------------------------------
-# Cachefly is unthrottled on most paths; Cloudflare __down is throttled from some
-# networks (e.g. RU returns ~20 KB instead of the requested size), so use Cachefly
-# as primary with Cloudflare as fallback.
 hr; log "[6] Throughput (download)"
 dn=""
 for src in "https://cachefly.cachefly.net/10mb.test" "https://speed.cloudflare.com/__down?bytes=25000000"; do
@@ -118,7 +99,6 @@ for src in "https://cachefly.cachefly.net/10mb.test" "https://speed.cloudflare.c
   fi
 done
 [ -z "$dn" ] && log "    download: FAILED/throttled on all sources (got ${sz:-0} bytes, code ${code:-?})"
-# Upload (best-effort; some paths throttle the endpoint).
 up=$(head -c 8000000 /dev/zero 2>/dev/null | curl -s -m 30 -o /dev/null -w '%{speed_upload}|%{size_upload}' \
      --data-binary @- "https://speed.cloudflare.com/__up" 2>/dev/null)
 ubps="${up%%|*}"; usz="${up##*|}"
@@ -126,7 +106,6 @@ if [ -n "$ubps" ] && [ "${usz:-0}" -gt 1000000 ] 2>/dev/null; then
   log "    upload:   $(awk "BEGIN{printf \"%.1f\",$ubps/125000}") Mbit/s (${usz} bytes)"
 else log "    upload:   best-effort failed/throttled (skip)"; fi
 
-# 7) Path MTU probe (DF flag) ----------------------------------------------------
 hr; log "[7] Path-MTU probe (largest unfragmented to ${MTU_TARGET})"
 mtu_found=""
 for payload in 1472 1464 1422 1392 1352 1252; do   # +28 (IP+ICMP) = 1500/1492/1450/1420/1380/1280

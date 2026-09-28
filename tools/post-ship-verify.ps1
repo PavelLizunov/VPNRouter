@@ -1,6 +1,3 @@
-# One executable post-ship gate. Visual screenshots run headlessly in the
-# isolated test process; every app install, live UI action and network check is
-# delegated to the fixed-identity WINBRAT verifier.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -151,7 +148,6 @@ function Assert-ExactReleaseAssets {
     if ($actual.Count -ne $expected.Count -or $missing.Count -gt 0 -or $unexpected.Count -gt 0) {
         throw 'The published release does not contain the exact expected 16 assets.'
     }
-    # IDs and update timestamps bind verification to this immutable inventory.
     return (($release.assets | Sort-Object name | ForEach-Object {
         if (-not $_.id -or -not $_.updatedAt -or $_.size -le 0) { throw 'Incomplete release asset identity.' }
         '{0}|{1}|{2}|{3}' -f $_.name, $_.id, $_.size, $_.updatedAt
@@ -211,8 +207,6 @@ try {
 
     $CurrentStep = 'VisualGate'
     $dotnet = Resolve-ProjectDotNet
-    # Existing PageScreenshotTests walk the pages at fixed dimensions;
-    # VisualDiffTests enforce baseline dimensions and pixel tolerance.
     Invoke-CheckedNative -FilePath $dotnet -Arguments @(
         'test', (Join-Path $Root 'VPNRouter.Tests\VPNRouter.Tests.csproj'),
         '-c', 'Release',
@@ -220,7 +214,6 @@ try {
     ) -Step 'Page screenshot and visual-diff gate'
 
     $CurrentStep = 'CommitCi'
-    # The CI helper deliberately uses exit codes, so isolate it in a child host.
     Push-Location $Root
     try {
         Invoke-CheckedNative -FilePath $PowerShellHost -Arguments @(
@@ -295,8 +288,6 @@ try {
     $RemoteMutationStarted = $true
     & $BratVerify -Action deploy -Version $Version
 
-    # ColdCycles validates clean -> connected/TUN/tunnel -> held -> clean twice.
-    # It also runs fixed HTTPS/UDP probes and sanitized lifecycle classification.
     $CurrentStep = 'ColdCycles'
     & $BratStability -Mode ColdCycles -Version $Version -Cycles $Cycles -RunSinceUtc $RemoteVerificationStartedUtc.ToString('o')
     if ((Assert-ExactReleaseAssets) -cne $inventoryBefore) { throw 'Release inventory changed during verification.' }

@@ -1,14 +1,3 @@
-# Safety: fixed target only. Never accepts a caller-supplied host/IP/hostname
-# and never falls back to the local machine; every action first verifies over
-# WinRM that 100.115.182.0 really is WINBRAT, and fails closed on any mismatch.
-#
-# Interactive UI work (uia) never touches local process/input/screen
-# APIs from this dev box: a helper script is shipped to the verified brat box
-# and run there in the interactive console session via a unique transient
-# scheduled task. Moving the logged-on session onto the physical console
-# (tscon) also runs through a unique transient SYSTEM scheduled task, so no
-# password is ever needed. All remote transient files live under
-# C:\r4review\verify and are removed again in a finally block.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -17,7 +6,6 @@ param(
 
     [string]$Version,
 
-    # UIA element selectors (uia): AutomationId and/or Name required.
     [string]$AutomationId,
     [string]$Name,
     [string]$ControlType,
@@ -26,7 +14,6 @@ param(
     [string]$UiaOperation = 'Inspect',
     [string]$Value,
 
-    # logs: only inspect entries written during the recent verification window.
     [ValidateRange(1, 1440)]
     [int]$LogWindowMinutes = 120,
     [string]$LogPattern,
@@ -37,16 +24,12 @@ param(
     [ValidateSet('Control', 'Boundary')]
     [string]$ProbeProfile = 'Control',
 
-    # lifecycle: caller-provided timestamp only; raw lines never leave WINBRAT.
     [string]$SinceUtc
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Resolve a credential file: prefer the current checkout root (local-first),
-# then fall back to the primary worktree root via Git's common directory.
-# Never copies credentials into task worktrees; fails closed if neither exists.
 function Resolve-CredentialFile {
     param(
         [Parameter(Mandatory = $true)] [string]$FileName,
@@ -69,20 +52,12 @@ function Resolve-CredentialFile {
             }
         }
     }
-    # Neither location has the file. Return the local path so the caller's
-    # own Test-Path guard (New-VerifiedBratSession) produces the actionable
-    # missing-file error; this also keeps store/bootstrap paths reachable.
     return $local
 }
 
 $Root            = Split-Path $PSScriptRoot -Parent
-# Fixed transport endpoint: the windows-brat VM's Tailscale CGNAT address.
-# Caller-nonconfigurable on purpose (see header); the LAN 192.168.0.106 is retired.
 $BratIp          = '100.115.182.0'
 $BratMachineName = 'WINBRAT'
-# Credential file keeps its legacy LAN-era name on purpose: the DPAPI-encrypted
-# secret already exists under this filename, so we resolve it as-is and avoid any
-# secret copy/migration. Only the transport IP above changed, not the credential.
 $CredFile        = Resolve-CredentialFile -FileName '.testpc-cred-192.168.0.106.xml' -LocalRoot $Root
 $RemoteVerifyRoot = 'C:\r4review\verify'
 
@@ -119,8 +94,6 @@ function Invoke-BratInteractive {
         [int]$TimeoutSeconds = 30
     )
 
-    # The only place UIA code exists. Shipped to brat and run
-    # there; never dot-sourced or invoked on this dev box.
     $helper = @'
 # BEGIN REMOTE IN-SESSION HELPER
 param(
@@ -332,12 +305,6 @@ exit 0
         TimeoutSeconds = $TimeoutSeconds
     }) | ConvertTo-Json -Depth 5
 
-    # Put the target's logged-on session on the physical console so the helper
-    # has a real interactive desktop. Fail closed if nobody is logged on. If
-    # the explorer session already is the active console session, skip tscon.
-    # Otherwise run tscon through a unique transient SYSTEM scheduled task:
-    # tscon needs SeTcbPrivilege and a SYSTEM principal gets it without a
-    # password. Everything runs on the already identity-verified PSSession.
     $sessionProbe = Invoke-Command -Session $Session -ScriptBlock {
         $e = Get-Process -Name explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -gt 0 } | Select-Object -First 1
         if (-not $e) {
@@ -367,9 +334,6 @@ public static extern uint WTSGetActiveConsoleSessionId();
                 Register-ScheduledTask -TaskName $tn -Action $action -Principal $principal -Force | Out-Null
                 $tsconStart = Get-Date
                 Start-ScheduledTask -TaskName $tn
-                # Poll until the task has actually run (LastRunTime past start)
-                # and finished; a first Ready state before the run starts is
-                # not completion.
                 $deadline = (Get-Date).AddSeconds(30)
                 $finished = $false
                 $t = $null
@@ -416,21 +380,11 @@ public static extern uint WTSGetActiveConsoleSessionId();
             $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
             $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
             Register-ScheduledTask -TaskName $tn -Action $action -Principal $principal -Force | Out-Null
-            # Capture the start timestamp on the remote clock immediately
-            # before Start-ScheduledTask and return it: RanSinceStart then
-            # compares remote LastRunTime against a remote-clock value, which
-            # removes both the fast-exit race (local Get-Date taken after
-            # Invoke-Command returns can postdate a quick run) and any
-            # host/VM clock skew.
             $started = Get-Date
             Start-ScheduledTask -TaskName $tn
             $started
         }
 
-        # TimeoutSeconds bounds the helper's own UI matching; the controller
-        # adds 30 s of slack for WinRM transport and task startup on top.
-        # The slack deadline polls on the local clock; the remote status
-        # probes compare LastRunTime against $taskStart from the remote clock.
         $deadline   = (Get-Date).AddSeconds($TimeoutSeconds + 30)
         $resultRaw  = $null
         while ((Get-Date) -lt $deadline) {
@@ -452,9 +406,6 @@ public static extern uint WTSGetActiveConsoleSessionId();
                 break
             }
             if ($status.State -eq 'Missing') { throw "Transient helper task '$taskName' disappeared on $BratMachineName." }
-            # Fast exit: the task ran and is already finished, but no result
-            # file exists. An initial Ready state before LastRunTime advances
-            # is NOT a fast exit and keeps polling.
             if ($status.State -eq 'Ready' -and $status.RanSinceStart) {
                 Start-Sleep -Milliseconds 300
                 $late = Invoke-Command -Session $Session -ArgumentList $remoteRes -ScriptBlock { param($rs) if (Test-Path $rs) { Get-Content $rs -Raw } else { $null } }
@@ -464,8 +415,6 @@ public static extern uint WTSGetActiveConsoleSessionId();
             Start-Sleep -Milliseconds 500
         }
         if (-not $resultRaw) {
-            # One final atomic read: the helper may have published its result
-            # while the last poll round-trip was in flight.
             $final = Invoke-Command -Session $Session -ArgumentList $remoteRes -ScriptBlock { param($rs) if (Test-Path $rs) { Get-Content $rs -Raw } else { $null } }
             if ($final) {
                 $resultRaw = $final
@@ -536,9 +485,6 @@ switch ($Action) {
     'deploy' {
         if (-not $Version) { throw "deploy requires -Version (e.g. -Version 2.48.0-r3)." }
 
-        # Fail-closed integrity gate BEFORE any remote contact: the exact
-        # repo-root artifact and its .sha256 sidecar must both exist, and the
-        # recomputed hash must match the sidecar exactly. No match => no deploy.
         $zipName = "VPNRouter-v$Version-win.zip"
         $zipPath = Join-Path $Root $zipName
         $shaPath = "$zipPath.sha256"
@@ -551,8 +497,6 @@ switch ($Action) {
         if ($actual -ne $expected) { throw "SHA256 mismatch for $zipName`: sidecar=$expected actual=$actual. Failing closed; not deploying." }
         Write-Host "SHA256 verified for $zipName`: $actual" -ForegroundColor Green
 
-        # The generic deploy script verifies WINBRAT on the same session it uses
-        # for process stop/copy/install, avoiding a check-then-reconnect gap.
         & (Join-Path $Root 'deploy-to-testpc.ps1') -TestHost $BratIp -Version $Version -Credential (Import-Clixml $CredFile) -ExpectedMachineName $BratMachineName
         if ($LASTEXITCODE) { throw "deploy-to-testpc.ps1 failed (exit $LASTEXITCODE)." }
     }
@@ -967,10 +911,6 @@ switch ($Action) {
                 Add-Type -AssemblyName System.Net.Http
                 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-                # The OS route only proves entry into the TUN. The Clash delay
-                # endpoint for the canonical `proxy` outbound proves sing-box
-                # can actually egress through the selected proxy, even when the
-                # caller process itself is not included by split-tunnel rules.
                 $proxyResult = [ordered]@{ Success = $false; Status = 0; LatencyMs = 0; Error = 'Other' }
                 $proxyWatch = [System.Diagnostics.Stopwatch]::StartNew()
                 $proxyHttp = New-Object System.Net.Http.HttpClient
@@ -1025,11 +965,6 @@ switch ($Action) {
                 }
                 finally { $proxyHttp.Dispose() }
 
-                # The Clash delay request above performs the fixed HTTPS fetch
-                # through the canonical `proxy` outbound. Reuse that result as
-                # the HTTPS dataplane assertion; a second request made by this
-                # WinRM PowerShell process could legitimately select `direct`
-                # in include-split mode and must never satisfy the gate.
                 $httpResult = [ordered]@{
                     Success       = [bool]$proxyResult.Success
                     ProxyObserved = [bool]$proxyResult.Success
@@ -1634,8 +1569,6 @@ $udp.Dispose()
                 $ownedProcesses = @(Get-Process -Name VPNRouter.App,VPNRouter.GUI,VPNRouter.CLI,sing-box -ErrorAction SilentlyContinue)
                 foreach ($ownedProcess in $ownedProcesses) {
                     try {
-                        # Pin the process handle before killing: a reused PID must
-                        # not transfer termination authority to a foreign process.
                         $null = $ownedProcess.Handle
                         if (-not $ownedProcess.HasExited -and $ownedProcess.Path -and $ownedPaths -icontains $ownedProcess.Path) {
                             $ownedProcess.Kill()

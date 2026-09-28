@@ -1,13 +1,8 @@
 name: Build Free Configs Pool
 
-# Aggregates VLESS configs from all 14 public sources into a single pool.json
-# and publishes to the rolling 'free-pool-latest' GitHub release.
-# NO validation — just metadata (country, host, port, SNI) + raw URI.
-# Client validates per-user locally (TCP/TLS/HTTP via sing-box).
 
 on:
   schedule:
-    # Every 6 hours at :17 past the hour (offset from :00 to dodge CI load spikes)
     - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
@@ -37,10 +32,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Phase 1 Q9 — NuGet package cache. `dotnet run --project ...` restores
-      # PoolAggregator's NuGet deps every 6 h on cron; caching ~/.nuget/packages
-      # cuts cold restores out of the hot path. Q11 will pin actions/cache to
-      # a commit SHA.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -72,7 +63,6 @@ jobs:
             echo "::warning::Pool has only $COUNT entries (expected >= 1000) — sources may be degraded"
           fi
 
-          # Compress for smaller download + ETag stability
           gzip -k /tmp/out/pool.json
           ls -la /tmp/out/
 
@@ -82,8 +72,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Create the rolling 'free-pool-latest' release if missing.
-          # This release lives forever and gets new pool.json every 6h via --clobber.
           if ! gh release view free-pool-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Creating rolling release 'free-pool-latest'..."
             gh release create free-pool-latest \

@@ -1,10 +1,5 @@
 name: CodeQL
 
-# Audit item 15 (2026-06-25): advisory C# SAST for a public network-security
-# tool (untrusted subscription YAML / vless URIs, helper.cmd generation, the
-# update ZIP extractor). ADVISORY ONLY - alerts surface in the Security tab;
-# this is NOT a required branch-protection check and NOT part of the cut-stable
-# gate. Weekly + manual so it never blocks the ship/cut loop.
 
 on:
   schedule:
@@ -21,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      # Actions pinned to full commit SHAs; Dependabot (github-actions) bumps them.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -35,9 +29,6 @@ jobs:
         with:
           languages: csharp
 
-      # Manual build via the test project graph (Core + App + CLI/Service refs).
-      # Same target test.yml builds on ubuntu, so Android (NU1102) and the
-      # Windows-only MCP tool are excluded -> a clean restore+build for tracing.
       - name: Build
         run: |
           dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj

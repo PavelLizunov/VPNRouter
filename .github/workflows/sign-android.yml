@@ -1,7 +1,5 @@
 name: Sign Android APK
 
-# Retired: preuploaded APKs cannot establish source provenance. Keep an explicit
-# failing entry point so old operator commands cannot silently sign arbitrary bytes.
 on:
   workflow_dispatch:
     inputs:

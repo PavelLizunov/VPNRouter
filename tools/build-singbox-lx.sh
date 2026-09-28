@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# Build sing-box-lx (Leadaxe fork) with AmneziaWG (with_awg) + XHTTP for macOS/Linux.
-# Darwin/Linux port of tools/build-singbox-lx.ps1 — SAME pinned commits, SAME 4
-# conn/bind_std.go patches. All four live in one cross-platform file and are safe
-# off Windows:
-#   - H4 reserved-byte receive-clear GATE: pure AmneziaWG protocol fix, ESSENTIAL
-#     (without it every AWG transport packet is misclassified -> no data flows).
-#   - OOB nil-guard (golang/go#77875): the pooled OOB is a non-nil zero-length slice
-#     when controlSize==0, which is ALSO the case on macOS (per the upstream note);
-#     leaving it nil is correct everywhere.
-#   - WriteMsgUDP send site + WSAENOBUFS(10055) retry: the errno-10055 check never
-#     matches off Windows (darwin ENOBUFS==55), so the retry is dead-but-harmless;
-#     the nil-guard half still helps.
-# Output: a `sing-box` binary (no .exe). Keep the pins in sync with the .ps1.
 set -euo pipefail
 
 LX_REPO="https://github.com/Leadaxe/sing-box-lx"
@@ -19,10 +6,6 @@ LX_COMMIT="c7a2592e750406ade9ebaae1d0fdb7482fc0773e"
 WG_REPO="https://github.com/Leadaxe/wireguard-go-awg2-lx"
 WG_BRANCH="lx"
 WG_COMMIT="0c0c10b5d3236796bd3832a6813223d6dc7d0bb1"
-# Targeted upstream backports (applied build-time on the pinned fork tree). The working
-# tree is a Leadaxe/sing-box-lx clone, so origin points at Leadaxe and is NOT the proven
-# source of these two SagerNet commits — fetch the EXACT SHAs from the immutable upstream
-# URL, never origin, never a branch/tag (both mutable). Keep in sync with the .ps1.
 UPSTREAM_REPO="https://github.com/SagerNet/sing-box.git"
 TUN_BACKPORT="0b7ffbaafa5f060dd8c762dfbc751d592cba1fea"   # F1: sing-tun v0.8.11 (TUN system-stack TCP NAT collision)
 DNS_BACKPORT="72a8723e13b9574664f4c78e588069fa4aca6fc9"   # F2: DNS nested single-flight self-deadlock
@@ -33,7 +16,6 @@ GO="${GO:-go}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Fail early if the Go toolchain is older than the fork's go.mod directive (1.24.7).
 command -v git >/dev/null   || { echo "FATAL: git not found";     exit 1; }
 command -v python3 >/dev/null || { echo "FATAL: python3 not found"; exit 1; }
 "$GO" version >/dev/null 2>&1 || { echo "FATAL: Go toolchain '$GO' not runnable"; exit 1; }
@@ -42,16 +24,9 @@ if [ "$(printf '%s\n%s\n' "$MINGO" "$HAVEGO" | sort -V | head -1)" != "$MINGO" ]
   echo "FATAL: Go >=$MINGO required for the fork (have '${HAVEGO:-none}'). Set GO=/path/to/newer/go."; exit 1
 fi
 
-# Resolve OUT to an ABSOLUTE path now, while pwd is still the caller's dir. `go build`
-# runs after `cd "$SRC"` (a temp workdir), so a relative OUT (e.g. the Linux CI's
-# publish/linux-x64/sing-box) would land inside $WORK and get rm'd by the EXIT trap —
-# the binary built fine but vanished (r14 Linux CI). Mac passed an absolute path so it
-# was unaffected. Also ensure the target dir exists.
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 mkdir -p "$(dirname "$OUT")"
 
-# P2 supply-chain (2026-07-10): fail CLOSED if a pinned checkout drifts from the
-# expected commit (a moved tag/branch would otherwise bundle an unpinned tree).
 assert_git_head() {  # <repo-dir> <expected-sha> <label>
   head="$(git -C "$1" rev-parse HEAD)"
   if [ "$head" != "$2" ]; then
@@ -67,8 +42,6 @@ git clone --quiet "$LX_REPO" "$SRC"
 git -C "$SRC" checkout --quiet "$LX_COMMIT"
 assert_git_head "$SRC" "$LX_COMMIT" "sing-box-lx"
 
-# Targeted upstream backports on the pinned fork tree (no pin rotation): cherry-pick
-# --no-commit (no Git identity needed); set -e + grep -Fq gates below fail closed.
 echo "[1.5/4] Backport upstream fixes (sing-tun NAT + DNS single-flight)"
 git -C "$SRC" fetch --quiet "$UPSTREAM_REPO" "$TUN_BACKPORT" "$DNS_BACKPORT"
 git -C "$SRC" cherry-pick --no-commit "$TUN_BACKPORT" "$DNS_BACKPORT"
@@ -126,16 +99,10 @@ CGO_ENABLED=0 "$GO" build -trimpath -tags "$TAGS" \
   -o "$OUT" ./cmd/sing-box
 
 echo "[4/4] Verify build-info -tags carries with_awg + with_xhttp (NOT forgeable)"
-# Use `go version -m` (reads the embedded build settings) rather than running the
-# binary: the recorded `build -tags=...` is what Go compiled in, and it works for
-# CROSS-compiled outputs too (a linux ELF can't exec on a darwin host). Go silently
-# ignores unknown -tags, so a dropped tag / unresolved wireguard-go replace yields a
-# feature-less binary that ships green then FATALs every AWG/xhttp config at runtime.
 TAGSINFO="$("$GO" version -m "$OUT" 2>/dev/null | grep -E 'build[[:space:]]+-tags=' || true)"
 echo "  $TAGSINFO"
 echo "$TAGSINFO" | grep -q "with_awg"   || { echo "FATAL: built binary MISSING with_awg — do NOT bundle";   exit 1; }
 echo "$TAGSINFO" | grep -q "with_xhttp" || { echo "FATAL: built binary MISSING with_xhttp — do NOT bundle"; exit 1; }
-# Native build only: smoke the version line too (cross-compiled outputs can't run here).
 if [ "$("$GO" env GOOS)" = "$("$GO" env GOHOSTOS)" ] && [ "$("$GO" env GOARCH)" = "$("$GO" env GOHOSTARCH)" ]; then
   "$OUT" version | head -1
 fi

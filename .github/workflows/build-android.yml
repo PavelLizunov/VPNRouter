@@ -1,13 +1,5 @@
 name: Build Android APK
 
-# Triggered by:
-#  - pushing a v* tag (automatic on release)
-#  - manual dispatch (re-run on existing releases for missing APK)
-#
-# Mirrors the build-mac.yml / build-linux.yml shape so a single tag push
-# kicks off all platform builds in parallel. After this workflow lands,
-# release assets become 14 (was 12 = 4 Win + 2 Mac + 6 Linux). See
-# git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md Phase A for context.
 on:
   push:
     tags:
@@ -31,9 +23,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # The Android publish step selects android-arm64 as its active RID.
-    # Without singular RuntimeIdentifier, publish falls back to the Linux
-    # runner RID and tries to restore an unavailable Mono.linux-x64 pack.
 
     steps:
       - name: Validate requested version and dispatch ref
@@ -84,19 +73,6 @@ jobs:
             exit 1
           fi
 
-      # Wave 26 (Phase 6, 2026-05-18) — bumped to multi-version setup so
-      # both 8.0 + 10.0 SDKs are available. Wave 23 (commit c33e372,
-      # Phase 5) moved Android to net10.0-android36.0 + Avalonia 12 which
-      # requires the .NET 10 SDK; the rest of the solution stays on net8.0
-      # so we keep 8.0.x in the install list. setup-dotnet@v4 takes a
-      # multi-line list and side-by-side installs both runtimes.
-      #
-      # 2026-05-25 (Wave 32c): pinned 10.0.x → 10.0.100 in r4 to dodge the
-      # `Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8` NU1102
-      # restore failure. **Did not help** — even SDK 10.0.100's bundled
-      # workload manifest references the same missing pack. The SDK version
-      # was not the cause: publish had no active Android RuntimeIdentifier and
-      # fell back to the linux-x64 host RID.
       - name: Setup .NET 8 + 10 SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
@@ -104,10 +80,6 @@ jobs:
             8.0.x
             10.0.301
 
-      # Phase 1 Q9 — NuGet package cache. `dotnet publish` for the Android
-      # head restores hundreds of MB of packages on cold runs. Keyed on the
-      # union hash of every .csproj so any package version bump invalidates
-      # cleanly. Q11 will pin actions/cache to a commit SHA.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -115,10 +87,6 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      # Phase 1 Q9 — .NET Android workload cache. `dotnet workload install
-      # android` below takes 3–4 min on a cold runner (large SDK download).
-      # Caching ~/.dotnet/workloads keyed on global.json (where SDK + workload
-      # versions are pinned) avoids repeating that download on warm runs.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.dotnet/workloads
@@ -126,53 +94,24 @@ jobs:
           restore-keys: |
             dotnet-workloads-${{ runner.os }}-
 
-      # JDK 17 is the minimum for current AndroidX + .NET Android 8 build
-      # tools. Temurin matches the developer-VM toolchain documented in
-      # git show 6491be4c:plans/vpnrouter-android-handbook.md §3.5.
       - name: Setup JDK 17 (Temurin)
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
         with:
           distribution: temurin
           java-version: "17"
 
-      # android-actions/setup-android@v3 installs cmdline-tools, accepts
-      # SDK licenses, and exports ANDROID_HOME / ANDROID_SDK_ROOT.
-      # The .NET Android workload picks up these env vars automatically;
-      # no extra -p:AndroidSdkDirectory flag needed.
       - name: Setup Android SDK
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd  # v4.0.4
 
-      # Wave 26 (Phase 6, 2026-05-18) — explicit platforms;android-36
-      # + build-tools;36.0.0 install. setup-android only ships the
-      # default platform (android-34 as of v3.2.2); .NET Android 10
-      # build for net10.0-android36.0 needs API 36 + matching build-
-      # tools. Without this step `dotnet publish` fails with NETSDK1139
-      # ("target framework moniker 'net10.0-android36.0' is not
-      # recognized") or aapt2 missing-platform errors.
       - name: Install Android SDK platform 36
         run: |
           set -euo pipefail
           SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           "$SDKMGR" --install "platforms;android-36" "build-tools;36.0.0"
 
-      # The Android workload is not bundled with setup-dotnet; it has to
-      # be installed explicitly. ~3-4 min on a cold runner.
-      # Wave 26 (Phase 6, 2026-05-18) — added --skip-manifest-update.
-      # Without it the install bumps the workload manifest first which
-      # can pull a newer Android workload version than what the .NET 10
-      # SDK ships locally; the --skip flag pins to the SDK's bundled
-      # manifest (matches the developer-VM toolchain documented in the
-      # Phase 5 ship report `git show 6491be4c:plans/phase5-android-net10-2026-05-18.md`).
       - name: Install .NET Android workload
         run: dotnet workload install android --skip-manifest-update
 
-      # ── Decode signing keystore from secret ────────────────────────────
-      # The keystore was generated locally one-time (see roadmap Phase A
-      # "One-time keystore setup") and uploaded as ANDROID_KEYSTORE_BASE64.
-      # Losing this keystore means we can't ship updates to existing
-      # installs — Android refuses APKs signed with a different key on the
-      # same package id. Backup encrypted to multiple locations.
-      # Missing signing prerequisites fail the build, including build-only runs.
       - name: Decode signing keystore
         id: keystore_decode
         env:
@@ -184,81 +123,18 @@ jobs:
             exit 1
           fi
           echo "$KEYSTORE_B64" | base64 -d > "$GITHUB_WORKSPACE/vpnrouter.keystore"
-          # Sanity check — file exists and is non-empty.
           test -s "$GITHUB_WORKSPACE/vpnrouter.keystore"
           echo "Keystore decoded: $(stat -c '%s bytes' "$GITHUB_WORKSPACE/vpnrouter.keystore")"
 
-      # ── Provision libbox.aar from internal tooling release ─────────────
-      # Phase 7 Wave 32 (2026-05-19) — libbox.aar (sing-box gomobile
-      # binding, ~11.7 MB) is gitignored because it ships outside the
-      # repo. Local builds drop the aar at VPNRouter.Android/Lib/ by
-      # hand; CI restores it from a dedicated internal "tooling"
-      # release on the same repo, fetched via the ambient GITHUB_TOKEN.
-      #
-      # Why a release asset instead of a secret? GitHub Actions secrets
-      # are capped at 48 KB; base64-encoded libbox.aar is ~15.6 MB.
-      # Phase 6 Wave 26's LIBBOX_AAR_BASE64 design exceeded that cap
-      # by ~325x and was never possible to provision (returned HTTP
-      # 422 "Value is too large" on every `gh secret set` attempt).
-      # Release assets, by contrast, have a 2 GB per-file cap.
-      #
-      # The aar is referenced by VPNRouter.Android.csproj
-      # (<AndroidLibrary Include="Lib\libbox.aar" Bind="false" />) so
-      # `dotnet publish` fails with a missing-file error if this step
-      # is skipped — that's the dependent gate.
-      #
-      # Rotation: when sing-box bumps to 1.13.11+, build the new aar
-      # locally (see plans/vpnrouter-wgturn-cli-phase1.md + Phase A
-      # roadmap), then:
-      #
-      #   gh release create tooling-libbox-singbox-X.Y.Z \
-      #     --repo PavelLizunov/VPNRouter \
-      #     --prerelease \
-      #     --title "Tooling: libbox.aar (sing-box X.Y.Z gomobile binding)" \
-      #     --notes "Internal CI asset. See .github/SECRETS.md." \
-      #     VPNRouter.Android/Lib/libbox.aar
-      #
-      # CRITICAL: include `--prerelease`! Without it, GitHub auto-marks
-      # the tooling release as Latest, which breaks the install.ps1
-      # one-liner (it queries /releases?per_page=30 + filter
-      # not-prerelease + first → picks tooling, fails to find win.zip).
-      # The original 2026-05-19 tooling release missed this flag and
-      # broke installs for ~3 hours. Post-incident SECRETS.md was
-      # updated with the corrected provisioning command.
-      #
-      # The OLD tooling release can be deleted (or kept for history)
-      # after one stable cycle.
-      #
-      # See .github/SECRETS.md for the full rotation procedure.
-      # DO NOT commit a real libbox.aar — the
-      # VPNRouter.Android/Lib/libbox*.aar gitignore rule is intentional.
-      #
-      # Missing release, missing asset and API errors must all fail the build.
       - name: Provision libbox.aar from tooling release
         id: libbox_provision
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Pin to a specific tooling release to make sing-box upgrades
-          # explicit. When libbox.aar is rebuilt against a new sing-box
-          # version, bump BOTH of these together — the release tag AND the
-          # expected SHA256 below. A stale hash is a HARD failure (see the
-          # integrity gate in the run block), so they can't silently drift.
-          # See block comment above for the full rotation procedure.
           LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
-          # Expected SHA256 of the pinned libbox.aar asset. Authoritative
-          # source: `sha256sum` of the asset attached to LIBBOX_RELEASE_TAG
-          # (tools/build-libbox-aar.sh also emits it as `aar_sha256` in its
-          # version.json fingerprint). That script is the committed build
-          # recipe — sing-box version, build tags, Go + sagernet/gomobile +
-          # NDK pins — for reproducing this exact artifact.
           LIBBOX_AAR_SHA256: "239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib
-          # --pattern restricts download to the expected asset name.
-          # The tooling release should only contain libbox.aar but be
-          # defensive in case future assets get added (e.g., debug
-          # variants, sha256 sidecars).
           if ! gh release download "$LIBBOX_RELEASE_TAG" \
                --repo "$GITHUB_REPOSITORY" \
                --pattern "libbox.aar" \
@@ -266,16 +142,7 @@ jobs:
             echo "::error::Failed to fetch required libbox.aar from tooling release $LIBBOX_RELEASE_TAG."
             exit 1
           fi
-          # Fail loudly if the downloaded asset is empty / corrupt.
-          # test -s succeeds only when the file exists AND has
-          # non-zero size; a torn download or wrong-name asset would
-          # produce a 0-byte file here.
           test -s VPNRouter.Android/Lib/libbox.aar
-          # Supply-chain integrity gate: the downloaded AAR must match the
-          # pinned SHA256 exactly. A mismatch means the tooling-release
-          # asset changed out from under the pin (re-upload, corruption, or
-          # tampering) — fail CLOSED rather than build a native runtime we
-          # can't vouch for. Absent and incorrect assets both fail closed.
           ACTUAL_SHA="$(sha256sum VPNRouter.Android/Lib/libbox.aar | awk '{print $1}')"
           if [ "$ACTUAL_SHA" != "$LIBBOX_AAR_SHA256" ]; then
             echo "::error::libbox.aar SHA256 mismatch on release $LIBBOX_RELEASE_TAG"
@@ -286,15 +153,6 @@ jobs:
           fi
           echo "libbox.aar provisioned + SHA256 verified ($(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar)) from release $LIBBOX_RELEASE_TAG"
 
-      # ── Build signed APK ───────────────────────────────────────────────
-      # arm64-only by default — covers all currently-shipping phones at
-      # ~47 MB instead of ~120 MB for the all-RID fat APK. arm/x64/x86
-      # variants can be added later as separate publish jobs if user
-      # demand surfaces.
-      #
-      # csproj has AndroidSigningKeyStore="vpnrouter.keystore" gated on
-      # Configuration=Release; we override with the absolute path so the
-      # MSBuild target finds the file regardless of working directory.
       - name: dotnet publish (android-arm64, signed)
         env:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -304,11 +162,6 @@ jobs:
             echo "::error::ANDROID_KEYSTORE_PASSWORD secret is not set."
             exit 1
           fi
-          # audit batch-8 (2026-07-10): pass VpnRouterVersion=$VERSION explicitly
-          # so the APK's versionName/versionCode derive from the RELEASE version,
-          # not the AppVersion.cs fallback (which could drift from the tag). The
-          # validate step above already hard-fails on drift; passing it here makes
-          # the built APK deterministic w.r.t. the tag regardless.
           dotnet publish VPNRouter.Android/VPNRouter.Android.csproj \
             -c Release \
             -p:VpnRouterVersion="${{ steps.version.outputs.version }}" \
@@ -319,10 +172,6 @@ jobs:
             -p:AndroidSigningKeyAlias=vpnrouter \
             -p:AndroidSigningKeyPass="$KS_PASS"
 
-      # ── Locate + rename APK ────────────────────────────────────────────
-      # The exact output path depends on .NET Android SDK version (with vs
-      # without RID subdir under bin/). `find` is more robust than hard-
-      # coding the path. The signed APK always carries the -Signed suffix.
       - name: Locate + rename APK
         id: apk
         run: |
@@ -380,7 +229,6 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           APK="${{ steps.apk.outputs.apk }}"
 
-          # Re-resolve the remote tag after the build; never upload stale provenance.
           git fetch --no-tags origin "refs/tags/$TAG"
           if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$GITHUB_SHA" ]; then
             echo "::error::Remote tag changed since this workflow started."
