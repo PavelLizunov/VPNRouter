@@ -2,7 +2,7 @@
 # GitHub Actions artifact to SignPath, verify every required Authenticode
 # signature on Windows, then upload only to an existing DRAFT release.
 #
-# Enrollment: plans/code-signing-signpath-runbook-2026-07-10.md
+# Enrollment: docs/code-signing-signpath-runbook.md
 
 name: Sign Windows (SignPath)
 

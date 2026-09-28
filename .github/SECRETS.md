@@ -171,7 +171,7 @@ No production impact — the workflow no longer reads this secret.
 ## `ANDROID_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PASSWORD`
 
 One-time keystore generation procedure: see
-`plans/vpnrouter-android-platform-parity-roadmap.md` Phase A
+`git show 6491be4c:plans/vpnrouter-android-platform-parity-roadmap.md` (archived), Phase A
 "One-time keystore setup".
 
 Loss of the keystore is catastrophic — Android refuses APK updates

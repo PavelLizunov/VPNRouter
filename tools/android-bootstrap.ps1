@@ -1,5 +1,5 @@
 # android-bootstrap.ps1 — reproducible toolchain installer for VPNRouter
-# Android development. Meta-test #8 (`plans/android-development-methodology.md`)
+# Android development. Meta-test #8 (`docs/android-development-methodology.md`)
 # requires this script: «toolchain bootstrap works on fresh VM».
 #
 # Idempotent: run multiple times, skips already-installed parts.

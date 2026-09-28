@@ -1,7 +1,7 @@
 # Performance baselines
 
 Pinned performance baselines for regression detection per
-`plans/android-development-methodology.md` §5.
+`docs/android-development-methodology.md` §5.
 
 ## Files
 

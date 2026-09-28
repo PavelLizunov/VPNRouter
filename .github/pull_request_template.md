@@ -7,7 +7,7 @@
 ## Tests added
 
 - [ ] Followed Test-First when contract was clear
-      (per `plans/android-development-methodology.md` §1.1)
+      (per `docs/android-development-methodology.md` §1.1)
 - [ ] Anti-fitted-to-fit checklist 6+/8 items pass (§6):
   - [ ] Test name reflects user-story / contract (not «test_for_pr_42»)
   - [ ] Setup builds state as user would (UI / API), not direct private mutation

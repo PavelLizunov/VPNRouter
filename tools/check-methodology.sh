@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-methodology.sh — runs all meta-tests from
-# plans/android-development-methodology.md. Exits non-zero if any
+# docs/android-development-methodology.md. Exits non-zero if any
 # methodology rule is violated. Hooked into pre-push (manually for now).
 #
 # Usage:
@@ -59,7 +59,7 @@ fi
 # ─── Meta-test 2: architectural drift ─────────────────────────────────
 echo "── #2: architectural drift ──"
 last_arch_review=$(git log --since="3 months ago" --format=%H -- \
-  plans/android-development-methodology.md 2>/dev/null | head -1)
+  docs/android-development-methodology.md 2>/dev/null | head -1)
 if [ -z "$last_arch_review" ]; then
   warn "methodology not touched in 90 days — architecture may be drifting"
 else
@@ -119,7 +119,7 @@ fi
 echo "── #7: phase progress ──"
 # Doc should have one '✓' or 'done' per completed phase. If new phase
 # work is committed but doc says 'next', that's drift.
-if grep -qE "Phase 1.*next" plans/android-development-methodology.md 2>/dev/null; then
+if grep -qE "Phase 1.*next" docs/android-development-methodology.md 2>/dev/null; then
   # Check if there are any Phase 1 commits in last 30 days
   phase1_commits=$(git log --since="30 days ago" --grep="Phase 1" --oneline 2>/dev/null | wc -l)
   if [ "$phase1_commits" -gt 0 ]; then
@@ -146,9 +146,9 @@ fi
 # ─── Meta-test 9: doc freshness vs Android churn ──────────────────────
 echo "── #9: doc freshness vs Android churn ──"
 android_commits_30=$(git log --since="30 days ago" --oneline -- VPNRouter.Android/ 2>/dev/null | wc -l)
-doc_age=$(git log -1 --format=%cr plans/android-development-methodology.md 2>/dev/null || echo "unknown")
+doc_age=$(git log -1 --format=%cr docs/android-development-methodology.md 2>/dev/null || echo "unknown")
 if [ "$android_commits_30" -gt 5 ]; then
-  doc_recent=$(git log --since="30 days ago" --format=%H -- plans/android-development-methodology.md 2>/dev/null | head -1)
+  doc_recent=$(git log --since="30 days ago" --format=%H -- docs/android-development-methodology.md 2>/dev/null | head -1)
   if [ -z "$doc_recent" ]; then
     warn "$android_commits_30 Android commits in 30d but methodology not updated (last: $doc_age)"
   else

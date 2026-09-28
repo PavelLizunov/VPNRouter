@@ -40,7 +40,7 @@ When release or platform facts change, update this file.
   notarization. Integrity is verified with `.sha256` sidecars. The fail-closed
   SignPath workflow is prepared, but Windows signing remains owner-blocked on
   OSS enrollment, five repository secrets and the expected-signer variable; see
-  `plans/code-signing-signpath-runbook-2026-07-10.md`.
+  `docs/code-signing-signpath-runbook.md`.
 - **Android is ARM64-only** and distributed by direct APK download; there is no
   Play Store package yet. The in-app updater (`AndroidApp.AutoUpdate.cs`)
   delivers later signed APKs.

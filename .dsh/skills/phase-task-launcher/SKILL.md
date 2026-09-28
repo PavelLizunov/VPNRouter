@@ -6,7 +6,7 @@ whenToUse: Before v3.0/refactor work, audit follow-ups, or any approved code cha
 
 # Phase task launcher
 
-Read `docs/agent-contract.md`, the relevant zone document and `plans/v3.0-execution-methodology.md` before implementation.
+Read `docs/agent-contract.md`, the relevant zone document and `docs/execution-methodology.md` before implementation.
 
 ## Required lifecycle
 

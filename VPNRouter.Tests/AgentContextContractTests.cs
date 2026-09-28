@@ -205,10 +205,8 @@ public sealed class AgentContextContractTests
             "docs/test-workers.md",
             "docs/REVIEW_AGENT_PROMPT.md",
             ".github/SECRETS.md",
-            "README-VM.md",
-            "plans/project-cheatsheet.md",
-            "plans/v3.0-execution-methodology.md",
-            "plans/host-build-testvm-workflow.md",
+            "docs/project-cheatsheet.md",
+            "docs/execution-methodology.md",
             "VPNRouter.Core/AGENTS.md",
             "VPNRouter.App/AGENTS.md",
             "VPNRouter.Android/AGENTS.md",
@@ -222,7 +220,6 @@ public sealed class AgentContextContractTests
             ".githooks/AGENTS.md",
             "packaging/AGENTS.md",
             "plans/AGENTS.md",
-            "design/AGENTS.md",
             ".dsh/AGENTS.md"
         };
         activeFiles.AddRange(Directory.EnumerateFiles(Path.Combine(root, ".dsh", "skills"), "*.md", SearchOption.AllDirectories)
@@ -271,7 +268,6 @@ public sealed class AgentContextContractTests
         ".githooks/AGENTS.md",
         "packaging/AGENTS.md",
         "plans/AGENTS.md",
-        "design/AGENTS.md",
         ".dsh/AGENTS.md"
     ];
 

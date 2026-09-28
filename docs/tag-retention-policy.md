@@ -1,7 +1,7 @@
 # Tag and release retention
 
 This document owns tag naming and retention. The [agent contract](agent-contract.md)
-owns safety and authority; the [release strategy](../plans/vpnrouter-release-strategy.md)
+owns safety and authority; the [release strategy](release-strategy.md)
 and release skills own publication and verification. Adopting this policy does not
 create, delete or move tags, delete releases, or configure GitHub enforcement.
 

@@ -51,4 +51,21 @@ Revert the PR; all content is in Git history.
 
 ## Outcome
 
-Pending.
+- Removed 816 files (about 120k lines): 715 under `plans/`, 28 `design/`,
+  59 `opendesign/`, plus lab scripts, unused root icons, the winget manifest and
+  one-off helpers. `plans/` now holds `AGENTS.md`, `OPEN-DEFECTS.md` and this brief.
+- Moved 10 live documents to `docs/` and indexed them in `docs/AGENTS.md`;
+  rewrote every reference to their old paths (skill, hook comment, PR template,
+  workflow comment, scripts, test comments, ledger).
+- `tools/check-methodology.sh` now reads `docs/android-development-methodology.md`.
+- `AgentContextContractTests` lists updated (moved files, removed
+  `README-VM.md`, host workflow plan and `design/AGENTS.md`); contract zone row
+  for `design/` removed in the same change.
+- README, `.github/SECRETS.md` and 19 ledger links now point to
+  `git show 6491be4c:plans/<file>` instead of missing files.
+- Left as history pointers (non-breaking, explained in `plans/AGENTS.md`):
+  code comments, workflow and script comments, `.gitignore` rules for removed
+  files, and "see also" lines inside moved documents. Handled in later stages.
+- Checks: line endings preserved; no relative Markdown link is broken; the
+  open P0/P1 gate set is unchanged (21 lines); exact-head CI recorded on PR #327.
+- `tools/zapret/` untouched pending the owner decision.

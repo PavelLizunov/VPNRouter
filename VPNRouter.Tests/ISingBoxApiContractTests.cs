@@ -23,7 +23,7 @@ namespace VPNRouter.Tests;
 ///   the URL templates or DTOs.</item>
 /// </list>
 ///
-/// <para>Why no <c>Moq</c>: per <c>plans/v3.0-execution-methodology.md</c>
+/// <para>Why no <c>Moq</c>: per <c>docs/execution-methodology.md</c>
 /// §5 — "Don't use Moq for fakes — write small inline impls per test
 /// class." The HttpListener pattern is the cheap, dependency-free way
 /// to hit the real HttpClient code path; the FakeSingBoxApi is hand-rolled.</para>
