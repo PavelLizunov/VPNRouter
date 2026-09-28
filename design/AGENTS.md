@@ -1,4 +1,4 @@
-# design/ — DSH Agent Instructions
+# Design instructions
 
 Design handoff bundles, visual tokens, and UI layout reference specs for VPNRouter.
 
@@ -7,7 +7,7 @@ Before taking actions under `design/`, review [`docs/agent-contract.md`](../docs
 ## Workflow & Skills
 
 - **Handoff Skill**: Use `.dsh/skills/merge-design-handoff` (or `merge-design-handoff` in the DSH skill catalog) when integrating design handoff packages into Avalonia UI.
-- **Subagents & Orchestration**: Delegated UI implementation or review tasks use DSH `subagent`; use `workflow` only when the user explicitly requests it or large scripted orchestration.
+- **Delegation**: Follow global Harness model-routing policy and current tool permissions. A design task does not authorize an unavailable worker route or a large review campaign.
 - **Provenance**: Transcripts under `design/chats/` and historical design specs are preserved as source-material context; they do not override current code or the canonical contract.
 
 ## Token Mapping

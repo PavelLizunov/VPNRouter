@@ -1,18 +1,21 @@
-# docs/ Directory Instructions
+# Documentation instructions
 
-This document governs the `./docs/` directory, which houses the canonical project contracts, test worker topology, and adversarial review prompts.
+Follow [the project contract](agent-contract.md) and root [AGENTS.md](../AGENTS.md).
+This directory owns repository contracts, worker guidance and review prompts.
 
-## Document Index & Precedence
+## Owners
 
-| File | Purpose & Precedence |
-|---|---|
-| `docs/agent-contract.md` | **Canonical Project Contract**. The supreme authority for ownership, working model, safety, Git rules, test oracles, and release gates. All local `AGENTS.md` files and instructions must yield to this file. |
-| `docs/test-workers.md` | **Worker Topology & Resource Rules**. Single source of truth for remote test VMs (such as `windows-brat`), Tailscale worker hostnames, capability tags, and execution constraints. Volatile credentials or IPs must never be copied elsewhere. |
-| `docs/REVIEW_AGENT_PROMPT.md` | **Adversarial Review Prompt**. Standardized instructions and review lenses (correctness, tests, security, regressions) used when conducting multi-agent reviews or bug-hunts before release cuts. |
+- [agent-contract.md](agent-contract.md): project safety, Git, tests and release gates.
+- [test-workers.md](test-workers.md): worker roles, preflight and resource constraints.
+- [REVIEW_AGENT_PROMPT.md](REVIEW_AGENT_PROMPT.md): bounded reviewer brief and evidence requirements.
 
-## Critical Invariants for Documentation Under `docs/`
+## Editing
 
-1. **No Direct Push to Main**: The canonical remote is `origin`. Never push directly to `main` (`docs/agent-contract.md` rule 1).
-2. **No Emoji Rule**: Do not add emoji to code, configuration, or documentation (`docs/agent-contract.md` rule 6).
-3. **No Secrets**: Never commit tokens, UUIDs, subscription endpoints, or credentials into repository files (`docs/agent-contract.md` rule 5).
-4. **Authority Separation**: A green test or verification check is evidence, not release authority. Candidate cuts, stable cuts, and deployments require explicit owner approval.
+- Keep one owner for each rule. Link to global Harness guidance for model routing;
+  project documents cannot grant tool permissions or override global safety rules.
+- Verify source paths, test names and commands against the current branch.
+  Mark historical observations as such rather than presenting them as readiness.
+- Keep instructions in concise English with plain Markdown. Do not add decorative
+  symbols, credentials, live subscription endpoints or raw logs.
+- Preserve explicit owner authorization for merges, tags, releases and deployments.
+  Documentation edits and green checks do not grant that authority.

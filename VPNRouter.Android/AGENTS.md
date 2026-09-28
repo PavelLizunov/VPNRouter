@@ -11,9 +11,9 @@ Source-links `VPNRouter.Core` directly (`<Compile Include="..\VPNRouter.Core\**\
 
 Canonical test oracle: `docs/agent-contract.md`.
 
-Run unit and shared Android-logic characterization tests:
+Run shared Android-logic unit tests (not an APK or AndroidApp surface check):
 ```powershell
-dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidAppCharacterizationTests|FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
 ```
 
 Release APK Build (requires local `libbox.aar` in `VPNRouter.Android/Lib/`):
@@ -35,10 +35,10 @@ Output artifact: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.a
 - `VPNRouter.Android/Lib/`: Local AAR and JAR libraries (`libbox.aar`, `zxing-android-embedded-4.3.0.aar`, `zxing-core-3.5.3.jar`).
 - `VPNRouter.Android/Resources/`: Android XML configs (`xml/file_paths.xml`) and launcher drawables (`mipmap-*/`).
 
-## AndroidApp Partial-Class Architecture & Member Surface Invariant
+## AndroidApp partial-class architecture
 
 - `AndroidApp : Avalonia.Application` is the cross-platform application entry point split across partial files. `AndroidApp.axaml.cs` manages constructor, framework initialization, shared fields, and cross-concern orchestration; partial sibling files own specific feature surfaces.
-- **Wave 9 Characterization Invariant**: `VPNRouter.Tests/AndroidAppCharacterizationTests` pins a source-derived SHA-256 hash of all member declarations across `AndroidApp*.cs` files. Any extraction or refactoring that drops, renames, or alters member signatures will fail this test. Update `PinnedHash` in `AndroidAppCharacterizationTests` only when intentional surface modifications are made.
+- The former AndroidApp source-hash characterization test is absent from the current suite. Before a mechanical split, establish an applicable characterization baseline; shared Core unit tests do not prove preservation of the Android UI/member surface. The September 16 test-prune entry in `plans/OPEN-DEFECTS.md` tracks the missing coverage.
 
 ## Java Sources & SingBox Native Runtime
 
