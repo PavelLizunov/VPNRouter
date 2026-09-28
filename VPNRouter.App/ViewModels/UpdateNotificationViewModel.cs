@@ -100,6 +100,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     private UpdateSourceInfo? _pendingUpdate;
 
+    // Once an error is shown, a late async status post must not overwrite it.
     private volatile bool _errorLocked;
 
     public UpdateNotificationViewModel(UpdateSettings settings, ILogger logger)

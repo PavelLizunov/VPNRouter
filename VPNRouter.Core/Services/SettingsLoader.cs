@@ -304,6 +304,7 @@ public static class SettingsLoader
 
         var yaml = serializer.Serialize(settings);
 
+        // Temp file, fsync, atomic rename: a crash mid-write must not truncate config.yaml.
         var tmp = configPath + ".tmp";
         try
         {

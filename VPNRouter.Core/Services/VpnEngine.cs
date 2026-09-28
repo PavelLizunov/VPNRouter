@@ -605,7 +605,9 @@ public class VpnEngine : IDisposable
 
         try { _probeCts?.Cancel(); } catch { }
         _warmupConfirmed = false;
+        // Dispose the health monitor before sing-box, or its poll sees sing-box exiting and restarts it mid-stop.
         try { _healthMonitor?.Dispose(); } catch { }
+        // Dispose, not Stop: unhooks the ProcessExit handler so each connect cycle does not leak a manager.
         try { _singBox?.Dispose(); } catch { }
         try { _slipstream?.Dispose(); } catch { }
 

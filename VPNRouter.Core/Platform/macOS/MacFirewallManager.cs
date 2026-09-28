@@ -590,6 +590,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
+    // If the engaged marker survived a hard kill while the kill switch was live, unblock the network on the next start.
     internal void CleanupOrphanedRules(ILogger? logger)
     {
         lock (_gate)

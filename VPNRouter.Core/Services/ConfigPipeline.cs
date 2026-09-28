@@ -46,6 +46,7 @@ internal static class ConfigPipeline
                 }
                 else
                 {
+                    // On restart validation is advisory, except the static IPv6-leak invariant, which must still block.
                     if (validation.Errors.Any(e =>
                             e.Contains("ipv4_only", StringComparison.OrdinalIgnoreCase)
                             || e.Contains("dns.strategy", StringComparison.OrdinalIgnoreCase)))

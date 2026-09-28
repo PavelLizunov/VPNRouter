@@ -955,6 +955,7 @@ public partial class AndroidApp
         }
         catch (System.Exception ex)
         {
+            // Never wipe the user's server list on a parse or persist failure: keep prior settings, surface the error and abort the apply.
             global::Android.Util.Log.Warn("VpnRouter.FC",
                 $"Apply public config failed — {ex.GetType().Name}: {ex.Message}; servers left unchanged");
             ShowMenuFeedback(Localization.FcApplyFailed);

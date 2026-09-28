@@ -13,6 +13,7 @@ public class FirewallManager : IFirewallManager
 
     private const int NetshTimeoutMs = 5000;
 
+    // DNS lockdown blocks outbound DNS ports on every adapter except loopback; sing-box resolves over DoH inside the tunnel, so it is unaffected.
     internal const string DnsLockdownAllowRule = "0_VPNRouter-DnsLockdown-LoopbackAllow";
     internal const string DnsLockdownTunAllowRule = "0_VPNRouter-DnsLockdown-TunAllow";
     internal const string DnsLockdownUdp53Rule = "VPNRouter-DnsLockdown-UDP53";

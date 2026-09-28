@@ -122,11 +122,13 @@ public partial class SingBoxManager
 
     private void StopInternal(bool releaseLock)
     {
+        // Only one thread runs StopInternal at a time; _stopState resets in finally.
         if (Interlocked.CompareExchange(ref _stopState, 1, 0) != 0)
         {
             _logger.Debug("[SingBoxManager] StopInternal: concurrent call detected (releaseLock={Release}), skipping", releaseLock);
             return;
         }
+        // Set before any Kill so a late Exited callback is recognised as part of the intentional stop.
         _stopInProgress = true;
         try
         {
@@ -427,6 +429,7 @@ public partial class SingBoxManager
 
             lock (s_tunRemovalGate)
             {
+                // A cleanup may have been queued while awaiting; join the new tail too so launch never races a pnputil removal.
                 if (!ReferenceEquals(s_pendingTunRemoval, pending))
                     continue;
 
@@ -445,6 +448,7 @@ public partial class SingBoxManager
 
     private bool RestartCore()
     {
+        // A stale HealthMonitor restart continuation can arrive after Dispose: never relaunch a disposed manager.
         if (Volatile.Read(ref _disposed) != 0)
         {
             _logger.Debug("[SingBoxManager] Restart ignored — manager already disposed");
@@ -458,6 +462,7 @@ public partial class SingBoxManager
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
 
+        // Set before StopInternal so a late Exited event during Restart is not reported as a crash.
         _restartInProgress = true;
         var oldHandle = _handle;
         try
@@ -662,6 +667,7 @@ public partial class SingBoxManager
             CaptureStdout: true,
             CaptureStderr: true);
 
+        // Last-moment disposal re-check at the spawn point: Dispose can race past the entry guard.
         if (Volatile.Read(ref _disposed) != 0)
         {
             _logger.Debug("[SingBoxManager] LaunchProcess aborted — manager disposed before spawn");

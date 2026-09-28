@@ -19,6 +19,7 @@ public static partial class ConfigGenerator
             new() { Action = "sniff", Timeout = "300ms" },
         };
 
+        // DNS-tunnel self-exclusion must precede hijack-dns and the proxy final, or slipstream's own resolver traffic loops back into the tunnel.
         if (isDnsTunnel)
         {
             if (dnsTunnelResolverIps is { Count: > 0 })

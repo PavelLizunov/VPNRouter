@@ -96,6 +96,7 @@ internal static class SplitTunnelDriverProtocol
         return buf;
     }
 
+    // Driver ABI: 40-byte buffer with fixed offsets (tunnel v4 @0, internet v4 @4, tunnel v6 @8, internet v6 @24).
     public static byte[] BuildAddresses(IPAddress? tunnelV4, IPAddress? internetV4, IPAddress? tunnelV6, IPAddress? internetV6)
     {
         var buf = new byte[40];

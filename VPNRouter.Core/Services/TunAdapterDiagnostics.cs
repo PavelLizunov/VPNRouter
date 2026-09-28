@@ -25,6 +25,7 @@ public static class TunAdapterDiagnostics
     internal static Func<TimeSpan, CancellationToken, Task> RemovalDelayAsync { get; set; } =
         static (delay, ct) => Task.Delay(delay, ct);
 
+    // Windows 10 before build 19041 (LTSC 2019) lacks pnputil /remove-device: use SetupAPI there.
     internal static Func<bool> RequiresNativePnpApi { get; set; } =
         static () => RequiresNativePnpForWindowsBuild(Environment.OSVersion.Version.Build);
     internal static bool RequiresNativePnpForWindowsBuild(int build) => build < 19041;

@@ -55,6 +55,7 @@ public partial class AndroidApp
 
     private CancellationTokenSource? _srvTestAllCts;
 
+    // Coalesces a burst of probe results into one list rebuild (avoids O(N^2) rebuilds); Interlocked because up to 4 probes complete concurrently.
     private int _srvRebuildScheduled;
 
     private Control BuildServersTabContent()

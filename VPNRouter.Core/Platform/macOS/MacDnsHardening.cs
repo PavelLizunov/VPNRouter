@@ -48,6 +48,7 @@ public sealed class MacDnsHardening : IUnixDnsHardening
                 SaveState(new MacDnsState { Service = service, OriginalServers = original });
             }
 
+            // Claim success only if networksetup applied the change; keep the saved state either way so Restore still runs.
             if (SetDnsServers(service, new[] { dnsTarget }, logger))
             {
                 FlushDnsCache(logger);
