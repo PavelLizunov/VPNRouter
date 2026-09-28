@@ -104,7 +104,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 
 ## Каталог фич
 
-Исторический каталог фич (аудит baseline v2.32.3 от 2026-05-17): **53 фичи** в 11 категориях. Полный справочник с flow-диаграммами + рейтингом сложности + service chains лежит в [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md). Сводка:
+Исторический каталог фич (аудит baseline v2.32.3 от 2026-05-17): **53 фичи** в 11 категориях. Полный справочник с flow-диаграммами + рейтингом сложности + service chains лежит в `git show 6491be4c:plans/feature-catalog-2026-05-17.md` (archived). Сводка:
 
 | Категория | Фич | Сложность | Платформы |
 |---|---:|---|---|
@@ -238,10 +238,8 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 > **Примечание**: Desktop-сборки (Windows, macOS, Linux) по умолчанию используют официальные релизные артефакты `PavelLizunov/sing-box-vpnctl` `v1.14.0-vpnctl.5`. Android по решению владельца сохраняет legacy-тулинг sing-box 1.13.10 (`libbox.aar`, Android 6.0+ / API 23+), а не мигрирует целиком на vpnctl.
 
 См. [`CURRENT_STATE.md`](CURRENT_STATE.md) для актуальной матрицы платформ и
-сборок, [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md)
-для feature-flow справочника и
-[`plans/v3.0-refactor-roadmap.md`](plans/v3.0-refactor-roadmap.md) для
-исторического baseline и дальнейших задач v3.0.
+сборок. Исторические планы, включая каталог фич и roadmap v3.0, вынесены из
+дерева; их можно прочитать через `git show 6491be4c:plans/<file>`.
 
 ## Как это работает (высокий уровень)
 

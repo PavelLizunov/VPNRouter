@@ -38,7 +38,6 @@ Read the relevant zone document before changing that area:
 | Git hooks | `.githooks/AGENTS.md` |
 | Installers and packages | `packaging/AGENTS.md` |
 | Plans and outcomes | `plans/AGENTS.md` |
-| Design references | `design/AGENTS.md` |
 | Project DSH skills | `.dsh/AGENTS.md` |
 | Documentation and contracts | `docs/AGENTS.md` |
 

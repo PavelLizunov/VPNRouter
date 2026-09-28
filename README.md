@@ -108,7 +108,7 @@ The Free Configs tab collects public VLESS endpoints. A scheduled server-side jo
 
 ## Feature matrix
 
-Historical feature catalog (v2.32.3 baseline audit, 2026-05-17): **53 features** across 11 categories. Full reference with per-feature flow diagrams + complexity ratings + service chains lives in [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md). Summary:
+Historical feature catalog (v2.32.3 baseline audit, 2026-05-17): **53 features** across 11 categories. Full reference with per-feature flow diagrams + complexity ratings + service chains lives in `git show 6491be4c:plans/feature-catalog-2026-05-17.md` (archived). Summary:
 
 | Category | Features | Complexity | Platforms |
 |---|---:|---|---|
@@ -237,11 +237,9 @@ Core services live in `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle)
 
 > **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.0-vpnctl.5` release artifacts. Android intentionally retains legacy tooling sing-box 1.13.10 (`libbox.aar`, Android 6.0+ / API 23+) per owner decision rather than migrating all platforms to vpnctl.
 
-See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the current platform/build matrix,
-[`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) for
-the feature-flow reference, and
-[`plans/v3.0-refactor-roadmap.md`](plans/v3.0-refactor-roadmap.md) for the
-historical v3.0 modernization baseline and its follow-up work.
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the current platform/build matrix.
+Historical plans, including the feature catalog and the v3.0 roadmap, were
+moved out of the tree; read them with `git show 6491be4c:plans/<file>`.
 
 ## How it works (high level)
 

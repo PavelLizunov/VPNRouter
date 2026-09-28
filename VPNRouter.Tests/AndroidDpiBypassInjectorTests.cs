@@ -6,7 +6,7 @@ using Xunit;
 namespace VPNRouter.Tests;
 
 // v2.32.2 methodology compliance (Bug-r10-J follow-up) — Android test
-// category tag per plans/android-development-methodology.md §3.1 (Unit
+// category tag per docs/android-development-methodology.md §3.1 (Unit
 // Tests / Layer C). Retroactively applied to existing Android tests so
 // the check-methodology.sh #1 + #3 meta-tests pass.
 

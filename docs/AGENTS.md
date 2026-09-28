@@ -9,6 +9,14 @@ This directory owns repository contracts, worker guidance and review prompts.
 - [tag-retention-policy.md](tag-retention-policy.md): tag naming, retention and service exceptions.
 - [test-workers.md](test-workers.md): worker roles, preflight and resource constraints.
 - [REVIEW_AGENT_PROMPT.md](REVIEW_AGENT_PROMPT.md): bounded reviewer brief and evidence requirements.
+- [execution-methodology.md](execution-methodology.md): task lifecycle and verification.
+- [release-strategy.md](release-strategy.md) and [cut-stable-checklist.md](cut-stable-checklist.md):
+  rolling-candidate policy and the fixed-WINBRAT live-update gate.
+- [code-signing-signpath-runbook.md](code-signing-signpath-runbook.md): Windows signing enrollment.
+- [interaction-contracts/README.md](interaction-contracts/README.md): Free Configs and Applications contracts.
+- [android-development-methodology.md](android-development-methodology.md) and
+  [android-keystore-backup.md](android-keystore-backup.md): Android workflow and signing-key backup.
+- [project-cheatsheet.md](project-cheatsheet.md): quick project reference.
 
 ## Editing
 

@@ -2,7 +2,7 @@
 # build-libbox-aar.sh — reproducible build of libbox.aar from sing-box
 # source. Runs on Mac (mm4.local) via SSH. Phase 1.1 of Android port.
 #
-# Methodology ref: plans/android-development-methodology.md §7 Phase 1
+# Methodology ref: docs/android-development-methodology.md §7 Phase 1
 # Plan ref:        plans/android-phase-1-libbox-build.md
 #
 # Usage:

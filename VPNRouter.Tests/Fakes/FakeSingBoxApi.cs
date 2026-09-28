@@ -8,7 +8,7 @@ namespace VPNRouter.Tests.Fakes;
 /// 2026-05-17). Records every call for assertion + lets tests drive
 /// canned state machines (healthy / crashed / proxy-switched).
 ///
-/// <para>Per <c>plans/v3.0-execution-methodology.md</c> §5: "Don't use
+/// <para>Per <c>docs/execution-methodology.md</c> §5: "Don't use
 /// Moq for fakes — write small inline impls per test class." This fake
 /// is one half-step away from inline — shared across the contract-test
 /// + future HealthMonitor + AutoFailover test suites — but kept tiny and

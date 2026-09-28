@@ -1,7 +1,7 @@
 #!/bin/bash
 # .githooks/pre-commit — VPNRouter v3.0 methodology enforcement.
 #
-# Authored 2026-05-17 per `plans/v3.0-execution-methodology.md` §1 "Hard
+# Authored 2026-05-17 per `docs/execution-methodology.md` §1 "Hard
 # enforcement". This hook runs BEFORE `git commit` finalizes, and exits
 # non-zero to abort the commit when any methodology gate fails.
 #
