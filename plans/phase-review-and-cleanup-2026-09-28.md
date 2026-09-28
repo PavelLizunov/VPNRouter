@@ -75,5 +75,15 @@ Evidence: `plans/pr323-independent-review-2026-09-28.md`.
 
 Cleanup branch: `dsh/repository-cleanup-2026-09-28`, based on that merge.
 Remaining PR snapshots fetched to `refs/pr-review/315` through `refs/pr-review/322`.
-PR #316 fails Windows CLI compilation after Spectre command signature changes;
-#317 and #318 have failed checks. No remaining PR or branch has been closed/deleted yet.
+PR #316's Spectre migration is deferred; compatible updates and corrected security
+improvements are integrated in PR #324 at `4f46f7ff`. All four exact-head checks
+passed (run 36423376910 plus grep 36423377046). Independent review found one
+init-only assignment error; its recommended correction compiled and tested in CI.
+
+#317/#318/#320/#321 are closed with rationale. A verified recovery bundle protects
+all original tips. Twenty-nine obsolete remote branches were deleted using atomic
+SHA leases; two deferred Dependabot branches were already absent. Omarchy, Pages
+and unpublished local performance work remain untouched. Remaining steps: final
+documentation CI, SHA-pinned #324 merge, close superseded originals, final ref
+cleanup and clean main checkout. See `plans/pr-cleanup-review-2026-09-28.md` and
+`plans/omarchy-session-handoff-2026-09-28.md`. Post-merge receipts belong in #324.

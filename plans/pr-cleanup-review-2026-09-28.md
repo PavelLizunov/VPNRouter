@@ -81,4 +81,35 @@ Recovery example (choose the archived branch ref from the manifest):
 git fetch /var/lib/dsh/Project/VPNRouter-backups/2026-09-28/before-cleanup.bundle refs/remotes/origin/BRANCH:refs/heads/recovered-BRANCH
 ```
 
-Closures, deletions, exact final CI and baseline receipts will be recorded below.
+## Acceptance checkpoint
+
+Integration head `4f46f7ff4ccff17e709e92b3c1adac33abd9aac6` passed all four
+exact-head checks: test, characterization-windows, go-test-windows and grep.
+Run 36423376910 includes successful Linux restore/build/tests, Windows CLI publish
+and the expanded Windows test filter. This confirms the init-only test correction
+compiles; it does not retroactively change the earlier review verdict.
+
+The owner-approved deferrals #317/#318 and rejected proposals #320/#321 are closed
+with rationale comments. Their exact tips are in the bundle. Twenty-nine archived
+origin branches were deleted atomically with exact SHA leases after confirming
+closed/merged PR state and bundle contents. The two deferred Dependabot branches
+were already absent when that deletion batch was prepared. Eight origin branches
+remain at this checkpoint: main, gh-pages, Omarchy, this task and four PRs awaiting
+integration. Do not call those four originals merged until #324 is accepted.
+
+Four closed-PR branches had tips newer/different than recorded PR heads (#294,
+#302, #308, #313). Their current tips were inspected and backed up, not assumed
+merged. Archived proposals include alternate host-helper validation, Flowseal
+formatting/tests and Telegram exception-log redaction; preservation is not an
+acceptance claim. The unpublished local performance branch has separate commits
+and is retained as an active-work exception, not deleted as stale.
+
+Backup size: 292877470 bytes. SHA256:
+`0563ea3adeafe83fbc48beaf68bd937165883082ac51c90b6ce2af0126aa1fac`.
+Stage-one deletion receipt: adjacent `deleted-branches-stage1.json`.
+
+After the final documentation checkpoint, require fresh exact-head CI before the
+SHA-pinned merge. Record the final main SHA, post-merge CI and remaining-ref
+inventory in PR #324 comments so post-acceptance metadata does not itself require
+another product merge. No branch deletion grants permission to touch Omarchy or
+untracked user files.
