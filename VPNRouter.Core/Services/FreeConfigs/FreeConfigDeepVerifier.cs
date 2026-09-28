@@ -7,46 +7,24 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-/// <summary>
-/// Deep verification: spawn a temporary sing-box instance with a single VLESS outbound
-/// and a SOCKS inbound on a free local port, then attempt an actual HTTP GET through it.
-///
-/// This is the only reliable way to know a config actually carries traffic — TCP+TLS
-/// tests can pass for many dead/fake endpoints because the user's active VPN transparently
-/// proxies handshakes.
-///
-/// Cost: ~3-5 seconds per config (sing-box spin-up + HTTP round-trip + teardown).
-/// Concurrency: CAN run in parallel (each spawn uses its own SOCKS port — no TUN involved).
-/// </summary>
 public sealed class FreeConfigDeepVerifier
 {
     private readonly ILogger _logger;
     private readonly string _singBoxPath;
 
-    /// <summary>Time to wait for sing-box to bind SOCKS before we attempt HTTP.</summary>
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
 
-    /// <summary>r8: per-extra-concurrent-spawn slack added to the SOCKS-bind wait —
-    /// same slow-hardware fix VlessDeepVerifier got in v2.47.0-r4 (N concurrent
-    /// sing-box spawns contend for CPU and the flat 1500ms falsely reports
-    /// "didn't bind" on a slow VM). Still bounded by the per-config OverallTimeout.</summary>
     private static readonly TimeSpan WarmupPerConcurrencySlack = TimeSpan.FromMilliseconds(300);
 
-    /// <summary>Overall per-config timeout.</summary>
     private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
 
-    /// <summary>HTTP request timeout (through SOCKS proxy).</summary>
     private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(8);
 
-    /// <summary>How many configs to verify in parallel.</summary>
     public int MaxConcurrency { get; set; } = 5;
 
-    /// <summary>Effective SOCKS-bind wait: flat warmup plus slack per EXTRA concurrent spawn.</summary>
     internal TimeSpan EffectiveSocksBindWait =>
         SingBoxWarmup + WarmupPerConcurrencySlack * Math.Max(0, MaxConcurrency - 1);
 
-    /// <summary>v2.14.3: if true, after HTTP trace also measure download throughput
-    /// via a 5 MB file from cloudflare/hetzner/ovh. Adds 3-8s per config.</summary>
     public bool MeasureBandwidth { get; set; } = false;
 
     public FreeConfigDeepVerifier(ILogger logger)
@@ -55,11 +33,6 @@ public sealed class FreeConfigDeepVerifier
         _singBoxPath = AppPaths.SingBoxExePath;
     }
 
-    /// <summary>
-    /// Verify a batch of configs. Mutates entries in place:
-    ///   success → Status = Verified, LastError = null, LatencyMs = HTTP RTT
-    ///   failure → Status unchanged (or TlsFailed if TLS actually failed), LastError = reason
-    /// </summary>
     public async Task VerifyBatchAsync(
         IReadOnlyCollection<FreeConfigEntry> configs,
         IProgress<(int done, int total)>? progress = null,
@@ -97,8 +70,6 @@ public sealed class FreeConfigDeepVerifier
     {
         cfg.LastTestedAt = DateTime.UtcNow;
 
-        // r9 P2: flag the probe window so RuntimeStatusDetector doesn't read our
-        // own spawned sing-box as a live tunnel (false "Connected via service").
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
 
         var socksPort = NetPortUtil.FindFreePort();
@@ -116,13 +87,11 @@ public sealed class FreeConfigDeepVerifier
 
         try
         {
-            // 1. Build minimal sing-box config.
             var vless = ServerUriParser.Parse(cfg.RawUri);
             var configJson = BuildSingleOutboundConfig(vless, socksPort, clashPort);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-verify-{Guid.NewGuid():N}.json");
             await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
 
-            // 2. Launch sing-box with stdout/stderr capture for diagnostics.
             var startInfo = new ProcessStartInfo
             {
                 FileName = _singBoxPath,
@@ -155,7 +124,6 @@ public sealed class FreeConfigDeepVerifier
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            // 3. Wait for sing-box to bind. Poll the SOCKS port.
             if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
             {
                 var stderrSnip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 300);
@@ -165,43 +133,18 @@ public sealed class FreeConfigDeepVerifier
                 return;
             }
 
-            // 4. HTTP GET through SOCKS proxy.
             var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaSocksAsync(socksPort, HttpTimeout, overallCts.Token);
 
             if (httpOk)
             {
                 cfg.Status = FreeConfigStatus.Verified;
-                // v2.29.0 Phase 3C: stamp the successful Deep Verify time so
-                // the next search session can skip re-verifying this entry
-                // if it ran within the last 6 hours. Saves 5-15 s per
-                // already-known-working config in the cached re-test pass.
                 cfg.LastDeepVerifyAt = DateTime.UtcNow;
-                // v2.28.6-r5: do NOT overwrite cfg.LatencyMs with httpLatencyMs.
-                // HTTP RTT through the proxy includes 5-7 round-trips:
-                //   1. local TCP+SOCKS handshake
-                //   2. TCP connect to proxy server
-                //   3. VLESS+Reality TLS-like handshake
-                //   4. TCP connect from proxy to target (cloudflare.com)
-                //   5. TLS handshake to target
-                //   6. HTTP request/response
-                // Even on a 30 ms link to the proxy, this stacks up to
-                // 200-500 ms — what the user sees as "ping > 300 ms".
-                // The user's mental model of "ping" is raw TCP RTT to the
-                // proxy server. That value was already measured by
-                // FreeConfigTester.TestOneAsync before this method ran.
-                // We keep cfg.LatencyMs = TCP ping; httpLatencyMs is used
-                // only for logging and as the "did the proxy actually
-                // pass traffic" gate above.
                 if (cfg.LatencyMs == 0)
                 {
-                    // Defensive fallback for recheck-only flows where the
-                    // verifier ran without a fresh TCP ping (e.g. legacy
-                    // call site). Still better than showing 0 ms.
                     cfg.LatencyMs = httpLatencyMs;
                 }
                 cfg.LastError = null;
 
-                // v2.14.3: optional bandwidth measurement via 5 MB download through same SOCKS proxy.
                 if (MeasureBandwidth)
                 {
                     var (bwOk, mbps, bwErr) = await DeepVerifyProbe.MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
@@ -226,12 +169,6 @@ public sealed class FreeConfigDeepVerifier
             }
             else
             {
-                // v2.39.0 (audit P0): also downgrade Verified on a failed HTTP
-                // probe — a previously-Verified entry that now fails must not
-                // keep showing Verified to non-merge callers (live search).
-                // The Saved-recheck merge separately restores Verified + a
-                // failed-last-check marker via LastDeepVerifyAt; this covers the
-                // paths that don't run the merge.
                 if (cfg.Status == FreeConfigStatus.Ok || cfg.Status == FreeConfigStatus.Slow
                     || cfg.Status == FreeConfigStatus.Verified)
                     cfg.Status = FreeConfigStatus.TlsFailed;
@@ -257,7 +194,6 @@ public sealed class FreeConfigDeepVerifier
         }
         finally
         {
-            // Cleanup: kill process + delete temp config.
             try
             {
                 if (process != null && !process.HasExited)
@@ -276,19 +212,6 @@ public sealed class FreeConfigDeepVerifier
         }
     }
 
-    /// <summary>
-    /// Build a minimal sing-box JSON: SOCKS inbound on loopback + single VLESS outbound.
-    /// Route everything through the VLESS outbound (no split tunneling, no profiles).
-    ///
-    /// <para>v2.32.0 (Android Bug #1): exposed as <c>internal</c> and given a
-    /// nullable <paramref name="clashPort"/> so the Android libbox-backed
-    /// verifier can reuse the same builder. When <paramref name="clashPort"/>
-    /// is null we omit the <c>experimental.clash_api</c> block — Android's
-    /// verify box runs alongside the main VPN box which may already own
-    /// :9090 for hot-reload, and the verify probe doesn't need the Clash
-    /// RPC anyway (we kill the box at the end of <see cref="VerifyOneAsync"/>
-    /// instead of hot-reloading it).</para>
-    /// </summary>
     internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort)
     {
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
@@ -319,9 +242,6 @@ public sealed class FreeConfigDeepVerifier
         }
         outboundsArray.Add((JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true });
 
-        // sing-box 1.13.3 quirk: DNS server with detour:"direct" is FATAL if the direct
-        // outbound is "empty" (just {type:direct,tag:direct}). Workaround: separate
-        // 'dns-direct' outbound with udp_fragment:true so it's non-empty.
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "error" },
@@ -376,5 +296,4 @@ public sealed class FreeConfigDeepVerifier
         return root.ToJsonString();
     }
 
-    /// <summary>Poll the loopback port until something accepts a connection, or timeout.</summary>
 }

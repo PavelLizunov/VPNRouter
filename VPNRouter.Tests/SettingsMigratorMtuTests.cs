@@ -1,12 +1,3 @@
-// TUN MTU migrations: historical 9000/1500 fixes plus v8 default 1420.
-//
-// The old 9000 jumbo TUN MTU (stack=system) put oversized HTTP/2 segments on the
-// wire that the real 1500-MTU path couldn't carry; with PMTUD broken they were
-// RST, so browsers got ERR_CONNECTION_CLOSED on YouTube / Google over TCP-only
-// (VLESS) proxies (small clients + UDP/QUIC proxies were unaffected). Confirmed
-// v8 moves the product default to 1420: Roblox/VLESS probing showed 1420 passes,
-// while 1280 regressed Steam SDR-class game UDP.
-
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -30,7 +21,6 @@ public class SettingsMigratorMtuTests
     [Fact]
     public void Migrate_5_to_6_LowersJumboMtu()
     {
-        // An existing config persisted with the old 9000 default.
         var s = new AppSettings { SchemaVersion = 5 };
         s.Tun.Mtu = 9000;
 
@@ -43,7 +33,6 @@ public class SettingsMigratorMtuTests
     [Fact]
     public void Migrate_5_to_6_KeepsCustomMtu()
     {
-        // A user who deliberately set a non-default MTU must keep it.
         var s = new AppSettings { SchemaVersion = 5 };
         s.Tun.Mtu = 1450;
 

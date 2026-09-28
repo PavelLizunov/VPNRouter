@@ -3,10 +3,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.49: the connected-Apply structural fingerprint must describe the same
-/// effective Include/Exclude policy that ConfigGenerator emits.
-/// </summary>
 public sealed class ConfigGeneratorAppRoutingFingerprintTests
 {
     [Fact]

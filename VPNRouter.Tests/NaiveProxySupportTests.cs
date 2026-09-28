@@ -2,25 +2,9 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// NaiveProxy support — v2.41.1
-//
-// sing-box's `naive` outbound (HTTP/2 CONNECT or HTTP/3 over QUIC via Chromium
-// Cronet) is usable from a subscription. Coverage:
-//   • ServerUriParser parses naive:// / naive+https:// / naive+quic:// into a
-//     VlessServerEntry { Protocol="naive", Username, Password, Tls.ServerName }.
-//   • The platform gate (ServerUriParser.NaiveRuntimeAvailable) refuses naive at
-//     intake where libcronet is absent (macOS / Android) — silent drop for
-//     subscriptions, clear throw for manual paste.
-//   • ConfigGenerator.BuildNaiveOutbound emits the minimal outbound sing-box
-//     accepts (username/password + tls{enabled,server_name}; NO insecure-true /
-//     uTLS / alpn) and the macOS/Android backstop drops naive before generation.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class NaiveProxySupportTests
 {
-    // ── Parser ────────────────────────────────────────────────────────────────
-
     [Fact]
     public void Naive_HttpsForm_ParsesCorrectly()
     {
@@ -77,19 +61,15 @@ public class NaiveProxySupportTests
         Assert.Equal(443, e.Port);
     }
 
-    // ── Platform gate ───────────────────────────────────────────────────────────
-
     [Fact]
     public void Naive_WhenRuntimeUnavailable_IsSupportedSchemeFalse_DroppedFromSubscription()
     {
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
-            ServerUriParser.NaiveRuntimeAvailable = false; // simulate macOS / Android
+            ServerUriParser.NaiveRuntimeAvailable = false;
             Assert.False(ServerUriParser.IsSupportedScheme("naive+https://u:p@h:443#x"));
 
-            // A mixed subscription blob: the naive line is silently dropped, the
-            // VLESS line survives (ParseMultiple pre-filters via IsSupportedScheme).
             var blob = "naive+https://u:p@h.example:443#drop\n" +
                        "vless://uuid@1.2.3.4:443?security=reality&pbk=PUB&sid=ID&flow=xtls-rprx-vision#keep";
             var parsed = ServerUriParser.ParseMultiple(blob);
@@ -119,7 +99,7 @@ public class NaiveProxySupportTests
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
-            ServerUriParser.NaiveRuntimeAvailable = true; // simulate Windows / Linux
+            ServerUriParser.NaiveRuntimeAvailable = true;
             Assert.True(ServerUriParser.IsSupportedScheme("naive+https://u:p@h:443#x"));
             Assert.True(ServerUriParser.IsSupportedScheme("naive+quic://u:p@h:443#x"));
             Assert.True(ServerUriParser.IsSupportedScheme("naive://u:p@h:443#x"));
@@ -127,17 +107,15 @@ public class NaiveProxySupportTests
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
 
-    // ── ConfigGenerator ─────────────────────────────────────────────────────────
-
     [Fact]
     public void Generate_NaiveServer_ProducesMinimalNaiveOutbound()
     {
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
-            ServerUriParser.NaiveRuntimeAvailable = true; // ensure not filtered
+            ServerUriParser.NaiveRuntimeAvailable = true;
             var settings = NaiveSettings();
-            Assert.Single(VlessServersResolver.Resolve(settings)); // subscribe → aggregate naive into Vless.Servers
+            Assert.Single(VlessServersResolver.Resolve(settings));
             var config = ConfigGenerator.Generate(NaiveProfile(), new[] { "Discord.exe" }, settings);
 
             var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
@@ -145,19 +123,14 @@ public class NaiveProxySupportTests
             Assert.Equal("naive", proxy!.Type);
             Assert.Equal("naive.example.com", proxy.Server);
             Assert.Equal(443, proxy.ServerPort);
-            Assert.Equal("user1", proxy.Username);   // survives Resolve (by-reference)
+            Assert.Equal("user1", proxy.Username);
             Assert.Equal("pass1", proxy.Password);
             Assert.NotNull(proxy.Tls);
             Assert.True(proxy.Tls!.Enabled);
             Assert.Equal("naive.example.com", proxy.Tls.ServerName);
-            // naive rejects these at outbound init — they must be omitted.
             Assert.Null(proxy.Tls.Reality);
             Assert.Null(proxy.Tls.Utls);
             Assert.Null(proxy.Tls.Alpn);
-            // 2026-06-08 (Pavel "Latvia NAIVE" IPv6-less host): force IPv4-first
-            // server resolution via the 1.13 domain_resolver object form so
-            // naive_quic doesn't dial the server's AAAA and fail with "address
-            // not valid in its context".
             Assert.NotNull(proxy.DomainResolver);
             Assert.Equal("local-dns", proxy.DomainResolver!.Server);
             Assert.Equal("prefer_ipv4", proxy.DomainResolver.Strategy);
@@ -172,11 +145,8 @@ public class NaiveProxySupportTests
         try
         {
             var settings = NaiveSettings();
-            // Resolve aggregates the naive server regardless of platform...
             Assert.Single(VlessServersResolver.Resolve(settings));
-            ServerUriParser.NaiveRuntimeAvailable = false; // ...but on macOS / Android
-            // the backstop filters it before generation → empty pool → the v2.28.2
-            // hard guard fires (fail-closed, no FATAL sing-box config).
+            ServerUriParser.NaiveRuntimeAvailable = false;
             var ex = Assert.Throws<InvalidOperationException>(
                 () => ConfigGenerator.Generate(NaiveProfile(), new[] { "Discord.exe" }, settings));
             Assert.Contains("no active VLESS servers", ex.Message);
@@ -189,7 +159,7 @@ public class NaiveProxySupportTests
     {
         var singBox = FindSingBoxWithCronet();
         if (singBox == null)
-            return; // no sing-box + libcronet pair available — skip (CI / pre-2.41.1 install)
+            return;
 
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
@@ -227,13 +197,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_NaiveServer_PassesDeadConfigGuard()
     {
-        // Regression for v2.41.1-r1 (brat Win, cdn.ninitux.top): the F-E
-        // pre-start dead-config guard's proxy-outbound allowlist
-        // (PlaceholderDefense.FindFirstProxyOutbound) omitted "naive", so a
-        // valid naive config was flagged "no proxy outbound found → dead",
-        // AutoFailover bounced naive → VLESS, settings reverted to naive, and
-        // the reconnect retried forever — surfacing as an "infinite process
-        // scan" (sing-box never even started with naive).
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -250,8 +213,6 @@ public class NaiveProxySupportTests
         }
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
-
-    // ── UDP pairing (r5) ──────────────────────────────────────────────────────
 
     [Fact]
     public void Naive_PairTag_ParsedIntoPairGroup()
@@ -272,9 +233,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_NaiveWithPairedHy2_RoutesUdpThroughHy2()
     {
-        // r5: naive can't carry UDP. With a co-located HY2 sharing pair=cdn,
-        // config-gen must emit proxy=naive (TCP) + proxy-udp=hysteria2 (UDP) so
-        // the full-tunnel hasUdpProxy machinery routes UDP → the paired HY2.
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -286,26 +244,18 @@ public class NaiveProxySupportTests
             var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
             var proxyUdp = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy-udp");
             Assert.NotNull(proxy);
-            Assert.Equal("naive", proxy!.Type);          // TCP via naive
+            Assert.Equal("naive", proxy!.Type);
             Assert.NotNull(proxyUdp);
-            Assert.Equal("hysteria2", proxyUdp!.Type);   // UDP via the paired HY2 (same node)
+            Assert.Equal("hysteria2", proxyUdp!.Type);
             Assert.Equal("213.155.15.93", proxyUdp.Server);
-            // full-tunnel UDP split → proxy-udp
             Assert.Contains(config.Route.Rules, r => r.Network == "udp" && r.Outbound == "proxy-udp");
         }
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────────────
-
     [Fact]
     public void Generate_NaivePairedSameHost_TcpGroupExcludesHy2()
     {
-        // r6 #2: when naive + its paired HY2 share ONE host, GetActiveServers()
-        // returns BOTH. The TCP "proxy" group must still be naive-only — never a
-        // urltest that includes HY2 (which sing-box could pick for TCP, defeating
-        // naive's DPI-evasion). This is the case the r5 test (different hosts) did
-        // NOT cover, so it passed while the bug was live.
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -317,9 +267,9 @@ public class NaiveProxySupportTests
             var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
             var proxyUdp = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy-udp");
             Assert.NotNull(proxy);
-            Assert.Equal("naive", proxy!.Type);          // TCP = naive ONLY (not a urltest with HY2)
+            Assert.Equal("naive", proxy!.Type);
             Assert.NotNull(proxyUdp);
-            Assert.Equal("hysteria2", proxyUdp!.Type);   // UDP = the paired HY2
+            Assert.Equal("hysteria2", proxyUdp!.Type);
             Assert.Contains(config.Route.Rules, r => r.Network == "udp" && r.Outbound == "proxy-udp");
         }
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
@@ -328,9 +278,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_NaivePairedWithVless_KeepsNaiveTcpOnly()
     {
-        // r6 #3: a VLESS sharing the naive's pair tag must NOT be auto-selected as
-        // the UDP sibling (only Hy2/TUIC qualify). Result: no proxy-udp, naive
-        // stays TCP-only, and the QUIC reject rule remains (not wrongly skipped).
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -351,8 +298,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_NaiveStaleTagNoSibling_KeepsNaiveTcpOnly()
     {
-        // r6 #3: naive carries a pair tag but the pool has NO Hy2/TUIC sibling
-        // (cached sub before a refresh). No proxy-udp; QUIC reject remains.
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -367,16 +312,14 @@ public class NaiveProxySupportTests
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
 
-    // r6 #2: naive + HY2 on the SAME host (pair=cdn) — GetActiveServers() returns both.
     private static AppSettings NaivePairedSameHostSettings()
     {
         var s = NaivePairedSettings();
-        s.App.Subscriptions[0].Servers[1].Server = "cdn.example.com"; // HY2 onto the naive's host
+        s.App.Subscriptions[0].Servers[1].Server = "cdn.example.com";
         s.App.Subscriptions[0].Servers[1].Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com", Insecure = true };
         return s;
     }
 
-    // r6 #3: naive (active) + a VLESS sharing pair=cdn on a different host.
     private static AppSettings NaivePairedWithVlessSettings()
     {
         var s = NaivePairedSettings();
@@ -390,20 +333,18 @@ public class NaiveProxySupportTests
         return s;
     }
 
-    // r6 #3: naive carries a pair tag but no sibling exists in the pool.
     private static AppSettings NaiveAloneWithTagSettings()
     {
         var s = NaivePairedSettings();
         s.App.BlockQuicOnTcpProxy = true;
-        s.App.Subscriptions[0].Servers.RemoveAt(1);              // drop the HY2 sibling
-        s.App.Subscriptions[0].Servers[0].PairGroup = "cdn";    // naive keeps its (now-stale) tag
+        s.App.Subscriptions[0].Servers.RemoveAt(1);
+        s.App.Subscriptions[0].Servers[0].PairGroup = "cdn";
         return s;
     }
 
     [Fact]
     public void Naive_QuicScheme_SetsNaiveQuic()
     {
-        // r7 #1: naive+quic:// → HTTP/3; naive+https:// / bare → HTTP/2.
         Assert.True(ServerUriParser.Parse("naive+quic://u:p@cdn.example.com:443#Q").NaiveQuic);
         Assert.False(ServerUriParser.Parse("naive+https://u:p@cdn.example.com:443#H").NaiveQuic);
         Assert.False(ServerUriParser.Parse("naive://u:p@cdn.example.com:443#B").NaiveQuic);
@@ -412,7 +353,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_NaiveQuic_EmitsQuicTrue()
     {
-        // r7 #1: a naive server parsed from naive+quic:// emits quic=true on its outbound.
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -432,8 +372,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void DeepVerify_NaiveEntry_BuildsNaiveOutbound_NotVless()
     {
-        // r7 #5: the deep verifier must emit a naive outbound (was falling through
-        // to BuildVlessOutbound → guaranteed false-fail for a valid naive server).
         var entry = new VlessServerEntry
         {
             Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com", Port = 443,
@@ -441,14 +379,13 @@ public class NaiveProxySupportTests
             Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
         };
         var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 11111, 22222);
-        Assert.Contains("\"naive\"", json);   // dispatched to BuildNaiveOutbound
-        Assert.Contains("\"quic\"", json);    // HTTP/3 carried into the verify config
+        Assert.Contains("\"naive\"", json);
+        Assert.Contains("\"quic\"", json);
     }
 
     [Fact]
     public void Hysteria2_AllowInsecureVariants_ParseInsecureTrue()
     {
-        // r7 (smaller): HY2 now accepts the same insecure spellings as TUIC.
         Assert.True(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&insecure=1#A").Tls!.Insecure);
         Assert.True(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&allowInsecure=1#B").Tls!.Insecure);
         Assert.True(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&allow_insecure=true#C").Tls!.Insecure);
@@ -458,8 +395,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void ParseBody_NaiveSameUserDifferentPassword_NotCollapsed()
     {
-        // r7 (smaller): dedup key now includes Password, so two naive creds that
-        // differ only by password survive instead of collapsing to one.
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -474,9 +409,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_NaiveSameHostWithExtraVless_TcpGroupIsNaiveOnly()
     {
-        // r10 (Codex #1): naive + paired HY2 + an extra same-host VLESS all in the
-        // active list → the TCP "proxy" group must be naive-ONLY (not a urltest that
-        // includes the VLESS, which sing-box could otherwise pick for TCP).
         var original = ServerUriParser.NaiveRuntimeAvailable;
         try
         {
@@ -487,7 +419,7 @@ public class NaiveProxySupportTests
             var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
             var proxyUdp = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy-udp");
             Assert.NotNull(proxy);
-            Assert.Equal("naive", proxy!.Type);          // naive-only, not urltest-with-vless
+            Assert.Equal("naive", proxy!.Type);
             Assert.NotNull(proxyUdp);
             Assert.Equal("hysteria2", proxyUdp!.Type);
         }
@@ -497,8 +429,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void Generate_Hy2AliasProtocol_BuildsHysteria2Outbound()
     {
-        // r10 (Codex #2): a server stored as protocol "hy2" must build a hysteria2
-        // outbound, not fall through to VLESS.
         var settings = NaiveSettings();
         var s = settings.App.Subscriptions[0].Servers[0];
         s.Protocol = "hy2";
@@ -516,7 +446,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void NaivePairing_BaseNameFallback_AmbiguousReturnsNull()
     {
-        // r9 follow-up #3: two same-base-name HY2 with no pair= tag → ambiguous → no pairing.
         var naive = new VlessServerEntry { Protocol = "naive", Name = "Latvia NAIVE", Server = "cdn.example.com", Port = 443 };
         var hy2a = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444 };
         var hy2b = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "b.example.com", Port = 8444 };
@@ -526,7 +455,6 @@ public class NaiveProxySupportTests
     [Fact]
     public void NaivePairing_BaseNameFallback_SingleCandidatePairs()
     {
-        // r9 follow-up #3: exactly one same-base-name HY2 → fallback pairing allowed.
         var naive = new VlessServerEntry { Protocol = "naive", Name = "Latvia NAIVE", Server = "cdn.example.com", Port = 443 };
         var hy2 = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444 };
         Assert.Same(hy2, NaivePairing.FindUdpSibling(naive, new[] { naive, hy2 }));
@@ -535,17 +463,15 @@ public class NaiveProxySupportTests
     [Fact]
     public void NaivePairing_PairTag_WinsOverAmbiguousBaseName()
     {
-        // r9 follow-up #3: explicit pair= stays authoritative even when base-name is ambiguous.
         var naive = new VlessServerEntry { Protocol = "naive", Name = "Latvia NAIVE", Server = "cdn.example.com", Port = 443, PairGroup = "cdn" };
         var tagged = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444, PairGroup = "cdn" };
         var untagged = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "b.example.com", Port = 8444 };
         Assert.Same(tagged, NaivePairing.FindUdpSibling(naive, new[] { naive, tagged, untagged }));
     }
 
-    // r10 #1: naive + HY2 + VLESS all on the SAME host; active = naive.
     private static AppSettings NaiveSameHostTripleSettings()
     {
-        var s = NaivePairedSameHostSettings(); // naive + HY2 both cdn.example.com, pair=cdn
+        var s = NaivePairedSameHostSettings();
         s.App.Subscriptions[0].Servers.Add(new VlessServerEntry
         {
             Name = "Latvia VLESS", Protocol = "vless", Server = "cdn.example.com", Port = 8443,
@@ -598,7 +524,6 @@ public class NaiveProxySupportTests
         Vless = new VlessConfig()
     };
 
-    // naive (active) + co-located HY2, both pair=cdn, full tunnel.
     private static AppSettings NaivePairedSettings() => new()
     {
         App = new AppConfig
@@ -638,12 +563,6 @@ public class NaiveProxySupportTests
         Vless = new VlessConfig()
     };
 
-    /// <summary>
-    /// Locate a sing-box binary that has libcronet beside it (naive's `check`
-    /// FATALs without it). Tries the installed ProgramData bin first, then walks
-    /// up to the repo's tools/singbox-cache. Returns null → the integration test
-    /// skips (CI without the binary, or a pre-2.41.1 install missing libcronet).
-    /// </summary>
     private static string? FindSingBoxWithCronet()
     {
         var prog = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";

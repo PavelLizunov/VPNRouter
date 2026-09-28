@@ -207,14 +207,12 @@ public sealed class WindowsServiceCommandTests
         var zapretActions = LoadSource("VPNRouter.Core", "Services", "ZapretActions.cs");
         var zapretUpdater = LoadSource("VPNRouter.Core", "Services", "ZapretUpdater.cs");
 
-        // Verify WindowsServiceCommand.GetSystemScPath usage
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", vmConnection);
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", healthCheck);
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", diagExporter);
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretActions);
         Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretUpdater);
 
-        // Verify no bare "sc.exe" / "sc" invocations remain
         Assert.DoesNotContain("new ProcessStartInfo(\"sc.exe\"", healthCheck);
         Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc.exe\"", vmConnection);
         Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc\"", zapretUpdater);

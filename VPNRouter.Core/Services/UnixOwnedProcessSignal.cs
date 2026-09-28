@@ -17,11 +17,6 @@ internal enum UnixOwnedSignalResult
     Failed
 }
 
-/// <summary>
-/// Linux-only stable signaling for one already-proven process identity.
-/// pidfd_open binds the kernel target before identity is re-read; the signal
-/// is then sent through that same pidfd, never through a recyclable PID.
-/// </summary>
 internal static class UnixOwnedProcessSignal
 {
     internal const string HelperFlag = "--vpnrouter-internal-signal-owned-v1";

@@ -6,30 +6,19 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// 2026-06-27: a jumbo TUN MTU (9000, the pre-v2.42 default) could get STUCK in a
-/// persisted config — the 9000->1280 fix only ran on the v5->v6 step, so a config
-/// that already passed v5->v6 on an older build never re-ran it, and Codex's
-/// Migrate_6_to_7 only caught 1500. Diag 20260627-203104 caught a tester on schema
-/// v6 + mtu 9000, PMTUD-blackholing DoH/joins -> Roblox Error 277, while users on
-/// the 1280 default were fine. Two layers now prevent it: ConfigGenerator clamps
-/// jumbo at GENERATION time (bulletproof, independent of migration state), and
-/// Migrate_6_to_7 rewrites the stuck 9000 in persistence. See
-/// plans/roblox-277-rca-2026-06-27.md.
-/// </summary>
 public sealed class MtuJumboFixTests
 {
     [Theory]
-    [InlineData(9000, 1420)]   // stuck pre-v2.42 jumbo default -> clamped
-    [InlineData(4000, 1420)]   // any > 1500 -> clamped
-    [InlineData(0, 1420)]      // invalid -> fallback
-    [InlineData(-1, 1420)]     // invalid -> fallback
-    [InlineData(575, 1420)]    // below persisted contract -> fallback
-    [InlineData(576, 576)]     // IPv4 minimum is valid
-    [InlineData(1501, 1420)]   // above persisted contract -> fallback
-    [InlineData(1500, 1500)]   // legacy default passes the clamp (migration lowers it)
-    [InlineData(1420, 1420)]   // current default unchanged
-    [InlineData(1400, 1400)]   // deliberate custom preserved
+    [InlineData(9000, 1420)]
+    [InlineData(4000, 1420)]
+    [InlineData(0, 1420)]
+    [InlineData(-1, 1420)]
+    [InlineData(575, 1420)]
+    [InlineData(576, 576)]
+    [InlineData(1501, 1420)]
+    [InlineData(1500, 1500)]
+    [InlineData(1420, 1420)]
+    [InlineData(1400, 1400)]
     public void NormalizeTunMtu_ClampsOutsideContract(int input, int expected)
         => Assert.Equal(expected, ConfigGenerator.NormalizeTunMtu(input));
 
@@ -40,14 +29,14 @@ public sealed class MtuJumboFixTests
         var config = ConfigGenerator.Generate(MakeProfile(), Array.Empty<string>(), settings);
         var tun = config.Inbounds.Find(i => i.Type == "tun");
         Assert.NotNull(tun);
-        Assert.Equal(1420, tun!.Mtu); // generation-time clamp, regardless of persisted value
+        Assert.Equal(1420, tun!.Mtu);
     }
 
     [Theory]
-    [InlineData(9000, 1280)]   // stuck jumbo rewritten (the tester's exact case)
-    [InlineData(1500, 1280)]   // legacy default rewritten
-    [InlineData(1400, 1400)]   // deliberate custom preserved
-    [InlineData(1280, 1280)]   // already safe, untouched
+    [InlineData(9000, 1280)]
+    [InlineData(1500, 1280)]
+    [InlineData(1400, 1400)]
+    [InlineData(1280, 1280)]
     public void Migrate_6_to_7_LowersLegacyAndStuckMtu(int input, int expected)
     {
         var s = new AppSettings { Tun = new TunSettings { Mtu = input } };

@@ -11,22 +11,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// Desktop STATS parity (2026-06-21) — live download/upload rate + active
-/// connection count on the connection status, mirroring the Android P1
-/// status-card line. Polled from sing-box's clash_api (<see cref="ISingBoxApi.GetConnectionsAsync"/>)
-/// on the EXISTING 2 s runtime-status timer while connected — no new timer.
-///
-/// <para>Unlike Android (where the app's own loopback is captured by its
-/// VpnService tun, forcing a Java-side protected socket — see P1), a desktop
-/// process reaches the in-process clash_api at 127.0.0.1:&lt;port&gt; directly, so a
-/// plain <see cref="ClashSingBoxApi"/> (loopback-guarded, owned HttpClient) works.</para>
-///
-/// <para>Cumulative totals → rate is the per-poll delta / elapsed; change-only
-/// property writes keep the UI quiet when idle. The poll is fire-and-forget with
-/// an in-flight guard so a slow clash_api never stacks ticks; failures are
-/// non-fatal (cleared failure).</para>
-/// </summary>
 public partial class MainWindowViewModel
 {
     private ClashSingBoxApi? _statsApi;
@@ -34,29 +18,19 @@ public partial class MainWindowViewModel
     private DateTimeOffset? _statsPrevAt;
     private int _statsInFlight;
 
-    // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy" group, the
-    // REAL member it routes through (resolved from clash_api /proxies/proxy ->
-    // "now" by the ConnStats poll). Consumed by DeriveConnectedServerLabel +
-    // RefreshActiveIndicator so the status line + list highlight show the actual
-    // server instead of the stale first-in-list. Null until resolved / non-auto.
     private ServerViewModel? _autoSelectedServer;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasConnectionStats))]
     private string _connectionStatsText = string.Empty;
 
-    /// <summary>True while a live-stats line is available (drives IsVisible).</summary>
     public bool HasConnectionStats => !string.IsNullOrEmpty(ConnectionStatsText);
 
-    /// <summary>
-    /// MVVM-Toolkit hook on the generated <c>IsConnected</c> setter: spin up /
-    /// tear down the clash_api stats client on connect / disconnect.
-    /// </summary>
     partial void OnIsConnectedChanged(bool value)
     {
         var oldApi = _statsApi;
         _statsApi = null;
-        try { oldApi?.Dispose(); } catch { /* best-effort */ }
+        try { oldApi?.Dispose(); } catch {  }
 
         _statsPrevAt = null;
         _statsPrevDown = 0;
@@ -82,16 +56,10 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>
-    /// Called from the 2 s runtime-status timer tick (UI thread). Fire-and-forget,
-    /// in-flight-guarded so a slow poll never stacks.
-    /// </summary>
     private void MaybePollConnStats()
     {
         if (!IsConnected || _statsApi is null) return;
 
-        // OPEN-DEFECTS.md:108 (perf-hunt F2): skip the /connections poll while the
-        // window is hidden/minimized (or null) — the stats line is off-screen.
         var window = GetMainWindow();
         if (window is null || !window.IsVisible || window.WindowState == WindowState.Minimized) return;
 
@@ -107,11 +75,6 @@ public partial class MainWindowViewModel
         {
             if (api is null || !IsConnected) return;
 
-            // v2.44.1-r6: when AutoSelectBestServer builds a urltest "proxy"
-            // group, resolve which member it's actually routing through so the
-            // status line + list highlight show the REAL server (not the stale
-            // first-in-list). Independent of + before the traffic poll so it
-            // runs even on an idle tunnel (which skips the traffic tick below).
             await MaybeRefreshAutoSelectedAsync(api).ConfigureAwait(false);
 
             var snap = await api.GetConnectionsAsync().ConfigureAwait(false);
@@ -128,9 +91,6 @@ public partial class MainWindowViewModel
                     return;
                 }
 
-                // Counter regression => sing-box restarted / counters reset (e.g. an
-                // in-place tunnel reconfigure while IsConnected stays true). Re-baseline
-                // and clear text instead of keeping stale rate text.
                 if (_statsPrevAt is not null && (snap.TotalDownloadBytes < _statsPrevDown || snap.TotalUploadBytes < _statsPrevUp))
                 {
                     _statsPrevDown = snap.TotalDownloadBytes;
@@ -152,7 +112,6 @@ public partial class MainWindowViewModel
                 }
                 else
                 {
-                    // Next good sample after failure/connect: baseline only, no spike.
                     ConnectionStatsText = string.Empty;
                 }
 
@@ -191,16 +150,6 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>
-    /// v2.44.1-r6: refresh <see cref="_autoSelectedServer"/> from the urltest
-    /// "proxy" group's current member (clash_api <c>/proxies/proxy</c> →
-    /// <c>"now"</c>) when AutoSelectBestServer is on, then push a status + list
-    /// highlight refresh on the UI thread if it changed. Best-effort: a null /
-    /// failed query clears the prior pick (status falls back to a generic label).
-    /// </summary>
-    /// <summary>R5 / perf-hunt F3 follow-up: poll the group's "now" member only
-    /// every 3rd stats tick (~6s at the 2s poll) — the auto-pick doesn't move
-    /// faster than urltest's own 3m interval, so per-tick polling was waste.</summary>
     private int _autoSelectPollTick;
 
     private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
@@ -209,8 +158,6 @@ public partial class MainWindowViewModel
                 .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             return;
 
-        // Every 3rd tick only (the FIRST tick fires immediately so the label
-        // appears right after connect, not 6 s later).
         if (Interlocked.Increment(ref _autoSelectPollTick) % 3 != 1)
             return;
 
@@ -239,12 +186,6 @@ public partial class MainWindowViewModel
         });
     }
 
-    /// <summary>
-    /// Map a urltest member tag (e.g. <c>"vless-Iceland VLESS ~main-brat"</c>)
-    /// back to its subscription row. The member tag is
-    /// <c>"&lt;protocol&gt;-&lt;ServerName&gt;"</c>; server names can contain
-    /// '-', so the row whose Name is the longest matching suffix wins.
-    /// </summary>
     private ServerViewModel? ResolveAutoSelectedServer(string? nowTag)
     {
         if (SubscriptionServers is null || string.IsNullOrEmpty(nowTag)) return null;

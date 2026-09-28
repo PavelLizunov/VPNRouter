@@ -3,31 +3,17 @@ using VPNRouter.Core.Localization;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// P2 (2026-06-21) — parsed view of the <c>Subscription-Userinfo</c> response header
-/// most VLESS/Clash subscription panels send (XrayR / V2Board / sing-box panels /
-/// Hiddify-compatible). Format: <c>upload=&lt;bytes&gt;; download=&lt;bytes&gt;;
-/// total=&lt;bytes&gt;; expire=&lt;unix-seconds&gt;</c> (any subset, any order).
-/// Shared by desktop + Android so the remaining-traffic / days-left card renders
-/// identically. Pure + side-effect-free → unit-tested in VPNRouter.Tests.
-/// </summary>
 public sealed record SubscriptionUserInfo(long Upload, long Download, long Total, DateTimeOffset? Expire)
 {
     public long Used => Upload + Download;
 
-    /// <summary>Remaining quota in bytes, or null when the provider sent no total.</summary>
     public long? RemainingBytes => Total > 0 ? Math.Max(0, Total - Used) : (long?)null;
 
-    /// <summary>Whole days until expiry (floored, never negative), or null when no expiry.</summary>
     public int? DaysLeft(DateTimeOffset now)
         => Expire is { } e ? (int)Math.Max(0, Math.Floor((e - now).TotalDays)) : (int?)null;
 
     public bool HasAnything => Total > 0 || Used > 0 || Expire is not null;
 
-    /// <summary>
-    /// Parse the raw header. Returns null for null/blank/unparseable input (so callers
-    /// can null-coalesce). Tolerant: ignores unknown keys, missing keys, and whitespace.
-    /// </summary>
     public static SubscriptionUserInfo? Parse(string? header)
     {
         if (string.IsNullOrWhiteSpace(header)) return null;
@@ -52,7 +38,7 @@ public sealed record SubscriptionUserInfo(long Upload, long Download, long Total
                     if (n > 0)
                     {
                         try { expire = DateTimeOffset.FromUnixTimeSeconds(n); any = true; }
-                        catch { /* out-of-range epoch — ignore */ }
+                        catch {  }
                     }
                     break;
             }
@@ -71,11 +57,6 @@ public sealed record SubscriptionUserInfo(long Upload, long Download, long Total
                + " " + units[u];
     }
 
-    /// <summary>
-    /// One-line human summary for the subscription card, localized via Strings.Ru.
-    /// e.g. "6.1 / 100 GB · ост. 42 дн" (RU) or "6.1 / 100 GB · 42 days left" (EN).
-    /// Returns empty when there's nothing to show.
-    /// </summary>
     public string FormatSummary(DateTimeOffset now)
     {
         if (!HasAnything) return string.Empty;

@@ -12,28 +12,14 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P1 clash_api secret (OPEN-DEFECTS, 2026-07-10): the Clash API on
-/// 127.0.0.1:9090 was exposed with NO secret — any local process (a hostile
-/// web page XHR-ing loopback; on Android any installed app) could read live
-/// connection metadata and issue control calls (proxy switch, config reload).
-/// These pins cover the chain: settings auto-generate → generated/injected
-/// config carries <c>experimental.clash_api.secret</c> → every consumer
-/// authenticates (HTTP <c>Authorization: Bearer</c>, WS <c>?token=</c>).
-/// A consumer missing the header would 401 against the locked API and read a
-/// HEALTHY tunnel as dead — which is why the consumer-side pins matter as much
-/// as the config-side ones.
-/// </summary>
 public sealed class ClashApiSecretTests
 {
-    // ── settings: generation ────────────────────────────────────────────────
-
     [Fact]
     public void EnsureSane_generates_secret_when_empty_and_preserves_existing()
     {
         var fresh = new AppSettings().EnsureSane();
         Assert.False(string.IsNullOrEmpty(fresh.SingBox.ClashApiSecret));
-        Assert.Equal(32, fresh.SingBox.ClashApiSecret.Length); // 16 random bytes → 32 hex
+        Assert.Equal(32, fresh.SingBox.ClashApiSecret.Length);
         Assert.True(fresh.SingBox.ClashApiSecret.All(Uri.IsHexDigit));
 
         var pinned = new AppSettings();
@@ -47,14 +33,12 @@ public sealed class ClashApiSecretTests
             AppSettingsSane.GenerateClashApiSecret(),
             AppSettingsSane.GenerateClashApiSecret());
 
-    // ── generated config carries the secret + the settings-backed controller ──
-
     private static AppSettings SubscribeSettings(string secret)
     {
         var s = new AppSettings().EnsureSane();
         s.App.ConfigMode = "subscribe";
         s.App.RoutingMode = "full";
-        s.SingBox.ClashApi = "127.0.0.1:9091"; // non-default port → proves settings are honoured
+        s.SingBox.ClashApi = "127.0.0.1:9091";
         s.SingBox.ClashApiSecret = secret;
         s.Vless.Servers = new()
         {
@@ -86,15 +70,13 @@ public sealed class ClashApiSecretTests
     public void Generate_omits_secret_when_settings_have_none()
     {
         var settings = SubscribeSettings("x");
-        settings.SingBox.ClashApiSecret = ""; // legacy shape — no secret key at all
+        settings.SingBox.ClashApiSecret = "";
         var json = GenerateJson(settings);
 
         using var doc = JsonDocument.Parse(json);
         var clash = doc.RootElement.GetProperty("experimental").GetProperty("clash_api");
         Assert.False(clash.TryGetProperty("secret", out _));
     }
-
-    // ── WS /logs token ──────────────────────────────────────────────────────
 
     [Fact]
     public void BuildLogsUri_appends_escaped_token_when_secret_present()
@@ -105,8 +87,6 @@ public sealed class ClashApiSecretTests
         var withToken = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", "s3cr+t&x");
         Assert.Equal("ws://127.0.0.1:9090/logs?level=info&token=s3cr%2Bt%26x", withToken.ToString());
     }
-
-    // ── HTTP consumers send Authorization: Bearer ───────────────────────────
 
     private sealed class CaptureHandler : HttpMessageHandler
     {
@@ -144,7 +124,7 @@ public sealed class ClashApiSecretTests
 
         _ = await api.GetVersionAsync();
 
-        Assert.Null(handler.Last!.Headers.Authorization); // legacy wire shape preserved
+        Assert.Null(handler.Last!.Headers.Authorization);
     }
 
     [Fact]
@@ -159,8 +139,6 @@ public sealed class ClashApiSecretTests
         Assert.Contains(
             "clashPort, settings.SingBox.ClashApiSecret, probeCt", source);
     }
-
-    // ── custom-config injection ─────────────────────────────────────────────
 
     private static AppSettings InjectorSettings()
     {
@@ -184,8 +162,6 @@ public sealed class ClashApiSecretTests
     [Fact]
     public void Inject_leaves_user_authored_clash_block_untouched()
     {
-        // The user set their own controller (their dashboards, their auth
-        // policy) — we must not graft our secret onto it.
         var raw = "{\"experimental\":{\"clash_api\":{\"external_controller\":\"127.0.0.1:9990\"}}," +
                   "\"outbounds\":[{\"type\":\"vless\",\"tag\":\"proxy\",\"server\":\"1.2.3.4\",\"server_port\":443,\"uuid\":\"u\"},{\"type\":\"direct\",\"tag\":\"direct\"}]}";
         var result = CustomConfigInjector.Inject(raw, Array.Empty<string>(), InjectorSettings());

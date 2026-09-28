@@ -2,9 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-/// <summary>v2.30.0: tests for the new full custom rules engine
-/// (direct/proxy/block actions). Covers parser, ConfigGenerator, and
-/// migration from v2.29.0-r4 CustomDirectRule schema.</summary>
 public class CustomRulesV2_30_ParserTests
 {
     [Fact]

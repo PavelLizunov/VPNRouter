@@ -14,23 +14,8 @@
     <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
   </UserControl.Resources>
 
-  <!-- v2.25.3 — ServersPage redesign per Claude Design handoff section 2.
-       Key differences from the previous layout:
-         • Column-header row above the list (Сервер | IP | Ping | Port)
-         • Radio-style indicator replaces the two separate dots (connected
-           marker + test-status marker) — cleaner single-indicator pattern.
-         • Mono font for name, host subtitle, IP, ping, port (aligns
-           with the table-like feel of the design).
-         • Name + protocol/security subtitle stack inside a single col.
-         • Active row gets arctic tint background + bold+arctic name.
-         • Deep verify button: was violet (#7C3AED, outside the Arctic
-           palette), now arctic primary to match the design-system rule
-           "primary CTAs in arctic, state colours for state only".
-         • `tcp + reality` subtitle sourced from ServerViewModel.HostSubtitle
-           (new in v2.25.3). -->
   <UserControl.Styles>
 
-    <!-- Row wrapper — gets the arctic tint when active -->
     <Style Selector="Border.srv-row">
       <Setter Property="Padding" Value="8,5"/>
       <Setter Property="CornerRadius" Value="3"/>
@@ -40,7 +25,6 @@
       <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
     </Style>
 
-    <!-- Name cell: mono semibold. Active name reads as arctic fg + bold. -->
     <Style Selector="TextBlock.srv-name">
       <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
       <Setter Property="FontSize" Value="11"/>
@@ -53,7 +37,6 @@
       <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
     </Style>
 
-    <!-- Host subtitle — tiny mono muted -->
     <Style Selector="TextBlock.srv-host">
       <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
       <Setter Property="FontSize" Value="9"/>
@@ -71,7 +54,6 @@
       <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
     </Style>
 
-    <!-- Numeric cells (IP / Ping / Port) — mono muted, tiny -->
     <Style Selector="TextBlock.srv-cell">
       <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
       <Setter Property="FontSize" Value="9"/>
@@ -79,7 +61,6 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- Column header row — caps, tiny, muted -->
     <Style Selector="TextBlock.srv-col-label">
       <Setter Property="FontSize" Value="9"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
@@ -87,7 +68,6 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- Compact refresh button at the end of a row -->
     <Style Selector="Button.srv-refresh">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
@@ -102,7 +82,6 @@
       <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
     </Style>
 
-    <!-- Remove default ListBoxItem padding so our Border.srv-row controls it -->
     <Style Selector="ListBox.srv-list ListBoxItem">
       <Setter Property="Padding" Value="0"/>
       <Setter Property="MinHeight" Value="0"/>
@@ -111,7 +90,6 @@
 
   <Grid RowDefinitions="Auto,*,Auto">
 
-    <!-- Sub-tab strip: VLESS Servers / Custom Config -->
     <ListBox Grid.Row="0"
              SelectedIndex="{Binding SelectedServerModeIndex}"
              Background="Transparent"
@@ -127,20 +105,17 @@
       <ListBoxItem Content="{Binding LblServerModeCustom}" Padding="10,4" FontSize="11"/>
     </ListBox>
 
-    <!-- ═══ VLESS Panel ═══ -->
     <Grid Grid.Row="1"
           IsVisible="{Binding IsVlessMode}"
           RowDefinitions="Auto,*,Auto,Auto"
           Margin="10,8,10,4">
 
-      <!-- Column headers — tiny caps labels matching the row grid. -->
       <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
             Margin="8,2,8,4">
         <TextBlock Grid.Column="1" Classes="srv-col-label"
                    Text="{Binding L_ColServer}"/>
         <TextBlock Grid.Column="2" Classes="srv-col-label"
                    Text="{Binding L_ColIp}"/>
-        <!-- v2.30.6-r1 (UX-23 fix): tooltip explains the "—" placeholder. -->
         <TextBlock Grid.Column="3" Classes="srv-col-label"
                    Text="{Binding L_ColPing}"
                    ToolTip.Tip="{Binding L_ColPingTooltip}"
@@ -150,10 +125,6 @@
                    HorizontalAlignment="Center"/>
       </Grid>
 
-      <!-- Server list.
-           v2.20.5 VirtualizingStackPanel kept from prior versions —
-           1000+ rows scenario (bulk paste) still matters even after the
-           redesign. -->
       <ListBox Grid.Row="1"
                x:Name="ServerList"
                Classes="srv-list"
@@ -174,30 +145,16 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ServerViewModel">
             <Border Classes="srv-row" Classes.active="{Binding IsActive}">
-              <!-- v2.30.1-r3: added per-row × delete button (column 6) so
-                   user can remove a row without first clicking it.
-                   Selecting a row auto-reconnects when VPN is running
-                   (intentional UX: "click server = switch"), but
-                   clicking the row JUST to delete it triggered an
-                   unwanted reconnect through the about-to-be-deleted
-                   server before the click reached the Remove button.
-                   Reported 2026-05-01. -->
               <Grid ColumnDefinitions="14,*,100,42,40,24,24" ColumnSpacing="8">
 
-                <!-- Radio -->
                 <Panel Grid.Column="0" VerticalAlignment="Center">
                   <icons:Pictogram Id="radio-on" Width="16" Height="16" IsVisible="{Binding IsActive}" Foreground="{DynamicResource SuccessSolidBrush}"/>
                   <icons:Pictogram Id="radio-off" Width="16" Height="16" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
                 </Panel>
 
-                <!-- Name + host subtitle (+ v2.32 r10 F-C orphan badge) -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                   <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
-                    <!-- v2.32 (r10, F-C) — flags legacy vless.servers entries
-                         that aren't in any active subscription. Usually F-B
-                         migration strips these on load; badge appears as a
-                         safety net for the rare survivors. -->
                     <Border IsVisible="{Binding IsOrphanFromSubscription}"
                             Background="{DynamicResource WarningBgBrush}"
                             BorderBrush="{DynamicResource WarningBorderBrush}"
@@ -220,32 +177,25 @@
                       <TextBlock Classes="srv-use-text" Text="{Binding ProtocolUseCase}"/>
                     </Border>
                   </Grid>
-                  <!-- R2 (urltest audit): honest phased health verdict — never claims
-                       "works" off ping/TCP alone; tooltip carries the RU-block /
-                       canary explanation + raw probe errors. -->
                   <TextBlock Classes="srv-host" Text="{Binding HealthVerdictText}"
                              IsVisible="{Binding HasHealthVerdict}"
                              ToolTip.Tip="{Binding HealthTooltip}"/>
                 </StackPanel>
 
-                <!-- IP -->
                 <TextBlock Grid.Column="2" Classes="srv-cell"
                            Text="{Binding Server}"
                            TextTrimming="CharacterEllipsis"/>
 
-                <!-- Ping (coloured by status; tooltip = full health verdict, R2) -->
                 <TextBlock Grid.Column="3" Classes="srv-cell"
                            Text="{Binding PingDisplay}"
                            Foreground="{Binding StatusDotBrush}"
                            HorizontalAlignment="Center"
                            ToolTip.Tip="{Binding HealthTooltip}"/>
 
-                <!-- Port -->
                 <TextBlock Grid.Column="4" Classes="srv-cell"
                            Text="{Binding Port}"
                            HorizontalAlignment="Center"/>
 
-                <!-- Refresh -->
                 <Button Grid.Column="5" Classes="srv-refresh"
                         icons:PictogramText.Icons="retest" icons:PictogramText.Content="⟳"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
@@ -253,7 +203,6 @@
                         IsEnabled="{Binding !IsTesting}"
                         ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
 
-                <!-- Per-row delete (× ) — does NOT change SelectedServer -->
                 <Button Grid.Column="6" Classes="srv-refresh"
                         icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveServerByEntryCommand}"
@@ -265,16 +214,11 @@
         </ListBox.ItemTemplate>
       </ListBox>
 
-      <!-- Hints — compact, muted.
-           v2.25.3: dropped the "ServerListHint" two-line block. Main hint
-           now lives as a tooltip on the radio column (right-click =
-           edit). TcpUdpHint stays as a single line. -->
       <TextBlock Grid.Row="2"
                  Text="{Binding LblTcpUdpHint}"
                  FontSize="10" Opacity="0.55" TextWrapping="Wrap"
                  Margin="4,6,0,0"/>
 
-      <!-- Server detail editor (opened via right-click) -->
       <Border Grid.Row="3"
               IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
               BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -306,7 +250,6 @@
       </Border>
     </Grid>
 
-    <!-- ═══ Custom Config Panel (unchanged in Phase 3) ═══ -->
     <Grid Grid.Row="1"
           IsVisible="{Binding !IsVlessMode}"
           RowDefinitions="*,Auto"
@@ -339,12 +282,6 @@
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- v2.30.5-r1 (UX-29 fix): empty-state hero shown when no
-             custom configs are present. Pre-r1 the area was blank
-             with only the "Нажмите на конфиг для активации" hint at
-             the bottom — implied an action that was impossible since
-             there was nothing to click. Now explains what custom
-             configs are + how to add one. -->
         <StackPanel HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Spacing="8"
@@ -365,19 +302,11 @@
                  IsVisible="{Binding CustomConfigs.Count}"/>
     </Grid>
 
-    <!-- ═══ Bottom action bar ═══ -->
     <Border Grid.Row="2" Padding="10,6"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}">
       <StackPanel Spacing="6">
-        <!-- Test all + Deep verify + progress row -->
         <StackPanel Spacing="2" IsVisible="{Binding IsVlessMode}">
-          <!-- v2.31.6-r9 — A11y: AutomationProperties.Name on action buttons.
-               ServerTestButtonText / ServerDeepButtonText already give a
-               descriptive label, but their content can flip to short
-               progress strings («Testing…», «Deep…»); the explicit Name
-               binding keeps screen readers announcing the canonical
-               action name regardless of progress state. -->
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Content="{Binding ServerTestButtonText}"
                     Command="{Binding TestAllServersCommand}"
@@ -386,11 +315,6 @@
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                     ToolTip.Tip="{Binding L_TipTestAllServers}"
                     AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
-            <!-- v2.25.3: Deep verify was #7C3AED (violet, outside Arctic
-                 palette). Now arctic primary to match the design-system
-                 rule "primary CTAs in arctic; state colours for state".
-                 Violet stays intentionally only in 3 semantic places
-                 (not here). -->
             <Button Content="{Binding ServerDeepButtonText}"
                     Command="{Binding DeepVerifyAllServersCommand}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
@@ -405,11 +329,6 @@
           <TextBlock Text="{Binding ServerDeepProgressText}"
                      FontSize="10" Opacity="0.7"
                      IsVisible="{Binding ServerDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-          <!-- v2.31.6-r15 (iter#6): active-VPN-intercept warning banner.
-               Shows when Test all detected most servers as Implausible
-               (sub-5 ms latency = local TUN/proxy interception). Pre-r15
-               this was a suffix on the status text but clipped on narrow
-               widths; now its own wrap-able yellow banner. -->
           <Border IsVisible="{Binding ServerTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                   Padding="8,5" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource WarningBgBrush}"
@@ -421,7 +340,6 @@
           </Border>
         </StackPanel>
 
-        <!-- VLESS: URI input + Add/Remove -->
         <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
           <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"
                   Command="{Binding AddServerCommand}"
@@ -434,9 +352,6 @@
                   Margin="6,0,0,0"
                   Padding="14,5" CornerRadius="{StaticResource RadiusSm}"
                   AutomationProperties.Name="{Binding L_TipDeleteServer}"/>
-          <!-- v2.31.6-r9 A11y: VLESS URI textbox needs explicit Name —
-               watermark text disappears once user starts typing, leaving
-               screen readers without context. -->
           <TextBox Text="{Binding VlessUri}"
                    PlaceholderText="{Binding L_WmVlessUri}"
                    FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
@@ -444,7 +359,6 @@
                    AcceptsReturn="False"
                    AutomationProperties.Name="{Binding L_WmVlessUri}"/>
         </DockPanel>
-        <!-- Custom Config buttons -->
         <StackPanel Orientation="Horizontal" Spacing="8"
                     IsVisible="{Binding !IsVlessMode}">
           <Button Content="{Binding LblAddConfig}"

@@ -21,63 +21,25 @@ using Proto = VPNRouter.Core.Services.SplitTunnelDriverProtocol;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Cross-platform seam over the Windows split-tunnel driver (mirror of
-/// <see cref="IWindowsDnsHardening"/>): the single implementation is
-/// <see cref="SplitTunnelDriverManager"/> (Windows), the test double is
-/// <c>FakeSplitTunnelDriver</c> (W1.2). Kept un-attributed so the cross-platform
-/// <c>VpnEngine</c> can hold an <c>ISplitTunnelDriver?</c> field without CA1416 soup;
-/// on non-Windows the field is simply null.
-///
-/// <para><b>Fail-open contract:</b> <see cref="EngageAsync"/> returns <c>false</c> (never
-/// throws) on any failure, and the excluded apps keep working via the post-capture
-/// <c>process_name → direct</c> rules that stay in every generated config. The driver only
-/// ever <i>adds</i> an OS-level bind redirect; losing it degrades to the prior behaviour,
-/// never breaks the network.</para>
-/// </summary>
-// public (not internal) so VpnEngine's public ctor + the PlatformServices factory can take it —
-// same reason IWindowsDnsHardening is public. The manager impl below stays internal.
 public interface ISplitTunnelDriver : IDisposable
 {
-    /// <summary>True when the bundled driver payload is present and the engine may try to engage it.</summary>
     bool IsAvailable { get; }
 
-    /// <summary>Last user-actionable failure from the driver manager, if any.</summary>
     string? LastFailureReason { get; }
 
-    /// <summary>True while the driver is in the ENGAGED state (excluded sockets bind to the
-    /// physical NIC past the TUN).</summary>
     bool IsEngaged { get; }
 
-    /// <summary>Observability only — false when the P3 event pump has died. Does NOT imply the
-    /// split stopped (splitting is in-kernel, independent of the pump). Feeds the badge tooltip / diag.</summary>
     bool IsPumpHealthy { get; }
 
-    /// <summary>Raised on an engaged↔disengaged transition (for the W1.3 badge). Handlers run
-    /// under the manager lock — keep them trivial and non-reentrant.</summary>
     event Action<bool>? EngagedChanged;
 
-    /// <summary>(Re)engage the driver for the given excluded paths + TUN addresses. Idempotent —
-    /// a second call reinitialises (RESET → INITIALIZE → REGISTER → SET). Returns false on any
-    /// failure (fail-open); never throws.</summary>
     Task<bool> EngageAsync(SplitTunnelEngageRequest request, CancellationToken ct);
 
-    /// <summary>RESET the driver to inert (kernel service is left running, per design). Idempotent;
-    /// never throws.</summary>
     Task DisengageAsync(CancellationToken ct);
 
-    /// <summary>Best-effort crash-recovery, called once at engine start: RESET a stale ENGAGED driver
-    /// left by a crashed prior session (the kernel service is never stopped, so its stale config can
-    /// bind a just-launched excluded app to a dead IP after an include-mode restart — the engage hook
-    /// can't catch this because a fresh manager's <see cref="IsEngaged"/> is false). No-op when nothing
-    /// is wired / the driver isn't loaded / we're already engaged. Never throws.</summary>
     Task SweepStaleStateAsync(CancellationToken ct);
 }
 
-/// <summary>Everything needed for a full (re)engage. <paramref name="ExcludedDosPaths"/> are the
-/// already-resolved DOS paths (e.g. <c>C:\Program Files\Discord\Discord.exe</c>) — the manager
-/// converts each to its NT device form. TUN addresses come from settings; the physical internet
-/// NIC is auto-detected.</summary>
 public sealed record SplitTunnelEngageRequest(
     IReadOnlyList<string> ExcludedDosPaths,
     string? TunnelIpv4,
@@ -92,18 +54,6 @@ public enum TrueSplitState
     Fallback
 }
 
-/// <summary>
-/// Sealed manager driving the <c>mullvad-split-tunnel</c> kernel driver: owns the SCM service
-/// (create/adopt, never stopped), the one exclusive overlapped device handle, the two WFP
-/// sublayers the driver installs filters into, and the engage state machine. A production
-/// reshape of the live-verified W1.0 spike; the byte-exact protocol + pure decisions live in
-/// <see cref="SplitTunnelDriverProtocol"/> and are golden-tested on CI. This class is the thin
-/// I/O orchestration — every public method fails open (§3 of the arch plan) and never throws.
-///
-/// <para><b>P2 scope:</b> SCM + collision guard, overlapped-IOCTL wrapper, engage/disengage,
-/// sublayers, crash-sweep, <see cref="NetworkChange"/> re-register, fail-open. The inverted-call
-/// event pump is P3 — <see cref="IsPumpHealthy"/> reports healthy until then.</para>
-/// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 {
@@ -113,22 +63,18 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private static readonly TimeSpan ReRegisterRetryDelay = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan DisposeGateTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PumpJoinTimeout = TimeSpan.FromSeconds(2);
-    // ImageNameLength is a USHORT (<= 65535 b) and the headers are fixed, so a DEQUEUE_EVENT
-    // payload can't exceed this — overflow is impossible by construction (arch §2.2).
     private const int PumpBufferSize = 64 * 1024 + 64;
-    private const int PumpMaxErrorStreak = 3;   // consecutive DEQUEUE errors → pump degraded, stops
+    private const int PumpMaxErrorStreak = 3;
 
     private readonly string _sysPath;
     private readonly string _ownTunName;
     private readonly ILogger _log;
     private readonly Func<string, string?> _queryDosDevice;
 
-    // Serialises the entire control plane (engage / disengage / re-register / sweep). The P3
-    // event pump uses its own OVERLAPPED on the same handle — legal, different OVERLAPPED.
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private SafeDeviceHandle? _device;
-    private SafeWaitHandle? _controlEvent;   // per control-IOCTL wait (its own event, distinct from the pump's)
+    private SafeWaitHandle? _controlEvent;
 
     private volatile bool _engaged;
     private volatile bool _pumpHealthy = true;
@@ -136,9 +82,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private bool _netChangeSubscribed;
     private bool _disposed;
 
-    // Event pump (P3): a dedicated bg thread draining DEQUEUE_EVENT. Observability only — its death
-    // never touches _engaged (splitting is in-kernel, arch §2.1). Its OVERLAPPED needs its OWN event
-    // (the control plane and the pump run concurrent overlapped I/O on the same handle).
     private Thread? _pumpThread;
     private SafeWaitHandle? _pumpEvent;
     private byte[]? _pumpBuffer;
@@ -154,10 +97,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     public string? LastFailureReason { get; private set; }
 
-    /// <param name="driverDir">Directory holding <c>mullvad-split-tunnel.sys</c>; defaults to the
-    /// bundled <c>driver/</c> beside the app (like sing-box). Injectable for tests.</param>
-    /// <param name="ownTunName">Our TUN adapter name, filtered out of the internet-NIC pick.</param>
-    /// <param name="queryDosDevice">Seam over <c>QueryDosDeviceW</c> (default wraps the native call).</param>
     public SplitTunnelDriverManager(
         string? driverDir = null,
         string ownTunName = "VPNRouter-TUN",
@@ -175,20 +114,18 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     public bool IsAvailable => File.Exists(_sysPath);
     public bool IsPumpHealthy => _pumpHealthy;
 
-    // ─── Public API (all fail-open, never throw) ────────────────────────────────
-
     public async Task<bool> EngageAsync(SplitTunnelEngageRequest request, CancellationToken ct)
     {
         if (!OperatingSystem.IsWindows()) return false;
 
         bool before = _engaged, ok;
         try { await _gate.WaitAsync(ct).ConfigureAwait(false); }
-        catch (OperationCanceledException) { return false; }   // cancelled → not engaged (fail-open), never throw
+        catch (OperationCanceledException) { return false; }
         try
         {
             ok = EngageLocked(request);
         }
-        catch (Exception ex)   // fail-path #13 — no exception ever reaches the caller
+        catch (Exception ex)
         {
             _log.Warning(ex, "[SplitTunnel] Engage threw (non-fatal) — RESET + fall back to post-capture routing");
             if (ex is Win32Exception win32
@@ -222,11 +159,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     {
         if (_disposed) return;
         _disposed = true;
-        // Cancel any in-flight NIC-debounce task BEFORE _gate.Dispose() below — else a task waking from
-        // its 5 s retry-delay would re-acquire a disposed _gate (bug-hunt P1-1). Its own finally disposes
-        // the CTS. Unconditional here so it fires even when a prior Disengage already unsubscribed.
-        // The Task no longer disposes its own CTS (see OnNetworkAddressChanged), so cancel + dispose the
-        // last one here. Guard the cancel so Dispose() itself never throws on a teardown race.
         var lastCts = Interlocked.Exchange(ref _debounceCts, null);
         if (lastCts is not null)
         {
@@ -249,24 +181,16 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         _gate.Dispose();
     }
 
-    /// <summary>
-    /// Crash-recovery sweep (§1.3, fail-path #12): if the demand-started driver survived a prior
-    /// session in a <c>&gt; STARTED</c> state (we never stop the service) while we are NOT engaged,
-    /// its stale IP/config would keep splitting excluded apps to a dead address — RESET it. Opens
-    /// the device only if the driver is already loaded (never creates the service just to sweep);
-    /// a device held by a real Mullvad daemon is skipped. Wired at <c>VpnEngine.StartAsyncInternal</c>
-    /// start (W1.2). Never throws.
-    /// </summary>
     public async Task SweepStaleStateAsync(CancellationToken ct = default)
     {
         if (!OperatingSystem.IsWindows() || !File.Exists(_sysPath)) return;
 
         try { await _gate.WaitAsync(ct).ConfigureAwait(false); }
-        catch (OperationCanceledException) { return; }   // never-throw contract (matches DisengageAsync)
+        catch (OperationCanceledException) { return; }
         try
         {
-            if (_engaged) return;                    // active this session — nothing stale
-            if (!EnsureDeviceOpenLocked()) return;   // driver not loaded / held elsewhere → nothing to sweep
+            if (_engaged) return;
+            if (!EnsureDeviceOpenLocked()) return;
             try
             {
                 var state = GetStateLocked();
@@ -276,19 +200,16 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                     TryResetLocked();
                 }
             }
-            finally { CloseDeviceLocked(); }         // we didn't engage; release the exclusive handle
+            finally { CloseDeviceLocked(); }
         }
         catch (Exception ex) { _log.Debug(ex, "[SplitTunnel] Stale-state sweep failed (ignored)"); }
         finally { _gate.Release(); }
     }
 
-    // ─── Engage / disengage flow (under _gate) ──────────────────────────────────
-
     private bool EngageLocked(SplitTunnelEngageRequest request)
     {
         LastFailureReason = null;
 
-        // #1 — driver file present? (build-time sha256 pin is W1.4; runtime just needs the .sys.)
         if (!IsAvailable)
         {
             LastFailureReason = $"True-split driver file is missing at {_sysPath}.";
@@ -296,15 +217,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return false;
         }
 
-        // #1b — P2 (2026-07-10): diagnostic integrity check against the shipped
-        // driver/checksums.sha256 sidecar. Windows kernel-driver signature
-        // enforcement already rejects a TAMPERED .sys, so this doesn't gate the
-        // load (fail-OPEN) — its value is catching a STALE-but-still-signed .sys
-        // (a partial/manual file swap → ABI mismatch with this manager) with a
-        // named log line instead of an opaque later IOCTL failure.
         VerifySysIntegrityLocked();
 
-        // #2/#3 — ensure the kernel service (create / adopt-moved / start), collision-guarded.
         if (DescribeRunningForeignSplitDriverOwner() is { } foreignOwner)
         {
             LastFailureReason = foreignOwner;
@@ -314,18 +228,12 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
         if (!EnsureServiceLocked()) return false;
 
-        // Micro-invariant: sublayers BEFORE any driver IOCTL, so the driver's filters never land
-        // in a sublayer we later delete (#6, and avoids FWP_E_IN_USE junk on teardown).
         if (!EnsureSublayersLocked()) return false;
 
-        // #4 — the single exclusive overlapped handle.
         if (!EnsureDeviceOpenLocked()) return false;
 
         var addrs = ResolveAddresses(request);
 
-        // #10 — no physical internet NIC resolved. BuildAddresses would zero the internet slot, so
-        // excluded sockets bind to 0.0.0.0 and break. Guard BEFORE the cheap-skip: a null inet means we
-        // must not stay engaged regardless of prior state. Full cleanup → fail-open to post-capture.
         if (addrs.inetV4 is null)
         {
             LastFailureReason = "True-split could not find a physical internet adapter with an IPv4 gateway.";
@@ -336,9 +244,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
         var initial = GetStateLocked();
 
-        // Idempotent cheap-skip (bug-hunt P1-3): a re-engage from a hot-apply that changed neither the
-        // excluded set nor the addresses is a no-op — skip the RESET→re-init so we don't briefly un-split
-        // excluded apps for nothing. Only when the driver is already ENGAGED for this exact config.
         if (initial == Proto.DriverState.Engaged && _engaged && _lastRequest is not null
             && _lastRequest.ExcludedDosPaths.SequenceEqual(request.ExcludedDosPaths, StringComparer.OrdinalIgnoreCase)
             && !SplitTunnelPolicy.ShouldReRegister(_lastAddrs, addrs))
@@ -346,8 +251,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return true;
         }
 
-        // Engage state machine (ABI §"State machine"). A non-STARTED state here is either a stale
-        // prior-session tail or a re-engage — RESET brings the driver back to STARTED to re-init.
         if (initial != Proto.DriverState.Started)
         {
             _log.Information("[SplitTunnel] Driver state {State} — RESET before (re)initialise", initial);
@@ -361,12 +264,8 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         IoctlLocked(Proto.IoctlSetConfiguration, BuildConfigBuffer(request.ExcludedDosPaths), null);
 
         var state = GetStateLocked();
-        if (state != Proto.DriverState.Engaged)   // #7
+        if (state != Proto.DriverState.Engaged)
         {
-            // Full cleanup, not just RESET: a failed RE-engage (after a prior success) must clear
-            // _engaged + close the handle, else IsEngaged stays true and the W1.3 badge lies while the
-            // driver is inert. BestEffortResetAndCloseLocked mirrors the exception path (#13); the
-            // EngageAsync wrapper's before/after check then raises EngagedChanged(false) → badge off.
             _log.Warning("[SplitTunnel] Engage did not reach ENGAGED (state={State}) — RESET + fall back", state);
             BestEffortResetAndCloseLocked();
             return false;
@@ -376,7 +275,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         _lastAddrs = addrs;
         _engaged = true;
         SubscribeNetworkChangeLocked();
-        StartPumpLocked();   // observability only — never gates engaged state
+        StartPumpLocked();
         _log.Information("[SplitTunnel] ENGAGED — {N} excluded path(s) bind to internet NIC {Inet}",
             request.ExcludedDosPaths.Count, addrs.inetV4);
         return true;
@@ -384,12 +283,10 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private void DisengageLocked()
     {
-        // Order (arch §2.2): stop the pump FIRST (cancel its pended DEQUEUE + join) so it isn't
-        // holding I/O on the handle when we RESET and close it.
         StopPumpLocked();
         UnsubscribeNetworkChangeLocked();
         if (_device is { IsInvalid: false })
-            TryResetLocked();          // driver → inert STARTED; service is LEFT running (design decision #3)
+            TryResetLocked();
         CloseDeviceLocked();
         DeleteSublayersLocked();
         if (_engaged)
@@ -399,28 +296,14 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
     }
 
-    // #5 — mid-flow engage failure returns the driver to inert. Deliberately does NOT unsubscribe
-    // NetworkChange (we only subscribe on the success tail, so there's nothing to undo) nor delete
-    // the sublayers (a retry reuses them via tolerated ALREADY_EXISTS, and deleting one that just
-    // took a driver filter would leave FWP_E_IN_USE junk). That's why this isn't DisengageLocked.
     private void BestEffortResetAndCloseLocked()
     {
-        StopPumpLocked();   // a prior engage's pump could be live if this is a failed re-engage
-        try { if (_device is { IsInvalid: false }) TryResetLocked(); } catch { /* best effort */ }
+        StopPumpLocked();
+        try { if (_device is { IsInvalid: false }) TryResetLocked(); } catch {  }
         CloseDeviceLocked();
         _engaged = false;
     }
 
-    // ─── SCM: create / adopt / start (never stop) ───────────────────────────────
-
-    /// <summary>
-    /// Fail-OPEN driver-integrity diagnostic: compare the shipped .sys against the
-    /// hash pinned in the sibling <c>checksums.sha256</c>. Mismatch → a named
-    /// warning (stale/mismatched driver, ABI issues possible), NOT a block —
-    /// Windows signature enforcement is the real tamper gate; this only turns a
-    /// silent ABI mismatch into a diagnosable log line. Absent/unreadable sidecar
-    /// → debug + proceed. Never throws.
-    /// </summary>
     private void VerifySysIntegrityLocked()
     {
         try
@@ -480,7 +363,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             }
             try
             {
-                // #3 — collision guard: what does the existing service point at?
                 string? existing = QueryServiceBinPath(svc);
                 var action = SplitTunnelPolicy.ClassifyServiceBinPath(existing ?? string.Empty, _sysPath);
                 switch (action)
@@ -524,7 +406,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (svc == IntPtr.Zero)
         {
             int err = Marshal.GetLastWin32Error();
-            if (err == Native.ERROR_SERVICE_EXISTS)   // race: created between our OpenService and here
+            if (err == Native.ERROR_SERVICE_EXISTS)
             {
                 svc = Native.OpenService(scm, Proto.ServiceName, Native.SERVICE_ALL_ACCESS);
                 if (svc == IntPtr.Zero)
@@ -573,10 +455,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             return true;
         }
         _log.Warning("[SplitTunnel] StartService failed (err={Err}) — post-capture stands", err);
-        // P2 (2026-07-10): name the two SCM errors that otherwise read as a bare
-        // "StartService err=N" — the project has a history of a silent-generic
-        // failure hiding an actionable cause (v2.31.7). 1058/1072 each have a
-        // concrete user remedy.
         LastFailureReason = err switch
         {
             Native.ERROR_SERVICE_MARKED_FOR_DELETE =>
@@ -639,8 +517,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         finally { Marshal.FreeHGlobal(buf); }
     }
 
-    // ─── WFP sublayers (we create them; the driver only installs filters into them) ──
-
     private bool EnsureSublayersLocked()
     {
         if (_sublayersCreated) return true;
@@ -663,7 +539,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private bool AddSublayerLocked(IntPtr engine, Guid key, ushort weight, string name)
     {
-        IntPtr namePtr = Marshal.StringToHGlobalUni(name);   // FWPM_DISPLAY_DATA0.name must be non-null
+        IntPtr namePtr = Marshal.StringToHGlobalUni(name);
         try
         {
             var sub = new Native.FWPM_SUBLAYER0 { subLayerKey = key, weight = weight };
@@ -696,8 +572,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
         finally { Native.FwpmEngineClose0(engine); }
     }
-
-    // ─── Device handle + overlapped control IOCTL ───────────────────────────────
 
     private bool EnsureDeviceOpenLocked()
     {
@@ -749,16 +623,11 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         _controlEvent = null;
     }
 
-    /// <summary>Issues one overlapped control IOCTL and blocks for its completion (control IOCTLs
-    /// are ms-scale, per §1.5 we reap them synchronously — no IOCP). Buffers + the OVERLAPPED are
-    /// pinned via <see cref="GCHandle"/> (no <c>unsafe</c>). Throws <see cref="Win32Exception"/> on
-    /// failure; the caller's try/catch turns that into fail-open.</summary>
     private uint IoctlLocked(uint code, byte[]? input, byte[]? output)
     {
         var dev = _device ?? throw new InvalidOperationException("split-tunnel device not open");
         var evt = _controlEvent ?? throw new InvalidOperationException("split-tunnel control event not created");
 
-        // Reset the manual-reset event so a prior op's signal can't complete this one early.
         Native.ResetEvent(evt);
 
         GCHandle inH = default, outH = default, ovH = default;
@@ -811,15 +680,13 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         return (Proto.DriverState)BitConverter.ToUInt64(outBuf, 0);
     }
 
-    private void ResetLocked() => IoctlLocked(Proto.IoctlReset, null, null);   // METHOD_NEITHER, null buffers
+    private void ResetLocked() => IoctlLocked(Proto.IoctlReset, null, null);
 
-    private void TryResetLocked()   // #11 — a wedged driver must never block teardown / Stop()
+    private void TryResetLocked()
     {
         try { ResetLocked(); }
         catch (Exception ex) { _log.Warning(ex, "[SplitTunnel] RESET failed (driver wedged?) — continuing teardown"); }
     }
-
-    // ─── Buffer assembly (live process snapshot + DOS→NT config) ─────────────────
 
     private byte[] BuildProcessSnapshotBuffer()
     {
@@ -835,7 +702,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             do
             {
                 uint pid = pe.th32ProcessID;
-                if (pid is 0 or 4) continue;   // Idle / System — no queryable image
+                if (pid is 0 or 4) continue;
                 var (ntPath, creation) = QueryProcessImageAndTime(pid);
                 byPid[pid] = new ProcInfo(pid, pe.th32ParentProcessID, creation, ntPath ?? string.Empty);
             } while (Native.Process32Next(snap, ref pe));
@@ -849,7 +716,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private static (string? ntPath, ulong creation) QueryProcessImageAndTime(uint pid)
     {
         IntPtr h = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
-        if (h == IntPtr.Zero) return (null, 0);   // System-protected / gone — skip (empty path)
+        if (h == IntPtr.Zero) return (null, 0);
         try
         {
             string? ntPath = null;
@@ -885,7 +752,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         return (ParseAddr(request.TunnelIpv4), inetV4, ParseAddr(request.TunnelIpv6), inetV6);
     }
 
-    /// <summary>Parses a settings TUN address that may be a bare IP or CIDR ("172.19.0.2/30").</summary>
     private static IPAddress? ParseAddr(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return null;
@@ -901,8 +767,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         return len == 0 ? null : sb.ToString();
     }
 
-    // ─── NetworkChange → re-register (§5.2, fail-path #10) ───────────────────────
-
     private void SubscribeNetworkChangeLocked()
     {
         if (_netChangeSubscribed) return;
@@ -915,8 +779,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (!_netChangeSubscribed) return;
         NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         _netChangeSubscribed = false;
-        // The Task no longer disposes its own CTS (see OnNetworkAddressChanged), so cancel + dispose the
-        // current one here and null it out. Guard the cancel against a teardown race.
         var cts = Interlocked.Exchange(ref _debounceCts, null);
         if (cts is not null)
         {
@@ -927,14 +789,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
     {
-        // NIC flaps fire a burst — debounce 2 s of quiet, then re-check under the gate.
         var fresh = new CancellationTokenSource();
-        // The SUPERSEDER owns the prior CTS's lifetime: cancel it (so its Task unwinds), THEN dispose it.
-        // The Task must NOT dispose its own CTS — that was the r2 daemon crash: the Task's finally-dispose
-        // ran while _debounceCts still referenced the CTS, so the NEXT event's Cancel() hit a disposed CTS
-        // -> ObjectDisposedException thrown synchronously on the NetworkChange callback thread, outside the
-        // Task's try/catch -> whole-daemon crash (found live on brat, r2). With disposal owned here,
-        // _debounceCts never references a disposed CTS. The try/catch stays as belt-and-suspenders.
         var prior = Interlocked.Exchange(ref _debounceCts, fresh);
         if (prior is not null)
         {
@@ -949,23 +804,17 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
                 await Task.Delay(NetChangeDebounce, fresh.Token).ConfigureAwait(false);
                 await ReRegisterIfChangedAsync(fresh.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { /* superseded by a newer change */ }
-            catch (ObjectDisposedException) { /* our CTS was disposed by a superseder/teardown — benign */ }
+            catch (OperationCanceledException) {  }
+            catch (ObjectDisposedException) {  }
             catch (Exception ex) { _log.Debug(ex, "[SplitTunnel] NetworkChange handler error (ignored)"); }
-            // NB: NO finally-dispose here — the next superseder (or Dispose / UnsubscribeNetworkChangeLocked)
-            // disposes `fresh`. Disposing here (the old bug-hunt-P1-2 "leak fix") is what caused the r2
-            // use-after-dispose crash. Every CTS is still disposed exactly once, so there is no leak.
         });
     }
 
-    // Test seam (InternalsVisibleTo): synchronously fire the NetworkChange handler — the exact path that
-    // threw ObjectDisposedException on a NIC-change burst in r2. Lets a unit test stress the CTS
-    // supersede/dispose lifecycle without a real NIC event.
     internal void RaiseNetworkAddressChangedForTest() => OnNetworkAddressChanged(this, EventArgs.Empty);
 
     private async Task ReRegisterIfChangedAsync(CancellationToken ct)
     {
-        if (_disposed) return;   // bug-hunt P1-1: don't touch a _gate that Dispose may be disposing
+        if (_disposed) return;
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -975,23 +824,19 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
             _log.Information("[SplitTunnel] Internet address changed — re-registering (inet {Old} → {New})",
                 _lastAddrs.inetV4, newAddrs.inetV4);
             if (TryReRegisterLocked(newAddrs)) { _lastAddrs = newAddrs; return; }
-            // else: first attempt failed — fall through to the retry below (control flow guarantees it).
         }
         finally { _gate.Release(); }
 
-        // Gate released during the retry wait so Engage/Disengage/Stop aren't blocked for 5 s.
         try { await Task.Delay(ReRegisterRetryDelay, ct).ConfigureAwait(false); }
         catch (OperationCanceledException) { return; }
 
-        if (_disposed) return;   // bug-hunt P1-1: Dispose may have raced the retry wait
+        if (_disposed) return;
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (!_engaged || _device is not { IsInvalid: false } || _lastRequest is null) return;
             var retryAddrs = ResolveAddresses(_lastRequest);
             if (TryReRegisterLocked(retryAddrs)) { _lastAddrs = retryAddrs; return; }
-            // Never hold ENGAGED with a stale internet IP — that would bind excluded apps to a dead
-            // address (anti-fail-open). Disengage so they return to post-capture via the live TUN.
             _log.Warning("[SplitTunnel] Re-register failed twice — disengaging (excluded fall back to post-capture)");
             bool before = _engaged;
             DisengageLocked();
@@ -1002,9 +847,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
 
     private bool TryReRegisterLocked((IPAddress? tunV4, IPAddress? inetV4, IPAddress? tunV6, IPAddress? inetV6) a)
     {
-        // #10 — never register a zeroed internet slot (would bind excluded apps to 0.0.0.0). A null inet
-        // is a re-register FAILURE, not a value to write: it falls into the retry, and on a persistent
-        // null the caller disengages (excluded return to post-capture via the live TUN) rather than lie.
         if (a.inetV4 is null)
         {
             _log.Warning("[SplitTunnel] Re-register skipped — no internet NIC resolved (won't bind excluded apps to 0.0.0.0)");
@@ -1018,23 +860,16 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         catch (Exception ex) { _log.Warning(ex, "[SplitTunnel] REGISTER_IP_ADDRESSES re-register failed"); return false; }
     }
 
-    // ─── Event pump (P3): inverted-call DEQUEUE_EVENT drain — observability only ─────
-
     private void StartPumpLocked()
     {
-        if (_pumpThread is { IsAlive: true }) return;   // a re-engage keeps the running pump
+        if (_pumpThread is { IsAlive: true }) return;
 
-        // Reclaim any orphaned event/buffer left by a PRIOR pump that exited on its own (the 3-error
-        // degrade path never runs StopPumpLocked) or a timed-out-and-since-died one. Safe here because
-        // the guard above proved no pump thread is alive — so we can't unpin a buffer still in use.
-        // Without this we'd leak a pinned 64 KB GCHandle + an event handle per degrade→re-engage cycle.
         FreePumpResourcesLocked();
         _pumpThread = null;
 
         var evt = Native.CreateEventW(IntPtr.Zero, bManualReset: true, bInitialState: false, null);
         if (evt.IsInvalid)
         {
-            // Pump is observability-only; failing to start it must NOT fail the engage (§2.1).
             _log.Warning("[SplitTunnel] Pump event create failed (err={Err}) — ENGAGED without the event pump (split still active, diag degraded)",
                 Marshal.GetLastWin32Error());
             evt.Dispose();
@@ -1058,8 +893,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         if (thread is null) { FreePumpResourcesLocked(); return; }
 
         _pumpStop = true;
-        // CancelIoEx(handle, NULL) aborts the pump's pended DEQUEUE (only I/O outstanding at this
-        // point in Disengage) → its GetOverlappedResult returns ERROR_OPERATION_ABORTED → clean exit.
         if (_device is { IsInvalid: false })
             Native.CancelIoEx(_device, IntPtr.Zero);
 
@@ -1070,11 +903,6 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
         else
         {
-            // Vanishingly rare (CancelIoEx reliably aborts a simple pended IOCTL). Do NOT free the
-            // buffer/event the abandoned thread may still be writing, and KEEP _pumpThread pointing at
-            // it so a later StartPumpLocked's IsAlive guard won't repin/free those resources. They're
-            // reclaimed once it finally dies (next StartPumpLocked) or when CloseDeviceLocked cancels
-            // its IRP; the pump's own try/catch absorbs the closed-handle error.
             _log.Warning("[SplitTunnel] Event pump did not join in {Sec}s — abandoning it (resources reclaimed when it exits)",
                 PumpJoinTimeout.TotalSeconds);
         }
@@ -1130,19 +958,16 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
         }
         catch (Exception ex)
         {
-            // Fail-open both ways: a dead pump is degraded telemetry, NOT a reason to drop the split.
             _log.Warning(ex, "[SplitTunnel] Event pump crashed — marking degraded (split stays active in-kernel)");
             _pumpHealthy = false;
         }
         GC.KeepAlive(evt);
     }
 
-    /// <summary>After a DEQUEUE error: returns false to EXIT the loop (cancelled, or too many
-    /// consecutive errors → degraded), true to keep pumping.</summary>
     private bool ContinueAfterPumpError(int err)
     {
         if (_pumpStop || err == Native.ERROR_OPERATION_ABORTED)
-            return false;   // cancelled by StopPumpLocked / a RESET — clean exit, not a degrade
+            return false;
         if (++_pumpErrorStreak >= PumpMaxErrorStreak)
         {
             _log.Warning("[SplitTunnel] Event pump: {N} consecutive DEQUEUE errors (last err={Err}) — degraded, stopping pump (split unaffected)",

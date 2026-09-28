@@ -16,9 +16,6 @@ public partial class SubscribePage : UserControl
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
     {
-        // v2.40.0-r5 (audit P1): unsubscribe the OLD VM before wiring the new one
-        // (DataContextChanged can fire repeatedly) — else each change leaks a
-        // handler, keeps the old VM alive, and double-fires ScrollIntoView.
         if (_subscribedVm is not null)
             _subscribedVm.ActiveServerChanged -= OnActiveServerChanged;
         _subscribedVm = DataContext as MainWindowViewModel;

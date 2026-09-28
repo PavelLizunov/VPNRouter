@@ -13,9 +13,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.49 regression coverage for the connected-Apply structural baseline.
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineApplyStructuralChangeTests
 {
@@ -193,7 +190,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             App = new AppConfig
             {
                 ConfigMode = "generated",
-                RoutingMode = "full", // Structural change: split -> full triggers forceRestart
+                RoutingMode = "full",
                 FlushDnsOnStart = false,
                 BypassRussianTraffic = false,
                 Subscriptions = new List<SubscriptionEntry>(),
@@ -239,24 +236,20 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
             Assert.False(result, "ApplyAsync must return false when sing-box reload/restart returns false.");
 
-            // 1. Exact message assert (not generic Apply failed)
             Assert.Contains("Apply failed: sing-box reload or restart was not confirmed", statuses);
             Assert.DoesNotContain(statuses, s => s.StartsWith("Applied"));
 
-            // 2. Baseline fingerprint all4 unchanged
             Assert.Equal(baselineConfigMode, engine.ActiveConfigMode);
             Assert.Equal(baselineRoutingMode, engine.ActiveRoutingMode);
             Assert.Equal(baselineTunFingerprint, engine.TunFingerprint);
             Assert.Equal(baselineAppRoutingFingerprint, engine.ActiveAppRoutingFingerprint);
 
-            // 3. Zero HTTP mutations, zero process spawn, zero driver engagement
             if (OperatingSystem.IsWindows())
             {
                 Assert.Empty(fakeHttp.SentRequests);
             }
             else
             {
-                // Unix IsRunning probes GET /configs; reload/restart must issue zero HTTP mutations
                 Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Get);
             }
             Assert.Empty(runner.StartCalls);
@@ -264,7 +257,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
             Assert.Equal(0, fakeDriver.EngageCount);
             Assert.Equal(0, fakeDriver.DisengageCount);
 
-            // 4. No hidden earlier failure in statuses
             Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && !s.Contains("sing-box reload or restart was not confirmed"));
         }
         finally
@@ -474,7 +466,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             App = new AppConfig
             {
                 ConfigMode = "generated",
-                RoutingMode = "full", // Structural change: split -> full triggers forceRestart
+                RoutingMode = "full",
                 FlushDnsOnStart = false,
                 BypassRussianTraffic = false,
                 Subscriptions = new List<SubscriptionEntry>(),
@@ -526,10 +518,8 @@ public sealed class VpnEngineApplyStructuralChangeTests
         {
             var result = await engine.ApplyAsync(settings);
             Assert.False(result);
-            // ZERO capability calls on failed Apply exact branch
             Assert.Empty(firewall.UpdateCalls);
 
-            // NIGHT-06: failed actual Apply retains existing contextA and failoverA (no reset on failed Apply)
             Assert.Same(baselineSettings, GetField(engine, "_failoverSettingsContext"));
             Assert.Same(baselineFailover, GetField(engine, "_failover"));
         }
@@ -592,7 +582,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         const string baselineConfigMode = "generated";
         const string baselineRoutingMode = "full";
-        // Baseline matches candidate so NO structural change occurs -> hot-reload branch taken
         var settings = new AppSettings
         {
             App = new AppConfig
@@ -676,17 +665,14 @@ public sealed class VpnEngineApplyStructuralChangeTests
             var result = await engine.ApplyAsync(settings);
             Assert.True(result, "ApplyAsync should succeed via hot reload.");
 
-            // NIGHT-06: successful actual Apply updates contextB and lazy resets _failover to null
             Assert.Same(settings, GetField(engine, "_failoverSettingsContext"));
             Assert.Null(GetField(engine, "_failover"));
 
-            // Exactly ONE call with exact generated JSON and intent
             var call = Assert.Single(firewall.UpdateCalls);
             Assert.True(call.EnabledForFullTunnel, "Full tunnel + BlockOnVpnFail must enable killswitch");
             Assert.Contains("10.0.0.1", call.ConfigJson);
             Assert.Equal(File.ReadAllText(VPNRouter.Core.AppPaths.CurrentConfigPath), call.ConfigJson);
 
-            // Exactly one HTTP PUT and no runner calls
             Assert.Single(fakeHttp.SentRequests, r => r.Method == HttpMethod.Put);
             if (OperatingSystem.IsWindows())
             {
@@ -720,19 +706,13 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [Fact]
     public void StartupPipeline_ColdOrderingSourceGuard_Phase6SkipsLegacyCapability_AndCommitOccursAfterStartBeforeMonitors()
     {
-        // Note: Cold runtime is not exercised directly in unit tests because real sing-box process
-        // and OS monitors cannot run without OS network stack / privilege; exact cold ordering is pinned
-        // via stripped-comment source guard.
         var source = LoadStartupPipelineSource();
         Assert.True(source != null, "StartupPipeline.cs source could not be loaded.");
 
         var clean = StripComments(source);
 
-        // 1. Phase 6 skips legacy CreateBlockRules for capability managers
         Assert.Contains("firewall is not ICommittedFirewallConfig", clean, StringComparison.Ordinal);
 
-        // 2. Exact execution order in ExecuteAsync:
-        // StartSingBoxPhaseAsync -> UpdateCommittedConfig -> StartMonitorsPhase
         var startIdx = clean.IndexOf("await StartSingBoxPhaseAsync(", StringComparison.Ordinal);
         var commitIdx = clean.IndexOf("committedFirewall.UpdateCommittedConfig(", StringComparison.Ordinal);
         var monitorIdx = clean.IndexOf("StartMonitorsPhase(", StringComparison.Ordinal);
@@ -782,7 +762,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
         {
             await engine.StartAsync(settingsB);
 
-            // NIGHT-06: No-op start ignored because sing-box is already running -> retain contextA and failoverA
             Assert.Same(settingsA, GetField(engine, "_failoverSettingsContext"));
             Assert.Same(failoverA, GetField(engine, "_failover"));
         }

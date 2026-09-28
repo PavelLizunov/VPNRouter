@@ -4,17 +4,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// slice 5 — copy-on-first-use bootstrap. The slipstream-client binary ships
-/// BUNDLED in the installer (app/, like sing-box); on first Start it is promoted
-/// to the canonical runtime path (SlipstreamExePath under %ProgramData%). These
-/// pin SlipstreamManager.EnsureBinaryProvisioned: bundled→runtime copy when
-/// absent, RE-PROMOTION when the runtime copy is a stale size (v2.42.0-r13 fix —
-/// the app/-only auto-update never refreshes the ProgramData copy, so a new CLI
-/// flag the updated DLL passes makes an old binary exit(2) → dns-tunnel dead),
-/// an efficiency skip when sizes match, and fail-closed when nothing is available.
-/// See plans/dns-tunnel-slipstream-integration-2026-06-10.md.
-/// </summary>
 public class SlipstreamManagerProvisioningTests : IDisposable
 {
     private readonly string _root;
@@ -59,41 +48,33 @@ public class SlipstreamManagerProvisioningTests : IDisposable
     [Fact]
     public void Provision_RuntimeSameSize_NotReCopied()
     {
-        // Same size as the bundle → assume identical → skip the (7 MB) re-copy so we
-        // don't rewrite the runtime binary on every Start. A same-length sentinel
-        // survives untouched.
-        var bundled = WriteBundled("AAAA-BUNDLE!!");   // 13 bytes
+        var bundled = WriteBundled("AAAA-BUNDLE!!");
         Directory.CreateDirectory(_binDir);
-        File.WriteAllText(_target, "BBBB-RUNTIME!");    // 13 bytes (same length)
+        File.WriteAllText(_target, "BBBB-RUNTIME!");
 
         var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, bundled, _binDir, null);
 
         Assert.True(ok);
-        Assert.Equal("BBBB-RUNTIME!", File.ReadAllText(_target)); // untouched (sizes match)
+        Assert.Equal("BBBB-RUNTIME!", File.ReadAllText(_target));
     }
 
     [Fact]
     public void Provision_RuntimeStaleDifferentSize_ReCopied()
     {
-        // v2.42.0-r13 regression: an existing user's ProgramData copy is the OLD
-        // slipstream-client.exe (a different size than the freshly-bundled one). Before
-        // the fix the early-return-if-exists left it stale forever, so the r12 DLL
-        // passing --path-stats made the old binary exit(2) → dns-tunnel dead. It MUST
-        // now re-promote (overwrite) when the sizes differ.
-        var bundled = WriteBundled("NEW-BUNDLED-BINARY-WITH-PATH-STATS"); // longer
+        var bundled = WriteBundled("NEW-BUNDLED-BINARY-WITH-PATH-STATS");
         Directory.CreateDirectory(_binDir);
-        File.WriteAllText(_target, "OLD-RUNTIME"); // shorter → stale
+        File.WriteAllText(_target, "OLD-RUNTIME");
 
         var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, bundled, _binDir, null);
 
         Assert.True(ok);
-        Assert.Equal("NEW-BUNDLED-BINARY-WITH-PATH-STATS", File.ReadAllText(_target)); // re-promoted
+        Assert.Equal("NEW-BUNDLED-BINARY-WITH-PATH-STATS", File.ReadAllText(_target));
     }
 
     [Fact]
     public void Provision_NeitherPresent_ReturnsFalse()
     {
-        var missingBundled = Path.Combine(_bundleDir, "slipstream-client.exe"); // never written
+        var missingBundled = Path.Combine(_bundleDir, "slipstream-client.exe");
         var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, missingBundled, _binDir, null);
 
         Assert.False(ok);

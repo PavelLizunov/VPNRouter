@@ -1,9 +1,5 @@
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P07 source-shape guards: pin the CLI start/stop generation contract,
-/// StateFile persistence invariants, and Android error scrub (AND-1).
-/// </summary>
 public sealed class P07CliStopSourceGuardTests
 {
     [Fact]
@@ -141,8 +137,6 @@ public sealed class P07CliStopSourceGuardTests
     {
         var source = ReadRepoFile("VPNRouter.Android", "VpnRouterService.java");
         Assert.Contains("scrubSecrets(e.getMessage())", source);
-        // Throwable.toString() embeds the unsanitized message in the
-        // stack-trace header — must not be passed to Log.e on this path.
         Assert.DoesNotContain("safeMsg, e)", source);
     }
 

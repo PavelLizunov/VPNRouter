@@ -5,14 +5,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — pin contract for
-/// <see cref="CrashReporter.ScrubSecrets"/>. Crash reports are written
-/// to disk and may be shared with support, so any new code path that
-/// regresses the scrub patterns silently leaks the user's vless URI,
-/// subscription URL or Reality public key. These tests enforce the
-/// minimum redaction surface.
-/// </summary>
 public sealed class CrashReporterScrubberTests
 {
     [Fact]
@@ -56,7 +48,6 @@ public sealed class CrashReporterScrubberTests
     {
         var s = CrashReporter.ScrubSecrets($"connection error: {uri}");
         Assert.Contains("[redacted]", s);
-        // The URI body proper must not survive the scrub.
         Assert.DoesNotContain(uri, s);
     }
 
@@ -110,9 +101,6 @@ public sealed class CrashReporterScrubberTests
         Assert.Contains("https://sub.example.com/[redacted]", s);
     }
 
-    // R13-B: wgturn:// carries wireguard key material. WriteReport (crash tail)
-    // and RedactLogText (diagnostics bundle) both funnel through ScrubSecrets,
-    // so this shared-regex pin closes both export paths.
     [Fact]
     public void ScrubSecrets_RedactsWgturnUri()
     {
@@ -143,7 +131,6 @@ public sealed class CrashReporterScrubberTests
     [Fact]
     public void ScrubSecrets_RedactsRealityPublicKey()
     {
-        // 43-char base64url Reality pbk
         const string pbk = "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU";
         var s = CrashReporter.ScrubSecrets($"reality pbk={pbk} sid=78ca7952");
         Assert.DoesNotContain(pbk, s);
@@ -164,8 +151,6 @@ public sealed class CrashReporterScrubberTests
         var s = CrashReporter.ScrubSecrets(input);
         Assert.Equal(input, s);
     }
-
-    // ── OBS-1: token= query-param scrubbing (ws/wss clash_api secret) ────
 
     [Fact]
     public void ScrubSecrets_RedactsWsTokenUri()
@@ -249,9 +234,6 @@ public sealed class CrashReporterScrubberTests
             $"vpnrouter-crashreporter-tests-{Guid.NewGuid():N}");
         try
         {
-            // Must capture the previous resolved value so the rest of the
-            // test suite (other classes touching AppPaths.DataDir) sees
-            // the same view it had before.
             var previous = VPNRouter.Core.AppPaths.DataDir;
 
             VPNRouter.Core.AppPaths.OverrideDataDir(tmp);
@@ -259,7 +241,6 @@ public sealed class CrashReporterScrubberTests
             Assert.Equal(System.IO.Path.Combine(tmp, "logs"),
                 VPNRouter.Core.AppPaths.LogsDir);
 
-            // Restore so other tests keep their assumptions.
             VPNRouter.Core.AppPaths.OverrideDataDir(previous);
             Assert.Equal(previous, VPNRouter.Core.AppPaths.DataDir);
         }
@@ -270,13 +251,6 @@ public sealed class CrashReporterScrubberTests
         }
     }
 
-    // ── OBS-2 (audit R06): bounded crash-tail regression tests ─────────────
-
-    /// <summary>
-    /// Sets up a temp DataDir with a logs/ subdirectory containing a single
-    /// vpnrouter-test.log file, calls WriteReport, and returns the report text.
-    /// Restores AppPaths.DataDir in all cases.
-    /// </summary>
     private static string WriteReportWithLog(string logContent)
     {
         var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
@@ -304,7 +278,6 @@ public sealed class CrashReporterScrubberTests
     [Fact]
     public void WriteReport_LargeLog_OnlyLast200Lines()
     {
-        // 300 numbered lines; the report must contain lines 101-300 and NOT lines 1-100.
         var lines = Enumerable.Range(1, 300).Select(i => $"log-line-{i:D4}");
         var report = WriteReportWithLog(string.Join(Environment.NewLine, lines));
 
@@ -327,8 +300,6 @@ public sealed class CrashReporterScrubberTests
     [Fact]
     public void WriteReport_TailStillScrubbed()
     {
-        // A vless:// URI in the last log line must be redacted in the report
-        // (preserves P09 scrubber behavior after the OBS-2 tail change).
         const string secret = "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443";
         var logContent = string.Join(Environment.NewLine,
             Enumerable.Range(1, 5).Select(i => $"benign line {i}")

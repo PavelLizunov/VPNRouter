@@ -1,51 +1,3 @@
-// v2.41.2-r4 (2026-06-09 — reconnect-stop false-crash suppression) pins.
-//
-// Bug report: Pavel's diagnostics 2026-06-09 (running v2.41.2-r1) showed that
-// switching subscription / VLESS server from the GUI logged a misleading
-//   [ERR] [SingBoxManager] sing-box crashed (exit code: -1)
-// on EVERY server switch — and could fire the Crashed event, prompting
-// HealthMonitor to launch a redundant recovery restart on top of the reconnect
-// (churn + a brief extra outage).
-//
-// Root cause: switching server → MainWindowViewModel.ReconnectAsync stops the
-// old sing-box (VpnEngine.Stop → SingBoxManager.Stop → StopInternal) and starts
-// a fresh one (VpnEngine.StartAsync) — i.e. Stop()+Start, NOT Restart(). The
-// intentional Windows Kill exits with code -1. The existing belt-and-braces
-// guard (v2.37.0-r52) only converts that -1 into an "expected exit" INF line +
-// suppresses Crashed when `_restartInProgress` is true — and that flag is set
-// ONLY inside SingBoxManager.Restart(). The reconnect path never sets it, so
-// when SuppressExitedEvent loses its ~14-33ms race, the late Exited callback
-// fell through to the ERR "crashed" branch and fired Crashed.
-//
-// Fix (extends, not fights, the _restartInProgress design): a sibling
-// `_stopInProgress` volatile flag set across StopInternal's kill+wait+cleanup
-// body. OnProcessExited's suppression guard becomes
-// `(_restartInProgress || _stopInProgress) && exitCode in {-1,137,143}`, so an
-// intentional Stop is recognised too. The flag is true ONLY during a stop, so
-// it cannot mask a GENUINE crash (process dies on its own → no teardown in
-// flight → both flags false → Crashed still fires + HealthMonitor still
-// recovers). The exit-code gate is a second discriminator (a real sing-box
-// FATAL exits with code 1, never the Kill-signal codes).
-//
-// What this file pins:
-//   Source (OS-agnostic, runs on Linux CI):
-//     1. `_stopInProgress` declared volatile.
-//     2. StopInternal sets it true BEFORE the first Kill.
-//     3. StopInternal clears it in the finally (paired with the _stopState reset).
-//     4. OnProcessExited's suppression guard ORs-in `_stopInProgress` and still
-//        gates on the -1/137/143 intentional-kill exit codes.
-//   Behavioural (Windows-gated — StartWithJson uses the Windows TUN-lock +
-//   netsh pre-launch cleanup; mirrors SingBoxManagerProcessRunnerTests):
-//     5. A reconnect-stop with the late-Exited race LOST does NOT fire Crashed
-//        and logs the "expected exit" line at INF (not ERR "crashed").
-//     6. A GENUINE crash (exit 1, no teardown in flight) STILL fires Crashed +
-//        State=Failed + logs ERR "crashed" — the HealthMonitor recovery trigger.
-//     7. A spontaneous -1 with NO teardown in flight (e.g. Task-Manager kill)
-//        STILL fires Crashed — proving the exit code alone is never suppressed.
-//
-// Brief: continuation of the brat (v2.36.0-r4 SuppressExitedEvent) / ekko
-// (v2.37.0-r52 _restartInProgress) intentional-stop regression lineage.
-
 #nullable enable
 
 using System;
@@ -63,31 +15,11 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins the v2.41.2-r4 reconnect-stop false-crash suppression. See file-header.
-/// </summary>
 public sealed class SingBoxManagerReconnectStopSuppressionTests
 {
-    // ─── Source pins (OS-agnostic — run on Linux CI) ─────────────────────────
-
-
-
-
-
-
-
-
-
-    // ─── Behavioural pins (Windows-gated — see file header) ──────────────────
-
     [Fact]
     public void ReconnectStop_LateExitedRaceLost_DoesNotFireCrashed_LogsExpectedExitAtInfo()
     {
-        // The fix, end-to-end. Drive the EXACT reconnect teardown
-        // (Stop → StopInternal: SuppressExitedEvent then Kill) with the
-        // late-Exited race LOST (SimulateExitedRaceLost) so the OS callback fires
-        // synchronously WHILE _stopInProgress is true — reproducing the
-        // ~14-33ms window from Pavel's logs deterministically.
         if (!OperatingSystem.IsWindows()) return;
 
         var (logger, sink) = BuildCapturingLogger();
@@ -105,55 +37,43 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
             manager.StartWithJson("{}");
             Assert.Equal(SingBoxState.Running, manager.State);
 
-            // Reconnect server-switch teardown.
             manager.Stop();
 
             Assert.Equal(SingBoxState.Stopped, manager.State);
 
-            // The fix: an intentional -1 exit during a stop is NOT a crash.
             Assert.Equal(0, crashedCount);
 
             var events = sink.Events;
 
-            // No ERR "sing-box crashed (exit code ...)" line.
             Assert.DoesNotContain(events, e =>
                 e.Level == LogEventLevel.Error &&
                 e.MessageTemplate.Text.Contains("sing-box crashed (exit code"));
 
-            // INF "Expected exit during intentional stop ..." line present, and
-            // rendered with phase = "stop" (not "restart").
             var suppression = events.FirstOrDefault(e =>
                 e.Level == LogEventLevel.Information &&
                 e.MessageTemplate.Text.Contains("Expected exit during intentional") &&
                 e.MessageTemplate.Text.Contains("suppressing Crashed event"));
             Assert.True(suppression != null,
                 "Expected an INF 'Expected exit during intentional ... suppressing Crashed event' line.");
-            // The structured {Phase} property must be "stop" (a plain reconnect
-            // Stop, NOT a Restart) — assert on the property, not the rendered
-            // text, to stay immune to Serilog's string-quoting in RenderMessage.
             Assert.True(suppression!.Properties.TryGetValue("Phase", out var phaseProp),
                 "suppression log event must carry a {Phase} property");
             Assert.Equal("stop", (phaseProp as ScalarValue)?.Value);
-            // With {Phase:l} the rendered line reads cleanly (no quotes).
             Assert.Contains("intentional stop (exit code: -1)", suppression.RenderMessage());
         }
         finally
         {
-            try { File.Delete(exe); } catch { /* best-effort */ }
+            try { File.Delete(exe); } catch {  }
         }
     }
 
     [Fact]
     public void GenuineCrash_NoTeardownInFlight_FiresCrashed_StateFailed_LogsCrashAtError()
     {
-        // The genuine-crash recovery path MUST be untouched: sing-box dies on its
-        // own (FATAL exit code 1) with NO Stop/Restart in flight → Crashed fires
-        // (HealthMonitor's recovery trigger) + State=Failed + ERR "crashed".
         if (!OperatingSystem.IsWindows()) return;
 
         var (logger, sink) = BuildCapturingLogger();
         var fake = new FakeProcessRunner();
-        var handle = new FakeProcessHandle(pid: 42002); // SimulateExitedRaceLost = false
+        var handle = new FakeProcessHandle(pid: 42002);
         fake.OnStart(_ => true, _ => handle);
 
         var exe = CreateStubExe();
@@ -165,7 +85,6 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
 
             manager.StartWithJson("{}");
 
-            // Spontaneous FATAL — no teardown in flight.
             handle.SignalExit(exitCode: 1);
 
             Assert.Equal(1, crashedCount);
@@ -175,24 +94,18 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
             Assert.Contains(events, e =>
                 e.Level == LogEventLevel.Error &&
                 e.MessageTemplate.Text.Contains("sing-box crashed (exit code"));
-            // And NOT the suppression line — this was a real crash.
             Assert.DoesNotContain(events, e =>
                 e.MessageTemplate.Text.Contains("Expected exit during intentional"));
         }
         finally
         {
-            try { File.Delete(exe); } catch { /* best-effort */ }
+            try { File.Delete(exe); } catch {  }
         }
     }
 
     [Fact]
     public void ExitMinusOne_NoTeardownInFlight_StillFiresCrashed()
     {
-        // Guards the dangerous over-suppression failure mode: the Kill-signal
-        // exit code (-1) must NEVER be suppressed on its own. Only
-        // teardown-in-flight + that code is suppressed. A spontaneous -1 (e.g.
-        // user kills sing-box via Task Manager) is a real crash → Crashed must
-        // fire so HealthMonitor recovers and the user isn't left offline.
         if (!OperatingSystem.IsWindows()) return;
 
         var (logger, sink) = BuildCapturingLogger();
@@ -209,7 +122,6 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
 
             manager.StartWithJson("{}");
 
-            // Spontaneous -1, NO Stop()/Restart() in flight.
             handle.SignalExit(exitCode: -1);
 
             Assert.Equal(1, crashedCount);
@@ -222,11 +134,9 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         }
         finally
         {
-            try { File.Delete(exe); } catch { /* best-effort */ }
+            try { File.Delete(exe); } catch {  }
         }
     }
-
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private static SingBoxManager BuildManager(IProcessRunner runner, string exePath, ILogger logger) =>
         new(new SingBoxSettings { ExecutablePath = exePath, ClashApi = "127.0.0.1:9090" },
@@ -251,8 +161,6 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         return (logger, sink);
     }
 
-    /// <summary>Returns the StopInternal method body (bounded between its header
-    /// and the following Restart() header) plus its start offset.</summary>
     private static (string body, int start) StopInternalBody()
     {
         var src = ReadSingBoxManagerSource();
@@ -283,11 +191,6 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         return ReadAllParts(fallback);
     }
 
-    // Reads the named source file PLUS any partial-class sibling files
-    // (e.g. SingBoxManager.cs + SingBoxManager.CrashDetect.cs + ...) in the
-    // same directory, concatenated. Keeps source-characterization assertions
-    // stable across a partial-class split: the asserted method may live in any
-    // partial, so we search the whole class source, not just the anchor file.
     private static string ReadAllParts(string primaryPath)
     {
         var dir = Path.GetDirectoryName(primaryPath)!;
@@ -302,8 +205,6 @@ public sealed class SingBoxManagerReconnectStopSuppressionTests
         return string.Join("\n", parts.Select(File.ReadAllText));
     }
 
-    /// <summary>Thread-safe in-memory Serilog sink so the behavioural tests can
-    /// assert on emitted log events (level + message template).</summary>
     private sealed class CapturingSink : ILogEventSink
     {
         private readonly List<LogEvent> _events = new();

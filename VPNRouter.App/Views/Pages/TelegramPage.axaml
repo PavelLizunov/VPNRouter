@@ -15,63 +15,11 @@
         <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
     </UserControl.Resources>
 
-    <!--
-      v2.36.0-r7 — TgProxyOneTap redesign per claude.ai/design handoff
-      `TgProxyOneTap.html`, variant A · Centered stack.
-      Bundle: C:/tmp/vpnrouter-design-tgproxy/vpnrouter-design-system/
-              project/TgProxyOneTap.html
-
-      User intent (chat5.md transcript): «дамай переделаем дизайн "6 ·
-      Инструменты → TgProxy" так чтоб была однокнопочный простой флов,
-      … нажал 1 кнопку и произошла магия». 2026-05-24 ship of v2.36.0-r6
-      MVP one-button flow (per-step download · port pre-check · scheme
-      banner · secret persistence) covered the *engine* side; this r7
-      delivers the matching UX surface.
-
-      Layout (variant A from the 6-option exploration):
-        1. Soft accent radial-glow hero card.
-        2. Plane icon (paper-plane Path, 46×46, accent-border).
-        3. Title  — flips stopped/running via LblTgProxyHeroTitle.
-        4. Lede   — flips stopped/running via LblTgProxyHeroLede.
-        5. Magic button (big primary, accent-solid) — fires
-           TgProxyMainActionCommand (download → start → open-Telegram
-           on first run, Stop afterwards). Same command as the footer
-           button — by design (both surfaces drive the same flow; body
-           is the hero, footer is muscle-memory).
-        6. 3 step chips (1 локально / 2 t.me/proxy / 3 авто-настройка)
-           visible only when stopped. Disappear in running state.
-        7. Air-pill «В эфире · :1443» visible only when running.
-
-      Persistent panels (kept from r3+r6):
-        - Per-step download progress textblock (r6 MVP task A).
-        - Toast banner (r4 BUG#3 fix).
-        - Scheme-missing warning (r6 MVP task C).
-
-      Power-user controls (Port + Secret + Open folder + GitHub +
-      version banner + setup hint) collapse into the «Тонкая настройка»
-      Expander — hidden by default per chat:
-        «Порт / Secret / PID / GitHub / папка — спрятаны в свёрнутый
-         блок "Тонкая настройка" внизу. По умолчанию закрыт.»
-      No information loss vs r3 — same controls, just stowed behind one tap.
-
-      Don'ts (from chat5.md):
-        - Don't mention «один клик / one-click» in copy.
-        - Don't introduce destructive-red CTA for Stop — same accent toggle.
-      -->
-
     <Grid RowDefinitions="*,Auto">
 
-        <!-- r31: 4-row Grid (same as DpiBypassPage r31). Hero + TabStrip
-             ALWAYS VISIBLE (Auto rows), TabContent gets remaining * row.
-             User rule: «магия одного клика — кнопка всегда видна без
-             скролла». Power-user details in tabs below. -->
         <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*" Margin="12,8,14,8">
             <StackPanel Grid.Row="0" Spacing="8">
 
-                    <!-- ────────── 1 · Per-step download progress (r6 MVP).
-                         Sits above the hero so visibility doesn't shift the
-                         hero card position on first-run install. Hidden when
-                         download not in flight. -->
                     <StackPanel IsVisible="{Binding IsTgProxyDownloading}" Spacing="6">
                         <ProgressBar IsIndeterminate="True"
                                      Height="3"
@@ -85,13 +33,6 @@
                                    Foreground="{DynamicResource TextSecondaryBrush}"/>
                     </StackPanel>
 
-                    <!-- ────────── 2 · Hero card — accent glow + centered stack.
-                         Outer Border is the rounded card with subtle border;
-                         inner Grid layers a soft RadialGradientBrush behind
-                         the content for the «marketing event» feel from
-                         design A. ZIndex via Grid layering: glow is bottom,
-                         StackPanel is top. -->
-                    <!-- r48: padding tightened + icon-LEFT layout for parity with DpiBypass -->
                     <Border CornerRadius="{StaticResource RadiusLg}"
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -99,9 +40,6 @@
                             Padding="16,10,16,12"
                             ClipToBounds="True">
                         <Grid>
-                            <!-- r48: glow disc anchored top-right to leave the
-                                 text column visually clean. Was centered/large
-                                 pre-r48 which clashed with new icon-left layout. -->
                             <Ellipse Width="140" Height="140"
                                      HorizontalAlignment="Right"
                                      VerticalAlignment="Top"
@@ -117,10 +55,6 @@
 
                             <StackPanel Spacing="10" HorizontalAlignment="Stretch" MaxWidth="420">
 
-                                <!-- r48: icon-LEFT header (same pattern as
-                                     DpiBypassPage r48). Saves ~40px of vertical
-                                     space by placing icon col 0 + title/lede
-                                     col 1 side-by-side instead of stacking. -->
                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
                                     <Border Grid.Column="0" Grid.RowSpan="2"
                                             Width="36" Height="36"
@@ -154,9 +88,6 @@
                                                Margin="0,3,0,0"/>
                                 </Grid>
 
-                                <!-- The magic button — big primary accent.
-                                     r36: MinWidth 240→220 (still hero feel,
-                                     narrower windows benefit). -->
                                 <Button Command="{Binding TgProxyMainActionCommand}"
                                         IsEnabled="{Binding !IsTgProxyDownloading}"
                                         Background="{DynamicResource AccentSolidBrush}"
@@ -171,11 +102,6 @@
                                         FontSize="13"
                                         AutomationProperties.Name="{Binding LblTgProxyMainAction}">
                                     <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                        <!-- Inline play / stop glyph. The design
-                                             uses a circular bg with a play
-                                             triangle; we keep it lean with
-                                             just the triangle so the button
-                                             stays compact at narrow widths. -->
                                         <icons:Pictogram Id="play" Width="14" Height="14"
                                                          Foreground="{DynamicResource AccentOnSolidBrush}"
                                                          VerticalAlignment="Center"
@@ -189,13 +115,6 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- r36: 3-step chips REMOVED (consumed ~80px when stopped,
-                                     duplicated info from hero lede). Steps still
-                                     described in lede + tabs/Help section. -->
-
-                                <!-- Air-pill (only when running). Green
-                                     dot + «В эфире · :1443». Adds the
-                                     truncated secret + Copy link mini-row. -->
                                 <StackPanel IsVisible="{Binding TgProxyEnabled}"
                                             Orientation="Horizontal"
                                             Spacing="6"
@@ -215,12 +134,6 @@
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource SuccessFgBrush}"
                                                        VerticalAlignment="Center"/>
-                                            <!-- v2.37.0-r15 — surface live TgProxy stats
-                                                 (Active / Total / ↑bytes ↓bytes) inside
-                                                 the air-pill. TgProxyStats is populated by
-                                                 the StatsUpdated event from TgProxyManager
-                                                 and refreshed on each parse cycle. Hidden
-                                                 until first stats arrive. -->
                                             <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding TgProxyStats}"
                                                        IsVisible="{Binding HasTgProxyStats}"
                                                        FontSize="10"
@@ -246,10 +159,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- ────────── 3 · Toast banner (r4 BUG#3 fix).
-                         Auto-clears after 2.5 s, hosts «Copied!»,
-                         «New secret» etc. without overwriting runtime
-                         status. -->
                     <Border IsVisible="{Binding HasTgProxyToast}"
                             Padding="10,6"
                             CornerRadius="{StaticResource RadiusSm}"
@@ -262,10 +171,6 @@
                                    Foreground="{DynamicResource AccentFgBrush}"/>
                     </Border>
 
-                    <!-- ────────── 4 · Scheme-missing warning (r6 MVP).
-                         Pops only when tg:// scheme has no registered
-                         handler at start-time. Proxy keeps running;
-                         banner offers Copy link + Dismiss fallbacks. -->
                     <Border IsVisible="{Binding IsTelegramSchemeWarningVisible}"
                             Padding="10,8"
                             CornerRadius="{StaticResource RadiusSm}"
@@ -293,23 +198,8 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ────────── 5 · r25 — Тонкая настройка as TabControl.
-                         Replaces the prior Expander block. Same rationale
-                         as DpiBypassPage r25 — Expander-in-ScrollViewer was
-                         the chronic source of "can't scroll to bottom"
-                         complaints. Tabs give each section its own viewport.
-                         3 tabs (less content than Zapret so fewer tabs):
-                           0 — Настройки  (Port + Secret + Regenerate)
-                           1 — Версия     (Version + Update + Reopen + status)
-                           2 — Помощь     (Setup hint + Folder + GitHub) -->
-
-                    <!-- r32: Description REMOVED from Row 0 — duplicated
-                         Hero lede and ate space that pushed tabs off-screen. -->
-
             </StackPanel>
 
-            <!-- r31 tab strip — ToggleButton with underline-active style.
-                 3 tabs: Настройки / Версия / Помощь. -->
             <UniformGrid Grid.Row="1" Rows="1" Columns="3" Margin="0,8,0,0">
                 <ToggleButton IsChecked="{Binding IsTgProxyTab0}"
                               Command="{Binding SetTgProxyTabCommand}"
@@ -346,16 +236,13 @@
                     Padding="10,6">
                 <Panel>
 
-                        <!-- ─── Tab 0: Настройки ─── -->
                         <ScrollViewer IsVisible="{Binding IsTgProxyTab0}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
 
-                            <!-- 2-column grid: Порт (120 px) | Secret (1fr). -->
                             <Grid ColumnDefinitions="120,*" ColumnSpacing="12">
 
-                                <!-- Col 1: Порт -->
                                 <StackPanel Grid.Column="0" Spacing="3">
                                     <TextBlock Text="{Binding L_TgProxyPort}"
                                                FontSize="9"
@@ -370,7 +257,6 @@
                                              AutomationProperties.Name="{Binding L_TgProxyPort}"/>
                                 </StackPanel>
 
-                                <!-- Col 2: Secret + Copy + New -->
                                 <StackPanel Grid.Column="1" Spacing="3">
                                     <TextBlock Text="{Binding L_TgProxySecret}"
                                                FontSize="9"
@@ -404,15 +290,11 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- ─── Tab 1: Версия ─── -->
                         <ScrollViewer IsVisible="{Binding IsTgProxyTab1}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
 
-                            <!-- Version + Update banner. The body status
-                                 dot here is informational; runtime state
-                                 also surfaces in the footer indicator. -->
                             <Border Padding="10,8"
                                     CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource SurfaceSunkenBrush}"
@@ -453,10 +335,6 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Reopen-in-Telegram lives on the Версия tab
-                                 because it's an action tied to current
-                                 connection state, not to settings. Folder
-                                 + GitHub move to the Помощь tab. -->
                             <Button Content="{Binding L_TgProxyReopenInTelegram}"
                                     Command="{Binding OpenTgProxyInTelegramCommand}"
                                     FontSize="10" Padding="10,5"
@@ -467,15 +345,11 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- ─── Tab 2: Помощь ─── -->
                         <ScrollViewer IsVisible="{Binding IsTgProxyTab2}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
 
-                            <!-- Manual setup hint (for clients without
-                                 working tg:// scheme — covers the long
-                                 tail of custom Telegram distros). -->
                             <Border Padding="10,8"
                                     CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource SurfaceSunkenBrush}">
@@ -488,7 +362,6 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Folder + GitHub side by side. -->
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Button Content="{Binding L_OpenFolder}"
                                         Command="{Binding OpenTgProxyFolderCommand}"
@@ -501,7 +374,6 @@
                                         Foreground="{DynamicResource AccentSolidBrush}"/>
                             </StackPanel>
 
-                            <!-- Author credit. -->
                             <TextBlock Text="Flowseal/tg-ws-proxy"
                                        FontSize="9"
                                        Opacity="0.4"
@@ -515,10 +387,6 @@
             </Border>
         </Grid>
 
-        <!-- ────────── 6 · Footer — kept from r3+r6.
-             Page-specific status + Stop button. Same TgProxyMainAction
-             command as the hero button; lives here for muscle memory
-             and narrow-window cases where the hero scrolls off. -->
         <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -538,9 +406,6 @@
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-                <!-- r51: footer CTA button removed (same as DpiBypass).
-                     Hero already has the magic button at top of page.
-                     Footer keeps only status dot + text. -->
                 <Button Grid.Column="1"
                         IsVisible="False"
                         Content="{Binding LblTgProxyMainAction}"

@@ -8,20 +8,12 @@ using VPNRouter.Core;
 
 namespace VPNRouter.App.Views;
 
-/// <summary>
-/// About dialog. Shows version, sing-box version, author, and a link back to
-/// the GitHub repo. Opened from the ⋯ menu flyout. v2.25.0 — took over the
-/// "by NiniTux · v2.x.y · sing-box …" subtitle that used to live in the
-/// compact header so the header can be a single tight row of badges.
-/// </summary>
 public partial class AboutWindow : Window
 {
     public AboutWindow()
     {
         InitializeComponent();
 
-        // Load the same logo the main window shows in its header. Falls back
-        // silently — a missing asset here is a cosmetic miss, not a crash.
         try
         {
             using var stream = AssetLoader.Open(
@@ -30,10 +22,8 @@ public partial class AboutWindow : Window
         }
         catch
         {
-            // Asset missing at runtime — leave placeholder blank.
         }
 
-        // Populate the info block from AppVersion and the bundled sing-box.
         VersionTextBlock.Text = $"v{AppVersion.Version}";
         SingBoxTextBlock.Text = GetSingBoxVersion();
     }
@@ -57,24 +47,9 @@ public partial class AboutWindow : Window
         }
         catch
         {
-            // Default browser unavailable / denied — no-op, this is just a
-            // convenience link, the user can paste the URL manually.
         }
     }
 
-    /// <summary>
-    /// Resolve the bundled sing-box binary version. On first launch the
-    /// binary may not be extracted yet; in that case we return a placeholder
-    /// rather than raising. Mirrors MainWindowViewModel.GetSingBoxVersion but
-    /// kept local so the About dialog is self-contained.
-    /// v2.25.0-r2: on macOS the probe was silently returning "unknown"
-    /// because stderr wasn't redirected — sing-box on darwin writes some
-    /// boot diagnostics to stderr first, and without a reader the stderr
-    /// pipe fills up and the child blocks before it gets to print the
-    /// version line. Fix: redirect both streams, wait, then parse whichever
-    /// stream contained the "version" token. Also write any exception to a
-    /// sidecar log so the next Mac report has something concrete.
-    /// </summary>
     private static string GetSingBoxVersion()
     {
         try
@@ -97,13 +72,10 @@ public partial class AboutWindow : Window
             };
             proc.Start();
 
-            // Drain both pipes so neither fills up and blocks the child.
-            // ReadToEnd is fine because sing-box version exits within ms.
             var stdout = proc.StandardOutput.ReadToEnd();
             var stderr = proc.StandardError.ReadToEnd();
             proc.WaitForExit(3000);
 
-            // Check stdout first (canonical), then stderr as fallback.
             foreach (var source in new[] { stdout, stderr })
             {
                 foreach (var line in source.Split('\n'))
@@ -114,10 +86,6 @@ public partial class AboutWindow : Window
                 }
             }
 
-            // Nothing matched — last-resort: return the first non-empty
-            // output line so the user at least sees WHAT came back rather
-            // than an opaque "unknown". Cap length so the dialog layout
-            // doesn't explode if sing-box printed a huge stack trace.
             var firstLine = (stdout + "\n" + stderr)
                 .Split('\n')
                 .Select(l => l.Trim())
@@ -129,9 +97,6 @@ public partial class AboutWindow : Window
         }
         catch (Exception ex)
         {
-            // Best-effort: log to ~/.../logs/about-probe.log so the next
-            // support round can see what failed without having to add a
-            // debugger. Silent if log write itself fails.
             try
             {
                 var logPath = System.IO.Path.Combine(AppPaths.LogsDir, "about-probe.log");
@@ -140,7 +105,7 @@ public partial class AboutWindow : Window
                     logPath,
                     $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {ex.Message}\n");
             }
-            catch { /* log failure is not a crash */ }
+            catch {  }
 
             return $"err: {ex.GetType().Name}";
         }

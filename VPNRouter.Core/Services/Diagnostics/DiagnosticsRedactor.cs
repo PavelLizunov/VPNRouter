@@ -5,56 +5,21 @@ using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Services.Diagnostics;
 
-/// <summary>
-/// Redacts secrets from the structured config files (config.yaml +
-/// current.json) and from log text, so a diagnostics bundle can be shared
-/// with support without leaking the user's VPN credentials.
-///
-/// CARDINAL RULE — fail safe. A redaction bug here is a credential leak, so
-/// this is built to over-redact rather than under-redact:
-///
-///  • Structured data (YAML/JSON) uses an ALLOWLIST of known-safe scalar keys.
-///    Any key NOT on the allowlist has its scalar value replaced with
-///    <c>***</c>. This means an unknown / newly-added secret field defaults to
-///    redacted (the audit acceptance criterion "unknown structured fields
-///    default to redacted"). Keys are always preserved — only VALUES are
-///    redacted — so the bundle stays diagnostic (you see the field exists).
-///  • Numbers and booleans are kept regardless of key (a port or a flag is not
-///    a credential), which preserves diagnostic value without leaking anything.
-///  • URL-bearing keys keep only their host; the path/query (where a
-///    subscription token lives) is dropped.
-///  • If a file fails to parse, it is OMITTED entirely rather than emitted raw
-///    — never risk leaking a secret because the parser tripped.
-///  • Log text (no key structure) uses the existing best-effort regex scrubber
-///    <see cref="CrashReporter.ScrubSecrets"/> (proxy URIs, http URLs, UUIDs,
-///    long base64/key runs).
-/// </summary>
 public static class DiagnosticsRedactor
 {
-    /// <summary>Replacement token for a redacted scalar value.</summary>
     public const string Redacted = "***";
 
-    /// <summary>Emitted in place of a file whose structured redaction failed.</summary>
     public const string OmittedOnParseFailure =
         "[diagnostics: structured redaction failed for this file; it was omitted to avoid leaking secrets]";
 
-    // Known-safe scalar keys. ONLY these have their string value preserved;
-    // everything else is replaced with `***`. Generous but deliberately
-    // excludes every credential field (uuid, password, short_id, private_key,
-    // secret, token, psk, auth, generic "key") and PII-heavy paths
-    // (process_path, rule_set local path can carry the OS username).
     private static readonly HashSet<string> SafeKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        // identity / structure
         "name", "tag", "type", "enabled", "label", "title",
-        // endpoint (host kept per design — not a credential)
         "server", "server_port", "port", "listen", "listen_port",
         "address", "server_name", "sni",
-        // transport / TLS (public-by-design values)
         "network", "transport", "security", "alpn", "flow", "fingerprint",
         "utls", "public_key", "pbk", "packet_encoding", "disable_sni",
         "insecure", "allow_insecure", "reality", "tls",
-        // DNS / routing structure
         "domain_strategy", "domain_resolver", "address_resolver", "detour",
         "strategy", "action", "outbound", "final", "clash_mode",
         "domain", "domain_suffix", "domain_keyword", "domain_regex",
@@ -62,22 +27,15 @@ public static class DiagnosticsRedactor
         "port_range", "process_name", "package_name", "network_type",
         "rule_set", "format", "download_detour", "update_interval",
         "inbound", "protocol", "client_subnet", "rewrite_ttl",
-        // TUN / inbound knobs
         "interface_name", "stack", "mtu", "strict_route",
         "auto_detect_interface", "endpoint_independent_nat", "sniff",
         "sniff_override_destination", "sniff_timeout", "store_fakeip",
         "udp_fragment", "udp_timeout", "tcp_fast_open", "udp_disable_domain_unmapping",
-        // hysteria/tuic/wireguard non-secret knobs
         "up_mbps", "down_mbps", "congestion_control", "idle_timeout",
         "heartbeat", "mtu_discovery",
-        // experimental / clash api (controller is local host:port; secret is NOT here)
         "external_controller", "external_ui", "default_mode", "store_rdrc",
-        // log
         "level", "output", "timestamp",
-        // config.yaml (AppSettings) scalar flags / modes
         "schema_version", "config_mode", "routing_mode", "dns_mode",
-        // split-tunnel routing config — non-secret app identifiers (basenames),
-        // and the core diagnostic for "why isn't my app routed?" cases.
         "routing_apps_mode", "routing_apps_include", "routing_apps_exclude",
         "custom_rules_priority", "force_ipv4_only", "strict_mode", "strict_dns",
         "log_level", "bypass_russian_traffic", "bypassrussiantraffic",
@@ -88,35 +46,15 @@ public static class DiagnosticsRedactor
         "language", "minimize_to_tray", "experimental", "prerelease",
     };
 
-    // Keys whose value is a URL: keep the scheme+host (diagnostic — which
-    // provider / source), drop the path & query (where tokens hide).
     private static readonly HashSet<string> UrlKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "url", "subscription_url", "subscriptionurl", "sub_url", "vk_link",
         "wgturn_url", "endpoint", "source", "remote",
     };
 
-    // v2.40.0 (review M2): authority class excludes `@` and an optional
-    // `userinfo@` is dropped, so `https://user:pass@host/path` keeps only
-    // `https://host` (basic-auth credentials never survive).
     private static readonly Regex _urlKeepHost = new(
         @"^(\w+://)(?:[^@/?#\s]+@)?([^/?#\s]+).*$", RegexOptions.Compiled);
 
-    // Log lines have no key structure, so the allowlist can't apply. The base
-    // CrashReporter.ScrubSecrets catches secret-SHAPED values (proxy URIs,
-    // UUIDs, long base64). This second pass catches SHORT secrets that ride in
-    // a `key=value` / `key: value` shape (e.g. `password=hunter2`,
-    // `short_id: abcd`) which the shape-based scrubber would miss. Keeps the
-    // key + separator, redacts the value. `key`/`pass` kept narrow to avoid
-    // over-matching benign log text (private_key / api_key, not bare key).
-    // v2.40.0 (review M3): added `authorization`/`proxy-authorization`
-    // (the bare `auth` alternative can't match inside "Authorization" because of
-    // the trailing \b) and `obfs[_-]?password`; and a non-capturing
-    // `(?:Bearer|Basic|...)\s+` is consumed BEFORE the value group so the actual
-    // token after the scheme word — not just the word "Bearer" — is redacted.
-    // Security enhancement: expanded key-value secret pattern to cover access_key, enc_key,
-    // encryption_key, auth_key, session_key, client_key, app_key, user_key, as well as separatorless variants
-    // like clientsecret, clientpassword, clientpass, refreshtoken, and accesstoken to prevent secret leakage in logs.
     private static readonly Regex _logKeyValueSecret = new(
         @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token)\b([""']?\s*[=:]\s*)([""']?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
         RegexOptions.Compiled);
@@ -125,10 +63,6 @@ public static class DiagnosticsRedactor
         @"^(\s*(?:-\s*)?([a-zA-Z0-9_-]+)\s*:\s*)(.*)$",
         RegexOptions.Compiled);
 
-    /// <summary>
-    /// Redact the main settings YAML. Returns redacted YAML, or falls back to
-    /// line-by-line secret redaction if it cannot be parsed into a node tree.
-    /// </summary>
     public static string RedactConfigYaml(string yaml)
     {
         if (string.IsNullOrWhiteSpace(yaml)) return yaml ?? string.Empty;
@@ -146,10 +80,6 @@ public static class DiagnosticsRedactor
         }
     }
 
-    /// <summary>
-    /// Fallback redaction for malformed YAML that cannot be parsed into a node tree.
-    /// Redacts values of non-allowlisted keys to '***' and scrubs remaining text for secrets.
-    /// </summary>
     internal static string RedactMalformedYaml(string yaml)
     {
         if (string.IsNullOrWhiteSpace(yaml)) return yaml ?? string.Empty;
@@ -183,10 +113,6 @@ public static class DiagnosticsRedactor
         return string.Join(Environment.NewLine, lines);
     }
 
-    /// <summary>
-    /// Redact a sing-box JSON config (current.json). Returns redacted,
-    /// indented JSON, or an omission placeholder if it cannot be parsed.
-    /// </summary>
     public static string RedactSingboxJson(string json)
     {
         if (string.IsNullOrWhiteSpace(json)) return json ?? string.Empty;
@@ -207,9 +133,6 @@ public static class DiagnosticsRedactor
         }
     }
 
-    /// <summary>
-    /// Redact free-form log text line by line using the regex scrubber.
-    /// </summary>
     public static string RedactLogText(string text)
     {
         if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
@@ -222,8 +145,6 @@ public static class DiagnosticsRedactor
         }
         return string.Join(Environment.NewLine, lines);
     }
-
-    // ── structured walkers ──────────────────────────────────────────────
 
     private static object? WalkYaml(object? node, string? parentKey)
     {
@@ -243,13 +164,13 @@ public static class DiagnosticsRedactor
             {
                 var result = new List<object?>();
                 foreach (var item in list)
-                    result.Add(WalkYaml(item, parentKey)); // scalar items inherit parent key
+                    result.Add(WalkYaml(item, parentKey));
                 return result;
             }
             case string s:
                 return RedactScalar(parentKey, s);
             default:
-                return node; // null/number/bool — kept
+                return node;
         }
     }
 
@@ -266,7 +187,6 @@ public static class DiagnosticsRedactor
                         WalkJson(child, key);
                     else if (child is JsonValue val && val.TryGetValue<string>(out var s))
                         obj[key] = RedactScalar(key, s);
-                    // numbers/bools/null untouched
                 }
                 break;
             }
@@ -278,32 +198,28 @@ public static class DiagnosticsRedactor
                     if (child is JsonObject or JsonArray)
                         WalkJson(child, parentKey);
                     else if (child is JsonValue val && val.TryGetValue<string>(out var s))
-                        arr[i] = RedactScalar(parentKey, s); // scalar items inherit parent key
+                        arr[i] = RedactScalar(parentKey, s);
                 }
                 break;
             }
         }
     }
 
-    // ── scalar policy ───────────────────────────────────────────────────
-
     private static string RedactScalar(string? key, string value)
     {
         if (string.IsNullOrEmpty(value)) return value;
 
         if (key != null && SafeKeys.Contains(key))
-            return value; // allowlisted scalar — safe to keep verbatim
+            return value;
 
         if (key != null && UrlKeys.Contains(key))
             return RedactUrlKeepHost(value);
 
-        // Unknown / non-allowlisted key → fail safe.
         return Redacted;
     }
 
     private static string RedactUrlKeepHost(string value)
     {
-        // Group 1 = scheme:// , Group 2 = host[:port] (userinfo dropped, M2).
         var m = _urlKeepHost.Match(value);
         return m.Success ? $"{m.Groups[1].Value}{m.Groups[2].Value}/{Redacted}" : Redacted;
     }

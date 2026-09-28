@@ -413,13 +413,11 @@ public sealed class ReleaseToolingContractTests
     {
         var postrm = Read("packaging", "linux", "postrm");
 
-        // Verify path-scoped kill patterns
         Assert.Contains("pkill -f /opt/vpnrouter/sing-box", postrm);
         Assert.Contains("pkill -f /opt/vpnrouter/VPNRouter.App", postrm);
         Assert.Contains("pkill -f /usr/local/vpnrouter/sing-box", postrm);
         Assert.Contains("pkill -f /usr/local/vpnrouter/VPNRouter.App", postrm);
 
-        // Verify that un-scoped pattern kills are absent
         var strippedApp = postrm
             .Replace("/opt/vpnrouter/VPNRouter.App", "")
             .Replace("/usr/local/vpnrouter/VPNRouter.App", "");

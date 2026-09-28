@@ -16,44 +16,19 @@ using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// v2.32.0 — Android Free Configs overlay. Mirrors desktop's
-/// <c>VPNRouter.App/Views/Pages/FreeConfigsPage.axaml</c> master-detail
-/// layout (Поиск + Сохранённые sub-tabs, list rows with country flag /
-/// endpoint / latency badge, bottom Connect CTA). Wires to
-/// <see cref="AndroidFreeConfigsOrchestrator"/> for the actual fetch /
-/// test pipeline.
-///
-/// <para>See <c>plans/v2.32.0-android-free-configs.md</c> for the
-/// element-by-element delta vs desktop and the explicit "not ported" list
-/// (Deep Verify, bandwidth column, per-row Recheck — all rely on
-/// desktop-only sing-box.exe spawning).</para>
-/// </summary>
 public partial class AndroidApp
 {
-    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone Free-Configs
-    // overlay is gone — content moves into the Advanced shell as the
-    // "Public configs" tab.
     private AndroidFreeConfigsOrchestrator? _fcOrchestrator;
 
-    // Sub-tab state. 0 = Search, 1 = Saved.
     private int _fcSelectedTab;
     private Avalonia.Controls.Button? _fcTabSearch;
     private Avalonia.Controls.Button? _fcTabSaved;
 
-    // Body containers (one per tab; toggled IsVisible).
     private Control? _fcSearchBody;
     private Control? _fcSavedBody;
 
-    // Search-tab widgets
     private Avalonia.Controls.Button? _fcFindButton;
     private Avalonia.Controls.Button? _fcStopButton;
-    // DEFCT-7.3-A — replaced Avalonia NumericUpDown (default ▲▼ RepeatButtons
-    // were ~22 dp tall, well below Android 48 dp touch-target spec — most taps
-    // missed and fell through to the underlying Find CTA). Now a hand-rolled
-    // [−][value][+] row with each step Button at 44 dp + an int-field source
-    // of truth so the readers in OnFreeConfigsFindClicked don't have to know
-    // about the spinner template.
     private int _fcTargetValue = 10;
     private int _fcMaxPingValue = 400;
     private TextBlock? _fcTargetValueText;
@@ -65,38 +40,24 @@ public partial class AndroidApp
     private ListBox? _fcSearchList;
     private TextBlock? _fcSearchEmptyHint;
 
-    // Saved-tab widgets
     private ListBox? _fcSavedList;
     private TextBlock? _fcSavedEmptyHint;
     private Avalonia.Controls.Button? _fcClearAllButton;
     private TextBlock? _fcSavedHint;
 
-    // Bottom action bar
     private TextBlock? _fcStatusText;
     private Avalonia.Controls.ProgressBar? _fcProgress;
     private TextBlock? _fcProgressLabel;
     private Avalonia.Controls.Button? _fcUseButton;
     private TextBlock? _fcConnectHint;
 
-    // Selection state — single SelectedEntry shared across both lists so
-    // the bottom CTA always knows what to apply.
     private FreeConfigEntry? _fcSelectedEntry;
 
-    // Live results bound to the Search-tab list.
     private readonly ObservableCollection<FreeConfigEntry> _fcSearchResults = new();
     private readonly ObservableCollection<FreeConfigEntry> _fcSavedResults = new();
 
-    // Current target / max-ping snapshot — captured at Find click so the
-    // status messages can quote what the user actually asked for.
     private int _fcTargetSnapshot = 10;
 
-    /// <summary>
-    /// AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E rename. Body content
-    /// for the Public tab inside the Advanced shell. Mirrors desktop
-    /// FreeConfigsPage.axaml: sub-tab strip (Search | Saved) + scrollable
-    /// bodies + bottom action bar. The shell provides the title bar /
-    /// close button / outer chrome.
-    /// </summary>
     private Control BuildPublicTabContent()
     {
         var bg        = GetBrush("SurfaceAppBrush");
@@ -116,11 +77,6 @@ public partial class AndroidApp
         var radiusXs = GetRadius("RadiusXs");
         var radiusSm = GetRadius("RadiusSm");
 
-        // ── Sub-tab strip (Search | Saved) ─────────────────────────────────
-        // POL-1: matches desktop FreeConfigsPage.axaml lines 22-37
-        // (`ListBox Padding="6,2" + ListBoxItem Padding="10,4" FontSize="11"`).
-        // Pre-POL-1 used MakeFcTabButton (Padding="0,6" FontSize=12 RadiusXs)
-        // which inflated the chips relative to desktop.
         _fcTabSearch = MakeAdvancedSubTabButton(Localization.FcTabSearch,
                                                 _fcSelectedTab == 0,
                                                 (_, _) => SelectFreeConfigsTab(0));
@@ -136,8 +92,6 @@ public partial class AndroidApp
             Children = { _fcTabSearch, _fcTabSaved },
         };
 
-        // ── Search tab body ────────────────────────────────────────────────
-        // 1) Green action card (Find / Stop + advanced settings expander)
         var searchHint = new TextBlock
         {
             Text = Localization.FcSearchHint,
@@ -178,11 +132,6 @@ public partial class AndroidApp
         };
         _fcStopButton.Click += OnFreeConfigsStopClicked;
 
-        // POL-1: BorderBrush uses SuccessBorderBrush to match desktop
-        // FreeConfigsPage.axaml line 98 (Expander
-        // `BorderBrush="{DynamicResource SuccessBorderBrush}"`).
-        // Pre-POL-1 used neutral BorderSubtleBrush which broke the green
-        // card chrome.
         _fcAdvancedToggle = new Avalonia.Controls.Button
         {
             Content = Localization.FcAdvancedSettings,
@@ -218,15 +167,8 @@ public partial class AndroidApp
             Child = greenCardStack,
         };
 
-        // 2) List header (Country | Endpoint | Latency | Transport)
         var headerRow = BuildFcListHeader(textM, sunken);
 
-        // 3) Search list + empty hint
-        // DEFCT-7.4-A: AlwaysSelected so that tapping the currently-selected
-        // row on Android touch is a no-op (Avalonia's default Single mode
-        // deselects on re-tap, which dropped the Connect CTA into a greyed
-        // state with _fcSelectedEntry == null). At least one row must stay
-        // selected once results exist — the bottom CTA depends on it.
         _fcSearchList = new ListBox
         {
             Background = Brushes.Transparent,
@@ -280,7 +222,6 @@ public partial class AndroidApp
         searchGrid.Children.Add(searchListBorder);
         _fcSearchBody = searchGrid;
 
-        // ── Saved tab body ─────────────────────────────────────────────────
         _fcSavedHint = new TextBlock
         {
             Text = Localization.FcSavedEmptyHint,
@@ -376,7 +317,6 @@ public partial class AndroidApp
             Children = { _fcSearchBody, _fcSavedBody }
         };
 
-        // ── Bottom action bar (status + progress + Use CTA) ────────────────
         _fcStatusText = new TextBlock
         {
             Text = Localization.FcStatusEmpty,
@@ -439,22 +379,6 @@ public partial class AndroidApp
             IsEnabled = false,
         };
         _fcUseButton.Click += OnFreeConfigsUseClicked;
-        // DEFCT-7.5-A (2026-05-10) — On Avalonia 11.3 / Android, Button.Click
-        // on this specific button doesn't fire on a tap (verified live: row
-        // auto-selects, Connect styles blue + IsEnabled=true, but tap does
-        // not invoke OnFreeConfigsUseClicked — no toast, no shell-close, no
-        // SetVlessUri side effect). The button sits inside a `bottomBar`
-        // Border docked to Bottom of an inner DockPanel; the Border or one
-        // of the ancestor handlers in the Advanced shell appears to swallow
-        // the standard Click route. Tapped routes through Avalonia's gesture
-        // recognizer pipeline rather than the Button's pointer-capture path
-        // and reaches us reliably under the same conditions. We subscribe
-        // both events; OnFreeConfigsUseClicked is debounced (200 ms window)
-        // so the rare case where both fire from a single tap on a working
-        // surface only does the work once. handledEventsToo:true so any
-        // ancestor that marks the event Handled cannot suppress us.
-        // Wave 23 (2026-05-18) — Avalonia 12 made Gestures internal; same
-        // routed event reachable through InputElement (publicly re-exposed).
         _fcUseButton.AddHandler(InputElement.TappedEvent, OnFreeConfigsUseClicked,
             RoutingStrategies.Bubble, handledEventsToo: true);
 
@@ -473,7 +397,6 @@ public partial class AndroidApp
             Child = bottomStack,
         };
 
-        // ── Compose: tab strip + body + bottom bar ────────────────────────
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(tabRow, Dock.Top);
         DockPanel.SetDock(bottomBar, Dock.Bottom);
@@ -652,21 +575,6 @@ public partial class AndroidApp
         return header;
     }
 
-    /// <summary>
-    /// DEFCT-7.3-A — replacement for NumericUpDown that meets Android's
-    /// 48 dp touch-target spec. Renders as [ − ][ value ][ + ] in a
-    /// horizontal StackPanel where each step button is 44×44 dp (close
-    /// enough to spec; the surrounding panel adds spacing). Min/max
-    /// clamp inside the click handlers so callers only see valid values.
-    /// </summary>
-    /// <param name="display">
-    /// Output param — the value-display TextBlock so the caller can keep
-    /// a reference for later updates (eg. after Find run resets the value).
-    /// </param>
-    /// <param name="onChanged">
-    /// Invoked with the post-step clamped int after each − / + tap.
-    /// Caller owns the field that stores the value.
-    /// </param>
     private StackPanel BuildSpinnerControl(
         int initial, int min, int max, int step, IBrush successFg,
         out TextBlock display,
@@ -684,7 +592,7 @@ public partial class AndroidApp
             MinWidth = 48,
             Foreground = successFg,
         };
-        var displayLocal = display; // capture for the closures below
+        var displayLocal = display;
         var minus = MakeSpinnerStepButton("−");
         var plus  = MakeSpinnerStepButton("+");
         minus.Click += (_, _) =>
@@ -727,18 +635,12 @@ public partial class AndroidApp
         return btn;
     }
 
-    /// <summary>
-    /// Per-row template — mirrors desktop's FreeConfigItemViewModel
-    /// rendering: country flag emoji + endpoint + colored latency badge +
-    /// transport label. Saved-tab variant adds a trailing ✕ remove button.
-    /// </summary>
     private Control BuildFcRow(FreeConfigEntry entry, bool isSavedTab)
     {
         var textP = GetBrush("TextPrimaryBrush");
         var textM = GetBrush("TextMutedBrush");
         var dangerSolid = GetBrush("DangerSolidBrush");
 
-        // Country column — "🇷🇺 RU" or "—" (mirrors FreeConfigItemViewModel.CountryDisplay).
         var country = new TextBlock
         {
             Text = string.IsNullOrEmpty(entry.CountryCode)
@@ -760,9 +662,6 @@ public partial class AndroidApp
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
 
-        // Latency badge — mirrors desktop's color + label logic. We
-        // reproduce the switch inline (no FreeConfigItemViewModel
-        // dependency on Android — the App-layer VM pulls SkiaSharp etc.).
         var latencyText = entry.Status switch
         {
             FreeConfigStatus.Verified when entry.LatencyMs <= 0 => "— ✓✓",
@@ -866,10 +765,6 @@ public partial class AndroidApp
         catch { return null; }
     }
 
-    /// <summary>
-    /// Convert ISO-2 country code to a regional indicator emoji.
-    /// Inlined here to avoid the App-layer VM dependency.
-    /// </summary>
     private static string FlagFor(string? cc)
     {
         if (string.IsNullOrEmpty(cc) || cc.Length != 2) return "🌐";
@@ -878,12 +773,6 @@ public partial class AndroidApp
         var c1 = 0x1F1E6 + (upper[1] - 'A');
         return char.ConvertFromUtf32(c0) + char.ConvertFromUtf32(c1);
     }
-
-    // ── Show / hide tab ──────────────────────────────────────────────────
-    //
-    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone overlay open/close
-    // pair is gone. The Advanced shell calls ReseedFreeConfigsTabState on
-    // tab activation and StopFreeConfigsBackgroundWork when leaving.
 
     private async void ReseedFreeConfigsTabState()
     {
@@ -904,14 +793,6 @@ public partial class AndroidApp
         await _fcOrchestrator.EnsureCacheLoadedAsync();
         ReloadFreeConfigsLists();
 
-        // AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E persistence. Restore
-        // the last-active sub-tab via AndroidStorage. Pre-Phase-E this
-        // was implicit ("default to Saved if non-empty"); the explicit
-        // KeyPublicActiveSubTab survives across overlay opens so a user
-        // who prefers Search keeps Search even after the Saved list grows
-        // populated. Fallback: if the persisted sub-tab is Saved but the
-        // saved list is empty (first launch / cleared cache), drop to
-        // Search so we don't show a blank pane.
         var persistedSaved = AndroidStorage.GetPublicActiveSubTabIsSaved();
         if (persistedSaved && _fcSavedResults.Count > 0)
             SelectFreeConfigsTab(1);
@@ -919,11 +800,6 @@ public partial class AndroidApp
             SelectFreeConfigsTab(0);
     }
 
-    /// <summary>
-    /// Cancel any in-flight find when the Advanced shell closes or
-    /// switches off the Public Configs tab — we don't want to keep
-    /// burning battery on TCP probes the user can no longer see.
-    /// </summary>
     private void StopFreeConfigsBackgroundWork()
     {
         _fcOrchestrator?.Cancel();
@@ -932,13 +808,9 @@ public partial class AndroidApp
     private void SelectFreeConfigsTab(int index)
     {
         _fcSelectedTab = index;
-        // AND-ADV-TOOLS-PUBLIC (2026-05-10) — persist the user's pick.
-        // Stored as bool: false = Search, true = Saved.
         AndroidStorage.SetPublicActiveSubTabIsSaved(index == 1);
         if (_fcSearchBody is not null) _fcSearchBody.IsVisible = index == 0;
         if (_fcSavedBody is not null)  _fcSavedBody.IsVisible  = index == 1;
-        // POL-1: re-painted via StyleAdvShellTab (matches sibling sub-tab
-        // strips). Pre-POL-1 used StyleSegmentButton — kebab pill shape.
         if (_fcTabSearch is not null)
         {
             StyleAdvShellTab(_fcTabSearch, index == 0);
@@ -950,8 +822,6 @@ public partial class AndroidApp
             _fcTabSaved.Content = SavedTabHeaderText();
         }
 
-        // Selection is per-tab — clear when tab changes so the bottom CTA
-        // doesn't try to use a stale entry from the other tab.
         _fcSelectedEntry = null;
         if (_fcUseButton is not null) _fcUseButton.IsEnabled = false;
     }
@@ -963,16 +833,11 @@ public partial class AndroidApp
         return Localization.FcTabSavedWithCount(n);
     }
 
-    // ── Find / Stop ───────────────────────────────────────────────────────
-
     private async void OnFreeConfigsFindClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_fcOrchestrator is null) return;
         if (_fcOrchestrator.IsBusy) return;
 
-        // DEFCT-7.3-A — read from int-field source of truth instead of the
-        // pre-fix NumericUpDown's Value (decimal?). Clamp guards stay since
-        // the spinner buttons already clamp at min/max but defensive is cheap.
         var target = _fcTargetValue;
         if (target < 1) target = 1;
         if (target > 50) target = 50;
@@ -984,8 +849,6 @@ public partial class AndroidApp
 
         var excludeRu = _fcExcludeRu?.IsChecked == true;
 
-        // Empty the live results list so we can show the new run's
-        // findings as they trickle in.
         _fcSearchResults.Clear();
         if (_fcUseButton is not null) _fcUseButton.IsEnabled = false;
         _fcSelectedEntry = null;
@@ -1021,16 +884,6 @@ public partial class AndroidApp
         if (_fcAdvancedPanel is not null) _fcAdvancedPanel.IsVisible = _fcAdvancedExpanded;
     }
 
-    // ── Selection + Use ───────────────────────────────────────────────────
-
-    /// <summary>
-    /// v2.39.0 (public-configs audit P1): the Connect CTA is enabled ONLY for a
-    /// deep-verified (✓✓) public config. A TCP/TLS candidate (single ✓) can be
-    /// selected to inspect it, but Connect stays disabled until deep verify
-    /// confirms real connectivity. Saved-tab rows are persisted Verified-only so
-    /// they pass; a legacy Ok row from an older cache stays gated until it is
-    /// re-verified. Returns the resulting enabled state.
-    /// </summary>
     private bool ApplyFcConnectGate()
     {
         var verified = _fcSelectedEntry is { } e &&
@@ -1041,13 +894,9 @@ public partial class AndroidApp
 
     private void OnFreeConfigsSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        // Remember which list the selection came from so the other one's
-        // SelectedItem can be cleared (single-CTA semantics).
         if (sender is ListBox box && box.SelectedItem is FreeConfigEntry entry)
         {
             _fcSelectedEntry = entry;
-            // Gate Connect on deep-verify status (audit P1) instead of
-            // enabling on any selection.
             ApplyFcConnectGate();
 
             if (ReferenceEquals(box, _fcSearchList) && _fcSavedList is not null)
@@ -1057,11 +906,6 @@ public partial class AndroidApp
         }
     }
 
-    // DEFCT-7.5-A (2026-05-10) — last-fire timestamp for the dual Click +
-    // Tapped subscription on _fcUseButton. A single tap can deliver both
-    // events; the 200 ms window collapses them to one handler invocation.
-    // Static so the timestamp survives across Public-tab rebuilds (it's
-    // shared with the per-instance buttons that are rebuilt on tab switch).
     private static DateTime _fcUseClickedAt = DateTime.MinValue;
 
     private void OnFreeConfigsUseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1072,18 +916,11 @@ public partial class AndroidApp
 
         var entry = _fcSelectedEntry;
         if (entry is null) return;
-        // v2.40.0 (contracts B1 #5): don't adopt+connect while a search/recheck
-        // owns the orchestrator — Apply stops+starts the VPN, racing the verifier
-        // processes (libbox) + the TUN lifecycle. Wait until the search is idle.
         if (_fcOrchestrator?.IsBusy == true)
         {
             ShowMenuFeedback(Localization.FcConnectBusySearch);
             return;
         }
-        // v2.39.0 (audit P1) backstop for the Verified-only Connect gate: never
-        // connect to a public config that hasn't passed deep verify, even if a
-        // UI path re-enabled the button. The button should already be disabled
-        // for non-verified rows (ApplyFcConnectGate), this is defence-in-depth.
         if (entry.Status != FreeConfigStatus.Verified)
         {
             ShowMenuFeedback(Localization.FcConnectNeedsVerify);
@@ -1091,26 +928,10 @@ public partial class AndroidApp
         }
         if (string.IsNullOrEmpty(entry.RawUri)) return;
 
-        // Bug-AND-021 (2026-05-17, user-reported "после подключения не
-        // переносит в список серверов"): pre-fix this cleared the Servers
-        // list entirely (SetServers(null)) and stashed the URI as a
-        // manual VLESS config. Result: chosen free config wasn't visible
-        // in Advanced > Servers, and any other servers the user had
-        // collected got wiped.
-        //
-        // Now we mirror desktop MainWindowViewModel.ApplyFreeConfigAsync:
-        //   - Parse URI into VlessServerEntry.
-        //   - Check if same host:port:uuid already exists in Servers.
-        //   - If new: add with unique display name (collision-safe).
-        //   - Set as SelectedServerName so GetActiveServer picks it up.
-        //   - Keep existing servers (no wipe).
-        // Subscription gets cleared because free config = manual mode.
         try
         {
             var vless = VPNRouter.Core.Services.ServerUriParser.Parse(entry.RawUri);
             var servers = AndroidStorage.GetServers() ?? new System.Collections.Generic.List<VPNRouter.Core.Models.VlessServerEntry>();
-            // Match by host:port:uuid (display name can vary). Reuse the
-            // existing entry's name so the user's curated label sticks.
             var existing = servers.FirstOrDefault(s =>
                 string.Equals(s.Server, vless.Server, System.StringComparison.OrdinalIgnoreCase) &&
                 s.Port == vless.Port &&
@@ -1121,7 +942,6 @@ public partial class AndroidApp
             }
             else
             {
-                // Unique-name pass — "⚡ free" + #2, #3, … if collisions.
                 var baseName = string.IsNullOrWhiteSpace(vless.Name) ? "⚡ free" : vless.Name!;
                 var displayName = baseName;
                 int suffix = 2;
@@ -1135,52 +955,31 @@ public partial class AndroidApp
         }
         catch (System.Exception ex)
         {
-            // applications-page-audit P0: NEVER wipe the user's curated Servers
-            // list on a parse/persist failure — that fallback was more
-            // destructive than the failed operation itself. Leave ALL prior
-            // settings untouched, surface an error, and abort the apply (a URI
-            // that failed to parse must not be routed).
             global::Android.Util.Log.Warn("VpnRouter.FC",
                 $"Apply public config failed — {ex.GetType().Name}: {ex.Message}; servers left unchanged");
             ShowMenuFeedback(Localization.FcApplyFailed);
             return;
         }
-        // Manual mode stores the raw URI as legacy fallback. The new
-        // active-server resolver (GetActiveServer) reads the Servers
-        // list + SelectedServerName first; the URI is only used if both
-        // are null (which we just made false above on the happy path).
         AndroidStorage.SetVlessUri(entry.RawUri);
         AndroidStorage.SetSubscriptionUrl(null);
 
         ShowMenuFeedback(Localization.FcUsedToast);
 
-        // AND-MIGRATE-OVERLAYS (2026-05-09): close the Advanced shell so
-        // the consent dialog (first-launch only) and the Simple-page
-        // status card become visible — the user just chose a public
-        // config, the next visible step is "Connect".
         CloseAdvancedShell();
 
-        // Refresh the config-row summary on the main page.
         UpdateConfigSummary();
 
-        // Defer the connect call one beat so the close animation gets a
-        // render frame before the system VPN consent dialog (if any)
-        // pops in. Pure UX nicety; no behavioural effect.
         Dispatcher.UIThread.Post(() =>
         {
             MainActivity.Instance?.RequestConnect();
         }, DispatcherPriority.Background);
     }
 
-    // ── Clear all (Saved tab) ─────────────────────────────────────────────
-
     private void OnFreeConfigsClearAllClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         _fcOrchestrator?.ClearSaved();
         ReloadFreeConfigsLists();
     }
-
-    // ── Live update from orchestrator ─────────────────────────────────────
 
     private void OnFcStatus(string text)
     {
@@ -1210,15 +1009,12 @@ public partial class AndroidApp
     {
         Dispatcher.UIThread.Post(() =>
         {
-            // De-dup by Id in case two batches happen to land the same row.
             for (int i = 0; i < _fcSearchResults.Count; i++)
             {
                 if (string.Equals(_fcSearchResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
                     return;
             }
             _fcSearchResults.Add(entry);
-            // Auto-select first row so user can connect immediately if
-            // they're in a hurry.
             if (_fcSelectedEntry is null && _fcSearchList is not null)
             {
                 _fcSearchList.SelectedItem = entry;
@@ -1234,24 +1030,11 @@ public partial class AndroidApp
         });
     }
 
-    /// <summary>
-    /// Bug&#x202F;#1 (2026-05-11): orchestrator's Deep Verify pass promoted
-    /// an entry from <see cref="FreeConfigStatus.Ok"/> to
-    /// <see cref="FreeConfigStatus.Verified"/>. We need to force the row
-    /// to re-render — FreeConfigEntry doesn't implement
-    /// INotifyPropertyChanged, so the ItemTemplate's Status snapshot is
-    /// stale. The cheapest reliable refresh is replacing the entry at the
-    /// same index, which raises ObservableCollection's CollectionChanged
-    /// (NotifyCollectionChangedAction.Replace) and triggers a re-template.
-    /// Also restores selection if this was the selected row (re-tap-free
-    /// path, the user shouldn't have to re-pick the row they just chose).
-    /// </summary>
     private void OnFcEntryUpgraded(FreeConfigEntry entry)
     {
         if (entry is null || string.IsNullOrEmpty(entry.Id)) return;
         Dispatcher.UIThread.Post(() =>
         {
-            // Search tab — main source of truth during a Find run.
             for (int i = 0; i < _fcSearchResults.Count; i++)
             {
                 if (string.Equals(_fcSearchResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
@@ -1267,9 +1050,6 @@ public partial class AndroidApp
                     break;
                 }
             }
-            // Saved tab — keep it consistent in case the upgrade arrived
-            // while the user was browsing Saved between Find runs (rare,
-            // but cheap to handle).
             for (int i = 0; i < _fcSavedResults.Count; i++)
             {
                 if (string.Equals(_fcSavedResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
@@ -1286,18 +1066,11 @@ public partial class AndroidApp
                 }
             }
 
-            // v2.39.0 (audit P1): a row just became connectable (✓✓). If the
-            // user has no CONNECTABLE row selected yet — nothing selected, OR the
-            // selection is still a non-verified candidate (OnFcFound auto-selects
-            // the lowest-latency Ok row, and THAT one can fail deep verify while a
-            // later one passes) — promote selection to this freshly verified row
-            // so the Connect CTA lights up without a manual tap. We never steal a
-            // selection that is already Verified.
             var selectedIsConnectable = _fcSelectedEntry is { } sel &&
                                         sel.Status == FreeConfigStatus.Verified;
             if (!selectedIsConnectable && _fcSearchList is not null &&
                 _fcSearchResults.Contains(entry))
-                _fcSearchList.SelectedItem = entry; // fires SelectionChanged -> gate
+                _fcSearchList.SelectedItem = entry;
             else
                 ApplyFcConnectGate();
         });
@@ -1312,18 +1085,12 @@ public partial class AndroidApp
         });
     }
 
-    /// <summary>
-    /// Repopulate both lists from the orchestrator's current state. Fired
-    /// after the overlay opens, after a Find run finishes, and after a
-    /// Saved-tab mutation (Remove / ClearAll).
-    /// </summary>
     private void ReloadFreeConfigsLists()
     {
         if (_fcOrchestrator is null) return;
         var saved = _fcOrchestrator.Saved;
 
         _fcSavedResults.Clear();
-        // Sort: tested ones first (lower latency wins), unknown last.
         var ordered = saved
             .OrderBy(c => c.Status switch
             {
@@ -1340,10 +1107,6 @@ public partial class AndroidApp
         if (_fcSavedEmptyHint is not null)
             _fcSavedEmptyHint.IsVisible = _fcSavedResults.Count == 0;
         if (_fcSavedHint is not null)
-            // DEFCT-7.6-A — toolbar-row hint mirrored the empty-state TextBlock so
-            // the misleading "No saved configs yet" line stayed visible above a
-            // populated list. Hide once results land; same predicate as the inner
-            // hint keeps the two TextBlocks in lockstep.
             _fcSavedHint.IsVisible = _fcSavedResults.Count == 0;
         if (_fcSavedList is not null)
             _fcSavedList.IsVisible = _fcSavedResults.Count > 0;
@@ -1355,7 +1118,6 @@ public partial class AndroidApp
         if (_fcSearchList is not null)
             _fcSearchList.IsVisible = _fcSearchResults.Count > 0;
 
-        // Saved tab counter on the tab strip.
         if (_fcTabSaved is not null && _fcSelectedTab != 1)
         {
             _fcTabSaved.Content = SavedTabHeaderText();

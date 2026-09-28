@@ -11,28 +11,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization regression suite for Windows sing-box process termination and
-/// exact-stop unconfirmed lifecycle invariants (NIGHT-08 Windows stop fix).
-/// <para>
-/// Invariants verified:
-/// 1. Kill throws / wait times out / process alive / HasExited throws leaves
-///    State=Failed, _exactStopUnconfirmed=true, preserves _handle, retains TUN lease,
-///    and queues NO PnP adapter removal or diagnostics runner calls.
-/// 2. Gated parameter contract: failure preserves TUN lock for BOTH releaseLock=false
-///    and releaseLock=true callers.
-/// 3. Later retry on an exited handle cleanly confirms stop, disposes the retained
-///    handle, nulls _handle, clears the unconfirmed guard, and releases TUN lease once.
-/// 4. Early HasExited safe probe: an exception during exit probe is caught and treated
-///    as unconfirmed stop without throwing unhandled exceptions.
-/// 5. Positive Windows restart: confirms fresh fake handle creation and TUN lock retention.
-/// 6. RestartCore: fails closed with old handle retained when exact stop is unconfirmed.
-/// 7. ReloadConfigJsonWithResult: cannot write candidate config to disk before unconfirmed
-///    stop is settled.
-/// 8. Dispose: retries are not terminal when exact stop is unconfirmed; subsequent confirmed
-///    stop settles terminal state.
-/// </para>
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class NightWindowsStopCharacterizationTests : IDisposable
 {
@@ -75,24 +53,19 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         VPNRouter.Core.AppPaths.OverrideDataDir(_testDataDir);
         Directory.CreateDirectory(_testDataDir);
 
-        // Save original TunOwnershipLock._instance then set null before tests.
-        // No release/dispose of original or semaphore.
         lock (s_tunOwnershipLockGate)
         {
             _savedTunOwnershipLockInstance = (TunOwnershipLock?)s_tunOwnershipLockInstanceField?.GetValue(null);
             s_tunOwnershipLockInstanceField?.SetValue(null, null);
         }
 
-        // Save static SingBoxManager pending removal task and TunAdapterDiagnostics latches
         _savedPendingTunRemoval = s_pendingTunRemovalField?.GetValue(null);
         _savedRemoveNetAdapterMissing = s_removeNetAdapterMissingField?.GetValue(null);
         _savedActionableModuleMissingLogged = s_actionableModuleMissingLoggedField?.GetValue(null);
         _savedNetAdapterModuleAvailable = s_netAdapterModuleAvailableField?.GetValue(null);
 
-        // Pre-set net adapter module availability to false so no PowerShell probe is spawned
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
 
-        // Save diagnostics Native resolver delegate exact actual property, replace returns emptyIDs explicitly
         _savedResolveNativePnpDeviceIds = TunAdapterDiagnostics.ResolveNativePnpDeviceIds;
         _nativeLookupCount = 0;
         TunAdapterDiagnostics.ResolveNativePnpDeviceIds = _ =>
@@ -104,7 +77,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 Error: null);
         };
 
-        // Save and replace static TunAdapterDiagnostics.Runner
         _savedTunDiagRunner = TunAdapterDiagnostics.Runner;
         _fakeDiagRunner = new FakeProcessRunner()
             .OnRun(_ => true, new ProcessResult(
@@ -115,30 +87,24 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 TimedOut: false));
         TunAdapterDiagnostics.Runner = _fakeDiagRunner;
 
-        // Save and replace static SingBoxManager.Runner
         _savedSingBoxRunner = SingBoxManager.Runner;
         SingBoxManager.Runner = new FakeProcessRunner();
     }
 
     public void Dispose()
     {
-        // Await static SingBoxManager pendingremoval task before restoring fakeRunner/resolver/paths
         WaitForPendingTunRemoval();
 
-        // Restore original task/latches field values not reset other's
         s_pendingTunRemovalField?.SetValue(null, _savedPendingTunRemoval);
         s_removeNetAdapterMissingField?.SetValue(null, _savedRemoveNetAdapterMissing);
         s_actionableModuleMissingLoggedField?.SetValue(null, _savedActionableModuleMissingLogged);
         s_netAdapterModuleAvailableField?.SetValue(null, _savedNetAdapterModuleAvailable);
 
-        // Restore diagnostics Native resolver delegate
         TunAdapterDiagnostics.ResolveNativePnpDeviceIds = _savedResolveNativePnpDeviceIds;
 
-        // Restore original runner exact nonnull no fallback new ProcessRunner
         TunAdapterDiagnostics.Runner = _savedTunDiagRunner;
         SingBoxManager.Runner = _savedSingBoxRunner;
 
-        // Dispose ONLY test singleton at end and restore original ref; no release/dispose original or semaphore
         lock (s_tunOwnershipLockGate)
         {
             var currentTestInstance = (TunOwnershipLock?)s_tunOwnershipLockInstanceField?.GetValue(null);
@@ -148,7 +114,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 {
                     currentTestInstance.Dispose();
                 }
-                catch { /* best-effort teardown of test singleton */ }
+                catch {  }
             }
             s_tunOwnershipLockInstanceField?.SetValue(null, _savedTunOwnershipLockInstance);
         }
@@ -159,10 +125,8 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (Directory.Exists(_testDataDir))
                 Directory.Delete(_testDataDir, recursive: true);
         }
-        catch { /* best-effort */ }
+        catch {  }
     }
-
-    // ─── 1. Kill throws / process remains alive ─────────────────────────
 
     [Theory]
     [InlineData(false)]
@@ -191,7 +155,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (!releaseLock)
                 WaitForPendingTunRemoval();
 
-            // Verify unconfirmed failure state
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Same(handle, GetField(manager, "_handle"));
             Assert.False(handle.DisposeCalled, "Handle must NOT be disposed when Kill throws and process remains alive.");
@@ -201,14 +164,12 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Later retry: process signals exit
             var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
             if (!releaseLock)
                 WaitForPendingTunRemoval();
 
-            // Verify confirmed stop state
             Assert.Equal(SingBoxState.Stopped, manager.State);
             Assert.Null(GetField(manager, "_handle"));
             Assert.True(handle.DisposeCalled, "Handle must be disposed on confirmed stop.");
@@ -227,8 +188,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
-
-    // ─── 2. WaitForExitAsync throws OperationCanceledException / alive ──
 
     [Theory]
     [InlineData(false)]
@@ -265,7 +224,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Later retry: process signals exit
             var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
@@ -290,8 +248,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
-
-    // ─── 3. WaitForExitAsync returns but process still alive ────────────
 
     [Theory]
     [InlineData(false)]
@@ -328,7 +284,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Later retry: process signals exit
             var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
@@ -354,8 +309,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         }
     }
 
-    // ─── 4. HasExited throws during safe probe ──────────────────────────
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -378,7 +331,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         try
         {
-            // Early safe probe must catch exception and treat as unconfirmed, never bubble up
             InvokeStopInternal(manager, releaseLock);
             if (!releaseLock)
                 WaitForPendingTunRemoval();
@@ -392,7 +344,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Later retry: process recovers probe and signals exit
             var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
@@ -453,7 +404,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Later retry
             var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Stop();
@@ -478,8 +428,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
-
-    // ─── 5. Windows positive Restart test ───────────────────────────────
 
     [Fact]
     public void WindowsPositiveRestart_ConfirmsNewFakeHandleAndTunLockRetention()
@@ -511,7 +459,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         File.WriteAllText(configPath, "{}");
         SetField(manager, "_currentConfigPath", configPath);
 
-        // Ensure all adapter lookups are faked
         TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
 
         var lockInstance = TunOwnershipLock.Instance(null);
@@ -553,8 +500,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
-
-    // ─── 6. RestartCore checks failed state and old handle ───────────────
 
     [Fact]
     public void RestartCore_WhenExactStopFails_LeavesFailedStateWithOldHandleAndRetainsLock()
@@ -602,8 +547,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         }
     }
 
-    // ─── 7. ReloadConfigJsonWithResult cannot write candidate ───────────
-
     [Fact]
     public void ReloadConfigJsonWithResult_WhenExactStopUnconfirmed_CannotWriteCandidateBeforeConfirmedStop()
     {
@@ -629,14 +572,12 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         try
         {
-            // Initial failed stop sets unconfirmed
             InvokeStopInternal(manager, releaseLock: false);
             WaitForPendingTunRemoval();
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Act: attempt reload with candidate config
             var result = manager.ReloadConfigJsonWithResult("{\"candidate\":\"forbidden-write\"}", forceRestart: true);
 
             Assert.False(result, "ReloadConfigJsonWithResult must return false when exact stop is unconfirmed.");
@@ -648,7 +589,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Disk verification: candidate config was NEVER written to disk
             var onDisk = File.ReadAllText(configPath);
             Assert.DoesNotContain("forbidden-write", onDisk);
             Assert.Contains("existing", onDisk);
@@ -662,8 +602,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
-
-    // ─── 8. Dispose retries not terminal if unconfirmed ─────────────────
 
     [Fact]
     public void Dispose_WhenExactStopUnconfirmed_RetriesAreNotTerminalAndSubsequentConfirmedStopReleasesLock()
@@ -686,7 +624,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
 
         try
         {
-            // First Dispose attempt: stop is unconfirmed
             manager.Dispose();
 
             Assert.Equal(SingBoxState.Failed, manager.State);
@@ -699,7 +636,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.Equal(0, _nativeLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Second Dispose attempt: process has exited, retry succeeds
             var previousLookupCount = _nativeLookupCount;
             handle.SignalExit();
             manager.Dispose();
@@ -714,7 +650,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             Assert.True(_nativeLookupCount > previousLookupCount);
             Assert.Empty(_fakeDiagRunner.RunCalls);
 
-            // Third Dispose attempt: terminal no-op
             manager.Dispose();
             Assert.Equal(1, (int)GetField(manager, "_disposed")!);
         }
@@ -727,8 +662,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
-
-    // ─── 9. Early already-exited clears guard and disposes handle ───────
 
     [Fact]
     public void StopInternal_EarlyAlreadyExited_DisposesHandleClearsGuardAndRunsCleanup()
@@ -743,9 +676,9 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
             DefaultSettings(), logger: null, http: new FakeHttpClient(), runner: fakeRunner);
 
         var handle = new StubbornWindowsProcessHandle(NewFakePid());
-        handle.SignalExit(); // already exited before StopInternal
+        handle.SignalExit();
         SetField(manager, "_handle", handle);
-        SetField(manager, "_exactStopUnconfirmed", true); // simulate retained unconfirmed flag from earlier attempt
+        SetField(manager, "_exactStopUnconfirmed", true);
 
         var lockInstance = TunOwnershipLock.Instance(null);
         SetLockOwnedForTest(lockInstance, manager);
@@ -774,8 +707,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         }
     }
 
-    // ─── 10. Idle manager Stop preserves expected cleanup ───────────────
-
     [Fact]
     public void StopInternal_IdleManager_NullHandle_PreservesExpectedCleanupWithoutThrowing()
     {
@@ -799,8 +730,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         Assert.Empty(_fakeDiagRunner.RunCalls);
     }
 
-    // ─── Test Infrastructure Helpers ────────────────────────────────────
-
     private static SingBoxSettings DefaultSettings() => new()
     {
         ExecutablePath = @"C:\nonexistent\sing-box.exe",
@@ -813,7 +742,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         {
             Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
         }
-        catch { /* best-effort */ }
+        catch {  }
     }
 
     private static string? GetAppPathsDataDir()
@@ -861,7 +790,7 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
                 pendingTask.GetAwaiter().GetResult();
             }
         }
-        catch { /* best-effort */ }
+        catch {  }
     }
 
     private static bool IsLockOwned(TunOwnershipLock lockInstance)
@@ -888,8 +817,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
         Assert.NotNull(ownedField);
 
         (semaphoreField!.GetValue(lockInstance) as IDisposable)?.Dispose();
-        // Count zero models a held semaphore without touching the system-wide
-        // Global\VPNRouter-SingBox-Owner name used by the installed app.
         semaphoreField.SetValue(lockInstance, new Semaphore(0, 1));
         ownedField!.SetValue(lockInstance, true);
     }

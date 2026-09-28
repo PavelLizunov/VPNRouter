@@ -2,18 +2,9 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// VlessUriParser
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class VlessUriParserTests
 {
-    // Q14 (2026-05-17): swapped from the v2.32.3 PlaceholderGuard sample
-    // (pbk=DnT9hI...nckU + sid=78ca7952) to a synthesized real-looking
-    // Reality fingerprint so VlessUriParser.Parse() doesn't reject the
-    // fixture as placeholder bait. The synthesized pbk is base64url-shaped
-    // 43 chars (matches what real X25519 pubkeys look like) and is NOT in
-    // PlaceholderDefense.KnownPubkeys / KnownShortIds.
     private const string RealityUri =
         "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443" +
         "?security=reality&sni=yahoo.com&fp=firefox" +
@@ -66,7 +57,6 @@ public class VlessUriParserTests
     [Fact]
     public void Parse_DefaultPort_Is443()
     {
-        // Port not specified — should default to 443
         var uri = "vless://uuid@server.com?security=tls&type=tcp#test";
         var entry = VlessUriParser.Parse(uri);
 

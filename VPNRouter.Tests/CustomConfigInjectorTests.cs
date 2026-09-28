@@ -5,9 +5,6 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// CustomConfigInjector
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class CustomConfigInjectorTests
 {
@@ -16,7 +13,6 @@ public class CustomConfigInjectorTests
         SingBox = new SingBoxSettings { ClashApi = "127.0.0.1:9090" }
     };
 
-    // ── User's example: selector + vless + tuic (legacy format) ──
     private const string LegacyConfig = """
     {
       "dns": {
@@ -49,7 +45,6 @@ public class CustomConfigInjectorTests
     }
     """;
 
-    // ── Action-based 1.12+ format ──
     private const string ActionConfig = """
     {
       "dns": {
@@ -73,8 +68,6 @@ public class CustomConfigInjectorTests
       }
     }
     """;
-
-    // ── Validate ──
 
     [Fact]
     public void Validate_ValidConfig_Passes()
@@ -116,13 +109,10 @@ public class CustomConfigInjectorTests
         Assert.True(isValid);
     }
 
-    // ── Inject: proxy tag detection ──
-
     [Fact]
     public void Inject_LegacyConfig_FindsSelectorTag()
     {
         var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "Discord.exe" }, CreateSettings());
-        // selector tag is "proxy", so process rule should use outbound: "proxy"
         Assert.Contains("\"outbound\": \"proxy\"", result);
         Assert.Contains("\"Discord.exe\"", result);
     }
@@ -135,15 +125,10 @@ public class CustomConfigInjectorTests
         Assert.Contains("\"outbound\": \"proxy\"", result);
     }
 
-    // ── Inject: format detection ──
-
     [Fact]
     public void Inject_LegacyConfig_NoActionField()
     {
         var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "test.exe" }, CreateSettings());
-        // Legacy format — process rule should NOT have "action" field
-        // The rule should be: {"process_name": [...], "outbound": "proxy"} without action
-        // (action only in action-based format)
         Assert.Contains("\"process_name\"", result);
     }
 
@@ -154,8 +139,6 @@ public class CustomConfigInjectorTests
         Assert.Contains("\"action\": \"route\"", result);
     }
 
-    // ── Inject: route rule position ──
-
     [Fact]
     public void Inject_LegacyConfig_ProcessRuleAfterSystemRules()
     {
@@ -164,9 +147,6 @@ public class CustomConfigInjectorTests
         var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
         Assert.NotNull(rules);
-        // Process rule should be after dns/ip_is_private/clash_mode rules
-        // Original: [dns-out, ip_is_private, clash_mode:direct, clash_mode:global]
-        // After inject: [dns-out, ip_is_private, clash_mode:direct, clash_mode:global, process_name]
         var processRuleIndex = -1;
         for (int i = 0; i < rules!.Count; i++)
         {
@@ -179,8 +159,6 @@ public class CustomConfigInjectorTests
         Assert.True(processRuleIndex >= 4, $"Process rule at index {processRuleIndex}, expected >= 4");
     }
 
-    // ── Inject: DNS rules ──
-
     [Fact]
     public void Inject_InjectsDnsRuleForRemoteServer()
     {
@@ -189,13 +167,10 @@ public class CustomConfigInjectorTests
         var dnsRules = StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray;
 
         Assert.NotNull(dnsRules);
-        // First DNS rule should be our injected process rule
         var firstRule = dnsRules![0] as JsonObject;
         Assert.NotNull(firstRule!["process_name"]);
         Assert.Equal("remote", firstRule["server"]?.ToString());
     }
-
-    // ── Inject: Clash API ──
 
     [Fact]
     public void Inject_AddsClashApi()
@@ -219,8 +194,6 @@ public class CustomConfigInjectorTests
         Assert.DoesNotContain("127.0.0.1:9090", result);
     }
 
-    // ── Inject: empty processes ──
-
     [Fact]
     public void Inject_EmptyProcesses_NoProcessRulesAdded()
     {
@@ -234,8 +207,6 @@ public class CustomConfigInjectorTests
         }
     }
 
-    // ── Inject: wildcard filtering ──
-
     [Fact]
     public void Inject_FiltersWildcardProcesses()
     {
@@ -245,8 +216,6 @@ public class CustomConfigInjectorTests
         Assert.DoesNotContain("chrome*", result);
         Assert.DoesNotContain("fire?", result);
     }
-
-    // ── Inject: idempotent ──
 
     [Fact]
     public void Inject_IdempotentReinjection()
@@ -258,19 +227,15 @@ public class CustomConfigInjectorTests
         var json = (JsonNode.Parse(second) as JsonObject)!;
         var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
-        // Should have exactly one process_name route rule (not two)
         var processRules = rules!.Where(r => r["process_name"] != null).ToList();
         Assert.Single(processRules);
 
-        // Should contain both processes
         var processNameArr = processRules[0]!["process_name"] as JsonArray;
         Assert.NotNull(processNameArr);
         var names = processNameArr!.Select(t => t!.ToString()).ToList();
         Assert.Contains("Discord.exe", names);
         Assert.Contains("Telegram.exe", names);
     }
-
-    // ── Inject: no route section ──
 
     [Fact]
     public void Inject_ConfigWithoutRoute_CreatesRouteSection()
@@ -283,8 +248,6 @@ public class CustomConfigInjectorTests
         Assert.NotNull(StjNodeHelpers.SelectToken(parsed, "route.rules"));
     }
 
-    // ── Case preservation ──
-
     [Fact]
     public void Inject_PreservesProcessNameCase()
     {
@@ -292,8 +255,6 @@ public class CustomConfigInjectorTests
         Assert.Contains("Discord.exe", result);
         Assert.Contains("Telegram.exe", result);
     }
-
-    // ── DNS optimization (real-world custom config) ──
 
     private const string RealWorldConfig = """
     {
@@ -336,10 +297,6 @@ public class CustomConfigInjectorTests
     }
     """;
 
-    // ── Like RealWorldConfig but with REAL crypto material (valid x25519
-    //    Reality key, valid UUID, hex short_id) so `sing-box check` accepts
-    //    it. The placeholder-keyed RealWorldConfig is fine for structural
-    //    assertions but fails `check` on "invalid public_key". ──
     private const string CheckableConfig = """
     {
       "dns": {
@@ -384,55 +341,43 @@ public class CustomConfigInjectorTests
         var result = CustomConfigInjector.Inject(RealWorldConfig, new[] { "chrome.exe" }, CreateSettings());
         var json = (JsonNode.Parse(result) as JsonObject)!;
 
-        // dns.strategy must be ipv4_only (was prefer_ipv4)
         Assert.Equal("ipv4_only", StjNodeHelpers.SelectToken(json, "dns.strategy")?.ToString());
 
-        // dns.final must point to local DNS (was "remote")
         var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
         Assert.NotEqual("remote", dnsFinal);
 
-        // route.final must be "direct" (split tunnel)
         Assert.Equal("direct", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // route.default_domain_resolver must be set to local DNS
         var resolver = StjNodeHelpers.SelectToken(json, "route.default_domain_resolver")?.ToString();
         Assert.NotNull(resolver);
         Assert.NotEqual("remote", resolver);
 
-        // tun.strict_route must be false
         var inbounds = json["inbounds"] as JsonArray;
         var tun = inbounds!.OfType<JsonObject>().FirstOrDefault(t => t["type"]?.ToString() == "tun");
         Assert.NotNull(tun);
         Assert.Equal(false, StjNodeHelpers.AsBool(tun["strict_route"]));
         Assert.Equal("system", tun["stack"]?.ToString());
 
-        // "block" and "dns" outbound types must be removed
         var outbounds = json["outbounds"] as JsonArray;
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "block");
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "dns");
 
-        // Non-proxy DNS servers must have detour:"dns-direct" to bypass hijack-dns routing loop
         var dnsServers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
         var localDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
         Assert.Equal("dns-direct", localDnsServer?["detour"]?.ToString());
-        // Proxy DNS server must keep its proxy detour
         var remoteDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
         Assert.Equal("proxy", remoteDnsServer?["detour"]?.ToString());
-        // dns-direct outbound must exist
         var allOutbounds = json["outbounds"] as JsonArray;
         var dnsDirect = allOutbounds!.FirstOrDefault(o => o["tag"]?.ToString() == "dns-direct");
         Assert.NotNull(dnsDirect);
         Assert.Equal("direct", dnsDirect!["type"]?.ToString());
 
-        // DNS servers must be converted to new format (type field present)
         foreach (var s in dnsServers!)
             Assert.NotNull(s["type"]);
 
-        // Remote DNS must be DoH (not DoT)
         var remoteDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
         Assert.Equal("https", remoteDns?["type"]?.ToString());
 
-        // Local DNS must NOT be type:"local" (causes DNS loop with TUN auto_route)
         var localDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
         Assert.NotNull(localDns);
         Assert.NotEqual("local", localDns!["type"]?.ToString());
@@ -450,12 +395,10 @@ public class CustomConfigInjectorTests
     [Fact]
     public void IncludeSplit_Ipv6Disabled_ForcesIpv4OnlyDnsStrategy()
     {
-        // Pre-fix: ForceIpv4Only=false + Ipv6Enabled=false left strategy absent → AAAA stall + IPv6 leak.
         var settings = CreateSettings(forceIpv4Only: false, ipv6Enabled: false);
         var json = (JsonNode.Parse(CustomConfigInjector.Inject(LegacyConfig, new[] { "chrome.exe" }, settings)) as JsonObject)!;
         Assert.Equal("ipv4_only", StjNodeHelpers.SelectToken(json, "dns.strategy")?.ToString());
 
-        // An authored strategy is the user's explicit contract — never overwritten absent ForceIpv4Only.
         var authored = (JsonNode.Parse(CustomConfigInjector.Inject(RealWorldConfig, new[] { "chrome.exe" }, settings)) as JsonObject)!;
         Assert.Equal("prefer_ipv4", StjNodeHelpers.SelectToken(authored, "dns.strategy")?.ToString());
     }
@@ -476,7 +419,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void EnsureUrltest_ExistingAutoOutbound_NoDuplicateTag()
     {
-        // Pre-fix: injected urltest blindly tagged "auto" → duplicate tag → sing-box FATAL.
         var json = (JsonNode.Parse(CustomConfigInjector.Inject(SelectorWithAutoOutbound, new[] { "chrome.exe" }, CreateSettings())) as JsonObject)!;
         var outbounds = json["outbounds"] as JsonArray;
         Assert.Contains(outbounds!, o => o["type"]?.ToString() == "urltest");
@@ -488,7 +430,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Validate_DuplicateOutboundTag_ReportsError()
     {
-        // Pre-fix: no duplicate-tag check → sing-box FATAL'd opaquely at start.
         var json = """
         {
           "outbounds": [
@@ -507,7 +448,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Inject_ActualCustomConfig_SingBoxCheck()
     {
-        // Test with the actual user config file if it exists
         var configPath = @"C:\ProgramData\VPNRouter\config\custom-brat-pc.json";
         if (!File.Exists(configPath))
             return;
@@ -517,7 +457,6 @@ public class CustomConfigInjectorTests
         settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
         var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
 
-        // Write to known location for manual inspection
         File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-inject.json", result);
 
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-actual-{Guid.NewGuid()}.json");
@@ -555,12 +494,10 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Inject_WithBypassRussianTraffic_PassesSingBoxCheck()
     {
-        // Verify geo bypass injection produces a valid sing-box config
         var configPath = @"C:\ProgramData\VPNRouter\config\custom-brat-pc.json";
         if (!File.Exists(configPath))
             return;
 
-        // Geo files must be present (downloaded by GeoDataDownloader normally)
         if (!GeoDataDownloader.AreGeoFilesAvailable())
             return;
 
@@ -570,8 +507,6 @@ public class CustomConfigInjectorTests
         settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
         var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
 
-        // Verify geo rules use a proxy-detour resolver, never the retired
-        // country-specific direct resolver.
         Assert.Contains("vpnrouter-geoip-ru", result);
         Assert.Contains("vpnrouter-geosite-ru", result);
         var parsed = (JsonNode.Parse(result) as JsonObject)!;
@@ -714,22 +649,9 @@ public class CustomConfigInjectorTests
         }
     }
 
-    // ─── Bug-r9-F-DEFENSIVE (2026-05-11) — Custom Config Mode silent leak ──
-    //
-    // Setup: stas (Custom Config Mode user) routed ALL traffic through a
-    // dead `outbound/vless[proxy]` dialing 195.135.255.216:443 that wasn't
-    // in his subscription. Root cause: his pasted sing-box JSON had a
-    // vless outbound without explicit `tag`, and FindProxyOutboundTag's
-    // historical fallback was `?? "proxy"` — shadowing the subscription's
-    // `vless-{name}` outbound list with an unnamed user outbound. These
-    // tests pin the new contract: anonymous outbounds get `"custom-proxy"`
-    // (distinct from subscription tags) AND the route rules reference
-    // that tag, so the unnamed outbound is the one actually used.
-
     [Fact]
     public void CustomConfigInjector_OutboundWithoutTag_GetsCustomProxy()
     {
-        // Anonymous proxy outbound — no tag field set by the user.
         var json = """
         {
           "outbounds": [
@@ -745,24 +667,16 @@ public class CustomConfigInjectorTests
         var outbounds = parsed["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
 
-        // The anonymous vless outbound must have been tagged "custom-proxy"
-        // (not the historical silent "proxy" fallback).
         var vless = outbounds!.FirstOrDefault(o => o["type"]?.ToString() == "vless");
         Assert.NotNull(vless);
         Assert.Equal("custom-proxy", vless!["tag"]?.ToString());
 
-        // And NO outbound should be tagged "proxy" — that's the shadowing
-        // that caused the leak in stas's log.
         Assert.DoesNotContain(outbounds!, o => o["tag"]?.ToString() == "proxy");
     }
 
     [Fact]
     public void CustomConfigInjector_RouteRulesUseCustomProxy()
     {
-        // When the proxy tag falls back to "custom-proxy", the injected
-        // route + DNS rules must reference that tag — otherwise the rule
-        // points at a non-existent outbound and sing-box silently fails
-        // over to direct (the exact silent-leak class we are defending).
         var json = """
         {
           "dns": {
@@ -790,16 +704,6 @@ public class CustomConfigInjectorTests
         Assert.Equal("custom-proxy", processRule!["outbound"]?.ToString());
     }
 
-    // ─── v2.39.0 audit P0 #147 — Apps Include/Exclude + Full Tunnel policy ──
-    //
-    // Custom-JSON mode must honour the SAME per-app routing policy as
-    // generated mode (ConfigGenerator.BuildRoute). Before the fix, Inject
-    // always routed the scanner list THROUGH the proxy and never forced
-    // final=proxy for full tunnel, so EXCLUDE mode was inverted (the apps the
-    // user wanted KEPT OUT of the VPN were the only ones tunnelled) and FULL
-    // tunnel leaked everything direct when the user's JSON carried
-    // final=direct. These tests pin the corrected contract.
-
     [Fact]
     public void Inject_ExcludeMode_Split_ListedAppDirect_FinalProxy()
     {
@@ -807,33 +711,24 @@ public class CustomConfigInjectorTests
         settings.App.RoutingAppsMode = "exclude";
         settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
 
-        // The scanner list is passed but must be IGNORED in exclude mode —
-        // RoutingAppsExclude is the source of truth.
         var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
         var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
-        // The excluded app is pinned to "direct" (bypasses the VPN), NOT proxy.
         var procRule = rules!.FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
         Assert.NotNull(procRule);
         Assert.Equal("direct", procRule!["outbound"]?.ToString());
         var names = (procRule["process_name"] as JsonArray)!.Select(t => t!.ToString()).ToList();
         Assert.Contains("Steam.exe", names);
-        Assert.DoesNotContain("Discord.exe", names); // scanner list ignored
+        Assert.DoesNotContain("Discord.exe", names);
 
-        // Everything ELSE flows through the proxy — route.final = proxy tag,
-        // NOT "direct". This is the inversion fix.
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // The excluded app's DNS resolves locally (matches its direct traffic).
         var dnsRule = (StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray)!
             .FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
         Assert.NotNull(dnsRule);
         Assert.Equal("local-dns", dnsRule!["server"]?.ToString());
 
-        // ...but the DEFAULT dns.final must point at the REMOTE/proxy DNS server
-        // (vpn-dns), because the unmatched majority is tunnelled — otherwise
-        // their DNS leaks to the local resolver (audit DNS-leak follow-up).
         Assert.Equal("vpn-dns", StjNodeHelpers.SelectToken(json, "dns.final")?.ToString());
     }
 
@@ -850,34 +745,27 @@ public class CustomConfigInjectorTests
 
         var procRule = rules!.FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
         Assert.NotNull(procRule);
-        // Include mode routes the listed apps THROUGH the proxy.
         Assert.Equal("proxy", procRule!["outbound"]?.ToString());
         var names = (procRule["process_name"] as JsonArray)!.Select(t => t!.ToString()).ToList();
-        Assert.Contains("Firefox.exe", names);      // explicit include honoured
-        Assert.DoesNotContain("Discord.exe", names); // scanner list overridden
+        Assert.Contains("Firefox.exe", names);
+        Assert.DoesNotContain("Discord.exe", names);
 
-        // Split include → everything else direct.
         Assert.Equal("direct", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // Include DNS resolves through the remote/proxy DNS server.
         var dnsRule = (StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray)!
             .FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
         Assert.NotNull(dnsRule);
         Assert.Equal("vpn-dns", dnsRule!["server"]?.ToString());
 
-        // Include split: the unmatched majority goes DIRECT, so dns.final stays
-        // on the local resolver (only the routed apps use vpn-dns above).
         Assert.Equal("local-dns", StjNodeHelpers.SelectToken(json, "dns.final")?.ToString());
     }
 
     [Fact]
     public void Inject_IncludeMode_EmptyExplicitList_FallsBackToScannerList()
     {
-        // The override path must NOT regress users who never opened the Apps
-        // tab: empty RoutingAppsInclude → use the legacy scanner list verbatim.
         var settings = CreateSettings();
         settings.App.RoutingAppsMode = "include";
-        settings.App.RoutingAppsInclude = new List<string>(); // empty
+        settings.App.RoutingAppsInclude = new List<string>();
 
         var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
@@ -897,27 +785,17 @@ public class CustomConfigInjectorTests
         var settings = CreateSettings();
         settings.App.RoutingMode = "full";
 
-        // ActionConfig's original route.final is "direct" — the pre-fix leak.
         var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
         var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
-        // Full tunnel: NO per-app process rules (everything via final).
         Assert.DoesNotContain(rules!, r => r!["process_name"] != null);
 
-        // The leak fix: final flips from the user's "direct" to the proxy tag.
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // Full tunnel: ALL DNS must resolve through the remote/proxy server too,
-        // not the local resolver (DNS-leak follow-up).
         Assert.Equal("vpn-dns", StjNodeHelpers.SelectToken(json, "dns.final")?.ToString());
     }
 
-    // v2.40.0 (review H1): a custom config whose DNS servers have NO proxy
-    // detour (all local / dns-direct after Strip) must NOT leave dns.final on the
-    // real NIC in full/exclude mode — the injector must SYNTHESIZE a proxy-routed
-    // DoH resolver. Without the fix, route.final=proxy tunnels traffic while DNS
-    // resolves direct = DNS leak.
     private const string NoProxyDnsConfig = """
     {
       "dns": {
@@ -946,19 +824,16 @@ public class CustomConfigInjectorTests
         var result = CustomConfigInjector.Inject(NoProxyDnsConfig, new[] { "Discord.exe" }, settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
 
-        // dns.final must NOT be the local/dns-direct resolver — it must point at a
-        // server that resolves THROUGH the proxy outbound.
         var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
         Assert.False(string.IsNullOrEmpty(dnsFinal));
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
         var finalServer = servers!.OfType<JsonObject>()
             .FirstOrDefault(s => s["tag"]?.ToString() == dnsFinal);
         Assert.NotNull(finalServer);
-        Assert.Equal("proxy", finalServer!["detour"]?.ToString()); // resolves inside the tunnel
+        Assert.Equal("proxy", finalServer!["detour"]?.ToString());
 
-        // The synthesized DNS server must be valid sing-box (no malformed startup).
         var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
-        if (!File.Exists(singBoxPath)) return; // CI without the binary — skip
+        if (!File.Exists(singBoxPath)) return;
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-h1-{routingMode}-{appsMode}-{Guid.NewGuid()}.json");
         try
         {
@@ -981,11 +856,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Inject_IncludeSplit_NoProxyDns_PerAppDnsRuleResolvesThroughProxy()
     {
-        // v2.40.0-r2 (regression review #2): in include-split the LISTED apps are
-        // tunnelled, so their per-app DNS rule must resolve THROUGH the proxy. When
-        // the custom config carries no proxy-detour DNS server, InjectDnsRules must
-        // synthesize one instead of falling back to servers[0] (the local/dns-direct
-        // resolver) — otherwise the tunnelled apps' DNS queries leak to the ISP.
         var settings = CreateSettings();
         settings.App.RoutingMode = "split";
         settings.App.RoutingAppsMode = "include";
@@ -994,30 +864,19 @@ public class CustomConfigInjectorTests
         var result = CustomConfigInjector.Inject(NoProxyDnsConfig, new[] { "Discord.exe" }, settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
 
-        // Find the injected process_name DNS rule and resolve its server tag.
         var rules = StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray;
         Assert.NotNull(rules);
         var appRule = rules!.OfType<JsonObject>().FirstOrDefault(r => r["process_name"] != null);
-        Assert.NotNull(appRule); // the listed app got a per-app DNS rule
+        Assert.NotNull(appRule);
         var ruleServerTag = appRule!["server"]?.ToString();
         Assert.False(string.IsNullOrEmpty(ruleServerTag));
 
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
         var ruleServer = servers!.OfType<JsonObject>().FirstOrDefault(s => s["tag"]?.ToString() == ruleServerTag);
         Assert.NotNull(ruleServer);
-        // The per-app resolver must run inside the tunnel — NOT a local/dns-direct one.
         Assert.Equal("proxy", ruleServer!["detour"]?.ToString());
     }
 
-    // v2.40.0 (review H1 — defense-in-depth follow-up): a hand-authored custom
-    // config that REUSES our reserved DNS tag "vpnrouter-vpn-dns" with a LOCAL
-    // detour must NOT short-circuit EnsureSynthesizedRemoteDns's idempotency
-    // guard. Before the fix the guard returned the tag on a tag-only match, so
-    // in full tunnel dns.final was pinned to that real-NIC resolver while
-    // route.final tunnels traffic = DNS leak. The fix coerces the reserved-tag
-    // server back to a proxy-routed DoH resolver. (Strip rewrites the authored
-    // detour:"direct" to "dns-direct" before the dns.final path runs — that is
-    // exactly the local-detour state that must still be coerced.)
     private const string ReservedTagLocalDetourConfig = """
     {
       "dns": {
@@ -1041,12 +900,8 @@ public class CustomConfigInjectorTests
         var result = CustomConfigInjector.Inject(ReservedTagLocalDetourConfig, Array.Empty<string>(), settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
 
-        // Full tunnel: route.final tunnels everything through the proxy.
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // dns.final must resolve THROUGH the proxy — it must point at a server
-        // whose detour equals the proxy outbound tag, NOT the local "direct" /
-        // "dns-direct" detour the config was authored with.
         var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
         Assert.False(string.IsNullOrEmpty(dnsFinal));
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
@@ -1055,17 +910,14 @@ public class CustomConfigInjectorTests
         Assert.NotNull(finalServer);
         Assert.Equal("proxy", finalServer!["detour"]?.ToString());
 
-        // The reserved-tag server itself must have been coerced in place to the
-        // canonical proxy-routed DoH shape (no local detour left behind).
         var reserved = servers!.OfType<JsonObject>()
             .FirstOrDefault(s => s["tag"]?.ToString() == "vpnrouter-vpn-dns");
         Assert.NotNull(reserved);
         Assert.Equal("proxy", reserved!["detour"]?.ToString());
         Assert.Equal("https", reserved["type"]?.ToString());
 
-        // The coerced config must still be valid sing-box (no malformed startup).
         var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
-        if (!File.Exists(singBoxPath)) return; // CI without the binary — skip
+        if (!File.Exists(singBoxPath)) return;
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-h1-reserved-{Guid.NewGuid()}.json");
         try
         {
@@ -1085,13 +937,6 @@ public class CustomConfigInjectorTests
         finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
     }
 
-    // v2.40.0-r6 (night-shift leak-hunt, Workflow #2 confirmed MEDIUM): a custom
-    // config can omit the dns section ENTIRELY (sing-box then falls back to its
-    // implicit system resolver). In full-tunnel / exclude mode route.final=proxy
-    // tunnels every connection, but with no dns.final the lookups resolve on the
-    // real NIC = DNS leak. The old guard required `dns.servers != null && Count>0`,
-    // so it skipped the whole fail-closed block for such configs. The fix CREATES
-    // the dns section + servers and synthesizes a proxy-routed DoH resolver.
     private const string NoDnsSectionConfig = """
     {
       "outbounds": [
@@ -1116,16 +961,12 @@ public class CustomConfigInjectorTests
         var result = CustomConfigInjector.Inject(NoDnsSectionConfig, new[] { "Discord.exe" }, settings);
         var json = (JsonNode.Parse(result) as JsonObject)!;
 
-        // route.final tunnels everything through the proxy in both modes.
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // The dns section + servers must have been CREATED (the input had none).
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
         Assert.NotNull(servers);
         Assert.NotEmpty(servers!);
 
-        // dns.final must point at a synthesized server that resolves THROUGH the
-        // proxy outbound — never left unset (which would leak to the system resolver).
         var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
         Assert.False(string.IsNullOrEmpty(dnsFinal));
         var finalServer = servers!.OfType<JsonObject>()
@@ -1133,9 +974,8 @@ public class CustomConfigInjectorTests
         Assert.NotNull(finalServer);
         Assert.Equal("proxy", finalServer!["detour"]?.ToString());
 
-        // The synthesized config must still be valid sing-box (no malformed startup).
         var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
-        if (!File.Exists(singBoxPath)) return; // CI without the binary — skip
+        if (!File.Exists(singBoxPath)) return;
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-nodns-{routingMode}-{appsMode}-{Guid.NewGuid()}.json");
         try
         {
@@ -1155,12 +995,6 @@ public class CustomConfigInjectorTests
         finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
     }
 
-    // v2.40.0-r8 (#1 — bug-scout HIGH leak): a custom config whose DNS server detours
-    // to a CUSTOM-NAMED direct outbound (detour:"myedge" -> {type:direct}), NOT the
-    // literal "direct". The old string-only classifier (detour != "direct") treated it
-    // as through-proxy, so in full/exclude mode route.final=proxy tunnelled everything
-    // while dns.final stayed on that real-NIC server = ISP-visible DNS leak. The fix
-    // resolves the detour to its outbound type and normalizes it to dns-direct.
     private const string CustomNamedDirectDnsConfig = """
     {
       "dns": {
@@ -1192,8 +1026,6 @@ public class CustomConfigInjectorTests
 
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // dns.final must resolve THROUGH the proxy — NOT the "mydns" real-NIC server
-        // whose detour points to the custom-named {type:direct} "myedge" outbound.
         var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
         Assert.False(string.IsNullOrEmpty(dnsFinal));
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
@@ -1204,10 +1036,6 @@ public class CustomConfigInjectorTests
         AssertSingBoxCheckPasses(result, $"customdirect-{routingMode}-{appsMode}");
     }
 
-    // v2.40.0-r8 (#2 — bug-scout MEDIUM): no dns section + a DOMAIN proxy server.
-    // The synthesized proxy-detour resolver must NOT become default_domain_resolver,
-    // else the proxy's own domain resolves through the not-yet-connected proxy =
-    // circular bootstrap. A real-NIC dns-direct bootstrap resolver must back it.
     private const string DomainProxyNoDnsConfig = """
     {
       "outbounds": [
@@ -1229,8 +1057,6 @@ public class CustomConfigInjectorTests
 
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
-        // default_domain_resolver must point at encrypted Cloudflare DNS on the
-        // real NIC so the proxy's own domain bootstraps without public UDP/53.
         var ddr = StjNodeHelpers.SelectToken(json, "route.default_domain_resolver")?.ToString();
         Assert.Equal("vpnrouter-dns-direct", ddr);
         var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
@@ -1245,8 +1071,6 @@ public class CustomConfigInjectorTests
         AssertSingBoxCheckPasses(result, "domainproxy-nodns-full");
     }
 
-    /// <summary>Runs `sing-box check` on the emitted config and asserts exit 0.
-    /// Skips gracefully when the binary is absent (CI).</summary>
     private static void AssertSingBoxCheckPasses(string configJson, string label)
     {
         var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
@@ -1273,9 +1097,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Inject_FullTunnel_OverridesUserFinalDirect_Selector()
     {
-        // LegacyConfig uses a SELECTOR tagged "proxy" and route.final "proxy".
-        // Flip the user's JSON to a leaky final=direct, then assert full tunnel
-        // restores final to the selector tag regardless.
         var leaky = LegacyConfig.Replace("\"final\": \"proxy\"", "\"final\": \"direct\"");
         var settings = CreateSettings();
         settings.App.RoutingMode = "full";
@@ -1286,8 +1107,6 @@ public class CustomConfigInjectorTests
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
     }
 
-    // ── Integration: generated mode-configs must pass `sing-box check` ──
-
     [Theory]
     [InlineData("exclude", "split")]
     [InlineData("include", "split")]
@@ -1296,7 +1115,7 @@ public class CustomConfigInjectorTests
     {
         var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
         if (!File.Exists(singBoxPath))
-            return; // CI without the binary — skip
+            return;
 
         var settings = CreateSettings();
         settings.App.RoutingAppsMode = appsMode;
@@ -1337,8 +1156,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Inject_MissingDnsHijackRule_InjectsHijackDnsAfterSniff()
     {
-        // SEC-02: when custom config omits hijack-dns, ensure injector inserts it
-        // so port 53 DNS does not leak in plaintext to the local ISP.
         var configJson = """
         {
           "outbounds": [
@@ -1372,8 +1189,6 @@ public class CustomConfigInjectorTests
     [Fact]
     public void Inject_FullTunnel_SanitizesUserDirectRules_PreventingBypass()
     {
-        // SEC-01: in full tunnel mode, user direct rules that would shadow route.final = proxy
-        // must be removed to prevent uninspected plaintext traffic leaks.
         var configJson = """
         {
           "outbounds": [
@@ -1402,10 +1217,8 @@ public class CustomConfigInjectorTests
 
         var rules = route.GetProperty("rules").EnumerateArray().ToList();
 
-        // Private IP direct bypass must be preserved
         Assert.Contains(rules, r => r.TryGetProperty("ip_is_private", out var p) && p.GetBoolean());
 
-        // Leaked user direct rule must be removed
         var leakedRule = rules.FirstOrDefault(r =>
             r.TryGetProperty("domain_suffix", out var d) && d.EnumerateArray().Any(s => s.GetString() == "leaked.com"));
         Assert.True(leakedRule.ValueKind == JsonValueKind.Undefined, "User direct rule must be sanitized in full tunnel");

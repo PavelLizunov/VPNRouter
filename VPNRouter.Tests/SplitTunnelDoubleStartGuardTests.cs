@@ -5,11 +5,6 @@ using System.Linq;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Regression pins for the split-tunnel double-start crash:
-/// ReconnectAsync + ToggleConnectionAsync must not race a second sing-box
-/// launch into a live/starting TUN.
-/// </summary>
 public sealed class SplitTunnelDoubleStartGuardTests
 {
     [Fact]

@@ -2,11 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// FLOW-1 (P06) source-ordering pin: Smart Connect must synchronize
-/// SelectedSubscriptionServer to the probed winner BEFORE SaveSettings
-/// re-derives ActiveSubscriptionServer from it.
-/// </summary>
 public sealed class SmartConnectPersistenceTests
 {
     [Fact]
@@ -19,19 +14,16 @@ public sealed class SmartConnectPersistenceTests
         var stripped = StripLineComments(src!);
         var oneline = Regex.Replace(stripped, @"\s+", " ");
 
-        // Locate the Smart Connect winner-switch branch.
         var branchIdx = oneline.IndexOf(
             "_settings.App.ActiveSubscriptionServer = chosen.Name",
             StringComparison.Ordinal);
         Assert.True(branchIdx >= 0,
             "SimpleMode.cs must contain the Smart Connect winner assignment");
 
-        // Region from the winner assignment to the next catch (bounded).
         var catchIdx = oneline.IndexOf("catch (Exception", branchIdx, StringComparison.Ordinal);
         var end = catchIdx < 0 ? Math.Min(oneline.Length, branchIdx + 800) : catchIdx;
         var region = oneline.Substring(branchIdx, end - branchIdx);
 
-        // The fix: winner lookup + selection sync must appear ...
         var lookupIdx = region.IndexOf(
             "SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name)",
             StringComparison.Ordinal);
@@ -44,7 +36,6 @@ public sealed class SmartConnectPersistenceTests
         Assert.True(assignIdx >= 0,
             "Smart Connect must assign SelectedSubscriptionServer to the winner");
 
-        // ... BEFORE SaveSettings, which re-derives from the selection.
         var saveIdx = region.IndexOf("SaveSettings()", StringComparison.Ordinal);
         Assert.True(saveIdx >= 0,
             "Smart Connect branch must call SaveSettings()");
@@ -54,8 +45,6 @@ public sealed class SmartConnectPersistenceTests
             $"SaveSettings (at {saveIdx}) — otherwise the stale selection clobbers " +
             "the probed winner during re-derivation");
     }
-
-    // ─── helpers (mirror sibling source-pin loaders) ────────────────────
 
     private static string? LoadSimpleModeSource()
     {

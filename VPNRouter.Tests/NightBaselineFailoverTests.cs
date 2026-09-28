@@ -12,11 +12,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Baseline-compatible characterization test for NIGHT-06 failover pool invalidation.
-/// Verifies that public VpnEngine.Stop() invalidates the cached AutoFailoverEngine instance.
-/// On baseline, Stop() leaves _failover untouched (expected RED). Fixed resets _failover to null.
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class NightBaselineFailoverTests
 {
@@ -130,8 +125,6 @@ public sealed class NightBaselineFailoverTests
 
             engine.Stop();
 
-            // Under baseline, Stop leaves _failover untouched (expected RED).
-            // Under fixed code, Stop sets _failover = null.
             Assert.Null(failoverField.GetValue(engine));
 
             Assert.Contains(fakeDns.Calls, c => c.Op == "Restore");

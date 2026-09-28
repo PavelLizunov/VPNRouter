@@ -26,8 +26,6 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    // ── v2.32.0 (AND-CC) — Custom sing-box JSON mode ───────────────────
-
     private void OnCcModeSubClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => SetCcMode("subscribe");
     private void OnCcModeManualClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -46,11 +44,6 @@ public partial class AndroidApp
         UpdateConfigSummary();
     }
 
-    /// <summary>
-    /// Repaints the segmented mode selector + flips visibility between
-    /// the URI input section and the custom-JSON section. Mirrors the
-    /// per-app picker's <see cref="ApplyPickerModeVisuals"/> pattern.
-    /// </summary>
     private void ApplyCcModeVisuals()
     {
         StyleSegment(_ccModeSubBtn, _ccMode == "subscribe");
@@ -117,9 +110,6 @@ public partial class AndroidApp
 
         if (!isValid)
         {
-            // Save anyway so the user doesn't lose their paste; they can
-            // fix-and-resave. sing-box itself surfaces the actual error
-            // when Connect runs.
             _ccCustomStatus.Text = string.Format(
                 Localization.CcSaveStatusInvalid + " ({0})",
                 string.Join("; ", errors));
@@ -136,9 +126,6 @@ public partial class AndroidApp
         if (_ccCustomInput is not null) _ccCustomInput.Text = string.Empty;
         if (_ccCustomStatus is not null) _ccCustomStatus.IsVisible = false;
         AndroidStorage.SetCustomConfigJson(null);
-        // Don't flip mode away from "custom" — user might be about to
-        // paste a different config. UpdateConfigSummary still shows
-        // "custom JSON · split/full".
         UpdateConfigSummary();
     }
 
@@ -195,12 +182,6 @@ public partial class AndroidApp
 
     private async void ReloadServerList()
     {
-        // v3.0 Phase 7.6 (2026-05-04) — disk + JSON deserialize off the
-        // UI thread. SharedPreferences GetString is fast (cached), but
-        // JsonConvert.DeserializeObject<List<VlessServerEntry>> on a
-        // 100-entry subscription cache can stall the UI for 100-200 ms
-        // on slower phones, contributing to the "app lags" complaint.
-        // Move to Task.Run; UI updates on the captured context.
         try
         {
             _cachedServers = await System.Threading.Tasks.Task.Run(AndroidStorage.GetServers);
@@ -258,29 +239,11 @@ public partial class AndroidApp
 
     private void OnAdvCardClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // AND-MIGRATE-OVERLAYS (2026-05-09): the Simple-page «Расширенные
-        // настройки ▸» CTA opens the Advanced shell on the Servers tab —
-        // matches desktop MainWindow's left-nav default landing ordering.
-        // From there the user can switch to Subscriptions / Apps /
-        // Network / DPI bypass / Telegram / Public configs without
-        // bouncing back to the kebab.
         OpenAdvancedShell(AdvancedTab.Servers);
     }
 
-    /// <summary>
-    /// v2.32.0 parity audit F-02 row 11 (2026-05-09) — build an inline
-    /// "Start with system" link card for the main scroller. Style mirrors
-    /// the autostart card on desktop SimplePage.axaml: title + subtitle
-    /// + small chevron, full-width tappable button. Clicking opens the
-    /// existing Settings overlay (already has the Autostart sub-section);
-    /// pre-fix this surface was only reachable via kebab → Settings →
-    /// scroll, which the parity audit flagged as a discoverability gap
-    /// vs. the desktop inline card.
-    /// </summary>
     private Control BuildAutostartInlineCard(double radiusSm)
     {
-        // Bug-AND-014 (2026-05-16) — promote title + subtitle to
-        // instance fields so ToggleLanguageAndRefresh can update them.
         _autostartCardTitleText = new TextBlock
         {
             Text = Localization.SmpAutostartCardTitle,

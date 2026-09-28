@@ -4,12 +4,6 @@ using System.Security.Principal;
 
 namespace VPNRouter.Core;
 
-/// <summary>
-/// Cross-platform path resolution for VPNRouter data directories.
-/// Windows: %ProgramData%\VPNRouter\
-/// macOS:   ~/Library/Application Support/VPNRouter/
-/// Linux:   ~/.config/vpnrouter/
-/// </summary>
 public static class AppPaths
 {
     internal const UnixFileMode PrivateUnixDirectoryMode =
@@ -19,18 +13,8 @@ public static class AppPaths
 
     private static string? _dataDir;
 
-    /// <summary>Root data directory (config, logs, cache, state).</summary>
     public static string DataDir => _dataDir ??= ResolveDataDir();
 
-    /// <summary>
-    /// Override the resolved data directory. Required on Android, where the
-    /// Linux fallback (<c>$HOME/.config/vpnrouter</c>) does not map onto the
-    /// per-app sandbox. Call as early as possible — before any code reads
-    /// <see cref="DataDir"/> or its derivatives — passing the result of
-    /// <c>Context.getFilesDir()</c>. Subsequent calls update the value
-    /// (this is a static field, so a stale reader could see the previous
-    /// path; callers must order initialisation accordingly).
-    /// </summary>
     public static void OverrideDataDir(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -55,23 +39,10 @@ public static class AppPaths
     public static string SingBoxExePath => Path.Combine(BinDir,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
-    // DNS-tunnel (slipstream) — last-resort transport sidecar. Dedicated dir
-    // parallel to zapret/, tg-proxy/. The binary is BUNDLED in the
-    // installer (app/, like sing-box) — NOT pulled from GitHub, because
-    // slipstream is reached precisely when GitHub is blocked (circular dep).
-    // SlipstreamManager promotes the bundled copy to SlipstreamExePath on first
-    // use. SlipstreamUpdater (on-demand refresh via a non-GitHub channel) is a
-    // deferred follow-up. See plans/dns-tunnel-slipstream-integration-2026-06-10.md.
     public static string SlipstreamDir => Path.Combine(DataDir, "slipstream");
     public static string SlipstreamBinDir => Path.Combine(SlipstreamDir, "bin");
     public static string SlipstreamExePath => Path.Combine(SlipstreamBinDir,
         OperatingSystem.IsWindows() ? "slipstream-client.exe" : "slipstream-client");
-    /// <summary>The slipstream-client binary as shipped inside the install
-    /// payload (app/ root = <see cref="AppContext.BaseDirectory"/>), or null if
-    /// not bundled. This is the SOURCE; <see cref="SlipstreamExePath"/> stays the
-    /// canonical RUNTIME location (matches sing-box: bundled in app/, executed
-    /// from a settings/data path). Mirrors how SingBoxManager co-locates
-    /// libcronet from AppContext.BaseDirectory.</summary>
     public static string? SlipstreamBundledExePath
     {
         get
@@ -81,15 +52,10 @@ public static class AppPaths
             return File.Exists(p) ? p : null;
         }
     }
-    // Active leaf cert (PEM) for the currently-selected dns-tunnel server. NOT a
-    // bundled asset — the PEM travels in the dns-tunnel:// profile and is written
-    // here by SlipstreamManager at launch, then passed to slipstream-client via
-    // --cert. Overwritten each launch, removed on Stop. (A leaf cert is public.)
     public static string SlipstreamActiveCertPath => Path.Combine(SlipstreamDir, "active-leaf.pem");
     public static string SlipstreamVersionPath => Path.Combine(SlipstreamDir, "version.txt");
     public static string SlipstreamLogPath => Path.Combine(LogsDir, "slipstream.log");
 
-    /// <summary>Ensure all required directories exist.</summary>
     public static void EnsureDirectories()
     {
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
@@ -115,7 +81,6 @@ public static class AppPaths
         Directory.CreateDirectory(ProfilesDir);
         Directory.CreateDirectory(GeoDir);
 
-        // SEC-2: tighten %ProgramData% ACL on first run without installer.
         if (OperatingSystem.IsWindows())
         {
             TryRestrictWindowsDataDirAcl(DataDir);
@@ -123,7 +88,6 @@ public static class AppPaths
         }
     }
 
-    /// <summary>Create and verify an owner-only Linux/macOS directory.</summary>
     internal static void EnsurePrivateUnixDirectory(string path)
     {
         var info = new DirectoryInfo(path);
@@ -140,7 +104,6 @@ public static class AppPaths
             throw new IOException($"Could not enforce owner-only directory permissions: {path}");
     }
 
-    /// <summary>Verify and restrict an existing secret-bearing Unix file.</summary>
     internal static void EnsurePrivateUnixFile(string path)
     {
         var info = new FileInfo(path);
@@ -155,7 +118,6 @@ public static class AppPaths
             throw new IOException($"Could not enforce owner-only file permissions: {path}");
     }
 
-    /// <summary>Create a file without exposing new Unix content through the process umask.</summary>
     internal static FileStream CreatePrivateFile(string path, FileMode mode = FileMode.Create)
     {
         var unix = OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
@@ -185,7 +147,6 @@ public static class AppPaths
         }
     }
 
-    /// <summary>Write UTF-8 text with owner-only creation semantics on Unix.</summary>
     internal static void WritePrivateText(string path, string content)
     {
         using var stream = CreatePrivateFile(path);
@@ -193,12 +154,6 @@ public static class AppPaths
         writer.Write(content);
     }
 
-    /// <summary>
-    /// Windows-only, best-effort: replace the inherited BUILTIN\Users read with
-    /// explicit SYSTEM + Administrators (FullControl) and current-user (Modify).
-    /// Uses well-known SIDs so the logic is locale-independent. Idempotent:
-    /// re-runs are no-ops once the Users ACE is gone.
-    /// </summary>
     [SupportedOSPlatform("windows")]
     private static void TryRestrictWindowsDataDirAcl(string dir)
     {
@@ -216,12 +171,10 @@ public static class AppPaths
             const InheritanceFlags inherit =
                 InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
 
-            // Well-known SIDs are locale-independent (unlike NTAccount names).
             var systemSid = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
             var adminsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
             var usersSid  = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
 
-            // Re-assert allowed identities BEFORE removing Users.
             security.SetAccessRule(new FileSystemAccessRule(
                 systemSid, FileSystemRights.FullControl,
                 inherit, PropagationFlags.None, AccessControlType.Allow));
@@ -232,8 +185,6 @@ public static class AppPaths
                 WindowsIdentity.GetCurrent().User!, FileSystemRights.Modify,
                 inherit, PropagationFlags.None, AccessControlType.Allow));
 
-            // RemoveAccessRuleAll drops EVERY Allow ACE for BUILTIN\Users
-            // regardless of rights/inheritance/propagation flags.
             security.RemoveAccessRuleAll(new FileSystemAccessRule(
                 usersSid, FileSystemRights.ReadAndExecute,
                 inherit, PropagationFlags.None, AccessControlType.Allow));
@@ -242,14 +193,9 @@ public static class AppPaths
         }
         catch
         {
-            // Best-effort: never throw from the startup path.
         }
     }
 
-    /// <summary>
-    /// SEC-01: Lock down %ProgramData%\VPNRouter\bin permissions so that non-admin users
-    /// cannot replace binaries (sing-box.exe) executed by privileged services.
-    /// </summary>
     [SupportedOSPlatform("windows")]
     internal static void RestrictWindowsBinDirAcl(string binDir)
     {
@@ -282,7 +228,6 @@ public static class AppPaths
         }
         catch
         {
-            // Best-effort: never throw from the startup path.
         }
     }
 
@@ -318,7 +263,6 @@ public static class AppPaths
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Library", "Application Support", "VPNRouter");
 
-        // Linux / other
         var xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
         return Path.Combine(
             !string.IsNullOrEmpty(xdg) ? xdg : Path.Combine(

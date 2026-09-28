@@ -1,13 +1,5 @@
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// R13-A: each of the four App ViewModel <c>{Url}</c> log sinks must wrap its
-/// argument in the pinned <see cref="VPNRouter.Core.Services.CanaryPolicy.RedactUrl"/>.
-/// Source-shape contract, not runtime: MainWindowViewModel builds its own
-/// non-injectable Serilog logger and three sinks fire only on a network failure,
-/// so a capturing-logger test would need a production seam + broad VM fixture.
-/// Redaction output shape is pinned separately by CanaryPolicyTests.
-/// </summary>
 public sealed class AppUrlRedactionSourceTests
 {
     [Theory]

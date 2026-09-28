@@ -2,12 +2,6 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
-    // ── Free Configs ──
-    // v2.30.7-r2 — "Свободные" / "Free" was deemed unclear (user
-    // feedback). Renamed to "Публичные" / "Public" — describes the
-    // source (public free pools from 14 sources, server-side
-    // pre-aggregated via GH Actions) without sounding like
-    // "free trial" or "no-cost product". Fits narrow tab strip.
     public static string TabFreeConfigs => Ru ? "Публичные" : "Public";
     public static string FcDashboardTotal     => Ru ? "Всего"         : "Total";
     public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
@@ -36,7 +30,6 @@ public static partial class Strings
         ? $"Список исчерпан — протестировано {tested}, найдено {verified} рабочих"
         : $"Queue exhausted — tested {tested}, found {verified} working";
 
-    // v2.28.5-r2/r4: batched fetch+test+verify status messages
     public static string FcStatusBatchedSearchStart(int target, int poolSize) => Ru
         ? $"Поиск {target} рабочих конфигов из пула {poolSize}..."
         : $"Searching {target} working configs from pool of {poolSize}...";
@@ -52,18 +45,12 @@ public static partial class Strings
     public static string FcStatusBatchedFound(int found, int target) => Ru
         ? $"Найдено {found}/{target} рабочих конфигов..."
         : $"Found {found}/{target} working configs...";
-    /// <summary>v2.28.5-r6: per-probe status update so the UI doesn't appear
-    /// frozen during the deep-verify phase. Each probe takes 3-5s, 5 in
-    /// parallel → status flips every ~600 ms.</summary>
     public static string FcStatusBatchedProbing(int found, int target, string host, int port, string cc) => Ru
         ? $"Найдено {found}/{target} · проверяю {host}:{port} [{cc}]..."
         : $"Found {found}/{target} · probing {host}:{port} [{cc}]...";
 
     public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
     public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
-    // v2.30.4-r1 (UX-66 fix): replaced literal "N" placeholder with
-    // copy that doesn't pretend to know an exact count. Pre-r1 said
-    // "Найдёт N рабочих" leaking the parameter symbol into the UI.
     public static string FcDeepHint        => Ru
         ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Остановится когда наберётся достаточно рабочих с пингом ниже порога."
         : "Downloads public VLESS configs and tries each one with a real connection. Stops once enough working ones meet your ping threshold.";
@@ -96,11 +83,9 @@ public static partial class Strings
     public static string FcColEndpoint        => Ru ? "Адрес"         : "Endpoint";
     public static string FcColLatency         => Ru ? "Пинг"          : "Latency";
     public static string FcColBandwidth       => Ru ? "Скорость"      : "Speed";
-    // v2.31.0-r4 (F-24 / UX-63): tooltip explaining "—" rows.
     public static string FcSpeedColumnTooltip => Ru
         ? "Скорость измеряется во время Глубокой проверки. «—» означает, что замер не запускался — нажмите ↻ или «Глубоко проверить» чтобы получить значение."
         : "Speed is measured during Deep verify. \"—\" means it wasn't measured — click ↻ or 'Deep verify' to get a number.";
-    // v2.31.0-r4 (F-26): inline confirmation toast after RunHealthCheck.
     public static string HealthCheckSavedToast => Ru
         ? "Отчёт сохранён и открыт в Блокноте"
         : "Report saved and opened in Notepad";
@@ -125,7 +110,6 @@ public static partial class Strings
         ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
         : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
 
-    // v2.13.17 — Smart Refresh (latency goal)
     public static string FcSmartRefreshLabel => Ru ? "Smart Refresh (стоп при достижении цели)" : "Smart Refresh (stop when goal reached)";
     public static string FcTargetNLabel      => Ru ? "Найти:" : "Find:";
     public static string FcConfigsWord       => Ru ? "конфигов" : "configs";
@@ -135,25 +119,18 @@ public static partial class Strings
         ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
         : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
 
-    // v2.28.4-r2: Quickstart banner removed (single-button flow makes the 3-step lecture obsolete).
-
-    // v2.14.7 — collapsible More Options
     public static string FcMoreOptions => Ru ? "Больше опций (фильтры, очистка, свои источники)" : "More options (filters, cleanup, user sources)";
 
-    // v2.28.4-r1: 6-section nav removed (FreeConfigs is now single Simple page).
     public static string FcListHeader    => Ru ? "Конфиги"       : "Configs";
     public static string FcListShown     => Ru ? "показано"         : "shown";
 
-    // Stop button in the Free Configs search card
     public static string FcDeepStop        => Ru ? "⏹ Остановить поиск" : "⏹ Stop search";
     public static string FcDeepStopTooltip => Ru
         ? "Прекратить текущий поиск. Найденные до отмены конфиги сохранены в кэше."
         : "Abort the current search. Configs found before cancel are preserved in cache.";
 
-    // v2.28.4-r4 — Advanced settings expander label inside the green search card
     public static string FcAdvancedSettings => Ru ? "▾ Настройки" : "▾ Settings";
 
-    // ── v2.28.6 — Free Configs tab strip (Search / Saved) + Saved-tab UI ──
     public static string FcTabSearch                 => Ru ? "▶ Поиск"     : "▶ Search";
     public static string FcTabSaved                  => Ru ? "Сохранённые" : "Saved";
     public static string FcTabSavedWithCount(int n)  => Ru ? $"Сохранённые ({n})" : $"Saved ({n})";
@@ -192,22 +169,15 @@ public static partial class Strings
         ? $"Перепроверено · {verified} работают, {failed} не работают"
         : $"Rechecked · {verified} working, {failed} failed";
 
-    /// <summary>v2.28.6-r3: thin hint shown inside the empty search-tab
-    /// list area. Replaces the v2.28.6-r1/r2 "no configs loaded" CTA card —
-    /// the green search card right above the list IS the call-to-action,
-    /// a second button below was redundant and broke the visual style of
-    /// other pages (ServersPage / ToolsPage have no big empty-state CTA).</summary>
     public static string FcSearchListEmptyHint => Ru
         ? "Нажмите кнопку выше, чтобы найти конфиги."
         : "Click the button above to find configs.";
 
-    // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "Fast scan (только TCP, без TLS)" : "Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
         ? "В 3 раза быстрее, но помечает как 'рабочие' даже honeypot-ы (открытый порт ≠ VLESS). Используйте только если Deep Verify отфильтрует дальше."
         : "3× faster but marks even honeypots as 'working' (open port ≠ VLESS). Deep Verify filters them out afterwards.";
 
-    // v2.14.3 — Deep Verify presets
     public static string FcPresetLabel    => Ru ? "Пресет:" : "Preset:";
     public static string FcPresetGaming   => Ru ? "Gaming (пинг<60ms, bw>2 Mbps)" : "Gaming (ping<60ms, bw>2 Mbps)";
     public static string FcPresetStream   => Ru ? "Streaming (пинг<250ms, bw>10 Mbps)" : "Streaming (ping<250ms, bw>10 Mbps)";
@@ -221,7 +191,6 @@ public static partial class Strings
         ? "Замер bandwidth скачивает ~5 MB через прокси (~150 MB для 30 кандидатов). OK на wifi, осторожно на мобильном."
         : "Bandwidth test downloads ~5 MB per config via proxy (~150 MB for 30 candidates). OK on wifi, mind mobile data.";
 
-    // v2.14.4 — User sources
     public static string FcUserSrcSection      => Ru ? "Мои источники" : "My sources";
     public static string FcUserSrcNamePlaceholder => Ru ? "Имя (опционально)" : "Name (optional)";
     public static string FcUserSrcUrlPlaceholder  => Ru ? "URL подписки (https://...)" : "Subscription URL (https://...)";
@@ -236,7 +205,6 @@ public static partial class Strings
     public static string FcUserSrcInvalidUrl   => Ru ? "Невалидный URL" : "Invalid URL";
     public static string FcUserSrcEmptyUrl     => Ru ? "Введите URL" : "Enter a URL";
 
-    // v2.14.5 — Tooltips
     public static string FcRefreshTooltip => Ru
         ? "Загрузить конфиги из всех источников (или pool.json с сервера), проверить TCP+TLS. ~2-15 мин в зависимости от настроек."
         : "Fetch configs from all sources (or server-side pool.json), test TCP+TLS. ~2-15 min depending on settings.";
@@ -247,7 +215,6 @@ public static partial class Strings
         ? "Скачивает свежие VLESS-конфиги из 14 источников и проверяет каждый реальным HTTPS-запросом через временный sing-box. Останавливается когда наберётся достаточно рабочих с пингом ниже порога. ~1-3 минуты."
         : "Fetches fresh VLESS configs from 14 sources and tests each with a real HTTPS request via a temporary sing-box. Stops once enough working configs match the ping threshold. ~1-3 minutes.";
 
-    // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
         ? "Публичный прокси — предупреждение"
         : "Public proxy — privacy warning";

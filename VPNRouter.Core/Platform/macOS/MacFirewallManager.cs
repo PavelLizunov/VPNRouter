@@ -8,58 +8,14 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Core.Platform.macOS;
 
-/// <summary>
-/// macOS pf-based kill-switch for <c>block_on_vpn_fail</c> (r6). GLOBAL egress
-/// block, engaged ONLY in full-tunnel mode.
-///
-/// <para>Why global + full-tunnel-only: pf filters packets (IP/port/interface),
-/// it has NO concept of process, so it cannot block just the routed apps the way
-/// Windows netsh does. The user-chosen semantics are therefore a global egress
-/// block that engages only in full-tunnel (where blocking everything is correct);
-/// split tunnel stays a labelled no-op. Full design + rationale:
-/// <c>plans/phase3-macos-pf-killswitch-r6-design-2026-06-04.md</c>.</para>
-///
-/// <para>Full-tunnel signal: <see cref="CreateBlockRules"/> is guided by the explicit
-/// <c>isFullTunnel</c> flag rather than process list emptiness; split tunnel remains
-/// disarmed even if process scan returns an empty list.</para>
-///
-/// <para>CRITICAL — the ruleset blocks all outbound EXCEPT loopback, RFC1918 /
-/// link-local, and the VPN server IP(s) (read from <c>current.json</c>). The
-/// server pass is what lets sing-box reconnect during the block window while
-/// blocking rules are active. Non-server IPv6 stays fully blocked (no v6 leak).</para>
-///
-/// <para>Pure <see cref="IProcessRunner"/> orchestration (no macOS APIs) so the
-/// exact pfctl command shapes are unit-tested on the Windows build; the live
-/// block / reconnect / no-brick behaviour is verified on the Mac host via the
-/// kill-9 SSH gate. Default-OFF (only constructed+armed when a profile sets
-/// block_on_vpn_fail). Fail-safe: Disable / Delete / Dispose ALWAYS lift the
-/// block (anchor flush; legacy engage → stock-ruleset restore) + release our
-/// pf-enable ref — never leave the Mac blocked.</para>
-///
-/// <para>P0.3 (2026-07-10): rules live in the dedicated anchor
-/// <c>com.vpnrouter/killswitch</c> instead of replacing the main ruleset. The
-/// first engage ensures the main ruleset carries the anchor call (without it
-/// anchor rules are inert — proven live); disable/teardown then touch ONLY the
-/// anchor, so other pf users' runtime state (e.g. another VPN's anchor) survives
-/// our disengage — the pre-P0.3 broad <c>pfctl -f /etc/pf.conf</c> restore wiped
-/// it on every shutdown.</para>
-/// </summary>
 public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallConfig
 {
     private const string DefaultPfConf = "/etc/pf.conf";
     private const string PfCtl = "/sbin/pfctl";
 
-    /// <summary>
-    /// P0.3 (2026-07-10): dedicated pf anchor. Rules are loaded INTO this anchor
-    /// (<c>pfctl -a … -f</c>) and are evaluated ONLY because Enable also ensures a
-    /// carrier line <c>anchor "com.vpnrouter/killswitch"</c> exists in the main
-    /// ruleset — stock macOS references only <c>com.apple/*</c>, so without the
-    /// carrier the anchor rules are INERT (a dead kill-switch). Proven live on the
-    /// Mac host 2026-07-10; see plans/macos-p0.3-pf-anchor-corrected-design-2026-07-10.md.
-    /// </summary>
     internal const string Anchor = "com.vpnrouter/killswitch";
-    internal const string AnchorMarker = "anchor-v1";  // marker content in anchor mode
-    internal const string LegacyMarker = "engaged";    // pre-P0.3 broad-load mode
+    internal const string AnchorMarker = "anchor-v1";
+    internal const string LegacyMarker = "engaged";
 
     private readonly object _gate = new();
     private readonly IProcessRunner _runner;
@@ -71,10 +27,10 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     private readonly string _mainConfPath;
     private readonly Func<string, IReadOnlyList<string>> _resolveHost;
 
-    private bool _armed;            // full-tunnel detected at CreateBlockRules
-    private bool _loaded;           // our blocking ruleset is live
-    private bool _anchorMode;       // true = engaged via the anchor; false = legacy broad load
-    private string? _enableToken;   // pfctl -E ref-count token
+    private bool _armed;
+    private bool _loaded;
+    private bool _anchorMode;
+    private string? _enableToken;
     private List<string> _serverIps = new();
     private bool _disposed;
 
@@ -96,10 +52,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         _logger = logger ?? Log.Logger;
         _runner = runner ?? new ProcessRunner();
         _currentConfigPath = currentConfigPath ?? AppPaths.CurrentConfigPath;
-        // Crash-recovery sentinel: written when the block is engaged, deleted on
-        // clean teardown. If it survives to the next launch, a hard kill stranded
-        // the kill-switch and the orphan sweep cleans up (anchor flush for
-        // anchor-v1, stock-ruleset restore for legacy).
         _markerPath = markerPath ?? System.IO.Path.Combine(AppPaths.DataDir, "pf-killswitch-engaged.marker");
         _pfConfPath = pfConfPath ?? DefaultPfConf;
         _rulesPath = rulesPath ?? System.IO.Path.Combine(AppPaths.DataDir, "vpnrouter-pf-killswitch.conf");
@@ -107,7 +59,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         _resolveHost = hostResolver ?? DefaultResolveHost;
     }
 
-    /// <inheritdoc />
     public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true)
     {
         lock (_gate)
@@ -115,11 +66,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             var names = (processNames ?? Enumerable.Empty<string>())
                 .Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
 
-            // P1 (2026-07-10): arm on the EXPLICIT routing intent, NEVER on list
-            // emptiness. Pre-fix `names.Count == 0` meant "full tunnel" — so a
-            // SPLIT-tunnel user whose process scan timed out (an empty list) had the
-            // WHOLE host's egress dropped on a crash. pf can't block per-process, so
-            // split stays a labelled no-op no matter what the scan returned.
             if (!isFullTunnel)
             {
                 _armed = false;
@@ -137,7 +83,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    /// <inheritdoc />
     public void EnableBlockRules()
     {
         lock (_gate)
@@ -150,7 +95,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                     "NOT blocking; traffic follows normal routing");
                 return;
             }
-            if (_loaded) return; // idempotent
+            if (_loaded) return;
 
             var rules = BuildRules(_serverIps);
             try
@@ -166,16 +111,12 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 return;
             }
 
-            // Enable pf (ref-counted) and capture the token so Disable can release
-            // OUR reference without disturbing other pf users. Do not acquire a second
-            // -E if we already retain a valid token from a prior engage/failed release.
             if (string.IsNullOrEmpty(_enableToken))
             {
                 var en = RunSudo(new[] { "-n", PfCtl, "-E" });
                 if (en.ok) _enableToken = ParsePfToken(en.stderr);
             }
 
-            // ── P0.3 anchor mode ──
             if (EnsureCarrier())
             {
                 var load = RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-f", _rulesPath });
@@ -183,7 +124,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 {
                     _loaded = true;
                     _anchorMode = true;
-                    WriteMarker(AnchorMarker); // sentinel so a hard kill is recoverable on next launch
+                    WriteMarker(AnchorMarker);
                     _logger.Information(
                         "[MacFirewall] pf kill-switch ENGAGED (anchor {Anchor}) — blocking all egress except lo0/LAN/server", Anchor);
                     return;
@@ -195,9 +136,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 return;
             }
 
-            // Legacy fallback: /etc/pf.conf unreadable or the carrier load failed —
-            // fall back to the pre-P0.3 broad main-ruleset load so the kill-switch
-            // still BLOCKS (correctness over blast-radius hygiene).
             _logger.Warning("[MacFirewall] anchor carrier unavailable — falling back to legacy broad pf load");
             var legacy = RunSudo(new[] { "-n", PfCtl, "-f", _rulesPath });
             if (legacy.ok)
@@ -212,12 +150,11 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 _logger.Warning(
                     "[MacFirewall] FAILED to load pf ruleset (pfctl sudoers grant missing or malformed rule " +
                     "(wrong inet/inet6 family)? {Err}) — NOT blocking; releasing pf-enable ref", legacy.stderr?.Trim());
-                ReleaseEnable(); // don't leave pf enabled-by-us with no blocking ruleset
+                ReleaseEnable();
             }
         }
     }
 
-    /// <inheritdoc />
     public void DisableBlockRules()
     {
         lock (_gate)
@@ -245,16 +182,10 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    /// <inheritdoc />
     public void DeleteAllRules()
     {
         lock (_gate)
         {
-            // Fail-safe teardown — used on clean shutdown and orphan cleanup.
-            // Anchor flush is a harmless no-op when nothing is loaded, so (unlike the
-            // pre-P0.3 unconditional /etc/pf.conf reload, which stomped OTHER tools'
-            // runtime pf state on every shutdown) this never touches the main
-            // ruleset unless a LEGACY broad load is actually live.
             bool isLegacy;
             if (_loaded)
             {
@@ -306,9 +237,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         {
             if (_disposed && !_loaded && string.IsNullOrEmpty(_enableToken)) return;
 
-            // Anti-brick backstop: if our blocking ruleset was ever loaded or token retained,
-            // make sure it's gone even on an abrupt shutdown.
-            // Disable/DeleteAll/Dispose callable repeatedly and do not make cleanup unreachable via disposed flag.
             try
             {
                 if (_loaded)
@@ -326,7 +254,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                     ReleaseEnable();
                 }
             }
-            catch { /* never throw from Dispose */ }
+            catch {  }
 
             if (!_loaded && string.IsNullOrEmpty(_enableToken))
             {
@@ -335,7 +263,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    /// <inheritdoc />
     void ICommittedFirewallConfig.UpdateCommittedConfig(string configJson, bool enabledForFullTunnel)
         => UpdateCommittedConfig(configJson, enabledForFullTunnel);
 
@@ -407,30 +334,17 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    // ─── helpers ───────────────────────────────────────────────────────────
-
     private bool RestoreDefaultRuleset()
-        => RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }).ok; // reload stock macOS ruleset
+        => RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }).ok;
 
     private bool FlushAnchor()
         => RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-F", "rules" }).ok;
 
-    /// <summary>
-    /// Make sure the main ruleset calls our anchor. Checks the live filter rules
-    /// (<c>pfctl -sr</c>) first so repeat engages don't reload the main ruleset;
-    /// when absent, loads <c>/etc/pf.conf</c> content + one trailing
-    /// <c>anchor "com.vpnrouter/killswitch"</c> line.
-    /// ponytail: reloading pf.conf+carrier drops OTHER tools' runtime-added
-    /// carrier lines (same class as the pre-P0.3 behaviour, but now only on the
-    /// FIRST engage instead of every enable/disable); faithful live-ruleset
-    /// merge via -sr/-sn reconstruction is the upgrade path if a real
-    /// coexistence report ever needs it.
-    /// </summary>
     private bool EnsureCarrier()
     {
         var sr = RunSudo(new[] { "-n", PfCtl, "-sr" });
         if (sr.ok && sr.stdout.Contains(Anchor, StringComparison.Ordinal))
-            return true; // carrier already present (prior engage this boot)
+            return true;
 
         string conf;
         try
@@ -476,16 +390,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         return false;
     }
 
-    /// <summary>
-    /// Build the pf ruleset: block all outbound, then pass loopback, the
-    /// private/link-local ranges, and each VPN server IP (so sing-box can
-    /// reconnect). Each server IP is emitted with its own address-family keyword
-    /// (<c>inet</c> for IPv4, <c>inet6</c> for IPv6) so an IPv6 literal is a
-    /// well-formed rule; all other IPv6 stays shut via <c>block drop out all</c>.
-    /// No <c>set</c> options: <c>set</c> is main-ruleset-only, so it would fail
-    /// the P0.3 anchor load (<c>pfctl -a … -f</c>); pf's default block-policy is
-    /// drop anyway, and <c>block drop</c> states it per-rule.
-    /// </summary>
     internal static string BuildRules(List<string> serverIps)
     {
         var sb = new StringBuilder();
@@ -522,10 +426,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 return;
             }
 
-            // Hostname server (Reality usually uses IPs, but a subscription or
-            // peer can hand out hostnames). pf rules take literal IPs only, so
-            // resolve NOW — while the VPN is healthy — and add the resolved IP(s)
-            // to the pass-list. Reject any non-IP or injected pf strings.
             try
             {
                 var resolved = _resolveHost(candidate);
@@ -584,8 +484,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 var endpointType = typeProp.GetString();
                 if (!string.Equals(endpointType, "wireguard", StringComparison.OrdinalIgnoreCase)) continue;
 
-                // CRITICAL: NEVER read ep["address"] (local tunnel addresses) or peer["allowed_ips"].
-                // Only read known type wireguard endpoints[].peers[].address.
                 if (!ep.TryGetProperty("peers", out var peersProp) || peersProp.ValueKind != JsonValueKind.Array)
                     continue;
 
@@ -618,7 +516,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    /// <summary>Bounded DNS resolve → IPv4 and IPv6 literals. Best-effort; empty on failure.</summary>
     private IReadOnlyList<string> DefaultResolveHost(string host)
     {
         try
@@ -648,18 +545,15 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         try
         {
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_markerPath)!);
-            // Content encodes HOW we engaged ("anchor-v1" vs legacy "engaged") so
-            // the post-crash orphan sweep knows whether an anchor flush suffices
-            // or the pre-P0.3 full-ruleset restore is needed.
             System.IO.File.WriteAllText(_markerPath, mode);
         }
-        catch { /* best-effort; absence just means the orphan sweep won't auto-run */ }
+        catch {  }
     }
 
     private void TryDeleteMarker()
     {
         try { if (System.IO.File.Exists(_markerPath)) System.IO.File.Delete(_markerPath); }
-        catch { /* swallow */ }
+        catch {  }
     }
 
     internal enum MarkerState
@@ -696,18 +590,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    /// <summary>
-    /// Orphan recovery: if our engaged-marker survived (a prior session was
-    /// HARD-killed — kill -9 / crash / power loss — while the kill-switch was
-    /// live, so Dispose never ran), unblock the Mac. Marker content picks the
-    /// path: <c>anchor-v1</c> → flush ONLY our anchor (the main ruleset was
-    /// never ours to restore); legacy <c>engaged</c> → the pre-P0.3
-    /// stock-ruleset reload. Unreadable or unknown markers are retained without
-    /// broad restore. A fresh process can't know the old <c>pfctl -E</c>
-    /// token, so the enable ref may leak (logged); an enabled pf with an empty
-    /// anchor is harmless. No-op when the marker is absent — a normal launch
-    /// never touches pf.
-    /// </summary>
     internal void CleanupOrphanedRules(ILogger? logger)
     {
         lock (_gate)
@@ -763,21 +645,14 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    /// <summary>
-    /// Static entry for app startup / process-exit — mirrors Windows
-    /// <c>FirewallManager.TryCleanupOrphanedRulesSafe</c>. Marker-gated, so it's a
-    /// no-op unless a prior session was hard-killed while the kill-switch was on.
-    /// Never throws.
-    /// </summary>
     public static void TryCleanupOrphanedRulesSafe(ILogger? logger)
     {
-        try { new MacFirewallManager(logger).CleanupOrphanedRules(logger); } catch { /* never throw from a startup hook */ }
+        try { new MacFirewallManager(logger).CleanupOrphanedRules(logger); } catch {  }
     }
 
     internal static string? ParsePfToken(string? stderr)
     {
         if (string.IsNullOrEmpty(stderr)) return null;
-        // `pfctl -E` prints "Token : 12345678901234" to stderr.
         var m = System.Text.RegularExpressions.Regex.Match(stderr, @"Token\s*:\s*(\d+)");
         return m.Success ? m.Groups[1].Value : null;
     }

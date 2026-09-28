@@ -2,13 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// FreeConfigKeepPolicy — v2.28.5 trim policy used by the FreeConfigsPage VM
-// after a search ends. _allConfigs is trimmed to entries that pass this
-// predicate so the working set drops back close to baseline within seconds
-// of the search completing (instead of holding ~12 MB of dead/unverified
-// FreeConfigEntry objects until the next search overwrites the list).
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class FreeConfigKeepPolicyTests
 {
@@ -35,7 +28,7 @@ public class FreeConfigKeepPolicyTests
 
     [Theory]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Unknown)]
-    [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok)] // v2.28.5-r2: Ok no longer kept (Verified-only)
+    [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Slow)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.TlsFailed)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Implausible)]
@@ -59,11 +52,6 @@ public class FreeConfigKeepPolicyTests
     [Fact]
     public void TrimSimulation_DropsToVerifiedOnly()
     {
-        // Mimic a realistic post-search _allConfigs: ~25k entries, of which
-        // ~10 are Verified, ~200 Ok (TCP+TLS but not deep-verified), the
-        // rest dead statuses. v2.28.5-r2: only Verified survive — Ok no
-        // longer counted as "keep" because the user wants the displayed
-        // list to show only fully-working configs.
         var entries = new List<VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry>();
         for (int i = 0; i < 10; i++)
             entries.Add(Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified));

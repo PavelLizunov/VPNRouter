@@ -5,13 +5,6 @@ using VPNRouter.Core.Interfaces;
 
 namespace VPNRouter.Core.Platform.macOS;
 
-/// <summary>
-/// macOS process monitor using polling (no ETW equivalent on macOS).
-/// Polls every 2 seconds and fires start/stop events by comparing snapshots.
-///
-/// Latency: ~0-2s vs ETW's &lt;10ms on Windows.
-/// Acceptable because HealthMonitor debounces changes with a 5s window anyway.
-/// </summary>
 public class MacProcessMonitor : IProcessMonitor
 {
     private readonly ILogger _logger;
@@ -60,7 +53,6 @@ public class MacProcessMonitor : IProcessMonitor
     {
         try
         {
-            // Capture initial snapshot without firing events
             _lastPids = TakeSnapshot().Keys.ToHashSet();
             _logger.Debug("[MacProcessMonitor] Initial snapshot: {Count} processes", _lastPids.Count);
 
@@ -74,7 +66,6 @@ public class MacProcessMonitor : IProcessMonitor
                     var current = TakeSnapshot();
                     var currentPids = current.Keys.ToHashSet();
 
-                    // Started: in current but not in last
                     foreach (var pid in currentPids.Except(_lastPids))
                     {
                         if (current.TryGetValue(pid, out var info))
@@ -83,14 +74,12 @@ public class MacProcessMonitor : IProcessMonitor
                         }
                     }
 
-                    // Stopped: in last but not in current
                     foreach (var pid in _lastPids.Except(currentPids))
                     {
-                        // We only have PID for stopped processes — name already gone
                         ProcessStopped?.Invoke(this, new ProcessEventArgs
                         {
                             ProcessId = pid,
-                            ProcessName = string.Empty, // not available after exit
+                            ProcessName = string.Empty,
                             ParentProcessId = 0
                         });
                     }
@@ -124,10 +113,10 @@ public class MacProcessMonitor : IProcessMonitor
                     {
                         ProcessId = p.Id,
                         ProcessName = p.ProcessName,
-                        ParentProcessId = 0 // not easily available without sysctl
+                        ParentProcessId = 0
                     };
                 }
-                catch { /* process may have exited between GetProcesses and access */ }
+                catch {  }
             }
         }
         finally

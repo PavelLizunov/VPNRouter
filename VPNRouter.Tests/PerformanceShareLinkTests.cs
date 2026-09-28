@@ -9,7 +9,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-// Public behavior regressions for the span scheme prefilter; not a benchmark suite.
 public sealed class PerformanceShareLinkTests
 {
     public static IEnumerable<object[]> ShareLinks => new[]

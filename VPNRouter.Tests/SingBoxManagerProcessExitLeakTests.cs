@@ -1,27 +1,3 @@
-// v2.40.0 audit P1 (plans/bug-responsiveness-memory-audit-targets-2026-06-02.md
-// "SingBoxManager регистрирует захватывающий ProcessExit lambda").
-//
-// Pre-fix the ctor subscribed an anonymous lambda to
-// AppDomain.CurrentDomain.ProcessExit that captured `this`. Because the
-// delegate was anonymous it could never be removed, so AppDomain's static
-// ProcessExit invocation list kept a strong reference to every SingBoxManager
-// ever constructed — disposed or not — until process exit. One manager per
-// process is harmless, but a test harness or a future host-reload that
-// recreates the manager would accumulate dead instances for the life of the
-// process.
-//
-// Fix: a NAMED handler (OnAppDomainProcessExit) + an explicit
-// `AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit` in Dispose().
-// A disposed manager is then no longer reachable from the static hook and is
-// eligible for GC.
-//
-// This file pins both:
-//   1. A behavioural WeakReference test — disposed managers are collected.
-//   2. A source pin — Dispose() emits the unsubscribe (so a refactor that
-//      drops it trips here).
-//
-// Cross-platform: ctor + Dispose are platform-neutral, so this runs everywhere.
-
 #nullable enable
 
 using System;
@@ -47,21 +23,12 @@ public sealed class SingBoxManagerProcessExitLeakTests
         ExecutablePath = Path.Combine(Path.GetTempPath(), "nonexistent-sing-box-for-leak-test.exe"),
     };
 
-    // Construct + Dispose each manager in its own NoInlining frame so the JIT
-    // can't extend a loop local's lifetime. Once this returns, only the weak
-    // reference and any ProcessExit subscription can still reach the manager.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference CreateAndDisposeOne()
     {
         var manager = new SingBoxManager(BuildIdleSettings());
         var weakReference = new WeakReference(manager);
 
-        // An idle Windows Stop queues fire-and-forget adapter cleanup whose
-        // delegate temporarily captures the manager through _logger. That is
-        // a valid bounded root, but it is unrelated to ProcessExit and makes a
-        // GC assertion depend on PowerShell scheduling. Exercise Stop's
-        // existing concurrent-call early return so Dispose still performs the
-        // real ProcessExit unsubscribe without starting that unrelated task.
         StopStateField.SetValue(manager, 1);
         manager.Dispose();
         return weakReference;
@@ -102,7 +69,6 @@ public sealed class SingBoxManagerProcessExitLeakTests
             if (File.Exists(candidate)) return candidate;
             dir = dir.Parent;
         }
-        // Fall back to a path relative to the test assembly (won't exist → test asserts).
         return Path.Combine(AppContext.BaseDirectory, segments.Last());
     }
 }

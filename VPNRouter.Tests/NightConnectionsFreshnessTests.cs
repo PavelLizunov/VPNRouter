@@ -10,14 +10,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Correctness and freshness tests for <see cref="ClashSingBoxApi.GetConnectionsAsync"/>
-/// and <see cref="ConnectionsSnapshot"/>:
-/// - Valid zero/nonzero success snapshots return IsValid = true.
-/// - Failures (HTTP 500, bad JSON, missing required fields, timeout, cancellation)
-///   return a failure snapshot with IsValid = false without throwing.
-/// - Cancellation tokens and timeouts preserve the contract of returning failureSnapshot rather than throwing.
-/// </summary>
 public sealed class NightConnectionsFreshnessTests
 {
     private sealed class FakeHttpMessageHandler : HttpMessageHandler
@@ -201,7 +193,6 @@ public sealed class NightConnectionsFreshnessTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        // Must NOT throw OperationCanceledException; must return failureSnapshot with IsValid = false
         var snapshot = await api.GetConnectionsAsync(cts.Token);
 
         Assert.False(snapshot.IsValid);

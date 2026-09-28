@@ -4,10 +4,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// 2026-09-16 review P1: ApplyFreeConfigAsync must paint Connected only on
-/// TwoPhaseStartOutcome.Connected, matching ToggleConnectionAsync.
-/// </summary>
 public sealed class ApplyFreeConfigReadinessTests
 {
     [Fact]

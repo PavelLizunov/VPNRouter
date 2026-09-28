@@ -1,23 +1,4 @@
 #nullable enable
-// ============================================================================
-// ZapretFlowsealParserTests.cs — v2.37.0-r53 (2026-05-28)
-// ============================================================================
-//
-// Regression tests for the Flowseal `test zapret.ps1` stdout parser
-// (ZapretAutoStrategy.ParseFlowsealTranscript + BestStrategyByScore).
-//
-// ROOT BUG (user report Z:\zapret 2026-05-28): Flowseal's current mode-2
-// output moved the target id onto a separate "=== [flag][provider] TARGET ==="
-// header line, so per-test status lines are now a BARE single bracket:
-//   [HTTP]   code=405 … status=OK
-// The old statusLineRx required two brackets ("[TargetId][HTTP] …") so it
-// never matched → every strategy scored 0/0 → no winner → "стратегия не
-// найдена" even though ALT3 (45/108) and ALT9 (75/108) clearly passed.
-//
-// These tests pin BOTH formats (new single-bracket + historical two-bracket),
-// the empirical best-by-score winner selection, and the UNSUPPORTED-as-pass /
-// LIKELY_BLOCKED-as-fail status semantics.
-// ============================================================================
 
 using System.Collections.Generic;
 using VPNRouter.Core.Services;
@@ -26,12 +7,9 @@ namespace VPNRouter.Tests;
 
 public sealed class ZapretFlowsealParserTests
 {
-    // ── New single-bracket format (the current Flowseal output) ─────────────
-
     [Fact]
     public void ParseTranscript_NewSingleBracketFormat_CountsScores()
     {
-        // Exact line shape from the user's Z:\zapret transcript.
         const string transcript = @"
   [1/1] general (ALT3).bat
 ------------------------------------------------------------
@@ -64,9 +42,6 @@ Best config: general (ALT3).bat
     [Fact]
     public void ParseTranscript_TwoStrategyRuns_PicksHigherScorer()
     {
-        // Mirrors the user's two-[1/1]-run transcript: ALT3 scores lower,
-        // ALT9 higher. The empirical best (ALT9) must win regardless of the
-        // order the "Best config:" lines appear.
         const string transcript = @"
   [1/1] general (ALT3).bat
 === [F][P] T1 ===
@@ -96,15 +71,12 @@ Best config: general (ALT9).bat
         Assert.Equal(6, perStrategy["general (ALT3)"].Total);
         Assert.Equal(6, perStrategy["general (ALT9)"].Passed);
         Assert.Equal(6, perStrategy["general (ALT9)"].Total);
-        // ALT9 (6/6) beats ALT3 (3/6) — empirical best wins.
         Assert.Equal("general (ALT9)", winner);
     }
 
     [Fact]
     public void ParseTranscript_ReversedOrder_StillPicksHigherScorer()
     {
-        // Same as above but ALT9 probed FIRST. Pre-r53 "last Best config: wins"
-        // would wrongly return ALT3 here; empirical best-by-score returns ALT9.
         const string transcript = @"
   [1/1] general (ALT9).bat
 === [F][P] T1 ===
@@ -132,12 +104,9 @@ Best config: general (ALT3).bat
         Assert.Equal("general (ALT9)", winner);
     }
 
-    // ── Historical two-bracket format (back-compat) ─────────────────────────
-
     [Fact]
     public void ParseTranscript_OldTwoBracketFormat_StillParses()
     {
-        // The pre-format-drift shape: "[YT_LIVE@0][HTTP] … status=OK".
         const string transcript = @"
   [1/20] general (ALT3).bat
 [YT_LIVE@0][HTTP] code=200 size=123 status=OK
@@ -151,8 +120,6 @@ Best config: general (ALT3).bat
         Assert.Equal(3, perStrategy["general (ALT3)"].Total);
     }
 
-    // ── Winner fallback when no "Best config:" line is present ──────────────
-
     [Fact]
     public void ParseTranscript_NoExplicitWinnerLine_FallsBackToBestScore()
     {
@@ -165,13 +132,10 @@ Best config: general (ALT3).bat
 [TLS1.2] code=200 ... status=OK
 ";
         var (winner, perStrategy) = ZapretAutoStrategy.ParseFlowsealTranscript(transcript);
-        // No "Best config:" anywhere — promote best-scoring (B: 2 > A: 1).
         Assert.Equal("strat B", winner);
         Assert.Equal(1, perStrategy["strat A"].Passed);
         Assert.Equal(2, perStrategy["strat B"].Passed);
     }
-
-    // ── Status-value semantics ──────────────────────────────────────────────
 
     [Fact]
     public void ParseTranscript_UnsupportedCountsAsPass_LikelyBlockedCountsAsFail()
@@ -185,12 +149,9 @@ Best config: general (ALT3).bat
 Best config: s.bat
 ";
         var (_, perStrategy) = ZapretAutoStrategy.ParseFlowsealTranscript(transcript);
-        // OK + UNSUPPORTED = 2 pass; LIKELY_BLOCKED + FAIL = not pass; total 4.
         Assert.Equal(2, perStrategy["s"].Passed);
         Assert.Equal(4, perStrategy["s"].Total);
     }
-
-    // ── Degenerate inputs ───────────────────────────────────────────────────
 
     [Theory]
     [InlineData("")]
@@ -206,7 +167,6 @@ Best config: s.bat
     [Fact]
     public void ParseTranscript_ConfigHeaderButZeroPasses_NoWinner()
     {
-        // A strategy that failed every target must NOT be promoted to winner.
         const string transcript = @"
   [1/1] dead.bat
 [HTTP] code=000 ... status=FAIL
@@ -218,15 +178,9 @@ Best config: s.bat
         Assert.Equal(2, perStrategy["dead"].Total);
     }
 
-    // ── r54: _vpnrouter_silent wrapper exclusion ────────────────────────────
-
     [Fact]
     public void ParseTranscript_SilentWrapperScoresHighest_ExcludedFromWinner()
     {
-        // Flowseal's all-configs sweep tests every *.bat including VPNRouter's
-        // own runtime wrapper "_vpnrouter_silent.bat", which scores as high as
-        // the active strategy. It must NOT win (no catalogue entry → would
-        // recur "стратегия не найдена") nor appear in the per-strategy table.
         const string transcript = @"
   [1/2] _vpnrouter_silent.bat
 === T1 ===
@@ -246,8 +200,6 @@ Best config: _vpnrouter_silent.bat
 ";
         var (winner, perStrategy) = ZapretAutoStrategy.ParseFlowsealTranscript(transcript);
 
-        // Wrapper scored 6/6 (vs ALT9 2/3) and is even named in "Best config:",
-        // yet the winner must be the real catalogue strategy.
         Assert.Equal("general (ALT9)", winner);
         Assert.False(perStrategy.ContainsKey("_vpnrouter_silent"));
         Assert.True(perStrategy.ContainsKey("general (ALT9)"));
@@ -256,8 +208,6 @@ Best config: _vpnrouter_silent.bat
     [Fact]
     public void ParseTranscript_OnlySilentWrapper_NoWinner()
     {
-        // If the wrapper is the ONLY thing probed, there's no usable catalogue
-        // winner — must return null, not "_vpnrouter_silent".
         const string transcript = @"
   [1/1] _vpnrouter_silent.bat
 === T1 ===
@@ -269,8 +219,6 @@ Best config: _vpnrouter_silent.bat
         Assert.Null(winner);
         Assert.Empty(perStrategy);
     }
-
-    // ── BestStrategyByScore unit ────────────────────────────────────────────
 
     [Fact]
     public void BestStrategyByScore_EmptyTable_ReturnsNull()
@@ -295,8 +243,8 @@ Best config: _vpnrouter_silent.bat
     {
         var table = new Dictionary<string, ZapretStrategyTestResult>
         {
-            ["lowratio"] = new() { Passed = 5, Total = 20 },  // 0.25
-            ["highratio"] = new() { Passed = 5, Total = 8 },  // 0.625
+            ["lowratio"] = new() { Passed = 5, Total = 20 },
+            ["highratio"] = new() { Passed = 5, Total = 8 },
         };
         Assert.Equal("highratio", ZapretAutoStrategy.BestStrategyByScore(table));
     }

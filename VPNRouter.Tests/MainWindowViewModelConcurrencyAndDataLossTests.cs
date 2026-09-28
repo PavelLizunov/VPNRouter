@@ -16,9 +16,6 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
     [AvaloniaFact]
     public void OnEngineStatus_WhenConnecting_StoppedDoesNotResetIsConnecting()
     {
-        // FIND-02: pre-start cleanup emits "Stopped" status asynchronously.
-        // If the UI is already in the process of connecting (IsConnecting == true),
-        // "Stopped" must NOT flip IsConnecting back to false, preventing duplicate connect clicks.
         var store = new InMemorySettingsStore();
         using var vm = new MainWindowViewModel(store);
 
@@ -31,15 +28,12 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
 
         onEngineStatus!.Invoke(vm, new object[] { "Stopped" });
 
-        // IsConnecting must remain true because the connection attempt is still in flight!
         Assert.True(vm.IsConnecting);
     }
 
     [AvaloniaFact]
     public void SaveSettings_WhenDefaultProfilesMissing_PreservesCustomGroupApps()
     {
-        // F-02: if default.json failed to deserialize or default groups are missing,
-        // SaveSettings() must not wipe existing CustomGroupApps on disk.
         var store = new InMemorySettingsStore();
         var initialSettings = new AppSettings();
         initialSettings.CustomGroupApps["Browsers"] = new List<string> { "special_browser.exe" };
@@ -47,11 +41,9 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
 
         using var vm = new MainWindowViewModel(store);
 
-        // Simulate state where default groups were not loaded into AppGroups
         vm.AppGroups.Clear();
         vm.AppGroups.Add(new AppGroupViewModel("Custom Apps", "", true) { IsCustomGroup = true });
 
-        // Invoke SaveSettings
         var saveSettings = typeof(MainWindowViewModel).GetMethod(
             "SaveSettings",
             BindingFlags.Instance | BindingFlags.NonPublic);
@@ -68,8 +60,6 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
     [Fact]
     public void SimpleMode_SmpToggleConnectAsync_GuardsIsConnectingAcrossProbe()
     {
-        // FIND-01: verify source contract that SmpToggleConnectAsync sets IsConnecting = true
-        // before running the 4s candidate health probe and wraps the bring-up in try/catch.
         var source = ReadAppFile("ViewModels", "MainWindowViewModel.SimpleMode.cs");
 
         var methodIdx = source.IndexOf("private async Task SmpToggleConnectAsync()", StringComparison.Ordinal);

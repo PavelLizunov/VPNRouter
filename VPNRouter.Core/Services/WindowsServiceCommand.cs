@@ -1,6 +1,5 @@
 namespace VPNRouter.Core.Services;
 
-/// <summary>Pure Windows Service Control Manager command-line contracts.</summary>
 public static class WindowsServiceCommand
 {
     private const string ServiceSwitch = "--service";

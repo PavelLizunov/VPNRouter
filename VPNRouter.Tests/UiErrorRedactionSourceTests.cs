@@ -1,12 +1,5 @@
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// R14: the two UI trust-boundary sinks that render <c>ex.Message</c> must
-/// wrap it in <see cref="VPNRouter.Core.Services.CrashReporter.ScrubSecrets"/>.
-/// Source-shape contract, not runtime: the sinks fire only on subscription
-/// failure behind internal catches. Scrubber output semantics stay pinned by
-/// CrashReporterScrubberTests.
-/// </summary>
 public sealed class UiErrorRedactionSourceTests
 {
     [Theory]

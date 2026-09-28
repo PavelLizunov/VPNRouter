@@ -15,35 +15,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// v2.32.0 (AND-4, 2026-05-07) — per-server testing UI inside a subscription
-/// drill-down. Mirrors desktop <c>VPNRouter.App/Views/Pages/ServersPage.axaml</c>
-/// (per-row Test button, latency badge, sort by latency) but lives as a
-/// fullscreen Border overlay (same pattern as the AND-1..AND-3 overlays in
-/// the SubscribePage / Free Configs / Settings partials).
-///
-/// <para>Tap on a subscription card's name area opens this overlay; the
-/// card's <c>↻</c> / <c>✎</c> / <c>✕</c> action buttons keep their existing
-/// roles (refresh / edit URL / delete). "Test all" runs a 4-way concurrent
-/// TCP+TLS probe via <see cref="TcpTlsProbe.ProbeServerAsync"/>; results
-/// persist via <see cref="AndroidStorage.SetServerTestResults"/> keyed by
-/// <c>Server:Port:Uuid:Flow</c> so badges survive app restart.</para>
-///
-/// <para>Concurrency = 4 — see <c>plans/v2.32.0-android-server-testing.md</c>
-/// "Concurrency choice" for the full rationale (mobile NAT/CPU/battery
-/// budget vs desktop's MaxConcurrency=80 free-config bulk path).</para>
-/// </summary>
 public partial class AndroidApp
 {
-    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone Server-list overlay
-    // is gone — the per-subscription server detail UI is now the
-    // "Servers" tab inside the Advanced shell. The drill-in entry point
-    // (sub-card name area tap) deeplinks to the shell on Servers tab with
-    // the tapped sub set as _srvCurrentSub.
-    //
-    // _srvTitle remains because the body header still reads
-    // "Servers · <sub name>" so the user knows which sub they're looking
-    // at when the shell title says "Advanced settings".
     private TextBlock? _srvTitle;
     private Avalonia.Controls.Button? _srvTestAllBtn;
     private Avalonia.Controls.Button? _srvSortToggle;
@@ -53,15 +26,6 @@ public partial class AndroidApp
     private TextBlock? _srvColServer;
     private TextBlock? _srvColPing;
 
-    // ── AND-ADV-SERVERS-SUBSCRIBE (Phase B, 2026-05-10) ────────────────
-    // Sub-tab segmented control (Servers / Custom Config JSON), the two
-    // sub-panels, and the footer action row (Test all / Deep verify /
-    // vless URI input / Remove / Add Server(s)). All hosted inside the
-    // Advanced shell's Servers tab content. Phase A may later relocate
-    // _srvFooterActionsRow into a dedicated FooterActions slot above the
-    // persistent connect/disconnect footer; for now it docks at the bottom
-    // of the tab content itself so users see the action surface
-    // immediately.
     private string _srvSubTab = "servers";
     private Avalonia.Controls.Button? _srvSubTabServersBtn;
     private Avalonia.Controls.Button? _srvSubTabCustomJsonBtn;
@@ -74,12 +38,6 @@ public partial class AndroidApp
     private Avalonia.Controls.Button? _srvAddBtn;
     private Avalonia.Controls.Button? _srvRemoveBtn;
 
-    // Custom Config (JSON) sub-tab body. Owns its own TextBox + status —
-    // independent from the Simple page's _ccCustomInput so navigation
-    // between the two surfaces doesn't cause control-already-parented
-    // errors. Both surfaces read/write the same AndroidStorage key
-    // (CustomConfigJson), so the UI stays in sync via re-seed on tab
-    // activation.
     private TextBox? _srvCustomJsonInput;
     private TextBlock? _srvCustomJsonStatus;
     private Avalonia.Controls.Button? _srvCustomJsonSaveBtn;
@@ -87,71 +45,28 @@ public partial class AndroidApp
     private Avalonia.Controls.Button? _srvCustomJsonValidateBtn;
     private TextBlock? _srvCustomJsonExplainer;
 
-    /// <summary>The subscription whose servers we're showing. Set on open.</summary>
     private SubscriptionEntry? _srvCurrentSub;
 
-    /// <summary>
-    /// In-memory mirror of the persisted side-table — keyed by
-    /// <c>Server:Port:Uuid:Flow</c>. Modified during Test all flows; flushed
-    /// to <see cref="AndroidStorage.SetServerTestResults"/> on each result
-    /// apply (so a kill -9 mid-batch still saves what we got).
-    /// </summary>
     private Dictionary<string, AndroidStorage.ServerTestResultDto> _srvResults = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Tracks per-server in-progress probes — disables the row Test button + spinner glyph.</summary>
     private readonly HashSet<string> _srvTestingKeys = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>0 = original order, 1 = ascending by latency (untested at end).</summary>
     private bool _srvSortByLatency = false;
 
-    /// <summary>Cancellation source for the current Test all batch (Stop button / overlay close).</summary>
     private CancellationTokenSource? _srvTestAllCts;
 
-    // AND-PERF (v2.40.0): coalesce per-probe-result list rebuilds. "Test all"
-    // delivers N results, and the old per-result Dispatcher.Post(RebuildServerList)
-    // queued N full O(N) rebuilds = O(N^2) BuildServerRow calls (janks hard at
-    // 100+ servers). This flag collapses a burst of results into ONE debounced
-    // rebuild. 0 = idle, 1 = a rebuild is already queued (Interlocked-guarded
-    // because ApplyResult runs from up to 4 concurrent probe continuations).
     private int _srvRebuildScheduled;
 
-    /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Servers
-    /// tab inside the Advanced shell. Updated AND-ADV-SERVERS-SUBSCRIBE
-    /// (Phase B, 2026-05-10) to mirror desktop ServersPage chrome:
-    /// segmented sub-tab control (Servers / Custom Config JSON), per
-    /// sub-tab body, and a persistent footer action row (Test all /
-    /// Deep verify / vless URI input / Remove / Add Server(s)) docked
-    /// at the bottom. Phase A may later move _srvFooterActionsRow into
-    /// a dedicated shell-owned FooterActions slot above the persistent
-    /// connect/disconnect footer; today the row docks inside the tab
-    /// content so the surface is visible immediately.
-    /// </summary>
     private Control BuildServersTabContent()
     {
-        // ── Sub-tab segmented control (top of tab body) ───────────────
         _srvSubTabRow = BuildServersSubTabBar();
 
-        // ── Servers sub-panel: existing subscription header + action row
-        //    + column headers + scrollable list. Pulled into its own
-        //    builder so the sub-tab toggle just flips IsVisible on two
-        //    sibling Controls inside the content host.
         _srvServersSubPanel = BuildServersListSubPanel();
 
-        // ── Custom Config (JSON) sub-panel: explainer + textarea +
-        //    Validate / Save / Clear (mirrors the Simple-page custom
-        //    section but is independent so both can be active in
-        //    different navigation paths without parenting collisions).
         _srvCustomJsonSubPanel = BuildCustomJsonSubPanel();
 
-        // ── Footer action row: Test all / Deep verify / vless URI /
-        //    Remove / Add Server(s). Visible only on the Servers
-        //    sub-tab — the Custom Config sub-tab has its own action
-        //    buttons inside its sub-panel.
         _srvFooterActionsRow = BuildServersFooterActions();
 
-        // Compose the sub-panels into a single content host so toggling
-        // the sub-tab flips one IsVisible bit per panel.
         var contentHost = new Grid();
         contentHost.Children.Add(_srvServersSubPanel);
         contentHost.Children.Add(_srvCustomJsonSubPanel);
@@ -163,8 +78,6 @@ public partial class AndroidApp
         dock.Children.Add(_srvFooterActionsRow);
         dock.Children.Add(contentHost);
 
-        // Initialize sub-tab to "servers" — paints segments + flips
-        // panel + footer visibility.
         ApplyServersSubTabVisuals();
 
         return new Border
@@ -174,19 +87,8 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Segmented control at the top of the Servers tab — desktop
-    /// ServersPage.axaml lines 117-131 (ListBox sub-tab strip). Active
-    /// segment uses the AccentBgSubtle pill style; inactive segments stay
-    /// neutral. Click flips _srvSubTab + repaints + toggles panel
-    /// visibility.
-    /// </summary>
     private StackPanel BuildServersSubTabBar()
     {
-        // POL-1: chip Padding/FontSize match desktop ServersPage.axaml line
-        // 129 (`Padding="10,4" FontSize="11"`); StackPanel margin matches
-        // the page's outer padding (`Margin="6,2"`). Pre-POL-1 used
-        // Padding=12,6 + Margin=12,8,12,6 — chips read taller than desktop.
         _srvSubTabServersBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersSubTabServers,
@@ -219,19 +121,8 @@ public partial class AndroidApp
         return row;
     }
 
-    /// <summary>
-    /// Build the Servers sub-panel — wraps the existing subscription
-    /// header + Test all / sort row + column headers + scrollable list
-    /// inside a DockPanel so the parent contentHost can toggle visibility
-    /// on a single Control. Field assignments (_srvTitle, _srvTestAllBtn,
-    /// etc.) match the pre-Phase-B contract so RebuildServerList /
-    /// OnSrvTestAllClicked / OnSrvSortToggleClicked stay unchanged.
-    /// </summary>
     private DockPanel BuildServersListSubPanel()
     {
-        // Subscription label sits inline at the top of the body so the
-        // user can see which sub they're inspecting (the shell's outer
-        // title says "Advanced settings", which is sub-agnostic).
         _srvTitle = new TextBlock
         {
             Text = string.Empty,
@@ -243,9 +134,6 @@ public partial class AndroidApp
             Margin = new Thickness(12, 4, 12, 0),
         };
 
-        // ── In-list Sort + status row (Test all / Deep verify moved to
-        //    the footer per Phase B; sort toggle stays here because it's
-        //    list-affordance, not action-row affordance).
         _srvSortToggle = new Avalonia.Controls.Button
         {
             Content = Localization.SrvSortByOriginal,
@@ -281,9 +169,6 @@ public partial class AndroidApp
         sortRow.Children.Add(_srvSortToggle);
         sortRow.Children.Add(_srvStatusText);
 
-        // ── Column header strip — mobile design 2026-05-11 collapsed the
-        // desktop 4-col (Server / IP / Ping / Port) into 2 visible
-        // captions: Server + Ping. IP+Port now live in the row's meta-line.
         _srvColServer = new TextBlock
         {
             Text = Localization.ColServer,
@@ -319,7 +204,6 @@ public partial class AndroidApp
             Child = headerGrid,
         };
 
-        // ── Body: scrollable per-server card list ──
         _srvListStack = new StackPanel
         {
             Spacing = 0,
@@ -348,8 +232,6 @@ public partial class AndroidApp
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
 
-        // Wrap the scroller in a bordered card to match desktop's
-        // ListBox.srv-list (BorderSubtleBrush + RadiusSm + SurfaceBaseBrush).
         var listCard = new Border
         {
             BorderBrush = GetBrush("BorderSubtleBrush"),
@@ -371,15 +253,6 @@ public partial class AndroidApp
         return dock;
     }
 
-    /// <summary>
-    /// Build the Custom Config (JSON) sub-panel — explainer text + paste
-    /// textarea + Validate / Save / Clear buttons + status banner.
-    /// Independent from the Simple page's _ccCustomInput surface so the
-    /// two can be navigated to in any order without Avalonia
-    /// already-has-a-parent errors. Both surfaces persist to the same
-    /// AndroidStorage.CustomConfigJson key — re-seed on tab activation
-    /// keeps them aligned.
-    /// </summary>
     private StackPanel BuildCustomJsonSubPanel()
     {
         _srvCustomJsonExplainer = new TextBlock
@@ -474,24 +347,8 @@ public partial class AndroidApp
         return stack;
     }
 
-    /// <summary>
-    /// Footer action row for the Servers tab — desktop ServersPage.axaml
-    /// lines 354-419 parity. Test all (green) + Deep verify (accent) +
-    /// vless URI input (1*) + Remove + Add Server(s). Visible only on the
-    /// Servers sub-tab; hidden when Custom Config (JSON) is active so the
-    /// sub-tab's own Validate/Save/Clear isn't competing for footer
-    /// real-estate.
-    ///
-    /// Phase A (later) may relocate this row into a dedicated
-    /// FooterActions slot above the persistent connect/disconnect footer.
-    /// For Phase B the row docks at the bottom of the tab content itself
-    /// so the surface is visible immediately.
-    /// </summary>
     private Border BuildServersFooterActions()
     {
-        // POL-1: Test all + Deep verify use desktop's `Padding="10,4" FontSize="10"`
-        // (ServersPage.axaml lines 357-369). Pre-POL-1 used FontSize=11
-        // Padding=10,5 — buttons looked heavier than desktop.
         _srvTestAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersTestAll,
@@ -517,12 +374,6 @@ public partial class AndroidApp
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
         };
-        // On Android the per-app sandbox can't spawn sing-box as a
-        // subprocess (see plans/vpnrouter-android-research.md §3 — libbox
-        // runs inside the VPN service, not the app process). Deep verify
-        // therefore degrades to the same TCP+TLS probe Test all uses,
-        // surfaced via tooltip so the user understands the platform
-        // limitation without the button feeling broken.
         ToolTip.SetTip(_srvDeepVerifyBtn, Localization.AdvServersDeepVerifyAndroidNote);
         _srvDeepVerifyBtn.Click += async (_, _) => await OnSrvDeepVerifyClicked();
 
@@ -539,10 +390,6 @@ public partial class AndroidApp
             BorderThickness = new Thickness(1),
         };
 
-        // POL-1: Remove + Add buttons use desktop's `Padding="14,5"` from
-        // ServersPage.axaml lines 399-409 (matches the `LblAddServers`
-        // primary CTA + `LblRemove` neutral). Pre-POL-1 used Padding 10,5 +
-        // 12,5 — narrower than desktop.
         _srvRemoveBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersRemove,
@@ -571,11 +418,6 @@ public partial class AndroidApp
         };
         _srvAddBtn.Click += (_, _) => OnSrvAddClicked();
 
-        // Two-row layout matches desktop's stacked DockPanel pattern:
-        //   row 0: [Test all] [Deep verify]  (left-aligned)
-        //   row 1: [vless input    ] [Remove] [Add Server(s)]
-        // On narrow phones the second row's URI input shrinks via the
-        // grid '1*' column; the action chips stay compact.
         var actionTopRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
@@ -610,11 +452,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Switch between the Servers and Custom Config (JSON) sub-tabs.
-    /// Re-seeds the Custom JSON textarea from storage on activation so
-    /// the two surfaces stay in sync.
-    /// </summary>
     private void SetServersSubTab(string sub)
     {
         if (sub != "servers" && sub != "custom") return;
@@ -624,8 +461,6 @@ public partial class AndroidApp
         if (sub == "custom") ReseedCustomJsonSubPanel();
     }
 
-    /// <summary>Repaint the segmented sub-tab control + flip sub-panel
-    /// + footer-action visibility to match _srvSubTab.</summary>
     private void ApplyServersSubTabVisuals()
     {
         StyleSegment(_srvSubTabServersBtn, _srvSubTab == "servers");
@@ -638,8 +473,6 @@ public partial class AndroidApp
             _srvFooterActionsRow.IsVisible = _srvSubTab == "servers";
     }
 
-    /// <summary>Pull the current Custom Config JSON from storage into
-    /// the textarea so opening the sub-tab shows the saved value.</summary>
     private void ReseedCustomJsonSubPanel()
     {
         if (_srvCustomJsonInput is null) return;
@@ -651,8 +484,6 @@ public partial class AndroidApp
             _srvCustomJsonStatus.IsVisible = false;
         }
     }
-
-    // ── Custom JSON sub-tab handlers ───────────────────────────────────
 
     private void OnSrvCustomJsonValidateClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -705,8 +536,6 @@ public partial class AndroidApp
         var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
         AndroidStorage.SetCustomConfigJson(raw);
         AndroidStorage.SetConfigMode("custom");
-        // Keep the Simple-page _ccMode mirror in sync so the segmented
-        // mode selector there reflects the just-applied "custom" choice.
         _ccMode = "custom";
         UpdateConfigSummary();
 
@@ -730,23 +559,8 @@ public partial class AndroidApp
         UpdateConfigSummary();
     }
 
-    // ── Footer action handlers ─────────────────────────────────────────
-
-    /// <summary>
-    /// Deep verify on Android = same TCP+TLS probe pass as Test all
-    /// (the per-app process sandbox can't spawn sing-box as a separate
-    /// process — libbox runs inside VpnRouterService, not the app
-    /// process). Tooltip explains the limitation. Reusing
-    /// OnSrvTestAllClicked keeps progress / status text consistent.
-    /// </summary>
     private async Task OnSrvDeepVerifyClicked() => await OnSrvTestAllClicked();
 
-    /// <summary>
-    /// Remove the highlighted active server from the current sub's list
-    /// (or the legacy single-VLESS-URI manual server). Greyed out by
-    /// default; flips to enabled in RebuildServerList when the active
-    /// server is one of the listed entries.
-    /// </summary>
     private void OnSrvRemoveClicked()
     {
         var sub = _srvCurrentSub;
@@ -759,11 +573,7 @@ public partial class AndroidApp
             string.Equals(s.Name, activeName, StringComparison.OrdinalIgnoreCase));
         if (sub.Servers.Count == before) return;
 
-        // Clear active selection if we just removed the active server.
         AndroidStorage.SetSelectedServerName(null);
-        // Persist the mutated subscription list back to storage so the
-        // SimplePage reflection of server count + active-server flag
-        // stays in sync.
         var subs = AndroidStorage.GetSubscriptions();
         var idx = subs.FindIndex(s =>
             string.Equals(s.Id, sub.Id, StringComparison.OrdinalIgnoreCase));
@@ -776,12 +586,6 @@ public partial class AndroidApp
         if (_srvRemoveBtn is not null) _srvRemoveBtn.IsEnabled = false;
     }
 
-    /// <summary>
-    /// Parse the URI input as a VLESS / hy2 / tuic / ss share-link and
-    /// append the resulting server to the current sub. Falls back to
-    /// adding the entry under a synthetic "Manual" sub if no
-    /// _srvCurrentSub exists yet (first-launch case).
-    /// </summary>
     private void OnSrvAddClicked()
     {
         if (_srvVlessUriInput is null) return;
@@ -804,9 +608,6 @@ public partial class AndroidApp
         var sub = _srvCurrentSub;
         if (sub is null)
         {
-            // Synthesize a "Manual" sub if none is active. Keeps the
-            // multi-protocol entries persistent across launches without
-            // requiring the user to set up a subscription first.
             sub = subs.FirstOrDefault(s =>
                 string.Equals(s.Name, "Manual", StringComparison.OrdinalIgnoreCase));
             if (sub is null)
@@ -831,17 +632,8 @@ public partial class AndroidApp
         RebuildServerList();
     }
 
-    /// <summary>
-    /// Open the overlay against a specific subscription. Pulls fresh test
-    /// history from storage + rebuilds the rows. Triggered from the
-    /// SubscribePage card's name-area tap (see <c>BuildSubCard</c>).
-    /// </summary>
     public void OpenServerListOverlay(SubscriptionEntry sub)
     {
-        // AND-MIGRATE-OVERLAYS (2026-05-09): drill-in from a sub card now
-        // deeplinks to the Advanced shell on the Servers tab with the
-        // tapped sub set as _srvCurrentSub. Closing the shell triggers
-        // the same SimplePage refresh the old close handler did.
         _srvCurrentSub = sub;
         _srvResults = AndroidStorage.GetServerTestResults();
         _srvTestingKeys.Clear();
@@ -849,34 +641,10 @@ public partial class AndroidApp
         OpenAdvancedShell(AdvancedTab.Servers);
     }
 
-    /// <summary>
-    /// Re-seed Servers tab state from persisted storage. Called by the
-    /// Advanced shell on tab activation.
-    /// </summary>
     private void ReseedServersTabState()
     {
         if (_srvCurrentSub is null)
         {
-            // Bug-AND-023 v4 (2026-05-17, user-reported "сервера подписки
-            // также продублировались из страницы подписки на страницу
-            // сервер"): pre-v4 the default fell through to "first enabled
-            // subscription", which meant the Servers tab showed the same
-            // list as the Subscribe tab's aggregated view — two tabs,
-            // identical content. Desktop's ServersPage shows ONLY the
-            // standalone Vless.Servers list (manual paste + free-config
-            // picks), NEVER subscription servers; subscription servers
-            // live on the Subscribe tab exclusively.
-            //
-            // v4 mirrors that by defaulting to the synthetic "Manual"
-            // subscription. It's created on first manual server add
-            // (AndroidApp.ServerList.cs OnAddManualServerClicked path);
-            // if it doesn't exist yet (fresh install + only QR-added
-            // subscriptions), we synthesize an empty in-memory one so
-            // the tab renders the "no manual servers yet" empty state
-            // instead of dropping into a sibling subscription's list.
-            // Drill-in from a Subscribe card (OpenServerListOverlay)
-            // still works the same way — it sets _srvCurrentSub
-            // explicitly to that sub, bypassing this default.
             var subs = AndroidStorage.GetSubscriptions();
             _srvCurrentSub = subs.FirstOrDefault(s =>
                 string.Equals(s.Name, "Manual", StringComparison.OrdinalIgnoreCase))
@@ -903,21 +671,14 @@ public partial class AndroidApp
         }
         if (_srvStatusText is not null)
             _srvStatusText.Text = string.Empty;
-        // Phase B (AND-ADV-SERVERS-SUBSCRIBE): reset transient input field
-        // + re-seed Custom JSON sub-panel from storage so the sub-tab
-        // shows the saved value if the user flips to it later.
         if (_srvVlessUriInput is not null) _srvVlessUriInput.Text = string.Empty;
         ReseedCustomJsonSubPanel();
         RebuildServerList();
     }
 
-    /// <summary>
-    /// Cancel any in-flight Test all batch when the Advanced shell closes
-    /// or switches off the Servers tab. Mirrors the old close handler.
-    /// </summary>
     private void StopServersTabBackgroundWork()
     {
-        try { _srvTestAllCts?.Cancel(); } catch { /* swallow */ }
+        try { _srvTestAllCts?.Cancel(); } catch {  }
     }
 
     private void RebuildServerList()
@@ -936,9 +697,6 @@ public partial class AndroidApp
         _srvEmptyHint.IsVisible = false;
 
         var ordered = OrderServers(servers);
-        // AND-PERF probe: one line per real rebuild. During "Test all" the
-        // coalescing in ScheduleServerListRebuild should keep this to a handful
-        // of lines instead of one-per-result (the old O(N^2) behaviour).
         global::Android.Util.Log.Info("VpnRouter.Perf", "server list rebuilt rows=" + ordered.Count);
         foreach (var srv in ordered)
         {
@@ -947,8 +705,6 @@ public partial class AndroidApp
         UpdateRemoveButtonEnabled(servers, activeName);
     }
 
-    /// <summary>Footer Remove button: enabled only when the active
-    /// server is one of the currently-listed entries.</summary>
     private void UpdateRemoveButtonEnabled(IReadOnlyList<VlessServerEntry> servers, string? activeName)
     {
         if (_srvRemoveBtn is null) return;
@@ -961,12 +717,6 @@ public partial class AndroidApp
             string.Equals(s.Name, activeName, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Order the rows. When sort-by-latency is active we put status
-    /// priority first (Ok/Slow → reachable failures → untested), then
-    /// LatencyMs ascending. This matches desktop's
-    /// <c>SortByLatency</c> mode behaviour.
-    /// </summary>
     private List<VlessServerEntry> OrderServers(IReadOnlyList<VlessServerEntry> source)
     {
         if (!_srvSortByLatency) return new List<VlessServerEntry>(source);
@@ -998,16 +748,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Per-row template — mirrors desktop's <c>Border.srv-row</c> pattern
-    /// from <c>ServersPage.axaml</c> lines 178-238 — radio | name+host
-    /// subtitle | IP | Ping | Port | refresh button. The "host subtitle"
-    /// is the protocol/security pair (e.g. "tcp + reality") taken from
-    /// <see cref="BuildHostSubtitle"/>; the IP column shows the raw
-    /// <see cref="VlessServerEntry.Server"/> field separately. Tap on the
-    /// row body (NOT the refresh button) selects this server as the
-    /// active one.
-    /// </summary>
     private Control BuildServerRow(VlessServerEntry srv, string? activeServerName)
     {
         var key = AndroidStorage.BuildServerKey(srv);
@@ -1016,7 +756,6 @@ public partial class AndroidApp
         var isActive = !string.IsNullOrEmpty(activeServerName)
                        && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase);
 
-        // ── Radio dot (12×12) — filled when active. ──
         var radioOuter = new Border
         {
             Width = 12,
@@ -1042,9 +781,6 @@ public partial class AndroidApp
             };
         }
 
-        // ── Name + protocol subtitle stack ──
-        // Desktop uses `DisplayName` (Name fallback to Server) and
-        // `HostSubtitle` (e.g. "tcp + reality") — same here.
         var displayName = string.IsNullOrWhiteSpace(srv.Name) ? srv.Server : srv.Name;
         var hostSubtitle = BuildHostSubtitle(srv);
 
@@ -1066,13 +802,9 @@ public partial class AndroidApp
             TextTrimming = TextTrimming.CharacterEllipsis,
             IsVisible = !string.IsNullOrEmpty(hostSubtitle),
         };
-        // Wrap the name stack in a Border so the tap-to-select hit area is
-        // explicitly bounded (excludes the row's refresh button). Pre-rev1
-        // we used PointerReleased on the full card and walked the visual
-        // tree to filter button presses — simpler to bound the hit area.
         var nameStack = new Border
         {
-            Background = Brushes.Transparent,  // hit-test-friendly
+            Background = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
             Child = new StackPanel
             {
@@ -1084,11 +816,7 @@ public partial class AndroidApp
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
         nameStack.PointerReleased += (s, e) => ApplyServerSelection(srv);
 
-        // Mobile design 2026-05-11 — name+meta+ping+refresh 4-col layout.
-        // The IP and Port cells collapsed into the meta-line under the
-        // server name (see hostText override below). Comment kept so the
-        // diff vs desktop's 6-col is traceable.
-        _ = hostText; // hostText is replaced below with the meta-line
+        _ = hostText;
         var metaParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(srv.Server)) metaParts.Add(srv.Server!);
         if (srv.Port > 0) metaParts.Add(":" + srv.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -1096,7 +824,6 @@ public partial class AndroidApp
         hostText.Text = string.Join(" · ", metaParts);
         hostText.IsVisible = !string.IsNullOrEmpty(hostText.Text);
 
-        // ── Ping pill — colored Border with white text on status bg ──
         var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);
         var pingBgBrush = ResolveLatencyBadgeBackground(hasResult ? result : null, isTesting);
         var pingHasData = hasResult && !isTesting && result is not null;
@@ -1124,7 +851,6 @@ public partial class AndroidApp
         if (hasResult && !string.IsNullOrEmpty(result?.Error))
             ToolTip.SetTip(pingBadge, result.Error);
 
-        // ── Per-row Test button (⟳) ──
         var testBtn = new Avalonia.Controls.Button
         {
             Content = "⟳",
@@ -1144,9 +870,6 @@ public partial class AndroidApp
         ToolTip.SetTip(testBtn, Localization.SrvTipTestRow);
         testBtn.Click += async (s, e) => await TestSingleServerAsync(srv);
 
-        // Mobile design 2026-05-11 — 4-col row (radio · name+meta · ping
-        // pill · refresh). IP and Port collapsed into the meta-line above.
-        // Mirrors Mobile.html `.srv` grid-template-columns:16px 1fr auto auto.
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
@@ -1162,11 +885,6 @@ public partial class AndroidApp
         grid.Children.Add(pingBadge);
         grid.Children.Add(testBtn);
 
-        // Compact, table-like row — desktop uses Padding="8,5"
-        // CornerRadius="3" (RadiusXs) and NO per-row border. The outer
-        // list card holds the visible border. Active row tints
-        // AccentBgSubtleBrush; inactive lets SurfaceBaseBrush (the card
-        // background) show through.
         return new Border
         {
             BorderThickness = new Thickness(0),
@@ -1179,13 +897,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Mirrors desktop <see cref="VPNRouter.App.ViewModels.ServerViewModel.HostSubtitle"/>.
-    /// Returns "tcp + reality" / "hysteria2 + salamander" / "tuic + bbr" /
-    /// "ss + chacha20-poly1305" / etc — the compact protocol+security
-    /// subtitle shown beneath the server name. Empty string for legacy
-    /// VLESS entries with no transport set so the row hides the subtitle.
-    /// </summary>
     private static string BuildHostSubtitle(VlessServerEntry srv)
     {
         var protocol = (srv.Protocol ?? "vless").ToLowerInvariant();
@@ -1215,7 +926,6 @@ public partial class AndroidApp
                 break;
 
             default:
-                // VLESS — keep desktop's "transport + security" format.
                 var transport = srv.Transport?.Type;
                 if (!string.IsNullOrWhiteSpace(transport))
                     parts.Add(transport!.ToLowerInvariant());
@@ -1228,15 +938,6 @@ public partial class AndroidApp
         return string.Join(" + ", parts);
     }
 
-    /// <summary>
-    /// Resolve a stored test result + testing flag to a (display text,
-    /// status-coloured brush) pair. Mirrors desktop
-    /// <c>ServerViewModel.PingDisplay</c> + <c>StatusDotBrush</c>: text is
-    /// the same compact set ("42 ms" / "—" / "×" / "TLS ×" / "&lt;5 ms"),
-    /// and the brush comes from the design tokens (SuccessSolidBrush /
-    /// WarningSolidBrush / DangerSolidBrush / TextMutedBrush) so theme
-    /// switches recolour without code changes.
-    /// </summary>
     private (string text, IBrush brush) ResolveLatencyDisplay(AndroidStorage.ServerTestResultDto? result, bool isTesting)
     {
         if (isTesting)
@@ -1259,16 +960,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Mobile-design ping-pill background. Mirrors
-    /// <see cref="ResolveLatencyDisplay"/>'s status mapping but yields
-    /// the solid-fill colour used as the pill's Background. The pill
-    /// text is rendered white on top (see callers in
-    /// <c>BuildAggregatedServerRow</c>) for the colored variants; the
-    /// muted "—" / "…" branches return SurfaceSunken so the pill blends
-    /// with the row background instead of showing a coloured chip when
-    /// there's no real data yet.
-    /// </summary>
     private IBrush ResolveLatencyBadgeBackground(AndroidStorage.ServerTestResultDto? result, bool isTesting)
     {
         if (isTesting || result is null)
@@ -1287,22 +978,6 @@ public partial class AndroidApp
         };
     }
 
-    /// <summary>
-    /// Make <paramref name="srv"/> the active server from an Advanced tab
-    /// (Servers list or Subscribe list) WITHOUT bouncing back to Simple.
-    ///
-    /// <para>Pre-2026-06-14 this closed the whole Advanced shell
-    /// (CloseAdvancedShell) and only SAVED the choice — so a running tunnel kept
-    /// the OLD server until the user went back into Advanced and pressed
-    /// Stop+Start. User-reported as a jarring jump + a needless round-trip.</para>
-    ///
-    /// <para>Now: stay in Advanced, move the active-server highlight, and — when
-    /// the tunnel is up — apply the new server in place. The Java service's
-    /// ACTION_START tears down the old tunnel before starting the new one
-    /// (teardownTunnelResources / A2), so the status card stays Connected through
-    /// a clean ~2s server swap; no manual Stop+Start. When disconnected we just
-    /// save it (applies on the next Connect).</para>
-    /// </summary>
     private void ApplyServerSelection(VlessServerEntry srv)
     {
         AndroidStorage.SetSelectedServerName(srv.Name);
@@ -1311,8 +986,6 @@ public partial class AndroidApp
         if (activity is not null && MainActivity.IntendedConnected)
         {
             ShowMenuFeedback(string.Format(Localization.SrvSwitchedReconnect, srv.Name));
-            // Re-applies the freshly-selected server in place (no Stop+Start) —
-            // the service swaps the tunnel; the card stays Connected.
             activity.RequestConnect();
         }
         else
@@ -1320,14 +993,10 @@ public partial class AndroidApp
             ShowMenuFeedback(string.Format(Localization.SrvSelectedActive, srv.Name));
         }
 
-        // Move the active-server highlight on both Advanced lists that surface
-        // it (the user stays on whichever tab they tapped). Best-effort.
         try { RebuildServerList(); } catch { }
         try { ScheduleAggregatedServerListRebuild(); } catch { }
         UpdateConfigSummary();
     }
-
-    // ── Test-all batch ─────────────────────────────────────────────────────
 
     private async Task OnSrvTestAllClicked()
     {
@@ -1335,8 +1004,7 @@ public partial class AndroidApp
         if (sub is null || sub.Servers.Count == 0) return;
         if (_srvTestAllCts is not null)
         {
-            // Already running — treat as Stop.
-            try { _srvTestAllCts.Cancel(); } catch { /* swallow */ }
+            try { _srvTestAllCts.Cancel(); } catch {  }
             return;
         }
 
@@ -1349,8 +1017,6 @@ public partial class AndroidApp
             var total = servers.Count;
             var done = 0;
 
-            // Mark all as testing up-front so the UI shows spinner state
-            // even before the semaphore admits the probe.
             foreach (var srv in servers)
             {
                 _srvTestingKeys.Add(AndroidStorage.BuildServerKey(srv));
@@ -1360,7 +1026,6 @@ public partial class AndroidApp
             if (_srvTestAllBtn is not null)
                 _srvTestAllBtn.Content = Localization.SrvTesting;
 
-            // Concurrency = 4 (see plan doc — mobile NAT/CPU/battery budget).
             using var sem = new SemaphoreSlim(4);
             var tasks = servers.Select(async srv =>
             {
@@ -1372,12 +1037,9 @@ public partial class AndroidApp
                 }
                 catch (OperationCanceledException)
                 {
-                    // Cancelled — leave the row as-is (testing flag clears in finally below).
                 }
                 catch
                 {
-                    // Catastrophic — apply Unreachable so the row at least
-                    // shows × instead of an indefinite spinner.
                     ApplyResult(srv, new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "probe error"));
                 }
                 finally
@@ -1389,7 +1051,6 @@ public partial class AndroidApp
             });
             await Task.WhenAll(tasks);
 
-            // Finalize summary + reachable count.
             var reachable = sub.Servers.Count(srv =>
             {
                 if (!_srvResults.TryGetValue(AndroidStorage.BuildServerKey(srv), out var r)) return false;
@@ -1401,11 +1062,9 @@ public partial class AndroidApp
         }
         finally
         {
-            // Clear all testing flags + persist results once at the end so
-            // we don't hammer SharedPreferences for each individual probe.
             _srvTestingKeys.Clear();
             AndroidStorage.SetServerTestResults(_srvResults);
-            try { _srvTestAllCts?.Dispose(); } catch { /* swallow */ }
+            try { _srvTestAllCts?.Dispose(); } catch {  }
             _srvTestAllCts = null;
             if (_srvTestAllBtn is not null)
                 _srvTestAllBtn.Content = Localization.AdvServersTestAll;
@@ -1447,27 +1106,13 @@ public partial class AndroidApp
             LastTestedAt = DateTimeOffset.UtcNow,
             Error = result.Error,
         };
-        // Re-render the affected row by rebuilding the list, but COALESCE the
-        // burst: "Test all" delivers N results and a naive per-result
-        // Dispatcher.Post(RebuildServerList) queues N full O(N) rebuilds =
-        // O(N^2) BuildServerRow calls. Schedule a single debounced rebuild that
-        // picks up every result applied so far (final state still guaranteed by
-        // the finally-block RebuildServerList in OnSrvTestAllClicked).
         ScheduleServerListRebuild();
     }
 
-    /// <summary>
-    /// Coalesce a burst of per-result updates into a single list rebuild.
-    /// ApplyResult fires once per probe completion (up to 4 concurrently); the
-    /// first call queues a Background-priority rebuild and flips the flag, and
-    /// every other call in the same burst is a no-op — the queued rebuild reads
-    /// the latest <c>_srvResults</c> / <c>_srvTestingKeys</c> so it renders all
-    /// results applied so far. Turns O(N^2) into O(N) for "Test all".
-    /// </summary>
     private void ScheduleServerListRebuild()
     {
         if (Interlocked.CompareExchange(ref _srvRebuildScheduled, 1, 0) != 0)
-            return; // a rebuild is already queued — it will include this result
+            return;
         Dispatcher.UIThread.Post(() =>
         {
             Interlocked.Exchange(ref _srvRebuildScheduled, 0);
@@ -1481,8 +1126,6 @@ public partial class AndroidApp
         _srvStatusText.Text = string.Format(Localization.SrvProgressFmt, done, total);
     }
 
-    // ── Sort toggle ────────────────────────────────────────────────────────
-
     private void OnSrvSortToggleClicked()
     {
         _srvSortByLatency = !_srvSortByLatency;
@@ -1494,8 +1137,6 @@ public partial class AndroidApp
         }
         RebuildServerList();
     }
-
-    // ── Localization refresh on language toggle ────────────────────────────
 
     private void RefreshServerListLocalizedStrings()
     {
@@ -1520,8 +1161,6 @@ public partial class AndroidApp
             ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
         }
 
-        // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — sub-tab segments + footer
-        // action row + Custom JSON sub-panel labels.
         if (_srvSubTabServersBtn is not null)
             _srvSubTabServersBtn.Content = Localization.AdvServersSubTabServers;
         if (_srvSubTabCustomJsonBtn is not null)
@@ -1550,8 +1189,6 @@ public partial class AndroidApp
         if (_srvCustomJsonClearBtn is not null)
             _srvCustomJsonClearBtn.Content = Localization.CcClearButton;
 
-        // Servers tab still mounted in the Advanced shell? Rebuild rows so
-        // localized status badges flip to the new locale.
         if (_srvListStack is not null) RebuildServerList();
     }
 }

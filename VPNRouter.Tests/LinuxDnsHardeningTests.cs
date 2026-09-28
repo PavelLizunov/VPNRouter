@@ -8,15 +8,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Wire-shape + crash-safety coverage for the Linux DNS-hardening orchestrator
-/// (systemd-resolved). LinuxDnsHardening is pure IProcessRunner orchestration (no
-/// Linux APIs), so the exact resolvectl/ip command args — where a wrong token
-/// would silently break the user's DNS — are pinned here on the Windows build.
-/// The live runtime effect (DNS actually entering the tunnel) is verified on a
-/// Linux host separately. Fail-open is asserted: a missing resolvectl / unresolved
-/// TUN degrades to "DNS not hardened", never a throw and never a sentinel.
-/// </summary>
 public class LinuxDnsHardeningTests : IDisposable
 {
     private readonly string _statePath =
@@ -30,18 +21,14 @@ public class LinuxDnsHardeningTests : IDisposable
     private static ProcessResult Ok(string stdout = "") => new ProcessResult(0, stdout, "", TimeSpan.Zero, false);
     private static ProcessResult Fail() => new ProcessResult(1, "", "err", TimeSpan.Zero, false);
 
-    // `ip -o route get 172.19.0.1` to the /30 TUN gateway resolves to the TUN dev.
     private const string RouteGetOut =
         "172.19.0.1 dev VPNRouter-TUN src 172.19.0.2 uid 1000 \n    cache \n";
 
-    /// <summary>Happy path: resolvectl present, ip resolves the TUN, all mutations succeed.</summary>
     private FakeProcessRunner BuildFake()
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(r => r.ExecutablePath == "resolvectl" && r.Arguments[0] == "--version", Ok("systemd 255"));
         fake.OnRun(r => r.ExecutablePath == "ip", Ok(RouteGetOut));
-        // dns / domain / flush-caches / revert all succeed (registered last; the
-        // --version matcher above wins for the version probe).
         fake.OnRun(r => r.ExecutablePath == "resolvectl", Ok());
         return fake;
     }
@@ -54,7 +41,6 @@ public class LinuxDnsHardeningTests : IDisposable
 
         sut.Apply("172.19.0.1", null);
 
-        // The critical command: resolvectl dns VPNRouter-TUN 172.19.0.1
         var dns = fake.RunCalls.FirstOrDefault(c =>
             c.ExecutablePath == "resolvectl" && c.Arguments.Contains("dns"));
         Assert.NotNull(dns);
@@ -90,7 +76,7 @@ public class LinuxDnsHardeningTests : IDisposable
     [Fact]
     public void Apply_empty_target_is_noop()
     {
-        var fake = new FakeProcessRunner(); // no matchers — any run would throw
+        var fake = new FakeProcessRunner();
         var sut = new LinuxDnsHardening(fake, _statePath);
 
         sut.Apply("", null);
@@ -103,14 +89,12 @@ public class LinuxDnsHardeningTests : IDisposable
     public void Apply_resolvectl_unavailable_is_failopen_noop()
     {
         var fake = new FakeProcessRunner();
-        // --version fails → resolved/resolvectl unavailable → Apply returns before
-        // touching ip or the dns/domain mutations.
         fake.OnRun(r => r.ExecutablePath == "resolvectl" && r.Arguments[0] == "--version", Fail());
         var sut = new LinuxDnsHardening(fake, _statePath);
 
         sut.Apply("172.19.0.1", null);
 
-        Assert.False(File.Exists(_statePath)); // no hardening attempted
+        Assert.False(File.Exists(_statePath));
         Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("dns"));
     }
 
@@ -119,7 +103,7 @@ public class LinuxDnsHardeningTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(r => r.ExecutablePath == "resolvectl" && r.Arguments[0] == "--version", Ok());
-        fake.OnRun(r => r.ExecutablePath == "ip", Ok("")); // no `dev` token → can't resolve TUN
+        fake.OnRun(r => r.ExecutablePath == "ip", Ok(""));
         var sut = new LinuxDnsHardening(fake, _statePath);
 
         sut.Apply("172.19.0.1", null);
@@ -142,7 +126,7 @@ public class LinuxDnsHardeningTests : IDisposable
             c.ExecutablePath == "resolvectl" && c.Arguments.Contains("revert"));
         Assert.NotNull(revert);
         Assert.Equal(new[] { "revert", "VPNRouter-TUN" }, revert!.Arguments.ToArray());
-        Assert.False(File.Exists(_statePath)); // cleared after a confirmed revert
+        Assert.False(File.Exists(_statePath));
     }
 
     [Fact]
@@ -162,7 +146,7 @@ public class LinuxDnsHardeningTests : IDisposable
     [Fact]
     public void RestoreStrandedIfAny_noop_when_no_sentinel()
     {
-        var fake = new FakeProcessRunner(); // no matchers — any run would throw
+        var fake = new FakeProcessRunner();
         var sut = new LinuxDnsHardening(fake, _statePath);
 
         sut.RestoreStrandedIfAny(null);

@@ -7,42 +7,16 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Phase 2D-4 (2026-05-17) contract tests for <see cref="ISingBoxApi"/>.
-///
-/// <para>Covers two layers:</para>
-/// <list type="bullet">
-///   <item><see cref="FakeSingBoxApi"/> happy-path + crash semantics —
-///   the test fake itself must record calls and reflect state changes
-///   so the HealthMonitor / AutoFailover tests downstream of this can
-///   trust their assertions.</item>
-///   <item><see cref="ClashSingBoxApi"/> end-to-end against an in-process
-///   <see cref="HttpListener"/> mock server — verifies the real HTTP
-///   wire shape (URL paths, JSON body, response parsing) matches what
-///   sing-box's Clash API serves. Catches drift if someone refactors
-///   the URL templates or DTOs.</item>
-/// </list>
-///
-/// <para>Why no <c>Moq</c>: per <c>docs/execution-methodology.md</c>
-/// §5 — "Don't use Moq for fakes — write small inline impls per test
-/// class." The HttpListener pattern is the cheap, dependency-free way
-/// to hit the real HttpClient code path; the FakeSingBoxApi is hand-rolled.</para>
-/// </summary>
 public sealed class ISingBoxApiContractTests
 {
-    // ── FakeSingBoxApi contract ────────────────────────────────────────
-
     [Fact]
     public async Task ReloadConfigAsync_FakeReturnsTrue_HappyPath()
     {
-        // Arrange
         var fake = new FakeSingBoxApi { TunnelHealthy = true };
         const string path = @"C:\ProgramData\VPNRouter\config\current.json";
 
-        // Act
         var result = await fake.ReloadConfigAsync(path, TestContext.Current.CancellationToken);
 
-        // Assert
         Assert.True(result);
         Assert.Single(fake.Calls);
         Assert.Equal("Reload", fake.Calls[0].Method);
@@ -52,16 +26,11 @@ public sealed class ISingBoxApiContractTests
     [Fact]
     public async Task ReloadConfigAsync_FakeCrashed_ReturnsFalse()
     {
-        // Arrange — simulate a crashed tunnel after a Start.
         var fake = new FakeSingBoxApi();
         fake.SimulateCrash();
 
-        // Act
         var result = await fake.ReloadConfigAsync("any/path", TestContext.Current.CancellationToken);
 
-        // Assert: returns false but call is still recorded so the test
-        // can assert HealthMonitor *attempted* the hot-reload before
-        // escalating to a full restart.
         Assert.False(result);
         Assert.Single(fake.Calls);
         Assert.Equal("Reload", fake.Calls[0].Method);
@@ -70,9 +39,6 @@ public sealed class ISingBoxApiContractTests
     [Fact]
     public async Task GetVersionAsync_FakeReturnsConfiguredString()
     {
-        // The fake's default Version mirrors the currently-bundled
-        // sing-box upstream — verify it round-trips unchanged and the
-        // call is logged.
         var fake = new FakeSingBoxApi { Version = "1.13.10", TunnelHealthy = true };
 
         var version = await fake.GetVersionAsync(TestContext.Current.CancellationToken);
@@ -84,15 +50,12 @@ public sealed class ISingBoxApiContractTests
     [Fact]
     public async Task SelectProxyAsync_RecordsCall_AndUpdatesSelectedByGroup()
     {
-        // Arrange
         var fake = new FakeSingBoxApi();
         fake.Proxies.Add(new ProxyInfo("a", "vless", 50, DateTimeOffset.UtcNow));
         fake.Proxies.Add(new ProxyInfo("b", "vless", 80, DateTimeOffset.UtcNow));
 
-        // Act
         var ok = await fake.SelectProxyAsync("select", "b", TestContext.Current.CancellationToken);
 
-        // Assert
         Assert.True(ok);
         Assert.Single(fake.Calls);
         Assert.Equal("SelectProxy", fake.Calls[0].Method);
@@ -104,15 +67,12 @@ public sealed class ISingBoxApiContractTests
     [Fact]
     public async Task ListProxiesAsync_ReturnsConfiguredProxies()
     {
-        // Arrange
         var fake = new FakeSingBoxApi();
         fake.Proxies.Add(new ProxyInfo("proxy", "vless", 42, DateTimeOffset.UtcNow));
         fake.Proxies.Add(new ProxyInfo("direct", "direct", DelayMs: null, DelayMeasuredAt: null));
 
-        // Act
         var list = await fake.ListProxiesAsync(TestContext.Current.CancellationToken);
 
-        // Assert — both proxies surface, both fields preserved.
         Assert.Equal(2, list.Count);
         Assert.Equal("proxy", list[0].Name);
         Assert.Equal("vless", list[0].Type);
@@ -120,15 +80,9 @@ public sealed class ISingBoxApiContractTests
         Assert.Null(list[1].DelayMs);
     }
 
-    // ── ClashSingBoxApi against in-process mock server ─────────────────
-
     [Fact]
     public async Task ClashSingBoxApi_AgainstMockServer_HappyPath()
     {
-        // Pick a free loopback port; we serve canned JSON for each Clash
-        // API endpoint and verify ClashSingBoxApi shapes the request +
-        // parses the response correctly. HttpListener is dependency-free
-        // and lives in the BCL, so this works in CI without extra deps.
         var port = GetFreeLoopbackPort();
         var baseUrl = $"http://127.0.0.1:{port}";
 
@@ -140,31 +94,24 @@ public sealed class ISingBoxApiContractTests
             using var api = new ClashSingBoxApi(baseUrl: baseUrl);
             var ct = TestContext.Current.CancellationToken;
 
-            // --- ReloadConfigAsync: PUT /configs?force=true ---
             var reloadOk = await api.ReloadConfigAsync(@"C:\fake\path.json", ct);
             Assert.True(reloadOk);
 
-            // --- GetVersionAsync: GET /version → {"version": "1.13.10"} ---
             var version = await api.GetVersionAsync(ct);
             Assert.Equal("1.13.10", version);
 
-            // --- GetConnectionsAsync: GET /connections ---
             var snapshot = await api.GetConnectionsAsync(ct);
             Assert.Equal(2, snapshot.ActiveCount);
             Assert.Equal(123L, snapshot.TotalUploadBytes);
             Assert.Equal(456L, snapshot.TotalDownloadBytes);
 
-            // --- SelectProxyAsync: PUT /proxies/select ---
             var selectOk = await api.SelectProxyAsync("select", "proxyA", ct);
             Assert.True(selectOk);
 
-            // --- ListProxiesAsync: GET /proxies ---
             var proxies = await api.ListProxiesAsync(ct);
             Assert.NotEmpty(proxies);
             Assert.Contains(proxies, p => p.Name == "proxyA" && p.Type == "vless");
 
-            // Verify the server saw the expected calls (catches accidental
-            // URL refactors silently in CI).
             Assert.Contains("PUT /configs?force=true", server.Calls);
             Assert.Contains("GET /version", server.Calls);
             Assert.Contains("GET /connections", server.Calls);
@@ -180,10 +127,6 @@ public sealed class ISingBoxApiContractTests
     [Fact]
     public void ClashSingBoxApi_RejectsNonLoopbackBaseUrl()
     {
-        // Security guard pin: ClashSingBoxApi must refuse public-Internet
-        // base URLs. Clash API is loopback-only by convention — allowing
-        // a remote endpoint would let a misconfigured / hostile network
-        // re-aim SelectProxyAsync.
         Assert.Throws<ArgumentException>(() =>
             new ClashSingBoxApi(baseUrl: "http://example.com:9090"));
 
@@ -193,13 +136,10 @@ public sealed class ISingBoxApiContractTests
         Assert.Throws<ArgumentException>(() =>
             new ClashSingBoxApi(baseUrl: "not-a-url"));
 
-        // Loopback variants must be accepted.
         using var localhostApi = new ClashSingBoxApi(baseUrl: "http://localhost:9090");
         using var loopback = new ClashSingBoxApi(baseUrl: "http://127.0.0.1:9090");
         using var v6Loopback = new ClashSingBoxApi(baseUrl: "http://[::1]:9090");
     }
-
-    // ── In-process mock server (HttpListener) ──────────────────────────
 
     private sealed class MiniMockServer : IDisposable
     {
@@ -226,7 +166,7 @@ public sealed class ISingBoxApiContractTests
         public void Stop()
         {
             _running = false;
-            try { _listener.Stop(); } catch { /* idempotent */ }
+            try { _listener.Stop(); } catch {  }
             try { _listener.Close(); } catch { }
             try { _thread.Join(1000); } catch { }
         }
@@ -239,10 +179,10 @@ public sealed class ISingBoxApiContractTests
             {
                 HttpListenerContext ctx;
                 try { ctx = _listener.GetContext(); }
-                catch { return; } // listener closed → exit
+                catch { return; }
 
                 try { HandleRequest(ctx); }
-                catch { /* keep the loop alive */ }
+                catch {  }
             }
         }
 
@@ -260,7 +200,6 @@ public sealed class ISingBoxApiContractTests
 
             if (method == "PUT" && path.StartsWith("/configs"))
             {
-                // 204 No Content — same as sing-box on success.
                 status = 204;
                 body = string.Empty;
             }
@@ -328,10 +267,6 @@ public sealed class ISingBoxApiContractTests
 
     private static int GetFreeLoopbackPort()
     {
-        // Lease an ephemeral port from the OS so two concurrent test runs
-        // don't collide. Closing the listener releases the port back to
-        // OS, so a brief race is possible — we accept it (tests still
-        // pass under retry; the alternative is leaking the port forever).
         var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;

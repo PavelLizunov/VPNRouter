@@ -4,36 +4,11 @@ using System.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Handle-safe wrappers around <see cref="Process.GetProcessesByName(string)"/>.
-///
-/// <para>v2.40.0-r3 (audit Этап 1 — bug-responsiveness-memory map P0):
-/// <c>Process.GetProcessesByName(name)</c> returns a <see cref="Process"/>[]
-/// where every entry holds a live kernel handle. A bare
-/// <c>GetProcessesByName(name).Length &gt; 0</c> leaks one OS handle per process
-/// until GC finalises the orphaned objects — on hot polling paths (runtime
-/// status every 1–2 s) that was the AU-9 "+170 handles per VPN cycle" leak,
-/// fixed centrally in <see cref="RuntimeStatusDetector"/> (v2.31.1) but still
-/// open in several Zapret / VM / Public-Configs side paths.</para>
-///
-/// <para>These helpers centralise the dispose-in-<c>finally</c> so any caller
-/// that only needs a boolean or a count never leaks. Prefer them over a raw
-/// <c>GetProcessesByName</c>; the pre-commit grep-guard
-/// (<c>.githooks/pre-commit</c>) flags new bare <c>.Length</c> uses so the leak
-/// can't quietly come back (DoD: no product <c>GetProcessesByName(...).Length</c>
-/// without disposing the objects).</para>
-/// </summary>
 public static class ProcessQuery
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _lastKnownAlivePids =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// True if at least one process with the given base name (no <c>.exe</c>) is
-    /// running. Disposes every returned <see cref="Process"/> handle. Enumeration
-    /// errors (permission / unsupported platform) are swallowed as "not running",
-    /// matching the prior call-site behaviour.
-    /// </summary>
     public static bool AnyAlive(string? processName)
     {
         if (string.IsNullOrWhiteSpace(processName)) return false;
@@ -41,8 +16,6 @@ public static class ProcessQuery
         if (string.Equals(processName, "winws", StringComparison.OrdinalIgnoreCase) && !OperatingSystem.IsWindows())
             return false;
 
-        // Fast path: if a previously detected process is still running with the expected name,
-        // we can confirm liveness via its PID directly without walking the full OS process table.
         if (_lastKnownAlivePids.TryGetValue(processName, out var lastPid))
         {
             try
@@ -79,10 +52,6 @@ public static class ProcessQuery
         }
     }
 
-    /// <summary>
-    /// True if ANY of the given base names has a running process. Short-circuits
-    /// on the first match; each probe is individually handle-safe.
-    /// </summary>
     public static bool AnyAlive(params string[]? processNames)
     {
         if (processNames == null) return false;
@@ -91,10 +60,6 @@ public static class ProcessQuery
         return false;
     }
 
-    /// <summary>
-    /// Number of running processes with the given base name (handle-safe).
-    /// Returns 0 on enumeration error.
-    /// </summary>
     public static int CountAlive(string? processName)
     {
         if (string.IsNullOrWhiteSpace(processName)) return 0;
@@ -120,7 +85,7 @@ public static class ProcessQuery
         foreach (var p in procs)
         {
             try { p.Dispose(); }
-            catch { /* defensive — GC will finalise if Dispose throws */ }
+            catch {  }
         }
     }
 }

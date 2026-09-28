@@ -7,10 +7,6 @@ using Serilog;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-/// <summary>
-/// Resolves DNS + GeoIP country code for free configs.
-/// Uses offline IFreeConfigCountryLookup if available, or falls back to ip-api.com batch endpoint.
-/// </summary>
 public sealed class FreeConfigGeoIp
 {
     private readonly HttpClient _http;
@@ -20,12 +16,8 @@ public sealed class FreeConfigGeoIp
     private readonly SemaphoreSlim _rateLimit = new(1, 1);
     private DateTime _lastBatchAt = DateTime.MinValue;
 
-    // ip-api.com: 45 requests/minute for unauthenticated free tier = 1 req per 1.33s.
-    // We respect that with a safety margin — 1.5s between batches (40 batches/min).
-    // Each batch is 100 IPs so 40 batches × 100 = 4000 IPs/min throughput.
     private static readonly TimeSpan MinDelayBetweenBatches = TimeSpan.FromMilliseconds(1500);
 
-    /// <summary>Optional progress reporter for UI: (stage, done, total).</summary>
     public IProgress<(string stage, int done, int total)>? Progress { get; set; }
 
     public FreeConfigGeoIp(ILogger logger, IFreeConfigCountryLookup? offlineLookup = null)
@@ -35,13 +27,8 @@ public sealed class FreeConfigGeoIp
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
     }
 
-    /// <summary>
-    /// Resolves host→IP for each config (DNS lookup with host deduplication), then enriches with country codes.
-    /// Mutates cfg.ResolvedIp and cfg.CountryCode in place.
-    /// </summary>
     public async Task EnrichAsync(IReadOnlyList<FreeConfigEntry> configs, CancellationToken ct = default)
     {
-        // Step 1: Handle literal IPs directly and collect distinct unresolvable hostnames
         var hostToIp = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var hostsToResolve = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -59,7 +46,6 @@ public sealed class FreeConfigGeoIp
             }
         }
 
-        // Step 2: Resolve unique hostnames once (reducing DNS queries by ~90%)
         using var sem = new SemaphoreSlim(30);
         var uniqueList = hostsToResolve.ToList();
         var total = uniqueList.Count;
@@ -81,7 +67,6 @@ public sealed class FreeConfigGeoIp
             }
             catch
             {
-                // Unresolvable — skip
             }
             finally
             {
@@ -92,7 +77,6 @@ public sealed class FreeConfigGeoIp
         });
         await Task.WhenAll(resolveTasks);
 
-        // Assign resolved IPs back to all matching configs
         foreach (var cfg in configs)
         {
             if (cfg.ResolvedIp == null && !string.IsNullOrWhiteSpace(cfg.Host) && hostToIp.TryGetValue(cfg.Host.Trim(), out var resolved))
@@ -101,7 +85,6 @@ public sealed class FreeConfigGeoIp
             }
         }
 
-        // Step 3: Fast offline GeoIP lookup if provided
         if (_offlineLookup != null)
         {
             foreach (var cfg in configs)
@@ -114,7 +97,6 @@ public sealed class FreeConfigGeoIp
             return;
         }
 
-        // Step 4: Online batch lookup fallback (ip-api.com)
         var uncached = configs
             .Where(c => !string.IsNullOrEmpty(c.ResolvedIp))
             .Select(c => c.ResolvedIp!)
@@ -135,7 +117,6 @@ public sealed class FreeConfigGeoIp
             Progress?.Report(("geoip", batchDone, batches.Count));
         }
 
-        // Assign country codes from memory cache
         foreach (var cfg in configs)
         {
             if (!string.IsNullOrEmpty(cfg.ResolvedIp) && _ipToCountry.TryGetValue(cfg.ResolvedIp, out var cc))
@@ -163,7 +144,6 @@ public sealed class FreeConfigGeoIp
     {
         try
         {
-            // ip-api.com batch endpoint: POST http://ip-api.com/batch?fields=query,countryCode
             var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(ips);
             using var req = new HttpRequestMessage(HttpMethod.Post, "http://ip-api.com/batch?fields=query,countryCode")
             {

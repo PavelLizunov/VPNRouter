@@ -132,20 +132,12 @@ public class CustomRulesV2_30_GeneratorTests
     [Fact]
     public void Apply_GeositeRule_RegistersRuleSetEntry()
     {
-        // v2.31.9-r5 migrated geosite/geoip rule-sets from type:remote
-        // (with Url) to type:local (with Path), routed through
-        // RuleSetCacheManager. The on-disk .srs is pre-fetched in C# with
-        // a bounded timeout instead of letting sing-box do a synchronous
-        // mandatory fetch at startup (which crashed sing-box on TLS
-        // timeout — brat-2026-05-05 P0). Pre-populate the cache file so
-        // EnsureLocal returns a path deterministically without hitting
-        // the network; clean up after to avoid polluting %ProgramData%.
         var cacheDir = System.IO.Path.Combine(
             VPNRouter.Core.AppPaths.CacheDir,
             VPNRouter.Core.Services.RuleSetCacheManager.CacheSubdir);
         System.IO.Directory.CreateDirectory(cacheDir);
         var stubPath = System.IO.Path.Combine(cacheDir, "user-geosite-ads.srs");
-        System.IO.File.WriteAllBytes(stubPath, new byte[] { 0x53, 0x52, 0x53, 0x00 }); // "SRS\0" magic placeholder
+        System.IO.File.WriteAllBytes(stubPath, new byte[] { 0x53, 0x52, 0x53, 0x00 });
         try
         {
             var config = NewConfigWithEmptyRoutes();

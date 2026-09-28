@@ -9,32 +9,8 @@ using Avalonia.Media;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// F-13 (2026-05-09) — Android DPI Bypass overlay. Mirrors desktop's
-/// <c>VPNRouter.App/Views/Pages/DpiBypassPage.axaml</c>: master-detail
-/// layout (sidebar + Status / Strategy / Hosts / Filters / Advanced
-/// sections) with a footer Apply bar (status indicator + toggle button).
-///
-/// <para>Mobile adaptation keeps functional parity while collapsing the
-/// sidebar to top tabs for the narrow Android viewport.
-/// The 140-px sidebar moves to a horizontal sub-tab strip at the top.
-/// Hosts and Filters sections are skipped (they manage Windows hosts file
-/// + ipset filter — both winws.exe-only). Status / Strategy / Advanced
-/// each get a section.</para>
-///
-/// <para>The Strategy ComboBox + warning banner already render inside
-/// Settings → Routing via <c>BuildDpiBypassCard</c>. This overlay reuses
-/// the same AndroidStorage state but presents it as a dedicated page so
-/// the structural shell matches desktop. Both surfaces stay in sync via
-/// the shared <c>SetDpiBypassMode</c> writer.</para>
-/// </summary>
 public partial class AndroidApp
 {
-    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone DPI Bypass
-    // overlay is gone — content moves into the Advanced shell as the
-    // "DPI bypass" tab.
-
-    // Top-tab strip (replaces sidebar list — Status / Strategy / Advanced).
     private int _dpiSelectedTab;
     private Avalonia.Controls.Button? _dpiTabStatus;
     private Avalonia.Controls.Button? _dpiTabStrategy;
@@ -43,27 +19,15 @@ public partial class AndroidApp
     private Control? _dpiBodyStrategy;
     private Control? _dpiBodyAdvanced;
 
-    // Strategy section ComboBox — kept in sync with the Settings overlay's
-    // _settingsDpiBypassMode so flipping mode in either surface refreshes
-    // the other on its next show.
     private Avalonia.Controls.ComboBox? _dpiStrategyComboBox;
 
-    // Footer (Apply-bar) widgets — mirror desktop DpiBypassPage footer
-    // lines 379-407.
     private Ellipse? _dpiFooterStatusDot;
     private TextBlock? _dpiFooterStatusText;
     private Avalonia.Controls.Button? _dpiFooterToggleBtn;
 
-    // Status-bar widgets cached for re-seed during ReseedDpiBypassTabState.
     private Ellipse? _dpiStatusBarDot;
     private TextBlock? _dpiStatusBarText;
 
-    /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the DPI bypass
-    /// tab inside the Advanced shell. Returns the inner sub-tab strip
-    /// (Status / Strategy / Advanced) + bodies + footer Apply bar. The
-    /// outer shell provides the title bar / close button.
-    /// </summary>
     private Control BuildDpiBypassTabContent()
     {
         var bg          = GetBrush("SurfaceAppBrush");
@@ -80,11 +44,6 @@ public partial class AndroidApp
         var accentOnSolid = GetBrush("AccentOnSolidBrush");
         var radiusSm    = GetRadius("RadiusSm");
 
-        // ── Top-tab strip (collapsed sidebar) ────────────────────────────
-        // POL-1: matches desktop ListBox sub-tab pattern via the shared
-        // MakeAdvancedSubTabButton (Padding="10,4" FontSize="11" RadiusSm).
-        // Pre-POL-1 used the kebab MakeSegmentButton helper which sized
-        // each chip Padding="0,6" FontSize=12 RadiusXs.
         _dpiTabStatus   = MakeAdvancedSubTabButton(Localization.ZapretSecStatus,   active: true,
                                                    (_, _) => SelectDpiTab(0));
         _dpiTabStrategy = MakeAdvancedSubTabButton(Localization.ZapretSecStrategy, active: false,
@@ -100,12 +59,6 @@ public partial class AndroidApp
             Children = { _dpiTabStatus, _dpiTabStrategy, _dpiTabAdvanced },
         };
 
-        // ── Status section ───────────────────────────────────────────────
-        // Mirrors DpiBypassPage Status pane (lines 82-146):
-        //   • section title
-        //   • description blurb (LblDpiDescription)
-        //   • status indicator border (sunken bg + dot + text)
-        //   • warning banner (yellow bg + ⚠ + LblDpiWarning)
         var statusTitle = new TextBlock
         {
             Text = Localization.ZapretSecStatus,
@@ -200,14 +153,6 @@ public partial class AndroidApp
             Background = bg,
         };
 
-        // ── Strategy section ─────────────────────────────────────────────
-        // Mirrors DpiBypassPage Strategy pane (lines 158-209):
-        //   • section title
-        //   • 1-line description (ZapretSecStrategyDesc)
-        //   • ComboBox picker (Off / Standard / Aggressive)
-        //   • version blurb (ZapretVersionText desktop equivalent — on
-        //     Android it's just "in-tunnel via sing-box" since there's
-        //     no separate binary).
         var strategyTitle = new TextBlock
         {
             Text = Localization.ZapretSecStrategy,
@@ -273,11 +218,6 @@ public partial class AndroidApp
             IsVisible = false,
         };
 
-        // ── Advanced section ─────────────────────────────────────────────
-        // Mirrors desktop's Advanced pane (lines 303-348) — diagnostics +
-        // service controls. On Android only Run health check + Open log
-        // make sense (no Zapret service to remove, no clear-cache for the
-        // browser sandbox, no service.bat menu).
         var advTitle = new TextBlock
         {
             Text = Localization.ZapretSecAdvanced,
@@ -351,8 +291,6 @@ public partial class AndroidApp
             OnMenuCheckLeaksClicked(s, e);
         };
 
-        // "Hosts/Filters not applicable" footer card — explains why those
-        // sections from desktop's sidebar aren't present here.
         var notApplicable = new Border
         {
             Padding = new Thickness(10, 8),
@@ -393,10 +331,6 @@ public partial class AndroidApp
             Children = { _dpiBodyStatus, _dpiBodyStrategy, _dpiBodyAdvanced },
         };
 
-        // ── Footer (Apply bar) ───────────────────────────────────────────
-        // Mirrors DpiBypassPage footer (lines 379-407): SurfaceSunkenBrush
-        // bg, 14,7 padding, divider above. Status indicator on left
-        // (color dot + label), toggle button on right (compact accent-blue).
         _dpiFooterStatusDot = new Ellipse
         {
             Width = 8,
@@ -455,7 +389,6 @@ public partial class AndroidApp
             Child = footerGrid,
         };
 
-        // ── Compose: tabs + body + footer ────────────────────────────────
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(tabRow, Dock.Top);
         DockPanel.SetDock(footer, Dock.Bottom);
@@ -478,19 +411,11 @@ public partial class AndroidApp
         if (_dpiBodyStatus   is not null) _dpiBodyStatus.IsVisible   = index == 0;
         if (_dpiBodyStrategy is not null) _dpiBodyStrategy.IsVisible = index == 1;
         if (_dpiBodyAdvanced is not null) _dpiBodyAdvanced.IsVisible = index == 2;
-        // POL-1: re-painted via StyleAdvShellTab (matches sibling sub-tab
-        // strips). Pre-POL-1 used StyleSegmentButton — kebab pill shape.
         if (_dpiTabStatus   is not null) StyleAdvShellTab(_dpiTabStatus,   index == 0);
         if (_dpiTabStrategy is not null) StyleAdvShellTab(_dpiTabStrategy, index == 1);
         if (_dpiTabAdvanced is not null) StyleAdvShellTab(_dpiTabAdvanced, index == 2);
     }
 
-    /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09): the standalone DPI Bypass
-    /// overlay close handler is gone — the Advanced shell owns the close
-    /// affordance now. Tab activation calls <see cref="ReseedDpiBypassTabState"/>
-    /// to refresh the visible widgets from the persisted mode.
-    /// </summary>
     private void ReseedDpiBypassTabState()
     {
         var mode = AndroidStorage.GetDpiBypassMode();
@@ -511,11 +436,6 @@ public partial class AndroidApp
         UpdateDpiFooterState();
     }
 
-    /// <summary>
-    /// Strategy ComboBox writer. Persists the new mode + refreshes the
-    /// footer indicator + the in-Settings ComboBox (so toggling here also
-    /// surfaces correctly when the user reopens Settings → Routing).
-    /// </summary>
     private void OnDpiStrategyChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
     {
         if (_dpiStrategyComboBox is null) return;
@@ -527,9 +447,6 @@ public partial class AndroidApp
         };
         AndroidStorage.SetDpiBypassMode(value);
 
-        // Mirror the change into the Settings overlay's ComboBox so the
-        // two surfaces stay in sync when both are open in the user's
-        // recent-tasks stack.
         if (_settingsDpiBypassMode is not null)
         {
             _settingsLoading = true;
@@ -544,12 +461,6 @@ public partial class AndroidApp
         UpdateDpiFooterState();
     }
 
-    /// <summary>
-    /// Footer toggle: flip between "off" and the last-non-off mode (default
-    /// Standard if the user has never picked anything else). Mirrors
-    /// desktop's <c>ToggleZapretCommand</c> behaviour — single tap toggles
-    /// without entering the strategy picker.
-    /// </summary>
     private void OnDpiFooterToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var current = AndroidStorage.GetDpiBypassMode();
@@ -591,15 +502,8 @@ public partial class AndroidApp
                 : Localization.AndroidDpiBypassFooterToggleOn;
     }
 
-    /// <summary>
-    /// Helper to detect current locale without exposing the private Ru
-    /// flag from <c>Strings</c>. We just probe a known RU-vs-EN string —
-    /// the result is true iff the Russian variant is active.
-    /// </summary>
     private static bool IsRu()
     {
-        // ZapretSecStrategy → "Стратегия" / "Strategy" — the cheapest
-        // reliable signal we already export.
         return Localization.ZapretSecStrategy.StartsWith("Стр", StringComparison.Ordinal);
     }
 }

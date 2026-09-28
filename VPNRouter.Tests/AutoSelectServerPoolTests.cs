@@ -5,12 +5,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Backlog A: pins <see cref="VlessConfig.GetActiveServers"/> opt-in auto-select.
-/// Off (default) = today's behaviour (active + same-IP pair). On = same-protocol
-/// pool (so ConfigGenerator wraps it in a urltest group), VLESS-vision kept to flow
-/// entries, other protocols excluded (review E4 — no cross-protocol exit mixing).
-/// </summary>
 public sealed class AutoSelectServerPoolTests
 {
     private static VlessServerEntry Srv(string name, string ip, string proto, string? flow) =>
@@ -57,8 +51,6 @@ public sealed class AutoSelectServerPoolTests
     [Fact]
     public void On_VlessVision_DropsNoFlowSiblingToAvoidCrossNodeSplit()
     {
-        // A no-flow VLESS sibling on a different node would otherwise be pooled into
-        // proxy-udp -> TCP via node A, UDP via node B. Keep flow-only.
         var cfg = new VlessConfig
         {
             AutoSelectBestServer = true,

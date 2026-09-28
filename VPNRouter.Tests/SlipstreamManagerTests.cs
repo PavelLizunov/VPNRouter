@@ -11,16 +11,8 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.41.x — DNS-tunnel (slipstream) sidecar manager. Spawns slipstream-client
-/// with the profile leaf PEM written to disk + passed via --cert; fail-closed
-/// (an immediate exit throws so VpnEngine won't start sing-box over a dead local
-/// port); optional fingerprint hard-reject. See
-/// plans/dns-tunnel-slipstream-integration-2026-06-10.md.
-/// </summary>
 public class SlipstreamManagerTests
 {
-    // A PEM whose base64 body is real, so ComputeLeafSha256Hex() can hash it.
     private static readonly byte[] FakeDer =
         Encoding.ASCII.GetBytes("fake-der-bytes-for-slipstream-unit-test-0123456789");
     private static readonly string SamplePem =
@@ -61,18 +53,12 @@ public class SlipstreamManagerTests
         return (fake, handle);
     }
 
-    // ── SelectResolvers — system-resolver mode (pure, no process/OS dependency) ──
-    // System-resolver mode (link sentinel "system") is the operator-agnostic
-    // WL-BYPASS path: on a strict RU mobile whitelist only the operator's own
-    // resolver is reachable, so the OS-discovered resolver wins over the link's
-    // hardcoded НСДИ IPs (which stay as the fallback).
-
     [Fact]
     public void SelectResolvers_NoSystemFlag_ReturnsLinkLiterals()
     {
-        var e = MakeEntry(); // DnsUseSystemResolver=false by default
+        var e = MakeEntry();
         var r = SlipstreamManager.SelectResolvers(e, new[] { "10.0.0.1:53" });
-        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, r); // OS list ignored
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, r);
     }
 
     [Fact]
@@ -81,7 +67,7 @@ public class SlipstreamManagerTests
         var e = MakeEntry();
         e.DnsUseSystemResolver = true;
         var r = SlipstreamManager.SelectResolvers(e, new[] { "10.152.222.133:53", "10.152.222.140:53" });
-        Assert.Equal(new[] { "10.152.222.133:53", "10.152.222.140:53" }, r); // operator resolver wins
+        Assert.Equal(new[] { "10.152.222.133:53", "10.152.222.140:53" }, r);
     }
 
     [Fact]
@@ -90,7 +76,7 @@ public class SlipstreamManagerTests
         var e = MakeEntry();
         e.DnsUseSystemResolver = true;
         var r = SlipstreamManager.SelectResolvers(e, Array.Empty<string>());
-        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, r); // fallback to link IPs
+        Assert.Equal(new[] { "195.208.4.1:53", "195.208.5.1:53" }, r);
     }
 
     [Fact]
@@ -98,9 +84,9 @@ public class SlipstreamManagerTests
     {
         var e = MakeEntry();
         e.DnsUseSystemResolver = true;
-        e.DnsResolvers = new List<string>(); // sentinel-only link
+        e.DnsResolvers = new List<string>();
         var r = SlipstreamManager.SelectResolvers(e, Array.Empty<string>());
-        Assert.Empty(r); // caller fails closed
+        Assert.Empty(r);
     }
 
     [Fact]
@@ -136,12 +122,12 @@ public class SlipstreamManagerTests
     [Fact]
     public void Start_MissingBinary_ThrowsClearError()
     {
-        CleanupFiles(); // ensure no binary present
+        CleanupFiles();
         var (fake, _) = AliveRunner();
         var mgr = new SlipstreamManager(runner: fake) { StartupProbeMs = 50 };
         var ex = Assert.Throws<SlipstreamException>(() => mgr.Start(MakeEntry()));
         Assert.Contains("slipstream-client not found", ex.Message);
-        Assert.Empty(fake.StartCalls); // never reached the spawn
+        Assert.Empty(fake.StartCalls);
     }
 
     [Fact]
@@ -165,14 +151,12 @@ public class SlipstreamManagerTests
                 "--tcp-listen-host", "127.0.0.1",
                 "-r", "195.208.4.1:53",
                 "-r", "195.208.5.1:53",
-                "-c", "bbr",      // r7: honor entry.CongestionControl (default bbr)
-                "-t", "2000",     // r7: gentler keep-alive
-                "--path-stats",   // r12: safe per-resolver throughput counters (Codex measure-first)
-                // r10: r9's --debug-poll / --debug-streams removed (segfault suspect).
+                "-c", "bbr",
+                "-t", "2000",
+                "--path-stats",
             };
             Assert.Equal(expected, argv);
 
-            // The profile PEM was written to the active-cert path verbatim.
             Assert.True(File.Exists(AppPaths.SlipstreamActiveCertPath));
             Assert.Equal(SamplePem, File.ReadAllText(AppPaths.SlipstreamActiveCertPath));
 
@@ -196,13 +180,6 @@ public class SlipstreamManagerTests
             Assert.Single(fake.StartCalls);
             var env = fake.StartCalls[0].EnvironmentOverrides;
             Assert.NotNull(env);
-            // slipstream-client emits its connection-lifecycle WARN lines
-            // ("local_error=0x433" idle-timeout / "resolver … became unavailable" /
-            // "reconnecting in Nms") which SlipstreamManager persists to
-            // slipstream.log — without RUST_LOG the tunnel-death post-mortem is blank.
-            // r10: reverted to "info" (r9's debug firehose is the segfault suspect).
-            // info still emits every connection-lifecycle WARN — enough to see a crash
-            // and its context — without the per-poll FFI hot loop.
             Assert.True(env!.TryGetValue("RUST_LOG", out var lvl));
             Assert.Equal("info", lvl);
         }
@@ -223,11 +200,9 @@ public class SlipstreamManagerTests
             mgr.Start(entry, localPort: 7001);
 
             var argv = fake.StartCalls[0].Arguments.ToList();
-            // --authoritative passed (bypass the rate-limiting recursive resolver)…
             var ai = argv.IndexOf("--authoritative");
             Assert.True(ai >= 0 && ai + 1 < argv.Count, "expected --authoritative <ep> in argv");
             Assert.Equal("213.155.15.93:53", argv[ai + 1]);
-            // …WITHOUT dropping the -r recursive resolvers (multipath fallback).
             Assert.Contains("-r", argv);
         }
         finally { CleanupFiles(); }
@@ -253,7 +228,6 @@ public class SlipstreamManagerTests
         EnsureDummyBinary();
         try
         {
-            // Server fingerprints often arrive as AA:BB:CC… uppercase — must normalise.
             var colonUpper = string.Join(":",
                 Enumerable.Range(0, SampleFingerprint.Length / 2)
                           .Select(i => SampleFingerprint.Substring(i * 2, 2).ToUpperInvariant()));
@@ -276,7 +250,7 @@ public class SlipstreamManagerTests
             var ex = Assert.Throws<SlipstreamException>(
                 () => mgr.Start(MakeEntry(fingerprint: "00ff00ff00ff")));
             Assert.Contains("fingerprint mismatch", ex.Message);
-            Assert.Empty(fake.StartCalls); // hard-reject before spawn
+            Assert.Empty(fake.StartCalls);
         }
         finally { CleanupFiles(); }
     }
@@ -288,8 +262,6 @@ public class SlipstreamManagerTests
         try
         {
             var fake = new FakeProcessRunner();
-            // Factory returns an already-exited handle → the watchdog sees the
-            // immediate exit and the manager must fail closed.
             fake.OnStart(r => r.ExecutablePath == AppPaths.SlipstreamExePath, _ =>
             {
                 var h = new FakeProcessHandle();
@@ -301,7 +273,6 @@ public class SlipstreamManagerTests
             var ex = Assert.Throws<SlipstreamException>(() => mgr.Start(MakeEntry()));
             Assert.Contains("exited immediately", ex.Message);
             Assert.False(mgr.IsRunning);
-            // Stop() in the fail-closed path removed the active cert.
             Assert.False(File.Exists(AppPaths.SlipstreamActiveCertPath));
         }
         finally { CleanupFiles(); }
@@ -321,7 +292,7 @@ public class SlipstreamManagerTests
         {
             listener.Stop();
         }
-        Assert.False(SlipstreamManager.IsPortListening(port)); // nothing listening now
+        Assert.False(SlipstreamManager.IsPortListening(port));
     }
 
     [Fact]

@@ -5,15 +5,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.38.0-r7 — pins the honest "couldn't refresh — showing cached" badge on
-/// the subscription card. Born from the Z:\surito 2026-05-29 diagnosis: a
-/// provider DPI-flap made the subscription fetch fail, the card dropped to
-/// "0s · —", and the user read it as "configs lost / account banned" — when in
-/// fact the API was returning servers fine and (where cached) they're preserved.
-/// The badge distinguishes (a) failed-but-cached from (b) failed-and-empty
-/// (provider unreachable), instead of a bare, alarming "0 servers".
-/// </summary>
 public sealed class SubscriptionViewModelBadgeTests
 {
     private static SubscriptionViewModel Vm(int cachedServers)
@@ -38,7 +29,6 @@ public sealed class SubscriptionViewModelBadgeTests
         var vm = Vm(4);
         vm.LastRefreshFailed = true;
         Assert.Equal(4, vm.CachedServerCount);
-        // "showing cached" — NOT the empty/unreachable variant.
         Assert.Equal(VPNRouter.Core.Localization.Strings.SubRefreshFailedCached, vm.StatusBadge);
         Assert.NotEqual(string.Empty, vm.StatusBadge);
     }

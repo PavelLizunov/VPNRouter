@@ -1,60 +1,3 @@
-// VpnRouterService — Android-native service that owns the VpnService
-// lifecycle and hosts the libbox.aar runtime.
-//
-// v2.32.0 (2026-05-07) — Network-resilience hardening (AND-NETRES):
-//   • Always-on VPN compatibility: when the system starts us via
-//     <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
-//     after device boot or user toggle in Settings → VPN, action is null
-//     (or VpnService.SERVICE_INTERFACE on some OEMs). Pre-NETRES we
-//     ignored these intents and stopped the service immediately. Now we
-//     reload the last-known-good config from SharedPreferences and bring
-//     the tunnel up without needing the Activity to launch first.
-//   • Doze mode hardening: wake-lock acquired during connect-init so the
-//     box service has CPU time to finish its initial dial even with the
-//     screen off. Released after success / failure.
-//   • Last-good-config persistence: after a successful boxService.start()
-//     we copy pendingConfigJson + pendingPerAppMode + pendingPerAppPackages
-//     into SharedPreferences. Always-on reads these back. Survives reboot
-//     because SharedPreferences are flushed to disk by the framework.
-//   • Auto-reconnect toggle: AndroidStorage's "auto_reconnect_on_network_change"
-//     pref controls whether fireUpdate forwards subsequent default-interface
-//     changes to libbox. ON (default) = sing-box re-binds upstream sockets
-//     on Wi-Fi ↔ cellular handoff. OFF = first-bind only, sing-box keeps
-//     using whatever interface it dialed on (less robust, included for
-//     debugging interference between libbox's own interface monitor and
-//     the platform monitor).
-//   • START_STICKY: tells the framework to recreate us if the kernel kills
-//     us under memory pressure. Pre-NETRES we used START_NOT_STICKY which
-//     is wrong for an Always-on VPN — the system would not bring us back.
-//
-// v3.0 Phase 5 (2026-05-04) — REWRITE based on sagernet/sing-box-for-android
-// reference (BoxService.kt + VPNService.kt + PlatformInterfaceWrapper.kt).
-// Pre-5 we used commandServer.startOrReloadService() with a minimal
-// PlatformInterface — most callbacks returned null/throw. That LEFT
-// sing-box without a network-interface list, no system CA certificates,
-// and no localDNSTransport, so its outbound sockets had nowhere to bind
-// and TLS handshakes always failed. Symptom: tun0 UP, libbox claims
-// "service started", but every routed packet ends in TCP-connect
-// timeout.
-//
-// Phase 5 changes:
-//   1. Direct Libbox.newService(json, platformInterface) — matches
-//      reference. CommandServer is now optional / removed (we don't
-//      use Clash API on Android).
-//   2. Keep ParcelFileDescriptor reference, return pfd.getFd() peek
-//      (NOT detachFd) so libbox can close the fd via its own
-//      lifecycle without us double-closing.
-//   3. Real getInterfaces() — enumerates wifi/cellular/ethernet via
-//      ConnectivityManager + NetworkInterface.
-//   4. Real systemCertificates() — pulls from AndroidCAStore.
-//   5. useProcFS() returns true on Android < Q (sing-box uses /proc
-//      for uid resolution there).
-//   6. autoDetectInterfaceControl(fd) → protect(fd) — already correct
-//      from Phase 3.
-//
-// Reference: bg/BoxService.kt, bg/VPNService.kt, bg/PlatformInterfaceWrapper.kt
-// in https://github.com/PavelLizunov/vpnrouter-android.
-
 package com.ninitux.vpnrouter;
 
 import android.annotation.SuppressLint;
@@ -117,85 +60,40 @@ public final class VpnRouterService extends VpnService {
 
     public static final String ACTION_START = "com.ninitux.vpnrouter.START";
     public static final String ACTION_STOP = "com.ninitux.vpnrouter.STOP";
-    // v2.40.0 AND-NODOZE (2026-06-02) — self-restart trigger fired from
-    // onTaskRemoved via AlarmManager when an aggressive OEM stopService's us
-    // on swipe-away. Carries no config; falls through to the last-good-config
-    // restore branch in onStartCommand (same path as the Always-on null-action
-    // restart), so the tunnel rebuilds from SharedPreferences.
     public static final String ACTION_RESTART = "com.ninitux.vpnrouter.RESTART";
     public static final String EXTRA_CONFIG_JSON = "config_json";
-    // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
-    // EXTRA_PER_APP_MODE: "off" / "include" / "exclude". When "include",
-    // ONLY the EXTRA_PER_APP_PACKAGES list routes via the tunnel; when
-    // "exclude", those packages BYPASS it. Pre-7.5 we shipped the
-    // EXTRA_ALLOWED_PACKAGES name (kept for back-compat) but always
-    // empty — TunOptions.includePackage came from libbox alone.
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
     public static final String EXTRA_PER_APP_MODE = "per_app_mode";
     public static final String EXTRA_PER_APP_PACKAGES = "per_app_packages";
-    public static final String EXTRA_NOTIF_TEXT = "notif_text";             // B7: localized FGS text
-    public static final String EXTRA_NOTIF_DISCONNECT = "notif_disconnect"; // B7: localized Disconnect label
+    public static final String EXTRA_NOTIF_TEXT = "notif_text";
+    public static final String EXTRA_NOTIF_DISCONNECT = "notif_disconnect";
 
-    // B7 (2026-06-21) — localized notification strings from the C# side (Localization),
-    // set in onStartCommand before ensureForegroundStarted(). Defaults are the prior
-    // hardcoded English so a missing extra (or an old caller) keeps current behavior.
     private String notifText = "Tunnel active";
     private String notifDisconnect = "Disconnect";
-    // v3.0 Phase 1.I — broadcasts so the Avalonia UI can flip its button
-    // label on real tunnel-state events instead of intent-only.
     public static final String ACTION_TUNNEL_UP = "com.ninitux.vpnrouter.TUNNEL_UP";
     public static final String ACTION_TUNNEL_DOWN = "com.ninitux.vpnrouter.TUNNEL_DOWN";
     public static final String ACTION_TUNNEL_ERROR = "com.ninitux.vpnrouter.TUNNEL_ERROR";
-    // P1 (2026-06-21): live tunnel stats broadcast (clash_api polled via a protected socket).
     public static final String ACTION_STATS = "com.ninitux.vpnrouter.STATS";
     public static final String EXTRA_STATS_DOWN = "stats_down_total";
     public static final String EXTRA_STATS_UP = "stats_up_total";
     public static final String EXTRA_STATS_CONN = "stats_conn";
     public static final String EXTRA_ERROR_MESSAGE = "error_message";
-    // DNS-tunnel (slipstream) — when the active server is dns-tunnel the
-    // service brings up the in-process Slipstream client (libslipstream_jni)
-    // BEFORE libbox and points sing-box's generated VLESS outbound at
-    // 127.0.0.1:<port>. These carry the tunnel parameters parsed from the
-    // dns-tunnel:// link; absent (null) for every other scheme, which keeps
-    // the slipstream path inert. See SlipstreamNative.java.
     public static final String EXTRA_DNS_TUNNEL_DOMAIN = "dns_tunnel_domain";
     public static final String EXTRA_DNS_TUNNEL_RESOLVERS = "dns_tunnel_resolvers";
     public static final String EXTRA_DNS_TUNNEL_CERT = "dns_tunnel_cert";
     public static final String EXTRA_DNS_TUNNEL_PORT = "dns_tunnel_port";
-    // When true, ignore EXTRA_DNS_TUNNEL_RESOLVERS as the primary path and use the
-    // active network's OS resolver(s) (ConnectivityManager → LinkProperties →
-    // getDnsServers()). The operator-agnostic WL-BYPASS path: on a strict RU mobile
-    // whitelist the operator's own resolver is the only reachable DNS, so a link
-    // cannot hardcode НСДИ IPs and work for every operator. The forwarded resolvers
-    // stay as the fallback when no OS resolver is discoverable.
     public static final String EXTRA_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "dns_tunnel_use_system_resolver";
 
     private static final int NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "vpnrouter_tunnel";
     private static final String LOG_TAG = "VpnRouter";
 
-    // v2.32.0 AND-NETRES — SharedPreferences keys read from BOTH this Java
-    // service AND the C# AndroidStorage. The "vpnrouter_settings" prefs
-    // file is the same one AndroidStorage uses (PrefsName const), so the
-    // keys must stay in sync with AndroidStorage.cs.
     private static final String PREFS_NAME = "vpnrouter_settings";
     private static final String KEY_LAST_GOOD_CONFIG = "last_good_config_json";
     private static final String KEY_LAST_GOOD_PER_APP_MODE = "last_good_per_app_mode";
-    // Stored as newline-separated package names. Java doesn't ship a JSON
-    // parser in android.jar (org.json works but adds boilerplate); newline
-    // is illegal inside Android package names, so it's a safe delimiter
-    // and keeps the persistence path simple.
     private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
     private static final String KEY_AUTO_RECONNECT = "auto_reconnect_on_network_change";
-    // v2.42.0 resume re-sync — authoritative live tunnel state, written in
-    // lockstep with the ACTION_TUNNEL_UP/DOWN broadcasts. The C# side reads it
-    // (AndroidStorage.GetTunnelLive) on MainActivity.OnResume to demote a stale
-    // "Connected" status card when a broadcast was lost because no Activity
-    // (hence no receiver) was alive at send time.
     private static final String KEY_TUNNEL_LIVE = "tunnel_live";
-    // DNS-tunnel (slipstream) last-good params, so an Always-on / swipe-recovery
-    // bring-up rebuilds the Slipstream front too (not just libbox). Resolvers
-    // are newline-packed like the per-app packages slot.
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN = "last_good_dns_tunnel_domain";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS = "last_good_dns_tunnel_resolvers_lines";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_CERT = "last_good_dns_tunnel_cert";
@@ -203,80 +101,27 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
     private static boolean libboxSetupDone = false;
-    // A10 (2026-06-15): process-lifetime cache of the system CA store as PEM
-    // strings. The AndroidCAStore is effectively immutable for a process run, but
-    // libbox can call systemCertificates() on every TLS-using connection — re-
-    // enumerating + Base64-PEM-encoding ~150 certs each time is needless work. A CA
-    // change requires Settings and is picked up on the next app launch. Held on the
-    // outer service (Java forbids static fields in the non-static PlatformInterface
-    // inner class); volatile for the cross-thread publish.
     private static volatile List<String> sCachedSystemCertificatePems;
 
     private String pendingConfigJson;
     private String[] pendingAllowedPackages;
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
-    // DNS-tunnel (slipstream) pending params — non-null only when the active
-    // server arrived as dns-tunnel. startTunnel() brings up the Slipstream
-    // front before libbox when pendingDnsTunnelDomain is set.
     private String pendingDnsTunnelDomain;
     private String[] pendingDnsTunnelResolvers;
     private String pendingDnsTunnelCert;
     private int pendingDnsTunnelPort;
     private boolean pendingDnsTunnelUseSystemResolver;
-    // True once nativeStart spawned the Slipstream worker, so stopTunnel
-    // tears it down after libbox. Reset on stop.
-    // B1 (v2.42.0-r14): volatile — written on the lifecycle worker, read on the
-    // main/binder thread (onTaskRemoved, the restore-branch hint).
     private volatile boolean slipstreamRunning;
     private volatile BoxService boxService;
     private volatile ParcelFileDescriptor currentPfd;
-    // v2.32.0 AND-NETRES — wake-lock held during connect-init so the
-    // box service can finish its first dial even on a screen-off / Doze
-    // device. Acquired in startTunnel(), released when tunnel-up fires
-    // OR the start path errors. 60-second hard cap so a stuck dial can't
-    // drain battery indefinitely.
     private PowerManager.WakeLock connectWakeLock;
 
-    // A3 (v2.42.0): dedicated thread for ConnectivityManager.NetworkCallback
-    // delivery — created lazily on first connect, reused across reconnects, and
-    // quit on service destroy. The libbox default-interface monitor's fireUpdate()
-    // does a bounded NetworkInterface.getByName retry (~500ms of Thread.sleep
-    // worst case) plus a blocking updateDefaultInterface() JNI call into libbox;
-    // delivering those on the MAIN looper added foreground-service main-thread
-    // pressure on every Wi-Fi<->cellular handoff (worst while a dns-tunnel was
-    // mid-reconnect). A SERVICE-level HandlerThread (vs one per platformInterface
-    // instance) avoids both a per-connect thread leak and a reuse-after-quit
-    // hazard. Matches sagernet's DefaultNetworkListener design.
     private HandlerThread netCallbackThread;
     private Handler netCallbackHandler;
 
-    // B1 (v2.42.0-r14) — the VPN lifecycle (start/stopTunnel) runs on this
-    // dedicated single-thread executor, NOT the service main thread. start/stop
-    // do BLOCKING native + libbox work: SlipstreamNative.nativeStart/nativeStop,
-    // waitForLocalPort's ~10s join, BoxService.start()/close(). On the main thread
-    // a Stop while the dns-tunnel is mid-reconnect (НСДИ resolver rate-limit →
-    // QUIC 0x433 → reconnect backoff) wedged the foreground-service main thread →
-    // ANR → "freeze until force-stop" (reported on two phones). onStartCommand now
-    // only calls startForeground (fast, main thread per the FGS contract) and
-    // enqueues the lifecycle work here. Single-thread ⇒ start/stop are serialized.
     private final java.util.concurrent.ExecutorService lifecycleExecutor = newLifecycleExecutor();
 
-    // B4 (2026-06-15, A101BM, 21 connect/disconnect cycles): an explicit single-thread
-    // pool with core-thread timeout so an idle "vpn-lifecycle" worker self-reaps after
-    // 30s. Rationale: if a service instance is killed/recreated WITHOUT onDestroy
-    // (START_STICKY recreate, OEM power-kill), its lifecycleExecutor never gets
-    // shutdown(); a parked daemon worker keeps the orphaned executor alive (worker ->
-    // executor ref => not GC'd), leaking for the process lifetime. Core-timeout is the
-    // only way that orphaned worker dies. Still core=max=1 ⇒ start/stop stay strictly
-    // serialized (the B1 contract); the worker just respawns on the next task.
-    //   NOTE: this is NOT a per-connect leak. Device measurement: "vpn-lifecycle"
-    //   oscillates 4 (idle) <-> 5 (just after a connect, reaped back to 4 within 30s),
-    //   and total process threads warm up (~39 -> ~48 over the first ~6-8 connects as
-    //   the libbox Go runtime grows its M-pool to steady state) then PLATEAU — flat at
-    //   ~48 across cycles 7..21, RSS stable. The unnamed "Thread-N" growth is libbox
-    //   gomobile JNI-attached goroutine M's (our teardownTunnelResources closes the
-    //   BoxService correctly); it is bounded and RSS-neutral, so benign.
     private static java.util.concurrent.ExecutorService newLifecycleExecutor() {
         java.util.concurrent.ThreadPoolExecutor exec = new java.util.concurrent.ThreadPoolExecutor(
                 1, 1, 30L, java.util.concurrent.TimeUnit.SECONDS,
@@ -293,8 +138,6 @@ public final class VpnRouterService extends VpnService {
         return exec;
     }
 
-    /** Enqueue VPN lifecycle work onto the dedicated worker (never the main
-     *  thread). Swallows the post-shutdown rejection during onDestroy. */
     private void submitLifecycle(Runnable task) {
         try {
             lifecycleExecutor.execute(task);
@@ -303,13 +146,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * Run a potentially-blocking native teardown on a throwaway daemon thread and
-     * wait up to timeoutMs. If it doesn't finish (e.g. nativeStop joining a
-     * Slipstream worker that is stuck in reconnect backoff), log and return so the
-     * lifecycle worker proceeds instead of wedging. The leaked thread finishes
-     * later or dies with the process; the OS reclaims native resources regardless.
-     */
     private void runBounded(String name, long timeoutMs, Runnable action) {
         Thread t = new Thread(action, "vpn-bounded-" + name);
         t.setDaemon(true);
@@ -329,13 +165,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * A3: lazily create + start the shared net-monitor looper thread and return
-     * its Handler, so ConnectivityManager.NetworkCallback delivery (and the
-     * ~500ms getByName retry + blocking updateDefaultInterface JNI inside
-     * fireUpdate) runs OFF the main thread. Synchronized against
-     * quitNetCallbackThread.
-     */
     private synchronized Handler ensureNetCallbackHandler() {
         if (netCallbackHandler == null) {
             netCallbackThread = new HandlerThread("vpn-net-monitor");
@@ -345,12 +174,6 @@ public final class VpnRouterService extends VpnService {
         return netCallbackHandler;
     }
 
-    /**
-     * A3: stop the shared net-monitor looper thread. Null-safe (may never have
-     * been created if the service stopped before any connect). quitSafely drains
-     * already-queued interface updates first. Called on the lifecycle worker from
-     * onDestroy, AFTER teardown has unregistered the NetworkCallback.
-     */
     private synchronized void quitNetCallbackThread() {
         if (netCallbackThread != null) {
             try {
@@ -366,16 +189,6 @@ public final class VpnRouterService extends VpnService {
     @Override
     public void onCreate() {
         super.onCreate();
-        // v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — Java unhandled exceptions
-        // in this service (libbox crashes, network-callback bugs, NPEs in
-        // builder.establish()) currently get swallowed into logcat, which
-        // a non-rooted user cannot read. Install a default uncaught
-        // handler that writes a minimal text report to <filesDir>/crashes/
-        // before chaining to the previous default — chaining is critical:
-        // without it the JVM keeps the dead thread alive and the process
-        // ends up in an undefined state. The C# CrashReporter on the
-        // Activity side reads the same dir on next launch and the kebab
-        // "View crash log" surface picks up either origin transparently.
         installJavaUncaughtHandler();
         initScreenStateReceiver();
     }
@@ -384,22 +197,12 @@ public final class VpnRouterService extends VpnService {
         try {
             final Thread.UncaughtExceptionHandler previous =
                     Thread.getDefaultUncaughtExceptionHandler();
-            // Anonymous inner class (not a lambda) because the javac
-            // pipeline driving this project's AndroidJavaSource items
-            // targets a pre-8 source level — LambdaMetafactory is not
-            // resolvable on the classpath. Existing service code uses
-            // the same pattern (see InterfaceUpdateListener wiring), so
-            // we follow it here for consistency.
             Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
                 @Override
                 public void uncaughtException(Thread thread, Throwable throwable) {
                     try {
                         writeJavaCrashReport(thread, throwable);
                     } catch (Throwable t) {
-                        // The reporter must never throw — if writing the
-                        // file failed for any reason, fall through to the
-                        // original handler so the process still terminates
-                        // correctly.
                         Log.w(LOG_TAG, "AND-CRASH-HOOK: writeJavaCrashReport threw: " + t.getMessage());
                     }
                     if (previous != null) {
@@ -466,8 +269,6 @@ public final class VpnRouterService extends VpnService {
             if (filesDir == null) return;
             File crashesDir = new File(filesDir, "crashes");
             if (!crashesDir.exists() && !crashesDir.mkdirs()) {
-                // mkdirs() can return false if the dir already exists due
-                // to a race; check existsAfter and bail only if truly absent.
                 if (!crashesDir.exists()) return;
             }
 
@@ -489,10 +290,6 @@ public final class VpnRouterService extends VpnService {
             if (throwable != null) {
                 java.io.StringWriter sw = new java.io.StringWriter();
                 throwable.printStackTrace(new java.io.PrintWriter(sw));
-                // Same scrub patterns the C# CrashReporter applies — kept
-                // minimal here to avoid depending on a Java regex library
-                // beyond what's in android.jar. Covers vless://… in
-                // exception messages (the most common leak vector).
                 sb.append(scrubSecrets(sw.toString()));
             } else {
                 sb.append("(no throwable)\n");
@@ -506,7 +303,6 @@ public final class VpnRouterService extends VpnService {
                 try { fw.close(); } catch (Exception ignored) { }
             }
         } catch (Throwable t) {
-            // Best-effort — swallow.
         }
     }
 
@@ -531,19 +327,12 @@ public final class VpnRouterService extends VpnService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_START.equals(action)) {
-            // B1: capture extras on the (fast) main thread; run the BLOCKING
-            // lifecycle on the worker. startForeground MUST be prompt on the main
-            // thread (FGS contract) — do it here, not inside startTunnel (which now
-            // runs worker-side and could be briefly queued behind a prior op).
-            // B7: capture localized notification strings BEFORE the foreground start
-            // (ensureForegroundStarted -> buildNotification) so the first FGS notification
-            // is localized. Empty/missing extras leave the English defaults.
             String nText = intent.getStringExtra(EXTRA_NOTIF_TEXT);
             if (nText != null && !nText.isEmpty()) notifText = nText;
             String nDisc = intent.getStringExtra(EXTRA_NOTIF_DISCONNECT);
             if (nDisc != null && !nDisc.isEmpty()) notifDisconnect = nDisc;
             if (!ensureForegroundStarted()) {
-                return START_STICKY; // background-FGS-start refused — already broadcast + stopSelf
+                return START_STICKY;
             }
             final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
             final String[] allowed = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
@@ -570,9 +359,6 @@ public final class VpnRouterService extends VpnService {
                 }
             });
         } else if (ACTION_STOP.equals(action)) {
-            // v2.40.0-r8 (#3): an explicit user Disconnect must defuse any pending
-            // onTaskRemoved swipe-recovery alarm, else a swipe-then-Disconnect
-            // within the ~1.5s window silently re-establishes the tunnel.
             cancelScheduledRestart();
             submitLifecycle(new Runnable() {
                 @Override
@@ -582,29 +368,10 @@ public final class VpnRouterService extends VpnService {
                 }
             });
         } else {
-            // v2.32.0 AND-NETRES — Always-on entry path.
-            // The system starts us via the <intent-filter> declared in the
-            // AndroidManifest (action="android.net.VpnService"). On Android
-            // 7+ the system passes intent.action = VpnService.SERVICE_INTERFACE;
-            // some OEMs / older Androids fire a null-action restart. Both
-            // mean "user enabled Always-on for VPNRouter — bring the tunnel
-            // up using whatever config last worked".
-            //
-            // Pre-NETRES this path fell through and the service stopped.
-            // Result: Always-on flag was set in system Settings but the
-            // tunnel never actually established at boot.
             Log.i(LOG_TAG, "AND-NETRES: system-initiated start (action=" + action
                     + ") — attempting last-good config restore");
-            // v2.40.0 AND-NODOZE — guard against a redundant restart. The
-            // onTaskRemoved swipe-recovery schedules an ACTION_RESTART
-            // unconditionally (it can't know whether the OEM will actually
-            // stopService us on swipe). If the foreground service in fact
-            // survived, boxService is still live — re-running startTunnel here
-            // would orphan the old BoxService + ParcelFileDescriptor and cause
-            // a spurious ~2s tunnel re-establish on every swipe-away. Only
-            // restore in a genuinely fresh/killed process (boxService == null).
             if (!ensureForegroundStarted()) {
-                return START_STICKY; // background-FGS-start refused — already broadcast + stopSelf
+                return START_STICKY;
             }
             submitLifecycle(new Runnable() {
                 @Override
@@ -622,11 +389,6 @@ public final class VpnRouterService extends VpnService {
                 }
             });
         }
-        // START_STICKY: if the kernel kills us under memory pressure, the
-        // framework recreates the service with a null intent → we hit the
-        // Always-on branch above and rebuild from last-good config. This
-        // is the right policy for a long-running VPN service that owns a
-        // foreground notification.
         return START_STICKY;
     }
 
@@ -635,19 +397,6 @@ public final class VpnRouterService extends VpnService {
         return null;
     }
 
-    /**
-     * Call startForeground promptly on the MAIN thread — the FGS contract requires
-     * it within seconds of a startForegroundService. Returns false if a
-     * background-FGS-start was refused (already broadcast + stopSelf).
-     *
-     * <p>Bug-AND-011 / Medium-5 (2026-05-16): 3-arg startForeground on API 34+ with
-     * explicit FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED. v2.40.0 AND-NODOZE
-     * (2026-06-02): on Android 12+ a background-initiated FGS start can be refused
-     * with ForegroundServiceStartNotAllowedException — broadcast an error and stop
-     * cleanly instead of reaching the AND-CRASH-HOOK uncaught handler. v2.42.0-r14
-     * (B1): split out of startTunnel so the prompt foreground call stays on the
-     * main thread while the blocking lifecycle moves to the worker executor.</p>
-     */
     private boolean ensureForegroundStarted() {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -672,15 +421,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * v2.42.0 resume re-sync — persist the authoritative live tunnel state to
-     * the shared prefs in lockstep with the TUNNEL_UP/DOWN broadcasts. The C#
-     * MainActivity.OnResume reads this (AndroidStorage.GetTunnelLive) to demote
-     * a stale "Connected" status card when a broadcast was lost because no
-     * Activity (hence no receiver) was alive at send time. Best-effort: a prefs
-     * failure just means the next resume can't self-heal — it never blocks the
-     * tunnel. apply() is async + non-blocking, fine for the worker thread.
-     */
     private void setTunnelLive(boolean live) {
         try {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -692,30 +432,13 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /** Bring the tunnel up. Runs on the lifecycle worker (lifecycleExecutor);
-     *  startForeground was already invoked on the main thread in onStartCommand. */
     private void startTunnel() {
-        // A2 (B3): a re-Start while a tunnel is already live must not orphan the old
-        // BoxService/TUN pfd/Slipstream (the old code overwrote boxService without
-        // closing it on the second start). Tear down the previous resources first —
-        // WITHOUT dropping the foreground notification (we stay foreground across the
-        // restart) or broadcasting TUNNEL_DOWN (we are reconfiguring, not stopping).
         if (boxService != null) {
             Log.i(LOG_TAG, "startTunnel: tunnel already live — tearing down previous before re-start");
             teardownTunnelResources();
         }
-        // AND-NETRES: hold a partial wake-lock during the ~5 s connect-init
-        // window. Without it, on a screen-off / Doze device the kernel
-        // can swap us out mid-handshake and the first dial silently
-        // hangs. 60 s timeout is the fail-safe — well over the typical
-        // libbox.start time (~1-2 s on this hardware).
         acquireConnectWakeLock();
 
-        // P1 clash_api secret (2026-07-10): the config we are about to launch
-        // carries experimental.clash_api.secret — libbox then 401s every
-        // unauthenticated API call, so the stats poller must present the same
-        // bearer token. Extracted here (single choke point: UI start, restore
-        // and Always-on all funnel through startTunnel with pendingConfigJson).
         clashApiSecret = extractClashApiSecret(pendingConfigJson);
 
         try {
@@ -725,10 +448,8 @@ public final class VpnRouterService extends VpnService {
             persistLastGoodConfig();
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
             setTunnelLive(true);
-            startStatsPoller();   // P1: begin polling clash_api for live up/down + conn count
+            startStatsPoller();
         } catch (Exception e) {
-            // AND-1: scrub before log + broadcast. Do NOT pass the raw
-            // Throwable to Log.e — its toString() embeds the unsanitized message.
             String safeMsg = scrubSecrets(e.getMessage());
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + safeMsg);
             try {
@@ -746,15 +467,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * v2.32.0 AND-NETRES — persist the just-started config so an Always-on
-     * trigger can rebuild the tunnel without going through the Activity.
-     * Called only from <code>startTunnel</code> AFTER
-     * <code>boxService.start()</code> succeeded — we never overwrite a
-     * known-good config with one that failed to start. Best-effort: if
-     * SharedPreferences write throws, the tunnel keeps running, but the
-     * next Always-on bring-up will fall back to the previous good config.
-     */
     private void persistLastGoodConfig() {
         try {
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
@@ -797,9 +509,6 @@ public final class VpnRouterService extends VpnService {
                 editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_PORT);
                 editor.remove(KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER);
             }
-            // apply() is async + non-throwing — for a "best effort" path
-            // that's the right choice. commit() would block the foreground
-            // start path on disk I/O for ~5-50 ms.
             editor.apply();
             Log.i(LOG_TAG, "AND-NETRES: persisted last-good config ("
                     + pendingConfigJson.length() + " chars, perAppMode="
@@ -810,12 +519,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * v2.32.0 AND-NETRES — load the last-known-good config from
-     * SharedPreferences into the same <code>pending*</code> fields the
-     * ACTION_START path uses. Returns true if a non-empty config was
-     * loaded.
-     */
     private boolean loadLastGoodConfig() {
         try {
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
@@ -830,9 +533,6 @@ public final class VpnRouterService extends VpnService {
             } else {
                 pendingPerAppPackages = packed.split("\n");
             }
-            // DNS-tunnel restore — so an Always-on / swipe-recovery bring-up
-            // re-establishes the Slipstream front, not just libbox. Empty
-            // domain ⇒ a non-dns-tunnel last-good config (slipstream stays inert).
             pendingDnsTunnelDomain = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN, null);
             if (pendingDnsTunnelDomain != null && pendingDnsTunnelDomain.isEmpty()) {
                 pendingDnsTunnelDomain = null;
@@ -844,8 +544,6 @@ public final class VpnRouterService extends VpnService {
             String packedResolvers = prefs.getString(KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS, null);
             pendingDnsTunnelResolvers = (packedResolvers == null || packedResolvers.isEmpty())
                     ? new String[0] : packedResolvers.split("\n");
-            // Allowed-packages extra was the legacy slot; AND-NETRES restore
-            // path always uses the per-app filter mode/packages exclusively.
             pendingAllowedPackages = new String[0];
             Log.i(LOG_TAG, "AND-NETRES: loaded last-good config (" + json.length()
                     + " chars, perAppMode=" + pendingPerAppMode
@@ -857,14 +555,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * v2.32.0 AND-NETRES — acquire a partial wake-lock for the connect-init
-     * window. PARTIAL_WAKE_LOCK keeps the CPU running but lets the screen
-     * sleep, exactly what we want for a background VPN bring-up. The
-     * 60-second timeout is a fail-safe in case <code>releaseConnectWakeLock</code>
-     * is somehow skipped (e.g. JVM kill mid-startup). setReferenceCounted(false)
-     * means a stray double-acquire just no-ops instead of leaking grants.
-     */
     private void acquireConnectWakeLock() {
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -894,10 +584,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * Initialise libbox once per process. Sets up the working / base /
-     * temp paths so the Go side can write its caches and logs.
-     */
     private synchronized void ensureLibboxSetup() throws Exception {
         if (libboxSetupDone) return;
 
@@ -916,14 +602,6 @@ public final class VpnRouterService extends VpnService {
         options.setFixAndroidStack(false);
         Libbox.setup(options);
 
-        // Bug-AND-011 / Critical-1 follow-up (2026-05-16 code review):
-        // route Go-side stderr to the app's private sandbox FilesDir
-        // instead of getExternalFilesDir(). Pre-fix the sing-box
-        // stderr (which captures Go-runtime panics and Reality
-        // handshake traces) was world-readable via adb / file manager
-        // / USB. Now stays inside /data/data/com.ninitux.vpnrouter/files/
-        // (only this app's UID can read it). For diagnostics on a
-        // debug build, use `adb shell run-as com.ninitux.vpnrouter cat`.
         try {
             File stderrFile = new File(filesDir, "singbox.stderr.log");
             Libbox.redirectStderr(stderrFile.getAbsolutePath());
@@ -944,15 +622,6 @@ public final class VpnRouterService extends VpnService {
 
         Libbox.checkConfig(pendingConfigJson);
 
-        // v2.32.0 (2026-05-07) — libbox API migration. The 1.13.x AAR
-        // dropped OverrideOptions + CommandServer.startOrReloadService;
-        // service creation now goes directly through Libbox.newService.
-        // CommandServer remains in libbox but is purely a Clash-API RPC
-        // gateway (Connections / Groups / URLTest / Stats). VPNRouter on
-        // Android drives lifecycle from the Java side via Intent
-        // broadcasts and never exposes a Clash dashboard, so we drop the
-        // CommandServer entirely. Reference: BoxService.kt in
-        // sagernet/sing-box-for-android — minimal flow is identical.
         VpnRouterPlatformInterface platformInterface = new VpnRouterPlatformInterface(this);
         boxService = Libbox.newService(pendingConfigJson, platformInterface);
         boxService.start();
@@ -960,20 +629,6 @@ public final class VpnRouterService extends VpnService {
         Log.i(LOG_TAG, "libbox service started successfully (v2.32.0)");
     }
 
-    /**
-     * DNS-tunnel (slipstream): when the active server arrived with dns-tunnel
-     * parameters, bring up the in-process Slipstream client BEFORE libbox and
-     * wait for its local TCP front to listen. sing-box's generated VLESS
-     * outbound dials 127.0.0.1:&lt;port&gt;, so starting libbox before the front
-     * is listening would dial a dead local socket — we fail CLOSED here (throw
-     * → startTunnel's catch broadcasts the error + stops) rather than leaving a
-     * "Connected" UI over a tunnel that can't carry traffic.
-     *
-     * <p>No-op for every non-dns-tunnel server (pendingDnsTunnelDomain null).
-     * The Slipstream resolver UDP:53 traffic bypasses the TUN automatically
-     * because the service self-disallows the VPNRouter UID in openTun(), so no
-     * extra loop-avoidance routing is needed.</p>
-     */
     private void startSlipstreamIfNeeded() throws Exception {
         if (pendingDnsTunnelDomain == null || pendingDnsTunnelDomain.isEmpty()) {
             return;
@@ -984,11 +639,6 @@ public final class VpnRouterService extends VpnService {
         }
         String[] resolvers = pendingDnsTunnelResolvers != null
                 ? pendingDnsTunnelResolvers : new String[0];
-        // System-resolver mode (link sentinel "system"): use the active network's
-        // OS resolver(s) — the operator-agnostic WL-BYPASS path. On a strict RU
-        // mobile whitelist the operator's own resolver (e.g. 10.x) is the only
-        // reachable DNS, so a link cannot hardcode НСДИ IPs. The forwarded literals
-        // stay as the fallback when no OS resolver is discoverable.
         if (pendingDnsTunnelUseSystemResolver) {
             String[] sys = readSystemResolvers();
             if (sys.length > 0) {
@@ -1000,11 +650,6 @@ public final class VpnRouterService extends VpnService {
                         + "falling back to " + resolvers.length + " link resolver(s)");
             }
         }
-        // The Slipstream client's ClientConfig.cert is a FILE PATH (it does
-        // fs::read on it for the leaf-cert pin) — NOT the PEM text. Desktop's
-        // SlipstreamManager writes the PEM to disk and passes the path; mirror
-        // that here. Passing the raw PEM made run_client fail
-        // "Failed to read cert <PEM>: No such file or directory".
         String certPath = "";
         if (pendingDnsTunnelCert != null && !pendingDnsTunnelCert.isEmpty()) {
             java.io.File certFile = new java.io.File(getFilesDir(), "slipstream-cert.pem");
@@ -1025,27 +670,12 @@ public final class VpnRouterService extends VpnService {
             throw new Exception("dns-tunnel: Slipstream nativeStart returned false");
         }
         slipstreamRunning = true;
-        // The local TCP listener binds almost immediately on spawn (before the
-        // QUIC-over-DNS handshake even completes), so this normally returns in
-        // well under a second. The 8 s cap is the fail-closed worst case and
-        // stays comfortably inside the foreground-service onStartCommand ANR
-        // window — the connect wake-lock is held for the whole window.
         if (!waitForLocalPort(port, 8_000L)) {
             throw new Exception("dns-tunnel: Slipstream front did not start listening on 127.0.0.1:" + port);
         }
         Log.i(LOG_TAG, "dns-tunnel: Slipstream front is listening on 127.0.0.1:" + port);
     }
 
-    /**
-     * Discover the active network's OS resolver(s) as "ip:53" strings via
-     * ConnectivityManager — the operator-agnostic WL-BYPASS path. Prefers the
-     * active default network, falling through to other networks only if it yields
-     * none. IPv4 only (the covert path uses ip:53); loopback / link-local skipped;
-     * deduped. Best-effort: returns an empty array on any failure so the caller
-     * falls back to the link's forwarded resolvers. The underlying network is up
-     * here (slipstream starts before the TUN), so on a strict mobile whitelist this
-     * returns the operator resolver (e.g. 10.x) — the only DNS reachable there.
-     */
     private String[] readSystemResolvers() {
         java.util.List<String> out = new java.util.ArrayList<>();
         try {
@@ -1055,20 +685,20 @@ public final class VpnRouterService extends VpnService {
             Network active = cm.getActiveNetwork();
             if (active != null) nets.add(active);
             for (Network n : cm.getAllNetworks()) {
-                if (!nets.contains(n)) nets.add(n); // active first, then the rest as fallback
+                if (!nets.contains(n)) nets.add(n);
             }
             for (Network net : nets) {
                 LinkProperties lp = cm.getLinkProperties(net);
                 if (lp == null || lp.getDnsServers() == null) continue;
                 for (java.net.InetAddress a : lp.getDnsServers()) {
-                    if (!(a instanceof java.net.Inet4Address)) continue; // IPv4 covert path
+                    if (!(a instanceof java.net.Inet4Address)) continue;
                     if (a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
                     String h = a.getHostAddress();
                     if (h == null) continue;
                     String ep = h + ":53";
                     if (!out.contains(ep)) out.add(ep);
                 }
-                if (!out.isEmpty()) break; // active network's resolvers suffice
+                if (!out.isEmpty()) break;
             }
         } catch (Exception e) {
             Log.w(LOG_TAG, "dns-tunnel: readSystemResolvers threw: " + e.getMessage());
@@ -1076,14 +706,6 @@ public final class VpnRouterService extends VpnService {
         return out.toArray(new String[0]);
     }
 
-    /**
-     * Poll 127.0.0.1:port for a connectable listener up to timeoutMs. The TCP
-     * connect MUST run off the main thread — startTunnel runs on the service's
-     * main thread, where a blocking socket connect throws
-     * NetworkOnMainThreadException (StrictMode). Doing it inline made every
-     * probe "fail" even though the Slipstream front was listening the whole
-     * time, so the front was always torn down by the fail-closed timeout.
-     */
     private boolean waitForLocalPort(int port, long timeoutMs) {
         final java.util.concurrent.atomic.AtomicBoolean ok =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -1096,7 +718,6 @@ public final class VpnRouterService extends VpnService {
                     ok.set(true);
                     return;
                 } catch (Exception ignored) {
-                    // front not listening yet
                 } finally {
                     try { s.close(); } catch (Exception ignored) { }
                 }
@@ -1117,13 +738,9 @@ public final class VpnRouterService extends VpnService {
         return ok.get();
     }
 
-    /** Tear down the Slipstream client if it was started. Idempotent. */
     private void stopSlipstreamIfRunning() {
         if (!slipstreamRunning) return;
         slipstreamRunning = false;
-        // B1: bound nativeStop — if the Slipstream worker is stuck in QUIC reconnect
-        // backoff (the НСДИ rate-limit-drop case), the join inside nativeStop can
-        // hang. Cap it so the lifecycle worker proceeds and the UI never wedges.
         runBounded("nativeStop", 4_000L, new Runnable() {
             @Override
             public void run() {
@@ -1137,32 +754,12 @@ public final class VpnRouterService extends VpnService {
         });
     }
 
-    /**
-     * Close the tunnel's native resources (BoxService, Slipstream front, TUN pfd) and
-     * release the connect wake-lock — WITHOUT touching the foreground notification or
-     * broadcasting TUNNEL_DOWN. Used by {@link #stopTunnel} (full stop) and by
-     * {@link #startTunnel}'s stop-old-before-start (A2: a re-Start must not orphan the
-     * previous BoxService/pfd/Slipstream). Bounded so a stuck native teardown can't
-     * wedge the lifecycle worker.
-     */
-    // ── P1 (2026-06-21): live tunnel stats ───────────────────────────────────
-    // Poll clash_api /connections via a VpnService-PROTECTED socket so the request
-    // bypasses our OWN tun. (The app's unprotected loopback to 127.0.0.1:9090 fails
-    // with "Connection failure" under a full tunnel — root-caused on device 2026-06-21;
-    // adb's shell uid bypasses the VPN, which is why external curl worked but the
-    // in-process managed HttpClient didn't.) Parse downloadTotal/uploadTotal + the
-    // connection count, broadcast to the C# UI. Every 2s while live; fully best-effort.
     private java.util.concurrent.ScheduledExecutorService statsPoller;
     private android.content.BroadcastReceiver screenStateReceiver = null;
     private volatile boolean isScreenOn = true;
 
-    // P1 clash_api secret (2026-07-10): bearer token the generated config locks
-    // the Clash API with. Set by startTunnel from the launching config; the raw
-    // HTTP GET below must carry it or libbox answers 401 and stats go dark.
     private volatile String clashApiSecret;
 
-    /** Best-effort read of experimental.clash_api.secret from a sing-box config
-     *  JSON. Null when absent/unparseable (legacy open API — no header sent). */
     private static String extractClashApiSecret(String configJson) {
         if (configJson == null) return null;
         try {
@@ -1207,21 +804,10 @@ public final class VpnRouterService extends VpnService {
         boolean protectedOk = false;
         try {
             sock = new Socket();
-            // bypass our own tun — the whole point of P1. protect() can return
-            // false (an unconnected new Socket() has no fd to protect yet on some
-            // devices — A101BM/Android 12 returns false EVERY tick). Device-verified
-            // 2026-07-10: the loopback connect to 127.0.0.1:9090 reaches the Clash
-            // API and stats flow ANYWAY (the kernel routes 127.0.0.0/8 via lo, not
-            // the tun), so a false protect() here is harmless. Only warn if a tick
-            // GENUINELY produces no stats (connect throws below) AND protect was
-            // false — that's the persistently-broken poller worth diagnosing, not
-            // the per-tick false alarm that used to spam a WARN every 2s.
             protectedOk = protect(sock);
             sock.connect(new InetSocketAddress("127.0.0.1", 9090), 2000);
             sock.setSoTimeout(2000);
             java.io.OutputStream os = sock.getOutputStream();
-            // HTTP/1.0 + close-delimited body so we never have to de-chunk.
-            // P1 (2026-07-10): bearer header — the config now locks the API.
             String secret = clashApiSecret;
             String auth = (secret == null || secret.isEmpty())
                 ? "" : ("Authorization: Bearer " + secret + "\r\n");
@@ -1242,15 +828,11 @@ public final class VpnRouterService extends VpnService {
             org.json.JSONObject obj = new org.json.JSONObject(body.substring(brace, end + 1));
             long down = obj.optLong("downloadTotal", 0L);
             long up = obj.optLong("uploadTotal", 0L);
-            // Isolate the connections-array read: if a libbox Clash-API version
-            // ships 'connections' as a non-array, getJSONArray throws and would
-            // otherwise discard the good down/up totals for this tick too.
             int conn = 0;
             try {
                 if (obj.has("connections") && !obj.isNull("connections"))
                     conn = obj.getJSONArray("connections").length();
             } catch (org.json.JSONException ignore) {
-                // schema drift — keep the down/up totals we already parsed.
             }
             Intent it = new Intent(ACTION_STATS).setPackage(getPackageName());
             it.putExtra(EXTRA_STATS_DOWN, down);
@@ -1258,10 +840,6 @@ public final class VpnRouterService extends VpnService {
             it.putExtra(EXTRA_STATS_CONN, conn);
             sendBroadcast(it);
         } catch (Exception e) {
-            // best-effort — clash_api not up yet / transient; retry next tick.
-            // Only surface it when protect() ALSO failed: that combination is the
-            // genuinely-broken poller (unprotected socket that got captured by the
-            // tun), vs. the harmless clash-api-not-up-yet transient.
             if (!protectedOk)
                 Log.w(LOG_TAG, "pollStatsOnce: stats tick failed after protect()=false — " + e);
         } finally {
@@ -1270,20 +848,11 @@ public final class VpnRouterService extends VpnService {
     }
 
     private boolean teardownTunnelResources() {
-        stopStatsPoller();   // P1: stop the stats poll on every teardown
+        stopStatsPoller();
         final BoxService bs = boxService;
         boxService = null;
-        // LOW (double-broadcast guard): record whether anything was actually live
-        // BEFORE tearing it down, so stopTunnel can drop the foreground
-        // notification + broadcast TUNNEL_DOWN at most once. An explicit Stop
-        // enqueues stopTunnel() AND triggers onDestroy() (which enqueues
-        // stopTunnel() again on the same serial worker); the second pass finds
-        // nothing live and must stay silent. Captured before stopSlipstreamIfRunning
-        // clears slipstreamRunning and before currentPfd is nulled below.
         final boolean wasLive = bs != null || slipstreamRunning || currentPfd != null;
         if (bs != null) {
-            // B1: bound boxService.close — libbox shutdown can block if sing-box is
-            // tearing down while dialing a dead 127.0.0.1 dns-tunnel front.
             runBounded("boxService.close", 4_000L, new Runnable() {
                 @Override
                 public void run() {
@@ -1295,8 +864,6 @@ public final class VpnRouterService extends VpnService {
                 }
             });
         }
-        // DNS-tunnel: tear down the Slipstream front AFTER libbox so sing-box
-        // never dials a dead 127.0.0.1 front during its own shutdown.
         stopSlipstreamIfRunning();
         if (currentPfd != null) {
             try { currentPfd.close(); } catch (Exception e) {
@@ -1304,21 +871,11 @@ public final class VpnRouterService extends VpnService {
             }
             currentPfd = null;
         }
-        // AND-NETRES belt-and-suspenders — startTunnel's finally already
-        // releases this, but if a kill landed between acquire and finally
-        // (or the tunnel was running and got externally stopped) we make
-        // sure the wake-lock doesn't leak.
         releaseConnectWakeLock();
         return wasLive;
     }
 
     private void stopTunnel() {
-        // LOW (double-broadcast guard): an explicit Stop runs stopTunnel() once
-        // here and again from onDestroy() (stopSelf -> onDestroy enqueues another
-        // stopTunnel on the same serial lifecycle worker). teardownTunnelResources
-        // reports whether anything was actually live; only the pass that tore
-        // something down drops the foreground notification + broadcasts
-        // TUNNEL_DOWN, so the UI sees the down-event exactly once.
         if (!teardownTunnelResources()) {
             return;
         }
@@ -1328,19 +885,13 @@ public final class VpnRouterService extends VpnService {
         } catch (Exception e) {
             Log.w(LOG_TAG, "broadcast tunnel-down threw: " + e.getMessage());
         }
-        // v2.42.0 resume re-sync — record the down so a resume that missed the
-        // (possibly lost) TUNNEL_DOWN broadcast can demote a stale card.
         setTunnelLive(false);
     }
 
     @Override
     public void onRevoke() {
         Log.i(LOG_TAG, "onRevoke: VPN revoked by system/user — tearing down tunnel");
-        // Explicit "stop using VPN" (permission revoked / another VPN took over):
-        // defuse any pending swipe-recovery restart so we don't resurrect it.
         cancelScheduledRestart();
-        // B1: onRevoke is delivered on a binder thread — never run the blocking
-        // teardown inline; enqueue it on the lifecycle worker.
         submitLifecycle(new Runnable() {
             @Override
             public void run() { stopTunnel(); }
@@ -1351,16 +902,10 @@ public final class VpnRouterService extends VpnService {
     @Override
     public void onDestroy() {
         releaseScreenStateReceiver();
-        // B1: enqueue a final teardown, then stop accepting new lifecycle work.
-        // shutdown() is non-blocking — it lets the queued stop drain on the daemon
-        // worker without blocking onDestroy (main thread). On process death the OS
-        // reclaims anything a bounded teardown didn't finish.
         submitLifecycle(new Runnable() {
             @Override
             public void run() {
                 stopTunnel();
-                // A3: quit the shared net-monitor thread AFTER teardown so
-                // boxService.close() has already unregistered its NetworkCallback.
                 quitNetCallbackThread();
             }
         });
@@ -1368,28 +913,6 @@ public final class VpnRouterService extends VpnService {
         super.onDestroy();
     }
 
-    /**
-     * v2.40.0 AND-NODOZE (2026-06-02) — swipe-away recovery. Aggressive OEMs
-     * (KYOCERA/BALMUDA, Xiaomi, Huawei, ...) call stopService when the user
-     * swipes the app from Recents — even for a foreground service. START_STICKY
-     * only covers a system memory-pressure kill, NOT an explicit stopService,
-     * so without this the tunnel silently dies on swipe-away with no recovery.
-     *
-     * <p>If the tunnel is active AND we're battery-opt exempt (so a background
-     * foreground-service start is permitted on Android 12+), schedule a
-     * near-immediate self-restart that rebuilds from last-good config via the
-     * ACTION_RESTART → restore branch in onStartCommand. When NOT exempt we
-     * can't legally restart from the background — log it and rely on the
-     * proactive battery-opt prompt (AndroidApp.Permissions) to unlock reliable
-     * recovery next time. The exemption is the same lever that lets the
-     * scheduled restart's startForeground succeed, so FIX#1 and FIX#2 are
-     * intentionally synergistic.</p>
-     *
-     * <p>Inexact AlarmManager.set is used deliberately: we only need to
-     * reappear, not hit a precise deadline, and exact alarms would require the
-     * SCHEDULE_EXACT_ALARM permission on Android 12+. A battery-opt-exempt app
-     * is exempt from the inexact-alarm Doze deferral anyway, so ~1.5s holds.</p>
-     */
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         try {
@@ -1417,19 +940,6 @@ public final class VpnRouterService extends VpnService {
         super.onTaskRemoved(rootIntent);
     }
 
-    /**
-     * v2.40.0-r8 (#3 bug-scout HIGH/regression fix) — cancel a pending
-     * onTaskRemoved swipe-recovery restart alarm. Called on an EXPLICIT user stop
-     * (ACTION_STOP / onRevoke) so that if the user swiped the app away and then
-     * deliberately Disconnected within the ~1.5s window, the scheduled
-     * ACTION_RESTART does NOT fire and silently re-establish the tunnel the user
-     * just turned off. Deliberately NOT called from onDestroy — a swipe the OEM
-     * honours by killing the FGS lands there, and the pending restart is the
-     * intended recovery. Reconstructs the same PendingIntent (request code 1 +
-     * ACTION_RESTART + FLAG_IMMUTABLE) so am.cancel matches by filterEquals; the
-     * alarm lives in the AlarmManager system service so this holds across the
-     * stopSelf that follows.
-     */
     private void cancelScheduledRestart() {
         try {
             Intent restart = new Intent(getApplicationContext(), VpnRouterService.class)
@@ -1449,13 +959,6 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * v2.40.0 AND-NODOZE — live battery-optimization-exemption read. Mirrors
-     * the C#-side AndroidApp.Permissions.IsIgnoringBatteryOptimizations so the
-     * service can decide whether a background self-restart is permitted.
-     * Returns false on any error (fail-safe: don't attempt a restart that
-     * would throw).
-     */
     private boolean isIgnoringBatteryOptimizations() {
         try {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -1491,11 +994,6 @@ public final class VpnRouterService extends VpnService {
                 .build();
     }
 
-    /**
-     * v3.0 Phase 5 — tun fd handed to libbox. Reference impl approach:
-     * keep PFD reference, return pfd.getFd() PEEK. Lifetime managed by
-     * stopTunnel() which closes PFD.
-     */
     int openTun(TunOptions options) throws Exception {
         Builder builder = new Builder()
                 .setSession("Virtual Penguin Network")
@@ -1515,10 +1013,6 @@ public final class VpnRouterService extends VpnService {
         boolean any6 = !inet6Routes.isEmpty();
         if (!any6) builder.addRoute("::", 0);
 
-        // P0.1 LAN-bypass observability (audit handoff Android P0.1 A1): prove
-        // whether route_exclude_address became narrowed Android route prefixes
-        // (split-route like 0.0.0.0/1, 128.0.0.0/1) or a full 0.0.0.0/0 fallback
-        // that would capture LAN. Route/no behaviour change — logging only.
         Log.i(LOG_TAG, "openTun: mtu=" + options.getMTU());
         Log.i(LOG_TAG, "openTun: inet4 addresses=" + joinPrefixes(inet4Addrs));
         Log.i(LOG_TAG, "openTun: inet6 addresses=" + joinPrefixes(inet6Addrs));
@@ -1538,10 +1032,6 @@ public final class VpnRouterService extends VpnService {
         } catch (Exception ignored) {}
         if (!dnsAdded) builder.addDnsServer("1.1.1.1");
 
-        // v3.0 Phase 7.5 (2026-05-04) & AND-CRASH-01 fix:
-        // Android's VpnService.Builder strictly forbids calling both
-        // addAllowedApplication and addDisallowedApplication on the same
-        // Builder instance (throws IllegalArgumentException). Ensure mutually exclusive paths:
         boolean isInclude = "include".equalsIgnoreCase(pendingPerAppMode);
         boolean isExclude = "exclude".equalsIgnoreCase(pendingPerAppMode);
 
@@ -1569,7 +1059,6 @@ public final class VpnRouterService extends VpnService {
                 builder.addDisallowedApplication(getPackageName());
             } catch (PackageManager.NameNotFoundException ignored) {}
         } else {
-            // Mode off / null: default behavior
             boolean hasInclude = options.getIncludePackage() != null && options.getIncludePackage().hasNext();
             if (hasInclude) {
                 addPackages(builder, options.getIncludePackage(), true);
@@ -1586,15 +1075,9 @@ public final class VpnRouterService extends VpnService {
             throw new Exception("VpnService.Builder.establish returned null");
         }
         currentPfd = pfd;
-        // PEEK fd — do not detach. libbox uses the fd; we keep the PFD
-        // reference alive for the duration of the service to prevent GC
-        // from closing the fd prematurely.
         return pfd.getFd();
     }
 
-    // P0.1 observability: return the prefixes we actually applied so openTun can
-    // log them WITHOUT consuming the libbox iterator twice (each getInet*Address /
-    // getInet*RouteAddress call is a single-pass RoutePrefixIterator).
     private static List<String> addPrefixesAsAddresses(Builder builder, RoutePrefixIterator iter) {
         List<String> applied = new ArrayList<>();
         if (iter == null) return applied;
@@ -1625,7 +1108,6 @@ public final class VpnRouterService extends VpnService {
         return applied;
     }
 
-    // Compact "a, b, c" join for logging (avoids the String.join API-26 floor).
     private static String joinPrefixes(List<String> items) {
         if (items == null || items.isEmpty()) return "<empty>";
         StringBuilder sb = new StringBuilder();
@@ -1648,30 +1130,11 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    /**
-     * v3.0 Phase 5 — full PlatformInterface implementation following
-     * sagernet/sing-box-for-android/PlatformInterfaceWrapper.kt. Pre-5
-     * most callbacks returned null; sing-box couldn't enumerate
-     * interfaces (no upstream socket binding), couldn't validate TLS
-     * (no system CAs), couldn't resolve DNS via system resolver. All
-     * routed traffic ended in TCP-connect timeout.
-     */
     private static final class VpnRouterPlatformInterface implements PlatformInterface {
         private final VpnRouterService service;
 
-        // v3.0 Phase 6.2 — DefaultNetworkMonitor state. Holds the
-        // current InterfaceUpdateListener libbox is interested in plus the
-        // ConnectivityManager.NetworkCallback we registered to feed it.
         private InterfaceUpdateListener defaultListener;
         private ConnectivityManager.NetworkCallback defaultCallback;
-        // v2.32.0 AND-NETRES — first-bind tracking. When the user disables
-        // the "auto-reconnect on network change" toggle, we still need to
-        // fire the FIRST updateDefaultInterface so sing-box's outbound
-        // sockets bind to a real interface and dialing works. Subsequent
-        // changes (Wi-Fi → cellular, network-loss-and-recovery) are then
-        // suppressed — sing-box keeps using its initial interface even if
-        // the kernel reports a new default. ON (default) = forward all
-        // updates; OFF = first update only.
         private boolean firstUpdateFired = false;
 
         VpnRouterPlatformInterface(VpnRouterService service) {
@@ -1685,10 +1148,6 @@ public final class VpnRouterService extends VpnService {
 
         @Override
         public boolean useProcFS() {
-            // sing-box reads /proc for uid resolution on Android < Q.
-            // On Q+ it uses ConnectivityManager.getConnectionOwnerUid
-            // (see findConnectionOwner). Pre-Phase-5 we returned false
-            // unconditionally — that breaks /proc access on Android 9.
             return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q;
         }
 
@@ -1699,8 +1158,6 @@ public final class VpnRouterService extends VpnService {
 
         @Override
         public void autoDetectInterfaceControl(int fd) throws Exception {
-            // Phase 3 fix carried forward — protect the fd from VPN routing
-            // so libbox's upstream sockets reach the real network.
             if (!service.protect(fd)) {
                 throw new Exception("VpnService.protect(" + fd + ") failed");
             }
@@ -1708,17 +1165,8 @@ public final class VpnRouterService extends VpnService {
 
         @Override
         public void clearDNSCache() {
-            // sing-box invalidating its own resolver cache — Android
-            // doesn't expose a system-wide DNS cache flush from a normal
-            // app, so we no-op. Reference impl does the same.
         }
 
-        /**
-         * v3.0 Phase 5 — real interface enumeration. Pre-5 we returned
-         * null; libbox saw no interfaces and couldn't bind upstream
-         * sockets to wlan0/cellular. Reference: PlatformInterfaceWrapper
-         * .kt getInterfaces().
-         */
         @SuppressLint("MissingPermission")
         @Override
         public NetworkInterfaceIterator getInterfaces() {
@@ -1754,7 +1202,6 @@ public final class VpnRouterService extends VpnService {
                             new io.nekohasekai.libbox.NetworkInterface();
                     bi.setName(ifName);
 
-                    // DNS servers
                     List<String> dnsHosts = new ArrayList<>();
                     if (lp.getDnsServers() != null) {
                         for (java.net.InetAddress a : lp.getDnsServers()) {
@@ -1764,7 +1211,6 @@ public final class VpnRouterService extends VpnService {
                     }
                     bi.setDNSServer(new SimpleStringIterator(dnsHosts));
 
-                    // Type
                     int t;
                     if (nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
                         t = Libbox.InterfaceTypeWIFI;
@@ -1779,14 +1225,12 @@ public final class VpnRouterService extends VpnService {
                     bi.setIndex(sysIface.getIndex());
                     try { bi.setMTU(sysIface.getMTU()); } catch (Exception ignored) {}
 
-                    // Addresses
                     List<String> addrs = new ArrayList<>();
                     for (InterfaceAddress ia : sysIface.getInterfaceAddresses()) {
                         java.net.InetAddress a = ia.getAddress();
                         String host = a.getHostAddress();
                         if (host == null) continue;
                         if (a instanceof Inet6Address) {
-                            // Strip zone id
                             int pct = host.indexOf('%');
                             if (pct >= 0) host = host.substring(0, pct);
                         }
@@ -1794,7 +1238,6 @@ public final class VpnRouterService extends VpnService {
                     }
                     bi.setAddresses(new SimpleStringIterator(addrs));
 
-                    // Flags
                     int flags = 0;
                     if (nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
                         flags = OsConstants.IFF_UP | OsConstants.IFF_RUNNING;
@@ -1817,14 +1260,8 @@ public final class VpnRouterService extends VpnService {
             }
         }
 
-        /**
-         * v3.0 Phase 5 — system trust anchors. Pre-5 returned null;
-         * sing-box had NO CAs and every TLS handshake failed.
-         */
         @Override
         public StringIterator systemCertificates() {
-            // A10: serve the process-lifetime cache when warm. Hand out a fresh
-            // copy so the iterator can never disturb the shared (immutable) list.
             List<String> cached = sCachedSystemCertificatePems;
             if (cached != null) {
                 return new SimpleStringIterator(new ArrayList<>(cached));
@@ -1842,8 +1279,6 @@ public final class VpnRouterService extends VpnService {
                             + "-----END CERTIFICATE-----";
                     certs.add(pem);
                 }
-                // Publish an immutable snapshot. A benign race just recomputes the
-                // same set — no lock needed.
                 sCachedSystemCertificatePems = Collections.unmodifiableList(certs);
                 return new SimpleStringIterator(new ArrayList<>(certs));
             } catch (Exception e) {
@@ -1854,16 +1289,12 @@ public final class VpnRouterService extends VpnService {
 
         @Override
         public LocalDNSTransport localDNSTransport() {
-            // Phase 5 simplification: return null, sing-box falls back
-            // to its own DNS resolution. Reference impl provides a
-            // LocalResolver bridging to Android's network DNS — that's
-            // a substantial port (DnsResolver API). Phase 6 if needed.
             return null;
         }
 
         @Override
         public WIFIState readWIFIState() {
-            return null; // optional, sing-box uses fallback
+            return null;
         }
 
         @Override
@@ -1872,35 +1303,6 @@ public final class VpnRouterService extends VpnService {
         @Override
         public boolean underNetworkExtension() { return false; }
 
-        /**
-         * v3.0 Phase 6.2 (2026-05-04) — wire ConnectivityManager.NetworkCallback
-         * to libbox's InterfaceUpdateListener.
-         *
-         * <para>Pre-6.2 this was a no-op stub. Symptom: every upstream
-         * connection from sing-box failed with "no available network
-         * interface" — sing-box has the interface list (from getInterfaces),
-         * but it doesn't know which one is the DEFAULT to bind upstream
-         * sockets to. Without that, all outbound dialing fails.</para>
-         *
-         * <para>Per sagernet/sing-box-for-android DefaultNetworkListener.kt
-         * + DefaultNetworkMonitor.kt, on Android P+ we cannot use
-         * <code>registerDefaultNetworkCallback</code> because since DP1 it
-         * returns the VPN interface itself (which would loop our own
-         * traffic). Instead:
-         *   - API 31+ → registerBestMatchingNetworkCallback (Android 12+)
-         *   - API 28-30 → requestNetwork(NetworkRequest, callback)
-         *   - API 26-27 → registerDefaultNetworkCallback
-         *   - API 24-25 → registerDefaultNetworkCallback (no Handler arg)
-         * </para>
-         *
-         * <para>When the callback fires onAvailable / onCapabilitiesChanged,
-         * we resolve the interface name → kernel index via
-         * NetworkInterface.getByName, then call
-         * <code>listener.updateDefaultInterface(name, index, false, false)</code>.
-         * The kernel can briefly report a network as available before its
-         * <code>NetworkInterface</code> entry shows up — we retry up to
-         * 10× with 50 ms backoff (per reference impl) before giving up.</para>
-         */
         @Override
         public void startDefaultInterfaceMonitor(InterfaceUpdateListener listener) {
             this.defaultListener = listener;
@@ -1964,9 +1366,6 @@ public final class VpnRouterService extends VpnService {
                 Log.e(LOG_TAG, "Phase 6.2: registering NetworkCallback failed: " + e.getMessage(), e);
             }
 
-            // Initial fire — there's almost certainly already an active
-            // network when libbox starts. Kicking it now means the very
-            // first outbound dial doesn't have to wait for a callback.
             try {
                 Network active = cm.getActiveNetwork();
                 if (active != null) {
@@ -1981,13 +1380,6 @@ public final class VpnRouterService extends VpnService {
             InterfaceUpdateListener l = defaultListener;
             if (l == null) return;
 
-            // v2.32.0 AND-NETRES — auto-reconnect toggle. When OFF, fire
-            // only the first update (so sing-box's initial bind works) and
-            // ignore subsequent changes. ON / unset = pre-NETRES Phase 6.2
-            // behavior (every change forwarded). The pref is read from
-            // SharedPreferences each time rather than cached because the
-            // user can toggle it from the Reliability section while the
-            // tunnel is running.
             if (firstUpdateFired) {
                 try {
                     SharedPreferences prefs = service.getSharedPreferences(
@@ -1999,8 +1391,6 @@ public final class VpnRouterService extends VpnService {
                         return;
                     }
                 } catch (Exception ignored) {
-                    // Pref read failed → fall through to forward (default-on
-                    // semantics), better to over-forward than under-forward.
                 }
             }
 
@@ -2016,10 +1406,6 @@ public final class VpnRouterService extends VpnService {
                         java.net.NetworkInterface ni = java.net.NetworkInterface.getByName(name);
                         if (ni != null) { index = ni.getIndex(); break; }
                     } catch (Exception e) {
-                        // Kernel hasn't created the interface entry yet —
-                        // back off and retry. After 10 × 50 ms we give up
-                        // and pass index=-1 to libbox so it falls back to
-                        // its own resolution.
                     }
                     try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                 }
@@ -2045,9 +1431,6 @@ public final class VpnRouterService extends VpnService {
                 defaultCallback = null;
             }
             defaultListener = null;
-            // AND-NETRES — reset the first-update guard so the next
-            // boxService.start() (e.g. after a stop+start cycle) re-fires
-            // the initial bind unconditionally even if auto-reconnect is OFF.
             firstUpdateFired = false;
         }
 
@@ -2063,31 +1446,8 @@ public final class VpnRouterService extends VpnService {
                 int ipProtocol,
                 String sourceAddress, int sourcePort,
                 String destinationAddress, int destinationPort) throws Exception {
-            // v2.32.0 (2026-05-07) — libbox API drift: return type
-            // changed from ConnectionOwner (a struct) to a raw int uid,
-            // with -1 meaning "owner unknown / unsupported". sing-box
-            // treats -1 as a fallback that disables per-uid rules for
-            // the connection. We filter at the VpnService.Builder layer
-            // (addAllowed/DisallowedApplication) and don't enable
-            // sing-box per-uid rules in our generated config, so a
-            // stub return is fine and saves the JNI round-trip into
-            // ConnectivityManager.getConnectionOwnerUid that the
-            // sagernet reference does on Android Q+.
             return -1;
         }
-
-        // ── v2.32.0 (2026-05-07) libbox API drift: PlatformInterface gained
-        // three new abstract methods. Stub implementations follow:
-        //
-        //   writeLog(String)    — replaces CommandServerHandler.writeDebugMessage,
-        //                          libbox now logs through PlatformInterface
-        //   packageNameByUid(int) — used for human-readable per-uid logs
-        //   uidByPackageName(String) — inverse of above
-        //
-        // All three are best-effort log-side helpers; functional VPN does
-        // not require them to return real data. We log the writeLog
-        // calls so libbox-internal diagnostics still surface, and use
-        // PackageManager for the uid↔package mapping when convenient.
 
         @Override
         public void writeLog(String message) {
@@ -2101,7 +1461,7 @@ public final class VpnRouterService extends VpnService {
             try {
                 String[] packages = service.getPackageManager().getPackagesForUid(uid);
                 if (packages != null && packages.length > 0) return packages[0];
-            } catch (Exception ignore) { /* best-effort */ }
+            } catch (Exception ignore) {  }
             return "uid=" + uid;
         }
 

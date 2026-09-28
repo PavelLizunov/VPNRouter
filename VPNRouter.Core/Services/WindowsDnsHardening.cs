@@ -9,28 +9,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Closes Windows DNS leak vectors that bypass our TUN routing:
-///
-/// 1. SMHNR (Smart Multi-Homed Name Resolution)
-///    Windows 8+ DNS client sends DNS queries to ALL active network adapters
-///    in PARALLEL and uses the first response. With multiple VPNs running
-///    (e.g. VPNRouter TUN + AmneziaWG), DNS leaks because the query goes
-///    out the secondary adapter without sing-box ever seeing it.
-///    Fix: HKLM\SOFTWARE\Policies\Microsoft\Windows NT\DNSClient\DisableSmartNameResolution = 1
-///
-/// 2. Parallel A+AAAA queries
-///    DNS client sends A and AAAA in parallel. Same multi-homed leak vector.
-///    Fix: HKLM\SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DisableParallelAandAAAA = 1
-///
-/// 3. TUN interface metric
-///    Windows picks the interface with the lowest metric for DNS routing
-///    when SMHNR is off. We pin VPNRouter-TUN to metric 1 (highest priority)
-///    so it always wins over physical adapters and other VPN tunnels.
-///
-/// Original values are saved to state.json before changes and restored on Stop().
-/// All operations require admin (which we already have).
-/// </summary>
 public static class WindowsDnsHardening
 {
     private const string SmhnrPolicyKey = @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient";
@@ -44,56 +22,16 @@ public static class WindowsDnsHardening
     private static readonly string StatePath =
         Path.Combine(AppPaths.DataDir, "dns-hardening-state.json");
 
-    // Tracks whether OUR firewall DNS-port block rules are currently installed.
-    // The lockdown is a projection of live tunnel state (see DnsLockdownPolicy):
-    // armed only while the tunnel is confirmed serving, lifted (fail-open) the
-    // moment it stops serving, re-armed on recovery. ReconcileLockdownForHealth
-    // is the single mutator; EnableLockdownIfConfigured (warm-up arm) and Restore
-    // (Stop) funnel through the same effective-state so netsh only runs on real
-    // transitions. volatile: read/written from the HealthMonitor timer thread,
-    // the StartupPipeline warm-up task, and VpnEngine.Stop.
     private static volatile bool _lockdownEffective;
 
-    /// <summary>
-    /// Apply DNS hardening: disable SMHNR + parallel A/AAAA, set TUN metric.
-    /// Saves original values so they can be restored later.
-    ///
-    /// <para>Legacy entry point — kept so callers that don't have access to
-    /// <see cref="AppSettings"/> (e.g. crash-recovery cleanup paths) can
-    /// still run the registry + TUN-metric portion of hardening without the
-    /// Wave 39 firewall lockdown layer. New callers should prefer the
-    /// <see cref="Apply(AppSettings, ILogger?)"/> overload so the
-    /// <see cref="AppConfig.DnsLeakLockdown"/> toggle is honoured.</para>
-    /// </summary>
     public static void Apply(ILogger? logger = null) => Apply(null, logger);
 
-    /// <summary>
-    /// Wave 39 (2026-05-19) overload — also installs the firewall-level
-    /// DNS-port lockdown when <see cref="AppConfig.DnsLeakLockdown"/> is
-    /// true (default for new installs; opt-in for upgrades, see
-    /// <see cref="SettingsMigrator.Migrate_4_to_5"/>).
-    ///
-    /// <para>The firewall portion runs as a fire-and-forget background
-    /// task so a slow netsh call doesn't block VPN startup. This mirrors
-    /// the pattern used elsewhere in the codebase for non-critical
-    /// auxiliary work (e.g. Wave 38a OnProcessExited diagnostics). The
-    /// firewall helpers themselves are idempotent and bounded by
-    /// per-call + outer 5s timeouts, so a hang is contained.</para>
-    /// </summary>
-    /// <param name="settings">App settings carrying the
-    /// <see cref="AppConfig.DnsLeakLockdown"/> flag. Null means
-    /// "skip the Wave 39 firewall layer" — back-compat behaviour for
-    /// the legacy <see cref="Apply(ILogger?)"/> path.</param>
-    /// <param name="logger">Serilog logger for status/error output.</param>
     public static void Apply(AppSettings? settings, ILogger? logger = null)
     {
         var log = logger ?? Log.Logger;
 
         try
         {
-            // Crash recovery: if a state file exists from a previous run that
-            // didn't get a clean Stop(), restore those values FIRST so we read
-            // the user's true original settings (not our modified ones).
             if (File.Exists(StatePath))
             {
                 log.Information("[DnsHardening] Found stale state file — restoring before re-apply");
@@ -118,66 +56,13 @@ public static class WindowsDnsHardening
             log.Warning(ex, "[DnsHardening] Apply failed (non-fatal)");
         }
 
-        // BR-7 (brat 2026-05-20) — lockdown installation moved OUT of
-        // Apply. The previous flow installed the firewall lockdown
-        // immediately after sing-box started, which on slow-TUN
-        // machines (brat's Win11 LTSC took 33 s for wintun to be
-        // routable) caused the warm-up HTTP probe to gstatic.com to
-        // fail: DNS resolution for gstatic.com was blocked because
-        // UDP/53 was banned on Ethernet and the TUN adapter wasn't
-        // forwarding DNS to sing-box yet. Result: 33 s window where
-        // the user could not browse, panic, rollback. r11 splits the
-        // two layers:
-        //
-        //   * Registry + TUN-metric hardening (above) is immediate.
-        //     Safe — these don't break in-flight resolution.
-        //
-        //   * Firewall lockdown is installed by
-        //     <see cref="EnableLockdownIfConfigured"/> from
-        //     <see cref="VPNRouter.Core.Services.StartupPipeline"/>'s
-        //     warm-up probe success branch, so the lockdown only
-        //     fires once TUN is confirmed routing. If warm-up fails,
-        //     lockdown never installs — user keeps internet (with a
-        //     DNS-leak risk noted in the logs).
     }
 
-    /// <summary>
-    /// BR-7 (brat 2026-05-20) — install the Wave 39 firewall-level
-    /// DNS-port lockdown. Called from
-    /// <see cref="VPNRouter.Core.Services.StartupPipeline"/>'s warm-up
-    /// success branch so the lockdown only blocks UDP/53 + TCP/53 +
-    /// TCP/853 on non-loopback interfaces AFTER TUN is confirmed
-    /// routing. Pre-r11 this lived inside Apply and fired immediately
-    /// — which broke the warm-up probe itself on slow-TUN machines.
-    ///
-    /// <para>No-op when <see cref="AppConfig.DnsLeakLockdown"/> is
-    /// false or settings is null. Fire-and-forget background task —
-    /// the user-visible Connected state doesn't gate on lockdown
-    /// install completing.</para>
-    /// </summary>
     public static void EnableLockdownIfConfigured(AppSettings? settings, ILogger? logger = null)
     {
-        // The warm-up probe just confirmed TUN is routing, so this is simply
-        // "reconcile with the tunnel serving" — arms the lockdown when the
-        // setting is on, no-ops otherwise. Funnelling through the reconciler
-        // keeps a single source of truth for _lockdownEffective so the
-        // HealthMonitor fail-open / re-arm path stays consistent.
         ReconcileLockdownForHealth(tunnelServing: true, settings, logger);
     }
 
-    /// <summary>
-    /// Reconcile the firewall DNS-port lockdown against live tunnel state —
-    /// the fail-open "Auto" semantics (see <see cref="DnsLockdownPolicy"/>).
-    ///
-    /// <para>Called: (a) from the StartupPipeline warm-up success branch with
-    /// <paramref name="tunnelServing"/>=true to arm; (b) every HealthMonitor
-    /// tick with the live serving signal (sing-box healthy AND Clash API
-    /// responding == TUN inbound loaded) to lift on outage / re-arm on
-    /// recovery; (c) from the sing-box crash hook with false for an immediate
-    /// fail-open. Idempotent — only touches netsh on a real Enable/Disable
-    /// transition. Fire-and-forget background netsh so the timer / warm-up
-    /// threads never block; non-throwing.</para>
-    /// </summary>
     public static void ReconcileLockdownForHealth(bool tunnelServing, AppSettings? settings, ILogger? logger = null)
     {
         var log = logger ?? Log.Logger;
@@ -191,9 +76,6 @@ public static class WindowsDnsHardening
                 log.Information(
                     "[DnsHardening] DnsLeakLockdown armed — TUN confirmed serving " +
                     "(UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)");
-                // BR-8 (brat 2026-05-20) — pass the TUN CIDR so the block rule
-                // allows sing-box's own TUN DNS endpoint (172.19.0.2:53), else
-                // even tunnelled DNS dies once the lockdown installs.
                 var tunCidr = settings?.Tun?.Ipv4Address;
                 _ = Task.Run(async () =>
                 {
@@ -220,21 +102,6 @@ public static class WindowsDnsHardening
         }
     }
 
-    /// <summary>
-    /// Restore original DNS settings.
-    ///
-    /// <para>Wave 39 (2026-05-19) extension: also unconditionally calls
-    /// <see cref="FirewallManager.DisableDnsLockdownAsync"/> to tear down
-    /// the firewall-level DNS port blocks. The disable is idempotent —
-    /// netsh reports "no rules match" with a non-zero exit when the rules
-    /// aren't there, which the firewall helper tolerates. We deliberately
-    /// don't gate on a state flag because the lockdown is a separate
-    /// safety layer; we want it cleaned up on every Stop regardless of
-    /// whether Apply enabled it this session (defensive — handles the
-    /// edge case where the user disabled the setting between Start and
-    /// Stop, or where a crash-recovery Restore is sweeping leftover
-    /// state from an earlier process).</para>
-    /// </summary>
     public static void Restore(ILogger? logger = null)
     {
         var log = logger ?? Log.Logger;
@@ -251,9 +118,8 @@ public static class WindowsDnsHardening
                 RestoreValue(Registry.LocalMachine, SmhnrPolicyKey, SmhnrPolicyValue, state.Smhnr, log);
                 RestoreValue(Registry.LocalMachine, ParallelKey, ParallelValue, state.ParallelAAAA, log);
 
-                // Reset TUN metric (only matters if interface still exists, e.g. crash recovery)
                 if (state.TunMetricChanged)
-                    TrySetTunMetric(0, log); // 0 = automatic
+                    TrySetTunMetric(0, log);
 
                 try { File.Delete(StatePath); } catch { }
                 log.Information("[DnsHardening] Restored to original values");
@@ -264,14 +130,6 @@ public static class WindowsDnsHardening
             log.Warning(ex, "[DnsHardening] Restore failed (non-fatal)");
         }
 
-        // Wave 39 — always attempt to tear down the firewall-level DNS
-        // lockdown. Idempotent; netsh returns non-zero for "no rules match"
-        // which the helper logs at Debug and treats as success. Fire-and-
-        // forget so a stuck netsh during shutdown doesn't block VpnEngine.Stop
-        // (which has its own try/catch wrapper around this call but still
-        // wouldn't want to wait on a 5s timeout per call).
-        // Clear effective-state so the next session's reconcile starts clean
-        // (Stop is the authoritative "lockdown is gone" point).
         _lockdownEffective = false;
         _ = Task.Run(async () =>
         {
@@ -285,8 +143,6 @@ public static class WindowsDnsHardening
             }
         });
     }
-
-    // ─── Private ──────────────────────────────────────────────────────────────
 
     private static SavedRegValue SaveAndSet(RegistryKey root, string keyPath, string valueName, int newValue, ILogger log)
     {
@@ -342,29 +198,9 @@ public static class WindowsDnsHardening
         }
     }
 
-    /// <summary>
-    /// Sets VPNRouter-TUN interface metric via netsh.
-    /// metric=1 means highest priority; metric=0 means automatic.
-    /// </summary>
     private static bool TrySetTunMetric(int metric, ILogger log)
         => TrySetTunMetricViaRunner(metric, _runnerOverride ?? new ProcessRunner(), log, TunInterfaceAlias);
 
-    /// <summary>
-    /// Phase 2G test seam — netsh call routed through <see cref="IProcessRunner"/>.
-    /// Internal so <c>VPNRouter.Tests</c> can inject a <c>FakeProcessRunner</c>
-    /// and assert the request shape (executable, args, timeout) without
-    /// spawning real netsh. The static facade <see cref="TrySetTunMetric(int, ILogger)"/>
-    /// wraps this with a default <see cref="ProcessRunner"/> so production
-    /// callers see no behaviour change.
-    /// </summary>
-    /// <param name="metric">Interface metric (1=highest priority, 0=auto).</param>
-    /// <param name="runner">Process runner — real or fake.</param>
-    /// <param name="log">Logger.</param>
-    /// <param name="interfaceAlias">Adapter name; tests pin this to a known
-    /// value to verify the shape, prod uses <see cref="TunInterfaceAlias"/>.</param>
-    /// <returns>True iff netsh returned exit code 0. False on timeout, nonzero
-    /// exit, or any thrown exception (logged but not surfaced — the caller's
-    /// state-tracking flag absorbs the failure as "we didn't change metric").</returns>
     internal static bool TrySetTunMetricViaRunner(
         int metric,
         IProcessRunner runner,
@@ -379,9 +215,6 @@ public static class WindowsDnsHardening
 
         try
         {
-            // ArgumentList-style args (not single string) so we don't have to
-            // worry about shell quoting around the alias (which may contain
-            // spaces on locales we haven't seen).
             var req = new ProcessRequest(
                 ExecutablePath: "netsh.exe",
                 Arguments: new[]
@@ -419,23 +252,7 @@ public static class WindowsDnsHardening
         }
     }
 
-    /// <summary>
-    /// Test override — when non-null, <see cref="TrySetTunMetric(int, ILogger)"/>
-    /// uses this runner instead of constructing a real <see cref="ProcessRunner"/>.
-    /// Allows the existing static <see cref="Apply"/> / <see cref="Restore"/>
-    /// public API to be exercised end-to-end with a fake netsh. Tests MUST
-    /// reset this back to <c>null</c> in a try/finally so other tests aren't
-    /// poisoned. Not thread-safe — assumes serial xUnit execution within the
-    /// fixture (single test class), which matches our existing test pattern.
-    /// </summary>
     internal static IProcessRunner? _runnerOverride;
-
-    // Phase 7 Wave 34 (2026-05-19): retired the local HardeningStateOptions
-    // field. Both Save/Load now use the JsonTypeInfo<HardeningState>
-    // overload directly against WindowsDnsHardeningJsonContext.Default.
-    // Wire format identical (PascalCase keys + WriteIndented matched what
-    // the local options pinned; both inherited from the context's
-    // [JsonSourceGenerationOptions] in Wave 31b).
 
     private static void SaveState(HardeningState state)
     {
@@ -462,14 +279,6 @@ public static class WindowsDnsHardening
         }
     }
 
-    // ─── State types ──────────────────────────────────────────────────────────
-
-    // Phase 6 — Wave 31b (2026-05-19): visibility flipped private → internal
-    // so the sibling JsonSerializerContext below (also Windows-only) can
-    // generate JsonTypeInfo for them at compile time. The contract is
-    // assembly-private — InternalsVisibleTo VPNRouter.Tests sees them too,
-    // which is the desired behaviour (tests can construct + assert state
-    // shapes directly). No external caller depends on these types.
     internal sealed class HardeningState
     {
         public SavedRegValue Smhnr { get; set; } = new();
@@ -484,19 +293,6 @@ public static class WindowsDnsHardening
     }
 }
 
-// Phase 6 — Wave 31b (2026-05-19): sibling JsonSerializerContext for the
-// dns_hardening_state.json sidecar. Windows-only because the entire
-// containing class is gated behind PLATFORM_WINDOWS — registering
-// HardeningState in the cross-platform VPNRouter.Core.Json.AppJsonContext
-// would require either #if-guarded attributes (clumsy) or moving the
-// state types out of the Windows-only file (defeats the platform gating).
-//
-// Same generator options as AppJsonContext (PropertyNameCaseInsensitive,
-// WhenWritingNull) so the resolver chain composes uniformly with the
-// reflective fallback in HardeningStateOptions.
-// Phase 7 Wave 34: WriteIndented=true preserves the human-readable
-// dns_hardening_state.json shape that the retired HardeningStateOptions
-// field pinned pre-Wave-34.
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     PropertyNameCaseInsensitive = true,

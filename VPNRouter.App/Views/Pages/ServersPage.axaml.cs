@@ -18,10 +18,6 @@ public partial class ServersPage : UserControl
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
     {
-        // v2.40.0-r5 (audit P1): DataContextChanged can fire repeatedly (window
-        // recreation, headless tests, host-context swap). Unsubscribe the OLD VM
-        // before wiring the new one — else each change leaks a handler, keeps the
-        // old VM alive, and double-fires ScrollIntoView.
         if (_subscribedVm is not null)
             _subscribedVm.ActiveServerChanged -= OnActiveServerChanged;
         _subscribedVm = DataContext as MainWindowViewModel;
@@ -41,7 +37,6 @@ public partial class ServersPage : UserControl
         });
     }
 
-    // Right click on a server item → open detail editor for THAT item.
     private void ServerList_ContextRequested(object? sender, ContextRequestedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;

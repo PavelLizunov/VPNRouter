@@ -3,14 +3,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// G3 (2026-06-27): a subscription refresh must reconnect ONLY when the ACTIVE
-/// server's identity (host|port|uuid) changed — a rotation of some OTHER server
-/// in the pool must not drop the tunnel. These pin the pure decision helpers
-/// (<see cref="SubscriptionRefreshDiff.ActiveServerSignature"/>); the
-/// RefreshSubscriptionSilentAsync wiring compares before/after signatures and
-/// skips the reconnect when they're equal.
-/// </summary>
 public class SubscriptionRefreshDiffTests
 {
     private static VlessServerEntry S(string name, string host, int port, string uuid)
@@ -29,13 +21,12 @@ public class SubscriptionRefreshDiffTests
     public void OtherServerRotated_ActiveSignatureUnchanged_NoReconnect()
     {
         var before = new[] { S("DE", "1.1.1.1", 443, "u1"), S("IS", "2.2.2.2", 443, "u2") };
-        // DE rotated its UUID; the active server IS is untouched.
         var after = new[] { S("DE", "1.1.1.1", 443, "u1-rotated"), S("IS", "2.2.2.2", 443, "u2") };
 
         var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "IS");
         var sigAfter = SubscriptionRefreshDiff.ActiveServerSignature(after, "IS");
 
-        Assert.Equal(sigBefore, sigAfter); // unchanged -> G3 skips the reconnect
+        Assert.Equal(sigBefore, sigAfter);
     }
 
     [Fact]
@@ -60,7 +51,6 @@ public class SubscriptionRefreshDiffTests
     [Fact]
     public void ActiveServerRemoved_SignatureNull_TreatedAsChanged()
     {
-        // Active "IS" no longer in the refreshed set -> null != before -> reconnect.
         var after = new[] { S("DE", "1.1.1.1", 443, "u1") };
         Assert.Null(SubscriptionRefreshDiff.ActiveServerSignature(after, "IS"));
     }
@@ -75,7 +65,6 @@ public class SubscriptionRefreshDiffTests
     public void ActiveServerSignature_FindsByUuid_EvenIfNameChanged()
     {
         var before = new[] { S("DE-Fast", "1.1.1.1", 443, "u1") };
-        // Provider renamed server from "DE-Fast" to "Germany #1", but host/port/uuid identical
         var after = new[] { S("Germany #1", "1.1.1.1", 443, "u1") };
 
         var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "DE-Fast", "u1");
@@ -97,8 +86,6 @@ public class SubscriptionRefreshDiffTests
     [Fact]
     public void ActiveServerSignature_SharedUserUuid_MatchesByNameNotFirst()
     {
-        // 95%+ of commercial subscription feeds share a single user-level UUID across all server nodes.
-        // ActiveServerSignature must resolve the exact node by Name, not blindly grab server 0 by UUID.
         const string sharedUserUuid = "b09f195d-79e1-4560-9118-875f10b7cb34";
         var servers = new[]
         {

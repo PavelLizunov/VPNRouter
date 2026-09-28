@@ -11,10 +11,6 @@ using VPNRouter.App.Services;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// Manages Windows Service install/uninstall/restart UI. On macOS this VM
-/// reports IsAvailable=false and the corresponding UI section is hidden.
-/// </summary>
 public partial class ServiceViewModel : ObservableObject
 {
     private readonly ILogger _logger;
@@ -24,10 +20,6 @@ public partial class ServiceViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private bool _autostartChecked;
     [ObservableProperty] private string _statusMessage = string.Empty;
-    // v2.27 §4.5 — expose service PID so the UI can show a prominent
-    // "● Running — PID 1234" status line instead of the tiny pill users miss.
-    // Best-effort; null when not running or when process enumeration fails
-    // (cross-session access-denied for a non-admin App, for example).
     [ObservableProperty] private int? _servicePid;
     [ObservableProperty] private bool _isBusy;
 
@@ -84,9 +76,6 @@ public partial class ServiceViewModel : ObservableObject
     }
 
 #if PLATFORM_WINDOWS
-    // Best-effort lookup of VPNRouter.Service PID via Process enumeration.
-    // Returns null if the service isn't running, enumeration fails, or the
-    // caller lacks rights to see cross-session processes (non-admin App).
     private static int? ResolveServicePid()
     {
         try

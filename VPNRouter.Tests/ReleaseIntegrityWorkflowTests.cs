@@ -128,7 +128,6 @@ public sealed class ReleaseIntegrityWorkflowTests
     [Fact]
     public void EmbeddedPython_BenignFixturesCoverHashFirstAndDataOnlyInspection()
     {
-        // The workflow runs on Ubuntu; other platforms retain the YAML/source contracts.
         if (!OperatingSystem.IsLinux()) return;
         var script = Script("Verify integrity");
         var python = script[(script.IndexOf("import hashlib", StringComparison.Ordinal))..];

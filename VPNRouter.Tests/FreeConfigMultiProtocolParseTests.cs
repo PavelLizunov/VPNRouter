@@ -5,10 +5,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// 2026-09-16 review P1: leftover VlessUriParser sites after the 2.50
-/// multi-protocol overhaul must use ServerUriParser.
-/// </summary>
 public sealed class FreeConfigMultiProtocolParseTests
 {
     [Fact]

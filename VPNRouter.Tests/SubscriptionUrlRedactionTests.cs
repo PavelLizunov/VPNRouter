@@ -13,11 +13,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// SEC-1: subscription URLs embed provider tokens in path/query; every {Url}
-/// log argument in SubscriptionFetcher must go through CanaryPolicy.RedactUrl.
-/// Pure redaction shape is pinned by CanaryPolicyTests — not duplicated here.
-/// </summary>
 [Collection(SubscriptionFetcherCollection.Name)]
 public sealed class SubscriptionUrlRedactionTests
 {
@@ -27,7 +22,6 @@ public sealed class SubscriptionUrlRedactionTests
     private const string CleanVless =
         "vless://uuid1@server1.example:443?security=tls&type=tcp&flow=xtls-rprx-vision#one";
 
-    // Placeholder-bait pubkey -> 0 servers -> fires both RefreshEntryAsync warning sites.
     private const string PlaceholderPubkey =
         "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU";
 
@@ -114,7 +108,6 @@ public sealed class SubscriptionUrlRedactionTests
         var (logger, sink) = BuildCapturingLogger();
         const string ownerRepo = "testowner/testrepo?token=secret123";
 
-        // Pre-seed cache so the test is deterministic, fast, and does not perform un-intercepted WAN HTTP calls
         Directory.CreateDirectory(VPNRouter.Core.AppPaths.CacheDir);
         var cacheFile = Path.Combine(VPNRouter.Core.AppPaths.CacheDir, "remote_versions.json");
         var entry = new
@@ -146,8 +139,6 @@ public sealed class SubscriptionUrlRedactionTests
 
         try
         {
-            // Use reflection or invoke internal/private method if needed, or hit public EnsureGeoFilesAsync / test helper
-            // We can invoke EnsureFileAsync via reflection to test arbitrary sensitiveUrl
             var method = typeof(GeoDataDownloader).GetMethod("EnsureFileAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             Assert.NotNull(method);
             var task = (Task<bool>)method.Invoke(downloader, new object[] { sensitiveUrl, tmp, 100L, "test-label", CancellationToken.None })!;

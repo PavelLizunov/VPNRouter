@@ -3,12 +3,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.32.0 (Android-led) — pin tests for the Core <see cref="ConfigShareDocument"/>
-/// schema. Verifies the round-trip
-/// invariant (Build → Serialize → TryParse preserves all fields), schema
-/// rejection paths, preview generation, and suggested export filenames.
-/// </summary>
 public class ConfigShareDocumentTests
 {
     private static ConfigShareDocument BuildSampleDocument()
@@ -263,8 +257,6 @@ public class ConfigShareDocumentTests
     [Fact]
     public void Parse_DropsExportedFromNullToDefault()
     {
-        // Producer omitted exported_from entirely — TryParse should not
-        // crash with a NullReferenceException downstream.
         var json = $"{{\"schema\":\"{ConfigShareDocument.SchemaMarker}\",\"version\":1,\"config_mode\":\"subscribe\"}}";
         var result = ConfigShareDocument.TryParse(json);
         Assert.True(result.Ok, $"parse failed: {result.Error}");

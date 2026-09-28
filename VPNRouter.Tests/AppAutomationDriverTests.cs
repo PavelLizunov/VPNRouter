@@ -98,11 +98,9 @@ public sealed class AppAutomationDriverTests : IDisposable
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             var baseUri = $"http://127.0.0.1:{port}";
 
-            // 1. Unauthenticated request should return 401
             var unauthResp = await client.GetAsync($"{baseUri}/metrics");
             Assert.Equal(HttpStatusCode.Unauthorized, unauthResp.StatusCode);
 
-            // 2. Authenticated GET /metrics
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", secret);
             var metricsResp = await client.GetAsync($"{baseUri}/metrics");
             Assert.Equal(HttpStatusCode.OK, metricsResp.StatusCode);
@@ -116,7 +114,6 @@ public sealed class AppAutomationDriverTests : IDisposable
             Assert.True(root.GetProperty("system").GetProperty("gc_allocated_mb").GetDouble() > 0);
             Assert.False(root.GetProperty("ui").GetProperty("is_connected").GetBoolean());
 
-            // 3. POST /ui/action: switch tab
             var actionPayload = new { action = "switch_tab", value = "2" };
             var actionContent = new StringContent(JsonSerializer.Serialize(actionPayload), Encoding.UTF8, "application/json");
             var actionResp = await client.PostAsync($"{baseUri}/ui/action", actionContent);
@@ -124,7 +121,6 @@ public sealed class AppAutomationDriverTests : IDisposable
 
             Assert.Equal(2, vm.SelectedTabIndex);
 
-            // 4. GET /ui/tree
             var treeResp = await client.GetAsync($"{baseUri}/ui/tree");
             Assert.Equal(HttpStatusCode.OK, treeResp.StatusCode);
 
@@ -133,12 +129,10 @@ public sealed class AppAutomationDriverTests : IDisposable
             Assert.True(treeDoc.RootElement.GetProperty("ok").GetBoolean());
             Assert.NotNull(treeDoc.RootElement.GetProperty("root"));
 
-            // 5. POST /ui/action: malformed JSON returns 400
             var badContent = new StringContent("not-valid-json", Encoding.UTF8, "application/json");
             var badResp = await client.PostAsync($"{baseUri}/ui/action", badContent);
             Assert.Equal(HttpStatusCode.BadRequest, badResp.StatusCode);
 
-            // 6. GET /ui/screenshot: returns 200 OK + image/png
             var screenResp = await client.GetAsync($"{baseUri}/ui/screenshot");
             Assert.Equal(HttpStatusCode.OK, screenResp.StatusCode);
             Assert.Equal("image/png", screenResp.Content.Headers.ContentType?.MediaType);

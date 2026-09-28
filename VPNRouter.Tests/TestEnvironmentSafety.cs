@@ -27,10 +27,6 @@ internal static class TestEnvironmentSafety
         VPNRouter.Core.AppPaths.EnsureDirectories();
         AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteTestDataDirectory();
 
-        // Unit tests must never inspect or mutate a developer/CI machine's
-        // physical VPNRouter-TUN device. Tests that exercise cleanup replace
-        // these seams with their own deterministic fakes and restore this
-        // process-wide safe baseline afterwards.
         TunAdapterDiagnostics.Runner = new FakeProcessRunner().OnRun(
             _ => true,
             new ProcessResult(0, string.Empty, string.Empty, TimeSpan.Zero, false));
@@ -50,6 +46,6 @@ internal static class TestEnvironmentSafety
     {
         var path = _testDataDir;
         if (string.IsNullOrWhiteSpace(path)) return;
-        try { Directory.Delete(path, recursive: true); } catch { /* process-exit best effort */ }
+        try { Directory.Delete(path, recursive: true); } catch {  }
     }
 }

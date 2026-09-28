@@ -2,13 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// v2.28.6 Phase 5 — FreeConfigFreshness pure-logic tests
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// All freshness math (tier classification, opacity, sort key, recheck-merge)
-// lives in Core so it's testable without an Avalonia headless harness. The
-// App's FreeConfigItemViewModel just delegates its getters.
 
 public class FreeConfigFreshnessTierTests
 {
@@ -31,9 +24,9 @@ public class FreeConfigFreshnessTierTests
     }
 
     [Theory]
-    [InlineData(0)]              // freshly tested
-    [InlineData(0.5)]            // half a day
-    [InlineData(0.99)]           // just under 1 day
+    [InlineData(0)]
+    [InlineData(0.5)]
+    [InlineData(0.99)]
     public void Tier_Fresh_When_Under_24h(double daysAgo)
     {
         var entry = Make(Now.AddDays(-daysAgo));
@@ -69,7 +62,7 @@ public class FreeConfigFreshnessTierTests
     [Fact]
     public void Tier_Failed_When_LastVerifyFailedAt_Greater_Than_LastTested()
     {
-        var entry = Make(Now.AddHours(-1), Now); // verified an hour ago, failed now
+        var entry = Make(Now.AddHours(-1), Now);
         Assert.Equal(
             VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshnessTier.Failed,
             VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.ClassifyTier(entry, Now));
@@ -78,8 +71,6 @@ public class FreeConfigFreshnessTierTests
     [Fact]
     public void Tier_Failed_Wins_Over_Fresh_Age()
     {
-        // Even if LastTestedAt is in the future (fresh), a failure timestamp
-        // ≥ tested makes it Failed. Defensive: locks the comparison rule.
         var entry = Make(Now, Now);
         Assert.Equal(
             VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshnessTier.Failed,
@@ -89,8 +80,6 @@ public class FreeConfigFreshnessTierTests
     [Fact]
     public void Tier_Fresh_When_LastTestedAt_Null()
     {
-        // Defensive: post-import / pre-Phase-1 entries with null timestamp
-        // are surfaced as Fresh rather than dropped from the tier system.
         var entry = Make(null);
         Assert.Equal(
             VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshnessTier.Fresh,
@@ -132,8 +121,6 @@ public class FreeConfigFreshnessTierTests
     [Fact]
     public void IsStale_True_For_FailedLastCheck()
     {
-        // Even a freshly verified entry is "stale" if it failed the most
-        // recent recheck — the bulk-Recheck button picks it up too.
         var entry = Make(Now.AddHours(-1), Now);
         Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.IsStale(entry, Now));
     }
@@ -166,7 +153,6 @@ public class FreeConfigFreshnessTierTests
     [Fact]
     public void SortKey_Within_Tier_Orders_By_Latency()
     {
-        // Two fresh entries differ only in latency → lower latency sorts first.
         var fast = Make(Now.AddHours(-1)); fast.LatencyMs = 10;
         var slow = Make(Now.AddHours(-1)); slow.LatencyMs = 200;
 
@@ -187,7 +173,6 @@ public class FreeConfigFreshnessTierTests
     public void AgeDays_Returns_0_For_Null_Or_Future()
     {
         Assert.Equal(0, VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.AgeDays(Make(null), Now));
-        // Future timestamp (clock skew defensive): still returns 0.
         Assert.Equal(0, VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.AgeDays(Make(Now.AddDays(1)), Now));
     }
 }

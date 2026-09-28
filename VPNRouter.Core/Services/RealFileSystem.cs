@@ -1,15 +1,8 @@
 #nullable enable
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Production <see cref="IFileSystem"/> implementation — 1:1 mapping to
-/// <see cref="System.IO.File"/>, <see cref="System.IO.Directory"/>, and
-/// <see cref="System.IO.Path"/>. Stateless, thread-safe by virtue of
-/// delegating to the underlying OS calls.
-/// </summary>
 public sealed class RealFileSystem : IFileSystem
 {
-    /// <summary>Retry interval used by <see cref="TryAcquireExclusiveLockAsync"/>.</summary>
     private static readonly TimeSpan LockRetryDelay = TimeSpan.FromMilliseconds(100);
 
     public Task<string> ReadAllTextAsync(string path, CancellationToken ct = default)
@@ -28,8 +21,6 @@ public sealed class RealFileSystem : IFileSystem
 
     public void DeleteFile(string path)
     {
-        // File.Delete is already no-throw on missing files; replicate
-        // that exactly so the contract is honoured.
         if (File.Exists(path))
             File.Delete(path);
     }
@@ -79,28 +70,10 @@ public sealed class RealFileSystem : IFileSystem
 
     public Stream OpenWrite(string path) => File.Create(path);
 
-    /// <summary>
-    /// Real exclusive-lock implementation. Opens the file with
-    /// <see cref="FileShare.None"/>; if another process or thread already
-    /// holds the file, the open throws <see cref="IOException"/>, we sleep
-    /// briefly and retry until <paramref name="timeout"/> elapses.
-    ///
-    /// <para>
-    /// Security note: this is the anti-double-launch guard. The returned
-    /// disposable both releases the OS lock AND deletes the file so a
-    /// subsequent launch sees a clean slate. If the process is
-    /// force-killed, the OS releases the lock automatically but the file
-    /// stays behind — <see cref="LockFile.DetectPreviousCrash"/> uses that
-    /// to surface a "previous run did not shut down cleanly" banner.
-    /// </para>
-    /// </summary>
     public async Task<IDisposable?> TryAcquireExclusiveLockAsync(
         string path, TimeSpan timeout, CancellationToken ct = default)
     {
         var deadline = DateTime.UtcNow + timeout;
-        // Ensure parent directory exists — the file open will otherwise
-        // fail with DirectoryNotFoundException, which we don't want to
-        // misinterpret as "another process holds the lock".
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
@@ -121,23 +94,17 @@ public sealed class RealFileSystem : IFileSystem
             }
             catch (IOException)
             {
-                // Held by another process — retry until timeout.
                 if (DateTime.UtcNow >= deadline) return null;
                 try { await Task.Delay(LockRetryDelay, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { throw; }
             }
             catch (UnauthorizedAccessException)
             {
-                // Permission denied — no point retrying.
                 return null;
             }
         }
     }
 
-    /// <summary>
-    /// Disposable wrapper that releases the OS file lock and best-effort
-    /// deletes the lock file so a subsequent process starts clean.
-    /// </summary>
     private sealed class LockHandle : IDisposable
     {
         private readonly FileStream _stream;
@@ -153,8 +120,8 @@ public sealed class RealFileSystem : IFileSystem
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            try { _stream.Dispose(); } catch { /* best-effort */ }
-            try { if (File.Exists(_path)) File.Delete(_path); } catch { /* best-effort */ }
+            try { _stream.Dispose(); } catch {  }
+            try { if (File.Exists(_path)) File.Delete(_path); } catch {  }
         }
     }
 }

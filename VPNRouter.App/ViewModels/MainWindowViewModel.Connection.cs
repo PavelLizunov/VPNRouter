@@ -9,36 +9,19 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
-    // ── Engine events ──
-
-    /// <summary>
-    /// 2026-06-09: AutoFailover surfaced a user-facing message — either it
-    /// switched servers after a dead-config probe, or (the rectuspc case) the
-    /// active server is unreachable and there's no candidate to fail over to.
-    /// The VPN process is still "running", so we don't flip IsConnected; we
-    /// overwrite the connection status line with the warning so the user
-    /// doesn't stare at a silent "Connected" while no traffic flows. Persists
-    /// until the next state transition (the engine's StatusChanged fires only
-    /// on transitions, not on healthy periodic ticks).
-    /// </summary>
     private void OnAutoFailoverMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return;
         Dispatcher.UIThread.Post(() =>
         {
             var text = "⚠ " + message;
-            StatusText = text;                 // classic/advanced status line
-            // Simple Mode (the default UI) does NOT bind StatusText — it shows
-            // SimpleStatusTitle/Description. Surface the same alert through the
-            // Simple status card so a silent dead "Connected" reads as a warning
-            // instead of a green "Protected" (rectuspc, v2.41.2-r3).
+            StatusText = text;
             _lastConnectionAlert = text;
             RaiseSimpleAlertProps();
             _logger?.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
         });
     }
 
-    // W1.3: drive the "True split active" badge from the driver's engaged↔disengaged transitions.
     private void OnTrueSplitEngagedChanged(bool engaged) =>
         Dispatcher.UIThread.Post(() => IsTrueSplitActive = engaged);
 
@@ -83,8 +66,6 @@ public partial class MainWindowViewModel
         {
             if (status.StartsWith("Connected") || status.StartsWith("VPN Router is running"))
             {
-                // NIGHT-07: legacy Connected*/VPN Router is running cannot SET IsConnected
-                // from false; only refresh display if already true from typed Connected event.
                 if (!IsConnected) return;
 
                 ConnectButtonText = Strings.StopVPN;
@@ -135,8 +116,6 @@ public partial class MainWindowViewModel
         });
     }
 
-    // ── Commands ──
-
     [RelayCommand]
     private async Task RestartTrueSplitAsync()
     {
@@ -183,29 +162,11 @@ public partial class MainWindowViewModel
             StatusText = Strings.Stopping;
             try
             {
-                // v2.31.6-r20 — symmetric Stop. The pre-r20 path was a single
-                // _engine.Stop() call that only affected the GUI's own engine.
-                // If the Windows Service was the actual owner of sing-box (or
-                // an older crashed GUI left orphans), _engine._singBox was
-                // null and Stop became a no-op while the real sing-box kept
-                // running. RuntimeStatusDetector then re-flipped IsConnected
-                // back to true within 1-2 seconds — user reports
-                // "press disconnect, it turns back on after a second".
-                //
-                // Mirror the cleanup the Connect-branch already does (kill
-                // orphan sing-box + stop Windows Service) so Stop guarantees
-                // the tunnel actually goes down regardless of who started it.
                 await Task.Run(() =>
                 {
                     try { _engine.Stop(); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] _engine.Stop"); }
 
-                    // v2.31.10-r2: pass respectTunLock:false — user clicked
-                    // Stop, so we explicitly INTEND to take down whoever
-                    // is running sing-box (even Service-spawned). Default
-                    // TunLock-aware path is for App startup; here it would
-                    // turn the Stop button into a no-op when Service held
-                    // the lock.
                     try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] OrphanCleanup on stop"); }
 
@@ -238,8 +199,6 @@ public partial class MainWindowViewModel
                 IsConnecting = false;
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;
-                // v2.20.0: clear the freshly-connected guard so a later poll
-                // can faithfully reflect whatever state sing-box ends up in.
                 _lastSuccessfulConnectAt = DateTime.MinValue;
             }
             return;
@@ -263,13 +222,10 @@ public partial class MainWindowViewModel
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
-            // Ensure clean state: stop any existing VPN, kill orphans,
-            // stop Windows Service. This guarantees the TUN lock is free.
             await Task.Run(() =>
             {
                 try
                 {
-                    // Stop our own engine if it's somehow still running
                     if (_engine.IsRunning)
                         _engine.Stop();
                 }
@@ -278,13 +234,6 @@ public partial class MainWindowViewModel
                     _logger.Debug(ex, "[VM] Pre-start engine stop");
                 }
 
-                // v2.31.10-r2: pass respectTunLock:false — user clicked
-                // Connect, so we explicitly INTEND to free the TUN lock
-                // (kill whatever is currently holding it, including
-                // Service-spawned sing-box) before our own engine tries
-                // to acquire it. Without this, default TunLock-aware
-                // skip would leave the Service-spawned sing-box alive
-                // and the next sc-stop wouldn't reach it via this VM.
                 try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
 
 #if PLATFORM_WINDOWS
@@ -310,7 +259,6 @@ public partial class MainWindowViewModel
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
-            // Subscribe mode: aggregate enabled subscriptions → feed into VLESS engine path
             var aggregatedServers = _settings.App.Subscriptions
                 .Where(s => s.Enabled)
                 .SelectMany(s => s.Servers)
@@ -319,69 +267,19 @@ public partial class MainWindowViewModel
             {
                 _settings.Vless.Servers = aggregatedServers;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                // v2.30.2-r3 Bug 2A fix #2: same fix as r2's
-                // ReconnectAsync.Subscription branch — do NOT force
-                // ConfigMode=generated. The initial-connect path here
-                // had the same bug-for-bug indicator gate problem:
-                // RefreshActiveIndicator() reads ConfigMode and gates
-                // SubscriptionServers list highlighting on
-                // ConfigMode=="subscribe". Forcing to "generated"
-                // killed the green dot on the Subscriptions list even
-                // though the engine connected correctly.
-                //
-                // Caught during in-app smoke test on r2 — clicking
-                // Запустить VPN button on a sub server connected fine
-                // ("Подключено [full] → de-01 443 main-brat") but the
-                // row indicator stayed dark. Same fix as r2 reconnect.
-                //
-                // Engine still uses Vless.Servers + Vless.ActiveServer
-                // we just wrote. Resolver re-aggregates idempotently
-                // when ConfigMode=subscribe — same content, same
-                // active. Net: identical engine behaviour, correct UI.
                 _logger?.Information(
                     "[VM] ToggleConnectionAsync.Connect.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
                     aggregatedServers.Count, _settings.Vless.ActiveServer);
             }
 
-            // macOS: ensure sudo access (one-time password prompt)
             if (OperatingSystem.IsMacOS())
                 await Task.Run(EnsureMacSudoAccess);
 
             try
             {
-                // v2.35.2 Stage 2 (PinkuDani 2026-05-21) — two-phase start
-                // timer. Closes the original Fix #2 spec deferred until the
-                // typed VpnEngine.Connected event landed in Stage 1
-                // (commit b012fe6). Replaces the pre-Stage-2 single 60s
-                // CTS+10s polling pattern with:
-                //
-                //   * Phase A budget (60s) — wait for SingBoxStarted event.
-                //     If we hit the budget, sing-box never spawned (real
-                //     hang in DeployAndSetupFirewall / TunAdapterDiagnostics
-                //     / wintun launch); Stop with Phase A diagnostic.
-                //   * Phase B budget (20s) — wait for Connected event
-                //     (TUN warm-up gstatic probe success). If we hit the
-                //     budget, sing-box is running but TUN never confirmed;
-                //     Stop with Phase B diagnostic (wintun driver issue or
-                //     upstream firewall blocking the probe).
-                //
-                // The pre-Stage-2 60s comment block (Win10 LTSC NetAdapter
-                // PowerShell module pay) is now Phase A's budget. Phase B's
-                // 20s is sized at 4x the happy-path warmup probe (~5s on
-                // healthy installs, 15 attempts × 1s loop in
-                // ScheduleWarmupProbe). The pre-Stage-2 IsRunning 10s
-                // polling fallback is gone — Connected event is the
-                // unambiguous "actually routing" signal.
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                // v2.32.1-r5 (Bug-r10-B) + reconnect fix (2026-06-15): session-
-                // scoped opt-out from ConflictingVpnDetector, set by
-                // IgnoreVpnConflictCommand. KEPT for the session (NOT reset here)
-                // so the subscription/server-switch reconnect + AutoFailover honour
-                // it too — else a removed-config reconnect re-throws
-                // ConflictingVpnException and the VPN can't come back. A fresh
-                // re-detect happens on the next app launch.
                 var skipConflictCheck = _skipVpnConflictThisSession;
 
                 var startTask = Task.Run(
@@ -406,12 +304,8 @@ public partial class MainWindowViewModel
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Connected)
                 {
-                    // Phase A + B both passed — sing-box up AND TUN warmup
-                    // probe succeeded. Surface await on startTask in case
-                    // a late exception was buffered (rare; defence pin).
-                    try { await startTask; } catch { /* event-side success
-                        is the authoritative signal; startTask exception
-                        post-Connected is a non-event race */ }
+                    try { await startTask; } catch {
+ }
                     IsConnected = true;
                     IsConnecting = false;
                     _lastSuccessfulConnectAt = DateTime.UtcNow;
@@ -419,24 +313,11 @@ public partial class MainWindowViewModel
                     StartSubRefreshTimer();
                     RefreshActiveIndicator();
                     RestoreConnectedStatus();
-                    // Bug-r9-E: clear any stale conflict banner after a
-                    // successful start (e.g. user dismissed the other VPN
-                    // and retried — pre-r9-E the banner would linger).
                     ConflictingVpnWarningText = string.Empty;
                 }
                 else if (outcome == Internals.TwoPhaseStartOutcome.StartTaskCompleted)
                 {
-                    // StartAsync returned BEFORE SingBoxStarted fired.
-                    // Surface any exception (TunOwnershipException,
-                    // ConflictingVpnException, etc.) by awaiting the task.
-                    // If it returned cleanly, OnEngineStatus will eventually
-                    // flip IsConnected when the engine emits a status event.
                     await startTask;
-                    // Audit batch-1 #2 residual: without this reset a clean
-                    // return with no follow-up status event left the UI stuck
-                    // on the "Connecting..." spinner forever. IsConnected
-                    // itself stays with OnEngineStatus (typed-Connected is the
-                    // only success signal); we only release the busy state.
                     IsConnecting = false;
                     _logger.Warning("[VM] StartAsync returned without firing SingBoxStarted — leaving state to OnEngineStatus");
                 }
@@ -462,12 +343,8 @@ public partial class MainWindowViewModel
                     ConnectButtonText = Strings.StartVPN;
                     return;
                 }
-                else // Cancelled
+                else
                 {
-                    // Outer CTS tripped (likely because both Phase A and
-                    // Phase B budgets summed up have expired). Map to the
-                    // same diagnostic as the dominant phase — Phase A's
-                    // is the conservative default (start never happened).
                     _logger.Error("[VM] Two-phase start cancelled by outer CTS");
                     try { await Task.Run(() => _engine.Stop()); } catch { }
                     IsConnecting = false;
@@ -491,15 +368,6 @@ public partial class MainWindowViewModel
             }
             catch (VPNRouter.Core.Services.ConflictingVpnException cvex)
             {
-                // Bug-r9-E (2026-05-11) — surface the named conflicting
-                // VPN as a dismissible header banner so the user knows
-                // exactly which app to close. Pre-r9-E this surfaced as
-                // the cryptic wintun "Cannot create a file when that
-                // file already exists" through the generic catch below.
-                // v2.32.1-r4 (Bug-r10-A): also capture conflicts into
-                // _lastConflicts so KillConflictingVpnCommand can act
-                // on them without re-running detection (which races
-                // with the user closing the other VPN themselves).
                 _logger.Warning(
                     "[VM] Conflicting VPN detected: {Count} processes ({First})",
                     cvex.Conflicts.Count,
@@ -518,13 +386,6 @@ public partial class MainWindowViewModel
             }
             catch (OperationCanceledException)
             {
-                // Stage 2 (2026-05-21): the coordinator's normal Phase A /
-                // Phase B paths now produce explicit outcomes; this catch
-                // only fires if a deeper StartAsync call surfaces an OCE
-                // after the coordinator already saw StartTaskCompleted, or
-                // the outer CTS race itself. Mirrors the Phase A diagnostic
-                // since "no signal at all" is conservatively a Phase A
-                // class of failure.
                 _logger.Error("[VM] OperationCanceledException out of two-phase start path — treating as Phase A timeout. Stopping engine.");
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnecting = false;
@@ -537,8 +398,6 @@ public partial class MainWindowViewModel
             {
                 _logger.Error(ex, "Failed to start VPN");
                 IsConnecting = false;
-                // NIGHT-07: preserve green ONLY if already typed ready IsConnected;
-                // otherwise take the stop/failed path so engine.IsRunning never fabricates connected.
                 if (IsConnected && _engine.IsRunning)
                 {
                     ConnectButtonText = Strings.StopVPN;

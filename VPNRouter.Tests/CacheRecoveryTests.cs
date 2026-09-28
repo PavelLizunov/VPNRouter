@@ -11,22 +11,8 @@ using StjJson = System.Text.Json.JsonSerializer;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.32.0 — pin <see cref="CacheRecovery"/> across all three on-disk JSON
-/// caches (free_configs.json, profiles.json, state.json). Goal: a corrupt
-/// or schema-mismatched cache file must never silently break a feature —
-/// it must always be quarantined (renamed to <c>.corrupt-{ts}</c> for post-
-/// mortem) and the in-memory load must surface a typed
-/// <see cref="RecoveryReason"/> that callers can branch on.
-///
-/// <para>Tests use temp directories so each one is hermetic — no
-/// %ProgramData% pollution. The <see cref="DirectoryFixture"/> helper
-/// auto-cleans on dispose so a failing run leaves the host clean.</para>
-/// </summary>
 public sealed class CacheRecoveryTests
 {
-    // ─── direct CacheRecovery API tests ──────────────────────────────────────
-
     [Fact]
     public void LoadOrRecover_FileMissing_ReturnsNotFound()
     {
@@ -63,7 +49,6 @@ public sealed class CacheRecoveryTests
         Assert.NotNull(result.Value);
         Assert.Equal("alpha", result.Value!.Name);
         Assert.Equal(2, result.Value.Items.Count);
-        // Round-trip must not have written any sibling .corrupt files.
         Assert.Empty(EnumerateCorruptBackups(path));
     }
 
@@ -72,7 +57,6 @@ public sealed class CacheRecoveryTests
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("legacy.json");
-        // Pre-v2.32.0 cache shape: no schema_version field at all.
         File.WriteAllText(path, "{\"name\":\"legacy\",\"items\":[\"x\"]}");
 
         var result = CacheRecovery.LoadOrRecover<DummyCache>(
@@ -83,7 +67,6 @@ public sealed class CacheRecoveryTests
         Assert.Equal(RecoveryReason.SchemaMissing, result.Reason);
         Assert.Null(result.Value);
         Assert.True(result.ShouldRebuild);
-        // Original file moved out of the way so the next save can take it.
         Assert.False(File.Exists(path));
         var backups = EnumerateCorruptBackups(path);
         Assert.Single(backups);
@@ -97,7 +80,6 @@ public sealed class CacheRecoveryTests
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("truncated.json");
-        // Mid-byte truncation — real-world disk-full / power-cut shape.
         File.WriteAllText(path, "{\"schema_version\":1,\"items\":[\"a\",\"b");
 
         var result = CacheRecovery.LoadOrRecover<DummyCache>(
@@ -120,7 +102,6 @@ public sealed class CacheRecoveryTests
         File.WriteAllText(path,
             "{\"schema_version\":1,\"name\":\"old\",\"items\":[]}");
 
-        // Caller expects v2 — v1 must be quarantined.
         var result = CacheRecovery.LoadOrRecover<DummyCache>(
             path,
             expectedSchemaVersion: 2,
@@ -137,7 +118,6 @@ public sealed class CacheRecoveryTests
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("structural.json");
-        // schema_version OK, JSON OK, but Items is null (mandatory list).
         File.WriteAllText(path,
             "{\"schema_version\":1,\"name\":\"alpha\",\"items\":null}");
 
@@ -156,9 +136,6 @@ public sealed class CacheRecoveryTests
     [Fact]
     public void LoadOrRecover_FutureSchemaForwardCompat_PassesThrough()
     {
-        // Forward-compat semantic: a future schema version (>= expected)
-        // is accepted on the assumption new fields are additive. The
-        // contract from the design doc is "< expected → wipe", not "!=".
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("future.json");
         File.WriteAllText(path,
@@ -180,10 +157,6 @@ public sealed class CacheRecoveryTests
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("strict.json");
-        // Probe sees schema_version=1 fine, but the caller's deserialiser
-        // throws on the typed payload (e.g. a custom converter rejects
-        // an enum value). We simulate by handing a deserialiser that
-        // always throws after the probe stage.
         File.WriteAllText(path,
             "{\"schema_version\":1,\"name\":\"x\",\"items\":[]}");
 
@@ -218,9 +191,6 @@ public sealed class CacheRecoveryTests
     [Fact]
     public void LoadOrRecover_TwoCorruptionsSameSecond_BothBackupsPreserved()
     {
-        // If two corrupt loads happen in the same UTC second the
-        // second quarantine must not clobber the first — uniquify with
-        // a numeric suffix.
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("burst.json");
 
@@ -237,15 +207,9 @@ public sealed class CacheRecoveryTests
         Assert.Equal(2, EnumerateCorruptBackups(path).Count);
     }
 
-    // ─── FreeConfigCache integration tests ───────────────────────────────────
-
     [Fact]
     public void FreeConfigCache_Load_OnLegacyFile_QuarantinesAndReturnsEmpty()
     {
-        // Pre-v2.32.0 free_configs.json had no schema_version. On first
-        // launch post-upgrade we must wipe + back up, so the next refresh
-        // rebuilds from network rather than feeding stale-format data
-        // into the verifier.
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("free_configs.json");
         File.WriteAllText(path,
@@ -264,9 +228,6 @@ public sealed class CacheRecoveryTests
     [Fact]
     public void FreeConfigCache_SaveLoadRoundTrip_PreservesEntries()
     {
-        // Happy path: write fresh file, read it back. v2.31.3 sub-5ms
-        // healing must continue to fire so the heal-old regression
-        // test from FreeConfigCacheMigrationTests doesn't backslide.
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("free_configs.json");
         var cache = new FreeConfigCache(NullLogger(), path);
@@ -280,7 +241,7 @@ public sealed class CacheRecoveryTests
                 {
                     Host = "1.2.3.4",
                     Port = 443,
-                    LatencyMs = 3, // sub-5ms — heal must reset on load
+                    LatencyMs = 3,
                     Status = FreeConfigStatus.Verified,
                 },
                 new FreeConfigEntry
@@ -296,7 +257,6 @@ public sealed class CacheRecoveryTests
 
         var roundTrip = cache.Load();
         Assert.Equal(2, roundTrip.Configs.Count);
-        // v2.31.3-r1 heal-old preserved alongside CacheRecovery
         Assert.Equal(0, roundTrip.Configs[0].LatencyMs);
         Assert.Equal(42, roundTrip.Configs[1].LatencyMs);
     }
@@ -306,7 +266,6 @@ public sealed class CacheRecoveryTests
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("free_configs.json");
-        // Cut mid-byte to simulate disk-full / power-cut on save.
         File.WriteAllText(path,
             "{\"schema_version\":1,\"Configs\":[{\"Host\":\"1.2.3.4\",\"Po");
 
@@ -324,7 +283,6 @@ public sealed class CacheRecoveryTests
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("free_configs.json");
-        // Explicit schema_version=0 — pre-v1, should wipe.
         File.WriteAllText(path,
             "{\"schema_version\":0,\"Configs\":[]}");
 
@@ -344,41 +302,16 @@ public sealed class CacheRecoveryTests
         var path = dir.PathFor("free_configs.json");
         var cache = new FreeConfigCache(NullLogger(), path);
 
-        // Caller forgot to set SchemaVersion — Save() must stamp it.
         var file = new FreeConfigCache.CacheFile { SchemaVersion = 0 };
         cache.Save(file);
 
         var raw = File.ReadAllText(path);
-        // Phase 7 Wave 34 (2026-05-19): the FreeConfigCache file shape moved
-        // from compact (WriteIndented=false on the local JsonOptions) to
-        // indented (WriteIndented=true on AppJsonContext) when the cache
-        // serializer migrated to the JsonTypeInfo<T> overload. The cache
-        // file is internal-only (no interop with NekoBox/Hiddify/etc.), and
-        // the on-disk size grows ~50% but stays well within sensible
-        // bounds. Updated this assertion to be whitespace-flexible so the
-        // contract pinned here is "schema_version key has value 1",
-        // independent of the formatter's indentation choice.
         Assert.Matches("\"schema_version\"\\s*:\\s*1", raw);
     }
-
-    // ─── ProfileCacheFile integration tests ──────────────────────────────────
 
     [Fact]
     public void ProfileCache_Load_OnLegacyRawProfileCollection_QuarantinesAndReturnsRebuild()
     {
-        // Pre-v2.32.0 cache/profiles.json was the raw upstream
-        // ProfileCollection JSON — no schema_version, no wrapper. On
-        // first read post-upgrade CacheRecovery must wipe it so we
-        // never feed legacy-shape JSON into the typed wrapper deserialiser.
-        //
-        // Phase 3B (2026-05-18) — migrated from Newtonsoft to STJ via
-        // ProfileManager.SafeJsonOptions. The legacy on-disk format that
-        // GitHubProfileSource pre-v2.32 wrote was Newtonsoft default
-        // PascalCase; we emulate that here by serialising with a non-
-        // snake-case STJ option (no PropertyNameCaseInsensitive, no
-        // [JsonPropertyName] effect on the legacy-bytes side). The
-        // schema-missing branch still trips because the bytes have no
-        // "schema_version" key.
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("profiles.json");
         var legacy = StjJson.Serialize(new ProfileCollection
@@ -401,8 +334,6 @@ public sealed class CacheRecoveryTests
         Assert.False(File.Exists(path));
         var backups = EnumerateCorruptBackups(path);
         Assert.Single(backups);
-        // Backup must preserve the legacy bytes verbatim — operator
-        // can copy it to a recovery dir if they want the old profile.
         Assert.Contains("Legacy", File.ReadAllText(backups.Single()));
     }
 
@@ -424,10 +355,6 @@ public sealed class CacheRecoveryTests
                 },
             },
         };
-        // Phase 3B (2026-05-18) — STJ serialization (matches the
-        // production GitHubProfileSource.LoadAsync write path which now
-        // also uses JsonSerializer.Serialize with WriteIndented=true on
-        // ProfileManager.SafeJsonOptions).
         File.WriteAllText(path,
             StjJson.Serialize(wrapper, ProfileManager.SafeJsonOptions));
 
@@ -454,7 +381,6 @@ public sealed class CacheRecoveryTests
         var result = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
             path,
             expectedSchemaVersion: 1,
-            // Phase 3B (2026-05-18) — STJ deserialization.
             deserialize: j => StjJson.Deserialize<ProfileCacheFile>(j, ProfileManager.SafeJsonOptions),
             structuralCheck: w => w.Profiles is not null);
 
@@ -463,25 +389,15 @@ public sealed class CacheRecoveryTests
         Assert.Single(EnumerateCorruptBackups(path));
     }
 
-    // ─── state.json integration tests ────────────────────────────────────────
-    //
-    // Note: the production StateFile uses a hard-coded %ProgramData% path so
-    // we can't easily redirect it in tests. We pin the schema_version
-    // contract by exercising CacheRecovery directly against a temp file
-    // shaped like state.json — which is exactly what StateFile.Read does
-    // under the hood.
-
     [Fact]
     public void StateFile_LikeCache_Load_OnLegacy_QuarantinesAndReturnsRebuild()
     {
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("state.json");
-        // Pre-v2.32.0 state.json — no schema_version field.
         File.WriteAllText(path,
             "{\"ActiveProfile\":\"Discord_Privacy\",\"SingBoxPid\":1234," +
             "\"StartedAt\":\"2026-05-01T00:00:00\",\"ProcessNames\":[\"Discord.exe\"]}");
 
-        // Use a struct mirroring RunState so we don't pull in CLI namespace.
         var result = CacheRecovery.LoadOrRecover<RunStateLike>(
             path,
             expectedSchemaVersion: 1,
@@ -529,8 +445,6 @@ public sealed class CacheRecoveryTests
         Assert.False(File.Exists(path));
     }
 
-    // ─── helpers ─────────────────────────────────────────────────────────────
-
     private static Serilog.ILogger NullLogger() =>
         new Serilog.LoggerConfiguration()
             .MinimumLevel.Fatal()
@@ -545,7 +459,6 @@ public sealed class CacheRecoveryTests
             .ToList();
     }
 
-    /// <summary>Probe DTO used by the API-level tests.</summary>
     private sealed class DummyCache
     {
         [JsonPropertyName("schema_version")]
@@ -558,14 +471,6 @@ public sealed class CacheRecoveryTests
         public List<string>? Items { get; set; } = new();
     }
 
-    /// <summary>
-    /// STJ-shaped mirror of <c>RunState</c>. Phase 4 (2026-05-18) — migrated
-    /// from Newtonsoft <c>[JsonProperty]</c> to System.Text.Json
-    /// <c>[JsonPropertyName]</c>. The wire field <c>schema_version</c> stays
-    /// snake_case (CacheRecovery's probe is unchanged); the other un-attributed
-    /// fields keep their PascalCase wire keys (matches the pre-Phase-4
-    /// Newtonsoft default).
-    /// </summary>
     private sealed class RunStateLike
     {
         [JsonPropertyName("schema_version")]
@@ -577,11 +482,6 @@ public sealed class CacheRecoveryTests
         public List<string> ProcessNames { get; set; } = new();
     }
 
-    /// <summary>
-    /// Hermetic temp-dir helper so each test owns its own filesystem
-    /// scratch space. Auto-cleans on Dispose; failures during cleanup
-    /// are swallowed (CI may hold transient locks on a logger flush).
-    /// </summary>
     private sealed class DirectoryFixture : IDisposable
     {
         public string Root { get; }
@@ -600,7 +500,7 @@ public sealed class CacheRecoveryTests
         public void Dispose()
         {
             try { Directory.Delete(Root, recursive: true); }
-            catch { /* best-effort cleanup */ }
+            catch {  }
         }
     }
 }

@@ -1,14 +1,3 @@
-// repair_test.go — P01 UPD-2 regression tests for the trampoline repair.
-//
-// Pins the ClickFix-safe invocation shape: the repair bootstrap is written
-// to a temp .ps1 and launched via `-File` (NEVER inline `-Command`, the exact
-// shape Defender's Trojan:Win32/ClickFix.DCW!MTB heuristic fires on). Mirrors
-// VPNRouter.App/Services/SelfRepair.cs.
-//
-// Run from the module dir (Windows — the package uses Windows-only
-// syscall.SysProcAttr fields, so it does not cross-compile to Linux/macOS):
-//
-//	cd VPNRouter.GUI && go test ./...
 package main
 
 import (
@@ -16,8 +5,6 @@ import (
 	"testing"
 )
 
-// TestRepairArgs_UsesFileNotCommand — the argv MUST use `-File` (path as the
-// final element) and MUST NOT contain `-Command`.
 func TestRepairArgs_UsesFileNotCommand(t *testing.T) {
 	const path = `C:\x\y.ps1`
 	args := repairArgs(path)
@@ -44,9 +31,6 @@ func TestRepairArgs_UsesFileNotCommand(t *testing.T) {
 	}
 }
 
-// TestRepairArgs_PathWithSpaces_PreservedAsSingleArg — a path containing
-// spaces must occupy exactly ONE argv slot immediately after -File (no shell
-// re-splitting), which is what keeps `C:\Users\Some User\...` intact.
 func TestRepairArgs_PathWithSpaces_PreservedAsSingleArg(t *testing.T) {
 	const path = `C:\Users\Some User\AppData\Local\Temp\vpnr.ps1`
 	args := repairArgs(path)
@@ -73,8 +57,6 @@ func TestRepairArgs_PathWithSpaces_PreservedAsSingleArg(t *testing.T) {
 	}
 }
 
-// TestRepairScript_DownloadsAndDotExecutes — the stable-channel script keeps
-// the download + dot-execute shape and does NOT carry -Prerelease.
 func TestRepairScript_DownloadsAndDotExecutes(t *testing.T) {
 	script := repairScript(false)
 
@@ -93,8 +75,6 @@ func TestRepairScript_DownloadsAndDotExecutes(t *testing.T) {
 	}
 }
 
-// TestRepairScript_Prerelease_AddsFlag — the prerelease channel appends
-// ` -Prerelease` to the dot-execute line.
 func TestRepairScript_Prerelease_AddsFlag(t *testing.T) {
 	script := repairScript(true)
 	if !strings.Contains(script, "& $tmp -Prerelease") {

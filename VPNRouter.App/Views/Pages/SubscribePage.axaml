@@ -15,19 +15,8 @@
     <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
   </UserControl.Resources>
 
-  <!-- v2.25.3 — SubscribePage redesign per Claude Design handoff section 3.
-       Shares the row-template, column-header, radio-indicator, and arctic
-       active-highlight primitives with ServersPage. Diffs from ServersPage:
-         • No sub-tab strip (pure subscription pool view).
-         • Empty-state overlay when SubscriptionServers is empty.
-         • Test all / Deep verify buttons bind to subscription-specific
-           commands, not the VLESS list ones.
-         • Subscriptions card-list (bottom) also re-laid-out as row-style
-           cards with URL subtitle + last-refresh timestamp, matching the
-           srv-row shape. -->
   <UserControl.Styles>
 
-    <!-- Row wrapper — arctic tint when active -->
     <Style Selector="Border.srv-row">
       <Setter Property="Padding" Value="8,5"/>
       <Setter Property="CornerRadius" Value="3"/>
@@ -102,14 +91,12 @@
 
   <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
 
-    <!-- Column headers — same grid definition as the row template below. -->
     <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
           Margin="18,6,18,4">
       <TextBlock Grid.Column="1" Classes="srv-col-label"
                  Text="{Binding L_ColServer}"/>
       <TextBlock Grid.Column="2" Classes="srv-col-label"
                  Text="{Binding L_ColIp}"/>
-      <!-- v2.30.6-r1 (UX-32 fix): tooltip explains the "—" placeholder. -->
       <TextBlock Grid.Column="3" Classes="srv-col-label"
                  Text="{Binding L_ColPing}"
                  ToolTip.Tip="{Binding L_ColPingTooltip}"
@@ -119,7 +106,6 @@
                  HorizontalAlignment="Center"/>
     </Grid>
 
-    <!-- Aggregated server pool -->
     <ListBox Grid.Row="1"
              x:Name="SubList"
              Classes="srv-list"
@@ -157,7 +143,6 @@
                     <TextBlock Classes="srv-use-text" Text="{Binding ProtocolUseCase}"/>
                   </Border>
                 </Grid>
-                <!-- R2 (urltest audit): honest phased health verdict line. -->
                 <TextBlock Classes="srv-host" Text="{Binding HealthVerdictText}"
                            IsVisible="{Binding HasHealthVerdict}"
                            ToolTip.Tip="{Binding HealthTooltip}"/>
@@ -189,7 +174,6 @@
       </ListBox.ItemTemplate>
     </ListBox>
 
-    <!-- Empty state overlay (kept as-is — simple centred prompt) -->
     <StackPanel Grid.Row="1"
                 IsVisible="{Binding !SubscriptionServers.Count}"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -202,11 +186,6 @@
                  HorizontalAlignment="Center"/>
     </StackPanel>
 
-    <!-- Section: action bar (Проверить все / Deep verify / прогресс)
-         v2.31.6-r13 A11y: AutomationProperties.Name on each action
-         button so screen readers announce the canonical label even
-         when the visible Content has been replaced with a progress
-         string ("Testing 3/7…"). Same pattern as ServersPage r9. -->
     <Border Grid.Row="2" Padding="10,6,10,4"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}">
@@ -220,8 +199,6 @@
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                     ToolTip.Tip="{Binding L_TipTestAllServers}"
                     AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
-            <!-- v2.25.3: arctic primary, was #7C3AED violet — same rationale
-                 as in ServersPage. -->
             <Button Content="{Binding ServerDeepButtonText}"
                     Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
@@ -229,12 +206,6 @@
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                     ToolTip.Tip="{Binding L_TipDeepVerifyServers}"
                     AutomationProperties.Name="{Binding L_TipDeepVerifyServers}"/>
-            <!-- v2.31.6-r15 (iter#6): Subscribe progress text now reads
-                 from SubscriptionTestProgressText (separate from the
-                 ServerTestProgressText used by Servers tab). Pre-r15
-                 they shared one field, so a Test all on Servers left
-                 stale "Pinged X/Y" text on this tab even when Subscribe
-                 servers had never been tested. -->
             <TextBlock Text="{Binding SubscriptionTestProgressText}"
                        VerticalAlignment="Center"
                        FontSize="10" Opacity="0.7"/>
@@ -242,8 +213,6 @@
           <TextBlock Text="{Binding SubscriptionDeepProgressText}"
                      FontSize="10" Opacity="0.7"
                      IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-          <!-- v2.31.6-r15: active-VPN-intercept warning banner. Same
-               pattern as ServersPage. -->
           <Border IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                   Padding="8,5" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource WarningBgBrush}"
@@ -254,8 +223,6 @@
                          Foreground="{DynamicResource WarningFgBrush}"/>
           </Border>
         </StackPanel>
-        <!-- Backlog A (2026-06-20): opt-in urltest auto-select. Off by default;
-             takes effect on next connect. -->
         <CheckBox IsChecked="{Binding AutoSelectBestServer}"
                   MinHeight="0" Padding="4,0"
                   ToolTip.Tip="{Binding L_AutoSelectBestTip}">
@@ -287,11 +254,6 @@
       </StackPanel>
     </Border>
 
-    <!-- Subscriptions card list — v2.25.3 re-laid-out as srv-row style.
-         Each subscription is a 1-line card:
-             [filled-arctic radio] [name + URL subtitle]  [timestamp]  [↻] [✕]
-         Same Grid.ColumnDefinitions shape as the server rows so things
-         line up vertically. -->
     <ScrollViewer Grid.Row="3"
                   MaxHeight="130"
                   HorizontalScrollBarVisibility="Disabled"
@@ -304,10 +266,6 @@
               <Grid ColumnDefinitions="24,*,Auto,Auto,Auto" ColumnSpacing="8"
                     VerticalAlignment="Center">
 
-                <!-- v2.25.10 fix: column widened 14 → 24 px, CheckBox got
-                     MinWidth=0/MinHeight=0/Padding=0 so Avalonia's default
-                     control sizing doesn't clip the check indicator (same
-                     root cause as the Settings → Routing radios). -->
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding Enabled}"
                           AutomationProperties.Name="{Binding Name}"
@@ -316,10 +274,6 @@
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                   <TextBlock Classes="srv-name" Text="{Binding Name}"/>
-                  <!-- v2.31.1-r1 (F-6 / UX-33): tooltip explaining the
-                       cryptic `URL · Ns · time` format. Pre-fix users
-                       read "7s" as seconds and the "—" placeholder as
-                       opaque. -->
                   <TextBlock Classes="srv-host"
                              ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipSubscriptionMetadata}">
                     <TextBlock.Text>
@@ -330,17 +284,11 @@
                       </MultiBinding>
                     </TextBlock.Text>
                   </TextBlock>
-                  <!-- v2.38.0-r7: honest "couldn't refresh — showing cached"
-                       badge. Visible only when the last fetch failed, so a
-                       provider DPI-flap reads as a transient refresh failure
-                       (cache preserved) instead of "configs lost / banned". -->
                   <TextBlock Text="{Binding StatusBadge}"
                              IsVisible="{Binding LastRefreshFailed}"
                              FontSize="10"
                              TextWrapping="Wrap"
                              Foreground="{DynamicResource WarningFgBrush}"/>
-                  <!-- P2 (2026-06-21): remaining quota / days-left from the provider's
-                       Subscription-Userinfo header. Hidden when not provided. -->
                   <TextBlock Text="{Binding UserInfoDisplay}"
                              IsVisible="{Binding HasUserInfo}"
                              FontSize="10"
@@ -372,11 +320,6 @@
       </ItemsControl>
     </ScrollViewer>
 
-    <!-- Add new subscription
-         v2.31.6-r13 A11y: AutomationProperties.Name on the form
-         inputs and the primary blue Add button. Watermarks disappear
-         after the user starts typing, so screen readers fall back to
-         the explicit Name binding. -->
     <Border Grid.Row="4" Padding="10,6"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}">

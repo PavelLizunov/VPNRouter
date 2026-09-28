@@ -3,11 +3,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// RB4 (2026-06-27): the UDP-path failover decision. Storm-safe by construction —
-/// fires only on a fully-dead UDP path (timeouts ≥ threshold AND zero successes)
-/// and at most once per cooldown.
-/// </summary>
 public class UdpDegradationDetectorTests
 {
     private static readonly DateTimeOffset T0 =
@@ -23,7 +18,6 @@ public class UdpDegradationDetectorTests
     [Fact]
     public void ThresholdMet_ButSomeSuccess_DoesNotFire()
     {
-        // Any UDP success => path is flaky, not dead. Never churn a working session.
         var d = new UdpDegradationDetector(minTimeouts: 30);
         Assert.False(d.ShouldFailover(udpTimeouts: 100, udpSuccesses: 1, T0));
     }
@@ -40,7 +34,6 @@ public class UdpDegradationDetectorTests
     {
         var d = new UdpDegradationDetector(minTimeouts: 30, cooldown: TimeSpan.FromMinutes(10));
         Assert.True(d.ShouldFailover(50, 0, T0));
-        // 9 minutes later, still dead — but cooldown blocks a second failover (storm guard).
         Assert.False(d.ShouldFailover(50, 0, T0.AddMinutes(9)));
     }
 
@@ -55,11 +48,9 @@ public class UdpDegradationDetectorTests
     [Fact]
     public void Recovery_BetweenFires_StillRespectsCooldown()
     {
-        // dead -> fire; then a healthy window (success) -> no fire; then dead again
-        // within cooldown -> still blocked. Cooldown is wall-clock, not event-gated.
         var d = new UdpDegradationDetector(minTimeouts: 30, cooldown: TimeSpan.FromMinutes(10));
         Assert.True(d.ShouldFailover(50, 0, T0));
-        Assert.False(d.ShouldFailover(0, 200, T0.AddMinutes(2)));   // healthy
-        Assert.False(d.ShouldFailover(50, 0, T0.AddMinutes(5)));    // dead again, cooldown
+        Assert.False(d.ShouldFailover(0, 200, T0.AddMinutes(2)));
+        Assert.False(d.ShouldFailover(50, 0, T0.AddMinutes(5)));
     }
 }

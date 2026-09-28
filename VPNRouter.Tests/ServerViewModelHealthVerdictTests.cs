@@ -7,20 +7,10 @@ using CoreStrings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins the R2 wiring of the phased health model into <see cref="ServerViewModel"/>:
-/// quick-probe + deep-verify outcomes fold through mapper/classifier into one honest
-/// verdict line. The audit's rules under test: TCP-only never reads as "works";
-/// a local/unsupported deep failure never renders the server "✗"; a TCP-reachable
-/// host with a failed proxied HTTP reads as protocol-blocked with the RU-block copy.
-/// Plain facts (no Avalonia) — brush properties are deliberately untouched.
-/// </summary>
 public class ServerViewModelHealthVerdictTests
 {
     private static ServerProbeResult Probe(ServerProbeStatus status, int ms = 42)
         => new(status, ms, null);
-
-    // ── No signal → no verdict line ─────────────────────────────────────────
 
     [Fact]
     public void FreshVm_HasNoVerdict()
@@ -29,8 +19,6 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal(ServerHealthVerdict.Unknown, vm.HealthVerdict);
         Assert.False(vm.HasHealthVerdict);
     }
-
-    // ── TCP-only never claims "works" ───────────────────────────────────────
 
     [Fact]
     public void QuickOkOnly_IsProtocolUntested_NeverHealthy()
@@ -54,8 +42,6 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal(ServerHealthVerdict.HostUnreachable, vm.HealthVerdict);
     }
 
-    // ── Deep verify folds into the verdict ──────────────────────────────────
-
     [Fact]
     public void DeepOk_IsHealthy()
     {
@@ -78,10 +64,8 @@ public class ServerViewModelHealthVerdictTests
         Assert.False(vm.IsDeepInconclusive);
         Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, vm.HealthVerdict);
         Assert.Contains(CoreStrings.HealthRuBlockWarning, vm.HealthTooltip);
-        Assert.Contains("http timeout", vm.HealthTooltip);   // raw error preserved for diagnostics
+        Assert.Contains("http timeout", vm.HealthTooltip);
     }
-
-    // ── Local / unsupported deep failures never condemn the server ──────────
 
     [Fact]
     public void DeepUnsupportedByVerifier_IsInconclusive_NotFailed_VerdictStaysUntested()
@@ -102,8 +86,6 @@ public class ServerViewModelHealthVerdictTests
     [Fact]
     public void DeepLocalInfraFailure_LegacyStringResult_IsInconclusive()
     {
-        // Legacy 1-arg Failed (phase None) with a local-infra STRING — the mapper's
-        // string fallback must keep protecting old results.
         var vm = new ServerViewModel();
         vm.ApplyProbeResult(Probe(ServerProbeStatus.Ok));
         vm.ApplyDeepResult(DeepVerifyResult.Failed("sing-box spawn failed"));
@@ -113,8 +95,6 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, vm.HealthVerdict);
     }
 
-    // ── R4: canary conclusion flows into the row verdict ─────────────────────
-
     [Fact]
     public void DeepOk_ButCanaryFailed_IsOnlyControlWorks_WithCanaryCopy()
     {
@@ -123,12 +103,10 @@ public class ServerViewModelHealthVerdictTests
         vm.ApplyDeepResult(new DeepVerifyResult(true, 120, null, null,
             BlockedCanary: PhaseOutcome.Fail));
 
-        Assert.True(vm.IsDeepVerified);   // the tunnel itself did pass
+        Assert.True(vm.IsDeepVerified);
         Assert.Equal(ServerHealthVerdict.OnlyControlWorks, vm.HealthVerdict);
         Assert.Contains(CoreStrings.HealthCanaryFailedWarning, vm.HealthTooltip);
     }
-
-    // ── R3: pool-wide subnet-risk flags ──────────────────────────────────────
 
     [Fact]
     public void RefreshProviderRiskFlags_FlagsHighRiskSubnetRows_NotOthers()
@@ -155,10 +133,10 @@ public class ServerViewModelHealthVerdictTests
 
             Assert.True(vms[0].IsProviderHighRisk);
             Assert.True(vms[1].IsProviderHighRisk);
-            Assert.True(vms[2].IsProviderHighRisk);     // untested sibling shares the risk
+            Assert.True(vms[2].IsProviderHighRisk);
             Assert.False(vms[3].IsProviderHighRisk);
             Assert.Contains(VPNRouter.Core.Localization.Strings.HealthProviderHighRisk,
-                vms[2].HealthTooltip);                   // tooltip explains it
+                vms[2].HealthTooltip);
         }
         finally
         {
@@ -167,8 +145,6 @@ public class ServerViewModelHealthVerdictTests
             try { Directory.Delete(temp, recursive: true); } catch { }
         }
     }
-
-    // ── R5: constructor hydration from the persisted store ──────────────────
 
     [Fact]
     public void Ctor_HydratesFreshPersistedVerdict()
@@ -185,7 +161,7 @@ public class ServerViewModelHealthVerdictTests
 
             var vm = new ServerViewModel(entry);
             Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, vm.HealthVerdict);
-            Assert.True(vm.HasHealthVerdict);   // the row explains WHY Auto excludes it
+            Assert.True(vm.HasHealthVerdict);
         }
         finally
         {
@@ -195,8 +171,6 @@ public class ServerViewModelHealthVerdictTests
         }
     }
 
-    // ── A later quick probe re-merges with the stored deep phases ───────────
-
     [Fact]
     public void QuickReprobe_AfterDeepFail_KeepsBlockedVerdict()
     {
@@ -205,7 +179,6 @@ public class ServerViewModelHealthVerdictTests
         vm.ApplyDeepResult(DeepVerifyResult.Failed("http failed", DeepVerifyFailurePhase.ProxiedHttp));
         Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, vm.HealthVerdict);
 
-        // Re-running the quick probe must not wash the deep failure away.
         vm.ApplyProbeResult(Probe(ServerProbeStatus.Ok, 51));
         Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, vm.HealthVerdict);
     }

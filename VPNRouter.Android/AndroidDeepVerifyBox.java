@@ -1,37 +1,3 @@
-// AndroidDeepVerifyBox — Free-Configs deep verification on Android.
-//
-// Bug #1 (v3.0 android-alpha r5+, 2026-05-11): pre-fix, the Android Free
-// Configs path stopped after TCP+TLS handshake and displayed every working
-// entry with a single ✓. Desktop runs an additional Deep Verify pass that
-// spins a transient sing-box, opens a SOCKS inbound, HTTP-probes Cloudflare
-// through it, and re-stamps the entry as Verified (✓✓) only if real HTTP
-// traffic came back. Without that on Android, users couldn't tell which
-// configs the TCP+TLS check had upgraded vs the ones that just sat there.
-//
-// This Java helper wraps a transient libbox BoxService (no TUN, just SOCKS
-// + the VLESS outbound from the config under test) and a Java HTTP probe
-// through that SOCKS proxy. The C# side
-// (VPNRouter.Android/AndroidFreeConfigDeepVerifier.cs) builds the config
-// JSON via the shared FreeConfigDeepVerifier.BuildSingleOutboundConfig
-// helper and calls verifyConfigSync per row.
-//
-// Concurrent-box risk: libbox upstream supports multiple sing-box.Service
-// instances in one process; SagerNet's reference Android app only ever
-// runs one, so it's not exercised. We pin the verify-box PlatformInterface
-// to "no TUN, no protect" and accept the worst case (libbox refuses or
-// throws) — the C# orchestrator catches and falls back to the existing
-// single-✓ display, no crash. When the main VPN tunnel is already up the
-// VPN's box and the verify box share the same process; our app excludes
-// itself from its own TUN at VpnService.Builder time (see
-// VpnRouterService.openTun's addDisallowedApplication(getPackageName())),
-// so the verify box's outbound sockets bypass the main TUN at the OS
-// level — no protect() needed.
-//
-// All public entry points are static and synchronous. The caller decides
-// concurrency. Verify cost is dominated by libbox startup (~1-2 s on
-// KYOCERA A101BM) + HTTP RTT (~150-400 ms), so 3-5 s end-to-end per
-// config in practice.
-
 package com.ninitux.vpnrouter;
 
 import android.content.Context;
@@ -70,41 +36,8 @@ public final class AndroidDeepVerifyBox {
     private static final String LOG_TAG = "VpnRouter.DV";
     private static final AtomicBoolean libboxSetupDone = new AtomicBoolean(false);
 
-    private AndroidDeepVerifyBox() { /* static-only */ }
+    private AndroidDeepVerifyBox() {  }
 
-    /**
-     * Synchronously verify a single config by spinning up a transient
-     * libbox BoxService, then HTTP-GETting <code>probeUrl</code> through
-     * its local SOCKS inbound on <code>socksPort</code>.
-     *
-     * <p>Returns a JSON object as a string:
-     * <pre>
-     *   {"ok":true,  "latencyMs":1234, "err":null}
-     *   {"ok":false, "latencyMs":0,    "err":"didn't bind | http timeout | …"}
-     * </pre>
-     * Always returns a non-null string. The orchestrator parses it on the
-     * C# side and updates the entry's Status / LastError accordingly.
-     *
-     * @param ctx        application context, used for libbox setup paths
-     *                   and AndroidCAStore (for system CA enumeration).
-     * @param configJson minimal sing-box config — SOCKS inbound on
-     *                   <code>socksPort</code> + single VLESS outbound,
-     *                   final=proxy. Built by
-     *                   <c>FreeConfigDeepVerifier.BuildSingleOutboundConfig</c>
-     *                   (in VPNRouter.Core).
-     * @param socksPort  port the SOCKS inbound listens on (loopback).
-     *                   Caller picks via TcpListener(0) before generating
-     *                   the config; passing it in saves re-parsing the
-     *                   JSON on the Java side.
-     * @param timeoutMs  overall verification timeout. Spans libbox spin-up
-     *                   + bind wait + HTTP round-trip + libbox teardown.
-     * @param probeUrl   target URL — typically
-     *                   <code>https://www.cloudflare.com/cdn-cgi/trace</code>.
-     *                   Response must contain an <code>ip=</code> line
-     *                   with a non-private address, else we report
-     *                   "local ip in response" (catches transparent
-     *                   intercepts that return the user's own IP).
-     */
     public static String verifyConfigSync(
             Context ctx,
             String configJson,
@@ -116,20 +49,12 @@ public final class AndroidDeepVerifyBox {
         try {
             ensureLibboxSetup(ctx);
 
-            // Libbox.checkConfig throws on schema errors; let the exception
-            // bubble through the catch below so the caller gets a useful
-            // err string instead of a silent failure.
             Libbox.checkConfig(configJson);
 
             VerifyPlatformInterface platform = new VerifyPlatformInterface(ctx);
             boxService = Libbox.newService(configJson, platform);
             boxService.start();
 
-            // Wait for SOCKS to bind. We do this by attempting to TCP-connect
-            // to 127.0.0.1:socksPort in a loop. libbox's start() is async on
-            // some paths (the Go side spins up listeners on its own goroutines),
-            // so we can return from start() before the listener is up. 100 ms
-            // poll × up to 2 s wait — same window the desktop verifier uses.
             if (!waitForPortBound(socksPort, 2000)) {
                 return jsonError(0, "sing-box didn't bind");
             }
@@ -144,9 +69,6 @@ public final class AndroidDeepVerifyBox {
                 return jsonError(0, probe.err != null ? probe.err : "http failed");
             }
         } catch (Throwable t) {
-            // Catch Throwable (not just Exception) so a libbox crash or
-            // OOM still returns a structured result instead of propagating
-            // through JNI back to .NET as an unstructured exception.
             Log.w(LOG_TAG, "verifyConfigSync threw after "
                     + (System.currentTimeMillis() - start) + " ms: "
                     + t.getClass().getSimpleName() + ": " + t.getMessage());
@@ -191,14 +113,6 @@ public final class AndroidDeepVerifyBox {
         return sb.toString();
     }
 
-    /**
-     * Libbox.setup is process-wide and idempotent in practice — calling
-     * it twice with the same paths is a no-op. We still gate it behind
-     * an AtomicBoolean so we don't waste a JNI round-trip per verify.
-     * The VPN service has its own setup-once flag in
-     * VpnRouterService.libboxSetupDone — running both is OK because the
-     * paths resolve to the same getFilesDir() / cacheDir() locations.
-     */
     private static void ensureLibboxSetup(Context ctx) throws Exception {
         if (libboxSetupDone.get()) return;
         synchronized (libboxSetupDone) {
@@ -225,12 +139,6 @@ public final class AndroidDeepVerifyBox {
         }
     }
 
-    /**
-     * Poll-connect to 127.0.0.1:port until something accepts or we run out
-     * of time. Mirrors the desktop verifier's WaitForPortBoundAsync — same
-     * 100 ms interval, same 2 s outer cap. Loopback connect is cheap; the
-     * cost is dominated by libbox's own startup latency, not the poll.
-     */
     private static boolean waitForPortBound(int port, int maxWaitMs) {
         long deadline = System.currentTimeMillis() + maxWaitMs;
         while (System.currentTimeMillis() < deadline) {
@@ -238,7 +146,6 @@ public final class AndroidDeepVerifyBox {
                 s.connect(new InetSocketAddress("127.0.0.1", port), 200);
                 return true;
             } catch (Exception ignored) {
-                // not bound yet
             }
             try { Thread.sleep(100); } catch (InterruptedException ignored) { return false; }
         }
@@ -251,22 +158,6 @@ public final class AndroidDeepVerifyBox {
         ProbeResult(boolean ok, String err) { this.ok = ok; this.err = err; }
     }
 
-    /**
-     * HTTP GET <code>probeUrl</code> through a local SOCKS5 proxy. The JVM
-     * applies the Proxy to the underlying Socket at openConnection time, so
-     * HTTPS via SOCKS5 works transparently — the TLS handshake rides over
-     * the SOCKS-tunneled TCP stream.
-     *
-     * <p>Cloudflare's trace endpoint returns multiline
-     * <code>key=value</code>. We validate two things:
-     * <ul>
-     *   <li>HTTP status is 2xx — eliminates captive portals and broken
-     *       proxies that return 5xx.</li>
-     *   <li>The <code>ip=</code> line contains a non-RFC1918 / non-loopback
-     *       address — eliminates transparent intercepts that mirror the
-     *       client's own IP back as "yours".</li>
-     * </ul>
-     */
     private static ProbeResult probeViaSocks(int socksPort, String probeUrl, int timeoutMs) {
         HttpURLConnection conn = null;
         try {
@@ -274,10 +165,6 @@ public final class AndroidDeepVerifyBox {
                     new InetSocketAddress("127.0.0.1", socksPort));
             URL url = new URL(probeUrl);
             conn = (HttpURLConnection) url.openConnection(proxy);
-            // Connect timeout caps the SOCKS handshake + the upstream
-            // TCP+TLS handshake to the probe target. Read timeout caps
-            // the response body wait. Sum stays under the caller's
-            // overall budget (typically 12 s).
             conn.setConnectTimeout(Math.min(timeoutMs, 5000));
             conn.setReadTimeout(Math.min(timeoutMs, 8000));
             conn.setUseCaches(false);
@@ -305,7 +192,6 @@ public final class AndroidDeepVerifyBox {
                 return new ProbeResult(false, "bad response");
             }
 
-            // Find the ip= line and reject local-only / private ranges.
             for (String line : body.split("\n")) {
                 if (line.startsWith("ip=")) {
                     String ip = line.substring(3).trim();
@@ -337,13 +223,9 @@ public final class AndroidDeepVerifyBox {
             byte[] b = ip.getAddress();
             if (b.length != 4) return false;
             int b0 = b[0] & 0xFF, b1 = b[1] & 0xFF;
-            // 10.0.0.0/8
             if (b0 == 10) return true;
-            // 172.16.0.0/12
             if (b0 == 172 && b1 >= 16 && b1 <= 31) return true;
-            // 192.168.0.0/16
             if (b0 == 192 && b1 == 168) return true;
-            // 100.64.0.0/10 (CGNAT — common on cellular)
             if (b0 == 100 && b1 >= 64 && b1 <= 127) return true;
             return false;
         } catch (Exception e) {
@@ -351,36 +233,6 @@ public final class AndroidDeepVerifyBox {
         }
     }
 
-    // ────────────────────────────────────────────────────────────────────
-    // Verify-box PlatformInterface — minimal subset of what
-    // VpnRouterPlatformInterface (in VpnRouterService) provides. The verify
-    // box has no TUN, so openTun is a hard failure. We don't call
-    // VpnService.protect() because our app is excluded from its own TUN
-    // at the OS layer (addDisallowedApplication(getPackageName())) — that
-    // exclusion bypasses TUN routing for ALL sockets opened in this
-    // process, including the libbox verify-box's outbound dials. The
-    // platform-auto-detect path is therefore disabled.
-    //
-    // What we DO need to support:
-    //   • getInterfaces — sing-box needs the upstream interface list to
-    //     pick a binding target. Without it, every outbound dial fails
-    //     with "no available network interface" (we learned this the
-    //     hard way during VpnRouterService Phase 5).
-    //   • systemCertificates — sing-box validates the probe target's TLS
-    //     cert against the system CAs. Reality outbounds bypass standard
-    //     TLS, but the cloudflare.com endpoint we probe is plain HTTPS
-    //     terminated at sing-box's outbound side, so CAs matter.
-    //   • startDefaultInterfaceMonitor — sing-box's outbound dial path
-    //     uses the "default interface" hint to decide which interface to
-    //     bind to. Without it, dials fail (we learned this during
-    //     VpnRouterService Phase 6.2). For verify we just fire one
-    //     initial update with the current active network — no callback
-    //     wiring since the verify box's lifetime is seconds, not the
-    //     network-change-sensitive minutes/hours of a real VPN session.
-    //   • writeLog — surface libbox-internal diagnostics if a verify
-    //     fails strangely. logcat tag "VpnRouter.DV.Libbox" so they're
-    //     greppable separately from the main service's "Libbox" tag.
-    // ────────────────────────────────────────────────────────────────────
     private static final class VerifyPlatformInterface implements PlatformInterface {
 
         private final Context ctx;
@@ -391,23 +243,16 @@ public final class AndroidDeepVerifyBox {
 
         @Override
         public int openTun(TunOptions options) throws Exception {
-            // Verify config is SOCKS-only — sing-box should never reach
-            // here. If it does, surface a loud error so we can diagnose
-            // (probably the caller passed a TUN-containing config by
-            // mistake).
             throw new Exception("verify box has no TUN — openTun unexpected");
         }
 
         @Override public boolean useProcFS() { return false; }
         @Override public boolean usePlatformAutoDetectInterfaceControl() { return false; }
-        @Override public void autoDetectInterfaceControl(int fd) { /* no-op */ }
-        @Override public void clearDNSCache() { /* no-op */ }
+        @Override public void autoDetectInterfaceControl(int fd) {  }
+        @Override public void clearDNSCache() {  }
 
         @Override
         public NetworkInterfaceIterator getInterfaces() {
-            // Reuse the same enumeration VpnRouterService.Phase 5 does —
-            // ConnectivityManager + NetworkInterface walk. Without it,
-            // sing-box can't pick an upstream interface and dial fails.
             try {
                 android.net.ConnectivityManager cm =
                         (android.net.ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -526,10 +371,6 @@ public final class AndroidDeepVerifyBox {
 
         @Override
         public void startDefaultInterfaceMonitor(InterfaceUpdateListener listener) {
-            // Fire an initial update so sing-box knows which interface to
-            // bind upstream dials to. We don't subscribe to network-change
-            // callbacks — the verify box lives for ~3-5 s, not long enough
-            // for a Wi-Fi handoff to matter.
             try {
                 android.net.ConnectivityManager cm =
                         (android.net.ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -552,10 +393,10 @@ public final class AndroidDeepVerifyBox {
         }
 
         @Override
-        public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) { /* no-op */ }
+        public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) {  }
 
         @Override
-        public void sendNotification(io.nekohasekai.libbox.Notification notification) { /* no-op */ }
+        public void sendNotification(io.nekohasekai.libbox.Notification notification) {  }
 
         @Override
         public int findConnectionOwner(int ipProtocol, String sa, int sp, String da, int dp) {

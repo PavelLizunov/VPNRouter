@@ -11,30 +11,7 @@
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
-  <!-- v2.25.4 — Settings page redesign per Claude Design handoff section 4.
-       Shape stays the same master-detail split (left nav + right pane)
-       but the Routing section becomes the showcase:
-         • Full-width radio-CARDS (not inline RadioButtons) — title + sub
-           line inside a bordered block; active card gets arctic border
-           and arctic-bg-subtle fill.
-         • .ru bypass upgraded to a filled-arctic checkbox card with
-           explanation paragraph inside.
-         • Left split trimmed 160 → 140 (matches design handoff).
-         • Autostart section — Windows users now also get Service
-           Restart / Reinstall buttons directly in the panel (they lived
-           in the footer through v2.24.4 and had no home after the
-           v2.25.0 footer compact until now).
-         • Apply button moved to right-aligned compact with an
-           "Autosave is on" left hint (design wants the Apply row tight,
-           not a full-width button bar). -->
-
   <UserControl.Resources>
-    <!-- v2.30.0-r11 — iOS-style toggle theme for CheckBox.
-         Per design RulesPage.html `.toggle` (32×18 track + 14×14 white
-         circle thumb). Off = BorderStrong bg + thumb on left (2px).
-         On = SuccessSolid bg + thumb on right (2px from right edge).
-         Used in the Cards rule rows to replace the boxy CheckBox.
-         To apply: <CheckBox Theme="{StaticResource IosToggleCheckBox}"/> -->
     <ControlTheme x:Key="IosToggleCheckBox" TargetType="CheckBox">
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Width" Value="32"/>
@@ -73,12 +50,6 @@
 
   <UserControl.Styles>
 
-    <!-- v2.30.0-r11 — Rule row card with hover state.
-         Per design `.rule { background:surface-base; border:1px subtle }`
-         and `.rule:hover { border-color:border-default; background:surface-raised }`.
-         Disabled rows get opacity .55 via the CustomRuleViewModel.RowOpacity
-         binding (already wired). Selectors live here in Styles, not
-         Resources, because Avalonia treats Resources as a keyed dictionary. -->
     <Style Selector="Border.rule-card">
       <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
@@ -98,9 +69,6 @@
       <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
     </Style>
 
-    <!-- v2.30.0-r14 — bulk-actions popover items per design `.bulk-pop .it`.
-         Plain transparent button with icon + text, hover gets sunken bg.
-         The .danger modifier paints text in danger-fg + danger-bg on hover. -->
     <Style Selector="Button.bulk-it">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
@@ -123,14 +91,6 @@
       <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
     </Style>
 
-    <!-- v2.30.0-r15 — FlyoutPresenter chrome override for the bulk-pop.
-         User report after r14: «В .bulk-pop остался задний фон».
-         Avalonia's Flyout wraps content in a FlyoutPresenter that has
-         its own default background + padding + shadow, which bled
-         through behind our designed Border. Targeting the .bulk-pop-host
-         class on the FlyoutPresenter strips its chrome so only our
-         designed Border is visible.
-         Hooked up via Flyout.FlyoutPresenterClasses="bulk-pop-host". -->
     <Style Selector="FlyoutPresenter.bulk-pop-host">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="0"/>
@@ -138,7 +98,6 @@
       <Setter Property="CornerRadius" Value="0"/>
     </Style>
 
-    <!-- Radio card: full-width clickable block with title + sub -->
     <Style Selector="Border.radio-card">
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
@@ -155,10 +114,6 @@
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-      <!-- v2.27.0-r2: wrap when card narrows. Without this, a long
-           multi-word title (e.g. a localised "Windows background service")
-           would keep the card wider than its ScrollViewer parent and push
-           the right edge past the window — the overflow user reported. -->
       <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style Selector="TextBlock.card-sub">
@@ -167,7 +122,6 @@
       <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 
-    <!-- Checkbox card (for .ru bypass + future toggles) -->
     <Style Selector="Border.checkbox-card">
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
@@ -180,17 +134,14 @@
       <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
     </Style>
 
-    <!-- Service pill — small status chip next to "VPN Service" label -->
     <Style Selector="Border.service-pill">
       <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
       <Setter Property="Padding" Value="8,2"/>
     </Style>
   </UserControl.Styles>
 
-  <!-- Master-detail: nav list left, pane right + bottom apply bar -->
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="140,*">
 
-    <!-- MASTER (left): section navigator -->
     <Border Grid.Row="0" Grid.Column="0"
             BorderThickness="0,0,1,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -201,10 +152,6 @@
                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                ScrollViewer.VerticalScrollBarVisibility="Auto">
         <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <!-- v2.30.0-r2: dedicated Rules section as a separate left-nav
-             item (was buried inside the Routing section as an expander).
-             Per user direction 2026-04-29: «Для кастомных настроек
-             маршрутизации нужен отдельный пункт в меню». -->
         <ListBoxItem Content="{Binding LblSettingsRules}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
         <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
         <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
@@ -213,20 +160,6 @@
       </ListBox>
     </Border>
 
-    <!-- DETAIL (right): selected section.
-         v2.27.0-r2: the border-overflow fix is entirely in the content
-         tree (WrapPanel for the status+buttons row, TextWrapping on
-         CheckBox content). The scrollbar was a red herring. Keeping
-         VerticalScrollBarVisibility at Auto so short tabs don't get a
-         cosmetic always-present scrollbar. -->
-    <!-- v2.28.4-r7: same pattern as the FreeConfigsPage r6 fix — push the
-         horizontal padding off the ScrollViewer onto an inner Grid via
-         Margin. The ScrollViewer keeps only its vertical padding; the
-         scrollbar reserves width with AllowAutoHide=False; and the inner
-         Grid's `Margin="14,0,14,0"` is part of the Grid's external
-         layout, decoupled from the ScrollViewer's scrollbar metrics —
-         so right padding stays locked even when text inside cards wraps
-         on resize. -->
     <ScrollViewer Grid.Row="0" Grid.Column="1"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
@@ -235,14 +168,12 @@
       <Grid Margin="14,0,14,0">
         <StackPanel HorizontalAlignment="Stretch">
 
-        <!-- ═══ Routing (Phase 4 showcase) ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
           <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="13"/>
           <TextBlock Text="{Binding L_RoutingDescription}"
                      FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
                      TextWrapping="Wrap"/>
 
-          <!-- Split Tunnel card -->
           <Border Classes="radio-card" Classes.active="{Binding IsSplitTunnel}">
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <RadioButton Grid.Column="0"
@@ -260,15 +191,6 @@
             </Grid>
           </Border>
 
-          <!-- Full Tunnel card.
-               v2.25.10 fix: explicit IsChecked binding to IsFullTunnel
-               (new in VM). Before this the Full RadioButton had no
-               binding and relied on GroupName exclusivity to flip Split
-               — which broke after ReloadMainWindowForLocalization kept
-               old + new windows alive briefly with the same GroupName,
-               causing the group manager to cross-wire. With a proper
-               two-way binding the radio state always mirrors the VM
-               regardless of how many window instances live at once. -->
           <Border Classes="radio-card" Classes.active="{Binding IsFullTunnel}">
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <RadioButton Grid.Column="0"
@@ -286,7 +208,6 @@
             </Grid>
           </Border>
 
-          <!-- .ru bypass checkbox card — filled when active -->
           <Border Classes="checkbox-card" Classes.active="{Binding BypassRussianTraffic}">
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <CheckBox Grid.Column="0"
@@ -304,47 +225,14 @@
             </Grid>
           </Border>
 
-          <!-- v2.30.0-r2: Custom rules expander REMOVED from Routing
-               section — moved to its own dedicated Rules section
-               (left-nav index 1). See below. -->
         </StackPanel>
 
-        <!-- ═══ Rules (v2.30.0-r7 — Cards/Edit view-mode toggle per
-             RulesExplorations.html design handoff) ═══
-             User direction 2026-04-29: «компоную контекст и дам тебе
-             дизайн и переработку страницы правила». Design ships
-             two view modes: Cards (default, structured) + Edit (full
-             text-mode editor with line-numbered gutter, per-line errors,
-             explicit Apply / Revert).
-             v2.30.0-r2..r6 carry-over: structured row editor, search,
-             bulk actions, Import/Export 3 formats, virtualization.
-             Edit mode replaces the old "Advanced (text format)" expander
-             at the bottom of the section. -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRulesSelected}">
-          <!-- Header row: title + Cards/Edit segmented toggle (right) +
-               Import/Export. The toggle replaces the bottom Advanced
-               expander; Cards is default friendly view, Edit is the
-               power-user textarea. -->
-          <!-- v2.30.3-r1 (BUG-10/11 fix): pre-r1 single-row layout
-               (*,Auto,Auto,Auto) caused the page title "Правила" to
-               truncate to "Прав" + Import/Export pills to ellipsize at
-               narrow window widths because the * column shrank below
-               its min-content. Now title is on its own row and all
-               buttons live in a second row with WrapPanel so they
-               wrap to a third visual line if needed. -->
           <StackPanel Spacing="6">
             <TextBlock Text="{Binding LblSettingsRules}"
                        FontWeight="Bold" FontSize="13"
                        VerticalAlignment="Center"/>
-            <!-- v2.30.3-r2: дROPPED ItemHeight="0" - it forced all items
-                 to be 0px tall (invisible). User report: «А почему ты
-                 убрал кнопки Карточки Список Текст Импорт Экспорт».
-                 The buttons were there but with zero height. -->
             <WrapPanel Orientation="Horizontal">
-              <!-- Segmented toggle (▦ Cards · ☰ Read · ✎ Edit). Each
-                   button is borderless when inactive, filled+accent
-                   when active. Sits in a Sunken-bg pill for visual
-                   grouping per the design's `.view-seg` pattern. -->
               <Border Margin="0,0,6,0"
                       Padding="2"
                       CornerRadius="{StaticResource RadiusSm}"
@@ -405,10 +293,6 @@
             </WrapPanel>
           </StackPanel>
 
-          <!-- Help banner — v2.30.0-r12 structured per design `.help`:
-               bold heading + 3 bullets with FontWeight=SemiBold for
-               toggle names + FontFamily=mono for technical code values
-               (CIDR ranges, "direct" action). Dismissable via X. -->
           <Border IsVisible="{Binding !IsRulesHelpBannerDismissed}"
                   Padding="12,10"
                   CornerRadius="{StaticResource RadiusMd}"
@@ -422,11 +306,9 @@
                          Foreground="{DynamicResource InfoFgBrush}"
                          VerticalAlignment="Top" Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="4">
-                <!-- Heading -->
                 <TextBlock Text="{Binding L_RulesHelpHeader}"
                            FontSize="10" FontWeight="SemiBold"
                            Foreground="{DynamicResource InfoFgBrush}"/>
-                <!-- Bullet 1: «toggle1» and «toggle2» fire BEFORE your rules. -->
                 <TextBlock FontSize="10"
                            TextWrapping="Wrap" LineHeight="15"
                            Foreground="{DynamicResource InfoFgBrush}">
@@ -437,9 +319,6 @@
                   <Run Text="{Binding L_RulesHelpB1T2}" FontWeight="SemiBold"/>
                   <Run Text="{Binding L_RulesHelpB1Suf}"/>
                 </TextBlock>
-                <!-- Bullet 2: Private nets (CIDR, ...) already go direct
-                     automatically. CIDR + "direct" rendered in monospace
-                     to match the design's <code> tag styling. -->
                 <TextBlock FontSize="10"
                            TextWrapping="Wrap" LineHeight="15"
                            Foreground="{DynamicResource InfoFgBrush}">
@@ -462,7 +341,6 @@
                        FontSize="10"/>
                   <Run Text="{Binding L_RulesHelpB2Suf}"/>
                 </TextBlock>
-                <!-- Bullet 3: Rule order DOES NOT matter — first match wins. -->
                 <TextBlock FontSize="10"
                            TextWrapping="Wrap" LineHeight="15"
                            Foreground="{DynamicResource InfoFgBrush}">
@@ -485,21 +363,8 @@
             </Grid>
           </Border>
 
-          <!-- ═══ Cards view (default) — structured row-table editor ═══
-               v2.30.0-r5 layout: description → add-form (top, primary)
-               → existing-rules header → search → bulk → list. v2.30.0-r7
-               wraps the whole thing in IsRulesViewCards visibility — the
-               sibling Edit-view panel below is shown when the segmented
-               toggle is flipped to Text. -->
           <StackPanel Spacing="10" IsVisible="{Binding IsRulesViewCards}">
 
-          <!-- v2.30.0-r17 — Custom-rules-priority toggle. User direction
-               2026-04-29: «хочу чтоб кастомные правила были выше или
-               переключатель что брать в приоритет». Default off =
-               toggles win (BypassRu + BlockAds before custom rules).
-               On = custom rules win, can override BypassRu/BlockAds for
-               specific domains (e.g. block .sberbank.ru even though
-               BypassRu would otherwise route ru-domains direct). -->
           <Border Padding="10,8"
                   CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
@@ -522,14 +387,6 @@
             </Grid>
           </Border>
 
-          <!-- ═══ Add-rule form (WIDE — ≥540 px) ═══
-               v2.30.0-r11/r13 — strict design `.add-row` 5-col grid
-               (130 / 160 / 1fr / 1fr / Auto). Visible only when
-               IsRulesNarrow=false; the narrow sibling below stacks
-               vertically when the viewport shrinks.
-               v2.30.0-r16: ClipToBounds=True so any rare overflow during
-               a fast resize transition stays inside the Border edge
-               instead of bleeding into the surrounding page. -->
           <Border IsVisible="{Binding !IsRulesNarrow}"
                   Padding="14"
                   CornerRadius="{StaticResource RadiusMd}"
@@ -542,15 +399,6 @@
                          FontSize="9" FontWeight="SemiBold"
                          Foreground="{DynamicResource TextMutedBrush}"
                          TextTrimming="CharacterEllipsis"/>
-              <!-- Add-row: 5-col grid per design `.add-row` 130/160/1fr/
-                   1fr/Auto. v2.30.0-r16: button column changed Auto → 100
-                   fixed. User report after r15: «Слово add всё равно
-                   вылазиет за обводку». Auto col with default MinWidth=0
-                   could shrink below the button's content width when the
-                   grid was squeezed; button text then overflowed its own
-                   column past the right Border edge. Fixed 100 px is
-                   enough for «+ Добавить» (~85 px) plus a small safety
-                   margin and never collapses regardless of grid pressure. -->
               <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="130"/>
@@ -559,14 +407,10 @@
                   <ColumnDefinition Width="*" MinWidth="60"/>
                   <ColumnDefinition Width="100"/>
                 </Grid.ColumnDefinitions>
-                <!-- Action -->
                 <StackPanel Grid.Column="0" Spacing="3">
                   <TextBlock Text="{Binding L_RulesAddLabelAction}" FontSize="9"
                              FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}"/>
-                  <!-- v2.30.6-r1 (UX-13 fix): ToolTip surfaces the live example
-                       on hover so users browsing the dropdown don't have to
-                       click each option to see what it does. -->
                   <ComboBox ItemsSource="{Binding AvailableRuleActions}"
                             SelectedItem="{Binding NewRuleAction}"
                             HorizontalAlignment="Stretch"
@@ -578,7 +422,6 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              MinHeight="11" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-                <!-- Type -->
                 <StackPanel Grid.Column="1" Spacing="3">
                   <TextBlock Text="{Binding L_RulesAddLabelType}" FontSize="9"
                              FontWeight="SemiBold"
@@ -594,7 +437,6 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              MinHeight="11" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-                <!-- Value (with live-validation) -->
                 <StackPanel Grid.Column="2" Spacing="3">
                   <TextBlock Text="{Binding L_RulesAddLabelValue}" FontSize="9"
                              FontWeight="SemiBold"
@@ -614,7 +456,6 @@
                                           Converter={x:Static conv:BoolToBrushConverter.Instance},
                                           ConverterParameter=SuccessFgBrush|DangerFgBrush}"/>
                 </StackPanel>
-                <!-- Comment -->
                 <StackPanel Grid.Column="3" Spacing="3">
                   <TextBlock FontSize="9" FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}">
@@ -629,13 +470,6 @@
                            FontSize="11" Padding="6,3" MinHeight="0"/>
                   <TextBlock Text=" " FontSize="9" MinHeight="11"/>
                 </StackPanel>
-                <!-- Add button (aligned to value baseline, not label).
-                     v2.30.0-r16: HorizontalAlignment=Stretch +
-                     HorizontalContentAlignment=Center fills the fixed
-                     100-px column edge-to-edge; centers the «+ Добавить»
-                     glyph + label. Padding reduced 14,5 → 8,5 so the
-                     content fits in 100 px even with the slightly wider
-                     RU label. -->
                 <Button Grid.Column="4"
                         icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                         Command="{Binding AddCustomRuleFromFormCommand}"
@@ -650,9 +484,6 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         BorderThickness="0"/>
               </Grid>
-              <!-- Validation error from Add command (parser-level — only
-                   surfaces if the user clicks Add despite the live
-                   validation hint already being red). -->
               <TextBlock Text="{Binding NewRuleValidationError}"
                          FontSize="10"
                          TextWrapping="Wrap"
@@ -661,14 +492,6 @@
             </StackPanel>
           </Border>
 
-          <!-- ═══ Add-rule form (NARROW — <540 px) ═══
-               v2.30.0-r13 — vertical-stack version. Per design
-               RulesExplorations.html `narrow-form`:
-                 row 1: action + type (50/50)
-                 row 2: value (full width)
-                 row 3: comment (full width)
-                 row 4: + Add button (full width)
-               Per-field labels and live-validation hints retained. -->
           <Border IsVisible="{Binding IsRulesNarrow}"
                   Padding="12"
                   CornerRadius="{StaticResource RadiusMd}"
@@ -679,10 +502,7 @@
               <TextBlock Text="{Binding L_CustomRulesAddTitle}"
                          FontSize="9" FontWeight="SemiBold"
                          Foreground="{DynamicResource TextMutedBrush}"/>
-              <!-- Row 1: action + type (50/50) -->
               <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                <!-- v2.30.6-r1 (UX-13 fix): tooltip carries concrete example
-                     instead of just the column header label. -->
                 <ComboBox Grid.Column="0"
                           ItemsSource="{Binding AvailableRuleActions}"
                           SelectedItem="{Binding NewRuleAction}"
@@ -696,7 +516,6 @@
                           FontSize="11" Padding="6,3" MinHeight="0"
                           ToolTip.Tip="{Binding NewRuleTypeHint}"/>
               </Grid>
-              <!-- Row 2: value (full width with live-validation) -->
               <TextBox Text="{Binding NewRuleValue}"
                        PlaceholderText="{Binding NewRuleValuePlaceholder}"
                        FontSize="11" Padding="6,3" MinHeight="0"
@@ -711,11 +530,9 @@
                          Foreground="{Binding NewRuleValueIsValid,
                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
                                       ConverterParameter=SuccessFgBrush|DangerFgBrush}"/>
-              <!-- Row 3: comment (full width) -->
               <TextBox Text="{Binding NewRuleComment}"
                        PlaceholderText="{Binding L_CustomRulesCommentLabel}"
                        FontSize="11" Padding="6,3" MinHeight="0"/>
-              <!-- Row 4: + Add (full width) -->
               <Button icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                       Command="{Binding AddCustomRuleFromFormCommand}"
                       FontSize="11" FontWeight="SemiBold"
@@ -734,16 +551,6 @@
             </StackPanel>
           </Border>
 
-          <!-- ═══ Existing rules section ═══
-               v2.30.0-r11 — strict design adherence per user prompt
-               «Нужно привести UI к макету строго, без отсебятины».
-               Reverted r10's wrapper Border (window-in-window). Design
-               RulesPage.html has a flat structure: header row → search
-               → toolbar (filter chips + bulk-actions ⋯ menu) → flat
-               rules list. The page-level ScrollViewer handles overflow
-               naturally; no inner card. -->
-
-          <!-- Section header: title + count -->
           <Grid ColumnDefinitions="*,Auto"
                 IsVisible="{Binding CustomRulesList.Count}"
                 Margin="0,4,0,0">
@@ -759,26 +566,14 @@
                        VerticalAlignment="Center"/>
           </Grid>
 
-          <!-- ═══ List toolbar (responsive wrapper) ═══
-               Per design RulesPage.html `.list-toolbar`. Wide (≥540 px)
-               uses 3-col grid; narrow (<540 px) stacks into 2 rows
-               (search above, chips + ⋯ below).
-               Outer StackPanel handles the "no rules → hide toolbar"
-               IsVisible check; each inner block flips based on
-               IsRulesNarrow. -->
         <StackPanel IsVisible="{Binding CustomRulesList.Count}" Spacing="6">
           <Grid ColumnDefinitions="*,Auto,Auto"
                 ColumnSpacing="6"
                 IsVisible="{Binding !IsRulesNarrow}">
-            <!-- Search input -->
             <TextBox Grid.Column="0"
                      Text="{Binding CustomRulesSearchText}"
                      PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
                      FontSize="11" Padding="6,3" MinHeight="0"/>
-            <!-- Filter chips (segment control with counts).
-                 Same `view-seg` pattern as the Cards/Text toggle but
-                 4-way: All / direct / proxy / block. Active chip gets
-                 SurfaceBaseBrush bg + AccentFgBrush fg. -->
             <Border Grid.Column="1"
                     Padding="2"
                     CornerRadius="{StaticResource RadiusSm}"
@@ -874,9 +669,6 @@
                 </Button>
               </StackPanel>
             </Border>
-            <!-- Bulk actions popover button. Per design, destructive
-                 actions live behind ⋯ — not on the surface — so the
-                 user has to deliberately open the menu. -->
             <Button Grid.Column="2"
                     Name="BulkBtnWide"
                     Width="28" Height="28" Padding="0" MinHeight="0"
@@ -887,14 +679,6 @@
                     Background="{DynamicResource SurfaceBaseBrush}"
                     CornerRadius="{StaticResource RadiusSm}"
                     ToolTip.Tip="{Binding L_RulesBulkActions}">
-              <!-- v2.30.0-r15: ⋯ rendered as inner TextBlock with explicit
-                   centering. User report after r14: «Три точки стоят не
-                   ровно». Direct Content="⋯" on Button rendered the
-                   character at its natural baseline (visually below
-                   center) even with HorizontalContentAlignment=Center.
-                   TextBlock with TextAlignment=Center + VerticalAlignment
-                   =Center + LineHeight tied to FontSize anchors the
-                   glyph to the button's geometric center. -->
               <TextBlock icons:PictogramText.Icons="more-horizontal" icons:PictogramText.Text="⋯"
                          FontSize="16"
                          FontWeight="Bold"
@@ -904,9 +688,6 @@
                          VerticalAlignment="Center"
                          Foreground="{DynamicResource TextSecondaryBrush}"/>
               <Button.Flyout>
-                <!-- v2.30.0-r14 — custom Flyout per design `.bulk-pop`.
-                     Replaces the OS-default MenuFlyout to fully control
-                     surface/border/shadow/padding/icons. -->
                 <Flyout Placement="BottomEdgeAlignedRight"
                         FlyoutPresenterClasses="bulk-pop-host">
                   <Border Background="{DynamicResource SurfaceBaseBrush}"
@@ -950,7 +731,6 @@
                                      VerticalAlignment="Center"/>
                         </StackPanel>
                       </Button>
-                      <!-- Separator: 1px BorderSubtle, margin 4,2 per design -->
                       <Border Height="1"
                               Background="{DynamicResource BorderSubtleBrush}"
                               Margin="2,4"/>
@@ -972,11 +752,6 @@
             </Button>
           </Grid>
 
-          <!-- ═══ List toolbar (NARROW — <540 px) ═══
-               2-row stack per design narrow-mode: search above, then a
-               second row with chips (left, fills available) + ⋯ (right).
-               Filter chips collapse equally (each chip Stretches via
-               StackPanel) so the row never overflows. -->
           <StackPanel IsVisible="{Binding IsRulesNarrow}" Spacing="6">
             <TextBox Text="{Binding CustomRulesSearchText}"
                      PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
@@ -1064,9 +839,6 @@
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource TextSecondaryBrush}"/>
                 <Button.Flyout>
-                  <!-- v2.30.0-r14 — same design `.bulk-pop` content as
-                       wide toolbar; duplicated because Flyout instances
-                       can't be shared across parents. -->
                   <Flyout Placement="BottomEdgeAlignedRight"
                           FlyoutPresenterClasses="bulk-pop-host">
                     <Border Background="{DynamicResource SurfaceBaseBrush}"
@@ -1132,13 +904,7 @@
             </Grid>
           </StackPanel>
         </StackPanel>
-        <!-- ↑ End responsive toolbar wrapper -->
 
-          <!-- v2.30.0-r18 — inline confirm bar for Clear All. Replaces
-               the broken two-click pattern in the popover. Stays visible
-               until user clicks Cancel or Delete (no auto-dismiss).
-               User report: «после клика окошко закрывается а там нужен
-               дабл-клик» — popover-close was killing the second click. -->
           <Border IsVisible="{Binding ClearAllConfirmPending}"
                   Padding="10,8"
                   CornerRadius="{StaticResource RadiusSm}"
@@ -1177,22 +943,7 @@
             </Grid>
           </Border>
 
-          <!-- v2.31.0-r5 (F-26 follow-up): the per-page toast Border that
-               used to live here was promoted to MainWindow.axaml root grid
-               so HealthCheck + bulk-rule-action feedback shows up on any
-               page, not only when the user is on Настройки → Правила.
-               Same RulesToastText binding; container moved up one level. -->
-
-
-          <!-- ═══ Rule list (responsive wrapper) ═══
-               Wide (≥540 px): 6-col flat row template per design `.rule`.
-               Narrow (<540 px): 3-row stacked card per design
-               `.rule-narrow` — pill+type+toggle+menu on row 1, value on
-               row 2, comment on row 3. Each ListBox is visibility-bound
-               to its breakpoint; outer StackPanel holds the no-rules
-               IsVisible check. -->
         <StackPanel IsVisible="{Binding CustomRulesList.Count}" Spacing="0">
-          <!-- WIDE list (≥540 px) — current 6-col template -->
           <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
                    IsVisible="{Binding !IsRulesNarrow}"
                    MaxHeight="360"
@@ -1211,26 +962,10 @@
             </ListBox.ItemContainerTheme>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:CustomRuleViewModel">
-                <!-- Rule card — v2.30.0-r11 strict design alignment.
-                     Visuals (background/border/padding/radius/margin/
-                     hover) live in the `Border.rule-card` style at the
-                     UserControl.Resources level. RowOpacity binding
-                     handles the disabled-state .55 opacity. -->
                 <Border Classes="rule-card"
                         Opacity="{Binding RowOpacity}">
                   <Grid ColumnDefinitions="74,110,*,Auto,Auto,Auto"
                         ColumnSpacing="12" VerticalAlignment="Center">
-                    <!-- Action chip — semantic light bg + matching fg +
-                         1px matching-tone border. r9: switched from
-                         hardcoded solid-color converter (blue/orange/red
-                         + white text) to ActionToTokenBrushConverter
-                         which looks up theme brushes per (action, role).
-                         Width pinned 74 to match design `.pill`. -->
-                    <!-- v2.30.0-r12: padding 10,5 per design `padding:5px 10px`
-                         (was 0,3 in r9-r11). With explicit Width=74 and
-                         box-border-style padding (Avalonia padding sits
-                         INSIDE Width, like CSS box-sizing:border-box),
-                         text gets 10 px horizontal + 5 px vertical room. -->
                     <Border Grid.Column="0"
                             CornerRadius="{StaticResource RadiusXs}"
                             Padding="10,5"
@@ -1266,12 +1001,6 @@
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"
                                ToolTip.Tip="{Binding Comment}"/>
-                    <!-- Comment column — v2.30.0-r9: was missing entirely
-                         pre-r9. Design has italic muted comment after the
-                         value, max-width 200 to avoid eating value column
-                         on long comments. Empty comments collapse via
-                         IsVisible, so the row reads as 5-col when there's
-                         no comment. -->
                     <TextBlock Grid.Column="3"
                                Text="{Binding Comment}"
                                FontSize="10"
@@ -1281,20 +1010,11 @@
                                Foreground="{DynamicResource TextMutedBrush}"
                                VerticalAlignment="Center"
                                IsVisible="{Binding Comment, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    <!-- v2.30.0-r11: iOS-style toggle (per design `.toggle`).
-                         32x18 track + 14x14 white thumb, off=BorderStrong,
-                         on=SuccessSolid. Theme defined in UserControl.Resources. -->
                     <CheckBox Grid.Column="4"
                               Theme="{StaticResource IosToggleCheckBox}"
                               IsChecked="{Binding Enabled}"
                               AutomationProperties.Name="{Binding Value}"
                               VerticalAlignment="Center"/>
-                    <!-- v2.30.0-r12: ⋯ context menu replaces direct ✕
-                         button per design `.menu-btn`. Currently the menu
-                         only has Delete; Edit / Move up/down are deferred
-                         to v2.30.1. The ⋯ pattern keeps destructive
-                         actions one-tap away rather than directly on the
-                         row surface. -->
                     <Button Grid.Column="5"
                             Width="24" Height="24"
                             Padding="0" MinHeight="0"
@@ -1325,10 +1045,6 @@
             </ListBox.ItemTemplate>
           </ListBox>
 
-          <!-- NARROW list (<540 px) — 3-row stacked card per design
-               `.rule-narrow`. Row 1 = pill + type + toggle + menu;
-               row 2 = value (full width); row 3 = comment (full width,
-               IsVisible-collapsed when empty). -->
           <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
                    IsVisible="{Binding IsRulesNarrow}"
                    MaxHeight="360"
@@ -1352,7 +1068,6 @@
                   <Grid ColumnDefinitions="Auto,*,Auto,Auto"
                         RowDefinitions="Auto,Auto,Auto"
                         ColumnSpacing="10" RowSpacing="3">
-                    <!-- Row 1, col 0: action chip -->
                     <Border Grid.Row="0" Grid.Column="0"
                             CornerRadius="{StaticResource RadiusXs}"
                             Padding="10,5"
@@ -1373,7 +1088,6 @@
                                               Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
                                               ConverterParameter=Fg}"/>
                     </Border>
-                    <!-- Row 1, col 1: type label -->
                     <TextBlock Grid.Row="0" Grid.Column="1"
                                Text="{Binding Type}"
                                FontSize="10"
@@ -1381,13 +1095,11 @@
                                Foreground="{DynamicResource TextMutedBrush}"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
-                    <!-- Row 1, col 2: iOS toggle -->
                     <CheckBox Grid.Row="0" Grid.Column="2"
                               Theme="{StaticResource IosToggleCheckBox}"
                               IsChecked="{Binding Enabled}"
                               AutomationProperties.Name="{Binding Value}"
                               VerticalAlignment="Center"/>
-                    <!-- Row 1, col 3: ⋯ menu -->
                     <Button Grid.Row="0" Grid.Column="3"
                             Width="24" Height="24"
                             Padding="0" MinHeight="0"
@@ -1412,7 +1124,6 @@
                         </MenuFlyout>
                       </Button.Flyout>
                     </Button>
-                    <!-- Row 2, cols 0-3: value (full width, mono) -->
                     <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
                                Text="{Binding Value}"
                                FontSize="11"
@@ -1420,7 +1131,6 @@
                                FontFamily="Consolas, 'SF Mono', monospace"
                                TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding Comment}"/>
-                    <!-- Row 3, cols 0-3: comment (italic, muted, hides when empty) -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
                                Text="{Binding Comment}"
                                FontSize="10"
@@ -1434,9 +1144,7 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </StackPanel>
-        <!-- ↑ End responsive list wrapper -->
 
-          <!-- empty-state hint when list itself is empty -->
           <TextBlock Text="{Binding L_CustomRulesEmpty}"
                      FontSize="11"
                      FontStyle="Italic"
@@ -1445,20 +1153,7 @@
                      IsVisible="{Binding !CustomRulesList.Count}"/>
 
           </StackPanel>
-          <!-- ↑ End Cards view -->
 
-          <!-- ═══ Read view (read-only grouped monospace) ═══
-               v2.30.0-r12 — third view-mode per design RulesExplorations.html
-               TextList component. Shows rules grouped by action with mono
-               typography:
-                   — direct (4) —
-                   ●  direct  domain_suffix  .corp.local       # comment
-                   ●  direct  ip_cidr        100.64.0.0/10     # CGNAT
-                   ...
-                   — proxy (3) —
-                   ...
-               Each row keeps its toggle (●/○) and a ⋯ delete affordance,
-               but no Type/Value editing — flip to Cards or Edit for that. -->
           <StackPanel Spacing="4" IsVisible="{Binding IsRulesViewRead}">
             <Border Padding="0,8"
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -1466,7 +1161,6 @@
                     CornerRadius="{StaticResource RadiusSm}"
                     Background="{DynamicResource SurfaceAppBrush}">
               <StackPanel Spacing="2">
-                <!-- Group: direct -->
                 <StackPanel IsVisible="{Binding ReadModeDirectRules.Count}" Spacing="0">
                   <TextBlock Text="{Binding ReadModeDirectHeader}"
                              FontSize="9"
@@ -1524,8 +1218,6 @@
                                   BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         </Grid>
-                        <!-- Narrow (<540 px): Action/Type over Value so the delete stays in the Auto column at MinWidth=360.
-                             IsRulesNarrow lives on MainWindowViewModel, reached via the page DataContext. -->
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,1" Opacity="{Binding RowOpacity}"
                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <StackPanel Grid.Column="0" Spacing="1">
@@ -1549,7 +1241,6 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- Group: proxy -->
                 <StackPanel IsVisible="{Binding ReadModeProxyRules.Count}" Spacing="0">
                   <TextBlock Text="{Binding ReadModeProxyHeader}"
                              FontSize="9"
@@ -1598,7 +1289,6 @@
                                   Background="Transparent" BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         </Grid>
-                        <!-- Narrow variant — see direct group. -->
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,1" Opacity="{Binding RowOpacity}"
                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <StackPanel Grid.Column="0" Spacing="1">
@@ -1622,7 +1312,6 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- Group: block -->
                 <StackPanel IsVisible="{Binding ReadModeBlockRules.Count}" Spacing="0">
                   <TextBlock Text="{Binding ReadModeBlockHeader}"
                              FontSize="9"
@@ -1671,7 +1360,6 @@
                                   Background="Transparent" BorderThickness="0"
                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         </Grid>
-                        <!-- Narrow variant — see direct group. -->
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,1" Opacity="{Binding RowOpacity}"
                               IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRulesNarrow}">
                           <StackPanel Grid.Column="0" Spacing="1">
@@ -1695,7 +1383,6 @@
                   </ItemsControl>
                 </StackPanel>
 
-                <!-- Empty state -->
                 <TextBlock Text="{Binding L_CustomRulesEmpty}"
                            FontSize="11" FontStyle="Italic"
                            Foreground="{DynamicResource TextMutedBrush}"
@@ -1705,21 +1392,8 @@
             </Border>
           </StackPanel>
 
-          <!-- ═══ Edit view (Text mode) ═══
-               v2.30.0-r7 — replaces the old Advanced expander. Per
-               RulesExplorations.html design: textarea with line-numbered
-               gutter, per-line errors, status strip with active count +
-               dirty indicator, Apply / Revert buttons, error list, format
-               hint. Unlike the old auto-saving expander, edits live in
-               EditedCustomRulesText buffer until Apply commits. -->
           <StackPanel Spacing="8" IsVisible="{Binding IsRulesViewEdit}">
 
-            <!-- Editor: gutter (Auto col) + TextBox (* col) inside a
-                 Border with BorderDefault + RadiusSm. Both share font +
-                 line-height so line numbers align with rules.
-                 The TextBox has TextWrapping=NoWrap so a long single line
-                 doesn't visually wrap and break the 1:1 line-to-number
-                 mapping (horizontal scroll handles long values). -->
             <Border BorderBrush="{DynamicResource BorderDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource RadiusSm}"
@@ -1728,10 +1402,6 @@
               <Grid ColumnDefinitions="Auto,*"
                     MinHeight="160"
                     MaxHeight="280">
-                <!-- Gutter — read-only line numbers in muted mono.
-                     IsHitTestVisible=False so clicks pass through to
-                     the textbox. Padding mirrors the textbox so visual
-                     line origin matches. -->
                 <Border Grid.Column="0"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -1749,12 +1419,6 @@
                                MinWidth="22"/>
                   </ScrollViewer>
                 </Border>
-                <!-- Editor TextBox. Borderless + transparent bg so the
-                     parent Border owns the visual frame. AcceptsReturn,
-                     NoWrap, monospace 11/18.
-                     v2.30.0-r7 note: keystrokes update the buffer
-                     (EditedCustomRulesText) but DON'T trigger SaveSettings.
-                     Apply commits to the canonical CustomRulesText. -->
                 <TextBox Grid.Column="1"
                          Text="{Binding EditedCustomRulesText}"
                          PlaceholderText="{Binding L_CustomRulesPlaceholder}"
@@ -1771,8 +1435,6 @@
               </Grid>
             </Border>
 
-            <!-- Status strip: active count + dirty indicator on left,
-                 Revert + Apply buttons on right. -->
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
               <TextBlock Grid.Column="0"
                          Text="{Binding RulesEditorStatusText}"
@@ -1804,8 +1466,6 @@
                       IsEnabled="{Binding RulesEditorIsDirty}"/>
             </Grid>
 
-            <!-- Error list (visible only on parse errors). First 4 errors
-                 with line-number prefix; "and N more…" if more exist. -->
             <Border IsVisible="{Binding RulesEditorErrorListText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                     Padding="8,6"
                     CornerRadius="{StaticResource RadiusSm}"
@@ -1819,9 +1479,6 @@
                          Foreground="{DynamicResource DangerFgBrush}"/>
             </Border>
 
-            <!-- Conflict warning (catch-all rule shadowing) — surfaced
-                 from the canonical CustomRulesConflictText (computed at
-                 Apply / SaveSettings time). Stays visible after Apply. -->
             <Border IsVisible="{Binding CustomRulesConflictText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                     Padding="8,5"
                     CornerRadius="{StaticResource RadiusSm}"
@@ -1840,8 +1497,6 @@
               </StackPanel>
             </Border>
 
-            <!-- Format hint — small, muted, monospace. Reminds the user
-                 of grammar + comment syntax. -->
             <Border Padding="10,7"
                     CornerRadius="{StaticResource RadiusSm}"
                     Background="{DynamicResource SurfaceSunkenBrush}">
@@ -1855,32 +1510,9 @@
           </StackPanel>
         </StackPanel>
 
-        <!-- ═══ Leak Protection ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
           <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
 
-          <!-- v2.28.4-r1: switched from CheckBox.Content<TextBlock> to the
-               radio-card 24,* pattern. The earlier v2.28.3-r1 fix wrapped
-               labels in <TextBlock TextWrapping="Wrap"> but the inner
-               TextBlock still inherited the CheckBox content-presenter's
-               natural width — Avalonia's default CheckBox template gives
-               the content slot all the space it asks for, so a long
-               localised label (e.g. RU "Строгая защита от утечек") still
-               pushed the parent Border past the ScrollViewer right edge
-               on ~500px windows. The 24,* Grid pattern (proven in this
-               same file's radio-card / checkbox-card sections) places the
-               TextBlock in a sized * column so it gets the parent width
-               as a real constraint and Wrap takes effect. -->
-          <!-- v2.30.0-r6: switched checkbox + text both to VerticalAlignment=Center.
-               User report: «текст съехал он стал выше галочек».
-               Pre-r6 used Top alignment on both with a 1px top margin on
-               the checkbox — was correct for multi-line wrapped labels
-               (checkbox aligned with first line) but visually misaligned
-               for single-line labels because CheckBox box sits a few px
-               below its container's top while TextBlock baseline is
-               higher. Center alignment works for both single-line and
-               multi-line labels (checkbox sits at vertical center of
-               multi-line block, which reads as "checkbox owns the row"). -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -1934,21 +1566,8 @@
                            TextWrapping="Wrap"
                            VerticalAlignment="Center"/>
               </Grid>
-              <!-- Wave 39 (v2.35.0-r5) — DNS-leak firewall lockdown. Sits at
-                   the bottom of the Leak Protection card because it is the
-                   most-strict / most-blast-radius toggle of the group:
-                   blocks all non-TUN UDP/53, TCP/53, TCP/853 via Windows
-                   Firewall while VPN is active. Default true for new
-                   installs, false for upgrades (migrated via
-                   SettingsMigrator). Sibling DNS-related boxes use the same
-                   24,* grid + Center vertical alignment per the v2.30.0-r6
-                   layout note above. -->
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipDnsLeakLockdown}">
-                <!-- v2.40.x (Fix #9): greyed out + annotated on macOS/Linux,
-                     where the firewall-backed lockdown has no backend yet
-                     (NullFirewallManager) and the toggle would be a silent
-                     no-op. IsEnabled re-enables once the kill-switch ships. -->
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding IsDnsLeakLockdownEnabled, Mode=TwoWay}"
                           IsEnabled="{Binding IsDnsLeakLockdownAvailable}"
@@ -1961,7 +1580,6 @@
                            IsEnabled="{Binding IsDnsLeakLockdownAvailable}"
                            VerticalAlignment="Center"/>
               </Grid>
-              <!-- v2.40.x (Fix #9): platform honesty note — only on macOS/Linux. -->
               <TextBlock Text="{Binding L_DnsLeakLockdownUnavailableNote}"
                          IsVisible="{Binding !IsDnsLeakLockdownAvailable}"
                          Foreground="{DynamicResource WarningFgBrush}"
@@ -1971,12 +1589,6 @@
             </StackPanel>
           </Border>
 
-          <!-- TUN interface MTU — connection/performance setting (not leak
-               protection, hence its own card). int-bound TextBox (not
-               NumericUpDown, which pushes decimal? null on clear and would
-               break the int binding). Persisted value is clamped 576..1500
-               (minimum 1280 with IPv6) in SaveSettings so a bad entry can't
-               brick the TUN. -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -2015,7 +1627,6 @@
           </Border>
         </StackPanel>
 
-        <!-- ═══ Content ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsContentSelected}">
           <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="13"/>
 
@@ -2035,7 +1646,6 @@
           </Border>
         </StackPanel>
 
-        <!-- ═══ Updates ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsUpdatesSelected}">
           <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="13"/>
 
@@ -2046,7 +1656,6 @@
             <StackPanel Spacing="3">
               <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"
                          TextWrapping="Wrap"/>
-              <!-- v2.28.3: same TextWrapping fix as Section A's checkboxes. -->
               <CheckBox IsChecked="{Binding ReceivePrereleases}"
                         AutomationProperties.Name="{Binding ReceivePrereleasesLabel}"
                         MinHeight="0" Padding="4,0">
@@ -2055,9 +1664,6 @@
             </StackPanel>
           </Border>
 
-          <!-- v2.30.4-r1 (SUGGEST-22 from UX audit): show current version
-               + manual Check button so users have an in-context way to
-               trigger an update check (the menu shortcut still works). -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -2069,11 +1675,6 @@
                 <TextBlock Text="{Binding AppVersionShortText}"
                            FontSize="12" FontWeight="SemiBold"/>
               </StackPanel>
-              <!-- v2.30.7-r2 (AU-11 fix): bind to CheckLinkText so the
-                   button gives feedback (Checking… / Up to date / etc).
-                   Was bound to static L_SmpMenuCheckUpdates so click
-                   appeared to do nothing — observable was set in code
-                   but never read by UI. -->
               <Button Grid.Column="1"
                       Content="{Binding UpdateVm.CheckLinkText}"
                       Command="{Binding UpdateVm.CheckManuallyCommand}"
@@ -2083,8 +1684,6 @@
             </Grid>
           </Border>
 
-          <!-- v2.39.0 Support / Diagnostics — appended under Updates rather than
-               a 6th settings sub-tab (avoids narrow-window tab-strip overflow). -->
           <Button Command="{Binding UpdateVm.ToggleVersionHistoryCommand}"
                   IsEnabled="{Binding !UpdateVm.IsDownloading}"
                   HorizontalAlignment="Left"
@@ -2175,30 +1774,9 @@
           </Border>
         </StackPanel>
 
-        <!-- ═══ Autostart (v2.27 Bug C redesign) ═══
-             Two logical sections grouped by WHEN the autostart happens
-             (not which Windows mechanism powers it), per plans/v2.27 §3.
-
-             Section A — "At Windows startup (before sign-in)":
-               the Windows service master toggle + which components it
-               should bring up at boot (VPN / Zapret / Telegram proxy).
-
-             Section B — "At user sign-in":
-               the HKCU Run key that launches VPNRouter on login. Gives
-               a separate explanation that this opens the UI only; it
-               does not start VPN itself — the user has to either start
-               manually or flip Section A's master.
-
-             Eliminates the v2.26 UX trap where three unrelated mechanisms
-             (service install / component yaml flags / Run key) lived in
-             one grouping and a user couldn't tell "what do I need to
-             tick to get VPN before login?" without reading source. -->
         <StackPanel Spacing="14" IsVisible="{Binding IsSettingsAutostartSelected}">
           <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
 
-          <!-- ══════════════════════════════════════════════════════════
-               Section A — At Windows startup (before sign-in)
-               ══════════════════════════════════════════════════════════ -->
           <StackPanel Spacing="8" IsVisible="{Binding IsWindowsPlatform}">
             <TextBlock Text="{Binding L_AutostartBootSectionTitle}"
                        FontSize="11" FontWeight="SemiBold"
@@ -2209,16 +1787,6 @@
                        Foreground="{DynamicResource TextMutedBrush}"
                        Opacity="0.85"/>
 
-            <!-- ── Windows service master card ──
-                 v2.27.0-r2: bound back to the raw ServiceVm.AutostartChecked
-                 (install/uninstall the service, nothing more) after user
-                 feedback on r1. The previous attempt to unify Simple and
-                 Advanced via SmpAutostartChecked created two equally-wide
-                 controls whose only job was to stay in sync with each other
-                 — at which point you don't need two. Simple's checkbox is
-                 now a link-card to this page, so this is the single source
-                 of truth for the install state. Sub-checkboxes below turn
-                 VPN / Zapret / Telegram on/off individually after install. -->
             <Border Classes="checkbox-card"
                     Classes.active="{Binding ServiceVm.AutostartChecked}">
               <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
@@ -2235,13 +1803,6 @@
                   <TextBlock Classes="card-sub"
                              Text="{Binding L_ServiceMasterSubtitle}"/>
 
-                  <!-- v2.27 §4.5: prominent status line with PID — replaces
-                       the tiny 9pt pill that users missed.
-                       v2.27.0-r2 fix for user-reported narrow-window overflow:
-                       WrapPanel lets status + Restart + Reinstall buttons flow
-                       onto a second line when parent Border < ~350px wide,
-                       instead of forcing a horizontal StackPanel wider than
-                       the card and overflowing the right edge. -->
                   <WrapPanel Orientation="Horizontal"
                              Margin="0,6,0,0"
                              IsVisible="{Binding ServiceVm.IsInstalled}">
@@ -2272,9 +1833,6 @@
                             Margin="0,0,6,4"/>
                   </WrapPanel>
 
-                  <!-- v2.27 §4.5 busy indicator: indeterminate progress bar
-                       + status message. Replaces bare italic text so the
-                       user actually notices that the install is in flight. -->
                   <StackPanel IsVisible="{Binding ServiceVm.IsBusy}"
                               Margin="0,6,0,0" Spacing="3">
                     <ProgressBar IsIndeterminate="True"
@@ -2288,10 +1846,6 @@
               </Grid>
             </Border>
 
-            <!-- ── Components to auto-start with the service ──
-                 Interactable only when service is installed (flag values
-                 are meaningless otherwise — nothing reads them on boot).
-                 Info hint when service isn't installed yet. -->
             <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                     Background="{DynamicResource SurfaceSunkenBrush}"
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -2300,22 +1854,6 @@
                 <TextBlock Text="{Binding L_ServiceComponentsHeader}"
                            FontSize="10" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextMutedBrush}"/>
-                <!-- v2.27.0-r2 narrow-window fix: wrap each CheckBox.Content
-                     in an explicit TextBlock with TextWrapping="Wrap".
-                     Default Avalonia CheckBox template renders bare-string
-                     Content as a no-wrap TextBlock, which set the sub-card
-                     min-width to the widest localised label (~180px for
-                     "Start TgProxy on system boot") and blew past the
-                     ScrollViewer right edge when window dropped to ~500px.
-                     v2.31.10 (autostart UX clarity): per-component status
-                     badge below each CheckBox names the actual delivery
-                     channel (Service-at-boot vs App-login vs nothing) so a
-                     user can't tick a toggle that doesn't fire. Three
-                     IsVisible-gated TextBlocks per component cover the
-                     three computed states from MainWindowViewModel. The
-                     CheckBox row stays IsEnabled-bound to ServiceVm.IsInstalled
-                     so a "no-op" toggle is also literally non-interactive,
-                     but the badge appears regardless of enabled state. -->
                 <StackPanel Spacing="5">
                   <StackPanel Spacing="2"
                               IsEnabled="{Binding ServiceVm.IsInstalled}">
@@ -2396,11 +1934,6 @@
                                Foreground="{DynamicResource DangerFgBrush}"/>
                   </StackPanel>
                 </StackPanel>
-                <!-- v2.31.1-r1 (F-4 / UX-6): inline CTA when service not
-                     installed. Pre-fix the only install path was scrolling
-                     up to the master toggle. Now there's a button right
-                     under the explanatory hint, both visible only when
-                     ServiceVm.IsInstalled=false. -->
                 <StackPanel Spacing="4"
                             IsVisible="{Binding !ServiceVm.IsInstalled}"
                             Margin="0,2,0,0">
@@ -2424,12 +1957,6 @@
             </Border>
           </StackPanel>
 
-          <!-- ══════════════════════════════════════════════════════════
-               Section B — At user sign-in
-               (Win HKCU\Run / Mac LaunchAgent / Linux XDG autostart)
-               v2.29.0: cross-platform. Pre-r2 was Windows-only with the
-               "available on Windows only" notice for Mac/Linux users.
-               ══════════════════════════════════════════════════════════ -->
           <StackPanel Spacing="8">
             <TextBlock Text="{Binding L_AutostartLoginSectionTitle}"
                        FontSize="11" FontWeight="SemiBold"
@@ -2458,15 +1985,11 @@
       </Grid>
     </ScrollViewer>
 
-    <!-- Apply bar: "Autosave is on" left hint + compact Apply right. -->
     <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
             Padding="14,7,14,8"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}"
             Background="{DynamicResource SurfaceSunkenBrush}">
-      <!-- v2.30.3-r1 (BUG-7 fix): added TextTrimming="CharacterEllipsis"
-           so even if a future locale string is too long, it ellipsizes
-           cleanly instead of being painted over by the Apply button. -->
       <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" ColumnSpacing="8">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
           <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.Text="✓" FontSize="11"
@@ -2478,7 +2001,6 @@
                      VerticalAlignment="Center"
                      TextTrimming="CharacterEllipsis"/>
         </StackPanel>
-        <!-- v2.31.6-r14 A11y: explicit Name on the canonical Apply CTA. -->
         <Button Grid.Column="1"
                 icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding L_ApplyNowReloadVpn}"
                 Command="{Binding ApplyPendingChangesCommand}"
