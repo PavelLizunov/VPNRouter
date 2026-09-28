@@ -290,6 +290,7 @@ public final class VpnRouterService extends VpnService {
             if (throwable != null) {
                 java.io.StringWriter sw = new java.io.StringWriter();
                 throwable.printStackTrace(new java.io.PrintWriter(sw));
+                // Crash text can contain vless URIs and keys: scrub before writing.
                 sb.append(scrubSecrets(sw.toString()));
             } else {
                 sb.append("(no throwable)\n");
@@ -741,6 +742,7 @@ public final class VpnRouterService extends VpnService {
     private void stopSlipstreamIfRunning() {
         if (!slipstreamRunning) return;
         slipstreamRunning = false;
+        // Bound nativeStop: a Slipstream worker stuck in reconnect backoff can hang the join and wedge the UI.
         runBounded("nativeStop", 4_000L, new Runnable() {
             @Override
             public void run() {

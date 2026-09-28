@@ -43,6 +43,7 @@ public class HealthMonitor : IDisposable
 
     private bool _shouldBeRunning;
 
+    // Wedge detection arms only after the Clash API has served once this lifecycle, never during TUN warm-up.
     private bool _servingConfirmed;
     private int _wedgeStreak;
     private const int WedgeKillThreshold = 4;
@@ -51,8 +52,10 @@ public class HealthMonitor : IDisposable
 
     private CancellationTokenSource? _restartCts;
 
+    // Re-entry guard: timer callbacks can overlap while a slow tick (Clash API / process probe) is still running.
     private int _onHealthTickInProgress;
 
+    // Serialises AttemptRestart, which is invoked from both the health tick and the Crashed callback on different threads.
     private readonly object _attemptRestartLock = new();
 
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromSeconds(5);
@@ -60,6 +63,7 @@ public class HealthMonitor : IDisposable
     private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(60);
     private DateTime _lastFullRestart = DateTime.MinValue;
 
+    // After a full restart the new TUN is not routing yet: lift the kill switch only once the tunnel is confirmed healthy.
     private int _deferredBlockRuleDisable;
 
     private static readonly TimeSpan DeferredDisableMaxWait = TimeSpan.FromSeconds(45);
@@ -179,6 +183,7 @@ public class HealthMonitor : IDisposable
 
         _logger.Debug("[HealthMonitor] New process detected: {Name} — debouncing", processName);
 
+        // Swap the debounce timer atomically: ETW callbacks arrive on multiple threads.
         var newTimer = new System.Threading.Timer(
             OnDebounceElapsed, null,
             (int)DebounceWindow.TotalMilliseconds,
@@ -378,6 +383,7 @@ public class HealthMonitor : IDisposable
         try { _firewall.EnableBlockRules(); }
         catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to enable firewall block rules on crash"); }
 
+        // sing-box is gone: lift the DNS lockdown now (fail open) so the user is not stranded offline.
         try { _dnsHardening.ReconcileLockdownForHealth(false, _appSettings, _logger); }
         catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to lift DNS lockdown on crash"); }
 
@@ -726,6 +732,7 @@ public class HealthMonitor : IDisposable
         _disposed = true;
         Stop();
 
+        // Unsubscribe in Dispose, not Stop: the subscription is made once in the constructor.
         try { _singBox.Crashed -= OnSingBoxCrashed; } catch { }
 
         _ownedApi?.Dispose();

@@ -16,11 +16,13 @@ public partial class SingBoxManager : IDisposable
     private readonly IProcessRunner _runner;
     private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
+    // int, not bool: Dispose uses Interlocked.CompareExchange for single execution.
     private int _disposed;
     private TunOwnershipLock _tunLock;
 
     private int _stopState;
 
+    // Process-wide ordered queue: TUN removal can outlive the manager, and a reconnect must not race a prior pnputil removal.
     private static readonly object s_tunRemovalGate = new();
     private static Task<TunAdapterNotReadyException?> s_pendingTunRemoval =
         Task.FromResult<TunAdapterNotReadyException?>(null);

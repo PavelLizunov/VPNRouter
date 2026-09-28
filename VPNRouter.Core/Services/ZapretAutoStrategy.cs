@@ -313,6 +313,7 @@ public static class ZapretAutoStrategy
 
         void Flush()
         {
+            // Never record the runtime wrapper as a strategy result.
             if (!string.IsNullOrEmpty(current) && total > 0 && !IsSilentWrapper(current))
             {
                 perStrategy[current] = new ZapretStrategyTestResult

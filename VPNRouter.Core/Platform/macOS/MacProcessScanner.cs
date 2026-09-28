@@ -98,6 +98,7 @@ public class MacProcessScanner : IProcessScanner
             using var proc = Process.Start(psi);
             if (proc == null) return tree;
 
+            // Read stdout on a background task so the WaitForExit timeout can fire if ps hangs.
             var readTask = System.Threading.Tasks.Task.Run(() => proc.StandardOutput.ReadToEnd());
             if (!proc.WaitForExit(5000))
             {

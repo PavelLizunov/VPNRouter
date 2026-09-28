@@ -97,6 +97,7 @@ public static class ConnectionHealthClassifier
 
     private static ConnHealthCategory ClassifyTeardown(string payload, IReadOnlySet<string>? proxyEndpoints)
     {
+        // Test raw-read before the endpoint match: a local raw-read close can name the proxy IP and must not count as a proxy error.
         if (payload.Contains(Markers.RawRead, StringComparison.Ordinal) ||
             payload.Contains(Markers.RawReadHyphen, StringComparison.Ordinal))
             return ConnHealthCategory.LocalClose;

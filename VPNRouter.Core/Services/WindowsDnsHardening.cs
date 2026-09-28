@@ -22,6 +22,7 @@ public static class WindowsDnsHardening
     private static readonly string StatePath =
         Path.Combine(AppPaths.DataDir, "dns-hardening-state.json");
 
+    // The lockdown mirrors live tunnel state: armed while the tunnel serves, lifted (fail open) when it stops.
     private static volatile bool _lockdownEffective;
 
     public static void Apply(ILogger? logger = null) => Apply(null, logger);

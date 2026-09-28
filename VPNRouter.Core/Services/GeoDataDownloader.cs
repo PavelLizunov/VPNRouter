@@ -83,6 +83,7 @@ public class GeoDataDownloader
 
             _logger.Information("[GeoData] Downloading {Label} from {Url}", label, CanaryPolicy.RedactUrl(url));
 
+            // Download to .tmp and rename so a partial download never replaces a working file.
             var tmpPath = destPath + ".tmp";
             try
             {

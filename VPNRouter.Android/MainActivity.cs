@@ -779,6 +779,7 @@ public class MainActivity : AvaloniaMainActivity
                 return;
             }
 
+            // The config dump contains credentials (UUID, Reality keys): debug builds only.
             if (IsDebuggable() && singboxLogPath is not null)
             {
                 try
@@ -869,6 +870,7 @@ public class MainActivity : AvaloniaMainActivity
         {
             configJson = await System.Threading.Tasks.Task.Run(
                 () => AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath));
+            // The config dump contains credentials (UUID, Reality keys): debug builds only.
             if (IsDebuggable() && singboxLogPath is not null)
             {
                 try

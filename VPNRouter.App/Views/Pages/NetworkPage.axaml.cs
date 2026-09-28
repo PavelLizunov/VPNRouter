@@ -30,6 +30,7 @@ public partial class NetworkPage : UserControl
         vm.IsRulesNarrow = width < NarrowBreakpoint;
     }
 
+    // Close the flyout after the button Command runs: Avalonia raises Click before executing Command.
     private void OnBulkItemClick(object? sender, RoutedEventArgs e)
     {
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>

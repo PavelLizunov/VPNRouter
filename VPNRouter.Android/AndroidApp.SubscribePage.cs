@@ -43,6 +43,7 @@ public partial class AndroidApp
 
     private CancellationTokenSource? _subsAggTestAllCts;
 
+    // Coalesces a burst of probe results into one aggregated-list rebuild; Interlocked because up to 4 probes complete concurrently.
     private int _subsAggRebuildScheduled;
 
     private List<SubscriptionEntry> _subs = new();

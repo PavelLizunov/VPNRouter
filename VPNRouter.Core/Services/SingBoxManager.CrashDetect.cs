@@ -29,6 +29,7 @@ public partial class SingBoxManager
             }
         }
 
+        // An exit during an intentional Stop or Restart is expected, not a crash.
         if ((_restartInProgress || _stopInProgress) && (exitCode == -1 || exitCode == 137 || exitCode == 143))
         {
             _logger.Information(

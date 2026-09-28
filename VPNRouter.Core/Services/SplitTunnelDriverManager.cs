@@ -159,6 +159,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     {
         if (_disposed) return;
         _disposed = true;
+        // Cancel the NIC-debounce task before disposing _gate, or it re-acquires a disposed gate.
         var lastCts = Interlocked.Exchange(ref _debounceCts, null);
         if (lastCts is not null)
         {
@@ -790,6 +791,7 @@ internal sealed class SplitTunnelDriverManager : ISplitTunnelDriver
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
     {
         var fresh = new CancellationTokenSource();
+        // The superseder cancels then disposes the prior CTS; the task must never dispose its own CTS.
         var prior = Interlocked.Exchange(ref _debounceCts, fresh);
         if (prior is not null)
         {
