@@ -51,9 +51,12 @@ Revert the PR; all content is in Git history.
 
 ## Outcome
 
-- Removed 816 files (about 120k lines): 715 under `plans/`, 28 `design/`,
-  59 `opendesign/`, plus lab scripts, unused root icons, the winget manifest and
-  one-off helpers. `plans/` now holds `AGENTS.md`, `OPEN-DEFECTS.md` and this brief.
+- Removed 816 files (about 120k lines): 714 under `plans/`, 29 `design/`
+  (including its AGENTS.md), 59 `opendesign/`, 4 winget manifest files, 3 lab
+  scripts under `tools/`, 6 root files (lab VM docs and scripts, unused icons,
+  update helper) and the unused `.dsh` quick-win brief template. `plans/` now
+  holds `AGENTS.md`, `OPEN-DEFECTS.md` and this brief; the tree has 874 tracked
+  files instead of 1689.
 - Moved 10 live documents to `docs/` and indexed them in `docs/AGENTS.md`;
   rewrote every reference to their old paths (skill, hook comment, PR template,
   workflow comment, scripts, test comments, ledger).
@@ -67,5 +70,9 @@ Revert the PR; all content is in Git history.
   code comments, workflow and script comments, `.gitignore` rules for removed
   files, and "see also" lines inside moved documents. Handled in later stages.
 - Checks: line endings preserved; no relative Markdown link is broken; the
-  open P0/P1 gate set is unchanged (21 lines); exact-head CI recorded on PR #327.
+  open P0/P1 gate set is unchanged (21 lines). Exact-head CI at `5b1fde17`
+  passed `test`, `characterization-windows`, `go-test-windows` (run 36460047556)
+  and `grep` (run 36460047847); `test` includes `AgentContextContractTests`.
+- Post-move script check: no history-like file remains outside code projects
+  except this brief.
 - `tools/zapret/` untouched pending the owner decision.
