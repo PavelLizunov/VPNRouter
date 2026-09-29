@@ -64,12 +64,12 @@ public sealed class VpnEngineSplitTunnelResolveTests
         var driver = new FakeSplitTunnelDriver();
         var engine = BuildEngine(driver);
 
-        await driver.EngageAsync(new SplitTunnelEngageRequest(new List<string> { @"C:\old.exe" }, "172.19.0.2", null), default);
+        await driver.EngageAsync(new SplitTunnelEngageRequest(new List<string> { @"C:\old.exe" }, "172.19.0.2", null), TestContext.Current.CancellationToken);
         Assert.True(driver.IsEngaged);
         int engagesBefore = driver.EngageCount;
 
         var settings = SplitExcludeSettings("zzz-nonexistent-vpnrouter-test.exe");
-        await engine.TryEngageSplitDriverAsync(settings, default);
+        await engine.TryEngageSplitDriverAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.Equal(engagesBefore, driver.EngageCount);
         Assert.Equal(1, driver.DisengageCount);
@@ -86,7 +86,7 @@ public sealed class VpnEngineSplitTunnelResolveTests
         var engine = BuildEngine(driver);
 
         var settings = SplitExcludeSettings("cmd.exe");
-        await engine.TryEngageSplitDriverAsync(settings, default);
+        await engine.TryEngageSplitDriverAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, driver.EngageCount);
         Assert.Equal(0, driver.DisengageCount);
@@ -107,7 +107,7 @@ public sealed class VpnEngineSplitTunnelResolveTests
         var driver = new FakeSplitTunnelDriver();
         var engine = BuildEngine(driver);
 
-        await engine.RestartTrueSplitAsync(SplitExcludeSettings("cmd.exe"), default);
+        await engine.RestartTrueSplitAsync(SplitExcludeSettings("cmd.exe"), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, driver.EngageCount);
         Assert.NotNull(driver.LastRequest);
@@ -125,7 +125,7 @@ public sealed class VpnEngineSplitTunnelResolveTests
         var states = new List<TrueSplitState>();
         engine.TrueSplitStateChanged += (state, _) => states.Add(state);
 
-        await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), default);
+        await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), TestContext.Current.CancellationToken);
 
         Assert.Equal(TrueSplitState.DriverMissing, engine.CurrentTrueSplitState);
         Assert.Contains(TrueSplitState.DriverMissing, states);
@@ -152,7 +152,7 @@ public sealed class VpnEngineSplitTunnelResolveTests
             reasons.Add(reason);
         };
 
-        await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), default);
+        await engine.TryEngageSplitDriverAsync(SplitExcludeSettings("cmd.exe"), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, driver.EngageCount);
         Assert.Equal(TrueSplitState.Fallback, engine.CurrentTrueSplitState);

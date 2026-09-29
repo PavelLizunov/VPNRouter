@@ -36,8 +36,10 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
 
     private sealed class StubProcessMonitor : IProcessMonitor
     {
+#pragma warning disable CS0067 // stub implements the interface; the events are never raised
         public event EventHandler<ProcessEventArgs>? ProcessStarted;
         public event EventHandler<ProcessEventArgs>? ProcessStopped;
+#pragma warning restore CS0067
         public int StartCount;
         public int StopCount;
         public int DisposeCount;
@@ -57,7 +59,7 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         s.App.RoutingAppsMode = "exclude";
         s.App.RoutingAppsExclude = new List<string> { "curl.exe" };
 
-        await engine.TryEngageSplitDriverAsync(s, default);
+        await engine.TryEngageSplitDriverAsync(s, TestContext.Current.CancellationToken);
 
         Assert.Equal(OperatingSystem.IsWindows() ? 1 : 0, fake.EngageCount);
     }
@@ -72,7 +74,7 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         s.App.RoutingAppsMode = "include";
         s.App.RoutingAppsExclude = new List<string> { "curl.exe" };
 
-        await engine.TryEngageSplitDriverAsync(s, default);
+        await engine.TryEngageSplitDriverAsync(s, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, fake.EngageCount);
     }

@@ -9,7 +9,7 @@ namespace VPNRouter.Tests;
 public class PictogramTextTests
 {
     private static string[] Ids(TextBlock text) => text.Inlines!
-        .OfType<InlineUIContainer>().Select(x => Assert.IsType<Pictogram>(x.Child).Id).ToArray();
+        .OfType<InlineUIContainer>().Select(x => Assert.IsType<Pictogram>(x.Child).Id!).ToArray();
     private static string Runs(TextBlock text) => string.Concat(text.Inlines!.OfType<Run>().Select(x => x.Text));
 
     [AvaloniaFact]

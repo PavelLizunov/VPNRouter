@@ -222,14 +222,16 @@ public sealed class ReleaseIntegrityWorkflowTests
         using var process = Process.Start(start)!;
         process.StandardInput.Write(python);
         process.StandardInput.Close();
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
+        var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
         if (!process.WaitForExit(30_000))
         {
             process.Kill(entireProcessTree: true);
             Assert.Fail("Benign Python fixtures timed out");
         }
+#pragma warning disable xUnit1031 // the process has exited and the output tasks are complete
         Assert.True(process.ExitCode == 0, stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult());
+#pragma warning restore xUnit1031
     }
 
     private static string Source()

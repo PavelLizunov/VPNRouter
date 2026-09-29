@@ -441,18 +441,18 @@ public sealed class VpnEngineStartAsyncSeamTests
             catch (Exception)
             {
             }
-        });
+        }, TestContext.Current.CancellationToken);
 
-        await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        var stopTask = Task.Run(() => engine.Stop());
+        var stopTask = Task.Run(() => engine.Stop(), TestContext.Current.CancellationToken);
         // Give Stop time to cancel the session before the bring-up resumes, otherwise the start runs on into the
         // five-second sing-box wait and this test races its own timeout.
-        await Task.Delay(500);
+        await Task.Delay(500, TestContext.Current.CancellationToken);
 
         holdBringUp.TrySetResult();
 
-        await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.False(engine.IsRunning);
     }
