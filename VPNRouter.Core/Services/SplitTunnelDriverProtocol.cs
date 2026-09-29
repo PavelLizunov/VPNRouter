@@ -65,14 +65,7 @@ internal static class SplitTunnelDriverProtocol
         ProcessDeparting = 8,
     }
 
-    public enum EventSeverity
-    {
-        Information,
-        Warning,
-        Debug,
-    }
-
-    public enum ServiceCollisionAction
+public enum ServiceCollisionAction
     {
         StartExisting,
         AdoptMovedInstall,
@@ -373,19 +366,6 @@ internal static class SplitTunnelPolicy
 
     private static bool IsExcludeMode(string routingAppsMode)
         => string.Equals(routingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
-
-    public static SplitTunnelDriverProtocol.EventSeverity ClassifyEvent(uint eventId)
-    {
-        switch (eventId)
-        {
-            case (uint)SplitTunnelDriverProtocol.EventId.StartSplittingProcess:
-            case (uint)SplitTunnelDriverProtocol.EventId.StopSplittingProcess:
-                return SplitTunnelDriverProtocol.EventSeverity.Information;
-        }
-        if ((eventId & SplitTunnelDriverProtocol.EventErrorFlag) != 0)
-            return SplitTunnelDriverProtocol.EventSeverity.Warning;
-        return SplitTunnelDriverProtocol.EventSeverity.Debug;
-    }
 
     public static bool ShouldReRegister(
         (IPAddress? TunV4, IPAddress? InetV4, IPAddress? TunV6, IPAddress? InetV6) oldAddrs,

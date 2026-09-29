@@ -69,12 +69,6 @@ public static class LeakProtection
         return new ValidationResult { Errors = errors, Warnings = warnings };
     }
 
-    public static void CollectIncompatibleSettings(AppSettings settings, List<string> warnings)
-    {
-        _ = settings;
-        _ = warnings;
-    }
-
     public static ValidationResult ValidateConfig(SingBoxConfig config, AppSettings? settings = null)
     {
         var errors = new List<string>();
