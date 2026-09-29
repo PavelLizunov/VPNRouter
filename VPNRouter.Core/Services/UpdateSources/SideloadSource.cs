@@ -68,15 +68,19 @@ public sealed class SideloadSource : IUpdateSource
 
         var latest = newer[0];
         var apk = FindApkAsset(latest.Release.Assets);
-        if (apk == null)
+        if (apk == null ||
+            !Uri.TryCreate(apk.BrowserDownloadUrl, UriKind.Absolute, out var apkUri) ||
+            (apkUri.Scheme != Uri.UriSchemeHttp && apkUri.Scheme != Uri.UriSchemeHttps))
             return null;
 
         string? sha = null;
         var shaAsset = FindChecksumAsset(latest.Release.Assets, apk);
-        if (shaAsset != null)
+        if (shaAsset != null &&
+            Uri.TryCreate(shaAsset.BrowserDownloadUrl, UriKind.Absolute, out var shaUri) &&
+            (shaUri.Scheme == Uri.UriSchemeHttp || shaUri.Scheme == Uri.UriSchemeHttps))
         {
             var shaResp = await _http.SendAsync(
-                new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(shaAsset.BrowserDownloadUrl)),
+                new HttpRequest(System.Net.Http.HttpMethod.Get, shaUri),
                 ct).ConfigureAwait(false);
             if (shaResp.IsSuccess())
             {
