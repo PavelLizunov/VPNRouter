@@ -48,7 +48,7 @@ public sealed class CacheRecoveryTests
         Assert.True(result.Loaded);
         Assert.NotNull(result.Value);
         Assert.Equal("alpha", result.Value!.Name);
-        Assert.Equal(2, result.Value!.Items.Count);
+        Assert.Equal(2, result.Value!.Items!.Count);
         Assert.Empty(EnumerateCorruptBackups(path));
     }
 
