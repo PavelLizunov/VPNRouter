@@ -28,4 +28,4 @@ suite compiles Core. No local SDK.
 
 ## Outcome
 
-Pending CI.
+Merged as #346 on 2026-09-29; exact-head CI green.

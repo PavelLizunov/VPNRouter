@@ -362,6 +362,7 @@ internal sealed class StartupPipeline
         {
             _host.Logger?.Warning("[StartupPipeline] Safe mode — forcing full-tunnel routing");
             isFullTunnel = true;
+            settings.App.RoutingMode = "full";
         }
 
         Profile activeProfile;

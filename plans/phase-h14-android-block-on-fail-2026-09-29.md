@@ -24,4 +24,4 @@ Android project builds (Release, android-arm64); exact-head CI.
   on `windows-worker` at exact SHA 538c822f: 0 errors, 84 warnings, 4m40s, APK produced. The same
   toolchain built `origin/main` (b1679a87, after the #339 dead-code removal) on a workstation earlier
   with 0 errors; that run broke the workstation build rule and is not repeated.
-- Exact-head CI: pending.
+- Merged as #352; exact-head CI green.

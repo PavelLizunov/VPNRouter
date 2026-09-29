@@ -66,7 +66,7 @@ public static class CrashReporter
             if (ex != null)
             {
                 sb.AppendLine("──── Exception ────");
-                sb.AppendLine(ScrubSecrets(ex.ToString()));
+                sb.AppendLine(DiagnosticsRedactor.RedactLogText(ex.ToString()));
                 sb.AppendLine();
             }
             else
@@ -87,7 +87,7 @@ public static class CrashReporter
                     {
                         sb.AppendLine($"──── Tail of {Path.GetFileName(logs)} (last 200 lines) ────");
                         foreach (var line in DiagnosticsExporter.TailLines(logs, 200).Split(Environment.NewLine))
-                            sb.AppendLine(ScrubSecrets(line));
+                            sb.AppendLine(DiagnosticsRedactor.RedactLogText(line));
                     }
                 }
             }

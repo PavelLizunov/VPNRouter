@@ -26,4 +26,4 @@ Exact-head CI: Windows job runs `VpnEngineDnsLockdownLifecycleTests`.
 
 ## Outcome
 
-Pending CI.
+Merged as #347 on 2026-09-29; exact-head CI green.
