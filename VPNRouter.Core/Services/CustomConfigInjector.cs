@@ -121,7 +121,7 @@ public static partial class CustomConfigInjector
             if (!string.IsNullOrEmpty(remoteTag))
                 dnsForFinal["final"] = remoteTag;
         }
-        else if (dnsServersForFinal != null && dnsServersForFinal.Count > 0)
+        else if (dnsForFinal != null && dnsServersForFinal != null && dnsServersForFinal.Count > 0)
         {
             var localTag = FindLocalDnsTag(dnsServersForFinal);
             if (!string.IsNullOrEmpty(localTag))

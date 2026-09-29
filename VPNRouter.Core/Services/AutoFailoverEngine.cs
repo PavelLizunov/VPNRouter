@@ -57,7 +57,7 @@ public sealed class AutoFailoverEngine
                     "поле server, server_port, uuid или Reality public_key выглядят неверно.");
         }
 
-        var hasEnabledSub = _settings.App?.Subscriptions?
+        var hasEnabledSub = _settings.App.Subscriptions?
             .Any(s => s != null && s.Enabled && (s.Servers?.Count ?? 0) > 0) == true;
 
         if (configMode == "generated"
