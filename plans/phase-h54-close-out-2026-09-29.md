@@ -17,4 +17,4 @@ Docs only. The repository documentation checks in CI.
 
 ## Outcome
 
-Pending CI.
+Merged in #390 after green CI. The H-51 brief was updated in its own PR (#386) because that PR merged after this one.
