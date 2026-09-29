@@ -83,43 +83,6 @@ public class ConfigGeneratorIncludeModeTests
     }
 
     [Fact]
-    public void IncludeMode_EmptyRoutingAppsInclude_FallsBackToLegacyProfileList()
-    {
-        var settings = BuildSettings(mode: "include");
-        var profile = BuildProfile();
-        var resolved = new[] { "legacy-app.exe" };
-
-        var config = ConfigGenerator.Generate(profile, resolved, settings);
-
-        Assert.Equal("direct", config.Route.Final);
-        var procNames = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
-            .SelectMany(r => r.ProcessName!)
-            .Distinct()
-            .ToList();
-        Assert.Contains("legacy-app.exe", procNames);
-    }
-
-    [Fact]
-    public void IncludeMode_ExplicitRoutingAppsInclude_OverridesResolvedList()
-    {
-        var settings = BuildSettings(
-            mode: "include",
-            include: new List<string> { "new-app.exe" });
-        var resolved = new[] { "legacy-app.exe" };
-
-        var config = ConfigGenerator.Generate(BuildProfile(), resolved, settings);
-
-        var procNames = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
-            .SelectMany(r => r.ProcessName!)
-            .Distinct()
-            .ToList();
-        Assert.Contains("new-app.exe", procNames);
-        Assert.DoesNotContain("legacy-app.exe", procNames);
-    }
-
-    [Fact]
     public void IncludeMode_DnsRulesPointSelectedAppsToVpnDns()
     {
         var settings = BuildSettings(

@@ -20,8 +20,6 @@ public static class LaunchFailureCounter
 
     private static int _cooldownMinutes = 10;
 
-    public static int CooldownMinutes => _cooldownMinutes;
-
     public static void ResetCooldown(int minutes) => _cooldownMinutes = Math.Max(0, minutes);
 
     private static string DefaultPath => Path.Combine(AppPaths.DataDir, DefaultFileName);
@@ -54,15 +52,6 @@ public static class LaunchFailureCounter
             s.LastFailureType = failureType;
         TrySave(p, s);
         return s.ConsecutiveFailures;
-    }
-
-    public static void RecordFailureType(string failureType, string? path = null)
-    {
-        if (string.IsNullOrEmpty(failureType)) return;
-        var p = path ?? DefaultPath;
-        var s = TryLoad(p);
-        s.LastFailureType = failureType;
-        TrySave(p, s);
     }
 
     public static void MarkStable(string? path = null)
@@ -155,5 +144,4 @@ public static class LaunchFailureCounter
         {
         }
     }
-
 }

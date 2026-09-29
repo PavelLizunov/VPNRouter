@@ -35,22 +35,6 @@ public sealed class FreeConfigMultiProtocolParseTests
         Assert.Null(FreeConfigAggregator.TryParseSourceLine("https://example.com", "src"));
     }
 
-    [Fact]
-    public void LeftoverCallSites_UseServerUriParser_NotVlessUriParser()
-    {
-        var aggregator = ReadRepoFile("VPNRouter.Core", "Services", "FreeConfigs", "FreeConfigAggregator.cs");
-        Assert.Contains("ServerUriParser.Parse(raw)", aggregator);
-        Assert.DoesNotContain("VlessUriParser.Parse(raw)", aggregator);
-
-        var androidApply = ReadRepoFile("VPNRouter.Android", "AndroidApp.FreeConfigs.cs");
-        Assert.Contains("ServerUriParser.Parse(entry.RawUri)", androidApply);
-        Assert.DoesNotContain("VlessUriParser.Parse(entry.RawUri)", androidApply);
-
-        var androidVerify = ReadRepoFile("VPNRouter.Android", "AndroidFreeConfigDeepVerifier.cs");
-        Assert.Contains("ServerUriParser.Parse(cfg.RawUri)", androidVerify);
-        Assert.DoesNotContain("VlessUriParser.Parse(cfg.RawUri)", androidVerify);
-    }
-
     private static string ReadRepoFile(params string[] segments)
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory);

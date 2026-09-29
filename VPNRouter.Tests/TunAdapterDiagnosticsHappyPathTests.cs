@@ -9,6 +9,7 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class TunAdapterDiagnosticsHappyPathTests
 {
     private static bool IsNetshEnumeration(ProcessRequest r)

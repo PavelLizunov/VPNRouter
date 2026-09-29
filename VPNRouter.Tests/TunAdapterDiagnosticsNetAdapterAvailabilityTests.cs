@@ -11,6 +11,7 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
 {
     private static FakeProcessRunner NewRunner()

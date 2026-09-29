@@ -56,6 +56,7 @@ public static class SingBoxFeatures
             }
             catch
             {
+                // Any probe failure keeps the safe default: fork protocols stay rejected.
                 _awg = false;
                 _xhttp = false;
             }
@@ -89,6 +90,7 @@ public static class SingBoxFeatures
         };
         using var p = Process.Start(psi);
         if (p == null) return string.Empty;
+        // Drain stdout and stderr concurrently before WaitForExit, or a full stderr pipe deadlocks the child.
         var outTask = p.StandardOutput.ReadToEndAsync();
         var errTask = p.StandardError.ReadToEndAsync();
         if (!p.WaitForExit(5000))

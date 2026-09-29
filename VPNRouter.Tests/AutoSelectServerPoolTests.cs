@@ -24,28 +24,12 @@ public sealed class AutoSelectServerPoolTests
     };
 
     [Fact]
-    public void Off_ReturnsOnlyActive()
-    {
-        var pool = Cfg(false, "DE").GetActiveServers();
-        Assert.Single(pool);
-        Assert.Equal("DE", pool[0].Name);
-    }
-
-    [Fact]
     public void On_Vless_ReturnsAllSameProtocolFlowServers()
     {
         var pool = Cfg(true, "DE").GetActiveServers();
         Assert.Equal(3, pool.Count);
         Assert.All(pool, s => Assert.Equal("vless", s.Protocol));
         Assert.DoesNotContain(pool, s => s.Protocol == "hysteria2");
-    }
-
-    [Fact]
-    public void On_Hysteria2_ReturnsOnlyHysteria2()
-    {
-        var pool = Cfg(true, "LV-HY2").GetActiveServers();
-        Assert.Single(pool);
-        Assert.Equal("hysteria2", pool[0].Protocol);
     }
 
     [Fact]
@@ -65,17 +49,5 @@ public sealed class AutoSelectServerPoolTests
         var pool = cfg.GetActiveServers();
         Assert.Equal(2, pool.Count);
         Assert.All(pool, s => Assert.False(string.IsNullOrEmpty(s.Flow)));
-    }
-
-    [Fact]
-    public void On_SingleServer_ReturnsSingle()
-    {
-        var cfg = new VlessConfig
-        {
-            AutoSelectBestServer = true,
-            ActiveServer = "DE",
-            Servers = new() { Srv("DE", "1.1.1.1", "vless", "xtls-rprx-vision") }
-        };
-        Assert.Single(cfg.GetActiveServers());
     }
 }

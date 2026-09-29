@@ -24,12 +24,6 @@ public sealed record CanaryAggregate(PhaseOutcome BlockedTargetCanary, bool Stal
 
 public static class CanaryPolicy
 {
-    public static readonly IReadOnlyList<string> DefaultControlUrls = new[]
-    {
-        "https://www.gstatic.com/generate_204",
-        "https://www.cloudflare.com/cdn-cgi/trace",
-    };
-
     public const bool DirectProbesDefaultEnabled = false;
 
     public static string RedactUrl(string? url)

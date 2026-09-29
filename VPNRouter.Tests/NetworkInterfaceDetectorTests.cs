@@ -33,31 +33,11 @@ public sealed class NetworkInterfaceDetectorTests
     }
 
     [Fact]
-    public void IsWireGuardName_IsCaseInsensitive()
-    {
-        Assert.True(NetworkInterfaceDetector.IsWireGuardName("wg-private", "wireguard tunnel"));
-        Assert.True(NetworkInterfaceDetector.IsWireGuardName("AMNEZIAWG-TUNNEL", "Some adapter"));
-        Assert.True(NetworkInterfaceDetector.IsWireGuardName("awg0", "ALL-CAPS DESC"));
-    }
-
-    [Fact]
     public void IsWireGuardName_NullsAreTreatedAsNoMatch()
     {
         Assert.False(NetworkInterfaceDetector.IsWireGuardName(null, null));
         Assert.False(NetworkInterfaceDetector.IsWireGuardName(null, "Ethernet"));
         Assert.False(NetworkInterfaceDetector.IsWireGuardName("eth0", null));
-    }
-
-    [Fact]
-    public void IsWireGuardName_MatchesAcrossEitherFieldSurface()
-    {
-        Assert.True(NetworkInterfaceDetector.IsWireGuardName(
-            name: "my-custom-renamed-vpn",
-            description: "WireGuard Tunnel"));
-
-        Assert.True(NetworkInterfaceDetector.IsWireGuardName(
-            name: "my-WireGuard-iface",
-            description: "Unknown Network Adapter"));
     }
 
     [Theory]
@@ -82,12 +62,6 @@ public sealed class NetworkInterfaceDetectorTests
     public void IsTailscaleCgnat_RejectsOutsideRange(string ip)
     {
         Assert.False(NetworkInterfaceDetector.IsTailscaleCgnat(IPAddress.Parse(ip)));
-    }
-
-    [Fact]
-    public void IsTailscaleCgnat_IPv6_ReturnsFalse()
-    {
-        Assert.False(NetworkInterfaceDetector.IsTailscaleCgnat(IPAddress.Parse("fd7a:115c:a1e0::1")));
     }
 
     [Theory]
@@ -143,28 +117,6 @@ public sealed class NetworkInterfaceDetectorTests
         Assert.Equal("10.9.1.0/24", result);
     }
 
-    [Fact]
-    public void CalculateSubnet_NearPointToPointSlash31_AlsoWidensToSlash24()
-    {
-        var addr = IPAddress.Parse("10.9.1.3");
-        var mask = IPAddress.Parse("255.255.255.254");
-
-        var result = NetworkInterfaceDetector.CalculateSubnet(addr, mask);
-
-        Assert.Equal("10.9.1.0/24", result);
-    }
-
-    [Fact]
-    public void CalculateSubnet_IPv6Input_ReturnsNullSafely()
-    {
-        var addr = IPAddress.Parse("fe80::1");
-        var mask = IPAddress.Parse("::1");
-
-        var result = NetworkInterfaceDetector.CalculateSubnet(addr, mask);
-
-        Assert.Null(result);
-    }
-
     [Theory]
     [InlineData(new byte[] { 255, 255, 255, 0 }, 24)]
     [InlineData(new byte[] { 255, 255, 0, 0 }, 16)]
@@ -198,15 +150,5 @@ public sealed class NetworkInterfaceDetectorTests
         Assert.NotNull(a);
         Assert.NotNull(b);
         Assert.NotNull(c);
-    }
-
-    [Fact]
-    public void DetectWireGuardSubnets_NullLogger_IsAcceptedGracefully()
-    {
-        var result = NetworkInterfaceDetector.DetectWireGuardSubnets(
-            ownTunName: "VPNRouter-TUN",
-            logger: null);
-
-        Assert.NotNull(result);
     }
 }

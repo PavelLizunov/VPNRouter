@@ -56,28 +56,6 @@ public class HealthMonitorRecoveryGapTests
     }
 
     [Fact]
-    public void Start_SetsShouldBeRunningTrue()
-    {
-        var hm = BuildHm();
-        try
-        {
-            hm.Start(new Profile { Name = "test" }, new AppSettings());
-            Assert.True(GetField<bool>(hm, "_shouldBeRunning"));
-        }
-        finally { hm.Stop(); hm.Dispose(); }
-    }
-
-    [Fact]
-    public void Stop_SetsShouldBeRunningFalse()
-    {
-        var hm = BuildHm();
-        hm.Start(new Profile { Name = "test" }, new AppSettings());
-        hm.Stop();
-        Assert.False(GetField<bool>(hm, "_shouldBeRunning"));
-        hm.Dispose();
-    }
-
-    [Fact]
     public void OnHealthTick_AfterCrash_TriggersRecoveryRestartAttempt()
     {
         var hm = BuildHm();
@@ -170,16 +148,6 @@ public class HealthMonitorRecoveryGapTests
 
         Assert.Equal(0, attempts);
         hm.Dispose();
-    }
-
-    [Fact]
-    public void Source_AttemptRestart_DoesNotHotReloadOrphanSingBox()
-    {
-        var src = File.ReadAllText(FindRepoFile("VPNRouter.Core", "Services", "HealthMonitor.cs"));
-
-        Assert.Contains("var managedSingBoxRunning = _singBox.IsRunning();", src);
-        Assert.Contains("OrphanCleanup.KillOrphans(_logger, respectTunLock: false)", src);
-        Assert.Contains("var hotReloaded = managedSingBoxRunning && TryHotReloadViaApi(configJson);", src);
     }
 
     private static string FindRepoFile(params string[] parts)

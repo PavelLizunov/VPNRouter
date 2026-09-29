@@ -100,24 +100,6 @@ public static class PlaceholderDefense
 
     public static bool IsPlaceholder(VlessServerEntry? entry) => Inspect(entry) != null;
 
-    public static string? InspectUri(string? uri)
-    {
-        if (string.IsNullOrWhiteSpace(uri)) return null;
-        try
-        {
-            var parsed = ServerUriParser.Parse(uri);
-            return Inspect(parsed);
-        }
-        catch (PlaceholderConfigException ex)
-        {
-            return ex.OffendingField;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     internal static class LayerA_ResolverScopeGuard
     {
         public static bool IsPlaceholderEntry(VlessServerEntry? entry)
@@ -125,21 +107,6 @@ public static class PlaceholderDefense
             if (entry is null) return false;
             return PlaceholderDefense.Inspect(entry) is not null;
         }
-    }
-
-    internal static class LayerB_MigratorStrip
-    {
-        public static string TruncateForLog(string? v)
-        {
-            if (string.IsNullOrEmpty(v)) return "(empty)";
-            return v.Length <= 16 ? v : $"{v[..8]}…{v[^4..]}";
-        }
-    }
-
-    internal static class LayerD_LeakValidation
-    {
-        public static bool IsPlaceholderEntry(VlessServerEntry? entry) =>
-            LayerA_ResolverScopeGuard.IsPlaceholderEntry(entry);
     }
 
     internal static class LayerE_RuntimeSanity
@@ -167,12 +134,6 @@ public static class PlaceholderDefense
 
             return PlaceholderDefense.Inspect(pubkey, shortId, server);
         }
-    }
-
-    internal static class Layer6_DeepVerify
-    {
-        public static string? InspectForDeepVerify(VlessServerEntry? entry) =>
-            PlaceholderDefense.Inspect(entry);
     }
 }
 

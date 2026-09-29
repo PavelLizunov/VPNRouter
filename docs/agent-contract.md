@@ -14,9 +14,7 @@ for the SDK, owning `.csproj` files for frameworks/packages, and platform build
 scripts/workflows for bundled runtime versions; do not infer one version for all targets.
 
 All repository zones are owned by Pavel Lizunov (`PavelLizunov`) and may be
-edited. `tools/zapret/` is a legacy vendored Zapret copy: the app downloads
-Zapret on demand and no build or test consumes these files; do not delete it
-without an owner decision. Generated upstream source/build caches such as `tools/singbox-cache/`
+edited. Generated upstream source/build caches such as `tools/singbox-cache/`
 remain untracked.
 
 Read the relevant zone document before changing that area:
@@ -111,7 +109,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
 
 # CLI and service contracts
-dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~CliVersionSourceTests|FullyQualifiedName~P07CliStopSourceGuardTests|FullyQualifiedName~ServiceAppCoexistenceTests|FullyQualifiedName~AutostartContractTests"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ServiceAppCoexistenceTests|FullyQualifiedName~AutostartContractTests"
 
 # Release, remote verification and packaging contracts
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests"

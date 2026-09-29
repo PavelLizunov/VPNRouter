@@ -26,23 +26,7 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    private void OnCcModeSubClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => SetCcMode("subscribe");
-    private void OnCcModeManualClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => SetCcMode("manual");
-    private void OnCcModeCustomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => SetCcMode("custom");
 
-    private void SetCcMode(string mode)
-    {
-        if (mode != "subscribe" && mode != "manual" && mode != "custom")
-            return;
-        if (_ccMode == mode) return;
-        _ccMode = mode;
-        AndroidStorage.SetConfigMode(mode);
-        ApplyCcModeVisuals();
-        UpdateConfigSummary();
-    }
 
     private void ApplyCcModeVisuals()
     {
@@ -53,132 +37,10 @@ public partial class AndroidApp
         if (_ccCustomSection is not null) _ccCustomSection.IsVisible = _ccMode == "custom";
     }
 
-    private void OnCcValidateClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_ccCustomInput is null || _ccCustomStatus is null) return;
-        var raw = (_ccCustomInput.Text ?? string.Empty).Trim();
-        _ccCustomStatus.IsVisible = true;
 
-        if (string.IsNullOrEmpty(raw))
-        {
-            _ccCustomStatus.Text = Localization.CcSaveStatusEmpty;
-            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
-            return;
-        }
 
-        try
-        {
-            var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
-            if (!isValid)
-            {
-                _ccCustomStatus.Text = string.Format(
-                    Localization.CcValidationFailed,
-                    string.Join("; ", errors));
-                _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
-                return;
-            }
-            var (protocols, server) = VPNRouter.Core.Services.CustomConfigInjector.ParseConfigInfo(raw);
-            _ccCustomStatus.Text = string.Format(Localization.CcValidationOk, protocols, server);
-            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "SuccessFgBrush");
-        }
-        catch (Exception ex)
-        {
-            _ccCustomStatus.Text = string.Format(Localization.CcValidationParseError, ex.Message);
-            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
-        }
-    }
 
-    private void OnCcSaveCustomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_ccCustomInput is null || _ccCustomStatus is null) return;
-        var raw = (_ccCustomInput.Text ?? string.Empty).Trim();
-        _ccCustomStatus.IsVisible = true;
 
-        if (string.IsNullOrEmpty(raw))
-        {
-            _ccCustomStatus.Text = Localization.CcSaveStatusEmpty;
-            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
-            return;
-        }
-
-        var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
-        AndroidStorage.SetCustomConfigJson(raw);
-        AndroidStorage.SetConfigMode("custom");
-        _ccMode = "custom";
-        ApplyCcModeVisuals();
-        UpdateConfigSummary();
-
-        if (!isValid)
-        {
-            _ccCustomStatus.Text = string.Format(
-                Localization.CcSaveStatusInvalid + " ({0})",
-                string.Join("; ", errors));
-            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
-            return;
-        }
-
-        _ccCustomStatus.Text = Localization.CcSaveStatusOk;
-        _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "SuccessFgBrush");
-    }
-
-    private void OnCcClearCustomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_ccCustomInput is not null) _ccCustomInput.Text = string.Empty;
-        if (_ccCustomStatus is not null) _ccCustomStatus.IsVisible = false;
-        AndroidStorage.SetCustomConfigJson(null);
-        UpdateConfigSummary();
-    }
-
-    private async void OnRefreshClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_serverInputError is null) return;
-        var url = AndroidStorage.GetSubscriptionUrl();
-        if (string.IsNullOrEmpty(url) && _serverInput is not null)
-        {
-            var raw = (_serverInput.Text ?? string.Empty).Trim();
-            if (raw.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-            {
-                AndroidStorage.SetSubscriptionUrl(raw);
-                url = raw;
-            }
-        }
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            _serverInputError.Text = Localization.RefreshNeedsUrl;
-            _serverInputError.IsVisible = true;
-            return;
-        }
-
-        _serverInputError.IsVisible = false;
-        try
-        {
-            var servers = await SubscriptionFetcher.FetchAsync(url, logger: null, ct: System.Threading.CancellationToken.None).ConfigureAwait(true);
-            var list = new List<VlessServerEntry>(servers);
-            AndroidStorage.SetServers(list);
-            _cachedServers = list;
-            UpdateServerListView();
-            var prevSelected = AndroidStorage.GetSelectedServerName();
-            var hasPrev = !string.IsNullOrEmpty(prevSelected) &&
-                          list.Exists(s => string.Equals(s.Name, prevSelected, StringComparison.OrdinalIgnoreCase));
-            if (!hasPrev && list.Count > 0)
-            {
-                AndroidStorage.SetSelectedServerName(list[0].Name);
-                if (_serverList is not null) _serverList.SelectedIndex = 0;
-            }
-            UpdateConfigSummary();
-        }
-        catch (Exception ex)
-        {
-            _serverInputError.Text = string.Format(Localization.RefreshFailed, ex.Message);
-            _serverInputError.IsVisible = true;
-        }
-    }
-
-    private void OnServerSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_serverList?.SelectedItem is VlessServerEntry entry)
-            AndroidStorage.SetSelectedServerName(entry.Name);
-    }
 
     private async void ReloadServerList()
     {
@@ -301,16 +163,6 @@ public partial class AndroidApp
         return btn;
     }
 
-    private void OnMenuExportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ShowExportOverlay();
-    }
 
-    private void OnMenuImportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ShowImportOverlay();
-    }
 
 }

@@ -7,12 +7,6 @@ namespace VPNRouter.Core.Services;
 
 public sealed class ConfigSanityCheck
 {
-    public static IReadOnlySet<string> KnownPlaceholderPubkeys => PlaceholderDefense.KnownPubkeys;
-
-    public static IReadOnlySet<string> KnownPlaceholderShortIds => PlaceholderDefense.KnownShortIds;
-
-    public static IReadOnlySet<string> KnownPlaceholderServers => PlaceholderDefense.KnownServers;
-
     private readonly ILogger? _logger;
     private readonly HttpClient _http;
 

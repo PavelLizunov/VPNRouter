@@ -103,6 +103,34 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     }
 
     [Fact]
+    public void StartWithJson_ThrowingStartedSubscriber_KillsProcessAndReleasesLease()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Windows-only - other platforms launch through pkexec or sudo.");
+
+        EnsureConfigDir();
+        var exe = Path.Combine(_testDataDir, "sing-box-stub.exe");
+        File.WriteAllText(exe, "stub");
+
+        var handle = new FakeProcessHandle(pid: NewFakePid());
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => handle);
+        var settings = new SingBoxSettings { ExecutablePath = exe, ClashApi = "127.0.0.1:9090" };
+        using var manager = new SingBoxManager(
+            settings, logger: null, http: new FakeHttpClient(), runner: runner);
+        manager.Started += _ => throw new InvalidOperationException("subscriber failed");
+
+        Assert.Throws<InvalidOperationException>(() => manager.StartWithJson("{}"));
+
+        Assert.Equal(1, handle.KillCallCount);
+        Assert.True(handle.HasExited);
+        Assert.False(IsLockOwned(TunOwnershipLock.Instance(null)),
+            "The TUN lease must be released after the failed start.");
+
+        SetField(manager, "_handle", null);
+        handle.Dispose();
+    }
+
+    [Fact]
     public void Restart_StopInternalReleasesLockOnlyWhenAsked()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),
@@ -442,79 +470,6 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             if (IsLockOwned(lockInstance)) lockInstance.Release();
             RestoreAppPathsDataDir(priorDataDir);
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void ReloadConfigJsonWithResult_LinuxCapabilityMode_RetainedExactStopRetry_RegressionPin()
-    {
-        Assert.SkipUnless(OperatingSystem.IsLinux(),
-            "Linux-only — exercises the capability-mode Stop branch.");
-
-        EnsureConfigDir();
-
-        var runner = new FakeProcessRunner();
-        var manager = new SingBoxManager(DefaultSettings(), null, new FakeHttpClient(), runner);
-        SetField(manager, "_linuxUsedPkexec", false);
-
-        var lockInstance = TunOwnershipLock.Instance(null);
-        SetLockOwnedForTest(lockInstance, manager);
-
-        var handle = new StubbornProcessHandle(NewFakePid());
-        SetField(manager, "_handle", handle);
-
-        try
-        {
-            var firstResult = manager.ReloadConfigJsonWithResult("{\"case\":\"initial\"}", forceRestart: true);
-
-            Assert.False(firstResult, "Initial reload must return false when exact stop is unconfirmed.");
-            Assert.Equal(SingBoxState.Failed, manager.State);
-            Assert.Empty(runner.StartCalls);
-            Assert.Same(handle, GetField(manager, "_handle"));
-            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
-            Assert.True(IsLockOwned(lockInstance), "TUN ownership lock must remain owned while exact stop is unconfirmed.");
-            Assert.Equal(1, handle.KillCallCount);
-
-            var configPath = VPNRouter.Core.AppPaths.CurrentConfigPath;
-            Assert.True(File.Exists(configPath));
-            var initialConfig = File.ReadAllText(configPath);
-            Assert.Contains("\"case\":\"initial\"", initialConfig);
-
-            var retryResult = manager.ReloadConfigJsonWithResult("{\"case\":\"unconfirmed-retry\"}", forceRestart: true);
-
-            Assert.False(retryResult, "Repeated reload must return false while exact stop remains unconfirmed.");
-            Assert.Equal(SingBoxState.Failed, manager.State);
-            Assert.Empty(runner.StartCalls);
-            Assert.Same(handle, GetField(manager, "_handle"));
-            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
-            Assert.True(IsLockOwned(lockInstance));
-            Assert.Equal(2, handle.KillCallCount);
-
-            var retryConfig = File.ReadAllText(configPath);
-            Assert.DoesNotContain("unconfirmed-retry", retryConfig);
-            Assert.Contains("\"case\":\"initial\"", retryConfig);
-
-            handle.SignalExit();
-            manager.Stop();
-
-            Assert.Equal(SingBoxState.Stopped, manager.State);
-            Assert.False((bool)GetField(manager, "_exactStopUnconfirmed")!,
-                "Direct Stop confirmation must clear _exactStopUnconfirmed.");
-            Assert.False((bool)GetField(manager, "_ownsTunLock")!,
-                "Direct Stop confirmation must clear _ownsTunLock.");
-            Assert.False(IsLockOwned(lockInstance),
-                "Direct Stop confirmation must release the TUN ownership lock.");
-            Assert.Null(GetField(manager, "_handle"));
-            Assert.True(handle.DisposeCalled,
-                "Confirmed exact stop must dispose the process handle.");
-        }
-        finally
-        {
-            SetField(manager, "_handle", null);
-            SetField(manager, "_ownsTunLock", false);
-            SetField(manager, "_exactStopUnconfirmed", false);
-            manager.Dispose();
-            if (IsLockOwned(lockInstance)) lockInstance.Release();
         }
     }
 

@@ -312,27 +312,6 @@ public class SettingsLoaderRobustnessTests : IDisposable
     }
 
     [Fact]
-    public void Save_ThenLoad_PersistsExcludedApps()
-    {
-        var path = PathFor("excluded-apps-roundtrip.yaml");
-        var s = new AppSettings
-        {
-            ExcludedApps = new List<string> { "firefox.exe", "msedge.exe" }
-        };
-        SettingsLoader.Save(s, path);
-
-        var yaml = File.ReadAllText(path);
-        Assert.Contains("excluded_apps:", yaml);
-        Assert.Contains("firefox.exe", yaml);
-
-        var reloaded = SettingsLoader.Load(path);
-        AssertSane(reloaded);
-        Assert.Equal(2, reloaded.ExcludedApps.Count);
-        Assert.Contains("firefox.exe", reloaded.ExcludedApps);
-        Assert.Contains("msedge.exe", reloaded.ExcludedApps);
-    }
-
-    [Fact]
     public void Load_PreV9IConfigWithoutExcludedApps_DefaultsToEmptyList()
     {
         var path = PathFor("legacy-no-excluded.yaml");

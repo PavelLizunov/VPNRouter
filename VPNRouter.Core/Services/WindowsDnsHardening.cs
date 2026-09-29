@@ -22,7 +22,25 @@ public static class WindowsDnsHardening
     private static readonly string StatePath =
         Path.Combine(AppPaths.DataDir, "dns-hardening-state.json");
 
+    // The lockdown mirrors live tunnel state: armed while the tunnel serves, lifted (fail open) when it stops.
     private static volatile bool _lockdownEffective;
+
+    // Enable, disable and teardown run strictly in call order: unordered background tasks could delete the rules
+    // before a slower enable installs them, leaving DNS blocked while the flag says the lockdown is lifted.
+    private static readonly object LockdownQueueGate = new();
+    private static Task _lockdownQueue = Task.CompletedTask;
+
+    private static Task QueueLockdown(Func<Task> action)
+    {
+        lock (LockdownQueueGate)
+        {
+            var next = _lockdownQueue
+                .ContinueWith(_ => action(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default)
+                .Unwrap();
+            _lockdownQueue = next;
+            return next;
+        }
+    }
 
     public static void Apply(ILogger? logger = null) => Apply(null, logger);
 
@@ -77,7 +95,7 @@ public static class WindowsDnsHardening
                     "[DnsHardening] DnsLeakLockdown armed — TUN confirmed serving " +
                     "(UDP/53 + TCP/53 + TCP/853 blocked off-tunnel; BR-7/BR-8 background install)");
                 var tunCidr = settings?.Tun?.Ipv4Address;
-                _ = Task.Run(async () =>
+                _ = QueueLockdown(async () =>
                 {
                     try { await FirewallManager.EnableDnsLockdownAsync(log, tunCidr); }
                     catch (Exception ex) { log.Warning(ex, "[DnsHardening] Background DNS lockdown install failed (non-fatal)"); }
@@ -89,7 +107,7 @@ public static class WindowsDnsHardening
                 log.Information(
                     "[DnsHardening] DnsLeakLockdown lifted (fail-open) — tunnel not serving; " +
                     "DNS restored so the user keeps internet while the VPN is down / reconnecting");
-                _ = Task.Run(async () =>
+                _ = QueueLockdown(async () =>
                 {
                     try { await FirewallManager.DisableDnsLockdownAsync(log); }
                     catch (Exception ex) { log.Warning(ex, "[DnsHardening] Background DNS lockdown lift failed (non-fatal)"); }
@@ -131,7 +149,7 @@ public static class WindowsDnsHardening
         }
 
         _lockdownEffective = false;
-        _ = Task.Run(async () =>
+        var teardown = QueueLockdown(async () =>
         {
             try
             {
@@ -142,6 +160,9 @@ public static class WindowsDnsHardening
                 log.Warning(ex, "[DnsHardening] Background DNS lockdown teardown failed (non-fatal)");
             }
         });
+
+        // Wait briefly so a normal quit does not leave the firewall rules behind; the ProcessExit sweep is the fallback.
+        try { teardown.Wait(TimeSpan.FromSeconds(5)); } catch { }
     }
 
     private static SavedRegValue SaveAndSet(RegistryKey root, string keyPath, string valueName, int newValue, ILogger log)

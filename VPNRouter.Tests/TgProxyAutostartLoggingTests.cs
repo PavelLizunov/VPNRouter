@@ -13,101 +13,6 @@ namespace VPNRouter.Tests;
 public sealed class TgProxyAutostartLoggingTests
 {
     [Fact]
-    public void TgProxyUpdater_IsInstalled_HasLoggerOverloadAndStructuredLog()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyUpdater.cs");
-        if (src == null) return;
-
-        Assert.Matches(
-            @"public\s+static\s+bool\s+IsInstalled\s*\(\s*(?:Serilog\.)?ILogger\?\s+\w+\s*\)",
-            src);
-
-        Assert.Matches(
-            @"public\s+static\s+bool\s+IsInstalled\s*\(\s*\)",
-            src);
-
-        Assert.Contains("PythonExe at", src);
-        Assert.Contains("ProxySourceDir at", src);
-        Assert.Contains("overall = ", src);
-    }
-
-    [Fact]
-    public void TgProxyManager_Start_LogsRedactedPsiAndPostSpawnProbe()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        Assert.Contains("FileName=", stripped);
-        Assert.Contains("Arguments=", stripped);
-        Assert.Contains("WorkingDirectory=", stripped);
-
-        Assert.Contains("redactedArgs", stripped);
-        Assert.Contains("RedactSecretInArgs", stripped);
-
-        Assert.Contains("WaitForExitAsync", stripped);
-        Assert.Contains("FromMilliseconds(2000)", stripped);
-        Assert.Contains("within 2s", stripped);
-
-        Assert.Contains("ExitCode", stripped);
-        Assert.Contains("StandardError", stripped);
-    }
-
-    [Fact]
-    public void ResilientStarter_LogsAttemptCadenceAndOutcome()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "ResilientStarter.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        Assert.Contains("[Resilient]", stripped);
-        Assert.Contains("attempt {Attempt}/{Max}, delay={Delay}s", stripped);
-
-        Assert.Contains("succeeded", stripped);
-
-        Assert.Contains("failed-with-{Error}", stripped);
-    }
-
-    [Fact]
-    public void VPNRouterService_AutostartTgProxyAsync_LogsEntryAndDecisions()
-    {
-        var src = LoadSource("VPNRouter.Service", "VPNRouterService.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        Assert.Contains("AutostartTgProxyAsync: entered", stripped);
-
-        Assert.Matches(
-            @"TgProxyUpdater\.IsInstalled\s*\(\s*Serilog\.Log\.Logger\s*\)",
-            stripped);
-
-        Assert.Contains("secret configured (len {SecretLen}), port {Port}", stripped);
-
-        Assert.DoesNotMatch(
-            @"\{Secret\}|secret\s*=\s*\{?[a-zA-Z]*Secret",
-            stripped.Replace("SecretLen", ""));
-    }
-
-    [Fact]
-    public void AppViewModel_ToggleTgProxyAsync_UsesLoggerAwareIsInstalledAndStructuredLogs()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        Assert.Matches(
-            @"TgProxyUpdater\.IsInstalled\s*\(\s*_logger\s*\)",
-            stripped);
-
-        Assert.Contains("ToggleTgProxyAsync: start path entered", stripped);
-        Assert.Contains("secret configured (len {SecretLen}), port {Port}", stripped);
-    }
-
-    [Fact]
     public void RedactSecretInArgs_ReplacesSecretValueWithLiteral()
     {
         const string realSecret = "abcdef0123456789abcdef0123456789";
@@ -166,19 +71,6 @@ public sealed class TgProxyAutostartLoggingTests
                 Regex.IsMatch(line, @"\b[a-f0-9]{32}\b"),
                 $"IsInstalled log line contained a 32-char hex blob (potential secret leak): {line}");
         }
-    }
-
-    [Fact]
-    public void IsInstalled_ParameterlessOverload_DelegatesToLoggerOverloadWithNullLogger()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyUpdater.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        Assert.Matches(
-            @"public\s+static\s+bool\s+IsInstalled\s*\(\s*\)\s*=>\s*IsInstalled(At)?\s*\(\s*[^)]*?(logger\s*:\s*)?null\s*\)",
-            stripped);
     }
 
     [Fact]

@@ -53,7 +53,6 @@ public static class AppPaths
         }
     }
     public static string SlipstreamActiveCertPath => Path.Combine(SlipstreamDir, "active-leaf.pem");
-    public static string SlipstreamVersionPath => Path.Combine(SlipstreamDir, "version.txt");
     public static string SlipstreamLogPath => Path.Combine(LogsDir, "slipstream.log");
 
     public static void EnsureDirectories()
@@ -226,8 +225,9 @@ public static class AppPaths
 
             dirInfo.SetAccessControl(security);
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "[AppPaths] Could not restrict the ACL of {BinDir}; the inherited permissions stay in place", binDir);
         }
     }
 

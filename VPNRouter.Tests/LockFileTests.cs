@@ -174,14 +174,6 @@ public sealed class LockFileTests
     }
 
     [Fact]
-    public void StaticFacade_AcquireReleaseDetect_SmokeTest()
-    {
-        var ex = Record.Exception(() => LockFile.DetectPreviousCrash());
-        Assert.Null(ex);
-
-    }
-
-    [Fact]
     public void AcquireInstance_PidPayloadStructure_IsThreeLines()
     {
         var fs = new InMemoryFileSystem();

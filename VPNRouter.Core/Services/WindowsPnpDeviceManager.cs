@@ -185,6 +185,7 @@ internal static class WindowsPnpDeviceManager
 
     internal static NativePnpPresenceResult QueryPresence(string instanceId)
     {
+        // Include phantom devnodes: Wintun rejects creation while a non-present record still exists.
         var result = CMLocateDevNodeW(out _, instanceId, CmLocateDevNodePhantom);
         return result switch
         {

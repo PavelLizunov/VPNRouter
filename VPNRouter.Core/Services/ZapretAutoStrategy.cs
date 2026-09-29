@@ -12,13 +12,6 @@ namespace VPNRouter.Core.Services;
 
 public static class ZapretAutoStrategy
 {
-    public static readonly IReadOnlyList<string> DefaultSeedOrder = new[]
-    {
-        "general (ALT3)",
-        "general",
-        "general (ALT)",
-    };
-
     public static readonly IReadOnlyList<string> DefaultProbeTargets = new[]
     {
         "https://discord.com",
@@ -302,74 +295,7 @@ public static class ZapretAutoStrategy
     private static bool IsSilentWrapper(string? name) =>
         string.Equals(name?.Trim(), SilentWrapperStrategyName, StringComparison.OrdinalIgnoreCase);
 
-    internal static (string? Winner,
-                     Dictionary<string, ZapretStrategyTestResult> PerStrategy)
-        ParseFlowsealTranscript(string? transcript)
-    {
-        var perStrategy = new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
-        string? explicitWinner = null;
-        string current = string.Empty;
-        int ok = 0, total = 0;
-
-        void Flush()
-        {
-            if (!string.IsNullOrEmpty(current) && total > 0 && !IsSilentWrapper(current))
-            {
-                perStrategy[current] = new ZapretStrategyTestResult
-                {
-                    Passed = ok,
-                    Total = total,
-                    At = DateTime.UtcNow,
-                };
-            }
-        }
-
-        if (!string.IsNullOrEmpty(transcript))
-        {
-            foreach (var raw in transcript.Split('\n'))
-            {
-                var line = raw.TrimEnd('\r');
-
-                var hdr = ConfigHeaderRx.Match(line);
-                if (hdr.Success)
-                {
-                    Flush();
-                    current = hdr.Groups[3].Value.Trim();
-                    ok = 0;
-                    total = 0;
-                    continue;
-                }
-
-                var st = StatusLineRx.Match(line);
-                if (st.Success)
-                {
-                    total++;
-                    var status = st.Groups[1].Value;
-                    if (status.Equals("OK", StringComparison.OrdinalIgnoreCase)
-                        || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ok++;
-                    }
-                    continue;
-                }
-
-                var w = WinnerRx.Match(line);
-                if (w.Success)
-                {
-                    var cand = w.Groups[1].Value.Trim();
-                    if (!IsSilentWrapper(cand))
-                        explicitWinner = cand;
-                }
-            }
-        }
-        Flush();
-
-        var scoreWinner = BestStrategyByScore(perStrategy);
-        var winner = !string.IsNullOrEmpty(scoreWinner) ? scoreWinner : explicitWinner;
-        return (winner, perStrategy);
-    }
-
-    internal static string? BestStrategyByScore(
+internal static string? BestStrategyByScore(
         IReadOnlyDictionary<string, ZapretStrategyTestResult> perStrategy)
     {
         string? best = null;

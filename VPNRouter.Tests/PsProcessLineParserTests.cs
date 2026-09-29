@@ -30,20 +30,6 @@ public class PsProcessLineParserTests
         Assert.Equal("Google Chrome", comm);
     }
 
-    [Fact]
-    public void Preserves_spaces_in_helper_process_basename()
-    {
-        const string line =
-            "4321 1234 /Applications/Google Chrome.app/Contents/Frameworks/" +
-            "Google Chrome Framework.framework/Versions/120.0/Helpers/" +
-            "Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper";
-
-        var ok = PsProcessLineParser.TryParseLine(line, out _, out _, out var comm);
-
-        Assert.True(ok);
-        Assert.Equal("Google Chrome Helper", comm);
-    }
-
     [Theory]
     [InlineData("   42    1 /sbin/launchd", 42, 1, "launchd")]
     [InlineData("100\t1\t/usr/sbin/cfprefsd", 100, 1, "cfprefsd")]

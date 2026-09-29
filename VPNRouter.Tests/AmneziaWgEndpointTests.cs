@@ -103,13 +103,6 @@ public sealed class AmneziaWgEndpointTests : IDisposable
     }
 
     [Fact]
-    public void IsSupportedScheme_AcceptsAwg()
-    {
-        Assert.True(ServerUriParser.IsSupportedScheme("awg://x@1.2.3.4:51820"));
-        Assert.True(ServerUriParser.IsSupportedScheme("amneziawg://x@1.2.3.4:51820"));
-    }
-
-    [Fact]
     public void Parse_AwgUri_PreservesPlusInKeys()
     {
         var e = ServerUriParser.Parse(

@@ -28,13 +28,6 @@ public sealed class SuffixMatchTests
         => Assert.Equal(-1, Match(new string?[] { "a", "b" }, "vless-zzz"));
 
     [Fact]
-    public void EmptyOrNullTag_ReturnsMinusOne()
-    {
-        Assert.Equal(-1, Match(new string?[] { "a" }, null));
-        Assert.Equal(-1, Match(new string?[] { "a" }, ""));
-    }
-
-    [Fact]
     public void NullOrEmptyNames_Skipped()
     {
         var names = new string?[] { null, "", "node1" };

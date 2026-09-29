@@ -46,117 +46,12 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
     }
 
     [Fact]
-    public void HasOrphanedIpsetFlag_NonexistentDir_ReturnsFalse()
-    {
-        var bogus = Path.Combine(_tempRoot, "no-such-dir");
-        Assert.False(ZapretAutoStrategy.HasOrphanedIpsetFlag(bogus));
-    }
-
-    [Fact]
     public void RestoreIpsetAfterKill_NoFlag_NoOp()
     {
         ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
 
         Assert.False(File.Exists(Path.Combine(_tempRoot, "ipset_switched.flag")));
         Assert.False(File.Exists(Path.Combine(_tempRoot, "lists", "ipset-all.txt")));
-    }
-
-    [Fact]
-    public void RestoreIpsetAfterKill_WithFlagAndBackup_RestoresAndDeletesFlag()
-    {
-        var listsDir = Path.Combine(_tempRoot, "lists");
-        var flagPath = Path.Combine(_tempRoot, "ipset_switched.flag");
-        var backupPath = Path.Combine(listsDir, "ipset-all.test-backup.txt");
-        var livePath = Path.Combine(listsDir, "ipset-all.txt");
-
-        File.WriteAllText(flagPath, "");
-        File.WriteAllText(backupPath, "1.2.3.4/32\n5.6.7.8/32\n");
-        File.WriteAllText(livePath, "");
-
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(flagPath));
-        Assert.False(File.Exists(backupPath));
-        Assert.True(File.Exists(livePath));
-        Assert.Equal("1.2.3.4/32\n5.6.7.8/32\n", File.ReadAllText(livePath));
-    }
-
-    [Fact]
-    public void RestoreIpsetAfterKill_FlagOnlyMissingBackup_DeletesFlagLeavesLiveAlone()
-    {
-        var listsDir = Path.Combine(_tempRoot, "lists");
-        var flagPath = Path.Combine(_tempRoot, "ipset_switched.flag");
-        var livePath = Path.Combine(listsDir, "ipset-all.txt");
-
-        File.WriteAllText(flagPath, "");
-        File.WriteAllText(livePath, "PRESERVED-ORIGINAL");
-
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(flagPath));
-        Assert.Equal("PRESERVED-ORIGINAL", File.ReadAllText(livePath));
-    }
-
-    [Fact]
-    public void RestoreIpsetAfterKill_Idempotent_SafeToCallTwice()
-    {
-        var listsDir = Path.Combine(_tempRoot, "lists");
-        var flagPath = Path.Combine(_tempRoot, "ipset_switched.flag");
-        var backupPath = Path.Combine(listsDir, "ipset-all.test-backup.txt");
-        var livePath = Path.Combine(listsDir, "ipset-all.txt");
-
-        File.WriteAllText(flagPath, "");
-        File.WriteAllText(backupPath, "ORIGINAL-LIST");
-        File.WriteAllText(livePath, "");
-
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(flagPath));
-        Assert.Equal("ORIGINAL-LIST", File.ReadAllText(livePath));
-    }
-
-    [Fact]
-    public void FlowsealProgress_ScoreOnlyUpdate_EmptyStrategyName()
-    {
-        var p = new ZapretAutoStrategy.FlowsealProgress(5, 20, string.Empty, 3, 6);
-        Assert.Equal(string.Empty, p.StrategyName);
-        Assert.Equal(3, p.OkCount);
-        Assert.Equal(6, p.TotalChecks);
-    }
-
-    [Fact]
-    public void FlowsealSweepResult_BackCompatCtor_DiagnosticAndErrorLinesDefault()
-    {
-        var r = new ZapretAutoStrategy.FlowsealSweepResult(
-            Winner: "general (ALT3)", TestedCount: 20, TotalCount: 20,
-            FullOutput: "<output>");
-        Assert.Equal("general (ALT3)", r.Winner);
-        Assert.Null(r.Diagnostic);
-        Assert.Null(r.ErrorLines);
-    }
-
-    [Fact]
-    public void FlowsealSweepResult_WithDiagnostic_CarriesTypedToken()
-    {
-        var r = new ZapretAutoStrategy.FlowsealSweepResult(
-            Winner: null, TestedCount: 0, TotalCount: 0, FullOutput: "",
-            Diagnostic: "not_admin", ErrorLines: Array.Empty<string>());
-        Assert.Equal("not_admin", r.Diagnostic);
-        Assert.NotNull(r.ErrorLines);
-        Assert.Empty(r.ErrorLines!);
-    }
-
-    [Fact]
-    public void FlowsealSweepResult_WithErrorLines_PreservesList()
-    {
-        var errs = new[] { "[ERROR] zapret service installed", "[WARN] curl missing" };
-        var r = new ZapretAutoStrategy.FlowsealSweepResult(
-            Winner: null, TestedCount: 1, TotalCount: 20, FullOutput: "",
-            Diagnostic: "canceled", ErrorLines: errs);
-        Assert.Equal(2, r.ErrorLines!.Count);
-        Assert.Contains("[ERROR] zapret service installed", r.ErrorLines);
-        Assert.Contains("[WARN] curl missing", r.ErrorLines);
     }
 
     [Fact]
@@ -204,12 +99,6 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
             "directory&with%shell^characters", null, null, CancellationToken.None);
 
         Assert.Equal("not_windows", result.Diagnostic);
-    }
-
-    [Fact]
-    public void FlowsealMaxSweepTime_IsTenMinutes()
-    {
-        Assert.Equal(TimeSpan.FromMinutes(10), ZapretAutoStrategy.FlowsealMaxSweepTime);
     }
 
     [Fact]

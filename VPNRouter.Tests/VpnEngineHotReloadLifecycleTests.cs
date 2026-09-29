@@ -8,6 +8,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineHotReloadLifecycleTests
 {
     private sealed class StubProcessScanner : IProcessScanner

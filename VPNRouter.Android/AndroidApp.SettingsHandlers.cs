@@ -26,11 +26,6 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    private void OnMenuSettingsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ShowSettings();
-    }
 
     private void ShowSettings()
     {
@@ -46,7 +41,6 @@ public partial class AndroidApp
             if (_settingsSplitRadio is not null) _settingsSplitRadio.IsChecked = routing == "split";
             if (_settingsFullRadio is not null) _settingsFullRadio.IsChecked = routing == "full";
             if (_settingsBypassRu is not null) _settingsBypassRu.IsChecked = AndroidStorage.GetBypassRussianTraffic();
-            if (_settingsBlockOnVpnFail is not null) _settingsBlockOnVpnFail.IsChecked = AndroidStorage.GetBlockOnVpnFail();
             if (_settingsBlockAds is not null) _settingsBlockAds.IsChecked = AndroidStorage.GetBlockAds();
             if (_settingsDnsStrategy is not null)
             {
@@ -103,13 +97,6 @@ public partial class AndroidApp
         MarkSettingsDirty();
     }
 
-    private void OnSettingsBlockOnVpnFailChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_settingsLoading || _settingsBlockOnVpnFail is null) return;
-        AndroidStorage.SetBlockOnVpnFail(_settingsBlockOnVpnFail.IsChecked == true);
-        MarkSettingsDirty();
-    }
-
     private void OnSettingsBlockAdsChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_settingsLoading || _settingsBlockAds is null) return;
@@ -142,19 +129,6 @@ public partial class AndroidApp
         _ = RunUpdateCheckAsync(manual: true);
     }
 
-    private void OnSettingsDpiBypassModeChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
-    {
-        if (_settingsLoading || _settingsDpiBypassMode is null) return;
-        var value = _settingsDpiBypassMode.SelectedIndex switch
-        {
-            1 => "standard",
-            2 => "aggressive",
-            _ => "off",
-        };
-        AndroidStorage.SetDpiBypassMode(value);
-        UpdateZapretChipFromState();
-        MarkSettingsDirty();
-    }
 
     private void MarkSettingsDirty()
     {

@@ -51,6 +51,7 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
             if (!System.IO.File.Exists(_statePath))
                 SaveState(new LinuxDnsState { Interface = iface });
 
+            // Claim success only when both the resolver pin and the routing domain took effect.
             var dnsOk = RunResolvectl(new[] { "dns", iface, dnsTarget }, logger);
             var domainOk = RunResolvectl(new[] { "domain", iface, DefaultRoutingDomain }, logger);
             if (dnsOk && domainOk)

@@ -44,8 +44,6 @@ internal static class SplitTunnelDriverProtocol
         Terminating = 5,
     }
 
-    public const uint EventErrorFlag = 0x80000000;
-
     public enum EventId : uint
     {
         StartSplittingProcess = 0,
@@ -65,14 +63,7 @@ internal static class SplitTunnelDriverProtocol
         ProcessDeparting = 8,
     }
 
-    public enum EventSeverity
-    {
-        Information,
-        Warning,
-        Debug,
-    }
-
-    public enum ServiceCollisionAction
+public enum ServiceCollisionAction
     {
         StartExisting,
         AdoptMovedInstall,
@@ -96,6 +87,7 @@ internal static class SplitTunnelDriverProtocol
         return buf;
     }
 
+    // Driver ABI: 40-byte buffer with fixed offsets (tunnel v4 @0, internet v4 @4, tunnel v6 @8, internet v6 @24).
     public static byte[] BuildAddresses(IPAddress? tunnelV4, IPAddress? internetV4, IPAddress? tunnelV6, IPAddress? internetV6)
     {
         var buf = new byte[40];
@@ -372,19 +364,6 @@ internal static class SplitTunnelPolicy
 
     private static bool IsExcludeMode(string routingAppsMode)
         => string.Equals(routingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
-
-    public static SplitTunnelDriverProtocol.EventSeverity ClassifyEvent(uint eventId)
-    {
-        switch (eventId)
-        {
-            case (uint)SplitTunnelDriverProtocol.EventId.StartSplittingProcess:
-            case (uint)SplitTunnelDriverProtocol.EventId.StopSplittingProcess:
-                return SplitTunnelDriverProtocol.EventSeverity.Information;
-        }
-        if ((eventId & SplitTunnelDriverProtocol.EventErrorFlag) != 0)
-            return SplitTunnelDriverProtocol.EventSeverity.Warning;
-        return SplitTunnelDriverProtocol.EventSeverity.Debug;
-    }
 
     public static bool ShouldReRegister(
         (IPAddress? TunV4, IPAddress? InetV4, IPAddress? TunV6, IPAddress? InetV6) oldAddrs,

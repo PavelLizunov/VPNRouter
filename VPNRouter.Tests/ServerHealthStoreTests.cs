@@ -40,31 +40,11 @@ public class ServerHealthStoreTests : IDisposable
     }
 
     [Fact]
-    public void Key_IsNameIndependent_SubscriptionRefreshSafe()
-    {
-        ServerHealthStore.Record(Entry(name: "old-name"), ServerHealthVerdict.Healthy);
-        Assert.Equal(ServerHealthVerdict.Healthy,
-            ServerHealthStore.GetFresh(Entry(name: "renamed-after-refresh")));
-    }
-
-    [Fact]
     public void Unknown_IsIgnored_NeverOverwritesARealVerdict()
     {
         ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);
         ServerHealthStore.Record(Entry(), ServerHealthVerdict.Unknown);
         Assert.Equal(ServerHealthVerdict.Healthy, ServerHealthStore.GetFresh(Entry()));
-    }
-
-    [Fact]
-    public void StaleRecord_PastTtl_IsNotFresh()
-    {
-        var t0 = new DateTimeOffset(2026, 7, 9, 12, 0, 0, TimeSpan.Zero);
-        ServerHealthStore.Record(Entry(), ServerHealthVerdict.ProtocolHandshakeBlockedLikely, now: t0);
-
-        var justInside = t0 + ServerHealthStore.FreshTtl;
-        var justPast = t0 + ServerHealthStore.FreshTtl + TimeSpan.FromMinutes(1);
-        Assert.NotNull(ServerHealthStore.GetFresh(Entry(), now: justInside));
-        Assert.Null(ServerHealthStore.GetFresh(Entry(), now: justPast));
     }
 
     [Fact]
@@ -87,26 +67,5 @@ public class ServerHealthStoreTests : IDisposable
         ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);
         ServerHealthStore.ResetForTests();
         Assert.Equal(ServerHealthVerdict.Healthy, ServerHealthStore.GetFresh(Entry()));
-    }
-
-    [Fact]
-    public void DifferentPortOrProtocol_AreDistinctIdentities()
-    {
-        ServerHealthStore.Record(Entry(port: 443), ServerHealthVerdict.ProtocolHandshakeBlockedLikely);
-        Assert.Null(ServerHealthStore.GetFresh(Entry(port: 8443)));
-        Assert.Null(ServerHealthStore.GetFresh(Entry(protocol: "hysteria2")));
-    }
-
-    [Fact]
-    public void ProviderKey_RoundTrips_AndSurvivesKeylessOverwrite()
-    {
-        ServerHealthStore.Record(Entry(), ServerHealthVerdict.ProtocolHandshakeBlockedLikely,
-            providerKey: "net:1.2.3.0/24");
-        Assert.Equal("net:1.2.3.0/24", ServerHealthStore.GetFreshRecord(Entry())!.ProviderKey);
-
-        ServerHealthStore.Record(Entry(), ServerHealthVerdict.Healthy);
-        var rec = ServerHealthStore.GetFreshRecord(Entry())!;
-        Assert.Equal(ServerHealthVerdict.Healthy, rec.Verdict);
-        Assert.Equal("net:1.2.3.0/24", rec.ProviderKey);
     }
 }

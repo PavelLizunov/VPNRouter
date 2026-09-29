@@ -6,6 +6,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class TunAdapterPnpSettleGateTests
 {
     private const string InstanceId = @"ROOT\NET\VPNROUTER_R3";
@@ -128,6 +129,7 @@ public sealed class TunAdapterPnpSettleGateTests
 
         await WithTunRunnerAsync(tunRunner, async () =>
         {
+            AcquireTunOwnership(manager);
             InvokeLaunch(manager);
             Assert.Single(processRunner.StartCalls);
 
@@ -140,7 +142,11 @@ public sealed class TunAdapterPnpSettleGateTests
             releaseQueuedRemoval.TrySetResult(Ok(string.Empty));
             await restart.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(2, processRunner.StartCalls.Count);
-        }, cleanup: () => DisposeAndDrain(manager), nativeLookup: _ =>
+        }, cleanup: () =>
+        {
+            releaseQueuedRemoval.TrySetResult(Ok(string.Empty));
+            DisposeAndDrain(manager);
+        }, nativeLookup: _ =>
         {
             var call = Interlocked.Increment(ref resolveCall);
             if (call == 2)
@@ -189,6 +195,7 @@ public sealed class TunAdapterPnpSettleGateTests
             Assert.Single(newProcessRunner.StartCalls);
         }, cleanup: () =>
         {
+            releaseOldRemoval.TrySetResult(Ok(string.Empty));
             DisposeAndDrain(oldManager);
             DisposeAndDrain(newManager);
         }, nativeLookup: _ =>
@@ -300,6 +307,11 @@ public sealed class TunAdapterPnpSettleGateTests
         typeof(SingBoxManager).GetMethod("LaunchProcess",
                 BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(manager, new object[] { @"C:\nonexistent\sing-box.exe" });
+
+    private static void AcquireTunOwnership(SingBoxManager manager) =>
+        Assert.True((bool)typeof(SingBoxManager).GetMethod("TryAcquireTunOwnership",
+                BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(manager, null)!);
 
     private static void InvokeQueue(SingBoxManager manager, string context) =>
         typeof(SingBoxManager).GetMethod("QueueTunAdapterRemoval",

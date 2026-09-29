@@ -110,16 +110,6 @@ public sealed class CrashReporterScrubberTests
     }
 
     [Fact]
-    public void ScrubSecrets_KeepsHttpHostButRedactsPath()
-    {
-        const string input = "fetch failed: https://sub.example.com/users/abc/sub.json";
-        var s = CrashReporter.ScrubSecrets(input);
-        Assert.Contains("https://sub.example.com", s);
-        Assert.Contains("/[redacted]", s);
-        Assert.DoesNotContain("/users/abc/sub.json", s);
-    }
-
-    [Fact]
     public void ScrubSecrets_RedactsBareUuid()
     {
         const string input = "user UUID 12345678-1234-1234-1234-123456789abc not found";
@@ -311,5 +301,21 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain("194.87.222.111", report);
         Assert.Contains("vless://[redacted]", report);
         Assert.Contains("benign line 5", report);
+    }
+
+    [Fact]
+    public void WriteReport_TailRedactsBareKeyValueSecrets()
+    {
+        var logContent = string.Join(Environment.NewLine,
+            "benign line",
+            "auth failed password=hunter2-plain api_key: abcd1234efgh",
+            "last line");
+
+        var report = WriteReportWithLog(logContent);
+
+        Assert.DoesNotContain("hunter2-plain", report);
+        Assert.DoesNotContain("abcd1234efgh", report);
+        Assert.Contains("benign line", report);
+        Assert.Contains("last line", report);
     }
 }

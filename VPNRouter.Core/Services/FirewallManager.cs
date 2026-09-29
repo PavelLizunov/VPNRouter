@@ -13,6 +13,7 @@ public class FirewallManager : IFirewallManager
 
     private const int NetshTimeoutMs = 5000;
 
+    // DNS lockdown blocks outbound DNS ports on every adapter except loopback; sing-box resolves over DoH inside the tunnel, so it is unaffected.
     internal const string DnsLockdownAllowRule = "0_VPNRouter-DnsLockdown-LoopbackAllow";
     internal const string DnsLockdownTunAllowRule = "0_VPNRouter-DnsLockdown-TunAllow";
     internal const string DnsLockdownUdp53Rule = "VPNRouter-DnsLockdown-UDP53";
@@ -69,6 +70,16 @@ public class FirewallManager : IFirewallManager
     {
         try
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                VPNRouter.Core.Platform.macOS.MacFirewallManager.TryCleanupOrphanedRulesSafe(logger ?? Log.Logger);
+                return;
+            }
+            if (OperatingSystem.IsLinux())
+            {
+                VPNRouter.Core.Platform.Linux.LinuxFirewallManager.TryCleanupOrphanedRulesSafe(logger ?? Log.Logger);
+                return;
+            }
             if (!OperatingSystem.IsWindows()) return;
             using var fw = new FirewallManager(logger ?? Log.Logger);
             fw.CleanupOrphanedRules();
@@ -283,8 +294,6 @@ public class FirewallManager : IFirewallManager
 
         return result;
     }
-
-    private List<string> FindRulesByPrefix(string prefix) => FindRulesByPrefixes(new[] { prefix });
 
     private bool RunNetsh(string arguments)
     {

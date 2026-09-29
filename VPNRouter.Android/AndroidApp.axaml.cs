@@ -150,7 +150,6 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.RadioButton? _settingsSplitRadio;
     private Avalonia.Controls.RadioButton? _settingsFullRadio;
     private Avalonia.Controls.CheckBox? _settingsBypassRu;
-    private Avalonia.Controls.CheckBox? _settingsBlockOnVpnFail;
     private Avalonia.Controls.ComboBox? _settingsDpiBypassMode;
     private Avalonia.Controls.ComboBox? _settingsDnsStrategy;
     private Avalonia.Controls.CheckBox? _settingsBlockAds;
@@ -1552,6 +1551,4 @@ public partial class AndroidApp : Avalonia.Application
         UpdateConfigSummary();
     }
 
-    private void OnLanguageToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => ToggleLanguageAndRefresh();
 }

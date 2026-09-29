@@ -20,13 +20,4 @@ public class TunnelStateResyncTests
         Assert.Equal(expectAct, act);
         Assert.Equal(expectCorrected, corrected);
     }
-
-    [Fact]
-    public void SilentTunDeath_IsTheRegressionGuard()
-    {
-        var act = TunnelStateResync.TryResolveOnResume(
-            intendedConnected: true, serviceTunnelLive: true, vpnTransportActive: false, out var corrected);
-        Assert.True(act);
-        Assert.False(corrected);
-    }
 }

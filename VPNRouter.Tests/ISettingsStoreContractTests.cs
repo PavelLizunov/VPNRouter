@@ -210,10 +210,4 @@ public sealed class ISettingsStoreContractTests : IDisposable
         }
         finally { SafeMode.Enabled = wasSafeMode; }
     }
-
-    [Fact]
-    public void Real_Instance_IsSingleton()
-    {
-        Assert.Same(RealSettingsStore.Instance, RealSettingsStore.Instance);
-    }
 }

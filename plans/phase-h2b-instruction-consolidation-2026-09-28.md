@@ -55,3 +55,5 @@ Revert the PR.
   removed files. Root bootstrap stays within the 8-25 line pin (22 lines).
 - Checks: every edit matched exactly once; no broken relative Markdown link; no
   reference to removed files outside historical plans; exact-head CI on PR #329.
+
+Merged as #329 on 2026-09-29; exact-head CI green.

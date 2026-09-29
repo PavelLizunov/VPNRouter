@@ -10,6 +10,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineDnsLockdownLifecycleTests
 {
     private sealed class StubProcessScanner : IProcessScanner
@@ -320,6 +321,48 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         Assert.Contains(
             fakeWarmupHttp.SentRequests,
             r => r.Uri.ToString().Contains("gstatic.com/generate_204"));
+    }
+
+    [Fact]
+    public async Task Start_DnsLeakLockdownOn_StaleWarmup_DoesNotInvokeEnableLockdown()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart drives SingBoxManager's Windows spawn path; Linux uses pkexec + getcap shell-outs not behind IProcessRunner.");
+
+        var prevSingBoxRunner = SingBoxManager.Runner;
+        var prevTunDiagRunner = TunAdapterDiagnostics.Runner;
+        var prevWarmupHttp = StartupPipeline.WarmupHttp;
+        TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
+
+        var (singBoxRunner, handle) = BuildSingBoxSpawnFake();
+        SingBoxManager.Runner = singBoxRunner;
+        TunAdapterDiagnostics.Runner = BuildTunCleanupFake();
+
+        var fakeWarmupHttp = BuildWarmupSuccessHttpClient();
+        StartupPipeline.WarmupHttp = fakeWarmupHttp;
+
+        var stubExe = CreateStubExe();
+        var dnsHardening = new NullWindowsDnsHardening();
+        var engine = BuildEngine(dnsHardening, out var firewall, out var monitor);
+
+        var settings = BuildHappyPathSettings(stubExe, dnsLeakLockdown: true);
+
+        using var cleanup = new DnsLockdownCleanup(
+            engine, stubExe, prevSingBoxRunner, prevTunDiagRunner, prevWarmupHttp);
+
+        await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
+
+        // A failover restart supersedes this start's generation before its warm-up probe completes.
+        engine.ResetFailoverContext(settings);
+
+        var probed = await WaitForAsync(
+            () => fakeWarmupHttp.SentRequests.Count >= 1,
+            TimeSpan.FromSeconds(5));
+        Assert.True(probed, "The warm-up probe never reached the HTTP seam.");
+
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Equal(0, dnsHardening.EnableLockdownCount);
     }
 
     [Fact]

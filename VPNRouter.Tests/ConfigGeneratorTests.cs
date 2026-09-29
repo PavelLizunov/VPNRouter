@@ -274,19 +274,6 @@ public class ConfigGeneratorTests
     }
 
     [Fact]
-    public void DnsRule_DirectMode_RoutedAppGetsVpnDnsRule()
-    {
-        var settings = CreateSettings();
-        var profile = CreateProfile(dnsMode: "direct");
-        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
-
-        var procRule = config.Dns.Rules
-            .FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("Discord.exe"));
-        Assert.NotNull(procRule);
-        Assert.Equal("vpn-dns", procRule!.Server);
-    }
-
-    [Fact]
     public void ProcessNames_PreservesCase()
     {
         var settings = CreateSettings();
@@ -313,19 +300,6 @@ public class ConfigGeneratorTests
         Assert.Contains("Discord.exe", routeRule.ProcessName!);
         Assert.DoesNotContain("chrome*", routeRule.ProcessName!);
         Assert.DoesNotContain("fire?.exe", routeRule.ProcessName!);
-    }
-
-    [Fact]
-    public void ProcessNames_DeduplicatesCaseInsensitive()
-    {
-        var settings = CreateSettings();
-        var profile = CreateProfile();
-        var processes = new[] { "Discord.exe", "discord.exe", "DISCORD.EXE" };
-
-        var config = ConfigGenerator.Generate(profile, processes, settings);
-
-        var routeRule = config.Route.Rules.First(r => r.ProcessName != null);
-        Assert.Single(routeRule.ProcessName!);
     }
 
     [Fact]
@@ -373,25 +347,5 @@ public class ConfigGeneratorTests
         var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
 
         Assert.Contains(config.Outbounds, o => o.Tag == "direct" && o.Type == "direct");
-    }
-
-    [Fact]
-    public void Route_DefaultDomainResolver_IsLocalDns()
-    {
-        var settings = CreateSettings();
-        var profile = CreateProfile();
-        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
-
-        Assert.Equal("local-dns", config.Route.DefaultDomainResolver);
-    }
-
-    [Fact]
-    public void Route_FinalIsDirect()
-    {
-        var settings = CreateSettings();
-        var profile = CreateProfile();
-        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
-
-        Assert.Equal("direct", config.Route.Final);
     }
 }

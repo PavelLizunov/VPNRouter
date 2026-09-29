@@ -126,13 +126,6 @@ public class CustomConfigInjectorTests
     }
 
     [Fact]
-    public void Inject_LegacyConfig_NoActionField()
-    {
-        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "test.exe" }, CreateSettings());
-        Assert.Contains("\"process_name\"", result);
-    }
-
-    [Fact]
     public void Inject_ActionConfig_HasActionField()
     {
         var result = CustomConfigInjector.Inject(ActionConfig, new[] { "test.exe" }, CreateSettings());
@@ -246,14 +239,6 @@ public class CustomConfigInjectorTests
 
         Assert.NotNull(parsed["route"]);
         Assert.NotNull(StjNodeHelpers.SelectToken(parsed, "route.rules"));
-    }
-
-    [Fact]
-    public void Inject_PreservesProcessNameCase()
-    {
-        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe", "Telegram.exe" }, CreateSettings());
-        Assert.Contains("Discord.exe", result);
-        Assert.Contains("Telegram.exe", result);
     }
 
     private const string RealWorldConfig = """
@@ -443,119 +428,6 @@ public class CustomConfigInjectorTests
 
         Assert.False(isValid);
         Assert.Contains(errors, e => e.Contains("Duplicate outbound tag", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Inject_ActualCustomConfig_SingBoxCheck()
-    {
-        var configPath = @"C:\ProgramData\VPNRouter\config\custom-brat-pc.json";
-        if (!File.Exists(configPath))
-            return;
-
-        var rawJson = File.ReadAllText(configPath);
-        var settings = CreateSettings();
-        settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
-        var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
-
-        File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-inject.json", result);
-
-        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-actual-{Guid.NewGuid()}.json");
-        try
-        {
-            File.WriteAllText(tempPath, result);
-
-            var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
-            if (!File.Exists(singBoxPath))
-                return;
-
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = singBoxPath,
-                Arguments = $"check -c \"{tempPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var proc = System.Diagnostics.Process.Start(psi)!;
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit(10000);
-
-            Assert.True(proc.ExitCode == 0, $"sing-box check failed (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
-        }
-        finally
-        {
-            if (File.Exists(tempPath))
-                File.Delete(tempPath);
-        }
-    }
-
-    [Fact]
-    public void Inject_WithBypassRussianTraffic_PassesSingBoxCheck()
-    {
-        var configPath = @"C:\ProgramData\VPNRouter\config\custom-brat-pc.json";
-        if (!File.Exists(configPath))
-            return;
-
-        if (!GeoDataDownloader.AreGeoFilesAvailable())
-            return;
-
-        var rawJson = File.ReadAllText(configPath);
-        var settings = CreateSettings();
-        settings.App.BypassRussianTraffic = true;
-        settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
-        var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
-
-        Assert.Contains("vpnrouter-geoip-ru", result);
-        Assert.Contains("vpnrouter-geosite-ru", result);
-        var parsed = (JsonNode.Parse(result) as JsonObject)!;
-        var dnsServers = (StjNodeHelpers.SelectToken(parsed, "dns.servers") as JsonArray)!;
-        Assert.DoesNotContain(dnsServers.OfType<JsonObject>(), s =>
-            s["tag"]?.ToString() == "vpnrouter-dns-ru");
-        var dnsRules = (StjNodeHelpers.SelectToken(parsed, "dns.rules") as JsonArray)!;
-        var geoRule = dnsRules.OfType<JsonObject>().Single(r =>
-            (r["rule_set"] as JsonArray)?.Any(rs =>
-                rs?.ToString() == "vpnrouter-geosite-ru") == true);
-        var targetTag = geoRule["server"]?.ToString();
-        var targetDns = dnsServers.OfType<JsonObject>().Single(s =>
-            s["tag"]?.ToString() == targetTag);
-        Assert.False(string.IsNullOrWhiteSpace(targetDns["detour"]?.ToString()));
-        Assert.NotEqual("direct", targetDns["detour"]?.ToString());
-        Assert.NotEqual("dns-direct", targetDns["detour"]?.ToString());
-
-        File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-bypass.json", result);
-
-        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-bypass-{Guid.NewGuid()}.json");
-        try
-        {
-            File.WriteAllText(tempPath, result);
-
-            var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
-            if (!File.Exists(singBoxPath))
-                return;
-
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = singBoxPath,
-                Arguments = $"check -c \"{tempPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var proc = System.Diagnostics.Process.Start(psi)!;
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit(10000);
-
-            Assert.True(proc.ExitCode == 0, $"sing-box check failed with bypass (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
-        }
-        finally
-        {
-            if (File.Exists(tempPath))
-                File.Delete(tempPath);
-        }
     }
 
     [Theory]

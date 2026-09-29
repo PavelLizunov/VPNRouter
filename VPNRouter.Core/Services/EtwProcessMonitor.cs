@@ -17,6 +17,7 @@ public class EtwProcessMonitor : IProcessMonitor
     private Thread? _sessionThread;
     private bool _disposed;
 
+    // Signals that RunSession assigned _session, so a fast Start/Stop cannot skip session.Stop() and leave the worker blocked.
     private readonly ManualResetEventSlim _sessionReady = new(false);
 
     public event EventHandler<ProcessEventArgs>? ProcessStarted;
@@ -46,6 +47,7 @@ public class EtwProcessMonitor : IProcessMonitor
     public void Stop()
     {
         _logger.Information("[ETW] Stopping process monitor");
+        // Capture references first; stopping the session unblocks Process(), then join with a bounded timeout.
         var thread = _sessionThread;
         if (!_sessionReady.Wait(TimeSpan.FromSeconds(1)))
         {

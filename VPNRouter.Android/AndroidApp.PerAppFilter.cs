@@ -895,25 +895,6 @@ public partial class AndroidApp
         SetActiveAppCategory(raw);
     }
 
-    private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        try
-        {
-            var logPath = AndroidDiagnosticsExporter.ResolveSingboxLogPath();
-            if (logPath is null)
-            {
-                ShowMenuFeedback(Localization.SaveStatusUnknown);
-                return;
-            }
-            CopyToClipboard("singbox-log-path", logPath);
-            ShowMenuFeedback(logPath);
-        }
-        catch (Exception ex)
-        {
-            ShowMenuFeedback($"Error: {ex.GetType().Name}");
-        }
-    }
 
     private void OnMenuUpdateCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {

@@ -14,59 +14,6 @@ namespace VPNRouter.Tests;
 public sealed class SingBoxManagerSuppressExitedEventTests
 {
     [Fact]
-    public void Source_StopInternal_CallsSuppressExitedEventBeforeKill_WindowsPath()
-    {
-        var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-
-        var winBranch = src.IndexOf("var winStopped = false;", StringComparison.Ordinal);
-        Assert.True(winBranch >= 0, "Windows graceful path landmark missing");
-
-        var nextCatch = src.IndexOf("catch (Exception ex)", winBranch, StringComparison.Ordinal);
-        Assert.True(nextCatch > winBranch, "Windows branch catch-block not found");
-        var winWindow = src.Substring(winBranch, nextCatch - winBranch);
-
-        var suppressIdx = winWindow.IndexOf("winTargetHandle.SuppressExitedEvent()", StringComparison.Ordinal);
-        var killIdx = winWindow.IndexOf("winTargetHandle.Kill(entireProcessTree: true)", StringComparison.Ordinal);
-
-        Assert.True(suppressIdx >= 0, "Expected `winTargetHandle.SuppressExitedEvent()` in SingBoxManager.cs (Windows graceful path)");
-        Assert.True(killIdx >= 0, "Expected `winTargetHandle.Kill(entireProcessTree: true)` after SuppressExitedEvent in SingBoxManager.cs (Windows graceful path)");
-        Assert.True(suppressIdx < killIdx,
-            "SuppressExitedEvent must be called BEFORE Kill in the Windows graceful Stop path. " +
-            $"suppressIdx={suppressIdx}, killIdx={killIdx} — wrong order would re-introduce brat's false-Crashed regression.");
-    }
-
-    [Fact]
-    public void Source_StopInternal_CallsSuppressExitedEventBeforeKill_LinuxPath()
-    {
-        var src = ReadSourceFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-
-        var linuxBranch = src.IndexOf("if (OperatingSystem.IsLinux() && !_linuxUsedPkexec)", StringComparison.Ordinal);
-        Assert.True(linuxBranch >= 0, "Linux capability path landmark missing");
-
-        var nextCatch = src.IndexOf("catch (Exception ex)", linuxBranch, StringComparison.Ordinal);
-        Assert.True(nextCatch > linuxBranch, "Linux branch catch-block not found");
-        var linuxWindow = src.Substring(linuxBranch, nextCatch - linuxBranch);
-
-        var suppressIdx = linuxWindow.IndexOf("targetHandle.SuppressExitedEvent()", StringComparison.Ordinal);
-        var killIdx = linuxWindow.IndexOf("targetHandle.Kill(entireProcessTree: true)", StringComparison.Ordinal);
-
-        Assert.True(suppressIdx >= 0, "Expected exact targetHandle.SuppressExitedEvent() in Linux capability-mode path");
-        Assert.True(killIdx >= 0, "Expected exact targetHandle.Kill(entireProcessTree: true) in Linux capability-mode path");
-        Assert.True(suppressIdx < killIdx,
-            $"SuppressExitedEvent must be called BEFORE Kill in the Linux capability-mode Stop path. " +
-            $"suppressIdx={suppressIdx}, killIdx={killIdx}.");
-    }
-
-    [Fact]
-    public void IProcessHandle_HasSuppressExitedEventMethod()
-    {
-        var method = typeof(IProcessHandle).GetMethod(nameof(IProcessHandle.SuppressExitedEvent));
-        Assert.NotNull(method);
-        Assert.Equal(typeof(void), method!.ReturnType);
-        Assert.Empty(method.GetParameters());
-    }
-
-    [Fact]
     public async Task Behavioural_AfterSuppress_SignalExit_DoesNotFireExited()
     {
         var handle = new FakeProcessHandle(pid: 99001);
@@ -97,30 +44,6 @@ public sealed class SingBoxManagerSuppressExitedEventTests
 
         Assert.Equal(1, exitedFired);
         Assert.True(handle.HasExited);
-    }
-
-    [Fact]
-    public void Source_TgProxyManager_StopCallsSuppressExitedEventBeforeKill()
-    {
-        var src = ReadSourceFile("VPNRouter.Core", "Services", "TgProxyManager.cs");
-
-        var suppressIdx = src.IndexOf("handle.SuppressExitedEvent()", StringComparison.Ordinal);
-        var killIdx = src.IndexOf("handle.Kill(entireProcessTree: true)", suppressIdx + 1, StringComparison.Ordinal);
-
-        Assert.True(suppressIdx >= 0, "Expected `handle.SuppressExitedEvent()` in TgProxyManager.cs");
-        Assert.True(killIdx >= 0, "Expected `handle.Kill(entireProcessTree: true)` after Suppress in TgProxyManager.cs");
-    }
-
-    [Fact]
-    public void Source_ZapretManager_StopCallsSuppressExitedEventBeforeKill()
-    {
-        var src = ReadSourceFile("VPNRouter.Core", "Services", "ZapretManager.cs");
-
-        var suppressIdx = src.IndexOf("handle.SuppressExitedEvent()", StringComparison.Ordinal);
-        var killIdx = src.IndexOf("handle.Kill(entireProcessTree: true)", suppressIdx + 1, StringComparison.Ordinal);
-
-        Assert.True(suppressIdx >= 0, "Expected `handle.SuppressExitedEvent()` in ZapretManager.cs");
-        Assert.True(killIdx >= 0, "Expected `handle.Kill(entireProcessTree: true)` after Suppress in ZapretManager.cs");
     }
 
     private static string ReadSourceFile(params string[] segments)

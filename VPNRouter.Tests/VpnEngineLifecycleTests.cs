@@ -9,6 +9,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineLifecycleTests
 {
     private sealed class StubProcessScanner : IProcessScanner
@@ -682,6 +683,7 @@ public sealed class VpnEngineLifecycleTests
         public void OnWarning(string message) { }
         public void OnSingBoxStarted(int pid) { }
         public void OnConnected(int pid) { }
+        public bool IsCurrentStart(int pid) => true;
         public void OnRestartAttempted(int attempt, int max) { }
         public void OnFailoverRequested(string reason) { }
         public void OnAutoFailoverTriggered(string message) { }

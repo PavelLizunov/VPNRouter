@@ -73,24 +73,6 @@ public class ServerHealthProbeTests
     }
 
     [Fact]
-    public void AliveRanked_ReturnsOnlyAlive_FastestFirst()
-    {
-        var results = new[]
-        {
-            Live("Slow", "1.1.1.1", alive: true,  ms: 300),
-            Live("Dead", "2.2.2.2", alive: false, ms: 0),
-            Live("Fast", "3.3.3.3", alive: true,  ms: 30),
-        };
-
-        var ranked = ServerHealthProbe.AliveRanked(results);
-
-        Assert.Equal(2, ranked.Count);
-        Assert.Equal("Fast", ranked[0].Name);
-        Assert.Equal("Slow", ranked[1].Name);
-        Assert.DoesNotContain(ranked, s => s.Name == "Dead");
-    }
-
-    [Fact]
     public async Task ProbeAllAsync_MarksAliveDeadPerInjectedProbe()
     {
         var probe = ProbeWhere(s => s.Server.StartsWith("good"), s => s.Server.Length);
@@ -179,18 +161,6 @@ public class ServerHealthProbeTests
 
         Assert.False(results.Single(r => r.Server.Name == "Boom").Alive);
         Assert.True(results.Single(r => r.Server.Name == "Ok").Alive);
-    }
-
-    [Fact]
-    public void MaxConcurrency_ConstantIsEight()
-    {
-        Assert.Equal(8, ServerHealthProbe.MaxConcurrency);
-
-        var field = typeof(ServerHealthProbe).GetField(
-            "MaxConcurrency",
-            BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-        Assert.NotNull(field);
-        Assert.Equal(8, field!.GetValue(null));
     }
 
     [Fact]

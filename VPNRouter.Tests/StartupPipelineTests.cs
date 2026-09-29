@@ -196,6 +196,34 @@ public sealed class StartupPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task SafeMode_ForcesFullTunnelRoutingIntoSettingsAndConfig()
+    {
+        var settings = BuildBaseSettings();
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            MakeServer("main", "104.194.156.93", 443)
+        };
+        settings.Vless.ActiveServer = "main";
+        settings.App.RoutingMode = "split";
+        settings.ActiveProfile = "TestProfile";
+
+        var host = new TestStartupHost();
+        var pipeline = new StartupPipeline(host, _store);
+
+        var result = await pipeline.ExecuteAsync(
+            new StartupContext(settings, StartupMode.HotReload),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success);
+        Assert.Equal("FullTunnel", result.Profile!.Name);
+        Assert.Equal("full", settings.App.RoutingMode);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(result.ConfigJson!);
+        var final = doc.RootElement.GetProperty("route").GetProperty("final").GetString();
+        Assert.NotEqual("direct", final);
+    }
+
+    [Fact]
     public async Task SetupFirewall_NoBlockOnFail_SkipsRuleCreation()
     {
         var settings = BuildBaseSettings();
@@ -377,34 +405,6 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.DoesNotContain("203.0.113.0/24", result.ConfigJson!);
     }
 
-    [Fact]
-    public void StartupResult_RecordShape_FieldsPresent()
-    {
-        var r1 = new StartupResult(
-            Success: true,
-            EarlyReturn: false,
-            ProcessId: 12345,
-            Duration: TimeSpan.FromMilliseconds(500),
-            ConfigJson: "{}",
-            Profile: new Profile { Name = "X" });
-
-        var r2 = r1 with { ProcessId = 99999 };
-
-        Assert.Equal(12345, r1.ProcessId);
-        Assert.Equal(99999, r2.ProcessId);
-        Assert.NotEqual(r1, r2);
-        Assert.Equal("X", r1.Profile?.Name);
-        Assert.Equal("{}", r1.ConfigJson);
-
-        var modes = new[]
-        {
-            StartupMode.ColdStart,
-            StartupMode.HotReload,
-            StartupMode.AutoFailover
-        };
-        Assert.Equal(3, modes.Length);
-    }
-
     internal sealed class CapturingFirewall : IFirewallManager
     {
         public int CreateBlockRulesCount { get; private set; }
@@ -476,6 +476,7 @@ public sealed class StartupPipelineTests : IDisposable
         public void OnSingBoxStarted(int pid) { }
         public List<int> ConnectedPids { get; } = new();
         public void OnConnected(int pid) => ConnectedPids.Add(pid);
+        public bool IsCurrentStart(int pid) => true;
         public void OnRestartAttempted(int attempt, int max) { }
         public void OnFailoverRequested(string reason) { }
         public void OnAutoFailoverTriggered(string message) =>

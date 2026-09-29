@@ -60,3 +60,5 @@ Revert the PR.
 - An earlier agent-based rewrite attempt was discarded; the delegated agent had
   spawned five more agents against instructions and all stopped at the usage
   limit. The script result replaces it entirely.
+
+Merged as #330 on 2026-09-29; exact-head CI green.

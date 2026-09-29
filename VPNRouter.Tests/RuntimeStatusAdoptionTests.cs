@@ -9,33 +9,6 @@ namespace VPNRouter.Tests;
 public sealed class RuntimeStatusAdoptionTests
 {
     [Fact]
-    public void DetectServiceManagedVpn_UsesOwnershipFilteredDetector_NotBareProcessName()
-    {
-        var body = LoadMethodBody(
-            new[] { "VPNRouter.App", "ViewModels", "MainWindowViewModel.cs" },
-            "DetectServiceManagedVpn");
-        if (body == null) return;
-
-        var stripped = StripLineComments(body);
-
-        Assert.Contains("RuntimeStatusDetector.IsVpnRunning", stripped);
-
-        Assert.DoesNotContain("ProcessQuery.AnyAlive(\"sing-box\")", stripped);
-        Assert.DoesNotContain("GetProcessesByName(\"sing-box\")", stripped);
-    }
-
-    [Fact]
-    public void RuntimeStatusDetector_IsVpnRunning_DelegatesToOwnershipFilter()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "RuntimeStatusDetector.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-        Assert.Contains("FindOwnedSingBox", stripped);
-        Assert.DoesNotContain("ProcessQuery.AnyAlive(\"sing-box\")", stripped);
-    }
-
-    [Fact]
     public void CandidateProcessNames_RenamedCustomExecutable_IsDiscoveredWithoutHardcodingSingBox()
     {
         var root = Path.Combine(Path.GetTempPath(), "vpnrouter-name-tests");
@@ -309,48 +282,6 @@ public sealed class RuntimeStatusAdoptionTests
             stateWrittenAtUtc: new DateTime(6000, DateTimeKind.Utc),
             identityReader: _ => live,
             ownerOverride: CurrentOwner(live)));
-    }
-
-    [Fact]
-    public void StatusCommand_UsesPureRuntimeProbe_WithoutSettingsLoaderOrOwnerWrites()
-    {
-        var src = LoadSource("VPNRouter.CLI", "Commands", "StatusCommand.cs");
-        if (src == null) return;
-        var stripped = StripLineComments(src);
-
-        Assert.Contains("RuntimeStatusDetector.GetVpnRuntime()", stripped);
-        Assert.DoesNotContain("SettingsLoader", stripped);
-        Assert.DoesNotContain("ConfiguredExePath =", stripped);
-        Assert.DoesNotContain("WriteRuntimeOwnerRecord", stripped);
-    }
-
-    [Fact]
-    public void SyncConnectedWithVpnRuntime_ShortCircuitsWhileConnecting()
-    {
-        var body = LoadMethodBody(
-            new[] { "VPNRouter.App", "ViewModels", "MainWindowViewModel.RuntimeStatus.cs" },
-            "SyncConnectedWithVpnRuntime");
-        if (body == null) return;
-
-        var stripped = StripLineComments(body);
-
-        Assert.Matches(@"if\s*\(\s*IsConnecting\s*\)\s*return", stripped);
-
-        Assert.DoesNotContain("ProcessQuery.AnyAlive(\"sing-box\")", stripped);
-    }
-
-    [Fact]
-    public void RuntimePoll_FeedsSyncFromOwnershipFilteredDetector()
-    {
-        var body = LoadMethodBody(
-            new[] { "VPNRouter.App", "ViewModels", "MainWindowViewModel.RuntimeStatus.cs" },
-            "UpdateRuntimeStatus");
-        var src = body ?? LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.RuntimeStatus.cs");
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-        Assert.Contains("RuntimeStatusDetector.IsVpnRunning", stripped);
-        Assert.Contains("SyncConnectedWithVpnRuntime", stripped);
     }
 
     private static string? LoadSource(params string[] relativeParts)

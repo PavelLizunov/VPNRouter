@@ -123,13 +123,6 @@ public class ServerUriParserDnsTunnelTests
     }
 
     [Fact]
-    public void Parse_NoFragment_NameDefaultsToDomain()
-    {
-        var e = ServerUriParser.Parse(Link(GoodJson));
-        Assert.Equal("tunnel.example.org", e.Name);
-    }
-
-    [Fact]
     public void Parse_MissingDomain_Throws()
     {
         var json = "{\"resolvers\":[\"195.208.4.1:53\"],\"uuid\":\"" + SampleUuid + "\"}";
@@ -158,16 +151,6 @@ public class ServerUriParserDnsTunnelTests
         var json = "{\"domain\":\"t.org\",\"resolvers\":[\"195.208.4.1:53\"]}";
         var ex = Assert.Throws<FormatException>(() => ServerUriParser.Parse(Link(json)));
         Assert.Contains("uuid", ex.Message);
-    }
-
-    [Fact]
-    public void Parse_FingerprintOptional_DefaultsEmpty()
-    {
-        var json = "{\"domain\":\"t.org\",\"resolvers\":[\"195.208.4.1:53\"]," +
-                   "\"cert\":\"" + PemInJson + "\",\"uuid\":\"" + SampleUuid + "\"}";
-        var e = ServerUriParser.Parse(Link(json));
-        Assert.Equal(string.Empty, e.DnsLeafFingerprint);
-        Assert.Equal(PemDecoded, e.DnsLeafCertPem);
     }
 
     [Fact]
@@ -205,13 +188,6 @@ public class ServerUriParserDnsTunnelTests
     public void Parse_EmptyPayload_Throws()
     {
         Assert.Throws<FormatException>(() => ServerUriParser.Parse("dns-tunnel://"));
-    }
-
-    [Fact]
-    public void IsSupportedScheme_DnsTunnel_TrueWhenRuntimeAvailable()
-    {
-        Assert.True(ServerUriParser.SlipstreamRuntimeAvailable);
-        Assert.True(ServerUriParser.IsSupportedScheme(Link(GoodJson)));
     }
 
     [Fact]

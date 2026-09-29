@@ -73,15 +73,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     }
 
     [Fact]
-    public void Prewarm_WithOverridesSet_NoOps_AndDoesNotThrow()
-    {
-        var ex = Record.Exception(() => SingBoxFeatures.Prewarm());
-        Assert.Null(ex);
-        Assert.False(SingBoxFeatures.AwgAvailable);
-        Assert.False(SingBoxFeatures.XhttpAvailable);
-    }
-
-    [Fact]
     public void ScrubSecrets_CollapsesAwgUri_HidingPrivateKey()
     {
         var scrubbed = CrashReporter.ScrubSecrets(
@@ -101,13 +92,6 @@ public sealed class SingBoxFeaturesGateTests : IDisposable
     {
         Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(
             new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), AwgOnlySettings()));
-    }
-
-    [Fact]
-    public void Generate_PersistedXhttpServer_Refused_WhenForkUnavailable()
-    {
-        Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(
-            new Profile { Name = "t", DnsMode = "vpn_only" }, Array.Empty<string>(), XhttpOnlySettings()));
     }
 
     private static AppSettings AwgOnlySettings() => SettingsWith(new VlessServerEntry

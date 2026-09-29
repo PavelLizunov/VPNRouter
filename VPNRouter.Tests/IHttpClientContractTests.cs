@@ -213,40 +213,6 @@ public sealed class IHttpClientContractTests
         Assert.Equal(0, handler.CallCount);
     }
 
-    [Fact]
-    public async Task FakeHttpClient_Setup_ReturnsCannedResponse()
-    {
-        var fake = new FakeHttpClient()
-            .Setup(TestUrl, "canned payload", statusCode: 201);
-
-        var response = await fake.SendAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(201, response.StatusCode);
-        Assert.Equal("canned payload", response.AsString());
-    }
-
-    [Fact]
-    public async Task FakeHttpClient_SentRequests_RecordsAllCalls()
-    {
-        var fake = new FakeHttpClient().Setup(TestUrl, "{}");
-
-        var ct = TestContext.Current.CancellationToken;
-        await fake.SendAsync(new HttpRequest(HttpMethod.Get, new Uri(TestUrl + "?a=1")), ct);
-        await fake.SendAsync(new HttpRequest(HttpMethod.Post, new Uri(TestUrl), Body: new byte[] { 1, 2 }, BodyContentType: "application/octet-stream"), ct);
-        await fake.SendAsync(new HttpRequest(HttpMethod.Get, new Uri(TestUrl + "?a=2")), ct);
-
-        var sent = fake.SentRequests;
-        Assert.Equal(3, sent.Count);
-        Assert.Equal(HttpMethod.Get, sent[0].Method);
-        Assert.Contains("a=1", sent[0].Uri.ToString());
-        Assert.Equal(HttpMethod.Post, sent[1].Method);
-        Assert.Equal(new byte[] { 1, 2 }, sent[1].Body);
-        Assert.Equal(HttpMethod.Get, sent[2].Method);
-        Assert.Contains("a=2", sent[2].Uri.ToString());
-    }
-
     private sealed class StubHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _respond;

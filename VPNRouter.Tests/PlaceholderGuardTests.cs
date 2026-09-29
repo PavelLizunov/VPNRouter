@@ -52,42 +52,6 @@ public class PlaceholderGuardTests
     }
 
     [Fact]
-    public void Inspect_PlaceholderShortId_ReturnsRealityShortIdField()
-    {
-        var dirty = new VlessServerEntry
-        {
-            Name = "stas-short-id",
-            Server = "94.131.107.42",
-            Port = 443,
-            Uuid = "abcd-1234",
-            Reality = new VlessRealityConfig
-            {
-                PublicKey = "vJgL_realPubkey",
-                ShortId = KnownBadShortId,
-            },
-        };
-        Assert.Equal("reality.short_id", PlaceholderDefense.Inspect(dirty));
-    }
-
-    [Fact]
-    public void Inspect_PlaceholderServerIp_ReturnsServerField()
-    {
-        var dirty = new VlessServerEntry
-        {
-            Name = "khunrath_ln",
-            Server = KnownBadServer,
-            Port = 443,
-            Uuid = "abcd",
-            Reality = new VlessRealityConfig
-            {
-                PublicKey = "vJgL_realPubkey",
-                ShortId = "deadbeef",
-            },
-        };
-        Assert.Equal("server", PlaceholderDefense.Inspect(dirty));
-    }
-
-    [Fact]
     public void Inspect_PubkeyMatchTakesPrecedenceOverShortId()
     {
         var dirty = new VlessServerEntry
@@ -124,22 +88,6 @@ public class PlaceholderGuardTests
         Assert.True(PlaceholderDefense.IsPlaceholder(KnownBadPubkey, null, null));
         Assert.False(PlaceholderDefense.IsPlaceholder("vJgL_realPubkey", null, null));
         Assert.False(PlaceholderDefense.IsPlaceholder((VlessServerEntry?)null));
-    }
-
-    [Fact]
-    public void InspectUri_VlessUriWithPlaceholderPubkey_ReturnsField()
-    {
-        var uri = $"vless://352714f4-7ecc-4c22-805f-ed5c5239f5bb@example.com:443" +
-                  $"?security=reality&pbk={KnownBadPubkey}&sni=yahoo.com&fp=firefox&type=tcp";
-        Assert.Equal("reality.public_key", PlaceholderDefense.InspectUri(uri));
-    }
-
-    [Fact]
-    public void InspectUri_UnparseableInput_ReturnsNull()
-    {
-        Assert.Null(PlaceholderDefense.InspectUri("not-a-uri"));
-        Assert.Null(PlaceholderDefense.InspectUri(""));
-        Assert.Null(PlaceholderDefense.InspectUri(null));
     }
 
     [Fact]

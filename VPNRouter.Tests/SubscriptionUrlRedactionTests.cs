@@ -250,16 +250,6 @@ public sealed class SubscriptionUrlRedactionTests
         }
     }
 
-    [Fact]
-    public void PolicyHttpClient_TimeoutMessage_DoesNotEmbedRequestUri()
-    {
-        var src = File.ReadAllText(Path.Combine(
-            FindRepoRoot(), "VPNRouter.Core", "Services", "PolicyHttpClient.cs"));
-        Assert.DoesNotContain("HTTP request to {request.Uri}", src);
-        Assert.DoesNotContain("HTTP streaming request to {request.Uri}", src);
-        Assert.Contains("HTTP request timed out after", src);
-    }
-
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

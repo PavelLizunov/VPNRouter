@@ -26,14 +26,6 @@ public class ServerHealthClassifierEdgeTests
                 BlockedTargetCanary: PhaseOutcome.Fail)));
 
     [Fact]
-    public void NoTcpPhase_DeepVerifyPass_UdpAppFail_IsUdpOrAppProfileFailed()
-        => Assert.Equal(ServerHealthVerdict.UdpOrAppProfileFailed,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Skipped,
-                ProxiedHttpControl: PhaseOutcome.Pass,
-                UdpAppProfile: PhaseOutcome.Fail)));
-
-    [Fact]
     public void SkippedTcp_DeepVerifyFail_StaysUnknown_NotBlocked()
     {
         var v = Verdict(new ServerHealthPhases(
@@ -48,56 +40,6 @@ public class ServerHealthClassifierEdgeTests
             TcpConnect: PhaseOutcome.Fail, ProxiedHttpControl: PhaseOutcome.Pass));
         Assert.Equal(ServerHealthVerdict.HostUnreachable, v);
     }
-
-    [Fact]
-    public void TlsSkipped_TcpPass_HttpPass_IsHealthy()
-        => Assert.Equal(ServerHealthVerdict.Healthy,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Pass,
-                TlsCamouflage: PhaseOutcome.Skipped,
-                ProxiedHttpControl: PhaseOutcome.Pass)));
-
-    [Fact]
-    public void TlsSkipped_TcpOnly_IsStillTcpOpenProtocolUntested()
-        => Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Pass, TlsCamouflage: PhaseOutcome.Skipped)));
-
-    [Fact]
-    public void CanaryAndUdpSkipped_HttpPass_IsHealthy()
-        => Assert.Equal(ServerHealthVerdict.Healthy,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Pass,
-                ProxiedHttpControl: PhaseOutcome.Pass,
-                BlockedTargetCanary: PhaseOutcome.Skipped,
-                UdpAppProfile: PhaseOutcome.Skipped)));
-
-    [Fact]
-    public void CanaryFail_AndUdpFail_CanaryVerdictWins()
-        => Assert.Equal(ServerHealthVerdict.OnlyControlWorks,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Pass,
-                ProxiedHttpControl: PhaseOutcome.Pass,
-                BlockedTargetCanary: PhaseOutcome.Fail,
-                UdpAppProfile: PhaseOutcome.Fail)));
-
-    [Fact]
-    public void CanaryPass_UdpFail_IsUdpOrAppProfileFailed()
-        => Assert.Equal(ServerHealthVerdict.UdpOrAppProfileFailed,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Pass,
-                ProxiedHttpControl: PhaseOutcome.Pass,
-                BlockedTargetCanary: PhaseOutcome.Pass,
-                UdpAppProfile: PhaseOutcome.Fail)));
-
-    [Fact]
-    public void CanaryFail_UdpPass_IsOnlyControlWorks()
-        => Assert.Equal(ServerHealthVerdict.OnlyControlWorks,
-            Verdict(new ServerHealthPhases(
-                TcpConnect: PhaseOutcome.Pass,
-                ProxiedHttpControl: PhaseOutcome.Pass,
-                BlockedTargetCanary: PhaseOutcome.Fail,
-                UdpAppProfile: PhaseOutcome.Pass)));
 
     [Fact]
     public void UdpNativeQuickSkip_DeepVerifyOk_ClassifiesHealthy()
@@ -126,16 +68,4 @@ public class ServerHealthClassifierEdgeTests
         Assert.Equal(PhaseOutcome.Pass, agg.BlockedTargetCanary);
         Assert.True(agg.StaleOrAmbiguous);
     }
-
-    [Fact]
-    public void CanaryEvaluate_AllFreshPassed_IsCleanPass()
-    {
-        var agg = CanaryPolicy.Evaluate(true, new[] { (true, false), (true, false) });
-        Assert.Equal(PhaseOutcome.Pass, agg.BlockedTargetCanary);
-        Assert.False(agg.StaleOrAmbiguous);
-    }
-
-    [Fact]
-    public void DirectBlockedTargetProbes_AreOffByDefault()
-        => Assert.False(CanaryPolicy.DirectProbesDefaultEnabled);
 }

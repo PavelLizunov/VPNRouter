@@ -97,13 +97,6 @@ public class FreeConfigRecheckMergeTests
     }
 
     [Fact]
-    public void Null_Entry_NoOp()
-    {
-        var prior = new VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot();
-        VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.MergeRecheckResult(null!, prior, Now);
-    }
-
-    [Fact]
     public void RestorePriorState_RestoresVerifiedStatus()
     {
         var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
@@ -149,12 +142,5 @@ public class FreeConfigRecheckMergeTests
 
         Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, entry.Status);
         Assert.Equal(Now.AddDays(-1), entry.LastVerifyFailedAt);
-    }
-
-    [Fact]
-    public void RestorePriorState_Null_Entry_NoOp()
-    {
-        var prior = new VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot();
-        VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RestorePriorState(null!, prior);
     }
 }

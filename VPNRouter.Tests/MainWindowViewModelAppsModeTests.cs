@@ -415,18 +415,6 @@ public class MainWindowViewModelAppsModeTests
         Assert.True(vm.HasPendingAppChanges);
     }
 
-    [Fact]
-    public void RoutingEditors_AreDisabledDuringApplyInBothModes()
-    {
-        var applications = File.ReadAllText(FindRepoFile(
-            "VPNRouter.App", "Views", "Pages", "ApplicationsPage.axaml"));
-        var simple = File.ReadAllText(FindRepoFile(
-            "VPNRouter.App", "Views", "Pages", "SimplePage.axaml"));
-
-        Assert.True(applications.Split("IsEnabled=\"{Binding !IsApplying}\"").Length - 1 >= 2);
-        Assert.Contains("<StackPanel Spacing=\"4\" IsEnabled=\"{Binding !IsApplying}\">", simple);
-    }
-
     [AvaloniaFact]
     public void AddCustomApp_WithBuiltInCategorySelected_LandsInPersistedCustomGroup()
     {
@@ -724,16 +712,6 @@ public class MainWindowViewModelAppsModeTests
 public class AppItemViewModelBridgeTests
 {
     [Fact]
-    public void IsChecked_FallsBackToLocalField_WhenBridgeNotWired()
-    {
-        var item = new AppItemViewModel("a.exe", isChecked: true);
-        Assert.True(item.IsChecked);
-
-        item.IsChecked = false;
-        Assert.False(item.IsChecked);
-    }
-
-    [Fact]
     public void IsChecked_RoutesToBridge_WhenWired()
     {
         var backing = new Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);
@@ -785,5 +763,4 @@ public class AppItemViewModelBridgeTests
         item.IsChecked = false;
         Assert.Equal(1, fired);
     }
-
 }

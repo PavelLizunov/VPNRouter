@@ -5,6 +5,7 @@ using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Services.Diagnostics;
 
+// Fail safe: a redaction bug leaks credentials, so redact whenever unsure.
 public static class DiagnosticsRedactor
 {
     public const string Redacted = "***";

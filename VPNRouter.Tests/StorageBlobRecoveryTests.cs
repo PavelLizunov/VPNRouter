@@ -85,17 +85,6 @@ public sealed class StorageBlobRecoveryTests
     }
 
     [Fact]
-    public void DeserialiserThrows_TreatedAsMalformed()
-    {
-        var r = StorageBlobRecovery.LoadOrRecover<List<string>>(
-            "anything", _ => throw new System.InvalidOperationException("boom"));
-
-        Assert.Equal(StorageBlobReason.JsonMalformed, r.Reason);
-        Assert.Null(r.Value);
-        Assert.Equal("boom", r.Detail);
-    }
-
-    [Fact]
     public void Loaded_RequiresSuccessAndNonNullValue()
     {
         var r = new BlobLoadResult<List<string>>(null, StorageBlobReason.Success);

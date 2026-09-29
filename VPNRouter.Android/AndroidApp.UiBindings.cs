@@ -297,65 +297,6 @@ public partial class AndroidApp
         return WrapSection(stack);
     }
 
-    private Border BuildDpiBypassCard()
-    {
-        var titleText = new TextBlock
-        {
-            Text = Localization.SettingsDpiBypassLabel,
-            FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
-            Foreground = GetBrush("TextPrimaryBrush"),
-        };
-        var hintText = new TextBlock
-        {
-            Text = Localization.SettingsDpiBypassHint,
-            FontSize = 10,
-            Foreground = GetBrush("TextSecondaryBrush"),
-            TextWrapping = TextWrapping.Wrap,
-        };
-
-        _settingsDpiBypassMode = new Avalonia.Controls.ComboBox
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            FontSize = 11,
-            ItemsSource = new[]
-            {
-                Localization.SettingsDpiBypassOff,
-                Localization.SettingsDpiBypassStandard,
-                Localization.SettingsDpiBypassAggressive,
-            },
-            SelectedIndex = AndroidStorage.GetDpiBypassMode() switch
-            {
-                "standard" => 1,
-                "aggressive" => 2,
-                _ => 0,
-            },
-        };
-        _settingsDpiBypassMode.SelectionChanged += OnSettingsDpiBypassModeChanged;
-
-        var warning = new TextBlock
-        {
-            Text = Localization.SettingsDpiBypassWarning,
-            FontSize = 9,
-            Foreground = GetBrush("WarningFgBrush"),
-            TextWrapping = TextWrapping.Wrap,
-        };
-
-        return new Border
-        {
-            Padding = new Thickness(10, 8),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            Background = GetBrush("SurfaceSunkenBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
-            BorderThickness = new Thickness(1),
-            Child = new StackPanel
-            {
-                Spacing = 6,
-                Children = { titleText, hintText, _settingsDpiBypassMode, warning }
-            }
-        };
-    }
-
     private Control BuildSettingsRulesSection()
     {
         var sectionTitle = MakeSectionTitle(Localization.SettingsSectionRules);
@@ -390,40 +331,23 @@ public partial class AndroidApp
     {
         var sectionTitle = MakeSectionTitle(Localization.SettingsSectionLeak);
 
-        _settingsBlockOnVpnFail = new Avalonia.Controls.CheckBox
-        {
-            IsChecked = AndroidStorage.GetBlockOnVpnFail(),
-            MinHeight = 0,
-            Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _settingsBlockOnVpnFail.IsCheckedChanged += OnSettingsBlockOnVpnFailChanged;
-
-        var blockLabel = new TextBlock
-        {
-            Text = Localization.BlockOnVpnFailLabel,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 11,
-        };
-        var blockGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("24,*"),
-            ColumnSpacing = 6,
-        };
-        Grid.SetColumn(_settingsBlockOnVpnFail, 0);
-        Grid.SetColumn(blockLabel, 1);
-        blockGrid.Children.Add(_settingsBlockOnVpnFail);
-        blockGrid.Children.Add(blockLabel);
-
         var blockHint = new TextBlock
         {
             Text = Localization.BlockOnVpnFailHint,
             FontSize = 10,
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(30, 0, 0, 0),
         };
+        var lockdownBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.ReliabilityAlwaysOnButton,
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        lockdownBtn.Click += OnReliabilityAlwaysOnClicked;
 
         var leakInner = new Border
         {
@@ -435,7 +359,7 @@ public partial class AndroidApp
             Child = new StackPanel
             {
                 Spacing = 4,
-                Children = { blockGrid, blockHint }
+                Children = { blockHint, lockdownBtn }
             }
         };
 
@@ -850,57 +774,4 @@ public partial class AndroidApp
         };
         return card;
     }
-
-    private StackPanel MakeLabeledCheckboxRow(Avalonia.Controls.CheckBox cb, string label, string hint)
-    {
-        var labelText = new TextBlock
-        {
-            Text = label,
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        var hintText = new TextBlock
-        {
-            Text = hint,
-            FontSize = 10,
-            Foreground = GetBrush("TextMutedBrush"),
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(28, 0, 0, 0),
-        };
-        var grid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("24,*"),
-            ColumnSpacing = 6,
-        };
-        Grid.SetColumn(cb, 0);
-        Grid.SetColumn(labelText, 1);
-        grid.Children.Add(cb);
-        grid.Children.Add(labelText);
-
-        return new StackPanel
-        {
-            Spacing = 2,
-            Children = { grid, hintText }
-        };
-    }
-
-    private StackPanel MakeAutostartRow(Avalonia.Controls.CheckBox cb, string statusText, string statusBrushKey)
-    {
-        var status = new TextBlock
-        {
-            Text = statusText,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 9,
-            Margin = new Thickness(22, 0, 0, 0),
-            Foreground = GetBrush(statusBrushKey),
-        };
-        return new StackPanel
-        {
-            Spacing = 2,
-            Children = { cb, status }
-        };
-    }
-
 }

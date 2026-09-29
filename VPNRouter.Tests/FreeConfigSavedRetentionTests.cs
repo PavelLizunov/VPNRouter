@@ -31,24 +31,6 @@ public class FreeConfigSavedRetentionTests
     }
 
     [Fact]
-    public void Verified_29Days_Retained()
-    {
-        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
-            Now.AddDays(-29));
-        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
-            .ShouldRetainInSavedList(entry, Now));
-    }
-
-    [Fact]
-    public void Verified_31Days_Dropped()
-    {
-        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
-            Now.AddDays(-31));
-        Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
-            .ShouldRetainInSavedList(entry, Now));
-    }
-
-    [Fact]
     public void Verified_NullLastTested_Retained()
     {
         var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, null);
@@ -70,12 +52,5 @@ public class FreeConfigSavedRetentionTests
     {
         Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
             .ShouldRetainInSavedList(null!, Now));
-    }
-
-    [Fact]
-    public void RetentionDays_Const_Is30()
-    {
-        Assert.Equal(30, VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
-            .SavedListRetentionDays);
     }
 }

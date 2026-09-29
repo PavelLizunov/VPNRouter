@@ -207,6 +207,7 @@ public static class SubscriptionFetcher
         var (servers, droppedPlaceholders, userInfo) = await FetchWithDiagnosticsAsync(entry.Url, logger, ct);
         if (ct.IsCancellationRequested) return 0;
 
+        // Never overwrite a cached quota with null on a transient failure.
         if (userInfo != null) entry.UserInfo = userInfo;
 
         if (droppedPlaceholders > 0 && logger != null)

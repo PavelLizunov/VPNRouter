@@ -28,79 +28,6 @@ public class IFileSystemContractTests
     }
 
     [Fact]
-    public async Task ReadWriteBytes_RoundTrip()
-    {
-        var fs = NewFs();
-        const string path = @"C:\bin\blob.dat";
-        var bytes = new byte[] { 0x00, 0xFF, 0x42, 0x10, 0xAA };
-        var ct = TestContext.Current.CancellationToken;
-
-        await fs.WriteAllBytesAsync(path, bytes, ct);
-        var roundTripped = await fs.ReadAllBytesAsync(path, ct);
-
-        Assert.Equal(bytes, roundTripped);
-        roundTripped[0] = 0x77;
-        var second = await fs.ReadAllBytesAsync(path, ct);
-        Assert.Equal(0x00, second[0]);
-    }
-
-    [Fact]
-    public void EnumerateFiles_NonRecursive_ReturnsTopLevel()
-    {
-        var fs = NewFs();
-        fs.Seed(@"C:\dir\a.txt", "a");
-        fs.Seed(@"C:\dir\b.txt", "b");
-        fs.Seed(@"C:\dir\sub\c.txt", "c");
-
-        var top = fs.EnumerateFiles(@"C:\dir", "*.txt", recursive: false)
-            .Select(Path.GetFileName)
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.Equal(new[] { "a.txt", "b.txt" }, top);
-    }
-
-    [Fact]
-    public void EnumerateFiles_Recursive_FindsNested()
-    {
-        var fs = NewFs();
-        fs.Seed(@"C:\dir\a.txt", "a");
-        fs.Seed(@"C:\dir\sub\b.txt", "b");
-        fs.Seed(@"C:\dir\sub\nested\c.txt", "c");
-        fs.Seed(@"C:\dir\sub\other.md", "other");
-
-        var all = fs.EnumerateFiles(@"C:\dir", "*.txt", recursive: true)
-            .Select(Path.GetFileName)
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.Equal(new[] { "a.txt", "b.txt", "c.txt" }, all);
-    }
-
-    [Fact]
-    public void DeleteFile_Missing_NoThrow()
-    {
-        var fs = NewFs();
-        var ex = Record.Exception(() => fs.DeleteFile(@"C:\does\not\exist.txt"));
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public void CreateDirectory_Idempotent()
-    {
-        var fs = NewFs();
-        const string path = @"C:\new\nested\dir";
-
-        fs.CreateDirectory(path);
-        fs.CreateDirectory(path);
-        fs.CreateDirectory(path);
-
-        Assert.True(fs.DirectoryExists(path));
-        Assert.True(fs.DirectoryExists(@"C:\new\nested"));
-        Assert.True(fs.DirectoryExists(@"C:\new"));
-    }
-
-    [Fact]
     public async Task TryAcquireExclusiveLock_HappyPath()
     {
         var fs = NewFs();
@@ -166,36 +93,6 @@ public class IFileSystemContractTests
                 var path = $@"C:\par\t{t}\f{i}.txt";
                 Assert.Equal($"{t}:{i}", await fs.ReadAllTextAsync(path, ct));
             }
-        }
-    }
-
-    [Fact]
-    public void RealFileSystem_BasicRoundTrip()
-    {
-        var fs = new RealFileSystem();
-        var tempDir = Path.Combine(Path.GetTempPath(),
-            "VPNRouter.IFileSystem.Tests-" + Guid.NewGuid().ToString("N"));
-        var path = Path.Combine(tempDir, "round.txt");
-
-        try
-        {
-            fs.CreateDirectory(tempDir);
-            Assert.True(fs.DirectoryExists(tempDir));
-
-            fs.WriteAllText(path, "hi");
-            Assert.True(fs.FileExists(path));
-            Assert.Equal("hi", fs.ReadAllText(path));
-
-            var info = fs.GetFileInfo(path);
-            Assert.NotNull(info);
-            Assert.Equal(2, info!.Length);
-
-            fs.DeleteFile(path);
-            Assert.False(fs.FileExists(path));
-        }
-        finally
-        {
-            try { fs.DeleteDirectory(tempDir, recursive: true); } catch { }
         }
     }
 

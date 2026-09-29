@@ -195,16 +195,4 @@ public class FirewallManagerProcessRunnerWireShapeTests
         Assert.Empty(FirewallManager.SplitShellArgs(""));
         Assert.Empty(FirewallManager.SplitShellArgs("   \t  "));
     }
-
-    [Fact]
-    public void Constructor_AcceptsCustomRunner_WiresUpInjection()
-    {
-        var fake = new FakeProcessRunner();
-
-        using var withFake = new FirewallManager(logger: null, runner: fake);
-        using var withDefault = new FirewallManager(logger: null, runner: null);
-
-        Assert.NotNull(withFake);
-        Assert.NotNull(withDefault);
-    }
 }

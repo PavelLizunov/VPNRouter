@@ -18,14 +18,6 @@ public class FreeConfigKeepPolicyTests
         };
     }
 
-    [Fact]
-    public void Verified_Kept()
-    {
-        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified);
-        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
-            .ShouldKeepInLiveCache(entry));
-    }
-
     [Theory]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Unknown)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok)]

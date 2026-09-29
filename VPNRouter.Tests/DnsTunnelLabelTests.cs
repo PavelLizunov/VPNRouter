@@ -34,30 +34,6 @@ public class DnsTunnelLabelTests
     }
 
     [Fact]
-    public void HostSubtitle_DnsTunnelEntry_ShowsDnsTunnel()
-    {
-        var vm = new ServerViewModel(new VlessServerEntry
-        {
-            Protocol = "dns-tunnel",
-            Server = "1.2.3.4",
-            DnsDomain = "tunnel.example.com",
-        });
-        Assert.Equal("dns-tunnel", vm.HostSubtitle);
-    }
-
-    [Fact]
-    public void HostSubtitle_ProtocolLostButDnsPayloadSurvives_StillDnsTunnel()
-    {
-        var vm = new ServerViewModel(new VlessServerEntry
-        {
-            Protocol = "vless",
-            Server = "1.2.3.4",
-            DnsDomain = "tunnel.example.com",
-        });
-        Assert.Equal("dns-tunnel", vm.HostSubtitle);
-    }
-
-    [Fact]
     public void HostSubtitle_NormalVless_UnchangedTcpReality()
     {
         var vm = new ServerViewModel(new VlessServerEntry

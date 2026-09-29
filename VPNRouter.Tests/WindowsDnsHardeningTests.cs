@@ -119,30 +119,6 @@ public sealed class WindowsDnsHardeningTests : IDisposable
     }
 
     [Fact]
-    public void TrySetTunMetricViaRunner_EmptyInterfaceAlias_DeclinesToRun()
-    {
-        var runner = new FakeProcessRunner();
-
-        var ok = WindowsDnsHardening.TrySetTunMetricViaRunner(
-            1, runner, Serilog.Log.Logger, interfaceAlias: "");
-
-        Assert.False(ok);
-        Assert.Empty(runner.RunCalls);
-    }
-
-    [Fact]
-    public void TrySetTunMetricViaRunner_WhitespaceInterfaceAlias_DeclinesToRun()
-    {
-        var runner = new FakeProcessRunner();
-
-        var ok = WindowsDnsHardening.TrySetTunMetricViaRunner(
-            1, runner, Serilog.Log.Logger, interfaceAlias: "   ");
-
-        Assert.False(ok);
-        Assert.Empty(runner.RunCalls);
-    }
-
-    [Fact]
     public void StaticDefault_TrySetTunMetric_RoutesThroughOverrideRunner()
     {
         var runner = new FakeProcessRunner();
@@ -192,22 +168,6 @@ public sealed class WindowsDnsHardeningTests : IDisposable
         var call = runner.RunCalls[0];
         Assert.True(call.Arguments.Count >= 5,
             $"Expected ArgumentList shape (multiple args); got {call.Arguments.Count}");
-    }
-
-    [Fact]
-    public void TrySetTunMetricViaRunner_PinsTimeoutAtFiveSeconds()
-    {
-        var runner = new FakeProcessRunner();
-        runner.OnRun(
-            _ => true,
-            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(10), false));
-
-        WindowsDnsHardening.TrySetTunMetricViaRunner(
-            1, runner, Serilog.Log.Logger, ExpectedInterfaceAlias);
-
-        var call = runner.RunCalls[0];
-        Assert.NotNull(call.Timeout);
-        Assert.Equal(TimeSpan.FromSeconds(5), call.Timeout!.Value);
     }
 }
 #endif

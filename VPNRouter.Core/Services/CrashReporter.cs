@@ -66,7 +66,7 @@ public static class CrashReporter
             if (ex != null)
             {
                 sb.AppendLine("──── Exception ────");
-                sb.AppendLine(ScrubSecrets(ex.ToString()));
+                sb.AppendLine(DiagnosticsRedactor.RedactLogText(ex.ToString()));
                 sb.AppendLine();
             }
             else
@@ -87,7 +87,7 @@ public static class CrashReporter
                     {
                         sb.AppendLine($"──── Tail of {Path.GetFileName(logs)} (last 200 lines) ────");
                         foreach (var line in DiagnosticsExporter.TailLines(logs, 200).Split(Environment.NewLine))
-                            sb.AppendLine(ScrubSecrets(line));
+                            sb.AppendLine(DiagnosticsRedactor.RedactLogText(line));
                     }
                 }
             }
@@ -102,6 +102,7 @@ public static class CrashReporter
         }
     }
 
+    // Crash reports may be shared: proxy URIs, subscription URLs, UUIDs and keys must never appear verbatim.
     private static readonly Regex _proxyUriPattern = new(
         @"\b(vless|vmess|trojan|tg|(?:ss|shadowsocks)(?:\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(?:\+(?:https|quic))?|amneziawg|awg|wireguard|wgturn|socks[45]?a?h?|snell|shadowtls|ssh|dns-tunnel)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);

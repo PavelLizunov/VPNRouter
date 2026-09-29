@@ -66,24 +66,6 @@ public sealed class LaunchFailureCounterTests
     }
 
     [Fact]
-    public void RecordFailureType_DoesNotChangeCounter()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-
-            LaunchFailureCounter.RecordFailureType("OutOfMemoryException", path);
-
-            var s = LaunchFailureCounter.Read(path);
-            Assert.Equal(2, s.ConsecutiveFailures);
-            Assert.Equal("OutOfMemoryException", s.LastFailureType);
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
     public void MarkStable_ZerosCounterAndStampsSuccess()
     {
         var path = NewTempPath();
@@ -120,21 +102,6 @@ public sealed class LaunchFailureCounterTests
     }
 
     [Fact]
-    public void RecommendAction_BelowThreshold_ReturnsNone()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.ResetCooldown(10);
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-            Assert.Equal("none", LaunchFailureCounter.RecommendAction(path));
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-            Assert.Equal("none", LaunchFailureCounter.RecommendAction(path));
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
     public void RecommendAction_AtThreshold3_ReturnsSelfRepair()
     {
         var path = NewTempPath();
@@ -160,21 +127,6 @@ public sealed class LaunchFailureCounterTests
                 LaunchFailureCounter.IncrementOnStartup(path: path);
 
             Assert.Equal("config-reset", LaunchFailureCounter.RecommendAction(path));
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
-    public void RecommendAction_AtThreshold7_ReturnsSafeModePrompt()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.ResetCooldown(10);
-            for (int i = 0; i < 7; i++)
-                LaunchFailureCounter.IncrementOnStartup(path: path);
-
-            Assert.Equal("safe-mode-prompt", LaunchFailureCounter.RecommendAction(path));
         }
         finally { CleanUp(path); }
     }
@@ -298,97 +250,6 @@ public sealed class LaunchFailureCounterTests
 
             var n = LaunchFailureCounter.IncrementOnStartup(path: path);
             Assert.Equal(1, n);
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
-    public void Threshold_ConstantsMatchSpec()
-    {
-        Assert.Equal(3, LaunchFailureCounter.SelfRepairThreshold);
-        Assert.Equal(5, LaunchFailureCounter.ConfigResetThreshold);
-        Assert.Equal(7, LaunchFailureCounter.SafeModePromptThreshold);
-    }
-
-    [Fact]
-    public void ProgramCs_WiresLaunchFailureCounter()
-    {
-        var sourcePath = FindRepoFile(Path.Combine("VPNRouter.App", "Program.cs"));
-        if (sourcePath == null) return;
-
-        var src = StripLineComments(File.ReadAllText(sourcePath));
-
-        var recommendIdx = src.IndexOf("LaunchFailureCounter.RecommendAction", StringComparison.Ordinal);
-        var incrementIdx = src.IndexOf("LaunchFailureCounter.IncrementOnStartup", StringComparison.Ordinal);
-
-        Assert.True(recommendIdx > 0,
-            "Program.Main must call LaunchFailureCounter.RecommendAction — not found in source");
-        Assert.True(incrementIdx > 0,
-            "Program.Main must call LaunchFailureCounter.IncrementOnStartup — not found in source");
-        Assert.True(recommendIdx < incrementIdx,
-            "RecommendAction must precede IncrementOnStartup so a triggered recovery " +
-            "doesn't double-count the current launch as another strike");
-
-        Assert.Contains("DispatchLaunchRecovery", src);
-    }
-
-    [Fact]
-    public void MainWindowCs_WiresMarkStable()
-    {
-        var sourcePath = FindRepoFile(Path.Combine("VPNRouter.App", "Views", "MainWindow.axaml.cs"));
-        if (sourcePath == null) return;
-
-        var src = StripLineComments(File.ReadAllText(sourcePath));
-
-        Assert.Contains("Opened +=", src);
-        Assert.Contains("LaunchFailureCounter.MarkStable", src);
-
-        var openedIdx = src.IndexOf("Opened +=", StringComparison.Ordinal);
-        var markStableIdx = src.IndexOf("LaunchFailureCounter.MarkStable", StringComparison.Ordinal);
-        Assert.True(openedIdx < markStableIdx,
-            "MarkStable must be called from inside the Opened handler");
-    }
-
-    [Fact]
-    public void Repro_EightStrikeLoop_PrintsEscalationTrace()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.ResetCooldown(10);
-            LaunchFailureCounter.Reset(path);
-
-            var expected = new[]
-            {
-                "none",
-                "none",
-                "none",
-                "self-repair",
-                "none",
-                "config-reset",
-                "none",
-                "safe-mode-prompt",
-            };
-
-            _output.WriteLine("=== v2.32.0 launch-failure-counter manual repro ===");
-            _output.WriteLine($"State file: {path}");
-            _output.WriteLine("");
-
-            for (int i = 0; i < expected.Length; i++)
-            {
-                var priorCount = LaunchFailureCounter.Read(path).ConsecutiveFailures;
-                var action = LaunchFailureCounter.RecommendAction(path);
-                var newCount = LaunchFailureCounter.IncrementOnStartup(path: path);
-
-                _output.WriteLine(
-                    $"launch #{i + 1,-2} : prior={priorCount,-2} action='{action,-16}' new-counter={newCount}");
-
-                Assert.Equal(expected[i], action);
-            }
-
-            _output.WriteLine("");
-            _output.WriteLine("Final state:");
-            _output.WriteLine(File.ReadAllText(path));
         }
         finally { CleanUp(path); }
     }

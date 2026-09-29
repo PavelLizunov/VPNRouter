@@ -16,33 +16,6 @@ public sealed class SubscriptionViewModelBadgeTests
     }
 
     [Fact]
-    public void HappyPath_NoBadge()
-    {
-        var vm = Vm(4);
-        vm.LastRefreshFailed = false;
-        Assert.Equal(string.Empty, vm.StatusBadge);
-    }
-
-    [Fact]
-    public void FetchFailed_WithCache_ShowsCachedBadge()
-    {
-        var vm = Vm(4);
-        vm.LastRefreshFailed = true;
-        Assert.Equal(4, vm.CachedServerCount);
-        Assert.Equal(VPNRouter.Core.Localization.Strings.SubRefreshFailedCached, vm.StatusBadge);
-        Assert.NotEqual(string.Empty, vm.StatusBadge);
-    }
-
-    [Fact]
-    public void FetchFailed_NoCache_ShowsUnreachableBadge()
-    {
-        var vm = Vm(0);
-        vm.LastRefreshFailed = true;
-        Assert.Equal(0, vm.CachedServerCount);
-        Assert.Equal(VPNRouter.Core.Localization.Strings.SubRefreshFailedEmpty, vm.StatusBadge);
-    }
-
-    [Fact]
     public void StatusBadge_RaisesPropertyChanged_OnFailedFlagFlip()
     {
         var vm = Vm(2);

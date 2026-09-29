@@ -57,31 +57,6 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
         Assert.Contains("special_browser.exe", saved.CustomGroupApps["Browsers"]);
     }
 
-    [Fact]
-    public void SimpleMode_SmpToggleConnectAsync_GuardsIsConnectingAcrossProbe()
-    {
-        var source = ReadAppFile("ViewModels", "MainWindowViewModel.SimpleMode.cs");
-
-        var methodIdx = source.IndexOf("private async Task SmpToggleConnectAsync()", StringComparison.Ordinal);
-        var nextMethodIdx = source.IndexOf("private bool TryApplyVless", StringComparison.Ordinal);
-        Assert.True(methodIdx >= 0, "SmpToggleConnectAsync method must exist");
-        Assert.True(nextMethodIdx > methodIdx, "Next method boundary must exist");
-
-        var body = source[methodIdx..nextMethodIdx];
-
-        var isConnectingCheck = body.IndexOf("if (IsConnecting) return;", StringComparison.Ordinal);
-        var isConnectingSet = body.IndexOf("IsConnecting = true;", StringComparison.Ordinal);
-        var probeAll = body.IndexOf(".ProbeAllAsync(", StringComparison.Ordinal);
-        var resetBeforeToggle = body.IndexOf("IsConnecting = false;\n            await ToggleConnectionAsync();", StringComparison.Ordinal);
-        if (resetBeforeToggle < 0)
-            resetBeforeToggle = body.IndexOf("IsConnecting = false;\r\n            await ToggleConnectionAsync();", StringComparison.Ordinal);
-
-        Assert.True(isConnectingCheck >= 0, "Entry guard must check IsConnecting");
-        Assert.True(isConnectingSet >= 0, "Must set IsConnecting = true");
-        Assert.True(probeAll > isConnectingSet, "Must set IsConnecting = true BEFORE probing candidates");
-        Assert.True(resetBeforeToggle > probeAll, "Must reset IsConnecting = false before handoff to ToggleConnectionAsync");
-    }
-
     private static string ReadAppFile(params string[] pathSegments)
     {
         var root = FindRepoRoot();

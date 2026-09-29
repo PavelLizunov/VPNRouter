@@ -141,6 +141,8 @@ public sealed class FreeConfigAggregator
                     cfg.LastTestedAt = prev.LastTestedAt;
                     cfg.MeasuredBandwidthMbps = prev.MeasuredBandwidthMbps;
                     cfg.BandwidthTestedAt = prev.BandwidthTestedAt;
+                    cfg.LastVerifyFailedAt = prev.LastVerifyFailedAt;
+                    cfg.LastDeepVerifyAt = prev.LastDeepVerifyAt;
                 }
             }
 
