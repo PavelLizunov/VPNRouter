@@ -428,14 +428,6 @@ public class TgProxyManager : IDisposable
         catch { return false; }
     }
 
-    public static void KillAll(int port = 1443)
-    {
-    }
-
-    public static void KillByPort(int port)
-    {
-    }
-
     public void Dispose()
     {
         lock (_lifecycleGate)

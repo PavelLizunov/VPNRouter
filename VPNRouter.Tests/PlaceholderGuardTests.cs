@@ -127,22 +127,6 @@ public class PlaceholderGuardTests
     }
 
     [Fact]
-    public void InspectUri_VlessUriWithPlaceholderPubkey_ReturnsField()
-    {
-        var uri = $"vless://352714f4-7ecc-4c22-805f-ed5c5239f5bb@example.com:443" +
-                  $"?security=reality&pbk={KnownBadPubkey}&sni=yahoo.com&fp=firefox&type=tcp";
-        Assert.Equal("reality.public_key", PlaceholderDefense.InspectUri(uri));
-    }
-
-    [Fact]
-    public void InspectUri_UnparseableInput_ReturnsNull()
-    {
-        Assert.Null(PlaceholderDefense.InspectUri("not-a-uri"));
-        Assert.Null(PlaceholderDefense.InspectUri(""));
-        Assert.Null(PlaceholderDefense.InspectUri(null));
-    }
-
-    [Fact]
     public void PlaceholderConfigException_TruncatesValueInMessage()
     {
         var ex = new PlaceholderConfigException("reality.public_key", KnownBadPubkey);

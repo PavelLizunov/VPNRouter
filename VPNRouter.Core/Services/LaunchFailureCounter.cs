@@ -56,15 +56,6 @@ public static class LaunchFailureCounter
         return s.ConsecutiveFailures;
     }
 
-    public static void RecordFailureType(string failureType, string? path = null)
-    {
-        if (string.IsNullOrEmpty(failureType)) return;
-        var p = path ?? DefaultPath;
-        var s = TryLoad(p);
-        s.LastFailureType = failureType;
-        TrySave(p, s);
-    }
-
     public static void MarkStable(string? path = null)
     {
         var p = path ?? DefaultPath;
@@ -155,5 +146,4 @@ public static class LaunchFailureCounter
         {
         }
     }
-
 }

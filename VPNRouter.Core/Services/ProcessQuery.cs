@@ -60,25 +60,6 @@ public static class ProcessQuery
         return false;
     }
 
-    public static int CountAlive(string? processName)
-    {
-        if (string.IsNullOrWhiteSpace(processName)) return 0;
-        Process[]? procs = null;
-        try
-        {
-            procs = Process.GetProcessesByName(processName);
-            return procs.Length;
-        }
-        catch
-        {
-            return 0;
-        }
-        finally
-        {
-            DisposeAll(procs);
-        }
-    }
-
     private static void DisposeAll(Process[]? procs)
     {
         if (procs == null) return;

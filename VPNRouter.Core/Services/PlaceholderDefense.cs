@@ -100,24 +100,6 @@ public static class PlaceholderDefense
 
     public static bool IsPlaceholder(VlessServerEntry? entry) => Inspect(entry) != null;
 
-    public static string? InspectUri(string? uri)
-    {
-        if (string.IsNullOrWhiteSpace(uri)) return null;
-        try
-        {
-            var parsed = ServerUriParser.Parse(uri);
-            return Inspect(parsed);
-        }
-        catch (PlaceholderConfigException ex)
-        {
-            return ex.OffendingField;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     internal static class LayerA_ResolverScopeGuard
     {
         public static bool IsPlaceholderEntry(VlessServerEntry? entry)

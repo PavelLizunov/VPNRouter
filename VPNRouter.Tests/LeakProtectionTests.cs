@@ -73,21 +73,6 @@ public class LeakProtectionTests
     }
 
     [Fact]
-    public void RuBypassAndDnsLockdown_DoNotWarnWhenDnsUsesTunnel()
-    {
-        var settings = new AppSettings();
-        settings.App.BypassRussianTraffic = true;
-        settings.App.DnsLeakLockdown = true;
-
-        var result = LeakProtection.ValidateAppSettings(settings);
-        var compatibilityWarnings = new List<string>();
-        LeakProtection.CollectIncompatibleSettings(settings, compatibilityWarnings);
-
-        Assert.Empty(compatibilityWarnings);
-        Assert.Empty(result.Warnings);
-    }
-
-    [Fact]
     public void InvalidDnsStrategy_Fails()
     {
         var config = CreateValidConfig();

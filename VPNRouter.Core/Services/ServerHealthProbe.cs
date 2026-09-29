@@ -123,13 +123,6 @@ public sealed class ServerHealthProbe
         }
         return PickBest(list);
     }
-
-    public static List<VlessServerEntry> AliveRanked(IEnumerable<ServerLiveness> results)
-        => results?
-            .Where(r => r.Alive)
-            .OrderBy(r => r.LatencyMs)
-            .Select(r => r.Server)
-            .ToList() ?? new List<VlessServerEntry>();
 }
 
 public sealed record ServerLiveness(VlessServerEntry Server, bool Alive, int LatencyMs);
