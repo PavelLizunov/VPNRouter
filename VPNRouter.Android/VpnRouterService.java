@@ -94,6 +94,19 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
     private static final String KEY_AUTO_RECONNECT = "auto_reconnect_on_network_change";
     private static final String KEY_TUNNEL_LIVE = "tunnel_live";
+
+    // Single connection-state record read by the quick-settings tile and the app screen
+    // (VPNRouter.Core VpnStateCodec parses these four words; this service is the only writer).
+    public static final String ACTION_TILE_START = "com.ninitux.vpnrouter.TILE_START";
+    private static final String STATE_DISCONNECTED = "disconnected";
+    private static final String STATE_CONNECTING = "connecting";
+    private static final String STATE_CONNECTED = "connected";
+    private static final String STATE_ERROR = "error";
+    private static final String KEY_VPN_STATE = "vpn_state";
+    private static final String KEY_VPN_STATE_REASON = "vpn_state_reason";
+    private static final String KEY_VPN_STATE_PID = "vpn_state_pid";
+    private static final String KEY_VPN_STATE_AT_MS = "vpn_state_at_ms";
+    private static final String TILE_SERVICE_CLASS = "com.ninitux.vpnrouter.VpnTileService";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_DOMAIN = "last_good_dns_tunnel_domain";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_RESOLVERS = "last_good_dns_tunnel_resolvers_lines";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_CERT = "last_good_dns_tunnel_cert";
@@ -385,6 +398,7 @@ public final class VpnRouterService extends VpnService {
                     } else {
                         Log.w(LOG_TAG, "AND-NETRES: no last-good config saved; "
                                 + "user must launch app and tap Connect at least once");
+                        writeVpnState(STATE_ERROR, "no-config");
                         stopSelf();
                     }
                 }
@@ -416,9 +430,43 @@ public final class VpnRouterService extends VpnService {
                 err.putExtra(EXTRA_ERROR_MESSAGE, "foreground-start-blocked");
                 sendBroadcast(err);
             } catch (Exception ignored) { }
+            writeVpnState(STATE_ERROR, "foreground-start-blocked");
             setTunnelLive(false);
             stopSelf();
             return false;
+        }
+    }
+
+    private void writeVpnState(String state, String reason) {
+        try {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putString(KEY_VPN_STATE, state)
+                    .putString(KEY_VPN_STATE_REASON, reason)
+                    .putInt(KEY_VPN_STATE_PID, android.os.Process.myPid())
+                    .putLong(KEY_VPN_STATE_AT_MS, System.currentTimeMillis())
+                    .apply();
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "writeVpnState(" + state + ") threw: " + e.getMessage());
+        }
+        refreshTile();
+    }
+
+    private String readVpnState() {
+        try {
+            return getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(KEY_VPN_STATE, null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void refreshTile() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) return;
+        try {
+            android.service.quicksettings.TileService.requestListeningState(
+                    this, new android.content.ComponentName(getPackageName(), TILE_SERVICE_CLASS));
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "refreshTile threw: " + e.getMessage());
         }
     }
 
@@ -434,6 +482,7 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void startTunnel() {
+        writeVpnState(STATE_CONNECTING, null);
         if (boxService != null) {
             Log.i(LOG_TAG, "startTunnel: tunnel already live — tearing down previous before re-start");
             teardownTunnelResources();
@@ -447,6 +496,7 @@ public final class VpnRouterService extends VpnService {
             startSlipstreamIfNeeded();
             startLibboxService();
             persistLastGoodConfig();
+            writeVpnState(STATE_CONNECTED, null);
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
             setTunnelLive(true);
             startStatsPoller();
@@ -458,8 +508,10 @@ public final class VpnRouterService extends VpnService {
             } catch (Exception te) {
                 Log.w(LOG_TAG, "teardownTunnelResources on start failure threw: " + te.getMessage());
             }
+            String failure = e.getClass().getSimpleName() + ": " + safeMsg;
+            writeVpnState(STATE_ERROR, failure.length() > 300 ? failure.substring(0, 300) : failure);
             Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
-            err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + safeMsg);
+            err.putExtra(EXTRA_ERROR_MESSAGE, failure);
             sendBroadcast(err);
             setTunnelLive(false);
             stopSelf();
@@ -878,6 +930,10 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void stopTunnel() {
+        String recorded = readVpnState();
+        if (STATE_CONNECTING.equals(recorded) || STATE_CONNECTED.equals(recorded)) {
+            writeVpnState(STATE_DISCONNECTED, null);
+        }
         if (!teardownTunnelResources()) {
             return;
         }
@@ -893,6 +949,7 @@ public final class VpnRouterService extends VpnService {
     @Override
     public void onRevoke() {
         Log.i(LOG_TAG, "onRevoke: VPN revoked by system/user — tearing down tunnel");
+        writeVpnState(STATE_ERROR, "no-permission");
         cancelScheduledRestart();
         submitLifecycle(new Runnable() {
             @Override
