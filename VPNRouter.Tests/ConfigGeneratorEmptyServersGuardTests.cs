@@ -95,7 +95,7 @@ public class ConfigGeneratorEmptyServersGuardTests
         Assert.Equal("xtls-rprx-vision", proxy.Flow);
         Assert.NotNull(proxy.Tls);
         Assert.True(proxy.Tls!.Reality?.Enabled);
-        Assert.Equal("gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A", proxy.Tls.Reality.PublicKey);
+        Assert.Equal("gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A", proxy.Tls.Reality!.PublicKey);
     }
 
     [Fact]

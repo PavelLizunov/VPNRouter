@@ -84,7 +84,7 @@ public class ServerHealthProbeTests
             Srv("Iceland", "good-is"),
         };
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal(3, results.Count);
         Assert.True(results.Single(r => r.Server.Name == "Germany").Alive);
@@ -101,7 +101,7 @@ public class ServerHealthProbeTests
         var probe = ProbeWhere(_ => false);
         var servers = new List<VlessServerEntry> { Srv("A", "x"), Srv("B", "y") };
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.All(results, r => Assert.False(r.Alive));
         Assert.Null(ServerHealthProbe.PickBest(results));
@@ -112,7 +112,7 @@ public class ServerHealthProbeTests
     {
         var probe = new ServerHealthProbe(
             probeOverride: (_, _) => Task.FromResult(new ServerProbeResult(ServerProbeStatus.Slow, 900, null)));
-        var results = await probe.ProbeAllAsync(new List<VlessServerEntry> { Srv("S", "s") }, TimeSpan.FromSeconds(5));
+        var results = await probe.ProbeAllAsync(new List<VlessServerEntry> { Srv("S", "s") }, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.True(results.Single().Alive);
         Assert.Equal(900, results.Single().LatencyMs);
@@ -157,7 +157,7 @@ public class ServerHealthProbeTests
 
         var servers = new List<VlessServerEntry> { Srv("Boom", "boom"), Srv("Ok", "ok") };
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.False(results.Single(r => r.Server.Name == "Boom").Alive);
         Assert.True(results.Single(r => r.Server.Name == "Ok").Alive);
@@ -195,12 +195,12 @@ public class ServerHealthProbeTests
             return new ServerProbeResult(ServerProbeStatus.Ok, latency, null);
         });
 
-        var probeTask = probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(15));
+        var probeTask = probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         List<ServerLiveness> results;
         try
         {
-            await readyTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await readyTcs.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             Assert.Equal(8, Volatile.Read(ref maxActive));
         }
         finally
@@ -239,7 +239,7 @@ public class ServerHealthProbeTests
             }
         });
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(50));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
 
         Assert.Equal(12, results.Count);
         Assert.All(results, r =>
@@ -263,7 +263,7 @@ public class ServerHealthProbeTests
             return new ServerProbeResult(ServerProbeStatus.Ok, 10, null);
         });
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(30));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(30), TestContext.Current.CancellationToken);
 
         Assert.Equal(10, results.Count);
         Assert.All(results, r =>
@@ -287,7 +287,7 @@ public class ServerHealthProbeTests
         });
 
         var servers = new List<VlessServerEntry> { Srv("S1", "host1") };
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(30));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(30), TestContext.Current.CancellationToken);
 
         Assert.Single(results);
         Assert.False(results[0].Alive);
@@ -331,7 +331,7 @@ public class ServerHealthProbeTests
 
         try
         {
-            await probeStartedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await probeStartedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             callerCts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
@@ -379,7 +379,7 @@ public class ServerHealthProbeTests
 
         try
         {
-            await startTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await startTcs.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             callerCts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
@@ -423,10 +423,10 @@ public class ServerHealthProbeTests
     {
         var probe = new ServerHealthProbe();
 
-        var emptyResults = await probe.ProbeAllAsync(new List<VlessServerEntry>(), TimeSpan.FromSeconds(5));
+        var emptyResults = await probe.ProbeAllAsync(new List<VlessServerEntry>(), TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Empty(emptyResults);
 
-        var nullResults = await probe.ProbeAllAsync(null!, TimeSpan.FromSeconds(5));
+        var nullResults = await probe.ProbeAllAsync(null!, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Empty(nullResults);
     }
 
@@ -449,7 +449,7 @@ public class ServerHealthProbeTests
             Srv("Good", "good.host")
         };
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5));
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, results.Count);
 
@@ -481,7 +481,7 @@ public class ServerHealthProbeTests
             Srv("S3", "3.3.3.3"),
         };
 
-        var results = await probe.ProbeAllAsync(servers, TimeSpan.Zero);
+        var results = await probe.ProbeAllAsync(servers, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, Volatile.Read(ref probeCallCount));
 
@@ -506,7 +506,7 @@ public class ServerHealthProbeTests
             Srv("S2", "2.2.2.2"),
         };
 
-        var results = await probe.ProbeAllAsync(servers, Timeout.InfiniteTimeSpan);
+        var results = await probe.ProbeAllAsync(servers, Timeout.InfiniteTimeSpan, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, results.Count);
         Assert.All(results, r =>
@@ -528,6 +528,6 @@ public class ServerHealthProbeTests
         var servers = new List<VlessServerEntry> { Srv("S1", "1.1.1.1") };
 
         await Assert.ThrowsAnyAsync<ArgumentException>(() =>
-            probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(-5)));
+            probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(-5), TestContext.Current.CancellationToken));
     }
 }

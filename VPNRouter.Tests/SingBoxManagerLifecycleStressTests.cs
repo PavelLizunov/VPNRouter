@@ -88,8 +88,10 @@ public sealed class SingBoxManagerLifecycleStressTests : IDisposable
                 }))
                 .ToArray();
 
+#pragma warning disable xUnit1031 // the test waits on its own worker threads on purpose
             Assert.True(Task.WaitAll(tasks, TimeSpan.FromSeconds(10)),
                 $"storm {s}: concurrent Stop() storm did not complete within 10s — deadlock.");
+#pragma warning restore xUnit1031
 
             Assert.False(IsLockOwned(lockInstance),
                 $"storm {s}: the TUN lock is still owned after a concurrent " +

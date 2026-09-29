@@ -185,7 +185,7 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         Assert.DoesNotContain(fake.RunCalls,
             c => c.ExecutablePath == "powershell.exe" &&
                  c.Arguments.Any(a => a.Contains("Get-CimInstance")));
-        Assert.Single(fake.RunCalls.Where(IsPnpUtilRemove));
+        Assert.Single(fake.RunCalls, IsPnpUtilRemove);
 
         var disableCalls = fake.RunCalls.Where(IsNetshDisable).ToList();
         Assert.NotEmpty(disableCalls);

@@ -274,6 +274,32 @@ internal sealed class StartupPipeline
 
         _host.SetActiveModes(activeConfigMode, activeRoutingMode, tunFingerprint);
 
+        var rawCustomJson = ResolveServerSource(settings, isCustomConfig);
+
+        ct.ThrowIfCancellationRequested();
+
+        _host.OnStatus("Loading profiles...");
+        var (manager, collection) = await LoadProfileCatalogueAsync(settings, ct);
+
+        ct.ThrowIfCancellationRequested();
+
+        var activeProfile = SelectActiveProfile(settings, mode, manager, collection, isCustomConfig);
+
+        AddCustomAppsToProfile(activeProfile, settings);
+
+        if (!SafeMode.Enabled)
+            VpnEngine.RemoveExcludedApps(activeProfile, settings.ExcludedApps);
+
+        _host.OnStatus($"Profile: {activeProfile.Name} ({activeProfile.Processes.Count} rules)");
+        _host.SetActiveProfile(activeProfile);
+
+        ct.ThrowIfCancellationRequested();
+
+        return (activeProfile, isCustomConfig, rawCustomJson);
+    }
+
+    private string? ResolveServerSource(AppSettings settings, bool isCustomConfig)
+    {
         string? rawCustomJson = null;
 
         if (isCustomConfig)
@@ -323,9 +349,13 @@ internal sealed class StartupPipeline
                     : allServers[0].Server);
         }
 
-        ct.ThrowIfCancellationRequested();
+        return rawCustomJson;
+    }
 
-        _host.OnStatus("Loading profiles...");
+    private async Task<(ProfileManager manager, ProfileCollection collection)> LoadProfileCatalogueAsync(
+        AppSettings settings,
+        CancellationToken ct)
+    {
         VpnEngine.QuarantineStaleUserCatalogue(_host.Logger);
 
         var sources = SafeMode.Enabled
@@ -349,8 +379,16 @@ internal sealed class StartupPipeline
             collection.Profiles.Count,
             string.Join(", ", collection.Profiles.Select(p => p.Name)));
 
-        ct.ThrowIfCancellationRequested();
+        return (manager, collection);
+    }
 
+    private Profile SelectActiveProfile(
+        AppSettings settings,
+        StartupMode mode,
+        ProfileManager manager,
+        ProfileCollection collection,
+        bool isCustomConfig)
+    {
         var isFullTunnel = (settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
@@ -405,6 +443,11 @@ internal sealed class StartupPipeline
             activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
         }
 
+        return activeProfile;
+    }
+
+    private static void AddCustomAppsToProfile(Profile activeProfile, AppSettings settings)
+    {
         if (settings.CustomApps?.Count > 0)
         {
             foreach (var app in settings.CustomApps)
@@ -422,16 +465,6 @@ internal sealed class StartupPipeline
                 }
             }
         }
-
-        if (!SafeMode.Enabled)
-            VpnEngine.RemoveExcludedApps(activeProfile, settings.ExcludedApps);
-
-        _host.OnStatus($"Profile: {activeProfile.Name} ({activeProfile.Processes.Count} rules)");
-        _host.SetActiveProfile(activeProfile);
-
-        ct.ThrowIfCancellationRequested();
-
-        return (activeProfile, isCustomConfig, rawCustomJson);
     }
 
     private void PersistSanitizedActiveProfile(

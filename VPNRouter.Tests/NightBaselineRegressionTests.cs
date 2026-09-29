@@ -192,13 +192,13 @@ public sealed class NightBaselineRegressionTests
             phaseBBudget: TimeSpan.FromMilliseconds(500),
             cancellationToken: cts.Token);
 
-        await Task.Delay(20);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
         fake.FireStarted(12345);
 
-        await Task.Delay(20);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
         startTcs.TrySetResult(true);
 
-        await Task.Delay(20);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
         fake.FireConnected(12345);
 
         var outcome = await coordinatorTask;
@@ -242,13 +242,13 @@ public sealed class NightBaselineRegressionTests
             return new ServerProbeResult(ServerProbeStatus.Ok, 50, null);
         });
 
-        var probeTask = probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5));
+        var probeTask = probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         List<ServerLiveness> results;
         try
         {
-            await Task.WhenAny(gateTcs.Task, Task.Delay(2000));
-            await Task.Delay(100);
+            await Task.WhenAny(gateTcs.Task, Task.Delay(2000, TestContext.Current.CancellationToken));
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
         finally
         {

@@ -34,8 +34,10 @@ public sealed class VpnEngineHotReloadLifecycleTests
 
     private sealed class StubProcessMonitor : IProcessMonitor
     {
+#pragma warning disable CS0067 // stub implements the interface; the events are never raised
         public event EventHandler<ProcessEventArgs>? ProcessStarted;
         public event EventHandler<ProcessEventArgs>? ProcessStopped;
+#pragma warning restore CS0067
         public int StartCount;
         public int StopCount;
         public int DisposeCount;
@@ -360,7 +362,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         using var _ = cleanup;
 
         var applyTask = Task.Run(() => engine.ApplyAsync(settings, CancellationToken.None));
-        var stopTask = Task.Run(() => engine.Stop());
+        var stopTask = Task.Run(() => engine.Stop(), TestContext.Current.CancellationToken);
         await stopTask;
         await applyTask;
 

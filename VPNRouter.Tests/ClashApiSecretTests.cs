@@ -108,7 +108,7 @@ public sealed class ClashApiSecretTests
         using var http = new HttpClient(handler);
         using var api = new ClashSingBoxApi(http, "http://127.0.0.1:9090", secret: "tok123");
 
-        _ = await api.GetVersionAsync();
+        _ = await api.GetVersionAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(handler.Last);
         Assert.Equal("Bearer", handler.Last!.Headers.Authorization?.Scheme);
@@ -122,7 +122,7 @@ public sealed class ClashApiSecretTests
         using var http = new HttpClient(handler);
         using var api = new ClashSingBoxApi(http, "http://127.0.0.1:9090");
 
-        _ = await api.GetVersionAsync();
+        _ = await api.GetVersionAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(handler.Last!.Headers.Authorization);
     }

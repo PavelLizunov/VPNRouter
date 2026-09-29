@@ -68,7 +68,7 @@ public sealed class StartupPipelineTests : IDisposable
         var settings = BuildBaseSettings();
         settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("m", "1.2.3.4") };
         settings.Vless.ActiveServer = "m";
-        settings.ActiveProfile = null;
+        settings.ActiveProfile = null!;
         settings.App.RoutingMode = "split";
 
         var host = new TestStartupHost();
@@ -282,7 +282,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.App.RoutingMode = routingMode;
         settings.App.FlushDnsOnStart = false;
         settings.App.BypassRussianTraffic = false;
-        settings.ActiveProfile = activeProfile;
+        settings.ActiveProfile = activeProfile!;
         settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("main", "104.194.156.93", 443) };
         settings.Vless.ActiveServer = "main";
 
