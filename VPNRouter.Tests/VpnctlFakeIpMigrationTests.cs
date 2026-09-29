@@ -935,7 +935,7 @@ public class VpnctlFakeIpMigrationTests
 
         try
         {
-            await File.WriteAllTextAsync(tempConfig, injectedJson);
+            await File.WriteAllTextAsync(tempConfig, injectedJson, TestContext.Current.CancellationToken);
 
             var psi = new ProcessStartInfo
             {
@@ -950,8 +950,8 @@ public class VpnctlFakeIpMigrationTests
             using var proc = Process.Start(psi);
             Assert.NotNull(proc);
 
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderrTask = proc.StandardError.ReadToEndAsync();
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+            var stderrTask = proc.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             try

@@ -42,8 +42,8 @@ public class UpdateCheckerStagingTests
         var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
-        var dir1 = await checker.DownloadAndStageAsync(Info(sha));
-        var dir2 = await checker.DownloadAndStageAsync(Info(sha));
+        var dir1 = await checker.DownloadAndStageAsync(Info(sha), TestContext.Current.CancellationToken);
+        var dir2 = await checker.DownloadAndStageAsync(Info(sha), TestContext.Current.CancellationToken);
 
         try
         {

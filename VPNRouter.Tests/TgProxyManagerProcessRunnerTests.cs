@@ -109,7 +109,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             Assert.True(call.CaptureStdout);
             Assert.True(call.CaptureStderr);
 
+#pragma warning disable xUnit1031 // the test bounds a synchronous call with a timeout on purpose
             startTask.Wait(TimeSpan.FromSeconds(3), testCt);
+#pragma warning restore xUnit1031
             handle.SignalExit(0);
         }
         finally
@@ -142,7 +144,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             Assert.Equal("--verbose", call.Arguments[^1]);
             Assert.Equal(9, call.Arguments.Count);
 
+#pragma warning disable xUnit1031 // the test bounds a synchronous call with a timeout on purpose
             startTask.Wait(TimeSpan.FromSeconds(3), testCt);
+#pragma warning restore xUnit1031
             handle.SignalExit(0);
         }
         finally { sut.Dispose(); }
@@ -163,8 +167,10 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             var testCt = TestContext.Current.CancellationToken;
             var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretX"), testCt);
 
+#pragma warning disable xUnit1031 // the test bounds a synchronous call with a timeout on purpose
             Assert.True(startTask.Wait(TimeSpan.FromSeconds(5), testCt),
                 "Start should return within 5s — the 2s probe budget plus dispatch overhead.");
+#pragma warning restore xUnit1031
 
             Assert.True(sut.IsRunning);
             Assert.Equal(99003, sut.Pid);
@@ -203,7 +209,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
 
             handle.EmitOutput("stats: total=30 active=7 ws=3");
 
+#pragma warning disable xUnit1031 // the test bounds a synchronous call with a timeout on purpose
             startTask.Wait(TimeSpan.FromSeconds(5), testCt);
+#pragma warning restore xUnit1031
             handle.SignalExit(0);
 
             Assert.Equal(3, statsCaptured.Count);
@@ -226,7 +234,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         {
             var testCt = TestContext.Current.CancellationToken;
             var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretZ"), testCt);
+#pragma warning disable xUnit1031 // the test bounds a synchronous call with a timeout on purpose
             startTask.Wait(TimeSpan.FromSeconds(5), testCt);
+#pragma warning restore xUnit1031
 
             Assert.True(sut.IsRunning);
             Assert.Equal(99005, sut.Pid);
@@ -254,7 +264,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         {
             var testCt = TestContext.Current.CancellationToken;
             var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretQ"), testCt);
+#pragma warning disable xUnit1031 // the test bounds a synchronous call with a timeout on purpose
             startTask.Wait(TimeSpan.FromSeconds(5), testCt);
+#pragma warning restore xUnit1031
 
             sut.Stop();
             var ex = Record.Exception(() => sut.Stop());
@@ -290,7 +302,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         fake.OnStart(_ => true, _ => handle);
         using var sut = new TgProxyManager(logger: null, runner: fake);
 
-        var start = Task.Run(() => sut.Start(PickFreePort(), "secret-early-exit"));
+        var start = Task.Run(() => sut.Start(PickFreePort(), "secret-early-exit"), TestContext.Current.CancellationToken);
         while (fake.StartCalls.Count == 0) Thread.Sleep(10);
         handle.SignalExit(1);
 
