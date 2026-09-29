@@ -54,7 +54,7 @@ public sealed class NightConnectionsFreshnessTests
         };
 
         var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
+        var snapshot = await api.GetConnectionsAsync(TestContext.Current.CancellationToken);
 
         Assert.True(snapshot.IsValid);
         Assert.Equal(0, snapshot.ActiveCount);
@@ -78,7 +78,7 @@ public sealed class NightConnectionsFreshnessTests
         };
 
         var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
+        var snapshot = await api.GetConnectionsAsync(TestContext.Current.CancellationToken);
 
         Assert.True(snapshot.IsValid);
         Assert.Equal(2, snapshot.ActiveCount);
@@ -95,7 +95,7 @@ public sealed class NightConnectionsFreshnessTests
         };
 
         var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
+        var snapshot = await api.GetConnectionsAsync(TestContext.Current.CancellationToken);
 
         Assert.False(snapshot.IsValid);
         Assert.Equal(0, snapshot.ActiveCount);
@@ -115,7 +115,7 @@ public sealed class NightConnectionsFreshnessTests
         };
 
         var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
+        var snapshot = await api.GetConnectionsAsync(TestContext.Current.CancellationToken);
 
         Assert.False(snapshot.IsValid);
         Assert.Equal(0, snapshot.ActiveCount);
@@ -156,7 +156,7 @@ public sealed class NightConnectionsFreshnessTests
         };
 
         var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
+        var snapshot = await api.GetConnectionsAsync(TestContext.Current.CancellationToken);
 
         Assert.False(snapshot.IsValid);
         Assert.Equal(0, snapshot.ActiveCount);

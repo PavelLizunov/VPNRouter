@@ -379,6 +379,128 @@ public partial class AndroidApp : Avalonia.Application
         var radiusSm = GetRadius("RadiusSm");
         var radiusMd = GetRadius("RadiusMd");
 
+        var headerRow = BuildSimpleHeaderRow();
+
+        var statusCard = BuildSimpleStatusCard();
+
+        var configRowButton = BuildConfigRowButton(radiusXs, radiusSm);
+
+        _ccMode = AndroidStorage.GetConfigMode();
+        if (_ccMode != "subscribe" && _ccMode != "manual" && _ccMode != "custom")
+            _ccMode = "manual";
+
+        var inputSection = BuildServerInputSection(radiusXs);
+
+        var tunnelSection = BuildTunnelModeSection();
+
+        var autostartCard = BuildAutostartInlineCard(radiusSm);
+
+        _formCard = new Border
+        {
+            IsVisible = _formExpanded,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusSm),
+            Padding = new Thickness(10),
+            Child = new StackPanel
+            {
+                Spacing = 11,
+                Children = { inputSection, tunnelSection, autostartCard }
+            }
+        };
+        _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
+        _formCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
+
+        BuildConnectButtons(radiusSm);
+
+        var advCardButton = BuildAdvancedCardButton(radiusSm, radiusMd);
+
+        _menuFeedback = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 11,
+            Padding = new Thickness(12, 8),
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+        };
+        _menuFeedback.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        _menuFeedback.BindToken(TextBlock.BackgroundProperty, "SurfaceSunkenBrush");
+
+        BuildUpdateBanner(radiusMd);
+
+        var innerStack = new StackPanel
+        {
+            Spacing = 14,
+            Children =
+            {
+                headerRow,
+                statusCard,
+                _menuFeedback,
+                configRowButton,
+                _formCard,
+                _ctaConnect,
+                _ctaConnecting,
+                _ctaDisconnect,
+                advCardButton,
+            }
+        };
+
+        var innerWrapper = new Grid
+        {
+            MaxWidth = 420,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Children = { innerStack }
+        };
+
+        var outerGrid = new Grid
+        {
+            Margin = new Thickness(16, 0, 16, 0),
+            Background = Brushes.Transparent,
+            Children = { innerWrapper }
+        };
+
+        _mainScroller = new ScrollViewer
+        {
+            Content = outerGrid,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Padding = new Thickness(0, 12, 0, 16),
+            Focusable = true,
+        };
+        _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
+        var mainScroller = _mainScroller;
+
+        AttachTouchScrolling(mainScroller);
+
+        _logOverlay = BuildLogOverlay();
+
+        _cfgExportOverlay = BuildExportOverlay();
+        _cfgImportOverlay = BuildImportOverlay();
+
+        _profilesOverlay = BuildProfilesOverlay();
+
+        _advShellOverlay = BuildAdvancedShellOverlay();
+
+        _updateBannerFloating = new Grid
+        {
+            VerticalAlignment = VerticalAlignment.Top,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(16, 16, 16, 0),
+            Background = Brushes.Transparent,
+            Children = { _updateBanner! },
+        };
+        var updateBannerFloating = _updateBannerFloating;
+
+        return new Grid
+        {
+            Children = { mainScroller, _logOverlay,
+                         _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
+                         _advShellOverlay,
+                         updateBannerFloating }
+        };
+    }
+
+    private Grid BuildSimpleHeaderRow()
+    {
         _mascotImage = new Image
         {
             Source = LoadMascot(),
@@ -581,6 +703,11 @@ public partial class AndroidApp : Avalonia.Application
         headerRow.Children.Add(_kebabMenuButton);
         headerRow.Children.Add(_kebabPopup);
 
+        return headerRow;
+    }
+
+    private StackPanel BuildSimpleStatusCard()
+    {
         _statusCard = new StatusCard
         {
             IsOff = true,
@@ -619,6 +746,11 @@ public partial class AndroidApp : Avalonia.Application
             Children = { _statusCard, _statusHealthCheck, _statusErrorOneLiner },
         };
 
+        return statusCard;
+    }
+
+    private Avalonia.Controls.Button BuildConfigRowButton(double radiusXs, double radiusSm)
+    {
         var flagGlyph = new TextBlock
         {
             Text = "⚑",
@@ -694,10 +826,11 @@ public partial class AndroidApp : Avalonia.Application
         configRowButton.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderSubtleBrush");
         configRowButton.Click += OnConfigRowClicked;
 
-        _ccMode = AndroidStorage.GetConfigMode();
-        if (_ccMode != "subscribe" && _ccMode != "manual" && _ccMode != "custom")
-            _ccMode = "manual";
+        return configRowButton;
+    }
 
+    private StackPanel BuildServerInputSection(double radiusXs)
+    {
         _serverInputLabel = new TextBlock
         {
             Text = Localization.SmpInputLabel,
@@ -771,6 +904,11 @@ public partial class AndroidApp : Avalonia.Application
             },
         };
 
+        return inputSection;
+    }
+
+    private StackPanel BuildTunnelModeSection()
+    {
         _tunnelModeLabel = new TextBlock
         {
             Text = Localization.SmpTunnelModeLabel,
@@ -878,23 +1016,11 @@ public partial class AndroidApp : Avalonia.Application
             }
         };
 
-        var autostartCard = BuildAutostartInlineCard(radiusSm);
+        return tunnelSection;
+    }
 
-        _formCard = new Border
-        {
-            IsVisible = _formExpanded,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusSm),
-            Padding = new Thickness(10),
-            Child = new StackPanel
-            {
-                Spacing = 11,
-                Children = { inputSection, tunnelSection, autostartCard }
-            }
-        };
-        _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
-        _formCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
-
+    private void BuildConnectButtons(double radiusSm)
+    {
         _ctaConnect = new Avalonia.Controls.Button
         {
             Content = Localization.ButtonConnect,
@@ -943,7 +1069,10 @@ public partial class AndroidApp : Avalonia.Application
         _ctaDisconnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
         _ctaDisconnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _ctaDisconnect.Click += OnConnectClicked;
+    }
 
+    private Avalonia.Controls.Button BuildAdvancedCardButton(double radiusSm, double radiusMd)
+    {
         _advCardTitle = new TextBlock
         {
             Text = Localization.SmpAdvCardTitle,
@@ -1005,61 +1134,11 @@ public partial class AndroidApp : Avalonia.Application
         advCardButton.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
         advCardButton.Click += OnAdvCardClicked;
 
-        _menuFeedback = new TextBlock
-        {
-            Text = string.Empty,
-            FontSize = 11,
-            Padding = new Thickness(12, 8),
-            TextWrapping = TextWrapping.Wrap,
-            IsVisible = false,
-        };
-        _menuFeedback.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-        _menuFeedback.BindToken(TextBlock.BackgroundProperty, "SurfaceSunkenBrush");
+        return advCardButton;
+    }
 
-        BuildUpdateBanner(radiusMd);
-
-        var innerStack = new StackPanel
-        {
-            Spacing = 14,
-            Children =
-            {
-                headerRow,
-                statusCard,
-                _menuFeedback,
-                configRowButton,
-                _formCard,
-                _ctaConnect,
-                _ctaConnecting,
-                _ctaDisconnect,
-                advCardButton,
-            }
-        };
-
-        var innerWrapper = new Grid
-        {
-            MaxWidth = 420,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Children = { innerStack }
-        };
-
-        var outerGrid = new Grid
-        {
-            Margin = new Thickness(16, 0, 16, 0),
-            Background = Brushes.Transparent,
-            Children = { innerWrapper }
-        };
-
-        _mainScroller = new ScrollViewer
-        {
-            Content = outerGrid,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(0, 12, 0, 16),
-            Focusable = true,
-        };
-        _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
-        var mainScroller = _mainScroller;
-
+    private void AttachTouchScrolling(ScrollViewer mainScroller)
+    {
         const double scrollStartDistance = 8.0;
         bool isDragging = false;
         double dragStartY = 0;
@@ -1125,33 +1204,6 @@ public partial class AndroidApp : Avalonia.Application
             isDragging = false;
             activePointer = null;
         }, RoutingStrategies.Bubble, handledEventsToo: true);
-
-        _logOverlay = BuildLogOverlay();
-
-        _cfgExportOverlay = BuildExportOverlay();
-        _cfgImportOverlay = BuildImportOverlay();
-
-        _profilesOverlay = BuildProfilesOverlay();
-
-        _advShellOverlay = BuildAdvancedShellOverlay();
-
-        _updateBannerFloating = new Grid
-        {
-            VerticalAlignment = VerticalAlignment.Top,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(16, 16, 16, 0),
-            Background = Brushes.Transparent,
-            Children = { _updateBanner! },
-        };
-        var updateBannerFloating = _updateBannerFloating;
-
-        return new Grid
-        {
-            Children = { mainScroller, _logOverlay,
-                         _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
-                         _advShellOverlay,
-                         updateBannerFloating }
-        };
     }
 
     private static Bitmap? _mascotLight;

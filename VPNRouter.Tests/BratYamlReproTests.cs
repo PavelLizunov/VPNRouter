@@ -102,7 +102,7 @@ vless:
         Assert.NotNull(loaded);
         Assert.Equal("subscribe", loaded.App.ConfigMode);
 
-        Assert.Equal(1, loaded.App.Subscriptions.Count);
+        Assert.Single(loaded.App.Subscriptions);
         var sub = loaded.App.Subscriptions[0];
         Assert.Equal("ninitux", sub.Name);
         Assert.True(sub.Enabled, "Subscription enabled flag dropped during parse");
@@ -111,7 +111,7 @@ vless:
         Assert.Equal(443, sub.Servers[0].Port);
 
         Assert.NotNull(loaded.Vless.Servers);
-        Assert.Equal(1, loaded.Vless.Servers.Count);
+        Assert.Single(loaded.Vless.Servers);
         Assert.Equal("main-brat-manual", loaded.Vless.Servers[0].Name);
         Assert.Equal("9.10.11.12", loaded.Vless.Servers[0].Server);
 
@@ -129,10 +129,10 @@ vless:
 
         Assert.NotNull(loaded);
         Assert.Equal("subscribe", loaded.App.ConfigMode);
-        Assert.Equal(1, loaded.App.Subscriptions.Count);
+        Assert.Single(loaded.App.Subscriptions);
         Assert.Equal(2, loaded.App.Subscriptions[0].Servers.Count);
         Assert.NotNull(loaded.Vless.Servers);
-        Assert.Equal(1, loaded.Vless.Servers.Count);
+        Assert.Single(loaded.Vless.Servers);
         Assert.Equal("main-brat-manual", loaded.Vless.Servers[0].Name);
 
         Assert.Equal(AppSettings.CurrentSchemaVersion, loaded.SchemaVersion);
@@ -160,7 +160,7 @@ vless:
                 "any subscription server key. This is brat's bug.");
         }
 
-        Assert.Equal(1, loaded.Vless.Servers.Count);
+        Assert.Single(loaded.Vless.Servers);
     }
 
     [Fact]
@@ -174,7 +174,7 @@ vless:
         var loaded = SettingsLoader.Load(path);
 
         Assert.NotNull(loaded.Vless.Servers);
-        Assert.Equal(1, loaded.Vless.Servers.Count);
+        Assert.Single(loaded.Vless.Servers);
         Assert.Equal("main-brat-manual", loaded.Vless.Servers[0].Name);
         Assert.Equal("main-brat-manual", loaded.Vless.ActiveServer);
     }
@@ -211,7 +211,7 @@ vless:
         File.WriteAllText(path, yaml);
         var loaded = SettingsLoader.Load(path);
 
-        Assert.Equal(1, loaded.Vless.Servers.Count);
+        Assert.Single(loaded.Vless.Servers);
         Assert.Equal("user-active-manual", loaded.Vless.Servers[0].Name);
     }
 
@@ -230,7 +230,7 @@ vless:
 
         var loaded = SettingsLoader.Load(path);
 
-        Assert.Equal(1, loaded.Vless.Servers.Count);
+        Assert.Single(loaded.Vless.Servers);
         Assert.Equal("main-brat-manual", loaded.Vless.Servers[0].Name);
         Assert.Equal("main-brat-manual", loaded.Vless.ActiveServer);
     }

@@ -36,7 +36,7 @@ public sealed class SingBoxManagerCleanupPathTests
             {
                 barrier.SignalAndWait();
                 mgr.Dispose();
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
         await Task.WhenAll(tasks);
