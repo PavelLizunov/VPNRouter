@@ -1026,25 +1026,30 @@ public class VpnEngine : IDisposable
             _engine.SingBoxStarted?.Invoke(pid);
         }
 
-        public void OnConnected(int pid)
+        public bool IsCurrentStart(int pid)
         {
             try
             {
-                if (_engine._disposed) return;
-                if (_generation != _engine._failoverGeneration) return;
+                if (_engine._disposed) return false;
+                if (_generation != _engine._failoverGeneration) return false;
                 if (_sessionCts == null || _sessionCts.IsCancellationRequested || !ReferenceEquals(_engine._sessionCts, _sessionCts))
-                    return;
+                    return false;
 
                 if (_singBoxManager == null || !ReferenceEquals(_engine._singBox, _singBoxManager) || _singBoxManager.Pid != pid || _singBoxManager.State != SingBoxState.Running)
-                    return;
+                    return false;
 
-                if (_startedHandle == null || _startedHandle.HasExited || !ReferenceEquals(_singBoxManager.OwnedProcessHandle, _startedHandle))
-                    return;
+                return _startedHandle != null && !_startedHandle.HasExited
+                    && ReferenceEquals(_singBoxManager.OwnedProcessHandle, _startedHandle);
             }
             catch
             {
-                return;
+                return false;
             }
+        }
+
+        public void OnConnected(int pid)
+        {
+            if (!IsCurrentStart(pid)) return;
 
             _engine._warmupConfirmed = true;
             _engine._failover?.ResetCycle();

@@ -46,6 +46,8 @@ internal interface IStartupHost
 
     void OnConnected(int pid);
 
+    bool IsCurrentStart(int pid);
+
     void OnRestartAttempted(int attempt, int max);
 
     void OnFailoverRequested(string reason);
@@ -766,6 +768,13 @@ internal sealed class StartupPipeline
                     _host.Logger?.Information(
                         "[StartupPipeline] TUN ready after {Ms}ms (attempt {Attempt})",
                         sw.ElapsedMilliseconds, attempt);
+                    if (!_host.IsCurrentStart(pidSnapshot))
+                    {
+                        _host.Logger?.Debug(
+                            "[StartupPipeline] Warm-up of PID {Pid} finished after a restart; ignoring stale result",
+                            pidSnapshot);
+                        return;
+                    }
                     _host.OnStatus($"Connected (PID {pidSnapshot})");
 
                     try { _host.OnConnected(pidSnapshot); }
@@ -795,7 +804,8 @@ internal sealed class StartupPipeline
                 "Wave 39 firewall DNS lockdown NOT installed (BR-7: prefer " +
                 "internet-up + DNS-leak-risk over internet-down + lockdown-on)",
                 sw.ElapsedMilliseconds);
-            _host.OnStatus($"Connected (PID {pidSnapshot})");
+            if (_host.IsCurrentStart(pidSnapshot))
+                _host.OnStatus($"Connected (PID {pidSnapshot})");
         }, ct);
     }
 
