@@ -25,4 +25,4 @@ result; `line-multiset.py` reproduced the H-48 route/DNS/Inject comparison). No 
 
 ## Outcome
 
-Pending CI.
+Merged in #388 after green exact-head CI.

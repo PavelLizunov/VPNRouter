@@ -22,4 +22,4 @@ Exact-head CI (full suite, including `StartupPipelineTests` and the safe-mode te
 
 ## Outcome
 
-Pending CI.
+Merged in #382 after green exact-head CI.

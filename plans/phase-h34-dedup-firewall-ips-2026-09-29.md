@@ -20,4 +20,4 @@ on `windows-worker`; exact-head CI (Ubuntu builds these platform classes too).
 
 ## Outcome
 
-Pending CI.
+Merged in #369 after green exact-head CI.

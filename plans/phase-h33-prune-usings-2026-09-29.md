@@ -25,4 +25,4 @@ Exact-head CI (Windows, Ubuntu, Android compile); App, CLI and Service builds on
 
 ## Outcome
 
-Pending CI.
+Merged in #368 after green exact-head CI.
