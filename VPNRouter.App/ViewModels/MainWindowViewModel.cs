@@ -571,8 +571,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsBadComboWarningVisible))]
     private bool _bypassRussianTraffic = true;
 
+    [ObservableProperty] private string _customRulesText = string.Empty;
+
+    [ObservableProperty] private string _customRulesErrorText = string.Empty;
+
+    [ObservableProperty] private string _customRulesConflictText = string.Empty;
+
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> CustomRulesList { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
 
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> FilteredCustomRulesList { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
 
     public string CustomRulesCountText
@@ -650,8 +658,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _ => 0
     };
 
+    public IReadOnlyList<string> AvailableRuleActions { get; }
         = new[] { "direct", "proxy", "block" };
 
+    public IReadOnlyList<string> AvailableRuleTypes { get; }
         = new[]
         {
             "domain", "domain_suffix", "domain_keyword", "domain_regex",
@@ -779,8 +789,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SaveSettings();
     }
 
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeDirectRules { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeProxyRules { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeBlockRules { get; }
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
 
     [ObservableProperty] private string _readModeDirectHeader = string.Empty;

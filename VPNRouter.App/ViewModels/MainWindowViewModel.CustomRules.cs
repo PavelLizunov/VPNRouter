@@ -38,20 +38,11 @@ public partial class MainWindowViewModel
         MarkRoutingSettingsChanged();
     }
 
-    [ObservableProperty] private string _customRulesText = string.Empty;
-
-    [ObservableProperty] private string _customRulesErrorText = string.Empty;
-
-    [ObservableProperty] private string _customRulesConflictText = string.Empty;
-
-    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> CustomRulesList { get; }
     private bool _isSyncingCustomRules;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CustomRulesCountText))]
     private string _customRulesSearchText = string.Empty;
-
-    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> FilteredCustomRulesList { get; }
 
     private void RebuildFilteredCustomRulesList()
     {
@@ -204,10 +195,6 @@ public partial class MainWindowViewModel
         RebuildFilteredCustomRulesList();
     }
 
-    public IReadOnlyList<string> AvailableRuleActions { get; }
-
-    public IReadOnlyList<string> AvailableRuleTypes { get; }
-
     partial void OnCustomRulesTextChanged(string value)
     {
         if (_isLoadingUI) return;
@@ -254,10 +241,6 @@ public partial class MainWindowViewModel
         RulesViewMode = "edit";
         RecomputeRulesEditorState();
     }
-
-    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeDirectRules { get; }
-    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeProxyRules { get; }
-    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeBlockRules { get; }
 
     [ObservableProperty]
     private string _editedCustomRulesText = string.Empty;
