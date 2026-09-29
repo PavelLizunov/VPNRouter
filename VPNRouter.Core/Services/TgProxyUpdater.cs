@@ -12,8 +12,6 @@ public class TgProxyUpdater
     internal const string SupportedProxySourceSha256 =
         "62193af82c97d494264a0c6b744b37a7670c458cd1492e5e9ef0235298156327";
 
-    public const string ProxyRepoPublic = ProxyRepo;
-
     private const string GitHubApiBase = "https://api.github.com/repos";
     private const string PythonVersion = "3.12.7";
     private const string PythonZipUrl = $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";

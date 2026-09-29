@@ -186,10 +186,6 @@ public static partial class Strings
 
     public static string SettingsDpiBypassAggressive => Ru ? "Агрессивно" : "Aggressive";
 
-    public static string MenuSectionProfiles => Ru ? "Профили" : "Profiles";
-
-    public static string MenuItemOpenProfiles => Ru ? "Профили маршрутизации" : "Routing profiles";
-
     public static string ProfilesOverlayTitle => Ru ? "Профили маршрутизации" : "Routing profiles";
 
     public static string ProfilesIntro => Ru
@@ -226,16 +222,6 @@ public static partial class Strings
     public static string TipMenuItemHealthCheck => TipSmpMenuHealthCheck;
     public static string TipMenuItemSafeMode => TipSmpMenuSafeMode;
     public static string TipMenuItemResetConfig => TipSmpMenuResetConfig;
-
-    public static string MenuSectionTools => Ru ? "Инструменты" : "Tools";
-
-    public static string MenuItemOpenTools => Ru
-        ? "DPI bypass + Telegram proxy"
-        : "DPI bypass + Telegram proxy";
-
-    public static string MenuItemOpenDpiBypass => Ru
-        ? "Обход блокировок (Zapret)"
-        : "DPI bypass (Zapret)";
 
     public static string ToolsOverlayTitle => Ru ? "Инструменты" : "Tools";
 

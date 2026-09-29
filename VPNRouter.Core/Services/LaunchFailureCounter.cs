@@ -20,8 +20,6 @@ public static class LaunchFailureCounter
 
     private static int _cooldownMinutes = 10;
 
-    public static int CooldownMinutes => _cooldownMinutes;
-
     public static void ResetCooldown(int minutes) => _cooldownMinutes = Math.Max(0, minutes);
 
     private static string DefaultPath => Path.Combine(AppPaths.DataDir, DefaultFileName);

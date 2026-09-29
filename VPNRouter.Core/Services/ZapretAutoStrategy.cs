@@ -12,13 +12,6 @@ namespace VPNRouter.Core.Services;
 
 public static class ZapretAutoStrategy
 {
-    public static readonly IReadOnlyList<string> DefaultSeedOrder = new[]
-    {
-        "general (ALT3)",
-        "general",
-        "general (ALT)",
-    };
-
     public static readonly IReadOnlyList<string> DefaultProbeTargets = new[]
     {
         "https://discord.com",

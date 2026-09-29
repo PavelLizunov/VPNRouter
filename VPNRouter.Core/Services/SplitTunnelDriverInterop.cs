@@ -34,8 +34,6 @@ internal static class SplitTunnelDriverInterop
     public const int ERROR_SERVICE_DOES_NOT_EXIST = 1060;
     public const int ERROR_SERVICE_MARKED_FOR_DELETE = 1072;
     public const int ERROR_ALREADY_EXISTS = 183;
-    public const int ERROR_FILE_NOT_FOUND = 2;
-    public const int ERROR_PATH_NOT_FOUND = 3;
     public const int ERROR_ACCESS_DENIED = 5;
     public const int ERROR_IO_PENDING = 997;
     public const int ERROR_OPERATION_ABORTED = 995;
@@ -43,7 +41,6 @@ internal static class SplitTunnelDriverInterop
     public const uint SERVICE_STOPPED = 0x00000001;
 
     public const uint RPC_C_AUTHN_WINNT = 10;
-    public const uint FWP_E_SUBLAYER_NOT_FOUND = 0x80320007;
     public const uint FWP_E_ALREADY_EXISTS = 0x80320009;
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

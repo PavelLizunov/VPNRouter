@@ -1479,10 +1479,6 @@ public static partial class Strings
         ? "Активный сервер: {0}"
         : "Active server: {0}";
 
-    public static string MenuSectionFreeConfigs => Ru ? "Публичные конфиги" : "Public configs";
-
-    public static string MenuItemOpenFreeConfigs => Ru ? "Найти сервер" : "Find a server";
-
     public static string FcOverlayTitle => Ru ? "Публичные конфиги" : "Public configs";
 
     public static string FcSearchHint => Ru
