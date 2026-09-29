@@ -592,7 +592,67 @@ public class SplitTunnelProtocolTests
         Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "excludeapps", true, "auto"));
     }
 
-"aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee *./driver/mullvad-split-tunnel.sys",
+    private static (IPAddress?, IPAddress?, IPAddress?, IPAddress?) Addr(
+        string? tunV4, string? inetV4, string? tunV6 = null, string? inetV6 = null)
+        => (tunV4 is null ? null : IPAddress.Parse(tunV4),
+            inetV4 is null ? null : IPAddress.Parse(inetV4),
+            tunV6 is null ? null : IPAddress.Parse(tunV6),
+            inetV6 is null ? null : IPAddress.Parse(inetV6));
+
+    [Fact]
+    public void ShouldReRegister_V4Changed_True()
+    {
+        Assert.True(SplitTunnelPolicy.ShouldReRegister(
+            Addr("10.0.0.1", "83.97.108.34"),
+            Addr("10.0.0.1", "83.97.108.99")));
+    }
+
+    [Fact]
+    public void ShouldReRegister_Identical_False()
+    {
+        Assert.False(SplitTunnelPolicy.ShouldReRegister(
+            Addr("10.0.0.1", "83.97.108.34"),
+            Addr("10.0.0.1", "83.97.108.34")));
+    }
+
+    [Fact]
+    public void ShouldReRegister_V6Appeared_True()
+    {
+        Assert.True(SplitTunnelPolicy.ShouldReRegister(
+            Addr("10.0.0.1", "83.97.108.34"),
+            Addr("10.0.0.1", "83.97.108.34", inetV6: "2001:db8::1")));
+    }
+
+    [Fact]
+    public void ShouldReRegister_BothNullTuples_False()
+    {
+        Assert.False(SplitTunnelPolicy.ShouldReRegister(
+            Addr(null, null), Addr(null, null)));
+    }
+
+    private const string Sidecar =
+        "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201  mullvad-split-tunnel.sys\n" +
+        "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d  mullvad-split-tunnel.cat\n" +
+        "3dd5905e5fb98d61a942a33e8c9a5ba07c3a2de1e4f319e1fec3e54df6591608  mullvad-split-tunnel.inf\n";
+
+    [Fact]
+    public void ParseSidecarHashFor_ReturnsHashForListedFile()
+        => Assert.Equal(
+            "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201",
+            SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, "mullvad-split-tunnel.sys"));
+
+    [Fact]
+    public void ParseSidecarHashFor_MatchesRegardlessOfFilenameCase()
+        => Assert.Equal(
+            "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d",
+            SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, "MULLVAD-SPLIT-TUNNEL.CAT"));
+
+    [Fact]
+    public void ParseSidecarHashFor_HandlesBinaryStarMarkerAndPathPrefix()
+        => Assert.Equal(
+            "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
+            SplitTunnelPolicy.ParseSidecarHashFor(
+                "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee *./driver/mullvad-split-tunnel.sys",
                 "mullvad-split-tunnel.sys"));
 
     [Theory]
