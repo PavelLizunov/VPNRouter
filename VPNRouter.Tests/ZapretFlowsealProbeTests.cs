@@ -54,7 +54,13 @@ public sealed class ZapretFlowsealProbeTests : IDisposable
     private sealed class ProgressLog : IProgress<ZapretAutoStrategy.FlowsealProgress>
     {
         public List<ZapretAutoStrategy.FlowsealProgress> Items { get; } = new();
-        public void Report(ZapretAutoStrategy.FlowsealProgress value) { lock (Items) Items.Add(value); }
+        public Action? OnFirstReport { get; init; }
+        public void Report(ZapretAutoStrategy.FlowsealProgress value)
+        {
+            bool first;
+            lock (Items) { first = Items.Count == 0; Items.Add(value); }
+            if (first) OnFirstReport?.Invoke();
+        }
     }
 
     private static readonly string[] TwoStrategyOutput =
@@ -193,9 +199,10 @@ public sealed class ZapretFlowsealProbeTests : IDisposable
         RequireWindowsAdmin();
         WriteScript(Echo("[1/3] general.bat").Append("Start-Sleep -Seconds 120").ToArray());
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(4));
+        cts.CancelAfter(TimeSpan.FromSeconds(90));
+        var progress = new ProgressLog { OnFirstReport = () => cts.Cancel() };
 
-        var result = await Run(ct: cts.Token);
+        var result = await Run(progress, cts.Token);
 
         Assert.Equal("canceled", result.Diagnostic);
         Assert.Null(result.Winner);
