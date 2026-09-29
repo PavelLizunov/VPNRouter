@@ -46,23 +46,54 @@ public static class SettingsLoader
             return CreateDefaults().EnsureSane();
 
         if (!File.Exists(configPath))
+            return CreateDefaultsAndWriteExample(configPath);
+
+        if (!TryReadConfig(configPath, out var yaml))
+            return CreateDefaults().EnsureSane();
+
+        AppSettings parsed;
+        try
         {
-            var defaults = CreateDefaults().EnsureSane();
-            try { WriteExample(configPath, defaults); }
-            catch (Exception writeEx)
-            {
-                try
-                {
-                    Console.Error.WriteLine(
-                        $"[SettingsLoader] could not write example config to {configPath} " +
-                        $"({writeEx.GetType().Name}: {writeEx.Message}); using in-memory defaults.");
-                }
-                catch { }
-            }
-            return defaults;
+            parsed = Parse(yaml);
+        }
+        catch (Exception parseEx)
+        {
+            return RecoverFromUnparsableConfig(configPath, parseEx);
         }
 
-        string yaml;
+        var validation = SettingsValidator.Validate(parsed);
+        foreach (var w in validation.Warnings)
+        {
+            Console.Error.WriteLine($"[SettingsValidator] warning: {w}");
+        }
+        if (!validation.IsValid)
+            return RecoverFromInvalidConfig(configPath, validation);
+
+        PersistClashApiSecretIfMissing(parsed, yaml, configPath);
+        LogLoadedSummary(parsed, configPath);
+
+        return parsed;
+    }
+
+    private static AppSettings CreateDefaultsAndWriteExample(string configPath)
+    {
+        var defaults = CreateDefaults().EnsureSane();
+        try { WriteExample(configPath, defaults); }
+        catch (Exception writeEx)
+        {
+            try
+            {
+                Console.Error.WriteLine(
+                    $"[SettingsLoader] could not write example config to {configPath} " +
+                    $"({writeEx.GetType().Name}: {writeEx.Message}); using in-memory defaults.");
+            }
+            catch { }
+        }
+        return defaults;
+    }
+
+    private static bool TryReadConfig(string configPath, out string yaml)
+    {
         try
         {
             yaml = File.ReadAllText(configPath);
@@ -77,69 +108,64 @@ public static class SettingsLoader
                     "using defaults for this session, original file untouched.");
             }
             catch { }
-            return CreateDefaults().EnsureSane();
+            yaml = string.Empty;
+            return false;
         }
+        return true;
+    }
 
-        AppSettings parsed;
+    private static AppSettings RecoverFromUnparsableConfig(string configPath, Exception parseEx)
+    {
         try
         {
-            parsed = Parse(yaml);
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var backup = $"{configPath}.unloadable-{stamp}";
+            File.Move(configPath, backup, overwrite: false);
+            Console.Error.WriteLine(
+                $"[SettingsLoader] config.yaml unloadable ({parseEx.GetType().Name}: {parseEx.Message}). " +
+                $"Renamed to {backup}; using defaults for this session.");
+            LastRecoveryNotice =
+                $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults. Backup: {backup}";
         }
-        catch (Exception parseEx)
+        catch
         {
-            try
-            {
-                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                var backup = $"{configPath}.unloadable-{stamp}";
-                File.Move(configPath, backup, overwrite: false);
-                Console.Error.WriteLine(
-                    $"[SettingsLoader] config.yaml unloadable ({parseEx.GetType().Name}: {parseEx.Message}). " +
-                    $"Renamed to {backup}; using defaults for this session.");
-                LastRecoveryNotice =
-                    $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults. Backup: {backup}";
-            }
-            catch
-            {
-                LastRecoveryNotice =
-                    $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults.";
-            }
-            return CreateDefaults().EnsureSane();
+            LastRecoveryNotice =
+                $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults.";
         }
+        return CreateDefaults().EnsureSane();
+    }
 
-        var validation = SettingsValidator.Validate(parsed);
-        foreach (var w in validation.Warnings)
+    private static AppSettings RecoverFromInvalidConfig(string configPath, SettingsValidationResult validation)
+    {
+        var reasonsJoined = string.Join("; ", validation.Reasons);
+        string? backup = null;
+        try
         {
-            Console.Error.WriteLine($"[SettingsValidator] warning: {w}");
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            backup = $"{configPath}.invalid-{stamp}";
+            File.Move(configPath, backup, overwrite: false);
         }
-        if (!validation.IsValid)
+        catch
         {
-            var reasonsJoined = string.Join("; ", validation.Reasons);
-            string? backup = null;
-            try
-            {
-                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                backup = $"{configPath}.invalid-{stamp}";
-                File.Move(configPath, backup, overwrite: false);
-            }
-            catch
-            {
-                backup = null;
-            }
-
-            var defaults = CreateDefaults();
-            try { Save(defaults, configPath); }
-            catch { }
-
-            var noticeLine = backup != null
-                ? $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; backup at {backup}; reset to defaults"
-                : $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; reset to defaults (backup failed)";
-            Console.Error.WriteLine(noticeLine);
-            LastRecoveryNotice = backup != null
-                ? $"config.yaml was invalid ({reasonsJoined}); restored defaults. Backup: {backup}"
-                : $"config.yaml was invalid ({reasonsJoined}); restored defaults.";
-            return defaults;
+            backup = null;
         }
 
+        var defaults = CreateDefaults();
+        try { Save(defaults, configPath); }
+        catch { }
+
+        var noticeLine = backup != null
+            ? $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; backup at {backup}; reset to defaults"
+            : $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; reset to defaults (backup failed)";
+        Console.Error.WriteLine(noticeLine);
+        LastRecoveryNotice = backup != null
+            ? $"config.yaml was invalid ({reasonsJoined}); restored defaults. Backup: {backup}"
+            : $"config.yaml was invalid ({reasonsJoined}); restored defaults.";
+        return defaults;
+    }
+
+    private static void PersistClashApiSecretIfMissing(AppSettings parsed, string yaml, string configPath)
+    {
         try
         {
             if (!string.IsNullOrEmpty(parsed.SingBox?.ClashApiSecret) &&
@@ -149,7 +175,10 @@ public static class SettingsLoader
             }
         }
         catch { }
+    }
 
+    private static void LogLoadedSummary(AppSettings parsed, string configPath)
+    {
         try
         {
             var subSummary = parsed.App?.Subscriptions == null || parsed.App.Subscriptions.Count == 0
@@ -172,8 +201,6 @@ public static class SettingsLoader
         catch
         {
         }
-
-        return parsed;
     }
 
     public static AppSettings Parse(string yaml)

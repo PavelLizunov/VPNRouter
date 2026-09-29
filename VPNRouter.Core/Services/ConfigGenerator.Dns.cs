@@ -47,68 +47,53 @@ public static partial class ConfigGenerator
         };
 
         if (settings.App.ResolveLanViaSystemDns && !strictDns)
+            AddLanSystemDns(dns, settings);
+
+        if (!isFullTunnel && processes.Count > 0)
         {
-            dns.Servers.Add(new DnsServer
-            {
-                Tag  = "dns-system",
-                Type = "local"
-            });
-
-            var lanSuffixes = new List<string> { "local", "lan", "home.arpa", "internal" };
-            if (settings.App.LanDnsSuffixes != null)
-            {
-                foreach (var s in settings.App.LanDnsSuffixes)
-                {
-                    var t = s?.Trim().TrimStart('.');
-                    if (string.IsNullOrEmpty(t)) continue;
-                    if (!t!.Contains('.') && PublicTldDenyList.Contains(t))
-                        continue;
-                    if (!lanSuffixes.Contains(t, StringComparer.OrdinalIgnoreCase))
-                        lanSuffixes.Add(t);
-                }
-            }
-
+            var dnsServer = isExcludeMode
+                ? (strictDns ? "vpn-dns" : "local-dns")
+                : (strictDns || profile.DnsMode != "smart" ? "vpn-dns" : "local-dns");
             dns.Rules.Add(new DnsRule
             {
-                DomainSuffix = lanSuffixes,
-                Action       = "route",
-                Server       = "dns-system"
+                ProcessName = processes.ToList(),
+                Action      = "route",
+                Server      = dnsServer
             });
-        }
-
-        if (isFullTunnel)
-        {
-        }
-        else if (isExcludeMode)
-        {
-            if (processes.Count > 0)
-            {
-                var dnsServer = strictDns ? "vpn-dns" : "local-dns";
-                dns.Rules.Add(new DnsRule
-                {
-                    ProcessName = processes.ToList(),
-                    Action      = "route",
-                    Server      = dnsServer
-                });
-            }
-        }
-        else
-        {
-            if (processes.Count > 0)
-            {
-                var dnsServer = strictDns || profile.DnsMode != "smart" ? "vpn-dns" : "local-dns";
-                dns.Rules.Add(new DnsRule
-                {
-                    ProcessName = processes.ToList(),
-                    Action      = "route",
-                    Server      = dnsServer
-                });
-            }
         }
 
         return dns;
     }
 
+    private static void AddLanSystemDns(SingBoxDns dns, AppSettings settings)
+    {
+        dns.Servers.Add(new DnsServer
+        {
+            Tag  = "dns-system",
+            Type = "local"
+        });
+
+        var lanSuffixes = new List<string> { "local", "lan", "home.arpa", "internal" };
+        if (settings.App.LanDnsSuffixes != null)
+        {
+            foreach (var s in settings.App.LanDnsSuffixes)
+            {
+                var t = s?.Trim().TrimStart('.');
+                if (string.IsNullOrEmpty(t)) continue;
+                if (!t!.Contains('.') && PublicTldDenyList.Contains(t))
+                    continue;
+                if (!lanSuffixes.Contains(t, StringComparer.OrdinalIgnoreCase))
+                    lanSuffixes.Add(t);
+            }
+        }
+
+        dns.Rules.Add(new DnsRule
+        {
+            DomainSuffix = lanSuffixes,
+            Action       = "route",
+            Server       = "dns-system"
+        });
+    }
 
     private static DnsServer BuildVpnDnsServer(AppSettings settings, bool proxyIsUdpNative)
     {
