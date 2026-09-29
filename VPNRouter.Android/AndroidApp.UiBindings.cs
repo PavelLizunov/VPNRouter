@@ -331,40 +331,23 @@ public partial class AndroidApp
     {
         var sectionTitle = MakeSectionTitle(Localization.SettingsSectionLeak);
 
-        _settingsBlockOnVpnFail = new Avalonia.Controls.CheckBox
-        {
-            IsChecked = AndroidStorage.GetBlockOnVpnFail(),
-            MinHeight = 0,
-            Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _settingsBlockOnVpnFail.IsCheckedChanged += OnSettingsBlockOnVpnFailChanged;
-
-        var blockLabel = new TextBlock
-        {
-            Text = Localization.BlockOnVpnFailLabel,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 11,
-        };
-        var blockGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("24,*"),
-            ColumnSpacing = 6,
-        };
-        Grid.SetColumn(_settingsBlockOnVpnFail, 0);
-        Grid.SetColumn(blockLabel, 1);
-        blockGrid.Children.Add(_settingsBlockOnVpnFail);
-        blockGrid.Children.Add(blockLabel);
-
         var blockHint = new TextBlock
         {
             Text = Localization.BlockOnVpnFailHint,
             FontSize = 10,
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(30, 0, 0, 0),
         };
+        var lockdownBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.ReliabilityAlwaysOnButton,
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        lockdownBtn.Click += OnReliabilityAlwaysOnClicked;
 
         var leakInner = new Border
         {
@@ -376,7 +359,7 @@ public partial class AndroidApp
             Child = new StackPanel
             {
                 Spacing = 4,
-                Children = { blockGrid, blockHint }
+                Children = { blockHint, lockdownBtn }
             }
         };
 

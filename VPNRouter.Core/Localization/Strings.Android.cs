@@ -68,13 +68,9 @@ public static partial class Strings
         ? "Другие приложения смогут включать/выключать VPN через broadcast (EXT_START / EXT_STOP / EXT_TOGGLE). По умолчанию выключено. Включайте только если доверяете автоматизации — при включении управлять туннелем сможет любое приложение."
         : "Lets other apps start/stop the VPN via broadcast (EXT_START / EXT_STOP / EXT_TOGGLE). Off by default. Enable only if you trust your automation — while on, any app can control the tunnel.";
 
-    public static string BlockOnVpnFailLabel => Ru
-        ? "Блокировать трафик при падении VPN"
-        : "Block traffic if VPN drops";
-
     public static string BlockOnVpnFailHint => Ru
-        ? "На Android делается через VpnService.Builder.setBlocking(true) — пакеты не уходят с устройства, пока туннель не поднимется заново."
-        : "On Android this maps to VpnService.Builder.setBlocking(true) — packets stay on device until the tunnel is back up.";
+        ? "Android не блокирует трафик при падении VPN сам. Включите VPNRouter как «Always-on VPN» и «Блокировать соединения без VPN» (Lockdown) в системных настройках VPN."
+        : "Android does not block traffic when the VPN drops on its own. Set VPNRouter as Always-on VPN and enable \"Block connections without VPN\" (Lockdown) in system VPN settings.";
 
     public static string DnsStrategyHeader => Ru ? "DNS-стратегия" : "DNS strategy";
 
