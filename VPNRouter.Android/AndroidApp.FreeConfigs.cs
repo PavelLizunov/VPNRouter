@@ -411,24 +411,6 @@ public partial class AndroidApp
         };
     }
 
-    private Avalonia.Controls.Button MakeFcTabButton(string label, bool active)
-    {
-        return new Avalonia.Controls.Button
-        {
-            Content = label,
-            FontSize = 12,
-            FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 6),
-            Background = active ? GetBrush("AccentBgSubtleBrush") : GetBrush("SurfaceSunkenBrush"),
-            Foreground = active ? GetBrush("AccentFgBrush") : GetBrush("TextSecondaryBrush"),
-            BorderBrush = active ? GetBrush("BorderAccentBrush") : GetBrush("BorderSubtleBrush"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-        };
-    }
-
     private Border BuildAdvancedSettingsPanel(IBrush successFg)
     {
         var targetLabel = new TextBlock

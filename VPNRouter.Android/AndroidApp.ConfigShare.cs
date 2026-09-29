@@ -350,24 +350,12 @@ public partial class AndroidApp
         return overlay;
     }
 
-    public void ShowExportOverlay()
-    {
-        if (_cfgExportOverlay is null) return;
-        ResetExportOverlay();
-        _cfgExportOverlay.IsVisible = true;
-    }
 
     public void HideExportOverlay()
     {
         if (_cfgExportOverlay is not null) _cfgExportOverlay.IsVisible = false;
     }
 
-    public void ShowImportOverlay()
-    {
-        if (_cfgImportOverlay is null) return;
-        ResetImportOverlay();
-        _cfgImportOverlay.IsVisible = true;
-    }
 
     public void HideImportOverlay()
     {

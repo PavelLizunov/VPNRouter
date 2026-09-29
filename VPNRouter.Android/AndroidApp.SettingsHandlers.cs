@@ -26,11 +26,6 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    private void OnMenuSettingsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ShowSettings();
-    }
 
     private void ShowSettings()
     {
@@ -142,19 +137,6 @@ public partial class AndroidApp
         _ = RunUpdateCheckAsync(manual: true);
     }
 
-    private void OnSettingsDpiBypassModeChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
-    {
-        if (_settingsLoading || _settingsDpiBypassMode is null) return;
-        var value = _settingsDpiBypassMode.SelectedIndex switch
-        {
-            1 => "standard",
-            2 => "aggressive",
-            _ => "off",
-        };
-        AndroidStorage.SetDpiBypassMode(value);
-        UpdateZapretChipFromState();
-        MarkSettingsDirty();
-    }
 
     private void MarkSettingsDirty()
     {

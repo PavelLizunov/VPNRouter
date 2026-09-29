@@ -553,7 +553,6 @@ public static class AndroidStorage
 
     private const string KeyActiveProfile = "active_profile";
 
-    public static string? GetActiveProfile() => GetString(KeyActiveProfile);
     public static bool SetActiveProfile(string? value) => SetString(KeyActiveProfile, value);
 
     public static bool GetAutoReconnectOnNetworkChange() =>
@@ -577,39 +576,6 @@ public static class AndroidStorage
         SetBool(KeyPublicActiveSubTab, value);
 
     private const string KeyAdvancedActiveTab = "advanced_active_tab";
-
-    public static string GetAdvancedActiveTab()
-    {
-        var raw = GetString(KeyAdvancedActiveTab);
-        if (string.IsNullOrEmpty(raw)) return "Servers";
-
-        if (int.TryParse(raw, out var idx))
-        {
-            return idx switch
-            {
-                0 => "Servers",
-                1 => "Subscribe",
-                2 => "Applications",
-                3 => "Settings",
-                4 => "Tools",
-                5 => "Tools",
-                6 => "Public",
-                _ => "Servers",
-            };
-        }
-
-        return raw switch
-        {
-            "Subscriptions" => "Subscribe",
-            "Apps"          => "Applications",
-            "Network"       => "Settings",
-            "DpiBypass"     => "Tools",
-            "Telegram"      => "Tools",
-            "FreeConfigs"   => "Public",
-            "Servers" or "Subscribe" or "Settings" or "Applications" or "Tools" or "Public" => raw,
-            _ => "Servers",
-        };
-    }
 
     public static bool SetAdvancedActiveTab(string tabName)
         => SetString(KeyAdvancedActiveTab, tabName ?? "Servers");
@@ -860,11 +826,6 @@ public static class AndroidStorage
         }
     }
 
-    internal static void ResetRecoveryNoticeForTests()
-    {
-        lock (_recoveryLock) _lastRecoveryNotice = null;
-    }
-
     private static void StampRecoveryNotice(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return;
@@ -969,14 +930,6 @@ public static class AndroidStorage
 
     public static bool SetSafeModeOnNextLaunch(bool value)
         => SetBool(KeySafeModeOnNextLaunch, value);
-
-    public static bool ConsumeSafeModeOnNextLaunch()
-    {
-        if (!GetBool(KeySafeModeOnNextLaunch, defaultValue: false)) return false;
-        try { SetBool(KeySafeModeOnNextLaunch, false); }
-        catch { }
-        return true;
-    }
 
     public static bool ResetUserSettings()
     {
