@@ -30,7 +30,7 @@ public class TestUpdateSettings : CommandSettings
 
 public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, TestUpdateSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, TestUpdateSettings settings, CancellationToken cancellationToken)
     {
         var ciEnv = Environment.GetEnvironmentVariable("VPNROUTER_CI");
         if (!string.Equals(ciEnv, "1", StringComparison.Ordinal))

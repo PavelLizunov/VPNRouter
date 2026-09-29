@@ -7,7 +7,7 @@ namespace VPNRouter.CLI.Commands;
 
 public class StatusCommand : Command
 {
-    public override int Execute(CommandContext context)
+    public override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         var runtime = RuntimeStatusDetector.GetVpnRuntime();
         var state = StateFile.Read();

@@ -16,7 +16,7 @@ public class ProfilesListCommand : AsyncCommand
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context)
+    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var appSettings = _settingsStore.Load();
         var sources = VpnEngine.BuildProfileSources(appSettings);
@@ -84,7 +84,7 @@ public class ProfilesShowCommand : AsyncCommand<ProfilesShowSettings>
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, ProfilesShowSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, ProfilesShowSettings settings, CancellationToken cancellationToken)
     {
         var appSettings = _settingsStore.Load();
         var sources = VpnEngine.BuildProfileSources(appSettings);
@@ -134,7 +134,7 @@ public class ProfilesUpdateCommand : AsyncCommand
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context)
+    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var appSettings = _settingsStore.Load();
         var githubSources = appSettings.ProfileSources
