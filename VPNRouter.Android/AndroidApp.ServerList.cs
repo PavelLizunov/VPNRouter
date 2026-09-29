@@ -753,7 +753,17 @@ public partial class AndroidApp
     {
         var key = AndroidStorage.BuildServerKey(srv);
         var hasResult = _srvResults.TryGetValue(key, out var result);
-        var isTesting = _srvTestingKeys.Contains(key);
+        return BuildServerRowCore(srv, activeServerName, hasResult ? result : null,
+            _srvTestingKeys.Contains(key), TestSingleServerAsync);
+    }
+
+    private Control BuildServerRowCore(
+        VlessServerEntry srv,
+        string? activeServerName,
+        AndroidStorage.ServerTestResultDto? result,
+        bool isTesting,
+        Func<VlessServerEntry, Task> onTest)
+    {
         var isActive = !string.IsNullOrEmpty(activeServerName)
                        && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase);
 
@@ -783,7 +793,6 @@ public partial class AndroidApp
         }
 
         var displayName = string.IsNullOrWhiteSpace(srv.Name) ? srv.Server : srv.Name;
-        var hostSubtitle = BuildHostSubtitle(srv);
 
         var nameText = new TextBlock
         {
@@ -794,15 +803,20 @@ public partial class AndroidApp
             FontFamily = new FontFamily("monospace"),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
+        var metaParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(srv.Server)) metaParts.Add(srv.Server!);
+        if (srv.Port > 0) metaParts.Add(":" + srv.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var hostSubtitle = BuildHostSubtitle(srv);
+        if (!string.IsNullOrEmpty(hostSubtitle)) metaParts.Add(hostSubtitle);
         var hostText = new TextBlock
         {
-            Text = hostSubtitle,
+            Text = string.Join(" · ", metaParts),
             FontSize = 9,
             Foreground = GetBrush("TextMutedBrush"),
             FontFamily = new FontFamily("monospace"),
             TextTrimming = TextTrimming.CharacterEllipsis,
-            IsVisible = !string.IsNullOrEmpty(hostSubtitle),
         };
+        hostText.IsVisible = !string.IsNullOrEmpty(hostText.Text);
         var nameStack = new Border
         {
             Background = Brushes.Transparent,
@@ -817,17 +831,9 @@ public partial class AndroidApp
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
         nameStack.PointerReleased += (s, e) => ApplyServerSelection(srv);
 
-        _ = hostText;
-        var metaParts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(srv.Server)) metaParts.Add(srv.Server!);
-        if (srv.Port > 0) metaParts.Add(":" + srv.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        if (!string.IsNullOrEmpty(hostSubtitle)) metaParts.Add(hostSubtitle);
-        hostText.Text = string.Join(" · ", metaParts);
-        hostText.IsVisible = !string.IsNullOrEmpty(hostText.Text);
-
-        var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);
-        var pingBgBrush = ResolveLatencyBadgeBackground(hasResult ? result : null, isTesting);
-        var pingHasData = hasResult && !isTesting && result is not null;
+        var (pingDisplay, _) = ResolveLatencyDisplay(result, isTesting);
+        var pingBgBrush = ResolveLatencyBadgeBackground(result, isTesting);
+        var pingHasData = !isTesting && result is not null;
         var pingTextInside = new TextBlock
         {
             Text = pingDisplay,
@@ -849,7 +855,7 @@ public partial class AndroidApp
             Child = pingTextInside,
         };
         pingBadge.PointerReleased += (s, e) => ApplyServerSelection(srv);
-        if (hasResult && !string.IsNullOrEmpty(result?.Error))
+        if (!string.IsNullOrEmpty(result?.Error))
             ToolTip.SetTip(pingBadge, result.Error);
 
         var testBtn = new Avalonia.Controls.Button
@@ -869,7 +875,7 @@ public partial class AndroidApp
             VerticalAlignment = VerticalAlignment.Center,
         };
         ToolTip.SetTip(testBtn, Localization.SrvTipTestRow);
-        testBtn.Click += async (s, e) => await TestSingleServerAsync(srv);
+        testBtn.Click += async (s, e) => await onTest(srv);
 
         var grid = new Grid
         {
