@@ -8,6 +8,8 @@ six failing `PageScreenshotTests`, and whether the Windows worker can host Andro
 ## What
 
 - Ledger PAGESCREENSHOT-RENDER-INVALIDATION: the four experiments and the common denominator.
+- Ledger: close four entries that are stale (a removed script, a removed source-text test, the removed
+  `WgturnUpdater`, and the test-harness hermeticity entry that `TestEnvironmentSafety` already fixed).
 - `docs/test-workers.md`: one dated observation about nested virtualization and the disabled Windows
   Hypervisor Platform feature.
 
