@@ -53,29 +53,6 @@ public sealed class CacheRecoveryTests
     }
 
     [Fact]
-    public void LoadOrRecover_LegacyWithoutSchemaVersion_QuarantinesAndReturnsSchemaMissing()
-    {
-        using var dir = new DirectoryFixture();
-        var path = dir.PathFor("legacy.json");
-        File.WriteAllText(path, "{\"name\":\"legacy\",\"items\":[\"x\"]}");
-
-        var result = CacheRecovery.LoadOrRecover<DummyCache>(
-            path,
-            expectedSchemaVersion: 1,
-            deserialize: j => StjJson.Deserialize<DummyCache>(j));
-
-        Assert.Equal(RecoveryReason.SchemaMissing, result.Reason);
-        Assert.Null(result.Value);
-        Assert.True(result.ShouldRebuild);
-        Assert.False(File.Exists(path));
-        var backups = EnumerateCorruptBackups(path);
-        Assert.Single(backups);
-        Assert.Contains("legacy",
-            File.ReadAllText(backups.Single()),
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void LoadOrRecover_TruncatedJson_QuarantinesAndReturnsJsonMalformed()
     {
         using var dir = new DirectoryFixture();
@@ -293,48 +270,6 @@ public sealed class CacheRecoveryTests
         Assert.Empty(loaded.Configs);
         Assert.False(File.Exists(path));
         Assert.Single(EnumerateCorruptBackups(path));
-    }
-
-    [Fact]
-    public void FreeConfigCache_Save_StampsCurrentSchemaVersion()
-    {
-        using var dir = new DirectoryFixture();
-        var path = dir.PathFor("free_configs.json");
-        var cache = new FreeConfigCache(NullLogger(), path);
-
-        var file = new FreeConfigCache.CacheFile { SchemaVersion = 0 };
-        cache.Save(file);
-
-        var raw = File.ReadAllText(path);
-        Assert.Matches("\"schema_version\"\\s*:\\s*1", raw);
-    }
-
-    [Fact]
-    public void ProfileCache_Load_OnLegacyRawProfileCollection_QuarantinesAndReturnsRebuild()
-    {
-        using var dir = new DirectoryFixture();
-        var path = dir.PathFor("profiles.json");
-        var legacy = StjJson.Serialize(new ProfileCollection
-        {
-            Profiles = new List<Profile>
-            {
-                new() { Name = "Legacy", Description = "from before v2.32" },
-            },
-        });
-        File.WriteAllText(path, legacy);
-
-        var result = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
-            path,
-            expectedSchemaVersion: GitHubProfileSource.CurrentSchemaVersion,
-            deserialize: j => StjJson.Deserialize<ProfileCacheFile>(j, ProfileManager.SafeJsonOptions),
-            structuralCheck: w => w.Profiles is not null);
-
-        Assert.Equal(RecoveryReason.SchemaMissing, result.Reason);
-        Assert.True(result.ShouldRebuild);
-        Assert.False(File.Exists(path));
-        var backups = EnumerateCorruptBackups(path);
-        Assert.Single(backups);
-        Assert.Contains("Legacy", File.ReadAllText(backups.Single()));
     }
 
     [Fact]

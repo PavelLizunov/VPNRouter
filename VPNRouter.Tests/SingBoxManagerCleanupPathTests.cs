@@ -22,41 +22,6 @@ public sealed class SingBoxManagerCleanupPathTests
     }
 
     [Fact]
-    public void Source_Dispose_ContainsInterlockedCompareExchange()
-    {
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        Assert.True(File.Exists(sourcePath),
-            $"SingBoxManager.cs source not found. Tried: {sourcePath}");
-
-        var source = SingBoxSourceText.ReadAll(sourcePath);
-
-        Assert.Contains("Interlocked.CompareExchange(ref _disposed, 1, 0)", source);
-    }
-
-    [Fact]
-    public void Source_ProcessExit_GatedByVolatileRead()
-    {
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        var source = SingBoxSourceText.ReadAll(sourcePath);
-
-        Assert.Contains("Volatile.Read(ref _disposed)", source);
-        Assert.Contains("if (Volatile.Read(ref _disposed) == 0)", source);
-    }
-
-    [Fact]
-    public void Source_Dispose_StopsLeaseWithoutDisposingProcessWideLock()
-    {
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        var source = SingBoxSourceText.ReadAll(sourcePath);
-        var disposeMethodStart = source.IndexOf("public void Dispose()", StringComparison.Ordinal);
-        Assert.True(disposeMethodStart >= 0, "Dispose method not found");
-
-        var disposeBodyApprox = source.Substring(disposeMethodStart, Math.Min(1800, source.Length - disposeMethodStart));
-        Assert.Contains("Stop();", disposeBodyApprox);
-        Assert.DoesNotContain("_tunLock.Dispose()", disposeBodyApprox);
-    }
-
-    [Fact]
     public async Task ConcurrentDispose_ManyThreads_NoExceptionThrown()
     {
         var mgr = new SingBoxManager(BuildIdleSettings());

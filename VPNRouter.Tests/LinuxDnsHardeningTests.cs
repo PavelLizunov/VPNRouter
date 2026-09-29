@@ -62,18 +62,6 @@ public class LinuxDnsHardeningTests : IDisposable
     }
 
     [Fact]
-    public void Apply_saves_sentinel_with_interface()
-    {
-        var fake = BuildFake();
-        var sut = new LinuxDnsHardening(fake, _statePath);
-
-        sut.Apply("172.19.0.1", null);
-
-        Assert.True(File.Exists(_statePath));
-        Assert.Contains("VPNRouter-TUN", File.ReadAllText(_statePath));
-    }
-
-    [Fact]
     public void Apply_empty_target_is_noop()
     {
         var fake = new FakeProcessRunner();

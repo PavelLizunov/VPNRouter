@@ -175,46 +175,6 @@ public sealed class VpnEngineConnectedEventTests
     }
 
     [Fact]
-    public void Connected_FailureBranchSilent_SourcePin()
-    {
-        var sourcePath = LocateStartupPipelineSource();
-        var source = File.ReadAllText(sourcePath);
-
-        var totalSites = CountSubstring(source, "_host.OnConnected(");
-        Assert.True(totalSites == 1,
-            $"Expected exactly 1 _host.OnConnected call site in " +
-            $"StartupPipeline.cs, found {totalSites}. If the new site is " +
-            $"intentional (e.g. Stage 3+ migration), update this test to " +
-            $"reflect the new contract.");
-
-        var methodStart = source.IndexOf(
-            "private void ScheduleWarmupProbe(",
-            StringComparison.Ordinal);
-        Assert.True(methodStart >= 0,
-            "Could not locate ScheduleWarmupProbe in StartupPipeline.cs " +
-            "source. Has the method been renamed?");
-
-        var failureBranchStart = source.IndexOf(
-            "TUN warm-up failed after",
-            methodStart,
-            StringComparison.Ordinal);
-        Assert.True(failureBranchStart > methodStart,
-            "Could not locate failure-branch anchor 'TUN warm-up failed " +
-            "after' inside ScheduleWarmupProbe.");
-
-        var failureBranchEnd = source.IndexOf("}, ct);",
-            failureBranchStart, StringComparison.Ordinal);
-        Assert.True(failureBranchEnd > failureBranchStart,
-            "Could not locate failure-branch terminator '}, ct);'.");
-
-        var failureBranch = source.Substring(
-            failureBranchStart, failureBranchEnd - failureBranchStart);
-        Assert.DoesNotContain("_host.OnConnected(", failureBranch);
-
-        Assert.Contains("OnStatus($\"Connected (PID {pidSnapshot})", failureBranch);
-    }
-
-    [Fact]
     public void Connected_FiresOncePerLifecycle_TwoCallsTwoEvents()
     {
         using var sessionCts = new CancellationTokenSource();

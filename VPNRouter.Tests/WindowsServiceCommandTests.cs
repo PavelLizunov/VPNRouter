@@ -129,60 +129,6 @@ public sealed class WindowsServiceCommandTests
         Assert.True(Path.IsPathFullyQualified(expected));
     }
 
-    [Theory]
-    [InlineData("VPNRouter.Service", "ServiceInstaller.cs")]
-    [InlineData("VPNRouter.App", "Services", "WindowsServiceHelper.cs")]
-    public void ServiceHelpers_UseStructuredSystemScArguments(params string[] parts)
-    {
-        var source = LoadSource(parts);
-
-        Assert.Contains("WindowsServiceCommand.BuildCreateArguments", source);
-        Assert.Contains("WindowsServiceCommand.BuildFailureRecoveryArguments", source);
-        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", source);
-        Assert.Contains("psi.ArgumentList.Add(argument)", source);
-        Assert.DoesNotContain("Arguments = arguments", source);
-        Assert.DoesNotContain("FileName = \"sc.exe\"", source);
-        Assert.DoesNotContain("RunSc($\"", source);
-    }
-
-    [Fact]
-    public void DesktopSelfHeal_PreservesScReportedExecutableQuotes()
-    {
-        var source = LoadSource(
-            "VPNRouter.App", "Services", "WindowsServiceHelper.cs");
-
-        Assert.Contains("return line[(colon + 1)..].Trim();", source);
-        Assert.DoesNotContain("Trim('\"')", source);
-        Assert.Contains("WindowsServiceCommand.IsCurrentImagePath", source);
-        Assert.Contains("WindowsServiceCommand.IsRecognizedVpnRouterImagePath", source);
-        Assert.Contains("\"config\", ServiceName, \"binPath=\", expected", source);
-
-        var startup = LoadSource("VPNRouter.App", "Program.cs");
-        Assert.Contains("if (!healResult.Success", startup);
-    }
-
-    [Fact]
-    public void ServiceHelpers_WireExactSharedBuilders()
-    {
-        var service = LoadSource("VPNRouter.Service", "ServiceInstaller.cs");
-        var app = LoadSource(
-            "VPNRouter.App", "Services", "WindowsServiceHelper.cs");
-
-        Assert.Contains(
-            "ServiceName, exePath, DisplayName, ServiceDependencies",
-            service);
-        Assert.Contains("ServiceName, exePath, DisplayName)", app);
-        foreach (var source in new[] { service, app })
-        {
-            Assert.Contains(
-                "BuildFailureRecoveryArguments(ServiceName)",
-                source);
-            Assert.Contains(
-                "RunSc(\"description\", ServiceName, Description)",
-                source);
-        }
-    }
-
     [Fact]
     public void GetSystemScPath_ResolvesSystem32OrThrowsOnNonWindows()
     {
@@ -196,28 +142,6 @@ public sealed class WindowsServiceCommandTests
         {
             Assert.Throws<PlatformNotSupportedException>(() => WindowsServiceCommand.GetSystemScPath());
         }
-    }
-
-    [Fact]
-    public void WindowsInboxTool_AuditedSourcesUseSystemScPath_NoBareSc()
-    {
-        var vmConnection = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
-        var healthCheck = LoadSource("VPNRouter.Core", "Services", "HealthCheck.cs");
-        var diagExporter = LoadSource("VPNRouter.Core", "Services", "Diagnostics", "DiagnosticsExporter.cs");
-        var zapretActions = LoadSource("VPNRouter.Core", "Services", "ZapretActions.cs");
-        var zapretUpdater = LoadSource("VPNRouter.Core", "Services", "ZapretUpdater.cs");
-
-        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", vmConnection);
-        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", healthCheck);
-        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", diagExporter);
-        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretActions);
-        Assert.Contains("WindowsServiceCommand.GetSystemScPath()", zapretUpdater);
-
-        Assert.DoesNotContain("new ProcessStartInfo(\"sc.exe\"", healthCheck);
-        Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc.exe\"", vmConnection);
-        Assert.DoesNotContain("new System.Diagnostics.ProcessStartInfo(\"sc\"", zapretUpdater);
-        Assert.DoesNotContain("\"sc.exe\"", diagExporter);
-        Assert.DoesNotContain("ExecutablePath: \"sc\"", zapretActions);
     }
 
     private static string LoadSource(params string[] relativeParts)

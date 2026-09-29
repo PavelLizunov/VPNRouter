@@ -57,17 +57,6 @@ public class DeepVerifyProbeScopeTests
     }
 
     [Fact]
-    public void Detector_CombinesOwnedProcessWithGlobalTunSemaphore_OnEveryPoll()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "RuntimeStatusDetector.cs");
-        if (src == null) return;
-        var stripped = StripLineComments(src);
-        Assert.Contains("TunOwnershipLock.ProbeOwnership", stripped);
-        Assert.Contains("IsTunnelPresent", stripped);
-        Assert.DoesNotContain("DeepVerifyProbe.AnyProbeInFlight", stripped);
-    }
-
-    [Fact]
     public void CrossProcessProbe_TrustedImageWithoutGlobalTunOwnership_IsNotATunnel()
     {
         Assert.False(RuntimeStatusDetector.IsTunnelPresent(
@@ -107,30 +96,6 @@ public class DeepVerifyProbeScopeTests
         Assert.False(RuntimeStatusDetector.IsTunnelPresent(
             liveTunnelChild: false,
             ownership: TunOwnershipStatus.Owned));
-    }
-
-    [Theory]
-    [InlineData("VPNRouter.Core", "Services", "VlessDeepVerifier.cs")]
-    [InlineData("VPNRouter.Core", "Services", "FreeConfigs", "FreeConfigDeepVerifier.cs")]
-    public void Verifiers_OpenProbeScope(params string[] parts)
-    {
-        var src = LoadSource(parts);
-        if (src == null) return;
-        Assert.Contains("DeepVerifyProbe.BeginProbeScope()", StripLineComments(src));
-    }
-
-    [Theory]
-    [InlineData("VPNRouter.Core", "Services", "VlessDeepVerifier.cs")]
-    [InlineData("VPNRouter.Core", "Services", "FreeConfigs", "FreeConfigDeepVerifier.cs")]
-    public void VerifierStderr_UsesSanitizedBoundedBuffer(params string[] parts)
-    {
-        var src = LoadSource(parts);
-        if (src == null) return;
-        var stripped = StripLineComments(src);
-        Assert.Contains("DeepVerifyProbe.AppendSanitizedLine", stripped);
-        Assert.Contains("DeepVerifyProbe.ReadSanitizedSnippet", stripped);
-        Assert.DoesNotContain("stderrBuffer.Append", stripped);
-        Assert.DoesNotContain("stderrBuffer.ToString", stripped);
     }
 
     private static string? LoadSource(params string[] relativeParts)

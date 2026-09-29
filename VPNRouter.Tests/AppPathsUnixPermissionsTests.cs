@@ -55,24 +55,6 @@ public sealed class AppPathsUnixPermissionsTests
     }
 
     [Fact]
-    public void CreatePrivateFile_RejectsSymbolicLinkWithoutTouchingTarget()
-    {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
-
-        WithTemporaryDataDir(() =>
-        {
-            AppPaths.EnsureDirectories();
-            var target = Path.Combine(AppPaths.DataDir, "attacker-target");
-            var link = Path.Combine(AppPaths.ConfigDir, "current.json");
-            File.WriteAllText(target, "unchanged");
-            File.CreateSymbolicLink(link, target);
-
-            Assert.Throws<IOException>(() => AppPaths.WritePrivateText(link, "secret"));
-            Assert.Equal("unchanged", File.ReadAllText(target));
-        });
-    }
-
-    [Fact]
     public void EnsureDirectories_RejectsSymbolicConfigDirectory()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;

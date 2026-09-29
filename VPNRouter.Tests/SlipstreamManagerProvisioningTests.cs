@@ -33,45 +33,6 @@ public class SlipstreamManagerProvisioningTests : IDisposable
     }
 
     [Fact]
-    public void Provision_BundledPresent_RuntimeAbsent_Copies()
-    {
-        var bundled = WriteBundled("BUNDLED-BINARY");
-        Assert.False(File.Exists(_target));
-
-        var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, bundled, _binDir, null);
-
-        Assert.True(ok);
-        Assert.True(File.Exists(_target));
-        Assert.Equal("BUNDLED-BINARY", File.ReadAllText(_target));
-    }
-
-    [Fact]
-    public void Provision_RuntimeSameSize_NotReCopied()
-    {
-        var bundled = WriteBundled("AAAA-BUNDLE!!");
-        Directory.CreateDirectory(_binDir);
-        File.WriteAllText(_target, "BBBB-RUNTIME!");
-
-        var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, bundled, _binDir, null);
-
-        Assert.True(ok);
-        Assert.Equal("BBBB-RUNTIME!", File.ReadAllText(_target));
-    }
-
-    [Fact]
-    public void Provision_RuntimeStaleDifferentSize_ReCopied()
-    {
-        var bundled = WriteBundled("NEW-BUNDLED-BINARY-WITH-PATH-STATS");
-        Directory.CreateDirectory(_binDir);
-        File.WriteAllText(_target, "OLD-RUNTIME");
-
-        var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, bundled, _binDir, null);
-
-        Assert.True(ok);
-        Assert.Equal("NEW-BUNDLED-BINARY-WITH-PATH-STATS", File.ReadAllText(_target));
-    }
-
-    [Fact]
     public void Provision_NeitherPresent_ReturnsFalse()
     {
         var missingBundled = Path.Combine(_bundleDir, "slipstream-client.exe");

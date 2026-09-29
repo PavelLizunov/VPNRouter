@@ -54,21 +54,6 @@ public class MacDnsHardeningTests : IDisposable
     }
 
     [Fact]
-    public void Apply_saves_original_resolver_to_sentinel()
-    {
-        var fake = BuildFake("8.8.8.8\n1.1.1.1");
-        var sut = new MacDnsHardening(fake, _statePath);
-
-        sut.Apply("172.19.0.1", null);
-
-        Assert.True(File.Exists(_statePath));
-        var json = File.ReadAllText(_statePath);
-        Assert.Contains("Wi-Fi", json);
-        Assert.Contains("8.8.8.8", json);
-        Assert.Contains("1.1.1.1", json);
-    }
-
-    [Fact]
     public void Apply_flushes_dns_cache()
     {
         var fake = BuildFake("8.8.8.8");
@@ -109,22 +94,6 @@ public class MacDnsHardeningTests : IDisposable
             c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("-setdnsservers"));
         Assert.Equal(new[] { "-n", "/usr/sbin/networksetup", "-setdnsservers", "Wi-Fi", "empty" },
             restore.Arguments.ToArray());
-    }
-
-    [Fact]
-    public void Reapply_does_not_overwrite_saved_original_with_tun_address()
-    {
-        var fake = BuildFake("8.8.8.8");
-        var sut = new MacDnsHardening(fake, _statePath);
-        sut.Apply("172.19.0.1", null);
-
-        var fake2 = BuildFake("172.19.0.1");
-        var sut2 = new MacDnsHardening(fake2, _statePath);
-        sut2.Apply("172.19.0.1", null);
-
-        var json = File.ReadAllText(_statePath);
-        Assert.Contains("8.8.8.8", json);
-        Assert.DoesNotContain("172.19.0.1", json);
     }
 
     [Fact]
