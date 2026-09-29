@@ -166,7 +166,7 @@ public static partial class ConfigGenerator
                 break;
             case "geosite":
             case "geoip":
-                var tagPrefix = rule.Type.Equals("geosite", StringComparison.OrdinalIgnoreCase)
+                var tagPrefix = string.Equals(rule.Type, "geosite", StringComparison.OrdinalIgnoreCase)
                     ? "user-geosite-" : "user-geoip-";
                 route.RuleSet = values.Select(v => tagPrefix + v).ToList();
                 break;

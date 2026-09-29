@@ -726,7 +726,9 @@ public partial class MainWindowViewModel
 #endif
     }
 
+#if PLATFORM_WINDOWS
     private bool _forceFreshProbe;
+#endif
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
@@ -883,7 +885,7 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsZapretTab3))]
     private int _zapretActiveTabIndex;
 
-    private CancellationTokenSource? _zapretProbeCts;
+    private CancellationTokenSource? _zapretProbeCts = null;
 
     [RelayCommand]
     private void CancelZapretProbe()
