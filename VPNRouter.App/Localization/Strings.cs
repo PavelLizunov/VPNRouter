@@ -680,16 +680,6 @@ public static class Strings
         ? "Этот сервер не входит в активные подписки — старая ручная запись. Если он вам не нужен, удалите его."
         : "This server isn't part of any active subscription — it's a legacy manual entry. If you don't need it, remove it.";
 
-    public static string AutoFailoverProbing => Ru
-        ? "Проверяем подключение..."
-        : "Probing connection...";
-    public static string AutoFailoverExhausted => Ru
-        ? "Все серверы подписки недоступны. Проверьте сеть или подписку."
-        : "All subscription servers are unreachable. Check network or subscription.";
-    public static string AutoFailoverCustomMode => Ru
-        ? "Свой конфиг не отвечает. Проверьте JSON-конфигурацию."
-        : "Custom config isn't responding. Check JSON configuration.";
-
     public static string CustomRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomRulesTitle;
     public static string CustomRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomRulesDescription;
     public static string CustomRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesPlaceholder;

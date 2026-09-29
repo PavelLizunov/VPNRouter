@@ -44,8 +44,6 @@ internal static class SplitTunnelDriverProtocol
         Terminating = 5,
     }
 
-    public const uint EventErrorFlag = 0x80000000;
-
     public enum EventId : uint
     {
         StartSplittingProcess = 0,
