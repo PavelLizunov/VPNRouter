@@ -1,32 +1,16 @@
 #nullable enable
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Styling;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
 using VPNRouter.Core.Services.Diagnostics;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
-using System.Collections.ObjectModel;
-using Avalonia.Input.Platform;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Platform.Storage;
-using Serilog;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.FreeConfigs;
-using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -621,7 +605,7 @@ public partial class MainWindowViewModel
 
         IsSimpleMode = true;
 
-        var firstEnabledSub = _settings.App.Subscriptions?
+        var firstEnabledSub = _settings.App.Subscriptions
             .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
         if (firstEnabledSub != null)
             SmpInput = firstEnabledSub.Url;

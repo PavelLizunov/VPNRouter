@@ -307,7 +307,7 @@ public class StartCommand : AsyncCommand<StartSettings>
     {
         try
         {
-            var sources = ProfileSourceFactory.Create(settings);
+            var sources = VpnEngine.BuildProfileSources(settings);
             var manager = new ProfileManager(sources, Serilog.Log.Logger);
             var collection = await manager.LoadAsync();
 

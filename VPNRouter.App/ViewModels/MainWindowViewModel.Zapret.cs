@@ -1,26 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Platform.Storage;
-using Avalonia.Styling;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Serilog;
-using VPNRouter.Core;
-using VPNRouter.Core.Models;
-using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.App.Localization;
-using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -741,7 +726,9 @@ public partial class MainWindowViewModel
 #endif
     }
 
+#if PLATFORM_WINDOWS
     private bool _forceFreshProbe;
+#endif
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
@@ -898,7 +885,7 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsZapretTab3))]
     private int _zapretActiveTabIndex;
 
-    private CancellationTokenSource? _zapretProbeCts;
+    private CancellationTokenSource? _zapretProbeCts = null;
 
     [RelayCommand]
     private void CancelZapretProbe()

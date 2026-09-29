@@ -125,7 +125,7 @@ public partial class ApplicationsPage : UserControl
     {
         var btn = sender as Button ?? this.FindControl<Button>("RunningProcessesButton");
         var flyout = btn?.Flyout as MenuFlyout;
-        if (flyout == null) return;
+        if (btn == null || flyout == null) return;
 
         var items = flyout.Items;
         items.Clear();
@@ -167,6 +167,7 @@ public partial class ApplicationsPage : UserControl
                         p.Dispose();
                     }
                 })
+                .OfType<string>()
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)

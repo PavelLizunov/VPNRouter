@@ -470,7 +470,7 @@ public static class AppAutomationDriver
                 using var rtb = new RenderTargetBitmap(pixelSize, dpi);
                 rtb.Render(_window);
                 using var ms = new MemoryStream();
-                rtb.Save(ms);
+                rtb.Save(ms, PngBitmapEncoderOptions.Default);
                 bytes = ms.ToArray();
             }
             catch (Exception ex)
