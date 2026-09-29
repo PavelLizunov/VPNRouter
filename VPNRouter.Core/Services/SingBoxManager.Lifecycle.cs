@@ -79,9 +79,30 @@ public partial class SingBoxManager
         }
         catch
         {
+            KillLaunchedProcessBestEffort();
             State = SingBoxState.Failed;
             ReleaseTunOwnership();
             throw;
+        }
+    }
+
+    // A start failure after the process was spawned (for example a Started subscriber that throws) must not
+    // release the TUN lease while sing-box is still running, or another instance could start a second one.
+    private void KillLaunchedProcessBestEffort()
+    {
+        var handle = _handle;
+        if (handle is null) return;
+        try
+        {
+            if (!handle.HasExited)
+            {
+                handle.SuppressExitedEvent();
+                handle.Kill(entireProcessTree: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[SingBoxManager] Could not stop the process launched before a start failure");
         }
     }
 
@@ -501,6 +522,7 @@ public partial class SingBoxManager
         }
         catch
         {
+            KillLaunchedProcessBestEffort();
             State = SingBoxState.Failed;
             ReleaseTunOwnership();
             throw;
