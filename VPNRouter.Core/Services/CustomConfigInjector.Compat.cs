@@ -184,21 +184,10 @@ public static partial class CustomConfigInjector
             throw new InvalidOperationException("Malformed 'dns.fakeip.enabled': must be a boolean.");
         }
 
-        string? globalV4 = null;
-        if (fakeIpObj.TryGetPropertyValue("inet4_range", out var v4Node) && v4Node != null)
-        {
-            if (v4Node is not JsonValue v4Val || !v4Val.TryGetValue<string>(out var v4Str) || string.IsNullOrWhiteSpace(v4Str) || !IsValidCidr(v4Str, isIpv6: false))
-                throw new InvalidOperationException("Malformed 'dns.fakeip.inet4_range': must be a valid IPv4 CIDR string.");
-            globalV4 = v4Str;
-        }
-
-        string? globalV6 = null;
-        if (fakeIpObj.TryGetPropertyValue("inet6_range", out var v6Node) && v6Node != null)
-        {
-            if (v6Node is not JsonValue v6Val || !v6Val.TryGetValue<string>(out var v6Str) || string.IsNullOrWhiteSpace(v6Str) || !IsValidCidr(v6Str, isIpv6: true))
-                throw new InvalidOperationException("Malformed 'dns.fakeip.inet6_range': must be a valid IPv6 CIDR string.");
-            globalV6 = v6Str;
-        }
+        var globalV4 = ReadOptionalCidr(fakeIpObj, "inet4_range", isIpv6: false,
+            "Malformed 'dns.fakeip.inet4_range': must be a valid IPv4 CIDR string.");
+        var globalV6 = ReadOptionalCidr(fakeIpObj, "inet6_range", isIpv6: true,
+            "Malformed 'dns.fakeip.inet6_range': must be a valid IPv6 CIDR string.");
 
         if (!enabled)
         {
@@ -219,47 +208,15 @@ public static partial class CustomConfigInjector
         {
             foreach (var typed in typedServers)
             {
-                string? typedV4 = null;
-                if (typed.TryGetPropertyValue("inet4_range", out var t4Node) && t4Node != null)
-                {
-                    if (t4Node is not JsonValue v4Val || !v4Val.TryGetValue<string>(out var v4Str) || string.IsNullOrWhiteSpace(v4Str) || !IsValidCidr(v4Str, isIpv6: false))
-                        throw new InvalidOperationException("Malformed typed fakeip server 'inet4_range': must be a valid IPv4 CIDR string.");
-                    typedV4 = v4Str;
-                }
+                var typedV4 = ReadOptionalCidr(typed, "inet4_range", isIpv6: false,
+                    "Malformed typed fakeip server 'inet4_range': must be a valid IPv4 CIDR string.");
+                var typedV6 = ReadOptionalCidr(typed, "inet6_range", isIpv6: true,
+                    "Malformed typed fakeip server 'inet6_range': must be a valid IPv6 CIDR string.");
 
-                string? typedV6 = null;
-                if (typed.TryGetPropertyValue("inet6_range", out var t6Node) && t6Node != null)
-                {
-                    if (t6Node is not JsonValue v6Val || !v6Val.TryGetValue<string>(out var v6Str) || string.IsNullOrWhiteSpace(v6Str) || !IsValidCidr(v6Str, isIpv6: true))
-                        throw new InvalidOperationException("Malformed typed fakeip server 'inet6_range': must be a valid IPv6 CIDR string.");
-                    typedV6 = v6Str;
-                }
-
-                if (globalV4 != null)
-                {
-                    if (typedV4 != null)
-                    {
-                        if (!string.Equals(globalV4, typedV4, StringComparison.OrdinalIgnoreCase))
-                            throw new InvalidOperationException("Conflicting fakeip IPv4 range between server and 'dns.fakeip'.");
-                    }
-                    else
-                    {
-                        typed["inet4_range"] = globalV4;
-                    }
-                }
-
-                if (globalV6 != null)
-                {
-                    if (typedV6 != null)
-                    {
-                        if (!string.Equals(globalV6, typedV6, StringComparison.OrdinalIgnoreCase))
-                            throw new InvalidOperationException("Conflicting fakeip IPv6 range between server and 'dns.fakeip'.");
-                    }
-                    else
-                    {
-                        typed["inet6_range"] = globalV6;
-                    }
-                }
+                MergeGlobalRange(typed, "inet4_range", globalV4, typedV4,
+                    "Conflicting fakeip IPv4 range between server and 'dns.fakeip'.");
+                MergeGlobalRange(typed, "inet6_range", globalV6, typedV6,
+                    "Conflicting fakeip IPv6 range between server and 'dns.fakeip'.");
             }
 
             dns.Remove("fakeip");
@@ -290,6 +247,28 @@ public static partial class CustomConfigInjector
         dns.Remove("fakeip");
     }
 
+    private static string? ReadOptionalCidr(JsonObject obj, string key, bool isIpv6, string malformedMessage)
+    {
+        if (!obj.TryGetPropertyValue(key, out var node) || node == null)
+            return null;
+        if (node is not JsonValue val || !val.TryGetValue<string>(out var text) || string.IsNullOrWhiteSpace(text) || !IsValidCidr(text, isIpv6))
+            throw new InvalidOperationException(malformedMessage);
+        return text;
+    }
+
+    private static void MergeGlobalRange(JsonObject typed, string key, string? globalRange, string? typedRange, string conflictMessage)
+    {
+        if (globalRange == null)
+            return;
+        if (typedRange == null)
+        {
+            typed[key] = globalRange;
+            return;
+        }
+        if (!string.Equals(globalRange, typedRange, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(conflictMessage);
+    }
+
     private static bool IsValidCidr(string cidr, bool isIpv6)
     {
         var parts = cidr.Split('/');
@@ -306,6 +285,20 @@ public static partial class CustomConfigInjector
         MigrateFakeIp(config);
 
         var dnsServers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
+        MigrateLegacyDnsServers(dnsServers);
+        ReplaceLocalDnsServers(dnsServers);
+        RouteLocalDnsDetoursThroughDirect(config, dnsServers);
+        NormalizeDnsStrategyAndFinal(config, dnsServers, forceIpv4Only, strictDns, ipv6Enabled);
+        RemoveLegacyDnsRules(config);
+        var removedTags = RemoveBlockAndDnsOutbounds(config);
+        RewriteRouteRules(config, removedTags);
+        var hadInboundSniff = NormalizeInbounds(config, excludeAddresses);
+        AddSniffRuleIfNeeded(config, hadInboundSniff);
+        EnsureLogOutput(config);
+    }
+
+    private static void MigrateLegacyDnsServers(JsonArray? dnsServers)
+    {
         if (dnsServers != null)
         {
             foreach (var server in dnsServers)
@@ -361,7 +354,10 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+    }
 
+    private static void ReplaceLocalDnsServers(JsonArray? dnsServers)
+    {
         if (dnsServers != null)
         {
             foreach (var server in dnsServers)
@@ -380,7 +376,10 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+    }
 
+    private static void RouteLocalDnsDetoursThroughDirect(JsonObject config, JsonArray? dnsServers)
+    {
         if (dnsServers != null)
         {
             var sbOutbounds = config["outbounds"] as JsonArray;
@@ -413,7 +412,10 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+    }
 
+    private static void NormalizeDnsStrategyAndFinal(JsonObject config, JsonArray? dnsServers, bool forceIpv4Only, bool strictDns, bool ipv6Enabled)
+    {
         var dns = config["dns"] as JsonObject;
         if (dns != null)
         {
@@ -458,7 +460,10 @@ public static partial class CustomConfigInjector
                     dns["final"] = localTag;
             }
         }
+    }
 
+    private static void RemoveLegacyDnsRules(JsonObject config)
+    {
         var dnsRules = StjNodeHelpers.SelectToken(config, "dns.rules") as JsonArray;
         if (dnsRules != null)
         {
@@ -472,7 +477,10 @@ public static partial class CustomConfigInjector
                     dnsRules.RemoveAt(i);
             }
         }
+    }
 
+    private static HashSet<string> RemoveBlockAndDnsOutbounds(JsonObject config)
+    {
         var outbounds = config["outbounds"] as JsonArray;
         var removedTags = new HashSet<string>();
         if (outbounds != null)
@@ -488,7 +496,11 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+        return removedTags;
+    }
 
+    private static void RewriteRouteRules(JsonObject config, HashSet<string> removedTags)
+    {
         var routeRules = StjNodeHelpers.SelectToken(config, "route.rules") as JsonArray;
         if (routeRules != null)
         {
@@ -513,7 +525,10 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+    }
 
+    private static bool NormalizeInbounds(JsonObject config, List<string>? excludeAddresses)
+    {
         bool hadInboundSniff = false;
         var inbounds = config["inbounds"] as JsonArray;
         if (inbounds != null)
@@ -576,7 +591,11 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+        return hadInboundSniff;
+    }
 
+    private static void AddSniffRuleIfNeeded(JsonObject config, bool hadInboundSniff)
+    {
         if (hadInboundSniff)
         {
             var sniffRules = StjNodeHelpers.SelectToken(config, "route.rules") as JsonArray;
@@ -593,7 +612,10 @@ public static partial class CustomConfigInjector
                 }
             }
         }
+    }
 
+    private static void EnsureLogOutput(JsonObject config)
+    {
         var log = config["log"] as JsonObject;
         if (log == null)
         {
