@@ -29,4 +29,4 @@ the load and after the save is compared between the parent SHA and this SHA. Exa
 
 ## Outcome
 
-Pending equivalence run and CI.
+Merged in #380 after green exact-head CI. Worker equivalence check passed (see the PR description).

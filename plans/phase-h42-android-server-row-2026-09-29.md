@@ -24,4 +24,4 @@ There is no device or emulator test in this change (no emulator work is allowed 
 
 ## Outcome
 
-Pending CI.
+Merged in #376 after green exact-head CI.

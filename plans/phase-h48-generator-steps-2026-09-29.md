@@ -27,4 +27,4 @@ outbounds, both rule formats, all routing modes). Exact-head CI runs the full su
 
 ## Outcome
 
-Pending equivalence run and CI.
+Merged in #383 after green exact-head CI. Worker equivalence check passed (comment on the PR).

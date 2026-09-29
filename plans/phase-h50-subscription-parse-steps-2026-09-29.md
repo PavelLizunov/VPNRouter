@@ -21,4 +21,4 @@ Exact-head CI (full suite, including the subscription parsing, redaction and pla
 
 ## Outcome
 
-Pending CI.
+Merged in #385 after green exact-head CI.

@@ -38,4 +38,4 @@ CI (Linux and Windows builds, full Windows suite, Android compile check).
 
 ## Outcome
 
-Pending build and CI.
+Merged in #377 after green exact-head CI.

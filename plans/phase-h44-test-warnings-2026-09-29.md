@@ -29,4 +29,4 @@ The exact-head CI log of this PR must show none of the warnings above; full suit
 
 ## Outcome
 
-Pending CI.
+Merged in #378 after green exact-head CI.

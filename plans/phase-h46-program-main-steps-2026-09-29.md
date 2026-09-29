@@ -28,4 +28,4 @@ Start-up itself is not exercised by any test, and nothing here was run on a desk
 
 ## Outcome
 
-Pending CI.
+Merged in #381 after green exact-head CI.

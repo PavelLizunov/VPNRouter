@@ -25,4 +25,4 @@ work is not allowed for now, so the screen itself was not looked at after the ch
 
 ## Outcome
 
-Pending CI.
+Merged in #379 after green exact-head CI.

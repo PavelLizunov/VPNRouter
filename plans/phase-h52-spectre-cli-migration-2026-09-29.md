@@ -22,4 +22,4 @@ Nothing was run on a desktop; the command signatures are the only change.
 
 ## Outcome
 
-Pending CI. When merged, Dependabot PR #335 is obsolete and can be closed.
+Merged in #387 after green exact-head CI.

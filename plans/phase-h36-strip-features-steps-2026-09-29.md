@@ -26,4 +26,4 @@ suite and exact-head CI.
 
 ## Outcome
 
-Pending equivalence run and CI.
+Merged in #371 after green exact-head CI. Worker equivalence check passed (comment on the PR).

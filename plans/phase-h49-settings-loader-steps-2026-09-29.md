@@ -23,4 +23,4 @@ read of the diff.
 
 ## Outcome
 
-Pending CI.
+Merged in #384 after green exact-head CI.
