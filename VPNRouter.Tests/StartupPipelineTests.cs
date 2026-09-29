@@ -196,6 +196,34 @@ public sealed class StartupPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task SafeMode_ForcesFullTunnelRoutingIntoSettingsAndConfig()
+    {
+        var settings = BuildBaseSettings();
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            MakeServer("main", "104.194.156.93", 443)
+        };
+        settings.Vless.ActiveServer = "main";
+        settings.App.RoutingMode = "split";
+        settings.ActiveProfile = "TestProfile";
+
+        var host = new TestStartupHost();
+        var pipeline = new StartupPipeline(host, _store);
+
+        var result = await pipeline.ExecuteAsync(
+            new StartupContext(settings, StartupMode.HotReload),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success);
+        Assert.Equal("FullTunnel", result.Profile!.Name);
+        Assert.Equal("full", settings.App.RoutingMode);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(result.ConfigJson!);
+        var final = doc.RootElement.GetProperty("route").GetProperty("final").GetString();
+        Assert.NotEqual("direct", final);
+    }
+
+    [Fact]
     public async Task SetupFirewall_NoBlockOnFail_SkipsRuleCreation()
     {
         var settings = BuildBaseSettings();
