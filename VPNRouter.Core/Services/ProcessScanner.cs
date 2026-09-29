@@ -59,7 +59,6 @@ public class ProcessScanner : IProcessScanner
                         _logger.Warning("[ProcessScanner] scan_pattern '{Pattern}' exceeded the {Ms}ms match timeout — skipping it (check the profile for a catastrophic wildcard)", pattern, PatternMatchTimeoutMs);
                     }
                 }
-
             }
 
             var childRules = profile.Processes
@@ -215,10 +214,4 @@ public class ScanResult
 {
     public List<string> ProcessNames { get; init; } = new();
     public DateTime ScannedAt { get; init; }
-    public bool HasChanges(ScanResult? previous)
-    {
-        if (previous == null) return true;
-        return !new HashSet<string>(ProcessNames, StringComparer.OrdinalIgnoreCase)
-            .SetEquals(previous.ProcessNames);
-    }
 }

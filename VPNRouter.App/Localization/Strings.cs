@@ -683,9 +683,6 @@ public static class Strings
     public static string AutoFailoverProbing => Ru
         ? "Проверяем подключение..."
         : "Probing connection...";
-    public static string AutoFailoverSwitching(int n, int total, string serverName) => Ru
-        ? $"Сервер недоступен. Переключаемся ({n}/{total}) → {serverName}"
-        : $"Server unreachable. Switching ({n}/{total}) → {serverName}";
     public static string AutoFailoverExhausted => Ru
         ? "Все серверы подписки недоступны. Проверьте сеть или подписку."
         : "All subscription servers are unreachable. Check network or subscription.";
@@ -989,5 +986,4 @@ public static class Strings
     public static string ZapretAvBlockToast => global::VPNRouter.Core.Localization.Strings.ZapretAvBlockToast;
 
     public static string ZapretAvBlockCopyPath => global::VPNRouter.Core.Localization.Strings.ZapretAvBlockCopyPath;
-
 }

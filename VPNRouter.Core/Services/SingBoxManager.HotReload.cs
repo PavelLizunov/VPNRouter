@@ -8,12 +8,6 @@ namespace VPNRouter.Core.Services;
 
 public partial class SingBoxManager
 {
-    public void ReloadConfig(SingBoxConfig config, bool forceRestart = false) =>
-        ReloadConfigJson(ConfigGenerator.Serialize(config), forceRestart);
-
-    public bool TryReloadConfig(SingBoxConfig config) =>
-        TryReloadConfigJson(ConfigGenerator.Serialize(config));
-
     public string WriteConfigToDisk(string configJson)
     {
         _currentConfigPath = WriteJsonToDisk(configJson);
@@ -83,5 +77,4 @@ public partial class SingBoxManager
         => string.IsNullOrEmpty(_settings.ClashApiSecret)
             ? null
             : new Dictionary<string, string> { ["Authorization"] = $"Bearer {_settings.ClashApiSecret}" };
-
 }

@@ -271,13 +271,6 @@ public static class TunAdapterDiagnostics
         }
     }
 
-    [SupportedOSPlatform("windows")]
-    internal static bool IsNetAdapterModuleAvailable()
-    {
-        if (!OperatingSystem.IsWindows()) return false;
-        return s_netAdapterModuleAvailable.Value;
-    }
-
     private static int s_actionableModuleMissingLogged;
 
     internal static void ResetRemoveNetAdapterLatchForTests()

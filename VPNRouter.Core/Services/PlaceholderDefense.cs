@@ -127,21 +127,6 @@ public static class PlaceholderDefense
         }
     }
 
-    internal static class LayerB_MigratorStrip
-    {
-        public static string TruncateForLog(string? v)
-        {
-            if (string.IsNullOrEmpty(v)) return "(empty)";
-            return v.Length <= 16 ? v : $"{v[..8]}…{v[^4..]}";
-        }
-    }
-
-    internal static class LayerD_LeakValidation
-    {
-        public static bool IsPlaceholderEntry(VlessServerEntry? entry) =>
-            LayerA_ResolverScopeGuard.IsPlaceholderEntry(entry);
-    }
-
     internal static class LayerE_RuntimeSanity
     {
         public static JsonObject? FindFirstProxyOutbound(JsonArray outbounds)
@@ -167,12 +152,6 @@ public static class PlaceholderDefense
 
             return PlaceholderDefense.Inspect(pubkey, shortId, server);
         }
-    }
-
-    internal static class Layer6_DeepVerify
-    {
-        public static string? InspectForDeepVerify(VlessServerEntry? entry) =>
-            PlaceholderDefense.Inspect(entry);
     }
 }
 

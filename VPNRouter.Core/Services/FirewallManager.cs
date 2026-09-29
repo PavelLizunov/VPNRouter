@@ -285,8 +285,6 @@ public class FirewallManager : IFirewallManager
         return result;
     }
 
-    private List<string> FindRulesByPrefix(string prefix) => FindRulesByPrefixes(new[] { prefix });
-
     private bool RunNetsh(string arguments)
     {
         try
