@@ -88,6 +88,14 @@ public partial class MainWindowViewModel
         }
     }
 
+    partial void OnTunMtuChanged(int value)
+    {
+        if (_isLoadingUI || value < TunSettings.MinimumMtu) return;
+        try { SaveSettings(); }
+        catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on TunMtu change failed"); }
+        MarkRoutingSettingsChanged();
+    }
+
     private void ApplySetupWizardSettings(int mtu, bool splitTunnel)
     {
         var previousMtu = TunMtu;

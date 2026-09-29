@@ -1,4 +1,4 @@
-# H-26: two old P2 ledger defects with concrete fixes
+# H-26: old P2 ledger defects with concrete fixes
 
 ## Why
 
@@ -14,6 +14,9 @@ Ledger review 2026-09-29 verified two long-open P2 entries in the current source
   start path and its ProcessExit hook (which call it) never cleaned up a leftover kill-switch table
   after `kill -9`; only the GUI did, through the platform managers directly.
 
+- Ledger MTU-5 (confirmed on WINBRAT 2026-08-03): editing `TunMtu` in the Network page updated the
+  warning and the view model but never called `SaveSettings`, so `1600` reverted after a restart.
+
 Also checked and found already fixed (closed in the ledger separately): `RunFlowsealProbeAsync`
 builds its PowerShell start info with `ArgumentList`.
 
@@ -25,6 +28,9 @@ builds its PowerShell start info with `ArgumentList`.
 - `FirewallManager.TryCleanupOrphanedRulesSafe` dispatches to `MacFirewallManager` /
   `LinuxFirewallManager` `.TryCleanupOrphanedRulesSafe` on those platforms (Windows unchanged). No
   unit test: the Unix methods shell out to `sudo`; the dispatch is a four-line platform branch.
+- `MainWindowViewModel.OnTunMtuChanged` saves and marks routing changed when the value is at least
+  the minimum (values above the maximum are saved clamped by `SaveSettings`); shorter prefixes typed
+  on the way to a valid number are ignored. Tests in `TunMtuPersistenceTests`.
 - Tests: `MergeWithCache_CarriesDeepVerifyMemoryToFreshEntry`,
   `WriteReport_TailRedactsBareKeyValueSecrets`.
 
