@@ -276,7 +276,7 @@ public class TgProxyManager : IDisposable
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = uri.AbsoluteUri,
+                FileName = url,
                 UseShellExecute = true
             });
         }

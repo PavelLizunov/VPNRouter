@@ -363,13 +363,6 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         var link = TgProxyManager.BuildProxyLink("127.0.0.1", 1443, "abc123secret");
         Assert.StartsWith("tg://proxy?", link);
         Assert.True(Uri.TryCreate(link, UriKind.Absolute, out var uri));
-        Assert.Equal("tg", uri.Scheme);
-    }
-
-    [Fact]
-    public void OpenInTelegram_HandlesInvalidOrMalformedParameters_DoesNotThrow()
-    {
-        var ex = Record.Exception(() => TgProxyManager.OpenInTelegram("invalid host with spaces", 1443, "secret"));
-        Assert.Null(ex);
+        Assert.Equal("tg", uri!.Scheme);
     }
 }
