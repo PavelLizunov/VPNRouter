@@ -298,10 +298,13 @@ public sealed class ZapretActionsTests : IDisposable
     public void OpenServiceMenu_PathWithMetacharacters_ThrowsArgumentException()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_dir_&_calc_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-        var servicePath = Path.Combine(tempDir, "service.bat");
+        var zapretDir = Path.Combine(tempDir, "zapret");
+        Directory.CreateDirectory(zapretDir);
+        var servicePath = Path.Combine(zapretDir, "service.bat");
         File.WriteAllText(servicePath, "@echo off");
 
+        var originalDataDir = AppPaths.DataDir;
+        AppPaths.OverrideDataDir(tempDir);
         try
         {
             var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(servicePath));
@@ -309,6 +312,75 @@ public sealed class ZapretActionsTests : IDisposable
         }
         finally
         {
+            AppPaths.OverrideDataDir(originalDataDir);
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("temp\rpath", "valid_hosts")]
+    [InlineData("temp\npath", "valid_hosts")]
+    [InlineData("temp\"path", "valid_hosts")]
+    [InlineData("valid_temp", "hosts\rpath")]
+    [InlineData("valid_temp", "hosts\npath")]
+    [InlineData("valid_temp", "hosts\"path")]
+    public void OpenHostsEditHelpers_PathWithDisallowedCharacters_ThrowsArgumentException(string tempPath, string hostsPath)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath));
+        Assert.Contains("contains disallowed characters", ex.Message);
+    }
+
+    [Fact]
+    public void OpenHostsEditHelpers_NullPaths_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers(null!, "valid_hosts"));
+        Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers("valid_temp", null!));
+    }
+
+    [Fact]
+    public void OpenServiceMenu_PathOutsideZapretDir_ThrowsArgumentException()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
+        var zapretDir = Path.Combine(tempDir, "zapret");
+        Directory.CreateDirectory(zapretDir);
+
+        var outsideBat = Path.Combine(tempDir, "outside.bat");
+        File.WriteAllText(outsideBat, "@echo off");
+
+        var originalDataDir = AppPaths.DataDir;
+        AppPaths.OverrideDataDir(tempDir);
+        try
+        {
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(outsideBat));
+            Assert.Contains("Zapret directory", ex.Message);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(originalDataDir);
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void OpenServiceMenu_NonBatExtension_ThrowsArgumentException()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
+        var zapretDir = Path.Combine(tempDir, "zapret");
+        Directory.CreateDirectory(zapretDir);
+
+        var exePath = Path.Combine(zapretDir, "service.exe");
+        File.WriteAllText(exePath, "fake");
+
+        var originalDataDir = AppPaths.DataDir;
+        AppPaths.OverrideDataDir(tempDir);
+        try
+        {
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(exePath));
+            Assert.Contains(".bat file", ex.Message);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(originalDataDir);
             try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
