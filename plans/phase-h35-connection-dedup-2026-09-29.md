@@ -29,4 +29,4 @@ coordinator has its own tests.
 
 ## Outcome
 
-Pending CI.
+Merged in #370 after green exact-head CI.
