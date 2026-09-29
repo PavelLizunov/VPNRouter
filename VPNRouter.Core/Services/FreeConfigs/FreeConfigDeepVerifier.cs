@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Text.Json.Nodes;
 using Serilog;
 using VPNRouter.Core.Models;
 
@@ -212,88 +211,6 @@ public sealed class FreeConfigDeepVerifier
         }
     }
 
-    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort)
-    {
-        var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
-        JsonObject? outbound = null;
-        JsonNode? awgEndpoint = null;
-
-        if (protocol is "amneziawg" or "awg" or "awg3" or "amneziawg3")
-        {
-            awgEndpoint = System.Text.Json.JsonSerializer.SerializeToNode(
-                ConfigGenerator.BuildAmneziaWgEndpoint(s, "proxy"));
-        }
-        else
-        {
-            outbound = protocol switch
-            {
-                "hysteria2" or "hy2"  => VlessDeepVerifier.BuildHysteria2Outbound(s),
-                "tuic"                => VlessDeepVerifier.BuildTuicOutbound(s),
-                "shadowsocks" or "ss" => VlessDeepVerifier.BuildShadowsocksOutbound(s),
-                "naive"               => VlessDeepVerifier.BuildNaiveOutbound(s),
-                _                     => VlessDeepVerifier.BuildVlessOutbound(s),
-            };
-        }
-
-        var outboundsArray = new JsonArray();
-        if (outbound != null)
-        {
-            outboundsArray.Add((JsonNode?)outbound);
-        }
-        outboundsArray.Add((JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true });
-
-        var root = new JsonObject
-        {
-            ["log"] = new JsonObject { ["level"] = "error" },
-            ["dns"] = new JsonObject
-            {
-                ["servers"] = new JsonArray
-                {
-                    (JsonNode?)new JsonObject { ["type"] = "https", ["tag"] = "dns-google", ["server"] = "8.8.8.8", ["path"] = "/dns-query", ["detour"] = "dns-direct-out" },
-                },
-                ["final"] = "dns-google",
-            },
-            ["inbounds"] = new JsonArray
-            {
-                (JsonNode?)new JsonObject
-                {
-                    ["type"] = "socks",
-                    ["tag"] = "socks-in",
-                    ["listen"] = "127.0.0.1",
-                    ["listen_port"] = socksPort,
-                    ["sniff"] = false,
-                },
-            },
-            ["outbounds"] = outboundsArray,
-            ["route"] = new JsonObject
-            {
-                ["final"] = "proxy",
-                ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-google" },
-                ["rules"] = new JsonArray
-                {
-                    (JsonNode?)new JsonObject { ["action"] = "sniff" },
-                    (JsonNode?)new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
-                },
-            },
-        };
-
-        if (awgEndpoint != null)
-        {
-            root["endpoints"] = new JsonArray { awgEndpoint };
-        }
-
-        if (clashPort is int port)
-        {
-            root["experimental"] = new JsonObject
-            {
-                ["clash_api"] = new JsonObject
-                {
-                    ["external_controller"] = $"127.0.0.1:{port}",
-                },
-            };
-        }
-
-        return root.ToJsonString();
-    }
-
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort) =>
+        VlessDeepVerifier.BuildSingleOutboundConfig(s, socksPort, clashPort);
 }
