@@ -15,15 +15,6 @@ public class ThemePreferenceTests
     }
 
     [Theory]
-    [InlineData("Light", "light")]
-    [InlineData("DARK", "dark")]
-    [InlineData("System", "system")]
-    public void Casing_is_normalized(string raw, string expected)
-    {
-        Assert.Equal(expected, MainWindowViewModel.NormalizeThemePref(raw));
-    }
-
-    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]

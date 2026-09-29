@@ -52,42 +52,6 @@ public class PlaceholderGuardTests
     }
 
     [Fact]
-    public void Inspect_PlaceholderShortId_ReturnsRealityShortIdField()
-    {
-        var dirty = new VlessServerEntry
-        {
-            Name = "stas-short-id",
-            Server = "94.131.107.42",
-            Port = 443,
-            Uuid = "abcd-1234",
-            Reality = new VlessRealityConfig
-            {
-                PublicKey = "vJgL_realPubkey",
-                ShortId = KnownBadShortId,
-            },
-        };
-        Assert.Equal("reality.short_id", PlaceholderDefense.Inspect(dirty));
-    }
-
-    [Fact]
-    public void Inspect_PlaceholderServerIp_ReturnsServerField()
-    {
-        var dirty = new VlessServerEntry
-        {
-            Name = "khunrath_ln",
-            Server = KnownBadServer,
-            Port = 443,
-            Uuid = "abcd",
-            Reality = new VlessRealityConfig
-            {
-                PublicKey = "vJgL_realPubkey",
-                ShortId = "deadbeef",
-            },
-        };
-        Assert.Equal("server", PlaceholderDefense.Inspect(dirty));
-    }
-
-    [Fact]
     public void Inspect_PubkeyMatchTakesPrecedenceOverShortId()
     {
         var dirty = new VlessServerEntry

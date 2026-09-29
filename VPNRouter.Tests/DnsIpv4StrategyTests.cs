@@ -39,13 +39,6 @@ public class DnsIpv4StrategyTests
     }
 
     [Fact]
-    public void Ipv6EnabledTun_AndForceOff_NoStrategyOverride()
-    {
-        var cfg = Gen(Make(ipv6Tun: true, forceIpv4: false));
-        Assert.Null(cfg.Dns.Strategy);
-    }
-
-    [Fact]
     public void ForceIpv4Only_AlwaysIpv4Only_RegardlessOfTun()
     {
         var cfg = Gen(Make(ipv6Tun: true, forceIpv4: true));

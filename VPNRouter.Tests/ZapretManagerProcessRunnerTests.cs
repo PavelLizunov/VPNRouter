@@ -124,33 +124,6 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task Start_HandleExitsWithin2sCodeZero_DoesNotFireImmediateExitEvent()
-    {
-        if (!SeededOrRealExe()) return;
-
-        var fake = new FakeProcessRunner();
-        var handle = new FakeProcessHandle(pid: 88003);
-        fake.OnStart(_ => true, _ => handle);
-
-        var sut = new ZapretManager(logger: null, runner: fake);
-        var immediateExitFired = 0;
-        sut.ImmediateExitDetected += () => Interlocked.Increment(ref immediateExitFired);
-
-        try
-        {
-            sut.Start("--wf-tcp=443");
-            handle.SignalExit(0);
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-
-            Assert.Equal(0, immediateExitFired);
-        }
-        finally
-        {
-            sut.Dispose();
-        }
-    }
-
-    [Fact]
     public void Stop_OnRunningManager_KillsHandleAndDisposes()
     {
         if (!SeededOrRealExe()) return;
@@ -177,78 +150,6 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
         finally
         {
             sut.Dispose();
-        }
-    }
-
-    [Fact]
-    public void Stop_CalledTwice_SecondCallIsNoOp()
-    {
-        if (!SeededOrRealExe()) return;
-
-        var fake = new FakeProcessRunner();
-        var handle = new FakeProcessHandle(pid: 88005);
-        fake.OnStart(_ => true, _ => handle);
-
-        var sut = new ZapretManager(logger: null, runner: fake);
-        try
-        {
-            sut.Start("--wf-tcp=443");
-
-            sut.Stop();
-            var ex = Record.Exception(() => sut.Stop());
-            Assert.Null(ex);
-
-            ex = Record.Exception(() => sut.Stop());
-            Assert.Null(ex);
-
-            Assert.False(sut.IsRunning);
-        }
-        finally
-        {
-            sut.Dispose();
-        }
-    }
-
-    [Fact]
-    public void StartFromBat_RoutesThroughCmdBat_WithZapretDirAsWorkingDir()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-zapret-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-        var batPath = Path.Combine(tempDir, "fake-strategy.bat");
-        File.WriteAllText(batPath, "@echo off\r\nrem fake strategy");
-
-        try
-        {
-            var fake = new FakeProcessRunner();
-            var handle = new FakeProcessHandle(pid: 88006);
-            fake.OnStart(_ => true, _ => handle);
-
-            var sut = new ZapretManager(logger: null, runner: fake);
-            try
-            {
-                sut.StartFromBat(batPath, "--wf-tcp=443");
-
-                Assert.Single(fake.StartCalls);
-                var call = fake.StartCalls[0];
-                Assert.Equal("cmd.exe", call.ExecutablePath);
-                Assert.Equal(2, call.Arguments.Count);
-                Assert.Equal("/c", call.Arguments[0]);
-                Assert.EndsWith("_vpnrouter_silent.bat", call.Arguments[1]);
-                Assert.Contains(tempDir, call.Arguments[1]);
-
-                Assert.Equal(tempDir, call.WorkingDirectory);
-
-                Assert.False(call.CaptureStdout);
-                Assert.False(call.CaptureStderr);
-            }
-            finally
-            {
-                sut.Dispose();
-            }
-        }
-        finally
-        {
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
 }

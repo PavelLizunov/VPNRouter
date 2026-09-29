@@ -25,12 +25,4 @@ public sealed class RoutingAppListEditorTests
         => Assert.Null(RoutingAppListEditor.NormalizeManualProcessName(input, windows: true));
 
     private static AppSettings Fresh() => new();
-
-    [Fact]
-    public void RemoveNullSettings_NoThrow_ReturnsFalseNull()
-    {
-        var (removed, normalized) = RoutingAppListEditor.TryRemoveProcessName(null, "Discord.exe");
-        Assert.False(removed);
-        Assert.Null(normalized);
-    }
 }

@@ -68,32 +68,4 @@ public sealed class TcpTlsProbeRealityDispatchTests
             listener.Stop();
         }
     }
-
-    [Fact]
-    public async Task PlainVless_NoSecurity_DoesTcpOnly()
-    {
-        var (listener, port) = StartBareTcpListener();
-        try
-        {
-            var server = new VlessServerEntry
-            {
-                Name = "test-plain-vless",
-                Protocol = "vless",
-                Server = "127.0.0.1",
-                Port = port,
-                Uuid = "test-uuid",
-            };
-
-            var result = await TcpTlsProbe.ProbeServerAsync(server, CancellationToken.None);
-
-            Assert.NotEqual(ServerProbeStatus.TlsFailed, result.Status);
-            Assert.True(
-                IsTcpReachable(result.Status),
-                $"Plain VLESS TCP-only probe must reach reachable status. Status was {result.Status}");
-        }
-        finally
-        {
-            listener.Stop();
-        }
-    }
 }

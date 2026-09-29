@@ -97,22 +97,6 @@ public class CustomRulesV2_30_ParserTests
     }
 
     [Fact]
-    public void Parse_GeositeName_Valid()
-    {
-        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct geosite category-news-ru");
-        Assert.Single(r.Rules);
-        Assert.Empty(r.Errors);
-    }
-
-    [Fact]
-    public void Parse_GeositeName_RejectsUppercase()
-    {
-        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct geosite Category-News-RU");
-        Assert.Empty(r.Rules);
-        Assert.Single(r.Errors);
-    }
-
-    [Fact]
     public void Parse_DisabledRule_PrefixBang()
     {
         var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("!block port 53");

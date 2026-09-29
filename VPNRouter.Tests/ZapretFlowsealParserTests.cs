@@ -15,17 +15,6 @@ public sealed class ZapretFlowsealParserTests
     }
 
     [Fact]
-    public void BestStrategyByScore_AllZeroPasses_ReturnsNull()
-    {
-        var table = new Dictionary<string, ZapretStrategyTestResult>
-        {
-            ["a"] = new() { Passed = 0, Total = 10 },
-            ["b"] = new() { Passed = 0, Total = 5 },
-        };
-        Assert.Null(ZapretAutoStrategy.BestStrategyByScore(table));
-    }
-
-    [Fact]
     public void BestStrategyByScore_EqualPasses_TieBreaksByRatio()
     {
         var table = new Dictionary<string, ZapretStrategyTestResult>

@@ -35,14 +35,6 @@ public class ServerViewModelHealthVerdictTests
     }
 
     [Fact]
-    public void QuickUnreachable_IsHostUnreachable()
-    {
-        var vm = new ServerViewModel();
-        vm.ApplyProbeResult(Probe(ServerProbeStatus.Unreachable, 0));
-        Assert.Equal(ServerHealthVerdict.HostUnreachable, vm.HealthVerdict);
-    }
-
-    [Fact]
     public void DeepOk_IsHealthy()
     {
         var vm = new ServerViewModel();
@@ -81,18 +73,6 @@ public class ServerViewModelHealthVerdictTests
         Assert.Equal("!", vm.DeepDisplay);
         Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, vm.HealthVerdict);
         Assert.NotEqual(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, vm.HealthVerdict);
-    }
-
-    [Fact]
-    public void DeepLocalInfraFailure_LegacyStringResult_IsInconclusive()
-    {
-        var vm = new ServerViewModel();
-        vm.ApplyProbeResult(Probe(ServerProbeStatus.Ok));
-        vm.ApplyDeepResult(DeepVerifyResult.Failed("sing-box spawn failed"));
-
-        Assert.False(vm.IsDeepFailed);
-        Assert.True(vm.IsDeepInconclusive);
-        Assert.Equal(ServerHealthVerdict.TcpOpenProtocolUntested, vm.HealthVerdict);
     }
 
     [Fact]

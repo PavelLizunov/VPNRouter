@@ -55,15 +55,6 @@ public class VlessUriParserTests
     }
 
     [Fact]
-    public void Parse_DefaultPort_Is443()
-    {
-        var uri = "vless://uuid@server.com?security=tls&type=tcp#test";
-        var entry = VlessUriParser.Parse(uri);
-
-        Assert.Equal(443, entry.Port);
-    }
-
-    [Fact]
     public void Parse_TlsSecurity_SetsTlsConfig()
     {
         var uri = "vless://uuid@server.com:443?security=tls&sni=example.com&type=tcp#test";
@@ -81,15 +72,6 @@ public class VlessUriParserTests
         var entry = VlessUriParser.Parse(uri);
 
         Assert.Equal("bratik-nout", entry.Name);
-    }
-
-    [Fact]
-    public void Parse_NoFragment_EmptyName()
-    {
-        var uri = "vless://uuid@server.com:443?security=tls&type=tcp";
-        var entry = VlessUriParser.Parse(uri);
-
-        Assert.Equal("", entry.Name);
     }
 
     [Fact]

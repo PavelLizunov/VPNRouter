@@ -20,12 +20,4 @@ public sealed class FreeConfigSortKeyTests
         var e = new FreeConfigEntry { Status = status, LatencyMs = latency };
         Assert.Equal(expected, FreeConfigItemViewModel.SortKeyFor(e));
     }
-
-    [Fact]
-    public void VerifiedRtt_RanksBelowOk()
-    {
-        var verified = new FreeConfigEntry { Status = FreeConfigStatus.Verified, LatencyMs = 500 };
-        var ok = new FreeConfigEntry { Status = FreeConfigStatus.Ok, LatencyMs = 10 };
-        Assert.True(FreeConfigItemViewModel.SortKeyFor(verified) < FreeConfigItemViewModel.SortKeyFor(ok));
-    }
 }

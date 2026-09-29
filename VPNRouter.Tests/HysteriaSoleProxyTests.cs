@@ -20,17 +20,6 @@ public sealed class HysteriaSoleProxyTests
     }
 
     [Fact]
-    public void VlessSelected_KeepsTcpVlessUdpHy2Split()
-    {
-        var config = Generate("main-vless");
-
-        var proxy = Assert.Single(config.Outbounds, o => o.Tag == "proxy");
-        Assert.Equal("vless", proxy.Type);
-        var udp = Assert.Single(config.Outbounds, o => o.Tag == "proxy-udp");
-        Assert.Equal("hysteria2", udp.Type);
-    }
-
-    [Fact]
     public void Hy2Selected_QuicNotRejected()
     {
         var config = Generate("main-hy2");

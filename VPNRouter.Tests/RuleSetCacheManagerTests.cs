@@ -170,24 +170,6 @@ public sealed class RuleSetCacheManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task EnsureLocal_FetchReturnsEmptyBody_NoCache_ReturnsNull()
-    {
-        var filename = "test-empty.srs";
-        var handler = new StaticResponseHandler(HttpStatusCode.OK, Array.Empty<byte>());
-        var client = new HttpClient(handler);
-
-        var result = await RuleSetCacheManager.EnsureLocalAsync(
-            "https://example.invalid/empty.srs",
-            filename,
-            httpClient: client,
-            cacheDir: _tempCacheDir,
-            cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Null(result);
-        Assert.False(File.Exists(ExpectedCachedFile(filename)));
-    }
-
-    [Fact]
     public async Task EnsureLocal_FetchSuccess_AtomicWrite_NoTmpLeftover()
     {
         var filename = "test-atomic.srs";

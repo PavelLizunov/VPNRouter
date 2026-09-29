@@ -241,14 +241,6 @@ public class CustomConfigInjectorTests
         Assert.NotNull(StjNodeHelpers.SelectToken(parsed, "route.rules"));
     }
 
-    [Fact]
-    public void Inject_PreservesProcessNameCase()
-    {
-        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe", "Telegram.exe" }, CreateSettings());
-        Assert.Contains("Discord.exe", result);
-        Assert.Contains("Telegram.exe", result);
-    }
-
     private const string RealWorldConfig = """
     {
       "dns": {

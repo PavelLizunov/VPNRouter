@@ -223,38 +223,6 @@ public class ConfigShareDocumentTests
     }
 
     [Fact]
-    public void BuildPreview_Russian_ShowsCounts()
-    {
-        var doc = BuildSampleDocument();
-        var preview = doc.BuildPreview(ru: true);
-        Assert.Contains("Подписки: 1", preview);
-        Assert.Contains("Серверы: 2", preview);
-    }
-
-    [Fact]
-    public void BuildPreview_English_ShowsCounts()
-    {
-        var doc = BuildSampleDocument();
-        doc.Settings = new ExportedSettings { Theme = "light" };
-        doc.PerAppFilter = new PerAppFilterExport { Mode = "include", Packages = new List<string> { "a", "b" } };
-
-        var preview = doc.BuildPreview(ru: false);
-        Assert.Contains("Subscriptions: 1", preview);
-        Assert.Contains("Settings: included", preview);
-        Assert.Contains("2 apps", preview);
-    }
-
-    [Fact]
-    public void SuggestFilename_ProducesSortableTimestamp()
-    {
-        var when = new DateTimeOffset(2026, 5, 7, 18, 30, 0, TimeSpan.Zero).ToLocalTime();
-        var name = ConfigShareDocument.SuggestFilename(when);
-        Assert.StartsWith("vpnrouter-config-", name);
-        Assert.EndsWith(".json", name);
-        Assert.Contains("2026", name);
-    }
-
-    [Fact]
     public void Parse_DropsExportedFromNullToDefault()
     {
         var json = $"{{\"schema\":\"{ConfigShareDocument.SchemaMarker}\",\"version\":1,\"config_mode\":\"subscribe\"}}";

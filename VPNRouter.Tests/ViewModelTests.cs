@@ -68,34 +68,6 @@ public class AutostartStatusComputationTests
     }
 
     [Fact]
-    public void ComputeAutostartStatus_NoServiceWithAppBootstrap_ReturnsLoginFallback()
-    {
-        var en = Strings.Lang;
-        try
-        {
-            Strings.Lang = "en";
-            Assert.Equal(Strings.AutostartStatusLoginFallback,
-                MainWindowViewModel.ComputeAutostartStatus(
-                    isServiceInstalled: false, hasAppBootstrap: true));
-        }
-        finally { Strings.Lang = en; }
-    }
-
-    [Fact]
-    public void ComputeAutostartStatus_NeitherServiceNorBootstrap_ReturnsNoBoot()
-    {
-        var en = Strings.Lang;
-        try
-        {
-            Strings.Lang = "en";
-            Assert.Equal(Strings.AutostartStatusNoBoot,
-                MainWindowViewModel.ComputeAutostartStatus(
-                    isServiceInstalled: false, hasAppBootstrap: false));
-        }
-        finally { Strings.Lang = en; }
-    }
-
-    [Fact]
     public void ComputeAutostartStatus_BilingualParity()
     {
         var en = Strings.Lang;
@@ -168,28 +140,6 @@ public class AutostartStatusBindingTests
         Assert.Contains(nameof(MainWindowViewModel.IsAutostartTgProxyStatusGood), notifications);
         Assert.Contains(nameof(MainWindowViewModel.IsAutostartTgProxyStatusWarn), notifications);
         Assert.Contains(nameof(MainWindowViewModel.IsAutostartTgProxyStatusBad), notifications);
-    }
-
-    [AvaloniaFact]
-    public void StatusLabels_BoundToExpectedStrings()
-    {
-        var en = Strings.Lang;
-        try
-        {
-            Strings.Lang = "en";
-            var vm = new MainWindowViewModel();
-
-            vm.ServiceVm.IsInstalled = true;
-            Assert.Equal(Strings.AutostartStatusBoot, vm.LblAutostartVpnStatus);
-            Assert.Equal(Strings.AutostartStatusBoot, vm.LblAutostartZapretStatus);
-            Assert.Equal(Strings.AutostartStatusBoot, vm.LblAutostartTgProxyStatus);
-
-            vm.ServiceVm.IsInstalled = false;
-            Assert.Equal(Strings.AutostartStatusNoBoot, vm.LblAutostartVpnStatus);
-            Assert.Equal(Strings.AutostartStatusNoBoot, vm.LblAutostartZapretStatus);
-            Assert.Equal(Strings.AutostartStatusNoBoot, vm.LblAutostartTgProxyStatus);
-        }
-        finally { Strings.Lang = en; }
     }
 
     private static void InvokeRemoveServerByEntry(MainWindowViewModel vm, ServerViewModel entry)

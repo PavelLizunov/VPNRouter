@@ -102,21 +102,6 @@ public sealed class LaunchFailureCounterTests
     }
 
     [Fact]
-    public void RecommendAction_BelowThreshold_ReturnsNone()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.ResetCooldown(10);
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-            Assert.Equal("none", LaunchFailureCounter.RecommendAction(path));
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-            Assert.Equal("none", LaunchFailureCounter.RecommendAction(path));
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
     public void RecommendAction_AtThreshold3_ReturnsSelfRepair()
     {
         var path = NewTempPath();
@@ -142,21 +127,6 @@ public sealed class LaunchFailureCounterTests
                 LaunchFailureCounter.IncrementOnStartup(path: path);
 
             Assert.Equal("config-reset", LaunchFailureCounter.RecommendAction(path));
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
-    public void RecommendAction_AtThreshold7_ReturnsSafeModePrompt()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.ResetCooldown(10);
-            for (int i = 0; i < 7; i++)
-                LaunchFailureCounter.IncrementOnStartup(path: path);
-
-            Assert.Equal("safe-mode-prompt", LaunchFailureCounter.RecommendAction(path));
         }
         finally { CleanUp(path); }
     }

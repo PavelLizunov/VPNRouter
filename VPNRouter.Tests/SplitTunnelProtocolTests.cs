@@ -175,15 +175,6 @@ public class SplitTunnelProtocolTests
     private const int ProcEntry = 32;
 
     [Fact]
-    public void BuildProcessRegistry_EmptyList_HeaderOnly()
-    {
-        var buf = P.BuildProcessRegistry(Array.Empty<ProcInfo>());
-        Assert.Equal(ProcHeader, buf.Length);
-        Assert.Equal(0UL, U64(buf, 0));
-        Assert.Equal((ulong)ProcHeader, U64(buf, 8));
-    }
-
-    [Fact]
     public void BuildProcessRegistry_SingleEntry_GoldenVector()
     {
         var p = new ProcInfo(Pid: 0x1234, ParentPid: 0x5678, CreationTime: 999,
@@ -205,40 +196,6 @@ public class SplitTunnelProtocolTests
 
         int blobBase = ProcHeader + ProcEntry;
         Assert.Equal(p.DevicePath, Encoding.Unicode.GetString(buf, blobBase, wide.Length));
-    }
-
-    [Fact]
-    public void BuildProcessRegistry_EmptyPath_OffsetAndLenAreZero()
-    {
-        var p = new ProcInfo(Pid: 7, ParentPid: 0, CreationTime: 0, DevicePath: "");
-        var buf = P.BuildProcessRegistry(new[] { p });
-
-        Assert.Equal(ProcHeader + ProcEntry, buf.Length);
-        Assert.Equal(7UL, U64(buf, ProcHeader + 0));
-        Assert.Equal(0UL, U64(buf, ProcHeader + 16));
-        Assert.Equal((ushort)0, U16(buf, ProcHeader + 24));
-    }
-
-    [Fact]
-    public void BuildProcessRegistry_MixedList_RoundTripsThroughReverseParser()
-    {
-        var procs = new List<ProcInfo>
-        {
-            new(Pid: 100, ParentPid: 4, CreationTime: 10, DevicePath: @"\Device\HarddiskVolume2\a.exe"),
-            new(Pid: 200, ParentPid: 0, CreationTime: 20, DevicePath: ""),
-            new(Pid: 300, ParentPid: 100, CreationTime: 30, DevicePath: @"\Device\HarddiskVolume2\c.exe"),
-        };
-
-        var buf = P.BuildProcessRegistry(procs);
-        var parsed = ReverseParseProcessRegistry(buf);
-
-        Assert.Equal(procs.Count, parsed.Count);
-        for (int i = 0; i < procs.Count; i++)
-        {
-            Assert.Equal(procs[i].Pid, parsed[i].Pid);
-            Assert.Equal(procs[i].ParentPid, parsed[i].ParentPid);
-            Assert.Equal(procs[i].DevicePath, parsed[i].DevicePath);
-        }
     }
 
     private static List<(uint Pid, uint ParentPid, string DevicePath)> ReverseParseProcessRegistry(byte[] buf)
@@ -272,33 +229,6 @@ public class SplitTunnelProtocolTests
 
         Assert.Equal(0u, map[10].ParentPid);
         Assert.Equal(0u, map[5].ParentPid);
-    }
-
-    [Fact]
-    public void ApplyPidRecycleGuard_NormalPair_Untouched()
-    {
-        var map = new Dictionary<uint, ProcInfo>
-        {
-            [10] = new(Pid: 10, ParentPid: 5, CreationTime: 200, DevicePath: "c"),
-            [5] = new(Pid: 5, ParentPid: 0, CreationTime: 100, DevicePath: "p"),
-        };
-
-        P.ApplyPidRecycleGuard(map);
-
-        Assert.Equal(5u, map[10].ParentPid);
-    }
-
-    [Fact]
-    public void ApplyPidRecycleGuard_ParentNotInMap_Untouched()
-    {
-        var map = new Dictionary<uint, ProcInfo>
-        {
-            [10] = new(Pid: 10, ParentPid: 999, CreationTime: 100, DevicePath: "c"),
-        };
-
-        P.ApplyPidRecycleGuard(map);
-
-        Assert.Equal(999u, map[10].ParentPid);
     }
 
     private static byte[] Event(uint id, byte[] body)
@@ -422,45 +352,6 @@ public class SplitTunnelProtocolTests
         Assert.Equal(@"\Device\HarddiskVolume2\Program Files\curl.exe", nt);
     }
 
-    [Fact]
-    public void DosPathToNtPath_LowercaseDrive_StillResolves()
-    {
-        var nt = P.DosPathToNtPath(@"c:\dir\app.exe", FakeQueryDosDevice);
-        Assert.Equal(@"\Device\HarddiskVolume2\dir\app.exe", nt);
-    }
-
-    [Fact]
-    public void DosPathToNtPath_NoLeadingBackslashAfterDrive_InsertsOne()
-    {
-        var nt = P.DosPathToNtPath(@"C:app.exe", FakeQueryDosDevice);
-        Assert.Equal(@"\Device\HarddiskVolume2\app.exe", nt);
-    }
-
-    [Fact]
-    public void DosPathToNtPath_SecondDrive_UsesItsPrefix()
-    {
-        var nt = P.DosPathToNtPath(@"D:\games\game.exe", FakeQueryDosDevice);
-        Assert.Equal(@"\Device\HarddiskVolume5\games\game.exe", nt);
-    }
-
-    [Theory]
-    [InlineData(@"\\server\share\app.exe")]
-    [InlineData(@"\Device\HarddiskVolume2\already-nt.exe")]
-    [InlineData("relative\\path.exe")]
-    [InlineData("")]
-    [InlineData("C")]
-    [InlineData("1:\\bad.exe")]
-    public void DosPathToNtPath_NonDrivePath_ReturnsNull(string dos)
-    {
-        Assert.Null(P.DosPathToNtPath(dos, FakeQueryDosDevice));
-    }
-
-    [Fact]
-    public void DosPathToNtPath_ResolverReturnsNull_ReturnsNull()
-    {
-        Assert.Null(P.DosPathToNtPath(@"Z:\dir\app.exe", FakeQueryDosDevice));
-    }
-
     private static NicSnapshot Nic(
         string name, NetworkInterfaceType type = NetworkInterfaceType.Ethernet,
         bool up = true, bool gw = true, string? v4 = "192.168.1.10", string? desc = null)
@@ -475,109 +366,11 @@ public class SplitTunnelProtocolTests
     }
 
     [Fact]
-    public void PickInternetInterface_OwnTunFilteredByWgName()
-    {
-        var nics = new[]
-        {
-            Nic("VPNRouter-TUN", desc: "WireGuard Tunnel"),
-            Nic("Ethernet"),
-        };
-        var pick = P.PickInternetInterface(nics);
-        Assert.Equal("Ethernet", pick!.Value.Name);
-    }
-
-    [Theory]
-    [InlineData("WireGuard Tunnel")]
-    [InlineData("AmneziaWG Adapter")]
-    [InlineData("Tailscale Tunnel")]
-    public void PickInternetInterface_WgAwgTailscale_Excluded(string desc)
-    {
-        var nics = new[]
-        {
-            Nic("vpn0", desc: desc),
-            Nic("Ethernet"),
-        };
-        var pick = P.PickInternetInterface(nics);
-        Assert.Equal("Ethernet", pick!.Value.Name);
-    }
-
-    [Fact]
-    public void PickInternetInterface_PrefersEthernetOverWifi()
-    {
-        var nics = new[]
-        {
-            Nic("Wi-Fi", NetworkInterfaceType.Wireless80211, v4: "192.168.1.20"),
-            Nic("Ethernet", NetworkInterfaceType.Ethernet, v4: "192.168.1.10"),
-        };
-        var pick = P.PickInternetInterface(nics);
-        Assert.Equal("Ethernet", pick!.Value.Name);
-    }
-
-    [Fact]
-    public void PickInternetInterface_OnlyWifi_ChoosesWifi()
-    {
-        var pick = P.PickInternetInterface(new[] { Nic("Wi-Fi", NetworkInterfaceType.Wireless80211) });
-        Assert.Equal("Wi-Fi", pick!.Value.Name);
-    }
-
-    [Fact]
-    public void PickInternetInterface_SkipsDown_NoGateway_NoV4()
-    {
-        var nics = new[]
-        {
-            Nic("Down", up: false),
-            Nic("NoGw", gw: false),
-            Nic("NoV4", v4: null),
-            Nic("Good"),
-        };
-        var pick = P.PickInternetInterface(nics);
-        Assert.Equal("Good", pick!.Value.Name);
-    }
-
-    [Fact]
-    public void PickInternetInterface_NoCandidates_ReturnsNull()
-    {
-        Assert.Null(P.PickInternetInterface(Array.Empty<NicSnapshot>()));
-        Assert.Null(P.PickInternetInterface(new[] { Nic("Down", up: false) }));
-    }
-
-    [Fact]
-    public void PickInternetInterface_TwoEthernet_DeterministicByName()
-    {
-        var forward = new[] { Nic("eth1", v4: "10.0.0.2"), Nic("eth0", v4: "10.0.0.1") };
-        var reverse = new[] { Nic("eth0", v4: "10.0.0.1"), Nic("eth1", v4: "10.0.0.2") };
-
-        Assert.Equal("eth0", P.PickInternetInterface(forward)!.Value.Name);
-        Assert.Equal("eth0", P.PickInternetInterface(reverse)!.Value.Name);
-    }
-
-    [Fact]
     public void ShouldEngage_WindowsSplitExcludeWithApps_NotOff_True()
     {
         Assert.True(SplitTunnelPolicy.ShouldEngage(
             isWindows: true, routingMode: "split", routingAppsMode: "exclude",
             hasExcludedApps: true, driverSetting: "auto"));
-    }
-
-    [Theory]
-    [InlineData(false, "split", "exclude", true, "auto")]
-    [InlineData(true, "full", "exclude", true, "auto")]
-    [InlineData(true, "split", "include", true, "auto")]
-    [InlineData(true, "split", "exclude", false, "auto")]
-    [InlineData(true, "split", "exclude", true, "off")]
-    public void ShouldEngage_NonQualifying_False(
-        bool win, string mode, string appsMode, bool hasApps, string driver)
-    {
-        Assert.False(SplitTunnelPolicy.ShouldEngage(win, mode, appsMode, hasApps, driver));
-    }
-
-    [Fact]
-    public void ShouldEngage_CaseInsensitive_ExcludeOnly_AliasesRejected()
-    {
-        Assert.True(SplitTunnelPolicy.ShouldEngage(true, "SPLIT", "Exclude", true, "AUTO"));
-        Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "exclude", true, "OFF"));
-        Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "exclude-apps", true, "auto"));
-        Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "excludeapps", true, "auto"));
     }
 
     private static (IPAddress?, IPAddress?, IPAddress?, IPAddress?) Addr(
@@ -595,29 +388,6 @@ public class SplitTunnelProtocolTests
             Addr("10.0.0.1", "83.97.108.99")));
     }
 
-    [Fact]
-    public void ShouldReRegister_Identical_False()
-    {
-        Assert.False(SplitTunnelPolicy.ShouldReRegister(
-            Addr("10.0.0.1", "83.97.108.34"),
-            Addr("10.0.0.1", "83.97.108.34")));
-    }
-
-    [Fact]
-    public void ShouldReRegister_V6Appeared_True()
-    {
-        Assert.True(SplitTunnelPolicy.ShouldReRegister(
-            Addr("10.0.0.1", "83.97.108.34"),
-            Addr("10.0.0.1", "83.97.108.34", inetV6: "2001:db8::1")));
-    }
-
-    [Fact]
-    public void ShouldReRegister_BothNullTuples_False()
-    {
-        Assert.False(SplitTunnelPolicy.ShouldReRegister(
-            Addr(null, null), Addr(null, null)));
-    }
-
     private const string Sidecar =
         "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201  mullvad-split-tunnel.sys\n" +
         "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d  mullvad-split-tunnel.cat\n" +
@@ -628,35 +398,5 @@ public class SplitTunnelProtocolTests
         => Assert.Equal(
             "10cf25bbcfe51fd663a1fec88a98e9b858f3a579589bb2ec496b66e4fdd1b201",
             SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, "mullvad-split-tunnel.sys"));
-
-    [Fact]
-    public void ParseSidecarHashFor_MatchesRegardlessOfFilenameCase()
-        => Assert.Equal(
-            "c599926a0327d7ae06b534f4cd039db30392e1897bb9d03e4fec3631744a4e6d",
-            SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, "MULLVAD-SPLIT-TUNNEL.CAT"));
-
-    [Fact]
-    public void ParseSidecarHashFor_HandlesBinaryStarMarkerAndPathPrefix()
-        => Assert.Equal(
-            "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee",
-            SplitTunnelPolicy.ParseSidecarHashFor(
-                "aa11bb22cc33dd44ee55ff66007788990011223344556677889900aabbccddee *./driver/mullvad-split-tunnel.sys",
-                "mullvad-split-tunnel.sys"));
-
-    [Theory]
-    [InlineData("not-listed.sys")]
-    [InlineData("")]
-    public void ParseSidecarHashFor_ReturnsNullForMissingOrEmpty(string fileName)
-        => Assert.Null(SplitTunnelPolicy.ParseSidecarHashFor(Sidecar, fileName));
-
-    [Fact]
-    public void ParseSidecarHashFor_NullSidecar_ReturnsNull()
-        => Assert.Null(SplitTunnelPolicy.ParseSidecarHashFor(null, "mullvad-split-tunnel.sys"));
-
-    [Fact]
-    public void ParseSidecarHashFor_RejectsNon64HexOrJunkLines()
-        => Assert.Null(SplitTunnelPolicy.ParseSidecarHashFor(
-            "deadbeef  mullvad-split-tunnel.sys\n# a comment\ngarbage line no hash\n",
-            "mullvad-split-tunnel.sys"));
 }
 

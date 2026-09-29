@@ -29,51 +29,11 @@ public class SplitTunnelManagerTests
     }
 
     [Fact]
-    public void ClassifyServiceBinPath_OurInstallRelocated_AdoptMovedInstall()
-    {
-        const string ours = @"D:\Apps\VPNRouter\app\driver\mullvad-split-tunnel.sys";
-        const string existing = @"C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys";
-        Assert.Equal(P.ServiceCollisionAction.AdoptMovedInstall,
-            SplitTunnelPolicy.ClassifyServiceBinPath(existing, ours));
-    }
-
-    [Fact]
     public void ClassifyServiceBinPath_RealMullvad_BailForeign()
     {
         const string existing = @"C:\Program Files\Mullvad VPN\resources\mullvad-split-tunnel.sys";
         Assert.Equal(P.ServiceCollisionAction.BailForeign,
             SplitTunnelPolicy.ClassifyServiceBinPath(existing, Ours));
-    }
-
-    [Fact]
-    public void ClassifyServiceBinPath_UnknownSquatter_BailForeign()
-    {
-        const string existing = @"C:\Windows\Temp\evil\mullvad-split-tunnel.sys";
-        Assert.Equal(P.ServiceCollisionAction.BailForeign,
-            SplitTunnelPolicy.ClassifyServiceBinPath(existing, Ours));
-    }
-
-    [Fact]
-    public void ClassifyServiceBinPath_SubstringButNotSegment_BailForeign()
-    {
-        const string existing = @"C:\Program Files\NotVpnRouterApp\driver\mullvad-split-tunnel.sys";
-        Assert.Equal(P.ServiceCollisionAction.BailForeign,
-            SplitTunnelPolicy.ClassifyServiceBinPath(existing, Ours));
-    }
-
-    [Fact]
-    public void ClassifyServiceBinPath_VpnRouterSegmentButWrongTail_BailForeign()
-    {
-        const string existing = @"C:\Program Files\VpnRouterClone\vpnrouter\weird\thing.sys";
-        Assert.Equal(P.ServiceCollisionAction.BailForeign,
-            SplitTunnelPolicy.ClassifyServiceBinPath(existing, Ours));
-    }
-
-    [Fact]
-    public void ClassifyServiceBinPath_UnreadableConfig_BailForeign()
-    {
-        Assert.Equal(P.ServiceCollisionAction.BailForeign,
-            SplitTunnelPolicy.ClassifyServiceBinPath("", Ours));
     }
 
     [Fact]

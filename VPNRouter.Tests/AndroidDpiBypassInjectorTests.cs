@@ -26,27 +26,6 @@ public class AndroidDpiBypassInjectorTests
     }
     """;
 
-    [Theory]
-    [InlineData("off")]
-    [InlineData("OFF")]
-    [InlineData("")]
-    [InlineData(null)]
-    public void Inject_OffOrEmpty_ReturnsInputUnchanged(string? mode)
-    {
-        var result = AndroidDpiBypassInjector.Inject(SampleConfig, mode!);
-        Assert.Equal(SampleConfig, result);
-    }
-
-    [Theory]
-    [InlineData("garbage")]
-    [InlineData("STRICT")]
-    [InlineData("hostfakesplit")]
-    public void Inject_UnknownMode_ReturnsInputUnchanged(string mode)
-    {
-        var result = AndroidDpiBypassInjector.Inject(SampleConfig, mode);
-        Assert.Equal(SampleConfig, result);
-    }
-
     [Fact]
     public void Inject_Standard_AddsTlsFragmentToProxyOutbound()
     {

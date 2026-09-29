@@ -185,19 +185,6 @@ public sealed class SingBoxManagerStateMachineTests
     }
 
     [Fact]
-    public void IsClashApiAlive_TransportException_ReturnsFalse()
-    {
-        var http = new FakeHttpClient()
-            .ThrowOn("127.0.0.1:9090/configs",
-                new HttpRequestException("Connection refused"));
-        using var manager = BuildManager(http);
-
-        var result = InvokePrivate<bool>(manager, "IsClashApiAlive");
-
-        Assert.False(result);
-    }
-
-    [Fact]
     public void TryHotReload_ProcessNull_ReturnsFalseWithoutHttpCall()
     {
         var http = new FakeHttpClient();

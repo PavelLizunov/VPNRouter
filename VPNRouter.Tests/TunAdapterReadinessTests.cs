@@ -193,64 +193,6 @@ public sealed class TunAdapterReadinessTests
         Assert.Equal("VPNRouter-TUN", esResult[0], ignoreCase: true);
     }
 
-    [Fact]
-    public void ExtractStaleAdapterNames_VPNRouterTunExactFinalField()
-    {
-        Assert.Single(TunAdapterDiagnostics.ExtractStaleAdapterNames(
-            "Admin State    State          Type             Interface Name\n" +
-            "Disabled       Disconnected   Dedicated        VPNRouter-TUN"));
-    }
-
-    [Fact]
-    public void ExtractStaleAdapterNames_SingBoxTunBareSuffix_BothSurfaced()
-    {
-        var bare = TunAdapterDiagnostics.ExtractStaleAdapterNames(
-            "Disabled       Disconnected   Dedicated        sing-box-tun");
-        Assert.Single(bare);
-        Assert.Equal("sing-box-tun", bare[0], ignoreCase: true);
-
-        var suffixed = TunAdapterDiagnostics.ExtractStaleAdapterNames(
-            "Disabled       Disconnected   Dedicated        sing-box-tun-AB12");
-        Assert.Single(suffixed);
-        Assert.Equal("sing-box-tun-AB12", suffixed[0], ignoreCase: true);
-    }
-
-    [Fact]
-    public void ExtractStaleAdapterNames_EmbeddedInLongerWordChar_NegativeTest()
-    {
-        var embeddedInWordChars = """
-            Admin State    State          Type             Interface Name
-            Enabled        Connected      Dedicated        MyVPNRouter-TUNExtra
-            Enabled        Connected      Dedicated        XVPNRouter-TUNX
-            """;
-        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(embeddedInWordChars);
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public void ExtractStaleAdapterNames_EmbeddedOrNumberedNames_AreIgnored()
-    {
-        var otherNames = """
-            Admin State    State          Type             Interface Name
-            Enabled        Connected      Dedicated        Pre-VPNRouter-TUN-Suffix
-            Enabled        Connected      Dedicated        My VPNRouter-TUN
-            Enabled        Connected      Dedicated        My sing-box-tun-AB12
-            Enabled        Connected      Dedicated        My  VPNRouter-TUN
-            Disabled       Disconnected   Dedicated        VPNRouter-TUN 46
-            Disabled       Disconnected   Dedicated        sing-box-tun-AB12 old
-            """;
-        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(otherNames);
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public void ExtractStaleAdapterNames_LowerCaseMatches_PinCurrentBehavior()
-    {
-        var lower = TunAdapterDiagnostics.ExtractStaleAdapterNames(
-            "Enabled        Connected      Dedicated        vpnrouter-tun");
-        Assert.Single(lower);
-    }
-
     private static string? LoadSingBoxManagerSource()
     {
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());

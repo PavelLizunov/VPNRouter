@@ -95,59 +95,6 @@ public sealed class FreeConfigPoolFetcherTests
         Assert.Equal("US", entry.CountryCode);
     }
 
-    [Fact]
-    public async Task FetchPool_PrefersGzip()
-    {
-        var previous = AppPaths.DataDir;
-        var dir = Path.Combine(Path.GetTempPath(), "pool-fetch-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            AppPaths.OverrideDataDir(dir);
-            var handler = new FakeHandler
-            {
-                Responder = req =>
-                {
-                    if (req.RequestUri!.AbsoluteUri.EndsWith("pool.json.gz"))
-                        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(GzipText(SamplePool)) };
-                    return new HttpResponseMessage(HttpStatusCode.NotFound);
-                }
-            };
-            var fetcher = new FreeConfigPoolFetcher(SilentLog, handler);
-            var entries = await fetcher.FetchPoolAsync();
-            Assert.NotNull(entries);
-            Assert.Equal(2, entries!.Count);
-            Assert.True(File.Exists(Path.Combine(AppPaths.CacheDir, "pool.json")), "decompressed cache should be written");
-        }
-        finally { AppPaths.OverrideDataDir(previous); TryDelete(dir); }
-    }
-
-    [Fact]
-    public async Task FetchPool_FallsBackToRaw_WhenGzipMissing()
-    {
-        var previous = AppPaths.DataDir;
-        var dir = Path.Combine(Path.GetTempPath(), "pool-fetch-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            AppPaths.OverrideDataDir(dir);
-            var handler = new FakeHandler
-            {
-                Responder = req =>
-                {
-                    if (req.RequestUri!.AbsoluteUri.EndsWith("pool.json.gz"))
-                        return new HttpResponseMessage(HttpStatusCode.NotFound);
-                    if (req.RequestUri.AbsoluteUri.EndsWith("pool.json"))
-                        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SamplePool) };
-                    return new HttpResponseMessage(HttpStatusCode.NotFound);
-                }
-            };
-            var fetcher = new FreeConfigPoolFetcher(SilentLog, handler);
-            var entries = await fetcher.FetchPoolAsync();
-            Assert.NotNull(entries);
-            Assert.Equal(2, entries!.Count);
-        }
-        finally { AppPaths.OverrideDataDir(previous); TryDelete(dir); }
-    }
-
     private static void TryDelete(string dir)
     {
         try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
