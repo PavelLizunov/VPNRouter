@@ -50,7 +50,7 @@ public partial class MainWindowViewModel
             }
             catch (Exception ex)
             {
-                _logger?.Debug(ex, "[ConnStats] clash_api init failed — live stats disabled this session");
+                _logger.Debug(ex, "[ConnStats] clash_api init failed — live stats disabled this session");
                 _statsApi = null;
             }
         }
