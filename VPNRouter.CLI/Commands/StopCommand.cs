@@ -35,7 +35,7 @@ public class StopCommand : Command
         Refused
     }
 
-    public override int Execute(CommandContext context)
+    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         RunState? observed;
         try

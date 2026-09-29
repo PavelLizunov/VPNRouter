@@ -14,7 +14,7 @@ public class ServiceInstallSettings : CommandSettings
 
 public class ServiceInstallCommand : Command<ServiceInstallSettings>
 {
-    public override int Execute(CommandContext context, ServiceInstallSettings settings)
+    protected override int Execute(CommandContext context, ServiceInstallSettings settings, CancellationToken cancellationToken)
     {
         if (!AdminHelper.IsAdmin())
         {
@@ -65,7 +65,7 @@ public class ServiceInstallCommand : Command<ServiceInstallSettings>
 
 public class ServiceUninstallCommand : Command
 {
-    public override int Execute(CommandContext context)
+    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         if (!AdminHelper.IsAdmin())
         {
@@ -86,7 +86,7 @@ public class ServiceUninstallCommand : Command
 
 public class ServiceStartCommand : Command
 {
-    public override int Execute(CommandContext context)
+    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         if (!AdminHelper.IsAdmin())
         {
@@ -107,7 +107,7 @@ public class ServiceStartCommand : Command
 
 public class ServiceStopCommand : Command
 {
-    public override int Execute(CommandContext context)
+    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         if (!AdminHelper.IsAdmin())
         {
@@ -128,7 +128,7 @@ public class ServiceStopCommand : Command
 
 public class ServiceStatusCommand : Command
 {
-    public override int Execute(CommandContext context)
+    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         var isInstalled = VPNRouter.Service.ServiceInstaller.IsInstalled();
 
