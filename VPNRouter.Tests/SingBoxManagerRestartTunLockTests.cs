@@ -103,6 +103,34 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     }
 
     [Fact]
+    public void StartWithJson_ThrowingStartedSubscriber_KillsProcessAndReleasesLease()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Windows-only - other platforms launch through pkexec or sudo.");
+
+        EnsureConfigDir();
+        var exe = Path.Combine(_testDataDir, "sing-box-stub.exe");
+        File.WriteAllText(exe, "stub");
+
+        var handle = new FakeProcessHandle(pid: NewFakePid());
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => handle);
+        var settings = new SingBoxSettings { ExecutablePath = exe, ClashApi = "127.0.0.1:9090" };
+        using var manager = new SingBoxManager(
+            settings, logger: null, http: new FakeHttpClient(), runner: runner);
+        manager.Started += _ => throw new InvalidOperationException("subscriber failed");
+
+        Assert.Throws<InvalidOperationException>(() => manager.StartWithJson("{}"));
+
+        Assert.Equal(1, handle.KillCallCount);
+        Assert.True(handle.HasExited);
+        Assert.False(IsLockOwned(TunOwnershipLock.Instance(null)),
+            "The TUN lease must be released after the failed start.");
+
+        SetField(manager, "_handle", null);
+        handle.Dispose();
+    }
+
+    [Fact]
     public void Restart_StopInternalReleasesLockOnlyWhenAsked()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),

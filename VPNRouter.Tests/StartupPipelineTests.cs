@@ -448,6 +448,7 @@ public sealed class StartupPipelineTests : IDisposable
         public void OnSingBoxStarted(int pid) { }
         public List<int> ConnectedPids { get; } = new();
         public void OnConnected(int pid) => ConnectedPids.Add(pid);
+        public bool IsCurrentStart(int pid) => true;
         public void OnRestartAttempted(int attempt, int max) { }
         public void OnFailoverRequested(string reason) { }
         public void OnAutoFailoverTriggered(string message) =>

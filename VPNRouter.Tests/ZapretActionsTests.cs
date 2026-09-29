@@ -46,7 +46,7 @@ public sealed class ZapretActionsTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == "sc"
+            r => r.ExecutablePath == ZapretActions.ScExecutablePath
               && r.Arguments.Count == 2
               && r.Arguments[0] == "query"
               && r.Arguments[1] == "BFE",
@@ -58,7 +58,7 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.True(actual);
         Assert.Single(fake.RunCalls);
         var req = fake.RunCalls[0];
-        Assert.Equal("sc", req.ExecutablePath);
+        Assert.Equal(ZapretActions.ScExecutablePath, req.ExecutablePath);
         Assert.Equal(new[] { "query", "BFE" }, req.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromSeconds(2), req.Timeout);
         Assert.True(req.CaptureStdout, "must capture stdout to parse RUNNING token");
@@ -68,7 +68,7 @@ public sealed class ZapretActionsTests : IDisposable
     public void IsServiceRunning_OutputContainsStoppedOnly_ReturnsFalse()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc", Ok(ScQueryStopped));
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(ScQueryStopped));
         ZapretActions.ProcessRunner = fake;
 
         Assert.False(ZapretActions.IsServiceRunning("zapret"));
@@ -87,7 +87,7 @@ public sealed class ZapretActionsTests : IDisposable
     public void ServiceExists_OutputContainsServiceName_ReturnsTrue()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc", Ok(ScQueryStopped));
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(ScQueryStopped));
         ZapretActions.ProcessRunner = fake;
 
         Assert.True(ZapretActions.ServiceExists("zapret"));
@@ -98,7 +98,7 @@ public sealed class ZapretActionsTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == "sc",
+            r => r.ExecutablePath == ZapretActions.ScExecutablePath,
             Fail(1060, "[SC] EnumQueryServicesStatus:OpenService FAILED 1060"));
         ZapretActions.ProcessRunner = fake;
 
@@ -110,7 +110,7 @@ public sealed class ZapretActionsTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == "sc"
+            r => r.ExecutablePath == ZapretActions.ScExecutablePath
               && r.Arguments.Count == 3
               && r.Arguments[0] == "query"
               && r.Arguments[1] == "state="
@@ -129,7 +129,7 @@ public sealed class ZapretActionsTests : IDisposable
     public void IsAnyServiceMatching_OutputMissesSubstring_ReturnsFalse()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc",
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath,
             Ok("SERVICE_NAME: DnsCache\r\nSERVICE_NAME: BFE\r\n"));
         ZapretActions.ProcessRunner = fake;
 
@@ -140,14 +140,14 @@ public sealed class ZapretActionsTests : IDisposable
     public async Task RunSc_PassesParsedArgsAndTimeout()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc", Ok(""));
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(""));
         ZapretActions.ProcessRunner = fake;
 
         await ZapretActions.RunSc("stop zapret");
 
         Assert.Single(fake.RunCalls);
         var req = fake.RunCalls[0];
-        Assert.Equal("sc", req.ExecutablePath);
+        Assert.Equal(ZapretActions.ScExecutablePath, req.ExecutablePath);
         Assert.Equal(new[] { "stop", "zapret" }, req.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromSeconds(5), req.Timeout);
     }
@@ -269,6 +269,9 @@ public sealed class ZapretActionsTests : IDisposable
     [InlineData("zapret_dir_\"_quote_")]
     public void RunTests_PathWithMetacharacters_ThrowsArgumentException(string folderPrefix)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows() && folderPrefix.IndexOfAny(new[] { '"', '|' }) >= 0,
+            "Windows forbids this character in a directory name, so the fixture cannot be created.");
+
         var tempDir = Path.Combine(Path.GetTempPath(), $"{folderPrefix}{Guid.NewGuid():N}");
         var utilsDir = Path.Combine(tempDir, "zapret", "utils");
         Directory.CreateDirectory(utilsDir);
