@@ -249,7 +249,7 @@ public sealed class ReleaseToolingContractTests
         var elevation = script[..script.IndexOf("Say \"VPNRouter installer running as Administrator\"", StringComparison.Ordinal)];
         const string launch = "Start-Process -FilePath $WindowsPowerShell -Verb RunAs -ArgumentList \"-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedBootstrap\"";
 
-        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(elevation, System.Text.RegularExpressions.Regex.Escape(launch)).Count);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(elevation, System.Text.RegularExpressions.Regex.Escape(launch)));
         Assert.Contains("$WindowsPowerShell = Join-Path $SystemDirectory", elevation);
         Assert.DoesNotContain("Start-Process powershell.exe", elevation);
         AssertFailClosedBranch(elevation, "-not [IO.File]::Exists($WindowsPowerShell)");

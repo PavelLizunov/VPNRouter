@@ -95,6 +95,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
         var monitor = new StubProcessMonitor();
         var fakeDriver = new FakeSplitTunnelDriver();
         var dnsHardening = new NullWindowsDnsHardening();
+#pragma warning disable CS0618
         var engine = new VpnEngine(
             scanner: scanner,
             firewallFactory: () => firewall,
@@ -102,6 +103,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             logger: null,
             dnsHardening: dnsHardening,
             splitDriver: fakeDriver);
+#pragma warning restore CS0618
 
         var statuses = new List<string>();
         engine.StatusChanged += statuses.Add;
@@ -180,7 +182,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         try
         {
-            var result = await engine.ApplyAsync(settings);
+            var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
             Assert.False(result, "ApplyAsync must return false when sing-box reload/restart returns false.");
 
@@ -372,6 +374,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
         var monitor = new StubProcessMonitor();
         var fakeDriver = new FakeSplitTunnelDriver();
         var dnsHardening = new NullWindowsDnsHardening();
+#pragma warning disable CS0618
         var engine = new VpnEngine(
             scanner: scanner,
             firewallFactory: () => firewall,
@@ -379,6 +382,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             logger: null,
             dnsHardening: dnsHardening,
             splitDriver: fakeDriver);
+#pragma warning restore CS0618
 
         SetField(engine, "_firewall", firewall);
 
@@ -464,7 +468,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         try
         {
-            var result = await engine.ApplyAsync(settings);
+            var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
             Assert.False(result);
             Assert.Empty(firewall.UpdateCalls);
 
@@ -496,6 +500,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
         var monitor = new StubProcessMonitor();
         var fakeDriver = new FakeSplitTunnelDriver();
         var dnsHardening = new NullWindowsDnsHardening();
+#pragma warning disable CS0618
         var engine = new VpnEngine(
             scanner: scanner,
             firewallFactory: () => firewall,
@@ -503,6 +508,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             logger: null,
             dnsHardening: dnsHardening,
             splitDriver: fakeDriver);
+#pragma warning restore CS0618
 
         var runner = new FakeProcessRunner();
         var fakeHttp = new FakeHttpClient().Setup("/configs", "{}");
@@ -526,7 +532,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         try
         {
-            await engine.StartAsync(settingsB);
+            await engine.StartAsync(settingsB, TestContext.Current.CancellationToken);
 
             Assert.Same(settingsA, GetField(engine, "_failoverSettingsContext"));
             Assert.Same(failoverA, GetField(engine, "_failover"));
