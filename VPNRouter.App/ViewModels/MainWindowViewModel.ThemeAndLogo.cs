@@ -4,6 +4,25 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.App.Localization;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Input;
+using Serilog;
+using VPNRouter.Core;
+using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform;
+using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.FreeConfigs;
+using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -65,4 +84,90 @@ public partial class MainWindowViewModel
         }
     }
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
+
+    private void ApplyTheme()
+    {
+        if (Application.Current != null)
+        {
+            ThemeVariant effective;
+            if (IsSystemThemePref)
+            {
+                Application.Current.RequestedThemeVariant = ThemeVariant.Default;
+                effective = ReadOsThemeVariant();
+            }
+            else
+            {
+                effective = IsDarkThemePref ? ThemeVariant.Dark : ThemeVariant.Light;
+                Application.Current.RequestedThemeVariant = effective;
+            }
+            IsDarkTheme = effective == ThemeVariant.Dark;
+        }
+
+        OnPropertyChanged(nameof(VpnBadgeBrush));
+        OnPropertyChanged(nameof(ZapretBadgeBrush));
+        OnPropertyChanged(nameof(TgProxyBadgeBrush));
+
+        foreach (var s in Servers)             s.NotifyThemeChanged();
+        foreach (var s in SubscriptionServers) s.NotifyThemeChanged();
+    }
+
+    private static ThemeVariant ReadOsThemeVariant()
+    {
+        try
+        {
+            var os = Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant;
+            return os == PlatformThemeVariant.Dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        }
+        catch
+        {
+            return ThemeVariant.Light;
+        }
+    }
+
+    internal static string NormalizeThemePref(string? raw)
+    {
+        if (string.Equals(raw, "dark", StringComparison.OrdinalIgnoreCase)) return "dark";
+        if (string.Equals(raw, "light", StringComparison.OrdinalIgnoreCase)) return "light";
+        return "system";
+    }
+
+    private void OnPlatformColorValuesChanged(object? sender, PlatformColorValues e)
+    {
+        if (!IsSystemThemePref) return;
+        Dispatcher.UIThread.Post(ApplyTheme);
+    }
+
+    private IPlatformSettings? _wiredPlatformSettings;
+
+    private void WireOsThemeFollow()
+    {
+        if (_wiredPlatformSettings != null) return;
+        try
+        {
+            var ps = Application.Current?.PlatformSettings;
+            if (ps == null) return;
+            ps.ColorValuesChanged += OnPlatformColorValuesChanged;
+            _wiredPlatformSettings = ps;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] WireOsThemeFollow: could not subscribe to ColorValuesChanged");
+        }
+    }
+
+    private void UnwireOsThemeFollow()
+    {
+        try
+        {
+            if (_wiredPlatformSettings != null)
+            {
+                _wiredPlatformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
+                _wiredPlatformSettings = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] UnwireOsThemeFollow: unsubscribe failed");
+        }
+    }
 }
