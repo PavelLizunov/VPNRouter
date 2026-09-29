@@ -56,17 +56,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
         if (releases == null || releases.Length == 0)
             return null;
 
-        var newer = releases
-            .Where(r => !r.Draft && (_settings.IsExperimental || !r.Prerelease))
-            .Select(r => new
-            {
-                Release = r,
-                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
-                Parsed = UpdateChecker.TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
-            })
-            .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
-            .OrderByDescending(r => r.Parsed!.Value)
-            .ToList();
+        var newer = ReleaseCandidates.NewerThan(releases, _settings.IsExperimental, current);
 
         if (newer.Count == 0)
             return null;
@@ -112,17 +102,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
         if (releases == null)
             return Array.Empty<UpdateSourceInfo>();
 
-        var candidates = releases
-            .Where(r => !r.Draft && !r.Prerelease)
-            .Select(r => new
-            {
-                Release = r,
-                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
-                Parsed = UpdateChecker.TryParseSemVer(
-                    (r.TagName ?? string.Empty).TrimStart('v'), out var parsed)
-                    ? parsed
-                    : (UpdateChecker.SemVer?)null,
-            })
+        var candidates = ReleaseCandidates.Parse(releases.Where(r => !r.Draft && !r.Prerelease))
             .Where(r => r.Parsed is { Rc: null } && r.Parsed.Value.CompareTo(current) < 0)
             .OrderByDescending(r => r.Parsed!.Value);
 
