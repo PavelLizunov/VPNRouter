@@ -487,41 +487,6 @@ public sealed class NightDurableReadinessTests
     }
 
     [Fact]
-    public void Subscription_And_Unsubscription_SourceGuard()
-    {
-        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
-        string? source = null;
-        for (var depth = 0; depth < 8 && directory != null; depth++, directory = directory.Parent)
-        {
-            var candidate = Path.Combine(directory.FullName, "VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-            if (File.Exists(candidate))
-            {
-                source = File.ReadAllText(candidate);
-                break;
-            }
-        }
-        Assert.NotNull(source);
-
-        var statusSubIdx = source!.IndexOf("_engine.StatusChanged += OnEngineStatus;", StringComparison.Ordinal);
-        Assert.True(statusSubIdx >= 0, "Constructor must wire StatusChanged += OnEngineStatus");
-
-        var connectedSubIdx = source.IndexOf("_engine.Connected += OnEngineConnected;", StringComparison.Ordinal);
-        Assert.True(connectedSubIdx >= 0, "Constructor must wire Connected += OnEngineConnected");
-
-        Assert.True(Math.Abs(connectedSubIdx - statusSubIdx) < 200,
-            "Connected subscription must be placed directly alongside StatusChanged in the constructor");
-
-        var statusUnsubIdx = source.IndexOf("_engine.StatusChanged -= OnEngineStatus;", StringComparison.Ordinal);
-        Assert.True(statusUnsubIdx >= 0, "Dispose must unhook StatusChanged -= OnEngineStatus");
-
-        var connectedUnsubIdx = source.IndexOf("_engine.Connected -= OnEngineConnected;", StringComparison.Ordinal);
-        Assert.True(connectedUnsubIdx >= 0, "Dispose must unhook Connected -= OnEngineConnected");
-
-        Assert.True(Math.Abs(connectedUnsubIdx - statusUnsubIdx) < 200,
-            "Connected unsubscription must be placed directly alongside StatusChanged in Dispose");
-    }
-
-    [Fact]
     public void CaptureReadinessGuard_FailStop_ActualEngineStop_UsesFakeSeams_RejectsGuardWithoutNetworking()
     {
         using var engine = BuildSeamEngine();

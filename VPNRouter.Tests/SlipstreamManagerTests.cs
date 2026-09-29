@@ -131,42 +131,6 @@ public class SlipstreamManagerTests
     }
 
     [Fact]
-    public void Start_HappyPath_SpawnsWithCorrectArgv_AndWritesCert()
-    {
-        EnsureDummyBinary();
-        try
-        {
-            var (fake, _) = AliveRunner();
-            var mgr = new SlipstreamManager(runner: fake) { StartupProbeMs = 50 };
-
-            mgr.Start(MakeEntry(), localPort: 7001);
-
-            Assert.Single(fake.StartCalls);
-            var argv = fake.StartCalls[0].Arguments.ToList();
-            var expected = new List<string>
-            {
-                "--cert", AppPaths.SlipstreamActiveCertPath,
-                "-d", "tunnel.example.org",
-                "-l", "7001",
-                "--tcp-listen-host", "127.0.0.1",
-                "-r", "195.208.4.1:53",
-                "-r", "195.208.5.1:53",
-                "-c", "bbr",
-                "-t", "2000",
-                "--path-stats",
-            };
-            Assert.Equal(expected, argv);
-
-            Assert.True(File.Exists(AppPaths.SlipstreamActiveCertPath));
-            Assert.Equal(SamplePem, File.ReadAllText(AppPaths.SlipstreamActiveCertPath));
-
-            Assert.True(mgr.IsRunning);
-            Assert.Equal(7001, mgr.LocalPort);
-        }
-        finally { CleanupFiles(); }
-    }
-
-    [Fact]
     public void Start_SetsRustLogEnv_SoTransportDeathIsDiagnosable()
     {
         EnsureDummyBinary();

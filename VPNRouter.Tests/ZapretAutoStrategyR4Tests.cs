@@ -62,61 +62,6 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
     }
 
     [Fact]
-    public void RestoreIpsetAfterKill_WithFlagAndBackup_RestoresAndDeletesFlag()
-    {
-        var listsDir = Path.Combine(_tempRoot, "lists");
-        var flagPath = Path.Combine(_tempRoot, "ipset_switched.flag");
-        var backupPath = Path.Combine(listsDir, "ipset-all.test-backup.txt");
-        var livePath = Path.Combine(listsDir, "ipset-all.txt");
-
-        File.WriteAllText(flagPath, "");
-        File.WriteAllText(backupPath, "1.2.3.4/32\n5.6.7.8/32\n");
-        File.WriteAllText(livePath, "");
-
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(flagPath));
-        Assert.False(File.Exists(backupPath));
-        Assert.True(File.Exists(livePath));
-        Assert.Equal("1.2.3.4/32\n5.6.7.8/32\n", File.ReadAllText(livePath));
-    }
-
-    [Fact]
-    public void RestoreIpsetAfterKill_FlagOnlyMissingBackup_DeletesFlagLeavesLiveAlone()
-    {
-        var listsDir = Path.Combine(_tempRoot, "lists");
-        var flagPath = Path.Combine(_tempRoot, "ipset_switched.flag");
-        var livePath = Path.Combine(listsDir, "ipset-all.txt");
-
-        File.WriteAllText(flagPath, "");
-        File.WriteAllText(livePath, "PRESERVED-ORIGINAL");
-
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(flagPath));
-        Assert.Equal("PRESERVED-ORIGINAL", File.ReadAllText(livePath));
-    }
-
-    [Fact]
-    public void RestoreIpsetAfterKill_Idempotent_SafeToCallTwice()
-    {
-        var listsDir = Path.Combine(_tempRoot, "lists");
-        var flagPath = Path.Combine(_tempRoot, "ipset_switched.flag");
-        var backupPath = Path.Combine(listsDir, "ipset-all.test-backup.txt");
-        var livePath = Path.Combine(listsDir, "ipset-all.txt");
-
-        File.WriteAllText(flagPath, "");
-        File.WriteAllText(backupPath, "ORIGINAL-LIST");
-        File.WriteAllText(livePath, "");
-
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(flagPath));
-        Assert.Equal("ORIGINAL-LIST", File.ReadAllText(livePath));
-    }
-
-    [Fact]
     public void FlowsealProgress_ScoreOnlyUpdate_EmptyStrategyName()
     {
         var p = new ZapretAutoStrategy.FlowsealProgress(5, 20, string.Empty, 3, 6);

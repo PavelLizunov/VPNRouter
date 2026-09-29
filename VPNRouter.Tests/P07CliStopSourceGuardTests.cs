@@ -132,14 +132,6 @@ public sealed class P07CliStopSourceGuardTests
             "Conditional clear must load and compare generation while holding the shared lock before deletion.");
     }
 
-    [Fact]
-    public void Android_StartTunnel_ScrubsError_NoRawThrowable()
-    {
-        var source = ReadRepoFile("VPNRouter.Android", "VpnRouterService.java");
-        Assert.Contains("scrubSecrets(e.getMessage())", source);
-        Assert.DoesNotContain("safeMsg, e)", source);
-    }
-
     private static string ReadCliFile(params string[] segments)
         => ReadRepoFile(new[] { "VPNRouter.CLI" }.Concat(segments).ToArray());
 

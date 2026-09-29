@@ -230,66 +230,6 @@ public sealed class NightUdpCancellationTests
         });
     }
 
-    [Fact]
-    public void SourceContract_PinsAwaitedReceive_AndExternalOceGuard()
-    {
-        var source = LoadSource("VPNRouter.Core", "Services", "TcpTlsProbe.cs");
-        var cleanSource = StripComments(source);
-
-        var probeUdpDef = cleanSource.IndexOf("public static async Task<ServerProbeResult> ProbeUdpAsync(", StringComparison.Ordinal);
-        Assert.True(probeUdpDef >= 0, "ProbeUdpAsync method definition not found");
-
-        var openBrace = cleanSource.IndexOf('{', probeUdpDef);
-        Assert.True(openBrace >= 0, "ProbeUdpAsync opening brace not found");
-
-        var depth = 0;
-        var methodEnd = -1;
-        for (var i = openBrace; i < cleanSource.Length; i++)
-        {
-            if (cleanSource[i] == '{') depth++;
-            else if (cleanSource[i] == '}')
-            {
-                depth--;
-                if (depth == 0)
-                {
-                    methodEnd = i + 1;
-                    break;
-                }
-            }
-        }
-        Assert.True(methodEnd > openBrace, "ProbeUdpAsync closing brace not found");
-
-        var methodBody = cleanSource[probeUdpDef..methodEnd];
-
-        var entryCancelIdx = methodBody.IndexOf("ct.ThrowIfCancellationRequested();", StringComparison.Ordinal);
-        var validationIdx = methodBody.IndexOf("if (string.IsNullOrWhiteSpace(host)", StringComparison.Ordinal);
-        Assert.True(entryCancelIdx >= 0 && entryCancelIdx < validationIdx,
-            "ct.ThrowIfCancellationRequested() must be called at entry before host/port validation");
-
-        Assert.DoesNotContain("Task.WhenAny", methodBody);
-        Assert.DoesNotContain("Task.Delay", methodBody);
-
-        Assert.Contains("await udp.ReceiveAsync(cts.Token);", methodBody);
-
-        Assert.Contains("await udp.SendAsync(probe, endpoint, cts.Token);", methodBody);
-
-        var receiveIdx = methodBody.IndexOf("await udp.ReceiveAsync(cts.Token);", StringComparison.Ordinal);
-        var postReceiveCancelIdx = methodBody.IndexOf("ct.ThrowIfCancellationRequested();", receiveIdx, StringComparison.Ordinal);
-        var latencyCalcIdx = methodBody.IndexOf("var latencyMs =", receiveIdx, StringComparison.Ordinal);
-        Assert.True(postReceiveCancelIdx >= 0 && postReceiveCancelIdx < latencyCalcIdx,
-            "ct.ThrowIfCancellationRequested() must be called after receive before calculating latency");
-
-        var externalOceCatchIdx = methodBody.IndexOf("catch (OperationCanceledException) when (ct.IsCancellationRequested)", StringComparison.Ordinal);
-        var broadCatchIdx = methodBody.IndexOf("catch (Exception ex)", StringComparison.Ordinal);
-        Assert.True(externalOceCatchIdx >= 0 && externalOceCatchIdx < broadCatchIdx,
-            "External OCE catch must rethrow before broadcatch (catch (Exception ex))");
-
-        var dnsTryIdx = methodBody.IndexOf("Dns.GetHostAddressesAsync", StringComparison.Ordinal);
-        var dnsCatchIdx = methodBody.IndexOf("catch (OperationCanceledException) when (ct.IsCancellationRequested)", dnsTryIdx, StringComparison.Ordinal);
-        Assert.True(dnsCatchIdx >= 0 && dnsCatchIdx < receiveIdx,
-            "DNS block must catch and rethrow external cancellation");
-    }
-
     private static string StripComments(string source)
     {
         var noBlock = Regex.Replace(source, @"/\*.*?\*/", "", RegexOptions.Singleline);

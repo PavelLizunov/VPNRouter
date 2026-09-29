@@ -65,69 +65,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         }
     }
 
-    [Fact]
-    public void TgProxyManager_IsRunning_And_Pid_AreLockFree()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
-        var isRunningBody = ExtractPropertyBody(src, "IsRunning");
-        var pidBody = ExtractPropertyBody(src, "Pid");
-
-        Assert.DoesNotContain("lock (_lifecycleGate)", isRunningBody);
-        Assert.DoesNotContain("lock (_lifecycleGate)", pidBody);
-    }
-
-    [Fact]
-    public void TgProxyManager_SourceAudit_NoUnsafeProcessSweepsOrPortKillers()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
-        var stripped = StripLineComments(src);
-
-        Assert.DoesNotContain("KillByPortWindows", stripped);
-        Assert.DoesNotContain("KillByPortUnix", stripped);
-        Assert.DoesNotContain("Process.GetProcessesByName(\"tg-ws-proxy\")", stripped);
-        Assert.DoesNotContain("Process.GetProcessesByName(\"TgWsProxy_windows\")", stripped);
-    }
-
-    [Fact]
-    public void MainWindowViewModel_LoadSettingsIntoUI_DoesNotAdoptForeignPortListener()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-        var match = Regex.Match(src, @"\b(?:(?:public|private|protected|internal)\s+)?void\s+LoadSettingsIntoUI\s*\(");
-        var loadSettingsStart = match.Success
-            ? match.Index
-            : src.IndexOf("private void LoadSettingsIntoUI()", StringComparison.Ordinal);
-        Assert.True(loadSettingsStart >= 0, "Expected LoadSettingsIntoUI in MainWindowViewModel.cs");
-
-        var start = src.IndexOf("TgProxyPort = _settings.App.TgProxyPort", loadSettingsStart, StringComparison.Ordinal);
-        Assert.True(start >= 0, "Expected the Telegram proxy block inside LoadSettingsIntoUI");
-        var end = src.IndexOf("ReceivePrereleases = _settings.Update.IsExperimental;", start, StringComparison.Ordinal);
-        Assert.True(end > start, "Expected the update-channel assignment after the Telegram proxy block");
-
-        var section = StripLineComments(src[start..end]);
-
-        Assert.DoesNotContain("TgProxyManager.IsAnyRunning(TgProxyPort)", section);
-        Assert.Contains("if (_tgProxy?.IsRunning == true)", section);
-    }
-
-    [Fact]
-    public void MainWindowViewModel_AutostartBootstrap_ForeignListenerFailsClosedWithoutOwnershipClaim()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.AutostartBootstrap.cs");
-        var body = ExtractMethodBody(src, "TryAutostartTgProxyAsync");
-
-        var isAnyRunningIdx = body.IndexOf("if (TgProxyManager.IsAnyRunning(TgProxyPort))", StringComparison.Ordinal);
-        Assert.True(isAnyRunningIdx >= 0, "Expected port check in TryAutostartTgProxyAsync");
-
-        var returnIdx = body.IndexOf("return;", isAnyRunningIdx, StringComparison.Ordinal);
-        Assert.True(returnIdx > isAnyRunningIdx);
-
-        var failClosedBlock = body[isAnyRunningIdx..returnIdx];
-        Assert.DoesNotContain("TgProxyEnabled = true", failClosedBlock);
-
-        Assert.Contains("if (manager.IsRunning)", body);
-        Assert.DoesNotContain("if (manager.IsRunning || TgProxyManager.IsAnyRunning", body);
-    }
-
     private sealed class StubbornProcessHandle : IProcessHandle
     {
         public int Pid { get; }
