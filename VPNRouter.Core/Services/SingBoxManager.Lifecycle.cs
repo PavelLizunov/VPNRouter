@@ -158,111 +158,122 @@ public partial class SingBoxManager
                 State,
                 releaseLock);
 
-        if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+            if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+            {
+                StopUnix(releaseLock);
+                return;
+            }
+
+            StopWindows(releaseLock);
+        }
+        finally
         {
-            if (!_ownsTunLock)
-            {
-                State = _handle is null ? SingBoxState.Stopped : SingBoxState.Failed;
-                return;
-            }
+            _stopInProgress = false;
+            Volatile.Write(ref _stopState, 0);
+        }
+    }
 
-            if (OperatingSystem.IsLinux() && !_linuxUsedPkexec)
-            {
-                var targetHandle = _handle;
-                var capabilityStopped = false;
-                try
-                {
-                    if (targetHandle != null)
-                    {
-                        if (!targetHandle.HasExited)
-                        {
-                            targetHandle.SuppressExitedEvent();
-                            targetHandle.Kill(entireProcessTree: true);
-                            try
-                            {
-                                using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                                targetHandle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
-                            }
-                            catch (OperationCanceledException)
-                            {
-                            }
-                        }
-
-                        capabilityStopped = targetHandle.HasExited;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "[SingBoxManager] Linux capability-mode exact Stop failed");
-                    capabilityStopped = false;
-                }
-                finally
-                {
-                    if (!ReferenceEquals(_handle, targetHandle))
-                    {
-                        _logger.Error("[SingBoxManager] Capability stop lost exact-handle ownership");
-                        capabilityStopped = false;
-                    }
-                    else if (capabilityStopped)
-                    {
-                        targetHandle?.Dispose();
-                        _handle = null;
-                    }
-                    _exactStopUnconfirmed = !capabilityStopped;
-                    State = capabilityStopped ? SingBoxState.Stopped : SingBoxState.Failed;
-                    if (releaseLock && capabilityStopped) ReleaseTunOwnership();
-                    _logger.Information(
-                        "[SingBoxManager] Linux capability-mode stop completed={Stopped}",
-                        capabilityStopped);
-                }
-                return;
-            }
-
-            var unixStopped = false;
-            try
-            {
-                unixStopped = LinuxStopEscalationChain();
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[SingBoxManager] Error stopping sing-box");
-            }
-            finally
-            {
-                _handle?.Dispose();
-                _handle = null;
-                _exactStopUnconfirmed = !unixStopped;
-                State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
-                if (releaseLock && unixStopped) ReleaseTunOwnership();
-                _logger.Information(
-                    "[SingBoxManager] Unix sing-box stop completed={Stopped}",
-                    unixStopped);
-            }
+    private void StopUnix(bool releaseLock)
+    {
+        if (!_ownsTunLock)
+        {
+            State = _handle is null ? SingBoxState.Stopped : SingBoxState.Failed;
             return;
         }
 
+        if (OperatingSystem.IsLinux() && !_linuxUsedPkexec)
+        {
+            StopLinuxCapabilityMode(releaseLock);
+            return;
+        }
+
+        StopUnixEscalated(releaseLock);
+    }
+
+    private void StopLinuxCapabilityMode(bool releaseLock)
+    {
+        var targetHandle = _handle;
+        var capabilityStopped = false;
+        try
+        {
+            if (targetHandle != null)
+            {
+                if (!targetHandle.HasExited)
+                {
+                    targetHandle.SuppressExitedEvent();
+                    targetHandle.Kill(entireProcessTree: true);
+                    try
+                    {
+                        using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        targetHandle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                }
+
+                capabilityStopped = targetHandle.HasExited;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[SingBoxManager] Linux capability-mode exact Stop failed");
+            capabilityStopped = false;
+        }
+        finally
+        {
+            if (!ReferenceEquals(_handle, targetHandle))
+            {
+                _logger.Error("[SingBoxManager] Capability stop lost exact-handle ownership");
+                capabilityStopped = false;
+            }
+            else if (capabilityStopped)
+            {
+                targetHandle?.Dispose();
+                _handle = null;
+            }
+            _exactStopUnconfirmed = !capabilityStopped;
+            State = capabilityStopped ? SingBoxState.Stopped : SingBoxState.Failed;
+            if (releaseLock && capabilityStopped) ReleaseTunOwnership();
+            _logger.Information(
+                "[SingBoxManager] Linux capability-mode stop completed={Stopped}",
+                capabilityStopped);
+        }
+    }
+
+    private void StopUnixEscalated(bool releaseLock)
+    {
+        var unixStopped = false;
+        try
+        {
+            unixStopped = LinuxStopEscalationChain();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[SingBoxManager] Error stopping sing-box");
+        }
+        finally
+        {
+            _handle?.Dispose();
+            _handle = null;
+            _exactStopUnconfirmed = !unixStopped;
+            State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
+            if (releaseLock && unixStopped) ReleaseTunOwnership();
+            _logger.Information(
+                "[SingBoxManager] Unix sing-box stop completed={Stopped}",
+                unixStopped);
+        }
+        
+    }
+
+    private void StopWindows(bool releaseLock)
+    {
         var winTargetHandle = _handle;
         if (winTargetHandle == null)
         {
             _logger.Information(
                 "[SingBoxManager] Stop called but sing-box already exited (process=null) — running cleanup-only path");
-            _exactStopUnconfirmed = false;
-            State = SingBoxState.Stopped;
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    QueueTunAdapterRemoval("SingBoxManager.StopInternal.early.async");
-                    if (releaseLock)
-                        WaitForQueuedTunAdapterRemoval();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
-                }
-            }
-            if (releaseLock) ReleaseTunOwnership();
+            FinishCleanupOnlyStop(releaseLock);
             return;
         }
 
@@ -294,26 +305,36 @@ public partial class SingBoxManager
             winTargetHandle.Dispose();
             if (ReferenceEquals(_handle, winTargetHandle))
                 _handle = null;
-            _exactStopUnconfirmed = false;
-            State = SingBoxState.Stopped;
-
-            if (OperatingSystem.IsWindows())
-            {
-                try
-                {
-                    QueueTunAdapterRemoval("SingBoxManager.StopInternal.early.async");
-                    if (releaseLock)
-                        WaitForQueuedTunAdapterRemoval();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
-                }
-            }
-            if (releaseLock) ReleaseTunOwnership();
+            FinishCleanupOnlyStop(releaseLock);
             return;
         }
 
+        KillWindowsProcess(winTargetHandle, releaseLock);
+    }
+
+    private void FinishCleanupOnlyStop(bool releaseLock)
+    {
+        _exactStopUnconfirmed = false;
+        State = SingBoxState.Stopped;
+
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                QueueTunAdapterRemoval("SingBoxManager.StopInternal.early.async");
+                if (releaseLock)
+                    WaitForQueuedTunAdapterRemoval();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
+            }
+        }
+        if (releaseLock) ReleaseTunOwnership();
+    }
+
+    private void KillWindowsProcess(IProcessHandle winTargetHandle, bool releaseLock)
+    {
         var winStopped = false;
         try
         {
@@ -386,12 +407,6 @@ public partial class SingBoxManager
                 _logger.Warning(
                     "[SingBoxManager] Windows exact stop was not confirmed — preserving handle and TUN lease");
             }
-        }
-        }
-        finally
-        {
-            _stopInProgress = false;
-            Volatile.Write(ref _stopState, 0);
         }
     }
 
