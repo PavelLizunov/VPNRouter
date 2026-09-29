@@ -830,7 +830,6 @@ internal static class Localization
     public static string ExternalControlHint => global::VPNRouter.Core.Localization.Strings.ExternalControlHint;
     public static string ReliabilityAutoReconnectTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectTitle;
     public static string ReliabilityAutoReconnectHint => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectHint;
-    public static string BlockOnVpnFailLabel => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailLabel;
     public static string BlockOnVpnFailHint => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailHint;
     public static string DnsStrategyHeader => global::VPNRouter.Core.Localization.Strings.DnsStrategyHeader;
     public static string DnsStrategyIpv4Only => global::VPNRouter.Core.Localization.Strings.DnsStrategyIpv4Only;
