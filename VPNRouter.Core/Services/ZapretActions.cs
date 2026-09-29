@@ -243,8 +243,17 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
-    private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
+    internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
+        ArgumentNullException.ThrowIfNull(tempPath);
+        ArgumentNullException.ThrowIfNull(hostsPath);
+
+        if (tempPath.Any(c => c is '\r' or '\n' or '"'))
+            throw new ArgumentException("Temp path contains disallowed characters", nameof(tempPath));
+
+        if (hostsPath.Any(c => c is '\r' or '\n' or '"'))
+            throw new ArgumentException("Hosts path contains disallowed characters", nameof(hostsPath));
+
         if (!OperatingSystem.IsWindows())
             return;
 
