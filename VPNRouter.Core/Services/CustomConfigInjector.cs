@@ -24,27 +24,7 @@ public static partial class CustomConfigInjector
         if (forkErrors.Count > 0)
             throw new NotSupportedException(forkErrors[0]);
 
-        var outboundsForGate = config["outbounds"] as JsonArray;
-        if (outboundsForGate != null && outboundsForGate.Count > 0)
-        {
-            var proxyForGate = ConfigSanityCheck.FindFirstProxyOutbound(outboundsForGate);
-            if (proxyForGate != null)
-            {
-                var offendingField = ConfigSanityCheck.InspectOutbound(proxyForGate);
-                if (offendingField != null)
-                {
-                    var reality = proxyForGate["tls"]?["reality"] as JsonObject;
-                    var offendingValue = offendingField switch
-                    {
-                        "reality.public_key" => StjNodeHelpers.AsString(reality?["public_key"]) ?? "",
-                        "reality.short_id" => StjNodeHelpers.AsString(reality?["short_id"]) ?? "",
-                        "server" => StjNodeHelpers.AsString(proxyForGate["server"]) ?? "",
-                        _ => "",
-                    };
-                    throw new PlaceholderConfigException(offendingField, offendingValue);
-                }
-            }
-        }
+        ThrowIfPlaceholderProxy(config);
 
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
@@ -89,6 +69,44 @@ public static partial class CustomConfigInjector
 
         StripUnsupportedFeatures(config, settings.Tun.GetEffectiveRouteExcludeAddress(), settings.App.ForceIpv4Only, settings.App.StrictDns, settings.Tun.Ipv6Enabled);
 
+        SetRouteFinal(config, isFullTunnel, isExcludeMode, proxyTag);
+
+        SetDnsFinal(config, settings, isFullTunnel, isExcludeMode, proxyTag);
+
+        EnsureDefaultDomainResolver(config);
+        EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
+        EnsureUrltest(config);
+
+        return config.ToJsonString(InjectorOutputOptions);
+    }
+
+    private static void ThrowIfPlaceholderProxy(JsonObject config)
+    {
+        var outboundsForGate = config["outbounds"] as JsonArray;
+        if (outboundsForGate != null && outboundsForGate.Count > 0)
+        {
+            var proxyForGate = ConfigSanityCheck.FindFirstProxyOutbound(outboundsForGate);
+            if (proxyForGate != null)
+            {
+                var offendingField = ConfigSanityCheck.InspectOutbound(proxyForGate);
+                if (offendingField != null)
+                {
+                    var reality = proxyForGate["tls"]?["reality"] as JsonObject;
+                    var offendingValue = offendingField switch
+                    {
+                        "reality.public_key" => StjNodeHelpers.AsString(reality?["public_key"]) ?? "",
+                        "reality.short_id" => StjNodeHelpers.AsString(reality?["short_id"]) ?? "",
+                        "server" => StjNodeHelpers.AsString(proxyForGate["server"]) ?? "",
+                        _ => "",
+                    };
+                    throw new PlaceholderConfigException(offendingField, offendingValue);
+                }
+            }
+        }
+    }
+
+    private static void SetRouteFinal(JsonObject config, bool isFullTunnel, bool isExcludeMode, string proxyTag)
+    {
         var route = config["route"] as JsonObject;
         if (route == null)
         {
@@ -98,7 +116,11 @@ public static partial class CustomConfigInjector
         route["final"] = (isFullTunnel || isExcludeMode) ? proxyTag : "direct";
         if (isFullTunnel)
             SanitizeFullTunnelDirectRules(config);
+    }
 
+    private static void SetDnsFinal(
+        JsonObject config, AppSettings settings, bool isFullTunnel, bool isExcludeMode, string proxyTag)
+    {
         var wantRemoteDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
         var dnsForFinal = config["dns"] as JsonObject;
         var dnsServersForFinal = dnsForFinal?["servers"] as JsonArray;
@@ -127,12 +149,6 @@ public static partial class CustomConfigInjector
             if (!string.IsNullOrEmpty(localTag))
                 dnsForFinal["final"] = localTag;
         }
-
-        EnsureDefaultDomainResolver(config);
-        EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
-        EnsureUrltest(config);
-
-        return config.ToJsonString(InjectorOutputOptions);
     }
 
     public static (bool IsValid, List<string> Errors) Validate(string rawJson)

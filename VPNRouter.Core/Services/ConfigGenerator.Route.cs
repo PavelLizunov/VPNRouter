@@ -21,23 +21,7 @@ public static partial class ConfigGenerator
 
         // DNS-tunnel self-exclusion must precede hijack-dns and the proxy final, or slipstream's own resolver traffic loops back into the tunnel.
         if (isDnsTunnel)
-        {
-            if (dnsTunnelResolverIps is { Count: > 0 })
-                rules.Add(new RouteRule
-                {
-                    IpCidr           = dnsTunnelResolverIps,
-                    Action           = "route",
-                    Outbound         = "direct",
-                    IsInfrastructure = true,
-                });
-            rules.Add(new RouteRule
-            {
-                ProcessName      = new List<string> { SlipstreamProcessName },
-                Action           = "route",
-                Outbound         = "direct",
-                IsInfrastructure = true,
-            });
-        }
+            AddDnsTunnelSelfExclusionRules(rules, dnsTunnelResolverIps);
 
         rules.Add(new RouteRule { Protocol = "dns", Action = "hijack-dns" });
 
@@ -49,30 +33,75 @@ public static partial class ConfigGenerator
         });
 
         if (blockQuicOnTcpProxy && !hasUdpProxy && !proxyIsUdpNative)
-        {
-            if (isFullTunnel || isExcludeMode)
-            {
-                rules.Add(new RouteRule { Network = "udp", Port = new List<int> { 443 }, Action = "reject" });
-                rules.Add(new RouteRule { Protocol = "quic", Action = "reject" });
-            }
-            else if (processes.Count > 0)
-            {
-                rules.Add(new RouteRule
-                {
-                    ProcessName = processes.ToList(),
-                    Network     = "udp",
-                    Port        = new List<int> { 443 },
-                    Action      = "reject"
-                });
-                rules.Add(new RouteRule
-                {
-                    ProcessName = processes.ToList(),
-                    Protocol    = "quic",
-                    Action      = "reject"
-                });
-            }
-        }
+            AddQuicRejectRules(rules, processes, isFullTunnel, isExcludeMode);
 
+        AddPerAppRoutingRules(rules, processes, isFullTunnel, isExcludeMode, hasUdpProxy);
+
+        string finalOutbound;
+        if (isFullTunnel)
+            finalOutbound = "proxy";
+        else if (isExcludeMode)
+            finalOutbound = "proxy";
+        else
+            finalOutbound = "direct";
+
+        return new SingBoxRoute
+        {
+            Rules                   = rules,
+            Final                   = finalOutbound,
+            AutoDetectInterface     = true,
+            DefaultDomainResolver   = "local-dns"
+        };
+    }
+
+    private static void AddDnsTunnelSelfExclusionRules(List<RouteRule> rules, List<string>? dnsTunnelResolverIps)
+    {
+        if (dnsTunnelResolverIps is { Count: > 0 })
+            rules.Add(new RouteRule
+            {
+                IpCidr           = dnsTunnelResolverIps,
+                Action           = "route",
+                Outbound         = "direct",
+                IsInfrastructure = true,
+            });
+        rules.Add(new RouteRule
+        {
+            ProcessName      = new List<string> { SlipstreamProcessName },
+            Action           = "route",
+            Outbound         = "direct",
+            IsInfrastructure = true,
+        });
+    }
+
+    private static void AddQuicRejectRules(
+        List<RouteRule> rules, List<string> processes, bool isFullTunnel, bool isExcludeMode)
+    {
+        if (isFullTunnel || isExcludeMode)
+        {
+            rules.Add(new RouteRule { Network = "udp", Port = new List<int> { 443 }, Action = "reject" });
+            rules.Add(new RouteRule { Protocol = "quic", Action = "reject" });
+        }
+        else if (processes.Count > 0)
+        {
+            rules.Add(new RouteRule
+            {
+                ProcessName = processes.ToList(),
+                Network     = "udp",
+                Port        = new List<int> { 443 },
+                Action      = "reject"
+            });
+            rules.Add(new RouteRule
+            {
+                ProcessName = processes.ToList(),
+                Protocol    = "quic",
+                Action      = "reject"
+            });
+        }
+    }
+
+    private static void AddPerAppRoutingRules(
+        List<RouteRule> rules, List<string> processes, bool isFullTunnel, bool isExcludeMode, bool hasUdpProxy)
+    {
         if (!isFullTunnel && processes.Count > 0)
         {
             var perAppOutbound = isExcludeMode ? "direct" : "proxy";
@@ -112,21 +141,5 @@ public static partial class ConfigGenerator
                 Outbound = "proxy-udp"
             });
         }
-
-        string finalOutbound;
-        if (isFullTunnel)
-            finalOutbound = "proxy";
-        else if (isExcludeMode)
-            finalOutbound = "proxy";
-        else
-            finalOutbound = "direct";
-
-        return new SingBoxRoute
-        {
-            Rules                   = rules,
-            Final                   = finalOutbound,
-            AutoDetectInterface     = true,
-            DefaultDomainResolver   = "local-dns"
-        };
     }
 }
