@@ -24,4 +24,4 @@ Only `plans/` changes; the gate script parses the same format. Exact-head CI.
 
 ## Outcome
 
-Pending CI.
+Merged as #362 on 2026-09-29; exact-head CI green.

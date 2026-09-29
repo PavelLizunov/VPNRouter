@@ -25,4 +25,4 @@ The workflow runs on its own pull request (its path filter includes itself).
 
 ## Outcome
 
-Pending. Not merged without an owner decision (permanent CI change).
+Merged as #360 on 2026-09-29 by owner decision. The workflow ran on its own pull request (`compile` job passed, about 8 minutes) and it now runs on every pull request that touches `VPNRouter.Android`, `VPNRouter.Core`, `Directory.Build.props` or `global.json`.

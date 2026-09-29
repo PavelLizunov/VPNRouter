@@ -41,3 +41,5 @@ and there is no local .NET SDK.
 ## Outcome
 
 Fixes are separate packages that need owner acceptance.
+
+Merged as #345 on 2026-09-29; exact-head CI green.
