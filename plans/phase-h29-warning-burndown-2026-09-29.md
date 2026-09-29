@@ -28,4 +28,6 @@ Rebuild on `windows-worker` and count the warnings again; related tests; exact-h
 
 ## Outcome
 
-Pending.
+On `windows-worker` at 58603c7f: the App, CLI and Service builds now report 9 warnings besides
+`CA1416` (was 29), 0 errors; the full `VPNRouter.Tests` run is unchanged from `main`: 2784 cases, 2761
+passed, 17 skipped, the same six known `PageScreenshotTests` failures. Merged as #364 when CI is green.
