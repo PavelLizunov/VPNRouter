@@ -37,7 +37,6 @@ VPNRouter.CLI --version                              (version from VPNRouter.Cor
   - `TestUpdateCommand.cs`: CI auto-update driver (`VPNROUTER_CI=1`).
 - `Helpers/`:
   - `AdminHelper.cs`: `IsAdmin()` check.
-  - `ProfileSourceFactory.cs`: Factory for profile sources.
   - `StateFile.cs`: `state.json` reader/writer for PID and status sync.
   - `CliJsonContext.cs`: Source-generated JSON context.
 
