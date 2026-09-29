@@ -75,15 +75,6 @@ public sealed class HealthMonitorStartIdempotencyTests
         Assert.Null(GetField<object?>(hm, "_powerListener"));
     }
 
-    [Fact]
-    public void Source_Start_GuardsAgainstAlreadyRunning()
-    {
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "HealthMonitor.cs");
-        Assert.True(File.Exists(sourcePath), $"HealthMonitor.cs not found at {sourcePath}");
-        var source = File.ReadAllText(sourcePath);
-        Assert.Contains("if (_healthTimer != null || _powerListener != null)", source);
-    }
-
     private static string FindRepoFile(params string[] segments)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

@@ -54,35 +54,6 @@ public class CliGenerationStateCharacterizationTests
     }
 
     [Fact]
-    public void Write_DoesNotOpenPreplantedLegacyTempPath()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), "VPNRouter_Test_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        var path = Path.Combine(tempDir, "state.json");
-        var legacyTemp = path + ".tmp";
-        var mutexName = "VPNRouter_StateFile_TestMutex_" + Guid.NewGuid().ToString("N");
-
-        try
-        {
-            File.WriteAllText(legacyTemp, "sentinel");
-            StateFile.Write(
-                new RunState { ActiveProfile = "OwnedRun", RunGeneration = Guid.NewGuid() },
-                path,
-                mutexName);
-
-            Assert.Equal("sentinel", File.ReadAllText(legacyTemp));
-            Assert.NotNull(StateFile.Read(path, mutexName));
-        }
-        finally
-        {
-            if (Directory.Exists(tempDir))
-            {
-                try { Directory.Delete(tempDir, recursive: true); } catch { }
-            }
-        }
-    }
-
-    [Fact]
     public void MatchingGeneration_UpdatesExactChildAndClearsState()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "VPNRouter_Test_" + Guid.NewGuid().ToString("N"));

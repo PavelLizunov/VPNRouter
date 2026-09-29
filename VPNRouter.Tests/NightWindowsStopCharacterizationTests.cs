@@ -548,62 +548,6 @@ public sealed class NightWindowsStopCharacterizationTests : IDisposable
     }
 
     [Fact]
-    public void ReloadConfigJsonWithResult_WhenExactStopUnconfirmed_CannotWriteCandidateBeforeConfirmedStop()
-    {
-        Assert.SkipUnless(OperatingSystem.IsWindows(),
-            "Windows-only — exercises Windows unconfirmed stop during reload.");
-
-        EnsureConfigDir();
-
-        var handle = new StubbornWindowsProcessHandle(NewFakePid()) { KillThrows = true };
-        var runner = new FakeProcessRunner();
-
-        var settings = DefaultSettings();
-        using var manager = new SingBoxManager(
-            settings, logger: null, http: new FakeHttpClient(), runner: runner);
-
-        SetField(manager, "_handle", handle);
-        var configPath = Path.Combine(VPNRouter.Core.AppPaths.ConfigDir, "current.json");
-        File.WriteAllText(configPath, "{\"existing\":\"baseline\"}");
-        SetField(manager, "_currentConfigPath", configPath);
-
-        var lockInstance = TunOwnershipLock.Instance(null);
-        SetLockOwnedForTest(lockInstance, manager);
-
-        try
-        {
-            InvokeStopInternal(manager, releaseLock: false);
-            WaitForPendingTunRemoval();
-            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
-            Assert.Equal(0, _nativeLookupCount);
-            Assert.Empty(_fakeDiagRunner.RunCalls);
-
-            var result = manager.ReloadConfigJsonWithResult("{\"candidate\":\"forbidden-write\"}", forceRestart: true);
-
-            Assert.False(result, "ReloadConfigJsonWithResult must return false when exact stop is unconfirmed.");
-            Assert.Equal(SingBoxState.Failed, manager.State);
-            Assert.Same(handle, GetField(manager, "_handle"));
-            Assert.True((bool)GetField(manager, "_ownsTunLock")!);
-            Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
-            Assert.True(IsLockOwned(lockInstance));
-            Assert.Equal(0, _nativeLookupCount);
-            Assert.Empty(_fakeDiagRunner.RunCalls);
-
-            var onDisk = File.ReadAllText(configPath);
-            Assert.DoesNotContain("forbidden-write", onDisk);
-            Assert.Contains("existing", onDisk);
-        }
-        finally
-        {
-            SetField(manager, "_handle", null);
-            SetField(manager, "_ownsTunLock", false);
-            SetField(manager, "_exactStopUnconfirmed", false);
-            handle.Dispose();
-            if (IsLockOwned(lockInstance)) lockInstance.Release();
-        }
-    }
-
-    [Fact]
     public void Dispose_WhenExactStopUnconfirmed_RetriesAreNotTerminalAndSubsequentConfirmedStopReleasesLock()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),

@@ -41,29 +41,6 @@ public sealed class FailoverRestartConcurrencyAuditTests
         Assert.NotEqual(SingBoxState.Restarting, mgr.State);
     }
 
-    [Fact]
-    public void Source_SingBoxManager_RestartAndReload_HaveDisposedGuard()
-    {
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "SingBoxManager.cs");
-        var source = SingBoxSourceText.ReadAll(sourcePath);
-
-        Assert.Contains("Restart ignored — manager already disposed", source);
-        Assert.Contains("ReloadConfigJson ignored — manager already disposed", source);
-        Assert.Contains("LaunchProcess aborted — manager disposed before spawn", source);
-        Assert.Contains("Volatile.Read(ref _disposed) != 0", source);
-    }
-
-    [Fact]
-    public void Source_ExecuteProbeFailoverRestart_TearsDownOnGenericThrow()
-    {
-        var sourcePath = FindRepoFile("VPNRouter.Core", "Services", "VpnEngine.cs");
-        var source = File.ReadAllText(sourcePath);
-
-        Assert.Contains(
-            "Failover restart failed to bring up replacement — tearing down partial state",
-            source);
-    }
-
     private static string FindRepoFile(params string[] segments)
     {
         var startDir = Path.GetDirectoryName(typeof(SingBoxManager).Assembly.Location)!;

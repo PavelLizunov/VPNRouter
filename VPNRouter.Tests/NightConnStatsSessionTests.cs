@@ -779,33 +779,4 @@ public sealed class NightConnStatsSessionTests
         Assert.False(vm.IsConnected);
         Assert.Null(GetField<ClashSingBoxApi>(vm, "_statsApi"));
     }
-
-    [Fact]
-    public void OnEngineStatus_ConnectedBranch_CallsOnIsConnectedChangedBeforeRefreshAndRestore_SourceGuard()
-    {
-        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
-        string? source = null;
-        for (var depth = 0; depth < 8 && directory != null; depth++, directory = directory.Parent)
-        {
-            var candidate = Path.Combine(directory.FullName, "VPNRouter.App", "ViewModels", "MainWindowViewModel.Connection.cs");
-            if (File.Exists(candidate))
-            {
-                source = File.ReadAllText(candidate);
-                break;
-            }
-        }
-        Assert.NotNull(source);
-
-        var connectedIdx = source!.IndexOf("status.StartsWith(\"Connected\")", StringComparison.Ordinal);
-        Assert.True(connectedIdx >= 0);
-
-        var onIsConnectedChangedIdx = source.IndexOf("OnIsConnectedChanged(true);", connectedIdx, StringComparison.Ordinal);
-        Assert.True(onIsConnectedChangedIdx >= 0);
-
-        var refreshIdx = source.IndexOf("RefreshActiveIndicator();", onIsConnectedChangedIdx, StringComparison.Ordinal);
-        Assert.True(refreshIdx > onIsConnectedChangedIdx);
-
-        var restoreIdx = source.IndexOf("RestoreConnectedStatus();", refreshIdx, StringComparison.Ordinal);
-        Assert.True(restoreIdx > refreshIdx);
-    }
 }

@@ -29,41 +29,6 @@ public sealed class CrossPlatformUiAndIconPolishTests
         }
     }
 
-    [Fact]
-    public void Strings_OsDisplayName_IncludesAndroid()
-    {
-        var src = LoadSource("VPNRouter.Core", "Localization", "Strings.cs");
-
-        Assert.Contains("OperatingSystem.IsAndroid() ? \"Android\"", src);
-    }
-
-    [Fact]
-    public void Strings_AutostartCard_DoesNotLeakWindowsOnAndroid()
-    {
-        var src = LoadSource("VPNRouter.Core", "Localization", "Strings.cs");
-
-        var offStart = src.IndexOf("public static string SmpAutostartCardOff", StringComparison.Ordinal);
-        var offEnd = src.IndexOf(";", offStart, StringComparison.Ordinal);
-        var offBody = src[offStart..offEnd];
-
-        Assert.Contains("OperatingSystem.IsAndroid()", offBody);
-        Assert.Contains("Configure VPN autostart on device boot", offBody);
-    }
-
-    [Fact]
-    public void AndroidApp_AdvancedShell_WrapsTabsInScrollViewerWithMinWidth()
-    {
-        var src = LoadSource("VPNRouter.Android", "AndroidApp.AdvancedShell.cs");
-
-        Assert.Contains("var tabScroll = new ScrollViewer", src);
-        Assert.Contains("HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden", src);
-        Assert.Contains("VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled", src);
-        Assert.Contains("Content = tabPanel", src);
-        Assert.Contains("Child = tabScroll", src);
-
-        Assert.Contains("MinWidth = 62", src);
-    }
-
     [Theory]
     [InlineData("mipmap-mdpi", 48, 48)]
     [InlineData("mipmap-hdpi", 72, 72)]

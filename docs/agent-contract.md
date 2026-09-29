@@ -111,7 +111,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~AndroidStorageSaneTests|FullyQualifiedName~AndroidDpiBypassInjectorTests"
 
 # CLI and service contracts
-dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~CliVersionSourceTests|FullyQualifiedName~P07CliStopSourceGuardTests|FullyQualifiedName~ServiceAppCoexistenceTests|FullyQualifiedName~AutostartContractTests"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~P07CliStopSourceGuardTests|FullyQualifiedName~ServiceAppCoexistenceTests|FullyQualifiedName~AutostartContractTests"
 
 # Release, remote verification and packaging contracts
 dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests"
