@@ -25,7 +25,7 @@ public sealed class FreeConfigFetcherTests
         var http = new FakeHttpClient().Setup(SourceUrl, $"{Vless}\n{Vless}\n");
         var fetcher = new FreeConfigFetcher(logger, http);
 
-        var result = await fetcher.FetchAsync(Source());
+        var result = await fetcher.FetchAsync(Source(), TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { Vless }, result);
         var request = Assert.Single(http.SentRequests);
@@ -44,7 +44,7 @@ public sealed class FreeConfigFetcherTests
         var http = new FakeHttpClient().Setup(SourceUrl, oversized);
         var fetcher = new FreeConfigFetcher(logger, http);
 
-        var result = await fetcher.FetchAsync(Source());
+        var result = await fetcher.FetchAsync(Source(), TestContext.Current.CancellationToken);
 
         Assert.Empty(result);
     }
@@ -60,7 +60,7 @@ public sealed class FreeConfigFetcherTests
         var http = new FakeHttpClient().Setup(SourceUrl, atLimit);
         var fetcher = new FreeConfigFetcher(logger, http);
 
-        Assert.Equal(new[] { Vless }, await fetcher.FetchAsync(Source()));
+        Assert.Equal(new[] { Vless }, await fetcher.FetchAsync(Source(), TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -84,7 +84,7 @@ public sealed class FreeConfigFetcherTests
             Enabled = true,
         };
 
-        Assert.Empty(await fetcher.FetchAsync(source));
+        Assert.Empty(await fetcher.FetchAsync(source, TestContext.Current.CancellationToken));
         Assert.Empty(http.SentRequests);
         var entry = Assert.Single(sink.Events);
         Assert.Equal("FreeConfigFetcher: refused non-http(s) or malformed source URL", entry.RenderMessage());
@@ -102,7 +102,7 @@ public sealed class FreeConfigFetcherTests
         var http = new FakeHttpClient().Setup(absoluteUrl, Vless);
         var source = new FreeConfigSource { Name = "test-source", Url = url, Enabled = true };
 
-        Assert.Equal(new[] { Vless }, await new FreeConfigFetcher(logger, http).FetchAsync(source));
+        Assert.Equal(new[] { Vless }, await new FreeConfigFetcher(logger, http).FetchAsync(source, TestContext.Current.CancellationToken));
         Assert.Equal(absoluteUrl, Assert.Single(http.SentRequests).Uri.AbsoluteUri);
     }
 
@@ -121,7 +121,7 @@ public sealed class FreeConfigFetcherTests
         var http = new FakeHttpClient().Setup(SourceUrl, "failure", statusCode);
         var fetcher = new FreeConfigFetcher(logger, http);
 
-        Assert.Empty(await fetcher.FetchAsync(Source()));
+        Assert.Empty(await fetcher.FetchAsync(Source(), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public sealed class FreeConfigFetcherTests
         {
             var http = new FakeHttpClient().ThrowOn(SourceUrl, error);
             var fetcher = new FreeConfigFetcher(logger, http);
-            Assert.Empty(await fetcher.FetchAsync(Source()));
+            Assert.Empty(await fetcher.FetchAsync(Source(), TestContext.Current.CancellationToken));
         }
     }
 

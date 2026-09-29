@@ -347,8 +347,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         try
         {
-            var stopTask = Task.Run(manager.Stop);
-            Assert.True(handle.WaitEntered.Wait(TimeSpan.FromSeconds(2)));
+            var stopTask = Task.Run(manager.Stop, TestContext.Current.CancellationToken);
+            Assert.True(handle.WaitEntered.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
 
             using var startInvoked = new ManualResetEventSlim();
             var startTask = Task.Run(() =>
@@ -356,9 +356,11 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
                 startInvoked.Set();
                 return Record.Exception(() => manager.StartWithJson("{}"));
             });
-            Assert.True(startInvoked.Wait(TimeSpan.FromSeconds(2)));
-            Assert.False(startTask.Wait(TimeSpan.FromMilliseconds(100)),
+            Assert.True(startInvoked.Wait(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
+#pragma warning disable xUnit1031 // the test asserts that a task is still blocked
+            Assert.False(startTask.Wait(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken),
                 "Start must wait behind the in-flight exact Stop lifecycle gate.");
+#pragma warning restore xUnit1031
             Assert.Same(handle, GetField(manager, "_handle"));
 
             handle.AllowExit.Set();

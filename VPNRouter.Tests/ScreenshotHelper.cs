@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Media.Imaging;
 
 namespace VPNRouter.Tests;
 
@@ -36,7 +37,7 @@ public static class ScreenshotHelper
             {
                 try
                 {
-                    bitmap.Save(path);
+                    bitmap.Save(path, PngBitmapEncoderOptions.Default);
                     return path;
                 }
                 catch (IOException ex)

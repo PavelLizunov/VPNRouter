@@ -168,7 +168,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             Assert.True(ok);
         });
 
-        Assert.Single(fake.RunCalls.Where(IsGetNetAdapterResolve));
+        Assert.Single(fake.RunCalls, IsGetNetAdapterResolve);
         var pnp = fake.RunCalls.Where(IsPnpUtilRemovePlain).ToList();
         Assert.Single(pnp);
         Assert.Contains(instanceId, pnp[0].Arguments);
@@ -243,7 +243,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             return new NativePnpRemovalResult(true, false, 0);
         });
 
-        Assert.Single(fake.RunCalls.Where(IsPnpUtilRemovePlain));
+        Assert.Single(fake.RunCalls, IsPnpUtilRemovePlain);
         Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemoveForce);
         Assert.Equal(new[] { @"ROOT\NET\0002" }, nativeRemovals);
     }
@@ -265,7 +265,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
                     logger: null, adapterName: "VPNRouter-TUN", context: $"test.cache{i}");
         });
 
-        Assert.Single(fake.RunCalls.Where(IsGetNetAdapterProbe));
+        Assert.Single(fake.RunCalls, IsGetNetAdapterProbe);
         Assert.Equal(5, fake.RunCalls.Where(IsGetNetAdapterResolve).Count());
     }
 
@@ -300,7 +300,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         Assert.Contains(fake.RunCalls.Where(IsNetshDisable),
             c => c.Arguments.Contains("name=VPNRouter-TUN"));
         Assert.Equal(new[] { "VPNRouter-TUN" }, lookedUpNames);
-        Assert.Single(fake.RunCalls.Where(IsPnpUtilRemovePlain));
+        Assert.Single(fake.RunCalls, IsPnpUtilRemovePlain);
         Assert.DoesNotContain(fake.RunCalls, IsGetNetAdapterResolve);
         Assert.DoesNotContain(fake.RunCalls,
             c => c.ExecutablePath == "powershell.exe" &&
@@ -517,7 +517,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
             Assert.False(r2);
         });
 
-        Assert.Single(fake.RunCalls.Where(IsGetNetAdapterResolve));
+        Assert.Single(fake.RunCalls, IsGetNetAdapterResolve);
         Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
     }
 

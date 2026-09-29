@@ -465,7 +465,7 @@ public sealed class MvmTwoPhaseStartTimerTests
 
         await Task.Delay(50, ct);
         var cancelStart = DateTime.UtcNow;
-        startTcs.TrySetCanceled();
+        startTcs.TrySetCanceled(TestContext.Current.CancellationToken);
 
         var outcome = await coordinatorTask;
         var cancelElapsed = DateTime.UtcNow - cancelStart;
@@ -491,13 +491,13 @@ public sealed class MvmTwoPhaseStartTimerTests
             phaseBBudget: TimeSpan.FromSeconds(5),
             cancellationToken: cts.Token);
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         fake.FireStarted(12345);
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         startTcs.TrySetResult(true);
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         cts.Cancel();
 
         var outcome = await coordinatorTask;

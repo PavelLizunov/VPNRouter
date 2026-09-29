@@ -44,7 +44,7 @@ public sealed class FreeConfigPoolFetcherTests
         var original = Encoding.UTF8.GetBytes(SamplePool);
         using var src = new MemoryStream(Gzip(original));
         using var dst = new MemoryStream();
-        await FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: true, dst, 10_000_000, default);
+        await FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: true, dst, 10_000_000, TestContext.Current.CancellationToken);
         Assert.Equal(original, dst.ToArray());
     }
 
@@ -54,7 +54,7 @@ public sealed class FreeConfigPoolFetcherTests
         var original = Encoding.UTF8.GetBytes(SamplePool);
         using var src = new MemoryStream(original);
         using var dst = new MemoryStream();
-        await FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: false, dst, 10_000_000, default);
+        await FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: false, dst, 10_000_000, TestContext.Current.CancellationToken);
         Assert.Equal(original, dst.ToArray());
     }
 
@@ -65,7 +65,7 @@ public sealed class FreeConfigPoolFetcherTests
         using var src = new MemoryStream(bomb);
         using var dst = new MemoryStream();
         await Assert.ThrowsAsync<InvalidDataException>(() =>
-            FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: true, dst, 64 * 1024, default));
+            FreeConfigPoolFetcher.DecompressBoundedAsync(src, gzip: true, dst, 64 * 1024, TestContext.Current.CancellationToken));
     }
 
     [Fact]
