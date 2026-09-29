@@ -129,6 +129,7 @@ public sealed class TunAdapterPnpSettleGateTests
 
         await WithTunRunnerAsync(tunRunner, async () =>
         {
+            AcquireTunOwnership(manager);
             InvokeLaunch(manager);
             Assert.Single(processRunner.StartCalls);
 
@@ -306,6 +307,11 @@ public sealed class TunAdapterPnpSettleGateTests
         typeof(SingBoxManager).GetMethod("LaunchProcess",
                 BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(manager, new object[] { @"C:\nonexistent\sing-box.exe" });
+
+    private static void AcquireTunOwnership(SingBoxManager manager) =>
+        Assert.True((bool)typeof(SingBoxManager).GetMethod("TryAcquireTunOwnership",
+                BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(manager, null)!);
 
     private static void InvokeQueue(SingBoxManager manager, string context) =>
         typeof(SingBoxManager).GetMethod("QueueTunAdapterRemoval",
