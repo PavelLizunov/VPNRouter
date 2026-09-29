@@ -76,3 +76,5 @@ Revert the PR; all content is in Git history.
 - Post-move script check: no history-like file remains outside code projects
   except this brief.
 - `tools/zapret/` untouched pending the owner decision.
+
+Merged as #327 on 2026-09-29; exact-head CI green.

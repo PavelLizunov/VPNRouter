@@ -31,3 +31,5 @@ PR CI green.
   `ReleaseToolingContractTests` case sliced `build.ps1` / `install.ps1` between
   comment section headers. Re-anchored on the first code line after each former
   header (all unique), so the executed slices cover the same code.
+
+Merged as #333 on 2026-09-29; exact-head CI green.
