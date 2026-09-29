@@ -575,126 +575,126 @@ internal static string? BestStrategyByScore(
 
         public void HandleLine(string line)
         {
-        _output.AppendLine(line);
-        if (_probeLog != null)
-        {
-            try
+            _output.AppendLine(line);
+            if (_probeLog != null)
             {
-                lock (_probeLogLock)
+                try
                 {
-                    _probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
-                }
-            }
-            catch { }
-        }
-
-        var m = ConfigHeaderRx.Match(line);
-        if (m.Success
-            && int.TryParse(m.Groups[1].Value, out var n)
-            && int.TryParse(m.Groups[2].Value, out var t))
-        {
-            int prevOk, prevTotal;
-            string prevName;
-            lock (_counterLock)
-            {
-                prevOk = _currentOk;
-                prevTotal = _currentTotal;
-                prevName = _currentName;
-                _currentOk = 0;
-                _currentTotal = 0;
-                TestedCount = n;
-                TotalCount = t;
-            }
-            if (!string.IsNullOrEmpty(prevName) && prevTotal > 0)
-            {
-                lock (_perStrategyLock)
-                {
-                    _perStrategy[prevName] = new ZapretStrategyTestResult
+                    lock (_probeLogLock)
                     {
-                        Passed = prevOk,
-                        Total = prevTotal,
-                        At = DateTime.UtcNow,
-                    };
-                }
-            }
-
-            var strategy = m.Groups[3].Value.Trim();
-            _currentName = strategy;
-            _progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
-            return;
-        }
-
-        var s = StatusLineRx.Match(line);
-        if (s.Success)
-        {
-            var status = s.Groups[1].Value;
-            bool isPass = status.Equals("OK", StringComparison.OrdinalIgnoreCase)
-                || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
-            int snapOk, snapTotal, snapN, snapT;
-            lock (_counterLock)
-            {
-                _currentTotal++;
-                if (isPass)
-                    _currentOk++;
-                snapOk = _currentOk;
-                snapTotal = _currentTotal;
-                snapN = TestedCount;
-                snapT = TotalCount;
-            }
-            if (snapN > 0 && snapT > 0)
-            {
-                _progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
-            }
-
-            if (!EarlyWinnerKilled
-                && snapOk == snapTotal
-                && snapTotal >= 16
-                && !string.IsNullOrEmpty(_currentName))
-            {
-                EarlyWinnerKilled = true;
-                Winner = _currentName;
-                _logger?.Information(
-                    "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
-                    Winner, snapOk, snapTotal);
-                if (_probeLog != null)
-                {
-                    try
-                    {
-                        lock (_probeLogLock)
-                        {
-                            _probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} # EARLY-WINNER {_currentName} ({snapOk}/{snapTotal}) — killing script, skipping remaining {snapT - snapN} configs");
-                        }
+                        _probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
                     }
-                    catch { }
                 }
-                _progress?.Report(new FlowsealProgress(
-                    snapN, snapT, _currentName, snapOk, snapTotal));
-                try { _killScript(); }
-                catch (Exception ex)
-                {
-                    _logger?.Warning(ex, "[ZapretAutoStrategy] Early-kill threw (proc may already be dead)");
-                }
+                catch { }
             }
-            return;
-        }
 
-        if (ErrorLineRx.IsMatch(line))
-        {
-            lock (_counterLock)
+            var m = ConfigHeaderRx.Match(line);
+            if (m.Success
+                && int.TryParse(m.Groups[1].Value, out var n)
+                && int.TryParse(m.Groups[2].Value, out var t))
             {
-                if (_errorLines.Count >= 8) _errorLines.RemoveAt(0);
-                _errorLines.Add(line.Trim());
-            }
-            _logger?.Debug("[ZapretAutoStrategy] flowseal-script: {Line}", line.Trim());
-            return;
-        }
+                int prevOk, prevTotal;
+                string prevName;
+                lock (_counterLock)
+                {
+                    prevOk = _currentOk;
+                    prevTotal = _currentTotal;
+                    prevName = _currentName;
+                    _currentOk = 0;
+                    _currentTotal = 0;
+                    TestedCount = n;
+                    TotalCount = t;
+                }
+                if (!string.IsNullOrEmpty(prevName) && prevTotal > 0)
+                {
+                    lock (_perStrategyLock)
+                    {
+                        _perStrategy[prevName] = new ZapretStrategyTestResult
+                        {
+                            Passed = prevOk,
+                            Total = prevTotal,
+                            At = DateTime.UtcNow,
+                        };
+                    }
+                }
 
-        var w = WinnerRx.Match(line);
-        if (w.Success)
-        {
-            Winner = w.Groups[1].Value.Trim();
-            _logger?.Information("[ZapretAutoStrategy] Flowseal sweep winner: {Strategy}", Winner);
-        
+                var strategy = m.Groups[3].Value.Trim();
+                _currentName = strategy;
+                _progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
+                return;
+            }
+
+            var s = StatusLineRx.Match(line);
+            if (s.Success)
+            {
+                var status = s.Groups[1].Value;
+                bool isPass = status.Equals("OK", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
+                int snapOk, snapTotal, snapN, snapT;
+                lock (_counterLock)
+                {
+                    _currentTotal++;
+                    if (isPass)
+                        _currentOk++;
+                    snapOk = _currentOk;
+                    snapTotal = _currentTotal;
+                    snapN = TestedCount;
+                    snapT = TotalCount;
+                }
+                if (snapN > 0 && snapT > 0)
+                {
+                    _progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
+                }
+
+                if (!EarlyWinnerKilled
+                    && snapOk == snapTotal
+                    && snapTotal >= 16
+                    && !string.IsNullOrEmpty(_currentName))
+                {
+                    EarlyWinnerKilled = true;
+                    Winner = _currentName;
+                    _logger?.Information(
+                        "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
+                        Winner, snapOk, snapTotal);
+                    if (_probeLog != null)
+                    {
+                        try
+                        {
+                            lock (_probeLogLock)
+                            {
+                                _probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} # EARLY-WINNER {_currentName} ({snapOk}/{snapTotal}) — killing script, skipping remaining {snapT - snapN} configs");
+                            }
+                        }
+                        catch { }
+                    }
+                    _progress?.Report(new FlowsealProgress(
+                        snapN, snapT, _currentName, snapOk, snapTotal));
+                    try { _killScript(); }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warning(ex, "[ZapretAutoStrategy] Early-kill threw (proc may already be dead)");
+                    }
+                }
+                return;
+            }
+
+            if (ErrorLineRx.IsMatch(line))
+            {
+                lock (_counterLock)
+                {
+                    if (_errorLines.Count >= 8) _errorLines.RemoveAt(0);
+                    _errorLines.Add(line.Trim());
+                }
+                _logger?.Debug("[ZapretAutoStrategy] flowseal-script: {Line}", line.Trim());
+                return;
+            }
+
+            var w = WinnerRx.Match(line);
+            if (w.Success)
+            {
+                Winner = w.Groups[1].Value.Trim();
+                _logger?.Information("[ZapretAutoStrategy] Flowseal sweep winner: {Strategy}", Winner);
+            }
         }
 
         public IReadOnlyList<string> SnapshotErrors()
