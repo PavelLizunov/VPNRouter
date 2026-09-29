@@ -9,13 +9,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Core.Platform.macOS;
 
-/// <summary>
-/// macOS process scanner. Uses a single `ps -eo pid,ppid,comm` call for all data.
-/// No Process.GetProcesses() — it's too slow on macOS (sysctl per-process).
-///
-/// Key difference from Windows: process names on macOS have no .exe suffix.
-/// This scanner strips .exe from all profile names before matching.
-/// </summary>
 public class MacProcessScanner : IProcessScanner
 {
     private readonly ILogger _logger;
@@ -32,7 +25,6 @@ public class MacProcessScanner : IProcessScanner
     {
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Single ps call — gets PID, PPID, and command name for all processes
         var tree = BuildProcessTree();
 
         var runningNames = new HashSet<string>(
@@ -40,10 +32,8 @@ public class MacProcessScanner : IProcessScanner
 
         foreach (var rule in profile.Processes)
         {
-            // 1. Primary process name — strip .exe for macOS
             found.Add(StripExe(rule.Name));
 
-            // 2. Scan patterns — match against running process names
             foreach (var pattern in rule.ScanPatterns)
             {
                 var strippedPattern = StripExe(pattern);
@@ -60,12 +50,9 @@ public class MacProcessScanner : IProcessScanner
                 }
                 catch (RegexMatchTimeoutException)
                 {
-                    // B3-1: skip a pathological pattern (fail-safe) instead of
-                    // wedging the scan. See ProcessScanner for the rationale.
                 }
             }
 
-            // 3. Include children — walk pre-built tree
             if (rule.IncludeChildren)
             {
                 var strippedName = StripExe(rule.Name);
@@ -93,11 +80,6 @@ public class MacProcessScanner : IProcessScanner
         return result;
     }
 
-    // ─── Private ──────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Run `ps -eo pid,ppid,comm` ONCE and build pid→name + parent→children maps.
-    /// </summary>
     private ProcessTree BuildProcessTree()
     {
         var tree = new ProcessTree();
@@ -116,14 +98,11 @@ public class MacProcessScanner : IProcessScanner
             using var proc = Process.Start(psi);
             if (proc == null) return tree;
 
-            // Drain stdout on a background task so a stalled `ps` can't block
-            // forever: the old code ReadToEnd()'d FIRST, so the WaitForExit(5s)
-            // timeout never fired — a hung ps would deadlock Connect / hot-reload
-            // (audit 2026-06-04). Now the timeout is the real guard.
+            // Read stdout on a background task so the WaitForExit timeout can fire if ps hangs.
             var readTask = System.Threading.Tasks.Task.Run(() => proc.StandardOutput.ReadToEnd());
             if (!proc.WaitForExit(5000))
             {
-                try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                try { proc.Kill(entireProcessTree: true); } catch { }
                 _logger.Warning("[MacProcessScanner] /bin/ps did not exit within 5s — killed; process tree may be incomplete this scan");
                 return tree;
             }
@@ -131,10 +110,6 @@ public class MacProcessScanner : IProcessScanner
 
             foreach (var line in output.Split('\n').Skip(1))
             {
-                // Parse pid/ppid/comm via the shared, space-path-safe parser.
-                // The comm column is a full executable path on macOS and may contain
-                // spaces ("/Applications/Google Chrome.app/.../Google Chrome"); a naive
-                // split would truncate it to "Google" and break process_name matching.
                 if (!Unix.PsProcessLineParser.TryParseLine(line, out var pid, out var ppid, out var comm))
                     continue;
 
@@ -180,9 +155,6 @@ public class MacProcessScanner : IProcessScanner
                 .Replace(@"\*", ".*")
                 .Replace(@"\?", ".") + "$";
 
-            // B3-1: bounded match time — see ProcessScanner.PatternMatchTimeoutMs
-            // for the full rationale (untrusted scan_patterns + catastrophic
-            // backtracking on hot paths). Mirror the 250ms ceiling here.
             return new Regex(regexPattern,
                 RegexOptions.IgnoreCase | RegexOptions.Compiled,
                 TimeSpan.FromMilliseconds(250));

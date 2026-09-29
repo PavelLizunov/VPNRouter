@@ -4,6 +4,25 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.App.Localization;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Input;
+using Serilog;
+using VPNRouter.Core;
+using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform;
+using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.FreeConfigs;
+using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -13,11 +32,6 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(LogoSource))]
     private bool _isDarkTheme;
 
-    // v2.40.x (Fix #7): the user's theme PREFERENCE — "light" | "dark" |
-    // "system". Distinct from IsDarkTheme, which is the EFFECTIVE variant
-    // currently showing (resolved in ApplyTheme; "system" derives it from the
-    // OS appearance). The three derived bools drive the segmented control's
-    // active-state in the ⋯ menu.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSystemThemePref))]
     [NotifyPropertyChangedFor(nameof(IsLightThemePref))]
@@ -28,34 +42,11 @@ public partial class MainWindowViewModel
     public bool IsLightThemePref  => string.Equals(ThemePreference, "light",  StringComparison.OrdinalIgnoreCase);
     public bool IsDarkThemePref   => string.Equals(ThemePreference, "dark",   StringComparison.OrdinalIgnoreCase);
 
-    // v2.20.3: single transparent-background mascot (penguin_mascot.png,
-    // 640×640, black lineart on alpha). Previous b_icon/w_icon pair had
-    // SOLID backgrounds (not transparent) and I had them swapped to boot —
-    // on light theme we were showing the black-rectangle variant, on dark
-    // the white-rectangle one, both as visible rectangles inside the
-    // accent-subtle container. User provided the clean transparent
-    // version; we use it directly for light theme and RGB-invert it for
-    // dark theme so the black lineart becomes white. Alpha channel is
-    // preserved through the invert so edges stay anti-aliased.
     private static readonly Bitmap _logoLight = LoadAsset("avares://VPNRouter.App/Assets/penguin_mascot.png");
     private static readonly Bitmap _logoDark  = TryBuildInvertedLogo(_logoLight) ?? _logoLight;
-    /// <summary>
-    /// Header mascot. Light theme uses the source image as-is (black
-    /// lineart on transparent). Dark theme uses an RGB-inverted copy
-    /// (white lineart on transparent) so it remains visible against the
-    /// dark subheader background.
-    /// </summary>
     public Bitmap LogoSource => IsDarkTheme ? _logoDark : _logoLight;
     private static Bitmap LoadAsset(string uri) => new(AssetLoader.Open(new System.Uri(uri)));
 
-    /// <summary>
-    /// Produce an RGB-inverted copy that preserves alpha. Uses
-    /// WriteableBitmap in Bgra8888/Unpremul so inverting the RGB channels
-    /// doesn't interact with premultiplied-alpha edges (no fringing).
-    /// Returns null on any failure — caller falls back to the original
-    /// bitmap, which just renders invisibly on dark theme but at least
-    /// doesn't crash the window.
-    /// </summary>
     private static Bitmap? TryBuildInvertedLogo(Bitmap source)
     {
         try
@@ -75,8 +66,6 @@ public partial class MainWindowViewModel
                 var bytes = new byte[byteCount];
                 System.Runtime.InteropServices.Marshal.Copy(fb.Address, bytes, 0, byteCount);
 
-                // BGRA: invert B, G, R; keep A. Source may be indexed-palette
-                // PNG — CopyPixels normalises to Bgra8888 regardless.
                 for (int i = 0; i < bytes.Length; i += 4)
                 {
                     bytes[i]     = (byte)(255 - bytes[i]);
@@ -95,4 +84,90 @@ public partial class MainWindowViewModel
         }
     }
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
+
+    private void ApplyTheme()
+    {
+        if (Application.Current != null)
+        {
+            ThemeVariant effective;
+            if (IsSystemThemePref)
+            {
+                Application.Current.RequestedThemeVariant = ThemeVariant.Default;
+                effective = ReadOsThemeVariant();
+            }
+            else
+            {
+                effective = IsDarkThemePref ? ThemeVariant.Dark : ThemeVariant.Light;
+                Application.Current.RequestedThemeVariant = effective;
+            }
+            IsDarkTheme = effective == ThemeVariant.Dark;
+        }
+
+        OnPropertyChanged(nameof(VpnBadgeBrush));
+        OnPropertyChanged(nameof(ZapretBadgeBrush));
+        OnPropertyChanged(nameof(TgProxyBadgeBrush));
+
+        foreach (var s in Servers)             s.NotifyThemeChanged();
+        foreach (var s in SubscriptionServers) s.NotifyThemeChanged();
+    }
+
+    private static ThemeVariant ReadOsThemeVariant()
+    {
+        try
+        {
+            var os = Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant;
+            return os == PlatformThemeVariant.Dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        }
+        catch
+        {
+            return ThemeVariant.Light;
+        }
+    }
+
+    internal static string NormalizeThemePref(string? raw)
+    {
+        if (string.Equals(raw, "dark", StringComparison.OrdinalIgnoreCase)) return "dark";
+        if (string.Equals(raw, "light", StringComparison.OrdinalIgnoreCase)) return "light";
+        return "system";
+    }
+
+    private void OnPlatformColorValuesChanged(object? sender, PlatformColorValues e)
+    {
+        if (!IsSystemThemePref) return;
+        Dispatcher.UIThread.Post(ApplyTheme);
+    }
+
+    private IPlatformSettings? _wiredPlatformSettings;
+
+    private void WireOsThemeFollow()
+    {
+        if (_wiredPlatformSettings != null) return;
+        try
+        {
+            var ps = Application.Current?.PlatformSettings;
+            if (ps == null) return;
+            ps.ColorValuesChanged += OnPlatformColorValuesChanged;
+            _wiredPlatformSettings = ps;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] WireOsThemeFollow: could not subscribe to ColorValuesChanged");
+        }
+    }
+
+    private void UnwireOsThemeFollow()
+    {
+        try
+        {
+            if (_wiredPlatformSettings != null)
+            {
+                _wiredPlatformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
+                _wiredPlatformSettings = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] UnwireOsThemeFollow: unsubscribe failed");
+        }
+    }
 }

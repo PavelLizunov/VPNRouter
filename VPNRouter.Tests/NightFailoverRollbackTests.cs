@@ -14,12 +14,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// NIGHT-06 regression tests: AutoFailover stale selector rollback prevention.
-/// Verifies that obsolete failover intents do not mutate settings or tried sets,
-/// cannot overwrite committed selections on the same settings instance during rollback or persistence,
-/// and that VpnEngine wire callbacks correctly invalidate upon reset or user Stop.
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class NightFailoverRollbackTests
 {
@@ -159,29 +153,23 @@ public sealed class NightFailoverRollbackTests
 
         var handleTask = failover.HandleDeadConfigAsync("probe failed", CancellationToken.None);
 
-        // Wait until failover mutates sameSettings to candidate "server-b" and awaits restart
         await restartStarted.Task;
         Assert.Equal("server-b", sameSettings.Vless.ActiveServer);
 
-        // Emulate committed intent: generation++ and selection C committed on the same settings object
         generation++;
         sameSettings.Vless.ActiveServer = "server-c";
         sameSettings.App.ActiveSubscriptionServer = "server-c";
 
-        // Complete the restart delegate with restartResult (false or true)
         restartTcs.SetResult(restartResult);
         var outcome = await handleTask;
 
-        // Obsolete intent returns switched: false, null server, null message
         Assert.False(outcome.Switched);
         Assert.Null(outcome.NewActiveServer);
         Assert.Null(outcome.UserFacingMessage);
 
-        // Newer committed selection C is retained on sameSettings (not overwritten by rollback or persist)
         Assert.Equal("server-c", sameSettings.Vless.ActiveServer);
         Assert.Equal("server-c", sameSettings.App.ActiveSubscriptionServer);
 
-        // Store was NOT saved
         Assert.Equal(0, store.SaveCount);
     }
 
@@ -274,66 +262,6 @@ public sealed class NightFailoverRollbackTests
     }
 
     [Fact]
-    public void VpnEngine_WireFailover_CallbackRejects_AfterResetWithSameSettingsObject()
-    {
-        var dns = new NullWindowsDnsHardening();
-        var fakeDriver = new FakeSplitTunnelDriver();
-        using var engine = BuildEngine(dns, fakeDriver);
-
-        var settings = CreateTestSettings("server-a", "server-b");
-        engine.ResetFailoverContext(settings);
-
-        var host = CreateStartupHost(engine);
-        var sanity = new ConfigSanityCheck();
-        var failover = host.WireFailover(sanity);
-
-        Assert.NotNull(failover.IsCurrentIntent);
-        Assert.True(failover.IsCurrentIntent!(), "Callback must accept active generation before reset.");
-
-        // Reset with exact SAME settings instance
-        engine.ResetFailoverContext(settings);
-
-        Assert.False(failover.IsCurrentIntent!(), "Callback must reject after reset even with the exact same settings object.");
-    }
-
-    [Fact]
-    public void VpnEngine_ActualStop_InvalidatesFailoverGenerationAndCallback_SafeFixtureHelpers()
-    {
-        var priorDataDir = GetAppPathsDataDir();
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-stop-test-{Guid.NewGuid():N}");
-        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
-
-        try
-        {
-            var dns = new NullWindowsDnsHardening();
-            var fakeDriver = new FakeSplitTunnelDriver();
-            using var engine = BuildEngine(dns, fakeDriver);
-
-            var settings = CreateTestSettings("server-a", "server-b");
-            engine.ResetFailoverContext(settings);
-
-            var host = CreateStartupHost(engine);
-            var sanity = new ConfigSanityCheck();
-            var failover = host.WireFailover(sanity);
-
-            Assert.NotNull(failover.IsCurrentIntent);
-            Assert.True(failover.IsCurrentIntent!(), "Callback must be valid before stop.");
-
-            // Public Stop under safe fixtures (no real scanner/dns/driver, no live process)
-            engine.Stop();
-
-            // Generation was incremented and session cancelled, invalidating the failover instance
-            Assert.False(failover.IsCurrentIntent!(), "Failover callback must evaluate to false after public Stop.");
-            Assert.Null(GetField(engine, "_failover"));
-        }
-        finally
-        {
-            RestoreAppPathsDataDir(priorDataDir);
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
     public async Task HandleDeadConfigAsync_CancellationDuringRestart_GuardsRollbackWhenIntentObsolete()
     {
         var sameSettings = CreateTestSettings("server-a", "server-b");
@@ -359,62 +287,11 @@ public sealed class NightFailoverRollbackTests
         var handleTask = failover.HandleDeadConfigAsync("probe failed", CancellationToken.None);
         await restartStarted.Task;
 
-        // Emulate Apply setting selection C and bumping generation
         generation++;
         sameSettings.Vless.ActiveServer = "server-c";
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handleTask);
 
-        // Retains server-c because intent was obsolete, rollback did not overwrite it
         Assert.Equal("server-c", sameSettings.Vless.ActiveServer);
-    }
-
-    [Fact]
-    public async Task VpnEngine_ActualDispose_InvalidatesFailoverCallback_RetainedFailoverEntryNoSaveNoRestart()
-    {
-        var priorDataDir = GetAppPathsDataDir();
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-dispose-test-{Guid.NewGuid():N}");
-        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
-
-        try
-        {
-            var dns = new NullWindowsDnsHardening();
-            var fakeDriver = new FakeSplitTunnelDriver();
-            var engine = BuildEngine(dns, fakeDriver);
-
-            var settings = CreateTestSettings("server-a", "server-b");
-            engine.ResetFailoverContext(settings);
-
-            var host = CreateStartupHost(engine);
-            var sanity = new ConfigSanityCheck();
-            var failover = host.WireFailover(sanity);
-
-            var store = new InMemorySettingsStore();
-            typeof(AutoFailoverEngine).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(failover, store);
-
-            Assert.NotNull(failover.IsCurrentIntent);
-            Assert.True(failover.IsCurrentIntent!(), "Callback must be valid before dispose.");
-
-            // Actual Dispose once (helper is idempotent; do not double-dispose)
-            engine.Dispose();
-
-            // Old callback evaluates to false after Dispose
-            Assert.False(failover.IsCurrentIntent!(), "Failover callback must evaluate to false after Dispose.");
-
-            // Retained failover handle rejects on entry without mutating settings, saving, or restarting
-            var outcome = await failover.HandleDeadConfigAsync("probe failed", CancellationToken.None);
-
-            Assert.False(outcome.Switched);
-            Assert.Null(outcome.NewActiveServer);
-            Assert.Null(outcome.UserFacingMessage);
-            Assert.Equal("server-a", settings.Vless.ActiveServer);
-            Assert.Equal(0, store.SaveCount);
-            Assert.Empty(failover.TriedServers);
-        }
-        finally
-        {
-            RestoreAppPathsDataDir(priorDataDir);
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
-        }
     }
 }

@@ -3,10 +3,6 @@ using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Models;
 
-/// <summary>
-/// v2.14.4 — user-provided source URL for Free Configs aggregation.
-/// Private subscriptions that user wants to include alongside the 14 public sources.
-/// </summary>
 public class UserFreeSource
 {
     [YamlMember(Alias = "name")]

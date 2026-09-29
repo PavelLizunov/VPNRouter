@@ -4,27 +4,9 @@ using Serilog;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-/// <summary>
-/// Persists aggregated free configs to JSON file in %ProgramData%\VPNRouter\cache\free_configs.json.
-/// Survives restarts so user doesn't wait for full re-scan every launch.
-/// </summary>
 public sealed class FreeConfigCache
 {
-    /// <summary>
-    /// v2.32.0 — current cache schema version. Bumped whenever the on-disk
-    /// shape changes in a non-backward-compatible way. Older files are
-    /// quarantined and rebuilt by <see cref="CacheRecovery"/>.
-    /// </summary>
     public const int CurrentSchemaVersion = 1;
-
-    // Phase 7 Wave 34: retired the local JsonOptions field. Save/Load
-    // now use the JsonTypeInfo<CacheFile> overload directly against
-    // AppJsonContext.Default. Wire format change: WriteIndented flipped
-    // false → true to match the global context posture; ~5-10% on-disk
-    // size growth, acceptable for an internal cache file with no
-    // external interop. See CacheRecoveryTests.cs:341
-    // FreeConfigCache_Save_StampsCurrentSchemaVersion for the test
-    // expectation update.
 
     private readonly string _path;
     private readonly ILogger _logger;
@@ -35,24 +17,16 @@ public sealed class FreeConfigCache
     {
     }
 
-    /// <summary>v2.32.0 — explicit-path constructor for unit tests so we
-    /// can run hermetically against a temp dir.</summary>
     public FreeConfigCache(ILogger logger, string filePath)
     {
         _logger = logger;
         _path = filePath;
     }
 
-    /// <summary>Cache file path (for diagnostics / Open Folder).</summary>
     public string FilePath => _path;
 
     public sealed class CacheFile
     {
-        /// <summary>
-        /// v2.32.0 — schema marker for <see cref="CacheRecovery"/>. Defaults
-        /// to <see cref="CurrentSchemaVersion"/> on a fresh in-memory file
-        /// so the first <see cref="Save"/> writes the current version.
-        /// </summary>
         [JsonPropertyName("schema_version")]
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -60,12 +34,6 @@ public sealed class FreeConfigCache
         public List<FreeConfigEntry> Configs { get; set; } = new();
     }
 
-    /// <summary>
-    /// Loads cached configs. Returns empty file object if missing,
-    /// schema-mismatched, or unreadable. Corrupt files are quarantined
-    /// as <c>free_configs.json.corrupt-{timestamp}</c> by
-    /// <see cref="CacheRecovery"/> for post-mortem.
-    /// </summary>
     public CacheFile Load()
     {
         _ioLock.Wait();
@@ -79,9 +47,6 @@ public sealed class FreeConfigCache
         }
     }
 
-    /// <summary>
-    /// Asynchronously loads cached configs using stream deserialization without LOH allocations.
-    /// </summary>
     public async Task<CacheFile> LoadAsync(CancellationToken ct = default)
     {
         await _ioLock.WaitAsync(ct).ConfigureAwait(false);
@@ -139,25 +104,9 @@ public sealed class FreeConfigCache
             return result.Value!;
         }
 
-        // NotFound is the clean first-launch path — keep it quiet.
-        // ShouldRebuild covers the four corruption reasons; the helper
-        // already logged the warning + quarantined the file. Returning
-        // an empty CacheFile signals "no cached configs" to the
-        // aggregator, which then triggers a fresh fetch on next refresh.
         return new CacheFile();
     }
 
-    /// <summary>
-    /// v2.31.3-r1 (F-25 follow-up): heal old cache entries that picked up
-    /// implausibly low TCP-ping latency from the pre-v2.31.2 Recheck flow.
-    /// Recheck used to skip the <c>ImplausibleThresholdMs=5</c> gate and
-    /// silently overwrote Verified <c>LatencyMs</c> with sub-1 ms readings
-    /// (cached route + ARP made <c>TcpClient.ConnectAsync</c> return faster
-    /// than the physical floor of internet RTT). v2.31.2 fixed the new-write
-    /// path; this migration heals old corrupted entries on load by resetting
-    /// any sub-threshold <c>LatencyMs</c> to 0 — the UI renders 0 as "—",
-    /// signalling "needs re-verify" rather than displaying the bogus value.
-    /// </summary>
     private static void HealCorruptedSubThresholdLatencies(CacheFile file)
     {
         const int ImplausibleThresholdMs = 5;
@@ -170,19 +119,11 @@ public sealed class FreeConfigCache
         }
     }
 
-    /// <summary>
-    /// Save cache atomically (write to .tmp, then rename). Always stamps
-    /// <see cref="CacheFile.SchemaVersion"/> with the current value so a
-    /// future load can detect schema drift.
-    /// </summary>
     public void Save(CacheFile file)
     {
         _ioLock.Wait();
         try
         {
-            // Stamp the current schema on every write — defends against
-            // callers that constructed the object externally and never
-            // touched the property.
             file.SchemaVersion = CurrentSchemaVersion;
             EnsureCacheDir();
             var tmp = $"{_path}.tmp.{Guid.NewGuid():N}";
@@ -208,50 +149,6 @@ public sealed class FreeConfigCache
         }
     }
 
-    /// <summary>
-    /// Save cache asynchronously using FileStream without intermediate LOH string allocations.
-    /// </summary>
-    public async Task SaveAsync(CacheFile file, CancellationToken ct = default)
-    {
-        await _ioLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            file.SchemaVersion = CurrentSchemaVersion;
-            EnsureCacheDir();
-            var tmp = $"{_path}.tmp.{Guid.NewGuid():N}";
-            await using (var stream = new FileStream(
-                tmp,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 8192,
-                useAsync: true))
-            {
-                await JsonSerializer.SerializeAsync(
-                    stream,
-                    file,
-                    VPNRouter.Core.Json.AppJsonContext.Default.CacheFile,
-                    ct).ConfigureAwait(false);
-                await stream.FlushAsync(ct).ConfigureAwait(false);
-            }
-            File.Move(tmp, _path, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning("FreeConfigCache: async save failed: {err}", ex.Message);
-        }
-        finally
-        {
-            _ioLock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Ensures the parent directory of the cache file exists. The default
-    /// constructor uses <see cref="AppPaths.CacheDir"/>, but tests inject
-    /// arbitrary paths — so we create the parent of <see cref="_path"/>
-    /// directly rather than calling <see cref="AppPaths.EnsureDirectories"/>.
-    /// </summary>
     private void EnsureCacheDir()
     {
         var dir = Path.GetDirectoryName(_path);

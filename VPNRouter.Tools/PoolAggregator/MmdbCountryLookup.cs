@@ -24,7 +24,6 @@ internal sealed class MmdbCountryLookup : IFreeConfigCountryLookup, IDisposable
         }
         catch
         {
-            // Unresolvable or private IP
         }
         return null;
     }

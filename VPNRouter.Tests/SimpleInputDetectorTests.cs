@@ -2,9 +2,6 @@ using VPNRouter.App;
 
 namespace VPNRouter.Tests;
 
-// r8 #4: Simple-mode input must recognise NaiveProxy share-links (Win/Linux
-// runtime; platform-gated at apply time) — previously naive:// fell through to
-// "Invalid" and the user got a generic error.
 public class SimpleInputDetectorTests
 {
     [Theory]
@@ -16,8 +13,6 @@ public class SimpleInputDetectorTests
     [InlineData("tuic://uuid:pw@h:443#n")]
     [InlineData("ss://x@h:443#n")]
     [InlineData("dns-tunnel://x@h:443#n")]
-    // P2 (2026-07-10): AmneziaWG share-links recognised at intake (apply-time
-    // gate refuses them on a non-lx core, like naive/dns-tunnel).
     [InlineData("awg://PEER@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32")]
     [InlineData("amneziawg://PEER@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32")]
     public void Classify_ServerUriSchemes(string uri)

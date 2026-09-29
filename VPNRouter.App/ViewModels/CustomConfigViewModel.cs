@@ -3,9 +3,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// ViewModel for a custom sing-box config entry.
-/// </summary>
 public partial class CustomConfigViewModel : ViewModelBase
 {
     [ObservableProperty] private string _name = string.Empty;
@@ -22,7 +19,6 @@ public partial class CustomConfigViewModel : ViewModelBase
         Path = entry.Path;
         IsActive = isActive;
 
-        // Parse config info
         var resolvedPath = Environment.ExpandEnvironmentVariables(entry.Path);
         if (File.Exists(resolvedPath))
         {

@@ -5,45 +5,19 @@ using Microsoft.Win32;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Flowseal zapret service actions — diagnostics, Discord cache cleanup,
-/// hosts file update, service menu launcher. Pure C# reimplementations.
-/// </summary>
 public static class ZapretActions
 {
-    // 3G-2 (v3.0 refactor): replaced per-class `static readonly HttpClient`
-    // with the shared IHttpClient seam. Static-class workaround: settable
-    // property defaulting to PolicyHttpClient.Shared.
-    /// <summary>HTTP seam — tests may override to inject <c>FakeHttpClient</c>.
-    /// Defaults to <see cref="PolicyHttpClient.Shared"/>.</summary>
     public static IHttpClient Http { get; set; } = PolicyHttpClient.Shared;
 
-    // v3.0 Phase 2D (2026-05-17): IProcessRunner seam for sc/netsh shells.
-    // Default = real ProcessRunner; tests assign FakeProcessRunner to drive
-    // canned exit codes / stdout / stderr without invoking real `sc`.
-    // Refactored call sites (Phase 2G sub-wave 7b-2, 2026-05-18):
-    // RunSc (POC), IsServiceRunning, IsAnyServiceMatching, ServiceExists,
-    // RunNetsh. Open process-touching surface that remains direct-Process:
-    // ClearDiscordCacheAsync (kills Discord), CheckProxyLine (registry read),
-    // RunTests (powershell shell-exec), OpenServiceMenu (cmd shell-exec
-    // with runas verb — UAC). Per plans/phase2-2G-untested-services-2026-05-17.md.
     private static IProcessRunner _processRunner = new ProcessRunner();
 
-    /// <summary>Test-only seam: swap in a fake. Production paths use the
-    /// default <see cref="ProcessRunner"/>; never call this outside tests.</summary>
     internal static IProcessRunner ProcessRunner
     {
         get => _processRunner;
         set => _processRunner = value ?? new ProcessRunner();
     }
 
-    /// <summary>
-    /// How long to wait for `sc stop/delete` to return before considering
-    /// the call hung. Matches the legacy 2-3s WaitForExit timings.
-    /// </summary>
     private static readonly TimeSpan ScCommandTimeout = TimeSpan.FromSeconds(5);
-
-    // ── Discord cache ──
 
     public static async IAsyncEnumerable<string> ClearDiscordCacheAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -51,13 +25,6 @@ public static class ZapretActions
         yield return "=== Clear Discord cache ===";
 
         var running = Process.GetProcessesByName("Discord");
-        // v2.40.0-r3 (audit P0 handle-leak sweep): KillProcessLine disposes each
-        // process it actually kills, but if the consumer stops enumerating early
-        // the unreached Process handles in `running` would leak. This finally
-        // disposes the WHOLE array on enumerator teardown — double-disposing the
-        // already-killed ones (Dispose is idempotent) while covering the early-exit
-        // and empty/Length==0 paths. yield-return inside try/finally (no catch) is
-        // legal in C#.
         try
         {
             if (running.Length == 0)
@@ -120,8 +87,6 @@ public static class ZapretActions
         catch (Exception ex) { return $"✗ Failed {label}: {ex.Message}"; }
     }
 
-    // ── Diagnostics ──
-
     public static async IAsyncEnumerable<string> RunDiagnosticsAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -136,7 +101,7 @@ public static class ZapretActions
 
         foreach (var proc in new[] { "AdguardSvc", "SmartByte" })
         {
-            yield return ProcessQuery.AnyAlive(proc) // v2.40.0-r3: handle-safe (was a bare .Length probe)
+            yield return ProcessQuery.AnyAlive(proc)
                 ? $"✗ [X] {proc} running — conflicts with zapret"
                 : $"✓ {proc} not running";
         }
@@ -154,7 +119,7 @@ public static class ZapretActions
 
         yield return await CheckHostsLineAsync(ct);
 
-        yield return ProcessQuery.AnyAlive("winws") // v2.40.0-r3: handle-safe (was a bare .Length probe)
+        yield return ProcessQuery.AnyAlive("winws")
             ? "✓ winws.exe is running"
             : "— winws.exe not running";
 
@@ -204,8 +169,6 @@ public static class ZapretActions
         }
         catch (Exception ex) { return $"? Couldn't read hosts: {ex.Message}"; }
     }
-
-    // ── Update hosts from Flowseal repo ──
 
     public static async IAsyncEnumerable<string> UpdateHostsAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -282,12 +245,6 @@ public static class ZapretActions
 
     private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
-        // v2.20.2: notepad / explorer.exe are Windows-only. On Linux / macOS
-        // they don't exist and Process.Start would throw into the silent
-        // catch, leaving the user with no feedback. Zapret is Windows-only
-        // anyway (it ships winws.exe), so in practice this helper should
-        // never be reached on other platforms — but guarding the call keeps
-        // the fallback noiseless instead of pretending it worked.
         if (!OperatingSystem.IsWindows())
             return;
 
@@ -299,16 +256,11 @@ public static class ZapretActions
         catch { }
     }
 
-    // ── Game filter (utils/game_filter.enabled) ──
-
     public enum GameFilterMode { Off = 0, All = 1, TcpOnly = 2, UdpOnly = 3 }
 
     private static string GameFilterFlagPath =>
         Path.Combine(ZapretUpdater.ZapretDir, "utils", "game_filter.enabled");
 
-    /// <summary>r34 — true if the user has explicitly set a Game Filter
-    /// mode (file exists). Used by magic-button flow to apply a sensible
-    /// default ONLY on first run, never overriding a user's choice.</summary>
     public static bool IsGameFilterConfigured => File.Exists(GameFilterFlagPath);
 
     public static GameFilterMode GetGameFilterMode()
@@ -350,8 +302,6 @@ public static class ZapretActions
         catch { }
     }
 
-    // ── IPSet filter (lists/ipset-all.txt) ──
-
     public enum IpSetMode { Any = 0, Loaded = 1, None = 2 }
 
     private static string IpSetListPath =>
@@ -383,7 +333,6 @@ public static class ZapretActions
 
             if (mode == IpSetMode.Any)
             {
-                // If switching from Loaded, back it up first
                 if (current == IpSetMode.Loaded && File.Exists(IpSetListPath))
                 {
                     if (File.Exists(IpSetBackupPath)) File.Delete(IpSetBackupPath);
@@ -393,7 +342,6 @@ public static class ZapretActions
             }
             else if (mode == IpSetMode.None)
             {
-                // Back up loaded list if present
                 if (current == IpSetMode.Loaded && File.Exists(IpSetListPath))
                 {
                     if (File.Exists(IpSetBackupPath)) File.Delete(IpSetBackupPath);
@@ -403,19 +351,15 @@ public static class ZapretActions
             }
             else if (mode == IpSetMode.Loaded)
             {
-                // Restore from backup
                 if (File.Exists(IpSetBackupPath))
                 {
                     if (File.Exists(IpSetListPath)) File.Delete(IpSetListPath);
                     File.Move(IpSetBackupPath, IpSetListPath);
                 }
-                // else: no backup — user needs to update IPSet list
             }
         }
         catch { }
     }
-
-    // ── IPSet list update ──
 
     public static async IAsyncEnumerable<string> UpdateIpSetListAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -461,8 +405,6 @@ public static class ZapretActions
         catch (Exception ex) { return $"✗ Save failed: {ex.Message}"; }
     }
 
-    // ── Auto-update check toggle ──
-
     private static string AutoUpdateFlagPath =>
         Path.Combine(ZapretUpdater.ZapretDir, "utils", "check_updates.enabled");
 
@@ -478,8 +420,6 @@ public static class ZapretActions
         }
         catch { }
     }
-
-    // ── Run network tests (test zapret.ps1) ──
 
     public static void RunTests()
     {
@@ -502,8 +442,6 @@ public static class ZapretActions
 
         Process.Start(psi);
     }
-
-    // ── Remove zapret / WinDivert services ──
 
     public static async IAsyncEnumerable<string> RemoveZapretServiceAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -529,14 +467,6 @@ public static class ZapretActions
         catch (Exception ex) { return $"✗ {svc}: {ex.Message}"; }
     }
 
-    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner so tests can
-    // inject FakeProcessRunner. `internal` (not private) so the test seam
-    // in VPNRouter.Tests can call directly via InternalsVisibleTo —
-    // exercising the method without simulating the entire
-    // RemoveZapretServiceAsync orchestration. Behavioural surface
-    // preserved: an exception path (FileNotFoundException etc.) still
-    // collapses to `false` so the consuming `StopDeleteServiceLineAsync`
-    // can fall through to "not installed".
     internal static string ScExecutablePath { get; set; } =
         OperatingSystem.IsWindows() ? WindowsServiceCommand.GetSystemScPath() : "sc";
 
@@ -556,16 +486,6 @@ public static class ZapretActions
         catch { return false; }
     }
 
-    // v3.0 Phase 2D refactor: route `sc` invocations through IProcessRunner
-    // so tests can intercept the call without spawning the real binary.
-    // Argument-splitting: legacy `args` came as a single shell-style string
-    // like "stop zapret"; we tokenise on whitespace because none of the
-    // service names we pass contain spaces (callers: StopDeleteServiceLineAsync
-    // only — pure verb + svc-name). If that changes, switch callers to pass
-    // IReadOnlyList<string> directly instead of relying on Split.
-    //
-    // v3.0 Phase 2G (2026-05-18): made `internal` so tests in VPNRouter.Tests
-    // can exercise the executable+ArgumentList composition assertion.
     internal static async Task RunSc(string args)
     {
         var argList = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -575,8 +495,6 @@ public static class ZapretActions
                 Arguments: argList,
                 Timeout: ScCommandTimeout));
     }
-
-    // ── Launch Flowseal service menu ──
 
     public static void OpenServiceMenu(string? customServicePath = null)
     {
@@ -607,14 +525,6 @@ public static class ZapretActions
         });
     }
 
-    // ── Service query helpers ──
-
-    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner + made `internal`
-    // for tests. Note the case-sensitivity contract: `sc query NAME` emits
-    // an output block containing the literal token "RUNNING" (or "STOPPED",
-    // "PAUSED", etc.) when the service exists; we compare with
-    // OrdinalIgnoreCase to mirror the legacy parser. A nonzero exit code
-    // (service doesn't exist, 1060) yields empty Stdout → returns false.
     internal static bool IsServiceRunning(string serviceName)
     {
         try
@@ -630,16 +540,6 @@ public static class ZapretActions
         catch { return false; }
     }
 
-    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner + made `internal`.
-    // `sc query state= all` enumerates *all* service states; we scan the dump
-    // for a case-insensitive substring match. This is intentionally permissive
-    // because the diagnostic surface ("⚠ VPN service running — may conflict")
-    // shouldn't be brittle about exact wording — false positives are visible
-    // to the user, false negatives silently hide conflicts.
-    //
-    // ArgumentList passes "state=" and "all" as separate tokens to match the
-    // legacy shell-string contract (`"query state= all"` parsed with a single
-    // space between `state=` and `all`).
     internal static bool IsAnyServiceMatching(string substring)
     {
         try
@@ -655,12 +555,6 @@ public static class ZapretActions
         catch { return false; }
     }
 
-    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner + made `internal`.
-    // Splits the legacy shell-style args on whitespace for the same reason
-    // RunSc does: existing callers only pass simple verb+noun strings like
-    // "interface tcp show global" — no embedded spaces or quoted args. The
-    // `out string output` shape is kept (vs. returning a tuple) to minimise
-    // diff for the consumer (CheckTcpTimestampsLine).
     internal static bool RunNetsh(string args, out string output)
     {
         output = "";

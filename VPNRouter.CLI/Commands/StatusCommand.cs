@@ -9,10 +9,6 @@ public class StatusCommand : Command
 {
     public override int Execute(CommandContext context)
     {
-        // Always perform the side-effect-free runtime probe. It reads
-        // config.yaml directly on every invocation, even when CLI state is
-        // absent, so GUI/Service ownership is observable without allowing the
-        // configured path to mutate the durable runtime-owner record.
         var runtime = RuntimeStatusDetector.GetVpnRuntime();
         var state = StateFile.Read();
 
@@ -76,7 +72,6 @@ public class StatusCommand : Command
             }
             catch
             {
-                // Process exited between the exact identity probe and metrics.
             }
         }
 
@@ -88,7 +83,6 @@ public class StatusCommand : Command
             ? "[bold green]Running[/]"
             : "[bold red]Crashed[/]";
 
-        // Main status table
         var table = new Table().NoBorder().HideHeaders();
         table.AddColumn("");
         table.AddColumn("");
@@ -102,7 +96,6 @@ public class StatusCommand : Command
         AnsiConsole.Write(table);
         AnsiConsole.WriteLine();
 
-        // Monitored processes
         if (exactState.ProcessNames.Count > 0)
         {
             AnsiConsole.MarkupLine($"[bold]Monitored Processes[/] ({exactState.ProcessNames.Count}):");
@@ -115,7 +108,6 @@ public class StatusCommand : Command
             AnsiConsole.WriteLine();
         }
 
-        // Metrics
         if (metrics != null)
         {
             AnsiConsole.MarkupLine("[bold]Health:[/]");
@@ -123,7 +115,6 @@ public class StatusCommand : Command
             AnsiConsole.MarkupLine($"  CPU time:   [yellow]{metrics.CpuTime:hh\\:mm\\:ss}[/]");
         }
 
-        // Log paths
         AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[bold]Logs:[/]");
         AnsiConsole.MarkupLine($"  [grey]%ProgramData%\\VPNRouter\\logs\\vpnrouter.log[/]");

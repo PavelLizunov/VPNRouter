@@ -5,8 +5,6 @@ using Avalonia.Media;
 
 namespace VPNRouter.App.Controls;
 
-/// <summary>Accepted UI catalog geometry, drawn in its original 24-unit viewbox.
-/// Not an application/brand icon. Foreground inherits the surrounding text token.</summary>
 public sealed class Pictogram : Control
 {
     public static readonly StyledProperty<string?> IdProperty =
@@ -43,8 +41,6 @@ public sealed class Pictogram : Control
     private static Part C(double x = 12, double y = 12, double radius = 9, bool fill = false, bool dash = false)
         => new(new EllipseGeometry(new Rect(x - radius, y - radius, radius * 2, radius * 2)), fill, dash);
 
-    // Transcribed from opendesign/mockups/ui-icon-catalog/proposed/*.svg.
-    // Preserve per-part fill/stroke and SVG dash lengths, not just path bounds.
     private static readonly IReadOnlyDictionary<string, Part[]> Shapes = new Dictionary<string, Part[]>
     {
         ["add"] = [P("M12 5v14M5 12h14")],

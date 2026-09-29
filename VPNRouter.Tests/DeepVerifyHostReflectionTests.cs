@@ -35,8 +35,6 @@ public sealed class DeepVerifyHostReflectionTests
     [Fact]
     public void EvaluateProbeResponse_ReflectsHostPublicIp_Rejected()
     {
-        // FCP-02: verify that when a proxy returns the host machine's public IP,
-        // it is rejected as transparent/non-anonymizing.
         var hostPublicIp = IPAddress.Parse("203.0.113.88");
         var body = "ip=203.0.113.88\nloc=US\n";
 

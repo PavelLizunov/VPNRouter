@@ -16,7 +16,6 @@ internal static class LinuxRuntimeEnvironment
         }
         catch
         {
-            // Unknown runtime: preserve the existing native-Linux launch path.
         }
 
         try
@@ -26,7 +25,6 @@ internal static class LinuxRuntimeEnvironment
         }
         catch
         {
-            // Unknown runtime: the exact sing-box error remains the backstop.
         }
 
         return null;

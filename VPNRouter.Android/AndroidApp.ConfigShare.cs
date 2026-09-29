@@ -14,24 +14,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// v2.32.0 (Android-led, 2026-05-07) — config share overlays:
-/// <b>Export</b> (kebab → Diagnostics → "Export config") and
-/// <b>Import</b> (kebab → Diagnostics → "Import config").
-///
-/// <para>Both overlays follow the same fullscreen-Border-on-top-of-
-/// scroller pattern as the log viewer (Phase 7.4) and Settings overlay
-/// (AND-2): hidden by default, shown imperatively, dismissed via a ✕
-/// close button. No XAML — built in code so the same Tokens binding
-/// flow as the rest of AndroidApp applies.</para>
-///
-/// <para>Wiring lives in this partial; field declarations + menu wiring
-/// in <c>AndroidApp.axaml.cs</c> are intentionally minimal so this
-/// feature can be feature-flagged or pulled out cleanly later.</para>
-/// </summary>
 public partial class AndroidApp
 {
-    // Export overlay
     private Border? _cfgExportOverlay;
     private TextBlock? _cfgExportTitle;
     private TextBlock? _cfgExportDesc;
@@ -43,7 +27,6 @@ public partial class AndroidApp
     private TextBlock? _cfgExportStatus;
     private Avalonia.Controls.Button? _menuExportConfigItem;
 
-    // Import overlay
     private Border? _cfgImportOverlay;
     private TextBlock? _cfgImportTitle;
     private TextBlock? _cfgImportDesc;
@@ -60,10 +43,6 @@ public partial class AndroidApp
     private ConfigShareDocument? _cfgImportPendingDoc;
     private Avalonia.Controls.Button? _menuImportConfigItem;
 
-    // ── Build overlays ─────────────────────────────────────────────────
-
-    /// <summary>Build the Export overlay. Hidden until the user picks
-    /// "Export config" from the kebab menu.</summary>
     internal Border BuildExportOverlay()
     {
         _cfgExportTitle = new TextBlock
@@ -190,8 +169,6 @@ public partial class AndroidApp
         return overlay;
     }
 
-    /// <summary>Build the Import overlay. Hidden until the user picks
-    /// "Import config" from the kebab menu.</summary>
     internal Border BuildImportOverlay()
     {
         _cfgImportTitle = new TextBlock
@@ -373,26 +350,12 @@ public partial class AndroidApp
         return overlay;
     }
 
-    // ── Show / hide ────────────────────────────────────────────────────
-
-    public void ShowExportOverlay()
-    {
-        if (_cfgExportOverlay is null) return;
-        ResetExportOverlay();
-        _cfgExportOverlay.IsVisible = true;
-    }
 
     public void HideExportOverlay()
     {
         if (_cfgExportOverlay is not null) _cfgExportOverlay.IsVisible = false;
     }
 
-    public void ShowImportOverlay()
-    {
-        if (_cfgImportOverlay is null) return;
-        ResetImportOverlay();
-        _cfgImportOverlay.IsVisible = true;
-    }
 
     public void HideImportOverlay()
     {
@@ -434,8 +397,6 @@ public partial class AndroidApp
         }
         if (_cfgImportPickBtn is not null) _cfgImportPickBtn.IsEnabled = true;
     }
-
-    // ── Click handlers ─────────────────────────────────────────────────
 
     private void OnCfgExportSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -589,31 +550,15 @@ public partial class AndroidApp
             ShowImportStatus(string.Format(Localization.ImportSuccess, backupHint));
         }
 
-        // Refresh the visible UI so changes are reflected immediately —
-        // server list, ConfigMode, language, etc. Fire-and-forget; the
-        // overlay stays open so the user reads the success/partial banner.
         try { ReloadServerListFromStorage(); }
-        catch { /* best-effort */ }
+        catch { }
         try { RefreshConfigModeUiFromStorage(); }
-        catch { /* best-effort */ }
+        catch { }
 
-        // F6 follow-up (2026-06-16) — ApplySnapshot may have changed PerAppMode
-        // (the routing source of truth) via the applied per-app block. Re-seed the
-        // Simple-page split/full radios — mirroring CloseAdvancedShell / ApplyProfile
-        // — so an import that changes routing can't leave the Simple page showing a
-        // mode that contradicts what Advanced→Settings will render on its next open
-        // (the exact cross-surface routing drift F6 fixes, just reached via the
-        // import path). Setting IsChecked re-fires the idempotent
-        // OnTunnelModeRadioChanged (no write when PerAppMode already matches) and
-        // refreshes the "Choose apps…" stack visibility. The Advanced→Settings
-        // radios self-heal via ReseedNetworkTabState on the next shell open.
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
         if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
         UpdatePerAppFormCountLabel();
-
-        // Theme + language live-switch on import remains a known gap (handbook
-        // 8.2) — full repaint on next launch.
 
         _cfgImportPendingDoc = null;
         if (_cfgImportApplyBtn is not null) _cfgImportApplyBtn.IsVisible = false;
@@ -625,8 +570,6 @@ public partial class AndroidApp
     {
         ResetImportOverlay();
     }
-
-    // ── Shared helpers ─────────────────────────────────────────────────
 
     private void ShowExportStatus(string text)
     {
@@ -642,11 +585,6 @@ public partial class AndroidApp
         _cfgImportStatus.IsVisible = !string.IsNullOrEmpty(text);
     }
 
-    /// <summary>
-    /// Best-effort UI refresh after import — re-reads current ConfigMode
-    /// and adjusts the segmented mode selector + visible sections in the
-    /// inline form. No-op if the form's fields aren't constructed yet.
-    /// </summary>
     private void RefreshConfigModeUiFromStorage()
     {
         var mode = AndroidStorage.GetConfigMode();
@@ -664,37 +602,19 @@ public partial class AndroidApp
             _serverInput.Text = AndroidStorage.GetVlessUri() ?? string.Empty;
         }
 
-        // Re-style the segmented buttons so the active segment matches
-        // the imported value.
         if (_ccModeSubBtn is not null) StyleSegmentButton(_ccModeSubBtn, mode == "subscribe");
         if (_ccModeManualBtn is not null) StyleSegmentButton(_ccModeManualBtn, mode == "manual");
         if (_ccModeCustomBtn is not null) StyleSegmentButton(_ccModeCustomBtn, mode == "custom");
     }
 
-    /// <summary>Reload the in-memory subscription / server list views so
-    /// the import is reflected without a relaunch. Defined defensively —
-    /// subscribers / server lists may not have been built yet during
-    /// app launch.</summary>
     private void ReloadServerListFromStorage()
     {
         try
         {
-            // The Subscribe overlay rebuilds its model from storage on
-            // each open; we don't need to push anything if it isn't open.
-            // The inline form server list reads from AndroidStorage on
-            // render — Free Configs overlay is similar. So a no-op here
-            // is OK for correctness, though we could explicitly trigger
-            // ReloadSubsList()/ReloadServerList() if those methods exist.
         }
-        catch { /* best-effort */ }
+        catch { }
     }
 
-    /// <summary>
-    /// Refresh localized strings whenever the language toggles. Mirrors
-    /// the field-by-field refresh in <c>ToggleLanguageAndRefresh</c>.
-    /// Called from the main toggle so every overlay's static text
-    /// follows the new language.
-    /// </summary>
     internal void RefreshConfigShareLocalization()
     {
         if (_cfgExportTitle is not null) _cfgExportTitle.Text = Localization.ExportTitle;

@@ -2,51 +2,19 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Outcome of a single <see cref="SettingsValidator.Validate"/> run.
-/// <see cref="Reasons"/> are FATAL — caller (typically
-/// <see cref="SettingsLoader"/>) should backup the bad file and reset
-/// to defaults. <see cref="Warnings"/> are soft observations that should
-/// be logged but do not justify a reset (e.g. an active custom config
-/// path missing on disk — the file may come back).
-/// </summary>
 public sealed record SettingsValidationResult(
     bool IsValid,
     IReadOnlyList<string> Reasons,
     IReadOnlyList<string> Warnings);
 
-/// <summary>
-/// Validates an in-memory <see cref="AppSettings"/> tree against
-/// structural invariants — the kind of damage that slips past
-/// YamlDotNet (which only maps types) but explodes deep inside the
-/// runtime as <c>NullReferenceException</c>, port-out-of-range,
-/// "value must be one of …", or — worst of all — silent leaks
-/// (a typoed <c>config_mode</c> treated as the wrong tunnel mode).
-///
-/// <para>Pure function — no side effects. Reads only. Caller is
-/// responsible for surfacing or acting on the result.</para>
-///
-/// <para>Runs AFTER <see cref="SettingsMigrator"/>, so schema-version
-/// drift has already been smoothed over by the time we get here.</para>
-///
-/// <para>v2.32.0 — see plans/v2.32.0-settings-validator.md.</para>
-/// </summary>
 public static class SettingsValidator
 {
-    // The allowed-values sets are listed once so the test suite has a
-    // single canonical reference and we don't get drift between
-    // validator and Strings.cs / ConfigMode-flipping code.
-
     private static readonly HashSet<string> AllowedConfigModes =
         new(StringComparer.OrdinalIgnoreCase) { "generated", "subscribe", "custom" };
 
     private static readonly HashSet<string> AllowedRoutingModes =
         new(StringComparer.OrdinalIgnoreCase) { "split", "full" };
 
-    // v2.40.x (Fix #7): "system" added — follow the OS appearance. Omitting it
-    // here would make SettingsValidator REJECT every config that adopted the new
-    // default theme and reset the WHOLE config.yaml to defaults on load (silent
-    // data loss). Caught by the YAML round-trip regression suite.
     private static readonly HashSet<string> AllowedThemes =
         new(StringComparer.OrdinalIgnoreCase) { "light", "dark", "system" };
 
@@ -59,10 +27,6 @@ public static class SettingsValidator
     private static readonly HashSet<string> AllowedUpdateChannels =
         new(StringComparer.OrdinalIgnoreCase) { "stable", "experimental" };
 
-    /// <summary>
-    /// Walks the post-migration <paramref name="settings"/> object and
-    /// reports any structural invariant violations.
-    /// </summary>
     public static SettingsValidationResult Validate(AppSettings? settings)
     {
         var fatal = new List<string>();
@@ -94,10 +58,6 @@ public static class SettingsValidator
             return;
         }
 
-        // ConfigMode: empty / unknown both invalid. Empty hits when the
-        // yaml has an explicit blank `config_mode:` line — that's not the
-        // first-run path (which uses the property's "generated" default),
-        // so the only way to get here is corruption / mistaken edit.
         var modeRaw = (app.ConfigMode ?? string.Empty).Trim();
         if (modeRaw.Length == 0 || !AllowedConfigModes.Contains(modeRaw))
         {
@@ -105,10 +65,6 @@ public static class SettingsValidator
                 $"app.config_mode must be one of {Join(AllowedConfigModes)}, got '{app.ConfigMode}'");
         }
 
-        // RoutingMode + Theme: SettingsLoader.Parse already substitutes
-        // defaults for empty values, so by the time we run a non-empty
-        // value is meaningful. Empty here would only show up if Parse
-        // skipped that branch (it doesn't, but defensive).
         var routingRaw = (app.RoutingMode ?? string.Empty).Trim();
         if (routingRaw.Length > 0 && !AllowedRoutingModes.Contains(routingRaw))
         {
@@ -151,11 +107,6 @@ public static class SettingsValidator
             }
         }
 
-        // ConfigMode == "custom" with a missing active path is a soft
-        // warning. The file may be temporarily missing (USB unplugged,
-        // permission glitch, a fresh checkout) and the next App start
-        // can recover once the user restores it. We do NOT reset the
-        // entire config over a missing file.
         if (string.Equals(modeRaw, "custom", StringComparison.OrdinalIgnoreCase))
         {
             CheckActiveCustomConfigPath(app, warn);
@@ -184,8 +135,6 @@ public static class SettingsValidator
         }
         catch
         {
-            // Bad %VAR% syntax — surface as warning rather than fatal so
-            // the user sees the issue without losing every other setting.
             warn.Add($"app.custom_configs[{active.Name}].path has invalid env-var syntax: '{active.Path}'");
             return;
         }

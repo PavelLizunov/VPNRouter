@@ -1,28 +1,4 @@
 #nullable enable
-// =============================================================================
-// RemoteVersionChecker — v2.37.0-r37 (2026-05-25)
-//
-// Lightweight GitHub-API version probe with 6-hour TTL cache.
-//
-// Used by Zapret and TgProxy auto-update-on-start flows: on every "magic
-// button" click we check if a newer upstream release exists, and if so
-// kick off the full download. The 6h TTL keeps us well within GitHub's
-// 60 req/hr unauthenticated rate-limit even with multi-thousand active
-// installs world-wide.
-//
-// Cache file: %ProgramData%\VPNRouter\cache\remote_versions.json
-//   {
-//     "Flowseal/zapret-discord-youtube": {
-//       "LatestTag": "v3.9.2",
-//       "LastCheckUtc": "2026-05-25T18:00:00Z"
-//     },
-//     "siberia-min/telegram-mtproto-proxy-binary": { ... }
-//   }
-//
-// All file/network ops are best-effort: cache corruption / network errors
-// degrade to "no info" (caller falls back to existing IsInstalled() guard
-// — never breaks the start flow).
-// =============================================================================
 
 using System;
 using System.Collections.Generic;
@@ -50,14 +26,6 @@ public static class RemoteVersionChecker
 
     private static readonly object _lock = new();
 
-    /// <summary>
-    /// Fetch the latest release tag for a GitHub repo, using a 6-hour cache
-    /// so we don't hammer GitHub on every start. Returns null on network
-    /// failure or rate-limit — caller should treat that as "no info"
-    /// (existing IsInstalled() guard handles the empty case).
-    /// </summary>
-    /// <param name="ownerRepo">"Owner/Repo" form, e.g. "Flowseal/zapret-discord-youtube".</param>
-    /// <param name="userAgent">User-Agent header required by GitHub API.</param>
     public static async Task<string?> GetLatestTagAsync(
         string ownerRepo,
         string userAgent,
@@ -66,7 +34,6 @@ public static class RemoteVersionChecker
     {
         if (string.IsNullOrWhiteSpace(ownerRepo)) return null;
 
-        // 1. Fast-path: hit the cache.
         var cached = TryLoadEntry(ownerRepo, logger);
         if (cached != null
             && !string.IsNullOrEmpty(cached.LatestTag)
@@ -78,7 +45,6 @@ public static class RemoteVersionChecker
             return cached.LatestTag;
         }
 
-        // 2. Fetch from GitHub.
         string? tag = null;
         try
         {
@@ -95,7 +61,6 @@ public static class RemoteVersionChecker
                 logger?.Information(
                     "[RemoteVersionChecker] HTTP {Code} from {Url} — keeping last-known cache value",
                     (int)resp.StatusCode, CanaryPolicy.RedactUrl(url));
-                // Return cached value (even if stale) if we have one.
                 return cached?.LatestTag;
             }
 
@@ -126,7 +91,6 @@ public static class RemoteVersionChecker
             return cached?.LatestTag;
         }
 
-        // 3. Update cache.
         SaveEntry(ownerRepo, new RemoteVersionCacheEntry
         {
             LatestTag = tag!,
@@ -137,10 +101,6 @@ public static class RemoteVersionChecker
         return tag;
     }
 
-    /// <summary>
-    /// Normalize a tag for comparison: strip leading "v", trim whitespace.
-    /// Useful when GitHub tags are "v3.9.2" but local version.txt holds "3.9.2".
-    /// </summary>
     public static string NormalizeTag(string? tag)
     {
         if (string.IsNullOrWhiteSpace(tag)) return string.Empty;
@@ -150,11 +110,6 @@ public static class RemoteVersionChecker
         return t;
     }
 
-    /// <summary>
-    /// Returns true when remote tag differs from local version (after
-    /// normalization). Empty/null on either side returns false (no info —
-    /// don't trigger spurious updates).
-    /// </summary>
     public static bool IsNewer(string? remoteTag, string? localTag)
     {
         var r = NormalizeTag(remoteTag);

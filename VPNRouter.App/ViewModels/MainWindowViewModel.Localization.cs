@@ -3,25 +3,13 @@ using VPNRouter.App.Localization;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// v2.25.12 — PropertyChanged-aware proxies for every Strings.cs key used
-/// in XAML. Each <c>L_Foo</c> returns <c>Strings.Foo</c>. When the user
-/// toggles language, <see cref="RefreshL10nProxies"/> fires PropertyChanged
-/// for every L_* member so bindings re-read the value. This replaces the
-/// v2.17.10 workaround of rebuilding the entire MainWindow (which blocked
-/// the UI thread for the whole XAML re-parse — ~200-500 ms of visible
-/// freeze even after the v2.25.11 Dispatcher-defer fix).
-///
-/// Generated from <c>/tmp/gen-l10n.sh</c>; regenerate if Strings.cs adds
-/// new keys that XAML starts referencing.
-/// </summary>
 public partial class MainWindowViewModel
 {
     public string L_AboutBrandName => Strings.AboutBrandName;
     public string L_AboutCloseBtn => Strings.AboutCloseBtn;
     public string L_AboutCreatorLabel => Strings.AboutCreatorLabel;
-    public string L_TrueSplitBadge => Strings.TrueSplitBadge;      // W1.3 status-zone badge
-    public string L_TrueSplitTooltip => Strings.TrueSplitTooltip;  // W1.3 caveats tooltip
+    public string L_TrueSplitBadge => Strings.TrueSplitBadge;
+    public string L_TrueSplitTooltip => Strings.TrueSplitTooltip;
     public string L_TrueSplitRetry => Strings.TrueSplitRetry;
     public string L_AboutRepoLabel => Strings.AboutRepoLabel;
     public string L_AboutSingBoxLabel => Strings.AboutSingBoxLabel;
@@ -37,11 +25,8 @@ public partial class MainWindowViewModel
     public string L_ApplyNowHint => Strings.ApplyNowHint;
     public string L_ApplyNowReloadVpn => Strings.ApplyNowReloadVpn;
     public string L_AppsGroupEmpty => Strings.AppsGroupEmpty;
-    // v2.29.0 — Apps page full-tunnel banner (replaces silent IsEnabled
-    // disable, see ApplicationsPage.axaml).
     public string L_AppsFullTunnelBanner => Strings.AppsFullTunnelBanner;
     public string L_AppsFullTunnelBannerAction => Strings.AppsFullTunnelBannerAction;
-    // v2.32 — Apps Include/Exclude 2-mode segmented toggle.
     public string L_AppsModeSectionTitle => Strings.AppsModeSectionTitle;
     public string L_AppsModeInclude => Strings.AppsModeInclude;
     public string L_AppsModeExclude => Strings.AppsModeExclude;
@@ -51,18 +36,12 @@ public partial class MainWindowViewModel
     public string L_AppsListSectionTitle => Strings.AppsListSectionTitle;
     public string L_AppsListInclude => Strings.AppsListInclude;
     public string L_AppsListExclude => Strings.AppsListExclude;
-    /// <summary>Selects which hint to show beneath the segmented toggle
-    /// based on current <see cref="RoutingAppsMode"/>.</summary>
     public string L_CurrentAppsModeHint =>
         IsRoutingAppsModeExclude ? L_AppsModeExcludeHint : L_AppsModeIncludeHint;
-    // v2.32 — ServersPage orphan-entry marker (F-C).
     public string L_ServersOrphanBadge => Strings.ServersOrphanBadge;
     public string L_ServersOrphanTooltip => Strings.ServersOrphanTooltip;
-    // v2.32 — Auto-failover (F-E) UI status surfacing.
-    // v2.30.0 — Custom rules engine (direct/proxy/block).
     public string L_CustomRulesPlaceholder => Strings.CustomRulesPlaceholder;
     public string L_CustomRulesConflictHeader => Strings.CustomRulesConflictHeader;
-    // v2.30.0-r2 — Network → Rules section strings.
     public string L_CustomRulesEmpty => Strings.CustomRulesEmpty;
     public string L_CustomRulesAddTitle => Strings.CustomRulesAddTitle;
     public string L_CustomRulesAddBtn => Strings.CustomRulesAddBtn;
@@ -77,7 +56,6 @@ public partial class MainWindowViewModel
     public string L_CustomRulesEnableAll => Strings.CustomRulesEnableAll;
     public string L_CustomRulesDisableAll => Strings.CustomRulesDisableAll;
     public string L_CustomRulesExistingHeader => Strings.CustomRulesExistingHeader;
-    // v2.30.0-r7 — Cards/Edit view-mode toggle (RulesExplorations.html design).
     public string L_RulesViewCards => Strings.RulesViewCards;
     public string L_RulesViewRead => Strings.RulesViewRead;
     public string L_RulesViewEdit => Strings.RulesViewEdit;
@@ -89,12 +67,9 @@ public partial class MainWindowViewModel
     public string L_RulesEditorFormatHint => Strings.RulesEditorFormatHint;
     public string L_RulesFilterAll => Strings.RulesFilterAll;
     public string L_RulesBulkActions => Strings.RulesBulkActions;
-    // v2.30.0-r14 — bulk-actions popover localizations.
     public string L_RulesSortByType => Strings.RulesSortByType;
-    // v2.30.0-r17 — Custom-rules-priority CheckBox.
     public string L_RulesCustomAboveToggles => Strings.RulesCustomAboveToggles;
     public string L_RulesCustomAboveTogglesHint => Strings.RulesCustomAboveTogglesHint;
-    // v2.30.0-r18 — Clear All inline confirm bar.
     public string L_RulesClearAllHint => Strings.RulesClearAllHint;
     public string L_RulesClearAllConfirm => Strings.RulesClearAllConfirm;
     public string L_Cancel => Strings.CommonCancel;
@@ -103,7 +78,6 @@ public partial class MainWindowViewModel
     public string L_RulesAddLabelValue   => Strings.RulesAddLabelValue;
     public string L_RulesAddLabelComment => Strings.RulesAddLabelComment;
     public string L_RulesAddLabelOpt     => Strings.RulesAddLabelOpt;
-    // v2.30.0-r12 — structured help-banner Runs (per-piece localization).
     public string L_RulesHelpHeader => Strings.RulesHelpHeader;
     public string L_RulesHelpB1Pre  => Strings.RulesHelpB1Pre;
     public string L_RulesHelpB1T1   => Strings.RulesHelpB1T1;
@@ -117,9 +91,7 @@ public partial class MainWindowViewModel
     public string L_RulesHelpB3Bold => Strings.RulesHelpB3Bold;
     public string L_RulesHelpB3Suf  => Strings.RulesHelpB3Suf;
     public string LblSettingsRules => Strings.SectionRules;
-    // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_AutoUpdateCheckLabel => Strings.AutoUpdateCheckLabel;
-    // v2.27 Bug C — two-section layout headers + hints
     public string L_AutostartBootSectionTitle => Strings.AutostartBootSectionTitle;
     public string L_AutostartBootSectionSub => Strings.AutostartBootSectionSub;
     public string L_AutostartComponentsInfoHint => Strings.AutostartComponentsInfoHint;
@@ -128,11 +100,9 @@ public partial class MainWindowViewModel
     public string L_TipSubscriptionMetadata => Strings.TipSubscriptionMetadata;
     public string L_AutostartLoginSectionTitle => Strings.AutostartLoginSectionTitle;
     public string L_AutostartLoginAppDescription => Strings.AutostartLoginAppDescription;
-    // v2.27 §4.5 — prominent PID line replacing the small pill
     public string L_ServiceStoppedLine => Strings.ServiceStoppedLine;
     public string L_ServiceRunningLine =>
         ServiceVm.ServicePid.HasValue ? Strings.ServiceRunningLine(ServiceVm.ServicePid.Value) : Strings.ServiceRunningText;
-    // v2.27.0-r2 — Simple autostart link-card replacing the old checkbox
     public string L_SmpAutostartCardTitle => Strings.SmpAutostartCardTitle;
     public string L_SmpAutostartCardStatus =>
         ServiceVm.IsInstalled && ServiceVm.IsRunning
@@ -169,7 +139,6 @@ public partial class MainWindowViewModel
     public string L_FcListShown => Strings.FcListShown;
     public string L_FcMsUnit => Strings.FcMsUnit;
 
-    // ── v2.28.6 Phase 2 — Saved-tab strings ──
     public string L_FcTabSearch              => Strings.FcTabSearch;
     public string L_FcSavedTabHint           => Strings.FcSavedTabHint;
     public string L_FcSavedClearAllBtn       => Strings.FcSavedClearAllBtn;
@@ -197,10 +166,6 @@ public partial class MainWindowViewModel
     public string L_LblNoServers => Strings.LblNoServers;
     public string L_LblPort => Strings.LblPort;
     public string L_LblPublicKey => Strings.LblPublicKey;
-    // v2.31.6-r9 — removed L_LblRoutingMode (no XAML reference).
-    // The corresponding LblRoutingMode getter in MainWindowViewModel.cs
-    // is still in use by NetworkPage.axaml routing-mode label binding,
-    // so kept; only the L_-prefixed proxy was orphaned.
     public string L_LblServer => Strings.LblServer;
     public string L_LblShortId => Strings.LblShortId;
     public string L_LblUuid => Strings.LblUuid;
@@ -291,8 +256,6 @@ public partial class MainWindowViewModel
     public string L_TipTestAllServers => Strings.TipTestAllServers;
     public string L_TipTestTcpTls => Strings.TipTestTcpTls;
     public string L_TipZapretAutoUpdate => Strings.TipZapretAutoUpdate;
-    // R09 — update-banner button (was hardcoded "↓ Update" in MainWindow.axaml;
-    // now runtime-refreshable so it follows the Ru/En toggle).
     public string L_UpdateButton => Strings.UpdateButton;
     public string L_UpdateIpSet => Strings.UpdateIpSet;
     public string L_WmTgProxyPort => Strings.WmTgProxyPort;
@@ -310,23 +273,14 @@ public partial class MainWindowViewModel
     public string L_ZapretSecStrategy => Strings.ZapretSecStrategy;
     public string L_ZapretSecStrategyDesc => Strings.ZapretSecStrategyDesc;
 
-    // ── Bug-r9-E + Bug-r9-G (2026-05-11) — pre-flight UX bindings ──
     public string L_ConflictOtherVpnDetectedTitle => Strings.ConflictOtherVpnDetectedTitle;
     public string L_ConflictRefreshButton => Strings.ConflictRefreshButton;
-    // v2.32.1-r4 (Bug-r10-A) — Kill conflicting VPN button.
     public string L_ConflictKillButton => Strings.ConflictKillButton;
     public string L_ConflictKillTooltip => Strings.ConflictKillTooltip;
-    // v2.32.1-r5 (Bug-r10-B) — Ignore conflict button.
     public string L_ConflictIgnoreButton => Strings.ConflictIgnoreButton;
     public string L_ConflictIgnoreTooltip => Strings.ConflictIgnoreTooltip;
     public string L_ZapretAvBlockCopyPath => Strings.ZapretAvBlockCopyPath;
 
-    /// <summary>
-    /// Broadcasts PropertyChanged for every L_* proxy via reflection.
-    /// Runs in ~1ms for 200 properties (faster than allocating a single
-    /// MainWindow clone). Also fires for existing Lbl* properties so the
-    /// same path refreshes hand-written localized properties.
-    /// </summary>
     private void RefreshL10nProxies()
     {
         var t = typeof(MainWindowViewModel);

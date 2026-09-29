@@ -4,18 +4,6 @@ using VPNRouter.Core.Interfaces;
 
 namespace VPNRouter.Core.Platform.macOS;
 
-/// <summary>
-/// No-op firewall manager for macOS.
-///
-/// block_on_vpn_fail is not implemented on macOS yet.
-/// On macOS, pfctl anchor rules could provide the same protection,
-/// but require root and more complex rule management.
-///
-/// For the initial macOS release, this stub logs that the feature
-/// is unavailable. Traffic will not be blocked if sing-box crashes.
-///
-/// TODO: implement MacFirewallManager with pfctl anchor rules.
-/// </summary>
 public class NullFirewallManager : IFirewallManager
 {
     private readonly ILogger _logger;

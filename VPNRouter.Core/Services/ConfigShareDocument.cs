@@ -7,46 +7,10 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// v2.32.0 (Android-led, 2026-05-07) — single-file export/import of a
-/// VPNRouter user's full configuration.
-///
-/// <para>The document is a JSON blob with a fixed schema marker
-/// (<c>"vpnrouter-config-share"</c>) and an integer <see cref="Version"/>
-/// that bumps when the schema changes incompatibly. Always-included
-/// payload — subscriptions list, manual VLESS URI, custom sing-box JSON
-/// (whichever is in use). Opt-in payload — settings (theme/lang/routing/
-/// dns/etc) and the per-app filter (mode + packages). Opt-in is OFF by
-/// default because both sections are device-specific: theme ≠ portable
-/// across two users; the per-app filter package list is bound to apps
-/// installed on THIS device.</para>
-///
-/// <para>The schema is deliberately platform-neutral so a desktop
-/// follow-up can adopt the same Document shape — the
-/// <see cref="ExportedFromInfo.Platform"/> field reflects the source so
-/// the importer can ignore platform-specific extras (e.g. an iOS PerApp
-/// list won't make sense on Windows, but the validator soft-skips it
-/// rather than rejecting the whole import).</para>
-///
-/// <para>Mirror desktop pattern reference:
-/// <c>VPNRouter.Core/Services/CustomRulesImportExport.cs</c> (rules-only
-/// pre-2.32). When desktop adopts whole-config share, this class is the
-/// single source of truth — no duplicate Document type.</para>
-///
-/// <para>Phase 4 (2026-05-18) — migrated from Newtonsoft.Json
-/// <c>[JsonProperty]</c> + <c>JObject.Parse</c> + <c>ToObject&lt;T&gt;</c> to
-/// System.Text.Json <c>[JsonPropertyName]</c> + <c>JsonDocument</c> +
-/// <c>JsonSerializer.Deserialize</c>. Wire format is preserved byte-for-byte
-/// because every property carries an explicit <c>[JsonPropertyName]</c>
-/// pinning the snake_case wire key the pre-migration Newtonsoft
-/// <c>[JsonProperty]</c> annotations produced.</para>
-/// </summary>
 public sealed class ConfigShareDocument
 {
-    /// <summary>Stable schema marker — anything else is REJECTED on import.</summary>
     public const string SchemaMarker = "vpnrouter-config-share";
 
-    /// <summary>Bump when an incompatible field shape is introduced.</summary>
     public const int CurrentVersion = 1;
 
     [JsonPropertyName("schema")]
@@ -61,56 +25,39 @@ public sealed class ConfigShareDocument
     [JsonPropertyName("exported_from")]
     public ExportedFromInfo ExportedFrom { get; set; } = new();
 
-    /// <summary>"subscribe" | "manual" | "custom" — mirrors AppSettings.App.ConfigMode.</summary>
     [JsonPropertyName("config_mode")]
     public string ConfigMode { get; set; } = "subscribe";
 
-    /// <summary>Always present — empty list if no subscriptions were configured.</summary>
     [JsonPropertyName("subscriptions")]
     public List<SubscriptionEntry> Subscriptions { get; set; } = new();
 
-    /// <summary>Single-URI mode payload. Null when ConfigMode != "manual".</summary>
     [JsonPropertyName("manual_vless_uri")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ManualVlessUri { get; set; }
 
-    /// <summary>User-pasted full sing-box JSON. Null when ConfigMode != "custom".</summary>
     [JsonPropertyName("custom_config")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CustomConfigPayload? CustomConfig { get; set; }
 
-    /// <summary>Opt-in. Null when user did NOT check "include settings" at export.</summary>
     [JsonPropertyName("settings")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ExportedSettings? Settings { get; set; }
 
-    /// <summary>Opt-in. Null when user did NOT check "include per-app filter".</summary>
     [JsonPropertyName("per_app_filter")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public PerAppFilterExport? PerAppFilter { get; set; }
 
-    /// <summary>Serialise to indented JSON (human-friendly diff/inspect).</summary>
     public static string Serialize(ConfigShareDocument doc)
     {
         if (doc == null) throw new ArgumentNullException(nameof(doc));
         return JsonSerializer.Serialize(doc, Json.AppJsonContext.Default.ConfigShareDocument);
     }
 
-    /// <summary>
-    /// Validate-and-parse. Returns a result carrying either the Document
-    /// or a single-line human-readable error reason. The error message
-    /// is suitable to surface verbatim in a toast — no stack traces.
-    /// </summary>
     public static ConfigShareDocumentParseResult TryParse(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
             return ConfigShareDocumentParseResult.Failure("empty content");
 
-        // Phase 4 (2026-05-18) — STJ JsonDocument for the schema-marker +
-        // version probe (cheap inspect-then-deserialize-fully pattern,
-        // mirrors the prior JObject.Parse → ToObject<T> flow). Defensive
-        // catches mirror Newtonsoft's JsonReaderException + generic
-        // Exception surfaces.
         JsonElement root;
         JsonDocument? doc = null;
         try
@@ -172,15 +119,9 @@ public sealed class ConfigShareDocument
         if (document is null)
             return ConfigShareDocumentParseResult.Failure("deserialised to null");
 
-        // Defensive: tolerate missing required containers from a future
-        // schema-1 producer that elided empty arrays. Default ctor
-        // populates Subscriptions=[]; the explicit null check ensures
-        // a future JSON "subscriptions": null doesn't crash us.
         document.Subscriptions ??= new List<SubscriptionEntry>();
         document.ExportedFrom ??= new ExportedFromInfo();
 
-        // Validate ConfigMode value — refuse instead of letting a typo
-        // slip past and confuse the routing engine downstream.
         var allowedModes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "subscribe", "manual", "custom"
@@ -191,9 +132,6 @@ public sealed class ConfigShareDocument
                 $"unknown config_mode '{document.ConfigMode}' (expected: subscribe / manual / custom)");
         }
 
-        // Per-mode invariants — soft-warn rather than hard-fail because
-        // a malformed export from a future / different platform might
-        // still carry useful subset data.
         if (string.Equals(document.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase) &&
             document.CustomConfig is null)
         {
@@ -204,12 +142,6 @@ public sealed class ConfigShareDocument
         return ConfigShareDocumentParseResult.Success(document);
     }
 
-    /// <summary>
-    /// Build a one-line preview suitable for a confirmation dialog —
-    /// "Подписки: 2, Серверы: 17, Custom JSON: нет, Настройки: вкл, Per-app: 4 пакета".
-    /// Never throws; returns "(invalid)" for null input. Bilingual via the
-    /// supplied <paramref name="ru"/> flag (false → English).
-    /// </summary>
     public string BuildPreview(bool ru)
     {
         var parts = new List<string>();
@@ -250,11 +182,6 @@ public sealed class ConfigShareDocument
         return string.Join(" · ", parts);
     }
 
-    /// <summary>
-    /// Suggested filename for the system file picker save UI. Mirrors
-    /// <c>vpnrouter-config-YYYYMMDD-HHmm.json</c> — sortable + extension
-    /// matches MIME type application/json.
-    /// </summary>
     public static string SuggestFilename(DateTimeOffset? when = null)
     {
         var ts = (when ?? DateTimeOffset.UtcNow).ToLocalTime();
@@ -262,7 +189,6 @@ public sealed class ConfigShareDocument
     }
 }
 
-/// <summary>"Where did this export come from" provenance block.</summary>
 public sealed class ExportedFromInfo
 {
     [JsonPropertyName("platform")]
@@ -275,7 +201,6 @@ public sealed class ExportedFromInfo
     public string DeviceLabel { get; set; } = string.Empty;
 }
 
-/// <summary>Custom sing-box JSON paste payload (used when ConfigMode=="custom").</summary>
 public sealed class CustomConfigPayload
 {
     [JsonPropertyName("name")]
@@ -285,7 +210,6 @@ public sealed class CustomConfigPayload
     public string SingBoxJson { get; set; } = string.Empty;
 }
 
-/// <summary>Opt-in settings block. Field names mirror the Android SharedPreferences keys (and desktop AppSettings.App).</summary>
 public sealed class ExportedSettings
 {
     [JsonPropertyName("theme")]
@@ -329,10 +253,8 @@ public sealed class ExportedSettings
     public bool? AutostartTgProxy { get; set; }
 }
 
-/// <summary>Opt-in per-app filter block. Mirrors VpnService.Builder allow/disallow lists.</summary>
 public sealed class PerAppFilterExport
 {
-    /// <summary>"off" | "include" | "exclude" — see PerAppFilterMode.</summary>
     [JsonPropertyName("mode")]
     public string Mode { get; set; } = "off";
 
@@ -340,7 +262,6 @@ public sealed class PerAppFilterExport
     public List<string> Packages { get; set; } = new();
 }
 
-/// <summary>Result of <see cref="ConfigShareDocument.TryParse"/>.</summary>
 public sealed class ConfigShareDocumentParseResult
 {
     public bool Ok { get; }

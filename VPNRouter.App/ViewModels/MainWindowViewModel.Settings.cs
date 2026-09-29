@@ -15,66 +15,33 @@ using VPNRouter.App.Localization;
 using VPNRouter.Core.Services.Diagnostics;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using System.Collections.ObjectModel;
+using Avalonia.Input.Platform;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Platform.Storage;
+using Serilog;
+using VPNRouter.Core.Platform;
+using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.FreeConfigs;
+using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// Phase 2B (Wave 8, 2026-05-18) — Settings/About surface split out of the
-/// <c>MainWindowViewModel</c> god-class. Hosts the non-VPN-runtime surface
-/// that backs the Network → settings sub-tabs, the ⋯ menu's About / Theme /
-/// Language segments, and the troubleshooting actions:
-///
-/// <list type="bullet">
-///   <item><see cref="VersionText"/> / <see cref="AppVersionShortText"/> /
-///   <see cref="GetSingBoxVersion"/> — strings the About dialog and ⋯ menu
-///   pill bind to.</item>
-///   <item><see cref="OpenLeakTest"/>, <see cref="RunHealthCheck"/>,
-///   <see cref="OpenAbout"/>, <see cref="RestartInSafeMode"/>,
-///   <see cref="ResetConfig"/>, <see cref="OpenLogs"/> — troubleshooting
-///   commands bound to the ⋯ flyout / Network → Updates section.</item>
-///   <item><see cref="ToggleTheme"/>, <see cref="ToggleLanguage"/> +
-///   their explicit-segment wrappers (<c>SetThemeLight/Dark</c>,
-///   <c>SetLanguageRussian/English</c>) — the per-segment commands the
-///   redesigned ⋯ menu popover binds to.</item>
-///   <item><see cref="ToggleUiMode"/>, <see cref="OpenAutostartSettings"/>,
-///   <see cref="InstallServiceForAutostart"/>, <see cref="ApplySettings"/>,
-///   <see cref="ShowWindow"/> — Simple/Advanced toggle + Autostart-jump
-///   helpers + Apply/ShowWindow used by the system-tray menu.</item>
-/// </list>
-///
-/// <para>Theme rendering (<c>ApplyTheme</c>) and locale broadcast
-/// (<c>RefreshLocalization</c>) stay in the main file because they are
-/// also called from the constructor + <see cref="LoadSettingsIntoUI"/>
-/// boot paths. <see cref="MainWindowViewModel.SaveSettings"/> stays in
-/// the main file too — it is THE cross-concern serialisation hub.</para>
-/// </summary>
 public partial class MainWindowViewModel
 {
-    // v2.37.0-r8 — magic-number extraction. ResetConfig two-step UX:
-    // first click "arms" the button; second click within this window
-    // performs the reset. Auto-disarm prevents a stale armed state
-    // from ambushing a later click meant for another action.
     private const int ResetConfigArmedTimeoutMs = 5000;
 
-    // ── Version ──
     public string VersionText => $"by NiniTux  ·  v{AppVersion.Version}  ·  sing-box {GetSingBoxVersion()}";
 
-    // v2.25.2 — short "v2.25.1-r2" string for the redesigned ⋯ menu About
-    // row. Rendered as a muted mono pill on the right side of the item.
-    // Kept separate from VersionText (which still carries by-line + sing-box
-    // for the About dialog) — the menu only has room for the version tag.
     public string AppVersionShortText => $"v{AppVersion.Version}";
 
     private static string GetSingBoxVersion()
     {
         try
         {
-            // v2.21.6: was hardcoded Windows %ProgramData% / macOS
-            // ~/Library/Application Support path. Linux fell through to the
-            // macOS branch and hit a non-existent path → subtitle showed
-            // "sing-box ?" on Linux. AppPaths.SingBoxExePath already
-            // resolves to the right location on all three platforms
-            // (uses ~/.config/vpnrouter/bin/sing-box on Linux).
             var exePath = AppPaths.SingBoxExePath;
             if (!File.Exists(exePath)) return "?";
 
@@ -90,7 +57,6 @@ public partial class MainWindowViewModel
             var output = proc?.StandardOutput.ReadToEnd() ?? "";
             proc?.WaitForExit(3000);
 
-            // Parse "sing-box version 1.13.7" or "sing-box version unknown"
             foreach (var line in output.Split('\n'))
             {
                 var trimmed = line.Trim();
@@ -102,15 +68,12 @@ public partial class MainWindowViewModel
         catch { return "?"; }
     }
 
-    // ── Troubleshooting / About / Reset / Logs ──
-
     [RelayCommand]
     private void OpenLeakTest()
     {
         OpenUrl("https://ipleak.net/");
     }
 
-    // ── Troubleshooting: health check (v2.24.1) ──
     [RelayCommand]
     private void OpenSetupWizard()
     {
@@ -133,8 +96,16 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Failed to open setup wizard");
+            _logger.Error(ex, "[ViewModel] Failed to open setup wizard");
         }
+    }
+
+    partial void OnTunMtuChanged(int value)
+    {
+        if (_isLoadingUI || value < TunSettings.MinimumMtu) return;
+        try { SaveSettings(); }
+        catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on TunMtu change failed"); }
+        MarkRoutingSettingsChanged();
     }
 
     private void ApplySetupWizardSettings(int mtu, bool splitTunnel)
@@ -148,7 +119,7 @@ public partial class MainWindowViewModel
         {
             TunMtu = mtu;
             if (IsSplitTunnel != splitTunnel)
-                IsSplitTunnel = splitTunnel; // Existing handler saves and handles a connected tunnel.
+                IsSplitTunnel = splitTunnel;
             else
                 SaveSettings();
 
@@ -157,8 +128,6 @@ public partial class MainWindowViewModel
         }
         catch
         {
-            // Keep the live ViewModel consistent when persistence fails. The
-            // settings store already keeps a rolling .bak on disk.
             _isLoadingUI = true;
             try
             {
@@ -188,8 +157,6 @@ public partial class MainWindowViewModel
             Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
             File.WriteAllText(reportPath, report);
 
-            // Open in system default text viewer.
-            // Security: Use ArgumentList instead of string concatenation to prevent argument injection and quoting errors on Linux/macOS
             ProcessStartInfo psi;
             if (OperatingSystem.IsWindows())
             {
@@ -201,7 +168,6 @@ public partial class MainWindowViewModel
             }
             else
             {
-                // xdg-open on Linux, /usr/bin/open on macOS.
                 var opener = OperatingSystem.IsMacOS()
                     ? "/usr/bin/open"
                     : "xdg-open";
@@ -213,16 +179,11 @@ public partial class MainWindowViewModel
             }
             psi.ArgumentList.Add(reportPath);
             System.Diagnostics.Process.Start(psi);
-            // v2.31.0-r4 (F-26): inline confirmation toast so the user
-            // gets feedback that the report was saved + opened. Pre-fix
-            // the menu item dismissed silently and the report only appeared
-            // in a separate Notepad window — easy to miss on multi-monitor
-            // setups or when Notepad opens behind VPNRouter.
             ShowRulesToast(VPNRouter.App.Localization.Strings.HealthCheckSavedToast);
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Health check failed");
+            _logger.Error(ex, "[ViewModel] Health check failed");
         }
     }
 
@@ -264,7 +225,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[ViewModel] MTU auto-tune failed");
+            _logger.Warning(ex, "[ViewModel] MTU auto-tune failed");
             MtuAutoTuneStatus = Strings.MtuAutoTuneNoResult;
         }
         finally
@@ -273,30 +234,16 @@ public partial class MainWindowViewModel
         }
     }
 
-    // ── About dialog (v2.25.0) ──
-    // Before v2.25.0 the version/build/by-line lived inline in the compact
-    // header. The redesign gives the header back to badges + mode-toggle,
-    // so the meta block moved into a dedicated About dialog accessible from
-    // the ⋯ flyout. Command lives here rather than in code-behind so the
-    // menu binding is declarative.
     [RelayCommand]
     private void OpenAbout()
     {
         try
         {
-            // v2.25.12: pass `this` as DataContext so the AboutWindow XAML
-            // can bind to L_* proxies on this VM ({Binding L_AboutTitle}
-            // etc.). Without this the dialog opened with no DataContext
-            // and every L_* binding silently resolved to empty string.
             var dlg = new VPNRouter.App.Views.AboutWindow
             {
                 DataContext = this
             };
 
-            // Give the dialog the main window as owner so it centres on top
-            // and blocks input to the main window until closed (modal feel
-            // without actually needing ShowDialog — plain Show() is fine here
-            // because About is information-only, no return value).
             var app = Avalonia.Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
             var owner = app?.MainWindow;
@@ -307,15 +254,10 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Failed to open About dialog");
+            _logger.Error(ex, "[ViewModel] Failed to open About dialog");
         }
     }
 
-    // ── Troubleshooting: safe mode + reset (v2.23.1) ──
-    // Menu header flips between "Reset config" and "Click again to
-    // reset" so user has to double-click (cheap confirmation without
-    // a separate dialog box that we'd need Avalonia.Controls.Dialog
-    // for on every platform).
     [ObservableProperty] private bool _resetConfigArmed;
     public string ResetConfigMenuHeader =>
         ResetConfigArmed
@@ -335,9 +277,6 @@ public partial class MainWindowViewModel
             ProcessStartInfo psi;
             if (OperatingSystem.IsLinux())
             {
-                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
-                // Use setsid --fork so the new instance survives our exit
-                // (same trick the updater uses after applying an update).
                 psi = new ProcessStartInfo
                 {
                     FileName = "/usr/bin/setsid",
@@ -350,7 +289,6 @@ public partial class MainWindowViewModel
             }
             else
             {
-                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
                 psi = new ProcessStartInfo
                 {
                     FileName = exe,
@@ -360,28 +298,20 @@ public partial class MainWindowViewModel
                 psi.ArgumentList.Add("--safe");
             }
             System.Diagnostics.Process.Start(psi);
-            // Release lock so next run's crash detector doesn't flag us.
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
             Environment.Exit(0);
         }
-        catch { /* user can still launch with --safe from terminal */ }
+        catch { }
     }
 
-    // v2.31.0-r3 (VM-11): track the auto-disarm task so multiple clicks
-    // don't stack stale Task.Delay continuations. Pre-fix every "arm" click
-    // queued a fresh disarm Task with no cancellation; if the user clicked
-    // arm-disarm-arm rapidly each disarm fired blindly later (mostly
-    // harmless because it re-set false=>false, but a leak nonetheless).
     private System.Threading.CancellationTokenSource? _resetDisarmCts;
 
     [RelayCommand]
     private void ResetConfig()
     {
-        // First click: arm the confirmation.
         if (!ResetConfigArmed)
         {
             ResetConfigArmed = true;
-            // Cancel any prior disarm task before queuing a new one.
             var oldCts = _resetDisarmCts;
             _resetDisarmCts = new System.Threading.CancellationTokenSource();
             var token = _resetDisarmCts.Token;
@@ -390,12 +320,6 @@ public partial class MainWindowViewModel
                 try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
                 oldCts.Dispose();
             }
-            // Auto-disarm after 5 seconds so a stale armed state can't
-            // ambush a later click that was meant for something else.
-            // v2.37.0-r8 — extracted to named constant for the lower-bound
-            // rationale (5s is "long enough for the user to find their
-            // mouse target, short enough that a wandered click doesn't
-            // fire something unexpected").
             _ = Task.Delay(ResetConfigArmedTimeoutMs, token).ContinueWith(t =>
             {
                 if (t.IsCanceled) return;
@@ -405,8 +329,6 @@ public partial class MainWindowViewModel
             return;
         }
         ResetConfigArmed = false;
-        // Confirmed — cancel pending disarm; we're either resetting now
-        // (Environment.Exit below) or aborting via the catch.
         _resetDisarmCts?.Cancel();
         _resetDisarmCts?.Dispose();
         _resetDisarmCts = null;
@@ -414,15 +336,14 @@ public partial class MainWindowViewModel
         try
         {
             var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
-            _logger?.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
+            _logger.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Config reset failed");
+            _logger.Error(ex, "[ViewModel] Config reset failed");
             return;
         }
 
-        // Restart fresh — no --safe needed, defaults are clean.
         try
         {
             var exe = Environment.ProcessPath;
@@ -430,7 +351,6 @@ public partial class MainWindowViewModel
             ProcessStartInfo psi;
             if (OperatingSystem.IsLinux())
             {
-                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
                 psi = new ProcessStartInfo
                 {
                     FileName = "/usr/bin/setsid",
@@ -453,7 +373,7 @@ public partial class MainWindowViewModel
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
             Environment.Exit(0);
         }
-        catch { /* reset already happened on disk, user can relaunch manually */ }
+        catch { }
     }
 
     [RelayCommand]
@@ -467,7 +387,6 @@ public partial class MainWindowViewModel
             ProcessStartInfo psi;
             if (OperatingSystem.IsWindows())
             {
-                // Security: Use ArgumentList instead of string concatenation with UseShellExecute=false to prevent argument injection
                 psi = new ProcessStartInfo
                 {
                     FileName = "explorer.exe",
@@ -477,7 +396,6 @@ public partial class MainWindowViewModel
             }
             else
             {
-                // Security: Use ArgumentList instead of string concatenation to prevent argument injection
                 psi = new ProcessStartInfo
                 {
                     FileName = "/usr/bin/open",
@@ -487,14 +405,8 @@ public partial class MainWindowViewModel
             }
             System.Diagnostics.Process.Start(psi);
         }
-        catch { /* best-effort */ }
+        catch { }
     }
-
-    // ── Diagnostics export (v2.39.0) ──
-    // Collects a redacted bundle (config + sing-box config + bounded log tails
-    // + env/health summary + geo manifest) into one ZIP on the Desktop, so a
-    // support request is a one-click attachment. Variant 0: nothing is
-    // uploaded; all secrets are stripped by DiagnosticsRedactor before zipping.
 
     [ObservableProperty]
     private bool _isExportingDiagnostics;
@@ -513,13 +425,13 @@ public partial class MainWindowViewModel
             ShowRulesToast(IsRussian
                 ? $"Диагностика сохранена на рабочий стол: {name}"
                 : $"Diagnostics saved to Desktop: {name}");
-            _logger?.Information("[VM] Diagnostics exported: {Path} ({Entries} entries, {Warnings} warnings)",
+            _logger.Information("[VM] Diagnostics exported: {Path} ({Entries} entries, {Warnings} warnings)",
                 result.ZipPath, result.Entries.Count, result.Warnings.Count);
             RevealInFileManager(result.ZipPath);
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[VM] Diagnostics export failed");
+            _logger.Error(ex, "[VM] Diagnostics export failed");
             ShowRulesToast(IsRussian ? "Не удалось собрать диагностику" : "Diagnostics export failed");
         }
         finally
@@ -528,7 +440,6 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>Open the OS file manager with the given file selected/revealed.</summary>
     private static void RevealInFileManager(string filePath)
     {
         try
@@ -539,58 +450,26 @@ public partial class MainWindowViewModel
             var psi = VPNRouter.App.Services.FileManagerHelper.BuildRevealStartInfo(filePath);
             System.Diagnostics.Process.Start(psi);
         }
-        catch { /* best-effort reveal */ }
+        catch { }
     }
-
-    // ── Theme / Language / UI mode / Settings commands ──
 
     [RelayCommand]
     private void ToggleTheme()
     {
-        // v2.17.10: log entry so bug reports about the window teleporting
-        // can be traced to the exact toggle that fired.
-        // v2.40.x (Fix #7): flipping makes an EXPLICIT light/dark choice
-        // (leaving "system"), routed through SetThemePreference so the pref
-        // persists. Picks the opposite of whatever variant is showing.
         SetThemePreference(IsDarkTheme ? "light" : "dark");
     }
 
     [RelayCommand]
     private void ToggleLanguage()
     {
-        // v2.25.12 — final fix for the "app freezes on language toggle"
-        // report. The underlying cause was that XAML `{x:Static loc:Strings.*}`
-        // markup extensions are evaluated exactly ONCE at parse time and
-        // never re-read. Every earlier iteration worked around this by
-        // rebuilding MainWindow from scratch on every language toggle,
-        // which meant re-parsing 7 pages' worth of XAML synchronously on
-        // the UI thread — a 200-500 ms hard freeze that the v2.25.11
-        // Dispatcher-defer trick merely concealed rather than removed.
-        //
-        // Real fix (shipped in v2.25.12):
-        //   1. Bulk-converted every `{x:Static loc:Strings.X}` → `{Binding L_X}`
-        //      across all 10 .axaml files (229 references).
-        //   2. Generated `MainWindowViewModel.Localization.cs` with 207
-        //      `public string L_X => Strings.X;` proxies.
-        //   3. `RefreshL10nProxies()` iterates those properties and fires
-        //      PropertyChanged for each so every binding re-reads.
-        // Result: toggling language now runs in ~5-10 ms — no rebuild,
-        // no freeze, flyout dismisses normally. Old
-        // `ReloadMainWindowForLocalization` helper kept around as
-        // fallback but is no longer wired into the toggle path.
         _logger.Information("[VM] ToggleLanguage → {Lang}", IsRussian ? "en" : "ru");
         IsRussian = !IsRussian;
         Strings.Lang = IsRussian ? "ru" : "en";
         SaveSettings();
         RefreshLocalization();
-        RefreshL10nProxies();   // broadcast PropertyChanged for every L_* + Lbl*
+        RefreshL10nProxies();
     }
 
-    // v2.25.2 — explicit segment commands for the redesigned ⋯ menu popover
-    // (Phase 1). The popover shows Theme as a System|Light|Dark segmented
-    // control (System added v2.40.x / Fix #7) and Language as RU|EN — clicking
-    // an already-active segment is a no-op. These wrappers let the XAML bind
-    // each segment button to its own command.
     [RelayCommand]
     private void SetThemeLight() => SetThemePreference("light");
 
@@ -600,12 +479,6 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void SetThemeSystem() => SetThemePreference("system");
 
-    /// <summary>
-    /// v2.40.x (Fix #7): apply + persist a theme preference. No-op if already
-    /// active. ApplyTheme resolves "system" against the OS appearance and sets
-    /// IsDarkTheme; SaveSettings persists the preference string (mirrors
-    /// ToggleLanguage, which also saves on change).
-    /// </summary>
     private void SetThemePreference(string pref)
     {
         pref = NormalizeThemePref(pref);
@@ -631,12 +504,6 @@ public partial class MainWindowViewModel
         ToggleLanguage();
     }
 
-    /// <summary>
-    /// Flip the UI between the minimalist SimplePage and the full tabbed
-    /// Advanced layout. Both views share the same ViewModel instance; the
-    /// window only swaps which pane is visible, so VM state (servers,
-    /// connection, Free Configs cache, etc.) survives the toggle.
-    /// </summary>
     [RelayCommand]
     private void ToggleUiMode()
     {
@@ -645,36 +512,16 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    /// <summary>
-    /// v2.27.0-r2: jump from Simple mode straight into Advanced →
-    /// Network → Autostart. Originally Simple had its own "Start with
-    /// Windows" checkbox bound to a computed property over three backing
-    /// settings. User feedback: two parallel sources of truth was more
-    /// confusing than useful, and getting them in sync needed extra code
-    /// paths (Bug B / Bug D). Collapsing Simple down to a link-card keeps
-    /// Simple actually simple — one path, one place to look — and the
-    /// Advanced master checkbox (bound directly to ServiceVm.Autostart
-    /// Checked again) is the only autostart surface. See plans/vpnrouter-
-    /// v2.27-service-ux.md §4 and the companion user feedback loop.
-    /// </summary>
     [RelayCommand]
     private void OpenAutostartSettings()
     {
         IsSimpleMode = false;
         _settings.App.UiMode = "advanced";
-        SelectedTabIndex = 2;           // Network tab
-        SelectedSettingsIndex = 5;      // Autostart sub-section (v2.30.0-r2: shifted +1 for Rules)
+        SelectedTabIndex = 2;
+        SelectedSettingsIndex = 5;
         SaveSettings();
     }
 
-    /// <summary>
-    /// v2.31.1-r1 (F-4 / UX-6): inline CTA used by the Autostart Section A
-    /// when the boot-autostart checkboxes are greyed out because the Windows
-    /// service isn't installed. Pre-fix the only path to install was scrolling
-    /// up to the master toggle, which wasn't obvious. The button binds to this
-    /// command which simply flips the master toggle — same code path as
-    /// clicking it directly, just discoverable from where the user is looking.
-    /// </summary>
     [RelayCommand]
     private void InstallServiceForAutostart()
     {
@@ -699,5 +546,501 @@ public partial class MainWindowViewModel
             window.WindowState = WindowState.Normal;
             window.Activate();
         }
+    }
+
+    [ObservableProperty] private bool _hasPendingAppChanges;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApplyAppChanges))]
+    [NotifyPropertyChangedFor(nameof(CanToggleConnection))]
+    private bool _isApplying;
+    private int _routingSettingsRevision;
+    public bool CanApplyAppChanges => IsConnected && !IsConnecting && !IsApplying;
+
+    private void MarkRoutingSettingsChanged()
+    {
+        Interlocked.Increment(ref _routingSettingsRevision);
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
+    private void ClearPendingIfRevisionUnchanged(int appliedRevision)
+    {
+        if (Volatile.Read(ref _routingSettingsRevision) == appliedRevision)
+            HasPendingAppChanges = false;
+    }
+
+    partial void OnAutostartUiChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        try
+        {
+            if (value)
+                AutostartHelper.Enable(Environment.ProcessPath!);
+            else
+                AutostartHelper.Disable();
+        }
+        catch (Exception ex) { _logger.Error(ex, "[VM] Autostart UI toggle failed"); }
+        SaveSettings();
+    }
+
+    partial void OnAutostartVpnChanged(bool value)
+    {
+        if (!_isLoadingUI)
+        {
+            try { SaveSettings(); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on AutostartVpn change failed"); }
+        }
+        OnPropertyChanged(nameof(SmpAutostartChecked));
+    }
+
+    partial void OnIsDnsLeakLockdownEnabledChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        try { SaveSettings(); }
+        catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on IsDnsLeakLockdownEnabled change failed"); }
+        MarkRoutingSettingsChanged();
+    }
+
+    private void LoadSettingsIntoUI()
+    {
+        _isLoadingUI = true;
+        try
+        {
+        var storedLang = _settings.App.Language ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(storedLang))
+        {
+            var osLang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            storedLang = string.Equals(osLang, "ru", StringComparison.OrdinalIgnoreCase) ? "ru" : "en";
+            _settings.App.Language = storedLang;
+            try { _settingsStore.Save(_settings); } catch { }
+        }
+        IsRussian = storedLang.Equals("ru", StringComparison.OrdinalIgnoreCase);
+        Strings.Lang = IsRussian ? "ru" : "en";
+
+        ThemePreference = NormalizeThemePref(_settings.App.Theme);
+        ApplyTheme();
+
+        IsSimpleMode = true;
+
+        var firstEnabledSub = _settings.App.Subscriptions?
+            .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
+        if (firstEnabledSub != null)
+            SmpInput = firstEnabledSub.Url;
+
+        var configMode = _settings.App.ConfigMode ?? "generated";
+        IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+        IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
+        SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
+        SelectedTabIndex = IsSubscribeMode ? 1 : 0;
+
+        IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase);
+
+        RoutingAppsMode = (_settings.App.RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
+
+        BypassRussianTraffic = _settings.App.BypassRussianTraffic;
+        CustomRulesAboveToggles = string.Equals(
+            _settings.App.CustomRulesPriority,
+            "custom_first",
+            System.StringComparison.OrdinalIgnoreCase);
+
+        _isSyncingCustomRules = true;
+        try
+        {
+            CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
+                .SerializeToText(_settings.App.CustomRules);
+        }
+        finally { _isSyncingCustomRules = false; }
+        RebuildCustomRulesList();
+
+        StrictMode = _settings.App.StrictMode;
+        TunMtu = _settings.Tun.Mtu;
+
+        ForceIpv4Only = _settings.App.ForceIpv4Only;
+        FlushDnsOnStart = _settings.App.FlushDnsOnStart;
+        StrictDns = _settings.App.StrictDns;
+        BlockAds = _settings.App.BlockAds;
+        AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
+        ConnectionIntentIndex = IntentToIndex(_settings.App.ConnectionIntent);
+        IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
+
+        AutostartVpn = _settings.App.AutostartVpn;
+        AutostartZapret = _settings.App.AutostartZapret;
+        AutostartTgProxy = _settings.App.AutostartTgProxy;
+#if PLATFORM_WINDOWS
+        AutostartUi = AutostartHelper.IsEnabled();
+#endif
+        LoadZapretStrategies();
+        ZapretCustomArgs = _settings.App.ZapretCustomArgs;
+        if (IsZapretRunning())
+        {
+            ZapretEnabled = true;
+            ZapretStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
+        }
+        else
+        {
+            ZapretEnabled = false;
+            ZapretStatus = Strings.Stopped;
+        }
+
+#if PLATFORM_WINDOWS
+        DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
+        FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
+
+        if (DiscordHostsInstalled && FlowsealHostsInstalled)
+        {
+            try { VPNRouter.Core.Services.HostsManager.ReconcileDiscordDuplicates(_logger); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Discord/Flowseal hosts reconcile failed (non-fatal)"); }
+        }
+
+        if (VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
+        {
+            GameFilterModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetGameFilterMode();
+            IpSetModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetIpSetMode();
+            ZapretAutoUpdateCheck = VPNRouter.Core.Services.ZapretActions.IsAutoUpdateCheckEnabled();
+        }
+
+        TgProxyPort = _settings.App.TgProxyPort > 0 ? _settings.App.TgProxyPort : 1443;
+        TgProxySecret = _settings.App.TgProxySecret;
+        TgProxyVersionText = TgProxyUpdater.IsInstalled()
+            ? (TgProxyUpdater.GetLocalVersion() ?? "?")
+            : (IsRussian ? "Не установлен" : "Not installed");
+        if (_tgProxy?.IsRunning == true)
+        {
+            TgProxyEnabled = true;
+            TgProxyStatus = $"{Strings.StatusRunning} (PID {_tgProxy.Pid})";
+            if (!string.IsNullOrEmpty(TgProxySecret))
+                TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
+        }
+        else
+        {
+            TgProxyEnabled = false;
+            TgProxyStatus = Strings.Stopped;
+        }
+#endif
+
+        ReceivePrereleases = _settings.Update.IsExperimental;
+
+        Servers.Clear();
+        ServerViewModel? activeServer = null;
+        foreach (var entry in _settings.Vless.GetEffectiveServers())
+        {
+            var vm = new ServerViewModel(entry);
+            Servers.Add(vm);
+            if (!string.IsNullOrEmpty(_settings.Vless.ActiveServer) &&
+                entry.Name?.Equals(_settings.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase) == true)
+                activeServer = vm;
+        }
+        ServerViewModel.RefreshUdpSiblingFlags(Servers);
+        ServerViewModel.RefreshProviderRiskFlags(Servers);
+        SelectedServer = activeServer ?? Servers.FirstOrDefault();
+
+        MarkOrphanServers();
+
+        if (_settings.App.Subscriptions.Count == 0
+            && !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl))
+        {
+            _settings.App.Subscriptions.Add(new SubscriptionEntry
+            {
+                Name = "Default",
+                Url = _settings.App.SubscriptionUrl,
+                Enabled = true,
+                Servers = _settings.App.SubscriptionServers ?? new(),
+                LastServerCount = (_settings.App.SubscriptionServers ?? new()).Count,
+                LastRefreshedAt = DateTimeOffset.UtcNow
+            });
+            _logger.Information("[VM] Migrated legacy subscription_url → Subscriptions[0]");
+        }
+
+        Subscriptions.Clear();
+        foreach (var entry in _settings.App.Subscriptions)
+            Subscriptions.Add(new SubscriptionViewModel(entry));
+
+        RebuildSubscriptionPool();
+
+        CustomConfigs.Clear();
+        CustomConfigViewModel? activeConfig = null;
+        foreach (var entry in _settings.App.CustomConfigs ?? new())
+        {
+            var isActive = entry.Name == _settings.App.ActiveCustomConfig;
+            var vm = new CustomConfigViewModel(entry, isActive);
+            CustomConfigs.Add(vm);
+            if (isActive) activeConfig = vm;
+        }
+        if (activeConfig == null && CustomConfigs.Count > 0)
+        {
+            activeConfig = CustomConfigs[0];
+            activeConfig.IsActive = true;
+            _settings.App.ActiveCustomConfig = activeConfig.Name;
+        }
+        SelectedCustomConfig = activeConfig;
+
+        var subTabHasManual = Servers.Count > 0;
+        var subTabHasCustom = CustomConfigs.Count > 0;
+        var subTabIndex = (subTabHasManual || !subTabHasCustom) ? 0 : 1;
+        SelectedServerModeIndex = subTabIndex;
+        _logger.Information(
+            "[VM] Sub-tab init: ServerModeIndex={Idx} (manual={M}, custom={C}, configMode={CM})",
+            subTabIndex, Servers.Count, CustomConfigs.Count, _settings.App.ConfigMode);
+
+        LoadApps();
+
+        RefreshLocalization();
+        }
+        finally
+        {
+            _isLoadingUI = false;
+        }
+    }
+
+    [RelayCommand]
+    private Task ApplyPendingChangesAsync() => ApplyPendingChangesInternalAsync(forceRestart: false);
+
+    [RelayCommand]
+    private void SwitchToSplitTunnel()
+    {
+        if (IsSplitTunnel) return;
+        IsSplitTunnel = true;
+        MarkRoutingSettingsChanged();
+        SaveSettings();
+    }
+
+    private async Task ApplyPendingChangesInternalAsync(bool forceRestart)
+    {
+        if (!CanApplyAppChanges) return;
+        IsApplying = true;
+        var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
+        try
+        {
+            SaveSettings();
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+
+            if (IsServiceManagedVpn)
+            {
+                if (ServiceVm.IsAvailable)
+                {
+                    StatusText = IsRussian
+                        ? "Перезапускаю службу с новыми настройками..."
+                        : "Restarting service with new settings...";
+                    await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
+                    ClearPendingIfRevisionUnchanged(appliedRevision);
+                    return;
+                }
+
+                ClearPendingIfRevisionUnchanged(appliedRevision);
+                StatusText = IsRussian
+                    ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
+                    : "Settings saved. Stop and Start VPN to apply — the service re-reads config.yaml on start.";
+                return;
+            }
+
+            var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
+            if (ok)
+            {
+                ClearPendingIfRevisionUnchanged(appliedRevision);
+                RestoreConnectedStatus();
+            }
+            else
+            {
+                StatusText = IsRussian ? "Не удалось применить" : "Apply failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] ApplyPendingChanges failed");
+            StatusText = $"{(IsRussian ? "Не удалось применить" : "Apply failed")}: {ex.Message}";
+        }
+        finally { IsApplying = false; }
+    }
+
+    private void SaveSettings()
+    {
+        if (_isLoadingUI) return;
+
+        try
+        {
+            var configPath = AppPaths.ConfigYamlPath;
+            if (File.Exists(configPath))
+                File.Copy(configPath, configPath + ".bak", overwrite: true);
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[Settings] Backup failed"); }
+
+        var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
+        var hasCustomConfig = !string.IsNullOrWhiteSpace(_settings.App.ActiveCustomConfig)
+                              || !string.IsNullOrWhiteSpace(_settings.App.CustomConfig)
+                              || (_settings.App.CustomConfigs?.Count ?? 0) > 0;
+        var hasActiveSubscription = (_settings.App.Subscriptions?.Any(s => s != null && s.Enabled) ?? false)
+                                    || !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl);
+
+        if (wantsCustomMode && hasActiveSubscription)
+        {
+            _settings.App.ConfigMode = "subscribe";
+            _logger.Information(
+                "[Settings] Subscription is active — keeping ConfigMode=subscribe " +
+                "even though Custom sub-tab is selected (user is peeking, not switching)");
+        }
+        else if (wantsCustomMode && !hasCustomConfig)
+        {
+            _settings.App.ConfigMode = "generated";
+            _logger.Information(
+                "[Settings] User clicked Custom sub-tab but no custom config is configured — keeping ConfigMode=generated instead of 'custom'");
+        }
+        else
+        {
+            _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
+        }
+
+        _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
+
+        var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
+        _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+
+        _settings.App.SubscriptionUrl = string.Empty;
+        _settings.App.SubscriptionServers = new();
+
+        _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
+
+        var appsModeCanon = (RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
+        if (appsModeCanon != "include" && appsModeCanon != "exclude") appsModeCanon = "include";
+        _settings.App.RoutingAppsMode = appsModeCanon;
+
+        try
+        {
+            var parsed = VPNRouter.Core.Services.CustomRulesParser
+                .ParseFromText(CustomRulesText);
+            _settings.App.CustomRules = parsed.Rules;
+            CustomRulesErrorText = parsed.Errors.Count == 0
+                ? string.Empty
+                : string.Join("\n", parsed.Errors.Select(e =>
+                    $"line {e.LineNumber}: {e.Reason}"));
+            var conflicts = VPNRouter.Core.Services.CustomRulesParser
+                .DetectConflicts(parsed.Rules);
+            CustomRulesConflictText = conflicts.Count == 0
+                ? string.Empty
+                : string.Join("\n", conflicts);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] CustomRules parse failed");
+        }
+
+        _settings.App.BypassRussianTraffic = BypassRussianTraffic;
+        _settings.App.CustomRulesPriority = CustomRulesAboveToggles ? "custom_first" : "toggles_first";
+
+        _settings.App.StrictMode = StrictMode;
+        var minimumTunMtu = _settings.Tun.Ipv6Enabled
+            ? TunSettings.MinimumIpv6Mtu
+            : TunSettings.MinimumMtu;
+        _settings.Tun.Mtu = Math.Clamp(TunMtu, minimumTunMtu, TunSettings.MaximumMtu);
+
+        _settings.App.ForceIpv4Only = ForceIpv4Only;
+        _settings.App.FlushDnsOnStart = FlushDnsOnStart;
+        _settings.App.StrictDns = StrictDns;
+        _settings.App.BlockAds = BlockAds;
+        _settings.Vless.AutoSelectBestServer = AutoSelectBestServer;
+        _settings.App.ConnectionIntent = IntentFromIndex(ConnectionIntentIndex);
+        _settings.App.DnsLeakLockdown = IsDnsLeakLockdownEnabled;
+        _settings.App.AutostartVpn = AutostartVpn;
+        _settings.App.AutostartZapret = AutostartZapret;
+        _settings.App.AutostartTgProxy = AutostartTgProxy;
+        _settings.App.AutostartUi = AutostartUi;
+        _settings.App.ZapretEnabled = ZapretEnabled;
+        _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
+            ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
+        _settings.App.ZapretCustomArgs = ZapretCustomArgs;
+        _settings.App.TgProxyEnabled = TgProxyEnabled;
+        _settings.App.TgProxyPort = TgProxyPort;
+        _settings.App.TgProxySecret = TgProxySecret;
+
+        _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
+
+        _settings.App.Theme = NormalizeThemePref(ThemePreference);
+        _settings.App.Language = IsRussian ? "ru" : "en";
+        _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
+
+        _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
+        var activeVless = SelectedServer ?? Servers.FirstOrDefault();
+        _settings.Vless.ActiveServer = activeVless?.Name ?? "";
+        if (_settings.Vless.Servers.Count > 0)
+        {
+            var entry = activeVless?.ToEntry() ?? _settings.Vless.Servers[0];
+            _settings.Vless.Server = entry.Server;
+            _settings.Vless.Port = entry.Port;
+            _settings.Vless.Uuid = entry.Uuid;
+            _settings.Vless.Flow = entry.Flow;
+            _settings.Vless.Security = entry.Security;
+            _settings.Vless.Reality = entry.Reality;
+        }
+
+        _settings.App.CustomConfigs = CustomConfigs.Select(c => c.ToEntry()).ToList();
+        var active = CustomConfigs.FirstOrDefault(c => c.IsActive);
+        _settings.App.ActiveCustomConfig = active?.Name ?? "";
+
+        if (_appsLoaded)
+        {
+            var activeProfileNames = AppGroups
+                .Where(g => g.IsChecked && g.Name != "Custom Apps")
+                .Select(g => g.Name);
+            _settings.ActiveProfile = string.Join(",", activeProfileNames);
+
+            var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+            _settings.CustomApps = customGroup?.Apps
+                .Select(a => a.ProcessName)
+                .ToList() ?? new();
+
+            var defaultGroupsCount = AppGroups.Count(g => g.Name != "Custom Apps" && !g.IsCustomCategory);
+            if (defaultGroupsCount > 0)
+            {
+                var customGroupApps = new Dictionary<string, List<string>>();
+                foreach (var group in AppGroups)
+                {
+                    if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
+                    var extras = group.Apps.Where(a => a.IsCustom).Select(a => a.ProcessName).ToList();
+                    if (extras.Count > 0)
+                        customGroupApps[group.Name] = extras;
+                }
+                _settings.CustomGroupApps = customGroupApps;
+            }
+
+            _settings.CustomCategories = AppGroups
+                .Where(g => g.IsCustomCategory)
+                .Select(g => new CustomCategory
+                {
+                    Name = g.Name,
+                    Enabled = g.IsChecked,
+                    Apps = g.Apps.Select(a => a.ProcessName).ToList()
+                })
+                .ToList();
+
+            var sweepIsIncludeMode = !string.Equals(
+                _settings.App.RoutingAppsMode, "exclude",
+                StringComparison.OrdinalIgnoreCase);
+            if (sweepIsIncludeMode)
+            {
+                var excluded = new List<string>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var group in AppGroups)
+                {
+                    if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
+                    if (!group.IsChecked) continue;
+                    foreach (var app in group.Apps)
+                    {
+                        if (app.IsChecked) continue;
+                        if (string.IsNullOrWhiteSpace(app.ProcessName)) continue;
+                        if (seen.Add(app.ProcessName))
+                            excluded.Add(app.ProcessName);
+                    }
+                }
+                _settings.ExcludedApps = excluded;
+            }
+        }
+
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
+    }
+
+    partial void OnReceivePrereleasesChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        _settings.Update.Channel = value ? "experimental" : "stable";
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 }

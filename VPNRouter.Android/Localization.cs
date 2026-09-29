@@ -3,17 +3,6 @@ using System.Globalization;
 
 namespace VPNRouter.Android;
 
-/// <summary>
-/// Thin re-export wrapper around <see cref="VPNRouter.Core.Localization.Strings"/>.
-/// The single source of truth for all UI labels lives in Core; this wrapper
-/// preserves the legacy public surface (<c>VPNRouter.Android.Localization</c>)
-/// so existing AndroidApp* call sites continue to work without bulk-edit.
-/// 
-/// <para>The Android-specific bootstrap stays here: <see cref="Ru"/> exposes the
-/// boolean view of Core's <c>Lang</c>, <see cref="LoadFromStorage"/> seeds Core's
-/// <c>Lang</c> from <c>AndroidStorage</c>, and <see cref="ToggleAndPersist"/> writes
-/// the choice back. Everything else is a pass-through to Core.</para>
-/// </summary>
 internal static class Localization
 {
     public static bool Ru =>
@@ -36,7 +25,6 @@ internal static class Localization
             return;
         }
 
-        // No explicit choice — guess from system Locale.
         try
         {
             var lang = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
@@ -63,7 +51,6 @@ internal static class Localization
     public static string TabSettings => global::VPNRouter.Core.Localization.Strings.TabSettings;
     public static string TabZapret => global::VPNRouter.Core.Localization.Strings.TabZapret;
     public static string TabTgWsProxy => global::VPNRouter.Core.Localization.Strings.TabTgWsProxy;
-    // Advanced shell tab labels (AND-ADV-CHROME 2026-05-10) — desktop parity.
     public static string TabAdvServers => global::VPNRouter.Core.Localization.Strings.TabAdvServers;
     public static string TabAdvSubscribe => global::VPNRouter.Core.Localization.Strings.TabAdvSubscribe;
     public static string TabAdvSettings => global::VPNRouter.Core.Localization.Strings.TabAdvSettings;
@@ -478,7 +465,6 @@ internal static class Localization
     public static string RulesHelpB3Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Suf;
     public static string RulesHelpBanner => global::VPNRouter.Core.Localization.Strings.RulesHelpBanner;
     public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;
-    // Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10).
     public static string AdvAppsCategoryNamePlaceholder => global::VPNRouter.Core.Localization.Strings.AdvAppsCategoryNamePlaceholder;
     public static string AdvAppsAddCategoryButton => global::VPNRouter.Core.Localization.Strings.AdvAppsAddCategoryButton;
     public static string AdvAppsSelectCategoryHint => global::VPNRouter.Core.Localization.Strings.AdvAppsSelectCategoryHint;
@@ -503,29 +489,21 @@ internal static class Localization
     public static string SmpInputLabel => global::VPNRouter.Core.Localization.Strings.SmpInputLabel;
     public static string SmpInputWatermark => global::VPNRouter.Core.Localization.Strings.SmpInputWatermark;
     public static string SmpInputHint => global::VPNRouter.Core.Localization.Strings.SmpInputHint;
-    // v2.32.0 parity port (2026-05-09) — auto-detect hint + Save/Refresh
-    // toast strings exposed for the Android Simple page rewrite. Same Core
-    // backing that powers desktop SmpInputDetectedHint / SmpToastText.
     public static string SmpInputDetectedServer => global::VPNRouter.Core.Localization.Strings.SmpInputDetectedServer;
     public static string SmpInputDetectedSubscription => global::VPNRouter.Core.Localization.Strings.SmpInputDetectedSubscription;
     public static string SmpSavedAsServerToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsServerToast;
     public static string SmpSavedAsSubscriptionToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsSubscriptionToast;
     public static string SmpRefreshDoneToast => global::VPNRouter.Core.Localization.Strings.SmpRefreshDoneToast;
-    // Android-only QR scan flow (lucid-pike, 2026-05-09) — see Core
-    // Strings.cs SmpScanQr* group. Wired from AndroidApp.QrScan.cs +
-    // MainActivity camera-intent path.
     public static string SmpScanQrButton => global::VPNRouter.Core.Localization.Strings.SmpScanQrButton;
     public static string SmpQrPermissionDenied => global::VPNRouter.Core.Localization.Strings.SmpQrPermissionDenied;
     public static string SmpQrNotRecognized => global::VPNRouter.Core.Localization.Strings.SmpQrNotRecognized;
     public static string SmpQrScannedToast => global::VPNRouter.Core.Localization.Strings.SmpQrScannedToast;
-    // Bug-AND-023 v3 (2026-05-17) — magic 1-step QR-scan auto-apply toasts.
     public static string SmpQrConnecting => global::VPNRouter.Core.Localization.Strings.SmpQrConnecting;
     public static string SmpQrSubscriptionFetching => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionFetching;
     public static string SmpQrSubscriptionEmpty => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionEmpty;
     public static string SmpQrSubscriptionFailed => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionFailed;
     public static string SmpQrUnsupportedScheme => global::VPNRouter.Core.Localization.Strings.SmpQrUnsupportedScheme;
     public static string SmpQrNaiveUnsupportedAndroid => global::VPNRouter.Core.Localization.Strings.SmpQrNaiveUnsupportedAndroid;
-    // v2.32.3 (2026-05-17) — placeholder credentials rejection / migration banner.
     public static string PlaceholderCredentialRejected => global::VPNRouter.Core.Localization.Strings.PlaceholderCredentialRejected;
     public static string PlaceholderSubscriptionDropped => global::VPNRouter.Core.Localization.Strings.PlaceholderSubscriptionDropped;
     public static string PlaceholderPruneBanner => global::VPNRouter.Core.Localization.Strings.PlaceholderPruneBanner;
@@ -852,7 +830,6 @@ internal static class Localization
     public static string ExternalControlHint => global::VPNRouter.Core.Localization.Strings.ExternalControlHint;
     public static string ReliabilityAutoReconnectTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectTitle;
     public static string ReliabilityAutoReconnectHint => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectHint;
-    public static string BlockOnVpnFailLabel => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailLabel;
     public static string BlockOnVpnFailHint => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailHint;
     public static string DnsStrategyHeader => global::VPNRouter.Core.Localization.Strings.DnsStrategyHeader;
     public static string DnsStrategyIpv4Only => global::VPNRouter.Core.Localization.Strings.DnsStrategyIpv4Only;
@@ -902,7 +879,6 @@ internal static class Localization
     public static string ProfilesAppliedToast => global::VPNRouter.Core.Localization.Strings.ProfilesAppliedToast;
     public static string ProfilesClearedToast => global::VPNRouter.Core.Localization.Strings.ProfilesClearedToast;
 
-    // F-10 kebab parity (2026-05-09) — items added to Android kebab.
     public static string MenuItemCheckLeaks => global::VPNRouter.Core.Localization.Strings.MenuItemCheckLeaks;
     public static string MenuItemHealthCheck => global::VPNRouter.Core.Localization.Strings.MenuItemHealthCheck;
     public static string MenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.MenuItemSafeMode;
@@ -910,7 +886,6 @@ internal static class Localization
     public static string TipMenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.TipMenuItemSafeMode;
     public static string TipMenuItemResetConfig => global::VPNRouter.Core.Localization.Strings.TipMenuItemResetConfig;
 
-    // F-13 Android visual port: Tools / DPI Bypass overlays (2026-05-09).
     public static string ToolsOverlayTitle => global::VPNRouter.Core.Localization.Strings.ToolsOverlayTitle;
     public static string DpiBypassOverlayTitle => global::VPNRouter.Core.Localization.Strings.DpiBypassOverlayTitle;
     public static string ToolsTabZapret => global::VPNRouter.Core.Localization.Strings.ToolsTabZapret;
@@ -927,9 +902,6 @@ internal static class Localization
     public static string AndroidToolsOpenLog => global::VPNRouter.Core.Localization.Strings.AndroidToolsOpenLog;
     public static string AndroidToolsCheckLeak => global::VPNRouter.Core.Localization.Strings.AndroidToolsCheckLeak;
 
-    // AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E of Android Advanced
-    // parity. Tools tab now hosts merged Zapret + Telegram sub-tabs.
-    // Public tab uses Search / Saved sub-tabs.
     public static string AdvToolsSubTabZapret => global::VPNRouter.Core.Localization.Strings.AdvToolsSubTabZapret;
     public static string AdvToolsSubTabTelegram => global::VPNRouter.Core.Localization.Strings.AdvToolsSubTabTelegram;
     public static string AdvToolsZapretAndroidExplainer => global::VPNRouter.Core.Localization.Strings.AdvToolsZapretAndroidExplainer;
@@ -944,12 +916,6 @@ internal static class Localization
     public static string AdvPublicCacheEmpty => global::VPNRouter.Core.Localization.Strings.AdvPublicCacheEmpty;
     public static string AdvPublicSelectRow => global::VPNRouter.Core.Localization.Strings.AdvPublicSelectRow;
 
-    // ZapretSec* labels are already re-exported earlier in this file
-    // (around line 215-225) from the v2.32.0 (AND-ZAPRET) batch. The
-    // F-13 DPI Bypass overlay reuses those existing accessors directly —
-    // re-adding here would cause CS0102 duplicate definitions.
-
-    // ── Android Advanced > Servers + Subscribe (Phase B parity, 2026-05-10) ──
     public static string AdvServersSubTabServers => global::VPNRouter.Core.Localization.Strings.AdvServersSubTabServers;
     public static string AdvServersSubTabCustomJson => global::VPNRouter.Core.Localization.Strings.AdvServersSubTabCustomJson;
     public static string AdvServersTestAll => global::VPNRouter.Core.Localization.Strings.AdvServersTestAll;
@@ -964,7 +930,6 @@ internal static class Localization
     public static string AdvServersDeepVerifyAndroidNote => global::VPNRouter.Core.Localization.Strings.AdvServersDeepVerifyAndroidNote;
     public static string AdvSubscribeAggregatedEmpty => global::VPNRouter.Core.Localization.Strings.AdvSubscribeAggregatedEmpty;
 
-    // ── Phase C: Settings tab side-nav (2026-05-10) ──
     public static string SettingsSectionRules => global::VPNRouter.Core.Localization.Strings.SettingsSectionRules;
     public static string AdvSettingsRulesAndroidNote => global::VPNRouter.Core.Localization.Strings.AdvSettingsRulesAndroidNote;
     public static string AdvSettingsAutostartAndroidIntro => global::VPNRouter.Core.Localization.Strings.AdvSettingsAutostartAndroidIntro;

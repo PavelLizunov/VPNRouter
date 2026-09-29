@@ -2,16 +2,6 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// ServerUriParser — v2.30.1-r3 multi-protocol URI parsing
-//
-// Verifies that share-link URIs for non-VLESS protocols (Hysteria2 with
-// Salamander obfuscation, TUIC v5 with congestion-control hint, Shadowsocks
-// 2022 in both plain and base64 userinfo forms, Shadowsocks + ShadowTLS v3
-// plugin) parse into VlessServerEntry rows with the right Protocol
-// discriminator and protocol-specific fields. The pre-existing VLESS path
-// keeps working unchanged.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class ServerUriParserTests
 {
@@ -96,7 +86,6 @@ public class ServerUriParserTests
     [Fact]
     public void Shadowsocks_Base64Userinfo_DecodesAndParses()
     {
-        // base64 of "aes-256-gcm:secretpw"
         var ui = System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("aes-256-gcm:secretpw"));
         var uri = "ss://" + ui + "@host:8388#ss-legacy";
         var e = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
@@ -107,13 +96,6 @@ public class ServerUriParserTests
     [Fact]
     public void Shadowsocks_Base64UrlUserinfo_DecodesAndParses()
     {
-        // Regression (v2.44.1): SIP002 and our Clash-YAML emitter
-        // (ClashYamlParser.MapShadowsocks) produce base64URL userinfo using
-        // '-'/'_', not standard base64. Before the fix the parser decoded with a
-        // plain Convert.FromBase64String which threw on '-'/'_', so those ss
-        // servers were silently dropped. This fixture's standard base64 contains
-        // a '+' (-> '-' in url-safe form), so it genuinely exercises the path.
-        // url-safe of UTF8("aes-256-gcm:s>>?>p?w") = "YWVzLTI1Ni1nY206cz4-Pz5wP3c".
         var uri = "ss://YWVzLTI1Ni1nY206cz4-Pz5wP3c@host:8388#ss-b64url";
         var e = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
         Assert.Equal("shadowsocks", e.Protocol);
@@ -183,8 +165,6 @@ public class ServerUriParserTests
     [InlineData("tuic://00000000-0000-0000-0000-000000000001:pw@[2001:db8::3]:443#test-tuic", "2001:db8::3", 443)]
     public void Parse_IPv6Literal_StripsBracketsAndNormalizesServer(string uri, string expectedHost, int expectedPort)
     {
-        // URI-01: verify that bracketed IPv6 hosts (e.g. [2001:db8::1]) have outer brackets stripped
-        // so that sing-box config builders don't emit double-bracketed hostnames.
         var entry = VPNRouter.Core.Services.ServerUriParser.Parse(uri);
         Assert.Equal(expectedHost, entry.Server);
         Assert.Equal(expectedPort, entry.Port);

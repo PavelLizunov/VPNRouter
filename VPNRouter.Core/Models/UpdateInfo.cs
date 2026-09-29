@@ -10,22 +10,11 @@ public class UpdateInfo
     public long SizeBytes { get; init; }
     public bool IsNewer { get; init; }
 
-    // ── Lite update support ──
-    /// <summary>URL for the lite update ZIP (app binaries only, no runtime/sing-box).</summary>
     public string? LiteDownloadUrl { get; init; }
-    /// <summary>Size of the lite update ZIP in bytes.</summary>
     public long LiteSizeBytes { get; init; }
-    /// <summary>True if a lite update package is available AND the current install supports it.</summary>
     public bool HasLiteUpdate { get; init; }
 
-    // ── Checksum verification (v2.15.8) ──
-    /// <summary>URL of the .sha256 file for the full install ZIP (null if not published).</summary>
     public string? FullChecksumUrl { get; init; }
-    /// <summary>URL of the .sha256 file for the lite update ZIP (null if not published).</summary>
     public string? LiteChecksumUrl { get; init; }
-    /// <summary>Already-normalized inline SHA256 (64 lowercase hex) of the install asset.
-    /// When non-null the download gate verifies against it directly without re-fetching
-    /// the sidecar; null falls back to the matching checksum URL. Extraction is refused
-    /// when both are absent.</summary>
     public string? FullChecksumSha256 { get; init; }
 }

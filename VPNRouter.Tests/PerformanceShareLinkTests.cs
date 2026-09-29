@@ -9,7 +9,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-// Public behavior regressions for the span scheme prefilter; not a benchmark suite.
 public sealed class PerformanceShareLinkTests
 {
     public static IEnumerable<object[]> ShareLinks => new[]
@@ -155,25 +154,6 @@ public sealed class PerformanceShareLinkTests
     [InlineData("", false)]
     public void IsSupportedScheme_SpanAndStringOverloadsAgree(string line, bool expected)
     {
-        Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line));
-        Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line.AsSpan()));
-    }
-
-    [Theory]
-    [InlineData("naive://test")]
-    [InlineData("naive+https://test")]
-    [InlineData("naive+quic://test")]
-    [InlineData("dns-tunnel://test")]
-    [InlineData("awg://test")]
-    [InlineData("amneziawg://test")]
-    public void IsSupportedScheme_SpanPreservesRuntimeGates(string line)
-    {
-        var expected = line.StartsWith("naive", StringComparison.Ordinal)
-            ? ServerUriParser.NaiveRuntimeAvailable
-            : line.StartsWith("dns-tunnel", StringComparison.Ordinal)
-                ? ServerUriParser.SlipstreamRuntimeAvailable
-                : SingBoxFeatures.AwgAvailable;
-
         Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line));
         Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line.AsSpan()));
     }

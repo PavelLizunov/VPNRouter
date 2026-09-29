@@ -2,16 +2,8 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-/// <summary>
-/// Built-in list of public sources for VLESS configs.
-/// Verified 2026-04-17: all six URLs return raw text (plain vless:// URIs, one per line).
-/// </summary>
 public static class FreeConfigSources
 {
-    /// <summary>
-    /// v2.14.4: merge built-in sources with user-provided ones (enabled only).
-    /// User sources are appended last (lower priority).
-    /// </summary>
     public static List<FreeConfigSource> GetAll(AppSettings? settings = null)
     {
         var result = new List<FreeConfigSource>(Default);
@@ -24,7 +16,7 @@ public static class FreeConfigSources
                 Name = string.IsNullOrWhiteSpace(u.Name) ? $"👤 {TrimHost(u.Url)}" : $"👤 {u.Name}",
                 Url = u.Url,
                 Enabled = true,
-                ExpectedCount = 0, // unknown for user sources
+                ExpectedCount = 0,
             });
         }
         return result;

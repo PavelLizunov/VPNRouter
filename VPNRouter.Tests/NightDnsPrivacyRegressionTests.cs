@@ -7,15 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Regression test suite for overnight audit findings NIGHT-02 and NIGHT-03:
-/// <list type="bullet">
-///   <item><description>NIGHT-02: Custom WireGuard/AmneziaWG endpoint split/include must preserve
-///   wireguard detour in synthesized/resolved DNS servers and not rewrite them to dns-direct.</description></item>
-///   <item><description>NIGHT-03: Effective StrictDns must override smart DNS and exclude local process rules,
-///   routing all DNS queries through vpn-dns / proxy detour while preserving runtime strict override=false.</description></item>
-/// </list>
-/// </summary>
 public class NightDnsPrivacyRegressionTests
 {
     private static AppSettings CreateSettings()
@@ -68,8 +59,7 @@ public class NightDnsPrivacyRegressionTests
         };
     }
 
-    // Note: inbounds (including tun) are optional in injector unit tests; no real network required.
-    private const string PlainWireGuardEndpointConfig = /*lang=json*/ """
+    private const string PlainWireGuardEndpointConfig =  """
     {
       "endpoints": [
         {
@@ -100,7 +90,7 @@ public class NightDnsPrivacyRegressionTests
     }
     """;
 
-    private const string VlessOutboundConfig = /*lang=json*/ """
+    private const string VlessOutboundConfig =  """
     {
       "outbounds": [
         { "type": "vless", "tag": "proxy", "server": "198.51.100.1", "server_port": 443, "uuid": "00000000-0000-0000-0000-000000000001" },
@@ -116,26 +106,19 @@ public class NightDnsPrivacyRegressionTests
     }
     """;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // NIGHT-03: ConfigGenerator Matrix
-    // strict on/off x include/exclude x smart/normal, runtime override
-    // ═══════════════════════════════════════════════════════════════════════════
-
     [Theory]
-    // Include mode combinations
     [InlineData("include", "smart", false, null, "local-dns", "dns-direct", "local-dns")]
-    [InlineData("include", "smart", true, null, "vpn-dns", "proxy", "vpn-dns")] // NIGHT-03 core bug fix: strict overrides smart include
-    [InlineData("include", "smart", true, false, "local-dns", "dns-direct", "local-dns")] // runtime override=false retained
+    [InlineData("include", "smart", true, null, "vpn-dns", "proxy", "vpn-dns")]
+    [InlineData("include", "smart", true, false, "local-dns", "dns-direct", "local-dns")]
     [InlineData("include", "vpn_only", false, null, "vpn-dns", "proxy", "local-dns")]
     [InlineData("include", "vpn_only", true, null, "vpn-dns", "proxy", "vpn-dns")]
     [InlineData("include", "vpn_only", true, false, "vpn-dns", "proxy", "local-dns")]
-    // Exclude mode combinations
     [InlineData("exclude", "normal", false, null, "local-dns", "dns-direct", "vpn-dns")]
-    [InlineData("exclude", "normal", true, null, "vpn-dns", "proxy", "vpn-dns")] // NIGHT-03 core bug fix: strict overrides exclude local rule
-    [InlineData("exclude", "normal", true, false, "local-dns", "dns-direct", "vpn-dns")] // runtime override=false retained
+    [InlineData("exclude", "normal", true, null, "vpn-dns", "proxy", "vpn-dns")]
+    [InlineData("exclude", "normal", true, false, "local-dns", "dns-direct", "vpn-dns")]
     [InlineData("exclude", "smart", false, null, "local-dns", "dns-direct", "vpn-dns")]
-    [InlineData("exclude", "smart", true, null, "vpn-dns", "proxy", "vpn-dns")] // strict overrides exclude smart
-    [InlineData("exclude", "smart", true, false, "local-dns", "dns-direct", "vpn-dns")] // runtime override=false retained
+    [InlineData("exclude", "smart", true, null, "vpn-dns", "proxy", "vpn-dns")]
+    [InlineData("exclude", "smart", true, false, "local-dns", "dns-direct", "vpn-dns")]
     public void ConfigGenerator_Dns_StrictMatrix_SelectedServerAndDetourMatchContract(
         string appsMode,
         string dnsMode,
@@ -165,31 +148,20 @@ public class NightDnsPrivacyRegressionTests
             settings,
             strictDnsOverride: strictDnsOverride);
 
-        // 1. Assert dns.final
         Assert.Equal(expectedFinalTag, config.Dns.Final);
 
-        // 2. Assert process DNS rule
         var procRule = config.Dns.Rules.FirstOrDefault(r =>
             r.ProcessName != null && r.ProcessName.Contains("Firefox.exe"));
         Assert.NotNull(procRule);
         Assert.Equal(expectedProcessServerTag, procRule!.Server);
 
-        // 3. Assert target resolver and its detour (not only final!)
         var resolverServer = config.Dns.Servers.Single(s => s.Tag == procRule.Server);
         Assert.Equal(expectedProcessDetour, resolverServer.Detour);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // NIGHT-02: Full Inject with Plain WireGuard Endpoint
-    // ═══════════════════════════════════════════════════════════════════════════
-
     [Fact]
     public void CustomConfigInjector_FullInject_PlainWireGuardEndpoint_SplitInclude_DetourRemainsWg()
     {
-        // NIGHT-02 specification:
-        // Full Inject test must match process DNS rule->resolver->detour for valid WG endpoint-only
-        // split/include, existing dns.servers local HTTPS, strict=false, BypassRu=false:
-        // detour remains wg.
         var settings = CreateSettings();
         settings.App.RoutingMode = "split";
         settings.App.RoutingAppsMode = "include";
@@ -203,7 +175,6 @@ public class NightDnsPrivacyRegressionTests
 
         var root = JsonNode.Parse(injectedJson)!.AsObject();
 
-        // 1. Process route rule routes to "wg"
         var routeRules = root["route"]?["rules"]?.AsArray();
         Assert.NotNull(routeRules);
         var procRoute = routeRules!.OfType<JsonObject>().FirstOrDefault(r =>
@@ -211,7 +182,6 @@ public class NightDnsPrivacyRegressionTests
         Assert.NotNull(procRoute);
         Assert.Equal("wg", (string?)procRoute!["outbound"]);
 
-        // 2. Process DNS rule routes to resolver
         var dnsRules = root["dns"]?["rules"]?.AsArray();
         Assert.NotNull(dnsRules);
         var procDns = dnsRules!.OfType<JsonObject>().FirstOrDefault(r =>
@@ -220,7 +190,6 @@ public class NightDnsPrivacyRegressionTests
         var resolverTag = (string?)procDns!["server"];
         Assert.False(string.IsNullOrEmpty(resolverTag));
 
-        // 3. Resolver server in dns.servers has detour == "wg" (NOT dns-direct!)
         var dnsServers = root["dns"]?["servers"]?.AsArray();
         Assert.NotNull(dnsServers);
         var resolverServer = dnsServers!.OfType<JsonObject>().FirstOrDefault(s =>
@@ -228,18 +197,12 @@ public class NightDnsPrivacyRegressionTests
         Assert.NotNull(resolverServer);
         Assert.Equal("wg", (string?)resolverServer!["detour"]);
 
-        // 4. Since strict=false and split/include, dns.final remains the local resolver
         Assert.Equal("local-https", (string?)root["dns"]?["final"]);
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Controls: VLESS, Full, Strict, Direct, Unknown
-    // ═══════════════════════════════════════════════════════════════════════════
 
     [Fact]
     public void CustomConfigInjector_Control_Vless_IncludeSplit_DetourIsProxy()
     {
-        // Control: Standard VLESS outbound in include mode routes process DNS through "proxy"
         var settings = CreateSettings();
         settings.App.RoutingMode = "split";
         settings.App.RoutingAppsMode = "include";
@@ -267,7 +230,6 @@ public class NightDnsPrivacyRegressionTests
     [Fact]
     public void CustomConfigInjector_Control_WireGuard_FullTunnel_DnsFinalRoutesThroughWg()
     {
-        // Control: Full tunnel with WG endpoint sets dns.final to resolver routed through "wg"
         var settings = CreateSettings();
         settings.App.RoutingMode = "full";
         settings.App.StrictDns = false;
@@ -291,7 +253,6 @@ public class NightDnsPrivacyRegressionTests
     [Fact]
     public void CustomConfigInjector_Control_WireGuard_StrictDns_DnsFinalAndProcessRouteThroughWg()
     {
-        // Control: StrictDns=true with WG endpoint ensures both process DNS and dns.final route through "wg"
         var settings = CreateSettings();
         settings.App.RoutingMode = "split";
         settings.App.RoutingAppsMode = "include";
@@ -326,8 +287,6 @@ public class NightDnsPrivacyRegressionTests
     [Fact]
     public void CustomConfigInjector_Control_DirectAndUnknownDetours_AreTreatedAsLocal()
     {
-        // Control: direct/dns-direct, custom-named direct outbounds, and unknown detours
-        // must be classified as local (IsLocalDetour = true) and normalized to dns-direct.
         var configJson = """
         {
           "endpoints": [
@@ -347,23 +306,19 @@ public class NightDnsPrivacyRegressionTests
         var outbounds = root["outbounds"] as JsonArray;
         var endpoints = root["endpoints"] as JsonArray;
 
-        // Direct and shims are local
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "direct"));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "dns-direct"));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "custom-direct"));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "custom-block"));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "custom-dns"));
 
-        // Unknown detour is fail-closed local
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "unknown-tag"));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, ""));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, null));
 
-        // Proxy outbound and WG endpoint are remote (NOT local)
         Assert.False(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "vless-proxy"));
         Assert.False(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "wg"));
 
-        // Preserve casing: exact tag match required
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "WG"));
         Assert.True(CustomConfigInjector.IsLocalDetour(outbounds, endpoints, "Vless-Proxy"));
     }
@@ -371,8 +326,6 @@ public class NightDnsPrivacyRegressionTests
     [Fact]
     public void CustomConfigInjector_Control_ArbitraryEndpointType_FailsClosedAsLocal()
     {
-        // Don't generically trust arbitrary endpoints: only type="wireguard" is remote;
-        // arbitrary/unknown endpoints fail closed as local.
         var outbounds = new JsonArray
         {
             new JsonObject { ["type"] = "direct", ["tag"] = "direct" }
@@ -392,12 +345,7 @@ public class NightDnsPrivacyRegressionTests
     [Fact]
     public void CustomConfigInjector_Control_DirectAndUnknownDetours_FinalInject_FailsClosedToSynthesizedRemote()
     {
-        // Control: full-Inject behavioral verification for direct, custom-direct, unknown detours,
-        // and non-wireguard endpoint types. In full tunnel (wantRemoteDns = true), StripUnsupportedFeatures
-        // normalizes all local/unknown detours to dns-direct, FindRemoteDnsTag rejects them as local,
-        // and CustomConfigInjector synthesizes a remote DNS server pointing to the valid WG endpoint.
-        // Note: inbounds (including tun) are optional in injector unit tests; no real network required.
-        var configJson = /*lang=json*/ """
+        var configJson =  """
         {
           "endpoints": [
             {
@@ -446,7 +394,6 @@ public class NightDnsPrivacyRegressionTests
 
         var root = JsonNode.Parse(injectedJson)!.AsObject();
 
-        // 1. All local and unknown detour servers were rewritten to dns-direct by StripUnsupportedFeatures
         var servers = root["dns"]?["servers"]?.AsArray();
         Assert.NotNull(servers);
 
@@ -462,7 +409,6 @@ public class NightDnsPrivacyRegressionTests
         Assert.NotNull(customEpDns);
         Assert.Equal("dns-direct", (string?)customEpDns!["detour"]);
 
-        // 2. Full tunnel fails closed: synthesized remote DNS server with detour=wg becomes dns.final
         var dnsFinal = (string?)root["dns"]?["final"];
         Assert.Equal("vpnrouter-vpn-dns", dnsFinal);
 
@@ -471,13 +417,9 @@ public class NightDnsPrivacyRegressionTests
         Assert.Equal("wg", (string?)synthServer!["detour"]);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Custom Exclude Mode: StrictDns on / off
-    // ═══════════════════════════════════════════════════════════════════════════
-
     [Theory]
     [InlineData(false, "local-https", "dns-direct")]
-    [InlineData(true, "vpnrouter-vpn-dns", "wg")] // Under StrictDns, custom exclude routes process to remote resolver
+    [InlineData(true, "vpnrouter-vpn-dns", "wg")]
     public void CustomConfigInjector_CustomExclude_StrictDns_TogglesProcessDnsRemote(
         bool strictDns,
         string expectedServerTag,

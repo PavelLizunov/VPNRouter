@@ -1,70 +1,16 @@
 #!/usr/bin/env bash
-# build-libbox-aar.sh — reproducible build of libbox.aar from sing-box
-# source. Runs on Mac (mm4.local) via SSH. Phase 1.1 of Android port.
-#
-# Methodology ref: docs/android-development-methodology.md §7 Phase 1
-# Plan ref:        git show 6491be4c:plans/android-phase-1-libbox-build.md
-#
-# Usage:
-#   bash tools/build-libbox-aar.sh                  # default pinned version
-#   SING_BOX_VERSION=v1.13.11 bash tools/build-libbox-aar.sh  # override
-#
-# What it does (idempotent):
-#   1. Refresh sing-box clone at ~/build/sing-box (checks out pinned tag)
-#   2. Verify gomobile toolchain (Go + gomobile + NDK)
-#   3. Run gomobile bind for android/arm64 + selected build tags
-#   4. Output to ~/build/libbox-out/libbox.aar
-#   5. Compute sha256, write tools/libbox-cache/version.json fingerprint
-#
-# Exit codes:
-#   0 — AAR built + validated successfully
-#   1 — toolchain missing (fix per android-bootstrap.ps1 / methodology §8)
-#   2 — gomobile bind failed (see captured stderr)
-#   3 — AAR validation failed (missing jni/arm64-v8a/libgojni.so etc)
 
 set -euo pipefail
 
 SING_BOX_VERSION="${SING_BOX_VERSION:-v1.14.0-alpha.24}"
-# CRITICAL: sagernet maintains a FORK of gomobile with sing-box-specific
-# workarounds. Upstream golang.org/x/mobile/cmd/gomobile@latest produces
-# linker error `os.checkPidfdOnce` on every Go version tried (1.25, 1.26).
-# Pin to the fork version SFA uses (per sing-box Makefile lib_android_new):
 SAGERNET_GOMOBILE_VERSION="${SAGERNET_GOMOBILE_VERSION:-v0.1.12}"
 BUILD_DIR="${BUILD_DIR:-$HOME/build}"
 SING_BOX_DIR="$BUILD_DIR/sing-box"
 OUT_DIR="$BUILD_DIR/libbox-out"
-# Curated tag set:
-#   with_gvisor    — TUN/stack
-#   with_quic      — Hysteria2/TUIC support
-#   with_utls      — Reality TLS impersonation
-#   with_wireguard — WireGuard outbound (used for emergency channel)
-#   with_clash_api — Hot-reload via Clash API (matches desktop)
-#
-# Plus required workaround tags discovered 2026-05-12:
-#   badlinkname              — bypass Go linkname stricter checks
-#   tfogo_checklinkname0     — bypass TFOGO's own linkname check (sing-box dep)
-#
-# Plus required ldflag:
-#   -checklinkname=0         — disable linker's name-mangling check
-#
-# Why these workarounds: Go 1.25+ tightened linkname rules. sing-box uses
-# `//go:linkname` to access unexported runtime symbols (e.g. os.checkPidfdOnce)
-# for socket/pidfd polling. Without these tags + ldflag, every gomobile bind
-# fails at link stage. Source: sing-box/cmd/internal/build_libbox/main.go
-# (canonical tag set), Makefile lib_android_new target.
-#
-# We explicitly OMIT (vs sing-box default build_libbox):
-#   with_naive_outbound,with_tailscale  — cronet-go has C++ exception
-#       relocation 315 incompat with NDK 27 lld. We don't need either.
 TAGS="${TAGS:-with_gvisor,with_quic,with_utls,with_wireguard,with_clash_api,badlinkname,tfogo_checklinkname0}"
 ANDROID_API="${ANDROID_API:-26}"
 ANDROID_TARGET="${ANDROID_TARGET:-android/arm64}"
 
-# Locate toolchain — set defaults if env not already configured.
-# CRITICAL: Go 1.26+ breaks sing-box v1.13.10 build with
-# "invalid reference to os.checkPidfdOnce" linker error. Pin to Go 1.25
-# (matches SFA upstream version.properties GO_VERSION=go1.25.9).
-# Override via GO_BIN_PATH if you've installed elsewhere.
 GO_BIN_PATH="${GO_BIN_PATH:-/opt/homebrew/opt/go@1.25/bin}"
 if [ ! -x "$GO_BIN_PATH/go" ]; then
   echo "[FAIL] Go 1.25 not found at $GO_BIN_PATH/go" >&2
@@ -76,7 +22,6 @@ ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetoo
 ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/27.2.12479018}"
 export ANDROID_SDK_ROOT ANDROID_NDK_HOME
 export ANDROID_HOME="$ANDROID_SDK_ROOT"
-# Put pinned Go 1.25 FIRST in PATH so `go` and `gomobile` use it.
 export PATH="$GO_BIN_PATH:/opt/homebrew/bin:$HOME/go/bin:$PATH"
 
 echo "── build-libbox-aar.sh ──"
@@ -86,7 +31,6 @@ echo "  Android API:       $ANDROID_API"
 echo "  target:            $ANDROID_TARGET"
 echo "  output:            $OUT_DIR/libbox.aar"
 
-# ── Step 1: toolchain check ──
 for tool in git go gomobile; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "[FAIL] $tool not in PATH. See tools/android-bootstrap.ps1." >&2
@@ -99,7 +43,6 @@ if [ ! -d "$ANDROID_NDK_HOME" ]; then
 fi
 echo "[OK] toolchain present: go $(go version | awk '{print $3}'), gomobile $(which gomobile)"
 
-# ── Step 2: refresh sing-box source ──
 mkdir -p "$BUILD_DIR"
 if [ -d "$SING_BOX_DIR/.git" ]; then
   echo "[INFO] refreshing existing sing-box clone..."
@@ -112,23 +55,10 @@ fi
 ACTUAL_VERSION=$(cd "$SING_BOX_DIR" && git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
 echo "[OK] sing-box checked out: $ACTUAL_VERSION"
 
-# ── Step 3a: install sagernet's gomobile fork (key discovery) ──
 echo "[INFO] ensuring sagernet/gomobile@$SAGERNET_GOMOBILE_VERSION installed..."
 go install -v "github.com/sagernet/gomobile/cmd/gomobile@$SAGERNET_GOMOBILE_VERSION" 2>&1 | tail -1
 go install -v "github.com/sagernet/gomobile/cmd/gobind@$SAGERNET_GOMOBILE_VERSION" 2>&1 | tail -1
 
-# ── Step 3b: gomobile bind with curated tags ──
-# We deliberately DO NOT use `go run ./cmd/internal/build_libbox -target android`
-# even though sing-box's Makefile uses it. That tool pulls in tags
-# with_naive_outbound,with_tailscale,etc., which transitively depend on
-# cronet-go. cronet-go's prebuilt libcronet.a uses C++ exception
-# unwinding metadata (relocation 315) that NDK 27's lld linker cannot
-# parse — every link fails with «unknown relocation (315) against typeinfo».
-#
-# Our curated tag set keeps the protocols we actually use (VLESS+Reality
-# via with_utls, WireGuard, gVisor for TUN, QUIC for hysteria2 if needed,
-# clash_api for hot-reload). No naive, no tailscale → no cronet → no
-# relocation 315.
 mkdir -p "$OUT_DIR"
 cd "$SING_BOX_DIR/experimental/libbox"
 echo "[INFO] running gomobile bind (curated tags, this can take 3-5 min on M-series)..."
@@ -144,7 +74,6 @@ if ! gomobile bind -v \
 fi
 echo "[OK] AAR produced: $(ls -lh $OUT_DIR/libbox.aar | awk '{print $5}')"
 
-# ── Step 4: validate AAR ──
 if ! unzip -l "$OUT_DIR/libbox.aar" | grep -q "jni/arm64-v8a/libgojni.so"; then
   echo "[FAIL] AAR missing jni/arm64-v8a/libgojni.so — gomobile bind incomplete" >&2
   exit 3
@@ -157,7 +86,6 @@ if ! unzip -l "$OUT_DIR/libbox.aar" | grep -q "classes.jar"; then
 fi
 echo "[OK] AAR contains classes.jar"
 
-# ── Step 5: fingerprint ──
 SHA256=$(shasum -a 256 "$OUT_DIR/libbox.aar" | awk '{print $1}')
 SIZE=$(stat -f '%z' "$OUT_DIR/libbox.aar" 2>/dev/null || stat -c '%s' "$OUT_DIR/libbox.aar")
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -167,7 +95,6 @@ NDK_VER=$(basename "$ANDROID_NDK_HOME")
 echo "[OK] sha256: $SHA256"
 echo "[OK] size:   $SIZE bytes"
 
-# Write fingerprint
 cat > "$OUT_DIR/version.json" <<EOF
 {
   "sing_box_version": "$ACTUAL_VERSION",

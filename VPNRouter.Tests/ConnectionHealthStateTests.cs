@@ -6,12 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// B0: the observe-only rolling-window aggregator. Pins the denominator
-/// (RelayOpenFail / RelayOpenAttempt), that benign LocalCloses never move the
-/// failure rate (review §E3/E7 — the whole point of B0 staying silent), window
-/// expiry, and per-node attribution. Uses an injected clock for determinism.
-/// </summary>
 public sealed class ConnectionHealthStateTests
 {
     private static ConnLogEvent Ev(ConnHealthCategory c) => new(c, null, "proxy", null, null);
@@ -56,9 +50,6 @@ public sealed class ConnectionHealthStateTests
     [Fact]
     public void FailureRate_ClampedToOne_WhenFailsExceedAttempts()
     {
-        // Classifier marker asymmetry (e.g. a UDP relay-open failure counted while
-        // its "packet connection" attempt wording isn't) can leave fails > attempts
-        // at a window edge. The rate must clamp to 1.0, never render a >100% value.
         var now = DateTimeOffset.UnixEpoch;
         var s = NewState(() => now);
         s.Record(Ev(ConnHealthCategory.RelayOpenAttempt));
@@ -66,15 +57,13 @@ public sealed class ConnectionHealthStateTests
         Assert.Equal(1.0, s.Snapshot().FailureRate, 3);
     }
 
-    // Benign local closes must never trip WouldWarn: a flood of LocalClose with no
-    // real relay-open failures stays calm. This is the false-positive the review warned of.
     [Fact]
     public void LocalCloseFlood_DoesNotWarn()
     {
         var now = DateTimeOffset.UnixEpoch;
         var s = NewState(() => now);
         for (int i = 0; i < 1000; i++) s.Record(Ev(ConnHealthCategory.LocalClose));
-        for (int i = 0; i < 5; i++) s.Record(Ev(ConnHealthCategory.RelayOpenAttempt)); // all succeed
+        for (int i = 0; i < 5; i++) s.Record(Ev(ConnHealthCategory.RelayOpenAttempt));
         var snap = s.Snapshot();
         Assert.Equal(0.0, snap.FailureRate, 3);
         Assert.False(snap.WouldWarn);
@@ -96,7 +85,7 @@ public sealed class ConnectionHealthStateTests
         var now = DateTimeOffset.UnixEpoch;
         var s = NewState(() => now);
         for (int i = 0; i < 5; i++) s.Record(Ev(ConnHealthCategory.RelayOpenAttempt));
-        for (int i = 0; i < 5; i++) s.Record(Ev(ConnHealthCategory.RelayOpenFail)); // 100% but tiny sample
+        for (int i = 0; i < 5; i++) s.Record(Ev(ConnHealthCategory.RelayOpenFail));
         Assert.False(s.Snapshot().WouldWarn);
     }
 
@@ -106,7 +95,7 @@ public sealed class ConnectionHealthStateTests
         var now = DateTimeOffset.UnixEpoch;
         var s = NewState(() => now);
         for (int i = 0; i < 30; i++) s.Record(Ev(ConnHealthCategory.RelayOpenFail));
-        now = now.AddMinutes(6); // past the 5-minute window
+        now = now.AddMinutes(6);
         var snap = s.Snapshot();
         Assert.Equal(0, snap.RelayOpenFails);
         Assert.False(snap.WouldWarn);

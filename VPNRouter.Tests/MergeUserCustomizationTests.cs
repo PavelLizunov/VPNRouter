@@ -2,16 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-/// <summary>
-/// v2.31.6-r10 (Phase F): tests pinning the extracted
-/// <c>MergeUserCustomization</c> helper. Pre-r10 this logic was
-/// duplicated ~50 LOC verbatim between VpnEngine.StartAsync and
-/// VpnEngine.ApplyAsync, with silent-leak risk if the two drifted.
-/// These tests exercise every branch of the consolidated helper:
-/// CustomGroupApps merge into existing profiles, dupe skip,
-/// CustomCategories injection, name-collision skip, .exe extension
-/// normalisation, empty/null inputs, whitespace-only inputs.
-/// </summary>
 public class MergeUserCustomizationTests
 {
     private static ProfileCollection BuildCollectionWith(params string[] profileNames)
@@ -54,7 +44,6 @@ public class MergeUserCustomizationTests
 
         var p = pc.Profiles.Single();
         Assert.Equal(2, p.Processes.Count);
-        // .exe appended to bare name; pre-existing .exe stays unchanged.
         Assert.Contains(p.Processes, x => x.Name == "MyExtraApp.exe");
         Assert.Contains(p.Processes, x => x.Name == "AlreadyHas.exe");
     }
@@ -73,8 +62,6 @@ public class MergeUserCustomizationTests
         VpnEngine.MergeUserCustomization(pc, s);
 
         var p = pc.Profiles.Single();
-        // Pre-existing Chrome.exe stays; case-insensitive duplicates
-        // skipped; firefox.exe added.
         Assert.Equal(2, p.Processes.Count);
         Assert.Contains(p.Processes, x => x.Name == "Chrome.exe");
         Assert.Contains(p.Processes, x => x.Name == "firefox.exe");
@@ -88,7 +75,6 @@ public class MergeUserCustomizationTests
 
         VpnEngine.MergeUserCustomization(pc, s);
 
-        // No profile matches the group name → no mutation.
         Assert.Empty(pc.Profiles.Single().Processes);
     }
 
@@ -127,7 +113,6 @@ public class MergeUserCustomizationTests
 
         VpnEngine.MergeUserCustomization(pc, s);
 
-        // No new profile injected; existing Discord_Privacy untouched.
         Assert.Single(pc.Profiles);
         Assert.Empty(pc.Profiles.Single().Processes);
     }
@@ -136,7 +121,7 @@ public class MergeUserCustomizationTests
     public void Merge_NullCollections_NoOp()
     {
         var pc = BuildCollectionWith("Discord_Privacy");
-        var s = new AppSettings(); // no CustomGroupApps, no CustomCategories
+        var s = new AppSettings();
 
         VpnEngine.MergeUserCustomization(pc, s);
 

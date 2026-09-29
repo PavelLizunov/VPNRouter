@@ -5,15 +5,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.CLI.Commands;
 
-/// <summary>
-/// <c>vpnrouter doctor</c> — diagnostic health check. Thin wrapper that
-/// calls <see cref="HealthCheck.RunAll"/> and prints the results with
-/// Spectre.Console colouring. Exit code 0 if everything is OK, 1 on
-/// warnings, 2 on errors.
-///
-/// Actual check logic lives in <see cref="HealthCheck"/> so the UI
-/// "Run Health Check" menu item can reuse it.
-/// </summary>
 public class DoctorCommand : Command
 {
     public override int Execute(CommandContext context)

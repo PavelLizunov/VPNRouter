@@ -1,17 +1,5 @@
-# Dependabot — keep dependencies current with grouped, low-noise PRs.
-#
-# Native runtime deps (sing-box, Zapret, tg-ws-proxy, libbox.aar) are NOT
-# managed here — they are downloaded artifacts pinned in code/CI. See
-# tools/native-deps.md for their manual bump procedure (the libbox.aar SHA256
-# is hard-gated in build-android.yml).
 version: 2
 updates:
-  # .NET / NuGet. Scoped to the desktop + core projects via `directories`.
-  # VPNRouter.Android targets a .NET preview (net10.0-android) whose runtime
-  # packs live on the dnceng preview feed, not public NuGet — Dependabot's
-  # restore can't resolve them (the same NU1102 root that gates Android CI), so
-  # including it fails the whole nuget job. Re-add the Android project here once
-  # it moves to a GA .NET.
   - package-ecosystem: "nuget"
     directories:
       - "/VPNRouter.Core"
@@ -25,14 +13,11 @@ updates:
     commit-message:
       prefix: "build"
     groups:
-      # One PR for routine minor/patch bumps to cut review noise; majors stay
-      # individual so they get scrutiny.
       nuget-minor-patch:
         update-types:
           - "minor"
           - "patch"
 
-  # GitHub Actions pinned in the workflows.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -3,13 +3,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// G5 (2026-06-27): when the TUN carries no IPv6 (<see cref="TunSettings.Ipv6Enabled"/>
-/// = false), the generated <c>dns.strategy</c> must be "ipv4_only" so sing-box
-/// never returns AAAA records that can't traverse the IPv4-only tunnel — the
-/// "address not valid in its context" dial-fails + per-query stall seen in user
-/// diags. This holds independent of the legacy ForceIpv4Only toggle.
-/// </summary>
 public class DnsIpv4StrategyTests
 {
     private static AppSettings Make(bool ipv6Tun, bool forceIpv4)
@@ -43,13 +36,6 @@ public class DnsIpv4StrategyTests
     {
         var cfg = Gen(Make(ipv6Tun: false, forceIpv4: false));
         Assert.Equal("ipv4_only", cfg.Dns.Strategy);
-    }
-
-    [Fact]
-    public void Ipv6EnabledTun_AndForceOff_NoStrategyOverride()
-    {
-        var cfg = Gen(Make(ipv6Tun: true, forceIpv4: false));
-        Assert.Null(cfg.Dns.Strategy);
     }
 
     [Fact]

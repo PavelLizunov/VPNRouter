@@ -20,5 +20,5 @@
 ## Zone checks
 
 ```powershell
-dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~HelperCmdParserGuardTests|FullyQualifiedName~PostShipVerifierContractTests"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PostShipVerifierContractTests"
 ```

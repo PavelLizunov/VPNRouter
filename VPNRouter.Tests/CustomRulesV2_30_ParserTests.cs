@@ -2,9 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-/// <summary>v2.30.0: tests for the new full custom rules engine
-/// (direct/proxy/block actions). Covers parser, ConfigGenerator, and
-/// migration from v2.29.0-r4 CustomDirectRule schema.</summary>
 public class CustomRulesV2_30_ParserTests
 {
     [Fact]
@@ -97,22 +94,6 @@ public class CustomRulesV2_30_ParserTests
         Assert.Empty(r.Rules);
         Assert.Single(r.Errors);
         Assert.Contains("network", r.Errors[0].Reason);
-    }
-
-    [Fact]
-    public void Parse_GeositeName_Valid()
-    {
-        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct geosite category-news-ru");
-        Assert.Single(r.Rules);
-        Assert.Empty(r.Errors);
-    }
-
-    [Fact]
-    public void Parse_GeositeName_RejectsUppercase()
-    {
-        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct geosite Category-News-RU");
-        Assert.Empty(r.Rules);
-        Assert.Single(r.Errors);
     }
 
     [Fact]

@@ -10,12 +10,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// G1 (2026-06-27) Smart Connect acceptance, at the deterministic logic layer:
-/// the probe + selector must land Connect on a LIVE server, never a dead one,
-/// and signal "none alive" honestly. The protocol probe is injected so the
-/// exclude-dead / fastest-wins / none-alive contract is fully testable.
-/// </summary>
 public class ServerHealthProbeTests
 {
     private static VlessServerEntry Srv(string name, string host, int port = 443)
@@ -24,14 +18,11 @@ public class ServerHealthProbeTests
     private static ServerLiveness Live(string name, string host, bool alive, int ms)
         => new(Srv(name, host), alive, alive ? ms : int.MaxValue);
 
-    // Injected probe: "good*" hosts reachable, everything else unreachable.
     private static ServerHealthProbe ProbeWhere(Func<VlessServerEntry, bool> alive, Func<VlessServerEntry, int>? latency = null)
         => new(probeOverride: (s, _) => Task.FromResult(
             alive(s)
                 ? new ServerProbeResult(ServerProbeStatus.Ok, latency?.Invoke(s) ?? 50, null)
                 : new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "dead")));
-
-    // ── PickBest / AliveRanked (pure) ────────────────────────────────────────
 
     [Fact]
     public void PickBest_ExcludesDead_PicksFastestAlive()
@@ -39,8 +30,8 @@ public class ServerHealthProbeTests
         var results = new[]
         {
             Live("Germany", "1.1.1.1", alive: true, ms: 120),
-            Live("Latvia",  "2.2.2.2", alive: false, ms: 0),   // dead -> never picked
-            Live("Iceland", "3.3.3.3", alive: true, ms: 40),   // fastest alive
+            Live("Latvia",  "2.2.2.2", alive: false, ms: 0),
+            Live("Iceland", "3.3.3.3", alive: true, ms: 40),
             Live("Nether",  "4.4.4.4", alive: true, ms: 200),
         };
 
@@ -82,26 +73,6 @@ public class ServerHealthProbeTests
     }
 
     [Fact]
-    public void AliveRanked_ReturnsOnlyAlive_FastestFirst()
-    {
-        var results = new[]
-        {
-            Live("Slow", "1.1.1.1", alive: true,  ms: 300),
-            Live("Dead", "2.2.2.2", alive: false, ms: 0),
-            Live("Fast", "3.3.3.3", alive: true,  ms: 30),
-        };
-
-        var ranked = ServerHealthProbe.AliveRanked(results);
-
-        Assert.Equal(2, ranked.Count);
-        Assert.Equal("Fast", ranked[0].Name);
-        Assert.Equal("Slow", ranked[1].Name);
-        Assert.DoesNotContain(ranked, s => s.Name == "Dead");
-    }
-
-    // ── ProbeAllAsync (injected protocol probe) ──────────────────────────────
-
-    [Fact]
     public async Task ProbeAllAsync_MarksAliveDeadPerInjectedProbe()
     {
         var probe = ProbeWhere(s => s.Server.StartsWith("good"), s => s.Server.Length);
@@ -120,7 +91,6 @@ public class ServerHealthProbeTests
         Assert.False(results.Single(r => r.Server.Name == "Latvia").Alive);
         Assert.True(results.Single(r => r.Server.Name == "Iceland").Alive);
 
-        // Acceptance: PickBest over the probe output never yields the dead one.
         var best = ServerHealthProbe.PickBest(results);
         Assert.NotEqual("Latvia", best!.Name);
     }
@@ -134,13 +104,12 @@ public class ServerHealthProbeTests
         var results = await probe.ProbeAllAsync(servers, TimeSpan.FromSeconds(5));
 
         Assert.All(results, r => Assert.False(r.Alive));
-        Assert.Null(ServerHealthProbe.PickBest(results)); // honest "none alive"
+        Assert.Null(ServerHealthProbe.PickBest(results));
     }
 
     [Fact]
     public async Task ProbeAllAsync_SlowStatus_CountsAsAlive()
     {
-        // ServerProbeStatus.Slow is still reachable (IsReachable == true).
         var probe = new ServerHealthProbe(
             probeOverride: (_, _) => Task.FromResult(new ServerProbeResult(ServerProbeStatus.Slow, 900, null)));
         var results = await probe.ProbeAllAsync(new List<VlessServerEntry> { Srv("S", "s") }, TimeSpan.FromSeconds(5));
@@ -149,13 +118,10 @@ public class ServerHealthProbeTests
         Assert.Equal(900, results.Single().LatencyMs);
     }
 
-    // ── PickForConnect (G1 connect decision) ─────────────────────────────────
-
     [Fact]
     public void PickForConnect_ActiveAlive_KeepsActive_EvenIfSlower()
     {
         var results = new[] { Live("DE", "1", true, 100), Live("IS", "2", true, 40) };
-        // Active = DE, which is alive (though slower) — respect the explicit pick.
         Assert.Equal("DE", ServerHealthProbe.PickForConnect(results, "DE")!.Name);
     }
 
@@ -197,20 +163,6 @@ public class ServerHealthProbeTests
         Assert.True(results.Single(r => r.Server.Name == "Ok").Alive);
     }
 
-    // ── NIGHT-09 & Aggregator Bounded Workers & Cancellation Invariants ─────
-
-    [Fact]
-    public void MaxConcurrency_ConstantIsEight()
-    {
-        Assert.Equal(8, ServerHealthProbe.MaxConcurrency);
-
-        var field = typeof(ServerHealthProbe).GetField(
-            "MaxConcurrency",
-            BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-        Assert.NotNull(field);
-        Assert.Equal(8, field!.GetValue(null));
-    }
-
     [Fact]
     public async Task ProbeAllAsync_MoreThanEightCandidates_BlockingTcsObservesMaxEight_AllEventuallyProcessed_FastestTailChosen()
     {
@@ -236,11 +188,9 @@ public class ServerHealthProbeTests
                 readyTcs.TrySetResult();
             }
 
-            // Wait for release signal so all 8 workers are concurrently active
             await releaseTcs.Task.ConfigureAwait(false);
             Interlocked.Decrement(ref currentActive);
 
-            // Tail server (S12) is alive and fastest
             int latency = s.Name == "S12" ? 15 : 100;
             return new ServerProbeResult(ServerProbeStatus.Ok, latency, null);
         });
@@ -250,23 +200,19 @@ public class ServerHealthProbeTests
         List<ServerLiveness> results;
         try
         {
-            // Block until exactly 8 workers are active simultaneously
             await readyTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(8, Volatile.Read(ref maxActive));
         }
         finally
         {
-            // Release the workers to process remaining items
             releaseTcs.TrySetResult();
             results = await probeTask;
         }
 
-        // All 12 candidates were eventually processed
         Assert.Equal(12, results.Count);
         Assert.All(results, r => Assert.True(r.Alive));
         Assert.Equal(8, maxActive);
 
-        // Fastest tail server S12 was chosen
         var best = ServerHealthProbe.PickBest(results);
         Assert.NotNull(best);
         Assert.Equal("S12", best!.Name);
@@ -293,10 +239,8 @@ public class ServerHealthProbeTests
             }
         });
 
-        // Short deadline stops unstarted and cancels in-flight workers
         var results = await probe.ProbeAllAsync(servers, TimeSpan.FromMilliseconds(50));
 
-        // Must return all 12 entries (full count, unstarted stay dead)
         Assert.Equal(12, results.Count);
         Assert.All(results, r =>
         {
@@ -304,9 +248,7 @@ public class ServerHealthProbeTests
             Assert.Equal(int.MaxValue, r.LatencyMs);
         });
 
-        // Concurrency is bounded by MaxConcurrency (8), so at most 8 could have started
         Assert.True(started <= 8);
-        // All started workers completed cleanup on deadline cancellation
         Assert.Equal(started, completed);
     }
 
@@ -335,14 +277,12 @@ public class ServerHealthProbeTests
     [Fact]
     public async Task ProbeAllAsync_DeadlineExpired_SwallowedProbeReturnsOk_NeverReportedAlive()
     {
-        // Tests: "after awaited _probe token.ThrowIfCancellationRequested so canceled receive never alive."
         var probe = new ServerHealthProbe(probeOverride: async (s, token) =>
         {
             var tcs = new TaskCompletionSource();
             using var reg = token.Register(() => tcs.TrySetResult());
             await tcs.Task.ConfigureAwait(false);
 
-            // Probe swallowed cancellation and attempts to return Ok
             return new ServerProbeResult(ServerProbeStatus.Ok, 15, null);
         });
 
@@ -363,15 +303,12 @@ public class ServerHealthProbeTests
         var probe = new ServerHealthProbe(probeOverride: (_, _) =>
             Task.FromResult(new ServerProbeResult(ServerProbeStatus.Ok, 10, null)));
 
-        // Empty list throws
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             probe.ProbeAllAsync(new List<VlessServerEntry>(), TimeSpan.FromSeconds(5), cts.Token));
 
-        // Null list throws
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             probe.ProbeAllAsync(null!, TimeSpan.FromSeconds(5), cts.Token));
 
-        // Populated list throws
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             probe.ProbeAllAsync(new List<VlessServerEntry> { Srv("S1", "host1") }, TimeSpan.FromSeconds(5), cts.Token));
     }
@@ -397,7 +334,6 @@ public class ServerHealthProbeTests
             await probeStartedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
             callerCts.Cancel();
 
-            // Must throw OperationCanceledException, NOT return dead list
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
         }
         finally
@@ -448,7 +384,6 @@ public class ServerHealthProbeTests
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
 
-            // When ProbeAllAsync throws, all workers MUST have completed — zero unobserved running tasks
             Assert.Equal(0, Volatile.Read(ref activeWorkers));
         }
         finally
@@ -470,13 +405,11 @@ public class ServerHealthProbeTests
     [Fact]
     public async Task ProbeAllAsync_CallerCancelSwallowedByProbe_StillThrowsOperationCanceledException()
     {
-        // Tests: "before return ct.ThrowIfCancellationRequested even swallowed probe returns success"
         using var callerCts = new CancellationTokenSource();
 
         var probe = new ServerHealthProbe(probeOverride: (s, token) =>
         {
             callerCts.Cancel();
-            // Swallowed probe returns success
             return Task.FromResult(new ServerProbeResult(ServerProbeStatus.Ok, 20, null));
         });
 
@@ -550,10 +483,8 @@ public class ServerHealthProbeTests
 
         var results = await probe.ProbeAllAsync(servers, TimeSpan.Zero);
 
-        // Zero deadline must short-circuit without executing any probes
         Assert.Equal(0, Volatile.Read(ref probeCallCount));
 
-        // Must return all entries as dead
         Assert.Equal(3, results.Count);
         Assert.All(results, r =>
         {

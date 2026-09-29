@@ -1,31 +1,3 @@
-# =============================================================================
-# tools/watch-after-push.ps1 — v2.37.0-r30 (2026-05-25)
-#
-# Post-push CI watcher. Auto-invoked by .githooks/post-push.
-# Polls the just-pushed commit's CI status, captures Linux MVM hash drift
-# (the most common red), and stages a fix file so the NEXT ship absorbs it.
-#
-# Why this exists: r25..r29 all shipped with red `test` job (Linux hash
-# drift) because the existing pre-push hook only checks PREVIOUS commit
-# state — it doesn't watch the NEW push's outcome. Result: red Xs
-# accumulated across 5 commits before user noticed.
-#
-# This script closes the loop:
-#   1. After git push completes, this is invoked in background.
-#   2. Polls latest CI for the just-pushed SHA every 30s.
-#   3. If `test` job fails with Linux hash drift message:
-#      - Parses "Actual:" line from job log
-#      - Writes pending fix to .git-suggested-hash-bump.txt at repo root
-#      - Exits 0 (don't block — just stage the fix for human/next-ship)
-#   4. If test passes — exit 0 silently.
-#   5. If other red — log + exit 0 (don't block; user reads logs).
-#
-# Usage (manual or via hook):
-#   pwsh tools/watch-after-push.ps1 -Sha <sha>
-#
-# Cleanup: after the next ship consumes the suggestion, manually delete
-# .git-suggested-hash-bump.txt (or it's overwritten on next watch).
-# =============================================================================
 
 param(
     [string]$Sha = "",
@@ -66,7 +38,6 @@ while (((Get-Date) - $start).TotalSeconds -lt $MaxWaitSec) {
 
     Write-Host "[watch] test job FAILURE on $Sha — capturing diagnostic..." -ForegroundColor Red
 
-    # Pull the job logs to extract Linux hash if applicable
     $jobId = $testRun.id
     $log = gh api "repos/$Repo/actions/jobs/$jobId/logs" 2>$null
     if ($log -match "Actual:\s+([a-f0-9]{64})") {

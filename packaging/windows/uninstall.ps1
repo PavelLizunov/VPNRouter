@@ -1,38 +1,10 @@
-# VPNRouter uninstaller for Windows.
-#
-# Invoked via:
-#   - "Settings -> Apps -> VPNRouter -> Uninstall" (via UninstallString in
-#     HKLM\...\Uninstall\VPNRouter, populated by install.ps1)
-#   - Direct: iwr -useb https://vpn.ninitux.com/uninstall.ps1 | iex
-#
-# Does:
-#   1. Self-elevates via UAC if needed.
-#   2. Stops VPNRouter.App / sing-box if running.
-#   3. Uninstalls the Windows Service if registered.
-#   4. Removes C:\Program Files\VPNRouter.
-#   5. Removes Start Menu shortcut.
-#   6. Removes the Add/Remove Programs registry key.
-#   7. LEAVES %ProgramData%\VPNRouter intact by default (user configs,
-#      logs, subscription cache). Pass -Purge to wipe that too.
-#   8. LEAVES Windows DNS registry hardening alone. VPNRouter.App
-#      restores the pre-VPN values via WindowsDnsHardening.Restore() on
-#      each shutdown, so if you uninstalled while VPN was running cleanly,
-#      your DNS config is already back to normal. If the app crashed,
-#      DNS may still be set to our values - fix manually via
-#      `ipconfig /flushdns` + `netsh interface ip reset`.
 
 [CmdletBinding()]
 param(
-    # Also remove user data (config.yaml, logs, profiles cache, subscriptions).
-    # Default off - preserving config lets users re-install without
-    # reconfiguring servers.
     [switch]$Purge,
 
-    # Skip interactive confirmation (for scripted uninstalls / Add-Remove
-    # flow where no terminal is visible to click through).
     [switch]$Yes,
 
-    # Internal: re-invoked from elevated process.
     [switch]$Elevated
 )
 
@@ -48,7 +20,6 @@ function Ok   ($msg) { Write-Host "[OK] $msg"  -ForegroundColor Green }
 function Warn ($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Err  ($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red }
 
-# == Self-elevate ========================================================
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
            ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
@@ -66,12 +37,6 @@ if (-not $isAdmin) {
     if ($Yes)   { $passThrough += "-Yes" }
     $flagsString = ($passThrough -join ' ')
 
-    # IMPORTANT: download via -OutFile, NOT via .Content / WriteAllText.
-    # Symmetric fix to install.ps1 — see that file for the full explanation
-    # of the PS 5.1 Byte[] stringification bug. Short version: WriteAllText
-    # implicitly calls [string]::Join(' ', $bytes) on a Byte[], producing
-    # "35 32 86 80..." in the saved file, which the elevated shell then
-    # tries (and fails) to parse as PowerShell tokens.
     $bootstrap = @"
 `$ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -91,7 +56,6 @@ pause
 
 Say "VPNRouter uninstaller running as Administrator"
 
-# == Confirm (skipped with -Yes) =========================================
 if (-not $Yes) {
     Write-Host ""
     Write-Host "This will remove VPNRouter:"
@@ -114,7 +78,6 @@ if (-not $Yes) {
     }
 }
 
-# == Stop running processes ==============================================
 Say "Stopping any running VPNRouter / sing-box..."
 foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNRouter.GUI", "sing-box")) {
     Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
@@ -123,7 +86,6 @@ foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNR
 }
 Start-Sleep -Milliseconds 500
 
-# == Uninstall Windows Service ===========================================
 $svc = Get-Service -Name VPNRouter -ErrorAction SilentlyContinue
 if ($svc) {
     Say "Uninstalling Windows Service..."
@@ -134,18 +96,10 @@ if ($svc) {
     if (Test-Path $cli) {
         & $cli service uninstall 2>&1 | ForEach-Object { Write-Host "    $_" }
     } else {
-        # Installer exe missing - fall back to raw sc.exe
         & sc.exe delete VPNRouter 2>&1 | ForEach-Object { Write-Host "    $_" }
     }
 }
 
-# == Uninstall the split-tunnel kernel driver service (W1.4 true-split) ===
-# Best-effort. The manager RESETs the driver to inert on disconnect, but a hard
-# app crash can leave it loaded. `sc stop` unloads it (freeing app\driver\*.sys so
-# the install-dir removal below can delete it); `sc delete` removes the SCM entry.
-# RESET-before-stop isn't available from here (app already gone) — the driver's
-# known callback-leak-until-reboot is accepted for the uninstall path. A still-locked
-# .sys is tolerated: the install-dir remove already tells the user to re-run after reboot.
 $stSvc = Get-Service -Name "mullvad-split-tunnel" -ErrorAction SilentlyContinue
 if ($stSvc) {
     Say "Removing split-tunnel driver service (mullvad-split-tunnel)..."
@@ -154,7 +108,6 @@ if ($stSvc) {
     & sc.exe delete mullvad-split-tunnel 2>&1 | ForEach-Object { Write-Host "    $_" }
 }
 
-# == Remove install dir ==================================================
 if (Test-Path $InstallRoot) {
     Say "Removing $InstallRoot..."
     try {
@@ -166,26 +119,17 @@ if (Test-Path $InstallRoot) {
     }
 }
 
-# == Remove Start Menu shortcut ==========================================
 $lnkPath = Join-Path $StartMenuDir "VPNRouter.lnk"
 if (Test-Path $lnkPath) {
     Remove-Item $lnkPath -Force -ErrorAction SilentlyContinue
     Ok "Removed Start Menu shortcut"
 }
 
-# == Remove Add/Remove Programs entry ====================================
 if (Test-Path $UninstallKey) {
     Remove-Item -Path $UninstallKey -Recurse -Force -ErrorAction SilentlyContinue
     Ok "Removed Add/Remove Programs entry"
 }
 
-# == Remove per-user Explorer context-menu verb (v2.38.0) ================
-# The "route through VPN" verb is registered per-user (HKCU) by the app on
-# every launch (ShellMenuRegistrar.Register). We run ELEVATED here, so the
-# process HKCU is the admin's hive - NOT the user who installed. Resolve the
-# interactive console user's SID and clean their hive via HKEY_USERS, with a
-# fallback to the current process hive (covers a non-elevated direct run).
-# Best-effort: a leftover verb is only a dead menu entry, never fatal.
 Say "Removing Explorer context-menu entry..."
 try {
     $sids = New-Object System.Collections.Generic.List[string]
@@ -213,7 +157,6 @@ try {
     Warn "Could not remove context-menu entry: $_"
 }
 
-# == Optional: purge user data ===========================================
 if ($Purge) {
     if (Test-Path $DataRoot) {
         Say "Purging $DataRoot..."

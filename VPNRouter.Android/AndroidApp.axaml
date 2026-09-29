@@ -3,17 +3,6 @@
              x:Class="VPNRouter.Android.AndroidApp"
              RequestedThemeVariant="Dark">
 
-    <!--
-      v3.0 Phase 2 (2026-05-04) — visual parity with desktop.
-      The same Arctic / Glacier design tokens are used on both
-      platforms. Tokens.axaml is linked from VPNRouter.App at build
-      time (see csproj <AvaloniaResource Link="Styles\Tokens.axaml">),
-      so any palette tweak in desktop applies to mobile automatically.
-
-      RequestedThemeVariant=Dark by default. AndroidStorage.GetTheme()
-      can override at runtime via Application.Current.RequestedThemeVariant.
-    -->
-
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

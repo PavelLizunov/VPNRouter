@@ -9,47 +9,13 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Loads profiles from ordered sources: GitHub → Local → Built-in fallback.
-/// Supports merging multiple profiles by name.
-/// </summary>
 public class ProfileManager
 {
-    /// <summary>v2.31.0-r1 (CO-4 audit fix): cap JSON nesting depth on
-    /// untrusted profile sources (GitHub URLs, local user-supplied files)
-    /// to prevent stack-overflow / DoS via deeply-nested arrays. Profiles
-    /// are flat objects with at most ~3 levels (collection→profile→
-    /// processes[]→rule); 32 leaves enormous head-room while neutralizing
-    /// adversarial input.
-    ///
-    /// <para>Phase 3B (2026-05-18) — migrated from Newtonsoft
-    /// JsonSerializerSettings to System.Text.Json JsonSerializerOptions.
-    /// STJ's <see cref="JsonSerializerOptions.MaxDepth"/> default is 64;
-    /// we tighten to 32 for the same defence-in-depth rationale. Files
-    /// exceeding the cap throw <see cref="JsonException"/> (translates to
-    /// the same fail-closed behaviour Newtonsoft's JsonReaderException did,
-    /// pinned by <c>ProfileManagerJsonDosGuardTests</c>).</para>
-    ///
-    /// <para><c>PropertyNameCaseInsensitive=true</c> for backward-compat
-    /// with hand-edited profiles that may have used different casing
-    /// (Newtonsoft is case-insensitive by default). <c>WriteIndented=true</c>
-    /// matches the v2.32.0 GitHubProfileSource cache file format
-    /// (Newtonsoft's <c>Formatting.Indented</c>).</para>
-    /// </summary>
     public static readonly JsonSerializerOptions SafeJsonOptions = new()
     {
         MaxDepth = 32,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        // Phase 5 — Wave 25 AOT-2 (2026-05-18): compose the source-gen
-        // context with the reflective fallback. Profile / ProcessRule /
-        // ProfileCollection / ProfileCacheFile are registered in
-        // AppJsonContext so deserialize routes through generated
-        // JsonTypeInfo (AOT-safe, no reflection); any future ad-hoc DTO
-        // shape under this options instance falls through to
-        // DefaultJsonTypeInfoResolver. Phase 6 enables PublishAot which
-        // requires every reachable type to be context-registered — until
-        // then the chain composition keeps existing behaviour intact.
         TypeInfoResolver = JsonTypeInfoResolver.Combine(
             AppJsonContext.Default,
             new DefaultJsonTypeInfoResolver()),
@@ -66,8 +32,6 @@ public class ProfileManager
         _sources = sources.OrderBy(s => s.Priority).ToList();
         _logger = logger ?? Log.Logger;
     }
-
-    // ─── Load ─────────────────────────────────────────────────────────────────
 
     public async Task<ProfileCollection> LoadAsync(CancellationToken ct = default)
     {
@@ -88,13 +52,6 @@ public class ProfileManager
             }
             catch (Exception ex)
             {
-                // v2.31.6-r19: profile sources are tried in order with built-in
-                // fallback as last resort. The vast majority of "failures" here
-                // are 404s from optional remote sources (e.g. an example
-                // GitHub URL the user never set up). Logging the full stack
-                // every reload spammed vpnrouter.log with stack traces. Keep
-                // a concise INFO for the common case; raw exception goes to
-                // DEBUG so diagnostics can opt in.
                 _logger.Debug(ex, "[ProfileManager] Source '{Source}' exception", source.SourceName);
                 _logger.Information("[ProfileManager] Source '{Source}' unavailable: {Reason} — trying next",
                     source.SourceName, ex.Message);
@@ -106,15 +63,11 @@ public class ProfileManager
         return _cache;
     }
 
-    // ─── Get / Merge ──────────────────────────────────────────────────────────
-
     public Profile GetProfile(string name)
     {
         if (_cache == null)
             throw new InvalidOperationException("Profiles not loaded. Call LoadAsync first.");
 
-        // Trim whitespace so CLI users typing `--profile "  Foo  "` or config
-        // files with accidental padding around names still resolve correctly.
         var trimmed = name?.Trim() ?? string.Empty;
         var profile = _cache.Profiles.FirstOrDefault(p =>
             string.Equals(p.Name, trimmed, StringComparison.OrdinalIgnoreCase));
@@ -125,11 +78,6 @@ public class ProfileManager
         return profile;
     }
 
-    /// <summary>
-    /// Returns the named profile or null if it doesn't exist. Never throws.
-    /// Use this when the caller wants to log-and-skip missing names rather
-    /// than abort the whole operation.
-    /// </summary>
     public Profile? TryGetProfile(string name)
     {
         if (_cache == null) return null;
@@ -141,11 +89,6 @@ public class ProfileManager
             string.Equals(p.Name, trimmed, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Tolerant variant of <see cref="MergeProfiles"/>. Resolves each name;
-    /// unknown names are logged and returned via <paramref name="missing"/>
-    /// but do not throw. Returns null if ALL names were missing.
-    /// </summary>
     public Profile? MergeProfilesTolerant(IEnumerable<string> names, out List<string> missing)
     {
         missing = new List<string>();
@@ -189,12 +132,6 @@ public class ProfileManager
         return merged;
     }
 
-    /// <summary>
-    /// Merges multiple profiles into one. Conflict resolution:
-    /// - processes: union of all
-    /// - dns_mode: strictest wins (vpn_only > smart > direct)
-    /// - block_on_vpn_fail: true wins over false
-    /// </summary>
     public Profile MergeProfiles(IEnumerable<string> names)
     {
         var profiles = names.Select(GetProfile).ToList();
@@ -219,11 +156,8 @@ public class ProfileManager
 
     public List<Profile> ListProfiles() => _cache?.Profiles ?? new List<Profile>();
 
-    // ─── Private ──────────────────────────────────────────────────────────────
-
     private static string ResolveDnsMode(IEnumerable<string> modes)
     {
-        // Strictness order: vpn_only > smart > direct
         var priority = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
             ["vpn_only"] = 3,
@@ -236,8 +170,6 @@ public class ProfileManager
             .First();
     }
 }
-
-// ─── Profile Sources ──────────────────────────────────────────────────────────
 
 public class LocalProfileSource : IProfileSource
 {
@@ -256,33 +188,13 @@ public class LocalProfileSource : IProfileSource
     public Task<ProfileCollection?> LoadAsync(CancellationToken ct = default)
     {
         var json = File.ReadAllText(_path);
-        // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on local files
-        // — user could place a malicious profiles.json that crashes the
-        // app or causes stack overflow via nested arrays.
         var result = JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.ProfileCollection);
         return Task.FromResult(result);
     }
 }
 
-/// <summary>
-/// v2.32.0 — schema-versioned wrapper for the on-disk
-/// <c>cache/profiles.json</c> sidecar. The raw upstream JSON
-/// (<see cref="Profiles"/>) is preserved verbatim so a future schema bump
-/// can rewrap without re-fetching.
-///
-/// <para>The file is consumed by <see cref="GitHubProfileSource.LoadAsync"/>
-/// when the upstream HTTP fetch fails; corrupt or schema-mismatched files
-/// are quarantined by <see cref="CacheRecovery"/> and skipped, so a bad
-/// cache never overrides the built-in fallback.</para>
-/// </summary>
 public sealed class ProfileCacheFile
 {
-    // Phase 3B (2026-05-18) — migrated from [JsonProperty] (Newtonsoft) to
-    // [JsonPropertyName] (STJ). Same wire field names → backward-compat
-    // with the v2.32.0 on-disk cache wrapper written by GitHubProfileSource.
-    // CacheRecovery's schema_version probe is STJ-based, so the field's
-    // [JsonPropertyName] name has always been the authoritative wire key.
-
     [JsonPropertyName("schema_version")]
     public int SchemaVersion { get; set; } = GitHubProfileSource.CurrentSchemaVersion;
 
@@ -298,19 +210,10 @@ public sealed class ProfileCacheFile
 
 public class GitHubProfileSource : IProfileSource
 {
-    /// <summary>
-    /// v2.32.0 — schema for <c>cache/profiles.json</c>. v1 = wrapper with
-    /// schema_version + cached_at + upstream_url + profiles. Pre-v1 (raw
-    /// <see cref="ProfileCollection"/>) caches are quarantined on first
-    /// load post-upgrade.
-    /// </summary>
     public const int CurrentSchemaVersion = 1;
 
     private readonly string _url;
     private readonly string _cacheDir;
-    // 3G-2 (v3.0 refactor): per-class static HttpClient replaced with the
-    // shared IHttpClient seam (PolicyHttpClient.Shared). Consolidated retry
-    // policy + DNS-refresh pool + test injectability.
     private readonly IHttpClient _http;
 
     public int Priority { get; }
@@ -326,7 +229,6 @@ public class GitHubProfileSource : IProfileSource
 
     public bool IsAvailable()
     {
-        // Quick connectivity check — assume available, fail gracefully in LoadAsync
         return true;
     }
 
@@ -342,15 +244,8 @@ public class GitHubProfileSource : IProfileSource
             if (!httpResponse.IsSuccess())
                 throw new HttpRequestException($"GitHub profile fetch returned HTTP {httpResponse.StatusCode}");
             var json = httpResponse.AsString();
-            // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on the GitHub
-            // profile URL — the channel is HTTPS but a compromised tap or
-            // typosquatted URL could feed adversarial JSON. ProfileCollection
-            // is shallow (~3 levels), 32 leaves enormous head-room.
             var result = JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.ProfileCollection);
 
-            // v2.32.0 — wrap raw upstream JSON in a schema-versioned envelope
-            // before persisting. The cache is consulted on offline starts;
-            // CacheRecovery quarantines old (pre-v1) files on first read.
             if (result != null)
             {
                 Directory.CreateDirectory(_cacheDir);
@@ -369,11 +264,6 @@ public class GitHubProfileSource : IProfileSource
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            // v2.32.0 — upstream unreachable. Fall back to the on-disk
-            // cache via CacheRecovery so an offline launch (or a temporary
-            // GitHub outage) doesn't drop the user straight to BuiltIn
-            // profiles. CacheRecovery handles legacy raw-ProfileCollection
-            // files automatically (no schema_version → quarantine + null).
             var loaded = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
                 cacheFile,
                 CurrentSchemaVersion,
@@ -389,8 +279,6 @@ public class GitHubProfileSource : IProfileSource
                 return loaded.Value.Profiles;
             }
 
-            // Re-throw so ProfileManager records the source as failed and
-            // moves on to the next source (Local / BuiltIn).
             throw;
         }
     }
@@ -404,8 +292,6 @@ public class BuiltInProfileSource : IProfileSource
     public Task<ProfileCollection?> LoadAsync(CancellationToken ct = default)
         => Task.FromResult<ProfileCollection?>(BuiltInProfiles.Get());
 }
-
-// ─── Built-in fallback profiles ───────────────────────────────────────────────
 
 public static class BuiltInProfiles
 {

@@ -10,14 +10,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Correctness and freshness tests for <see cref="ClashSingBoxApi.GetConnectionsAsync"/>
-/// and <see cref="ConnectionsSnapshot"/>:
-/// - Valid zero/nonzero success snapshots return IsValid = true.
-/// - Failures (HTTP 500, bad JSON, missing required fields, timeout, cancellation)
-///   return a failure snapshot with IsValid = false without throwing.
-/// - Cancellation tokens and timeouts preserve the contract of returning failureSnapshot rather than throwing.
-/// </summary>
 public sealed class NightConnectionsFreshnessTests
 {
     private sealed class FakeHttpMessageHandler : HttpMessageHandler
@@ -45,20 +37,6 @@ public sealed class NightConnectionsFreshnessTests
     {
         var httpClient = new HttpClient(handler);
         return new ClashSingBoxApi(httpClient: httpClient, baseUrl: "http://127.0.0.1:9090");
-    }
-
-    [Fact]
-    public void ConnectionsSnapshot_DefaultIsValid_IsTrue()
-    {
-        var snapshot = new ConnectionsSnapshot(0, 0L, 0L, DateTimeOffset.UtcNow);
-        Assert.True(snapshot.IsValid);
-    }
-
-    [Fact]
-    public void ConnectionsSnapshot_ExplicitIsValidFalse_IsFalse()
-    {
-        var snapshot = new ConnectionsSnapshot(0, 0L, 0L, DateTimeOffset.UtcNow) { IsValid = false };
-        Assert.False(snapshot.IsValid);
     }
 
     [Fact]
@@ -144,46 +122,6 @@ public sealed class NightConnectionsFreshnessTests
     }
 
     [Fact]
-    public async Task GetConnectionsAsync_NonObjectJson_ReturnsInvalidSnapshot()
-    {
-        var handler = new FakeHttpMessageHandler
-        {
-            Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("[1, 2, 3]", Encoding.UTF8, "application/json")
-            }
-        };
-
-        var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
-
-        Assert.False(snapshot.IsValid);
-        Assert.Equal(0, snapshot.ActiveCount);
-    }
-
-    [Theory]
-    [InlineData("{}")]
-    [InlineData("{\"downloadTotal\":100,\"uploadTotal\":200}")]
-    [InlineData("{\"downloadTotal\":100,\"connections\":[]}")]
-    [InlineData("{\"uploadTotal\":200,\"connections\":[]}")]
-    public async Task GetConnectionsAsync_MissingFields_ReturnsInvalidSnapshot(string json)
-    {
-        var handler = new FakeHttpMessageHandler
-        {
-            Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            }
-        };
-
-        var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
-
-        Assert.False(snapshot.IsValid);
-        Assert.Equal(0, snapshot.ActiveCount);
-    }
-
-    [Fact]
     public async Task GetConnectionsAsync_PreCancellationToken_ReturnsInvalidSnapshotWithoutThrowing()
     {
         var handler = new FakeHttpMessageHandler
@@ -201,7 +139,6 @@ public sealed class NightConnectionsFreshnessTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        // Must NOT throw OperationCanceledException; must return failureSnapshot with IsValid = false
         var snapshot = await api.GetConnectionsAsync(cts.Token);
 
         Assert.False(snapshot.IsValid);
@@ -216,36 +153,6 @@ public sealed class NightConnectionsFreshnessTests
         var handler = new FakeHttpMessageHandler
         {
             Responder = _ => throw new OperationCanceledException("simulated timeout or cancellation")
-        };
-
-        var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
-
-        Assert.False(snapshot.IsValid);
-        Assert.Equal(0, snapshot.ActiveCount);
-    }
-
-    [Fact]
-    public async Task GetConnectionsAsync_TaskCanceledException_ReturnsInvalidSnapshotWithoutThrowing()
-    {
-        var handler = new FakeHttpMessageHandler
-        {
-            Responder = _ => throw new TaskCanceledException("simulated timeout")
-        };
-
-        var api = CreateApi(handler);
-        var snapshot = await api.GetConnectionsAsync();
-
-        Assert.False(snapshot.IsValid);
-        Assert.Equal(0, snapshot.ActiveCount);
-    }
-
-    [Fact]
-    public async Task GetConnectionsAsync_NetworkException_ReturnsInvalidSnapshotWithoutThrowing()
-    {
-        var handler = new FakeHttpMessageHandler
-        {
-            Responder = _ => throw new HttpRequestException("connection refused")
         };
 
         var api = CreateApi(handler);

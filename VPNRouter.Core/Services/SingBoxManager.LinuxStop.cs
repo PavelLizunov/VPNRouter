@@ -12,13 +12,6 @@ public partial class SingBoxManager
         IdentityUnavailable
     }
 
-    /// <summary>
-    /// Stop the one sing-box identity published by this VPNRouter owner.
-    /// Linux uses pidfd for the direct and elevated helper paths. macOS has
-    /// no process descriptor, so it performs a fresh identity check followed
-    /// immediately by an exact-PID sudo kill. No branch falls back to a name
-    /// or command-line pattern.
-    /// </summary>
     private bool LinuxStopEscalationChain()
     {
         var target = ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath);

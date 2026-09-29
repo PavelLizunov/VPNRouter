@@ -6,14 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P1-2 (dep-review 2026-07-09): TgProxy pulls down + runs a Python interpreter
-/// and PyPI wheels (cffi/cryptography = compiled C/Rust extensions) under the
-/// user's account. Pre-fix they were installed on trust with zero integrity
-/// check. `VerifyPinnedSha256Static` is the fail-closed primitive: it throws
-/// unless the downloaded file matches the trusted digest (PyPI's published
-/// `digests.sha256` for wheels; a pinned constant for the python.org zip).
-/// </summary>
 public sealed class TgProxyDigestVerifyTests : IDisposable
 {
     private readonly string _f = Path.Combine(Path.GetTempPath(), "tgproxy-digest-" + Guid.NewGuid().ToString("N") + ".bin");

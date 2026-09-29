@@ -1,6 +1,3 @@
-# Orchestrates fixed-WINBRAT stability checks exclusively through
-# tools/brat-verify.ps1. This file must never contain WinRM, process, route,
-# UI Automation or screen-capture implementation.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -125,7 +122,6 @@ function Wait-BratState {
 
 function Get-CtaNames {
     param([Parameter(Mandatory = $true)] [ValidateSet('Connect', 'Disconnect')] [string]$Target)
-    # Keep Windows PowerShell 5.1 source ASCII-safe while matching EN and RU.
     $codePoints = if ($Target -eq 'Connect') {
         @(0x041F, 0x043E, 0x0434, 0x043A, 0x043B, 0x044E, 0x0447, 0x0438, 0x0442, 0x044C)
     }
@@ -172,9 +168,6 @@ function Ensure-Disconnected {
         return $clean
     }
     catch {
-        # A crashed GUI cannot service the Disconnect button. Fall back to an
-        # identity-verified remote action that stops only exact canonical
-        # VPNRouter executable paths and verifies the owned TUN disappeared.
         $emergency = Invoke-BratVerifyJson -Arguments @{ Action = 'emergencycleanup' }
         if ([int]$emergency.CoreCount -ne 0 -or -not [bool]$emergency.TunAbsent) {
             throw 'Emergency cleanup did not prove core-absent/TUN-absent state.'

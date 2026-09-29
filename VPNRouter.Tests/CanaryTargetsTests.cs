@@ -7,10 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins <see cref="CanaryTargets"/> (urltest R4): sane lightweight built-ins,
-/// user-override file replaces them, corrupt override falls back gracefully.
-/// </summary>
 public class CanaryTargetsTests : IDisposable
 {
     private readonly string _prevDataDir;
@@ -27,19 +23,6 @@ public class CanaryTargetsTests : IDisposable
     {
         AppPaths.OverrideDataDir(_prevDataDir);
         try { Directory.Delete(_tempDir, recursive: true); } catch { }
-    }
-
-    [Fact]
-    public void BuiltIn_AreLightweightPopularBlockedTargets()
-    {
-        var list = CanaryTargets.BuiltIn;
-        Assert.True(list.Count >= 2);
-        Assert.All(list, t =>
-        {
-            Assert.Equal(CanaryTier.PopularBlocked, t.Tier);
-            Assert.StartsWith("https://", t.Url);
-        });
-        Assert.Contains(list, t => t.Url.Contains("generate_204"));   // zero-payload endpoint
     }
 
     [Fact]

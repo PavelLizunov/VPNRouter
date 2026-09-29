@@ -8,47 +8,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Phase 3 — 3B (2026-05-18): Newtonsoft.Json → System.Text.Json round-trip pins
-// for every DTO migrated in this wave. Brief:
-// plans/phase3-3B-newtonsoft-to-stj-2026-05-18.md
-//
-// Migrated files (5):
-//   1. VPNRouter.Android/AndroidStorage.cs (uses VlessServerEntry,
-//      SubscriptionEntry, CustomCategory, ServerTestResultDto)
-//   2. VPNRouter.Core/Services/SubscriptionFetcher.cs (already STJ pre-3B)
-//   3. VPNRouter.Core/Services/FreeConfigs/FreeConfigCache.cs (already STJ)
-//   4. VPNRouter.Core/Services/UpdateChecker.cs (drops JsonConvert
-//      .DeserializeAnonymousType in favour of explicit GitHubRelease/Asset DTOs)
-//   5. VPNRouter.Core/Services/ProfileManager.cs (uses Profile, ProcessRule,
-//      ProfileCollection, ProfileCacheFile)
-//
-// What this suite pins:
-//   • Each migrated DTO survives JsonSerializer.Serialize →
-//     JsonSerializer.Deserialize unchanged (structural equality, field-by-field).
-//   • The on-disk JSON wire format remains backwards-compatible — i.e. the
-//     keys our Newtonsoft predecessor wrote are still parseable by the STJ
-//     successor (snake_case for [JsonPropertyName]-annotated fields,
-//     PascalCase for un-annotated fields via case-insensitive lookup).
-//   • The DoS guard MaxDepth=32 on ProfileManager.SafeJsonOptions matches the
-//     Newtonsoft predecessor's MaxDepth setting (pinned separately by
-//     ProfileManagerJsonDosGuardTests).
-//
-// Why round-trip + wire-compat both: the migration risk is that users with
-// existing on-disk JSON (profiles.json, SharedPreferences blobs, free-config
-// cache) get their data silently wiped because STJ chokes on a Newtonsoft-
-// authored field name. Round-trip alone wouldn't catch the wire-compat
-// regression — we'd happily serialize+deserialize fine in STJ but produce
-// JSON the previous build couldn't read (or vice versa: read NOTHING from
-// existing pre-3B blobs because the keys don't match). So each test
-// constructs the DTO, serializes it via STJ, then deserializes it via STJ —
-// AND inspects the intermediate JSON string for the expected wire keys.
-// ═══════════════════════════════════════════════════════════════════════════════
-
 public sealed class Phase3StjJsonRoundTripTests
 {
-    // ── Test fixtures ────────────────────────────────────────────────────
-
     private static Profile MakeProfile()
     {
         return new Profile
@@ -75,8 +36,6 @@ public sealed class Phase3StjJsonRoundTripTests
             AndroidPackages = new List<string> { "com.discord", "com.android.chrome" },
         };
     }
-
-    // ── DTO 1: Profile (5 fields + Processes[] + AndroidPackages[]) ─────
 
     [Fact]
     public void Profile_RoundTrip_StructurallyIdentical()
@@ -105,13 +64,6 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void Profile_WireFormat_UsesSnakeCaseKeys()
     {
-        // The on-disk profiles.json schema (committed in
-        // profiles/default.json / GitHubProfileSource cache) uses snake_case
-        // keys. STJ honours [JsonPropertyName] so the wire output must
-        // contain "dns_mode", "block_on_vpn_fail", "include_children",
-        // "scan_patterns", "android_packages" — the same keys the pre-3B
-        // Newtonsoft writer produced. A regression here would silently
-        // make profiles unreadable across the migration.
         var profile = MakeProfile();
         var json = JsonSerializer.Serialize(profile, ProfileManager.SafeJsonOptions);
 
@@ -121,8 +73,6 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Contains("\"scan_patterns\"", json);
         Assert.Contains("\"android_packages\"", json);
 
-        // And nothing PascalCase from a missing attribute — that would mean
-        // an [JsonPropertyName] got dropped.
         Assert.DoesNotContain("\"DnsMode\"", json);
         Assert.DoesNotContain("\"BlockOnVpnFail\"", json);
         Assert.DoesNotContain("\"IncludeChildren\"", json);
@@ -131,9 +81,6 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void Profile_LegacyWireFormat_DeserializesViaCaseInsensitive()
     {
-        // A profile authored by a user / older tool with snake_case keys
-        // (exact match — no quirks) must deserialize cleanly. This pins the
-        // baseline contract.
         const string json = """
             {
               "name": "Legacy",
@@ -160,8 +107,6 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Equal("com.test", profile.AndroidPackages[0]);
     }
 
-    // ── DTO 2: ProcessRule (3 fields, byte-identity check) ───────────────
-
     [Fact]
     public void ProcessRule_RoundTrip_BinaryIdentical()
     {
@@ -176,13 +121,9 @@ public sealed class Phase3StjJsonRoundTripTests
         var deserialized = JsonSerializer.Deserialize<ProcessRule>(json1, ProfileManager.SafeJsonOptions);
         Assert.NotNull(deserialized);
 
-        // Re-serializing the deserialized object must produce byte-identical
-        // JSON — proves the migration is fully lossless for this DTO.
         var json2 = JsonSerializer.Serialize(deserialized, ProfileManager.SafeJsonOptions);
         Assert.Equal(json1, json2);
     }
-
-    // ── DTO 3: ProfileCollection (just wraps Profile[]) ──────────────────
 
     [Fact]
     public void ProfileCollection_RoundTrip_PreservesNestedProfileFields()
@@ -201,9 +142,6 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Equal(original.Profiles[0].Processes.Count, roundTripped.Profiles[0].Processes.Count);
     }
 
-    // ── DTO 4: ProfileCacheFile (schema-versioned envelope for GitHub
-    //           cache; was Newtonsoft [JsonProperty] pre-3B) ──────────────
-
     [Fact]
     public void ProfileCacheFile_RoundTrip_KeepsSchemaMarker()
     {
@@ -220,8 +158,6 @@ public sealed class Phase3StjJsonRoundTripTests
 
         var json = JsonSerializer.Serialize(original, ProfileManager.SafeJsonOptions);
 
-        // Wire keys: schema_version / cached_at / upstream_url / profiles —
-        // exactly what Newtonsoft [JsonProperty] wrote pre-3B.
         Assert.Contains("\"schema_version\"", json);
         Assert.Contains("\"cached_at\"", json);
         Assert.Contains("\"upstream_url\"", json);
@@ -239,20 +175,12 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void ProfileCacheFile_SchemaVersionProbe_DetectsBumpForwardCompat()
     {
-        // CacheRecovery's STJ-based schema probe looks for "schema_version" —
-        // the migrated [JsonPropertyName] attribute on ProfileCacheFile
-        // emits exactly that key. Without this guarantee the offline-cache
-        // fallback in GitHubProfileSource breaks silently across migrations.
         var json = JsonSerializer.Serialize(
             new ProfileCacheFile { SchemaVersion = 42 },
             ProfileManager.SafeJsonOptions);
 
-        Assert.Contains("\"schema_version\": 42", json.Replace(" ", " ")); // tolerate whitespace
+        Assert.Contains("\"schema_version\": 42", json.Replace(" ", " "));
     }
-
-    // ── DTO 5: VlessServerEntry / SubscriptionEntry / CustomCategory ─────
-    //          (AndroidStorage blob shapes — wire-compat with pre-3B
-    //           Newtonsoft default conventions = PascalCase) ──────────────
 
     [Fact]
     public void VlessServerEntry_RoundTrip_PreservesAllProtocolFields()
@@ -288,13 +216,6 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void VlessServerEntry_DefaultConventions_UsesPascalCaseOnWire()
     {
-        // VlessServerEntry only has [YamlMember] attributes — no
-        // [JsonPropertyName]. Newtonsoft serialised these as PascalCase by
-        // default (C# property names verbatim); STJ does the same. This
-        // pin guards against accidentally adding a global STJ snake-case
-        // policy that would silently break every existing SharedPreferences
-        // blob on Android (which Newtonsoft wrote as "Server", "Port",
-        // "Uuid", etc.).
         var srv = new VlessServerEntry
         {
             Name = "x",
@@ -308,7 +229,7 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Contains("\"Server\":", json);
         Assert.Contains("\"Port\":", json);
         Assert.Contains("\"Uuid\":", json);
-        Assert.DoesNotContain("\"server\":", json);  // would imply unintended naming policy
+        Assert.DoesNotContain("\"server\":", json);
     }
 
     [Fact]
@@ -329,8 +250,6 @@ public sealed class Phase3StjJsonRoundTripTests
             },
         };
 
-        // AndroidStorage uses PropertyNameCaseInsensitive=true on JsonOptions —
-        // mirror that here so the test reflects production behaviour.
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         var json = JsonSerializer.Serialize(original, options);
         var roundTripped = JsonSerializer.Deserialize<SubscriptionEntry>(json, options);
@@ -366,18 +285,6 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Equal(original.Enabled, roundTripped.Enabled);
     }
 
-    // ── DTO 6: AndroidStorage's nested ServerTestResultDto (snake_case
-    //          via [JsonPropertyName]) ────────────────────────────────────
-
-    /// <summary>
-    /// Mirror of <c>AndroidStorage.ServerTestResultDto</c>. Re-declared here
-    /// (instead of via Android project reference) because the Tests project
-    /// targets net8.0 without the Android workload — we can't reference the
-    /// real type. The shape pin is the contract we care about: the wire
-    /// keys must stay snake_case (status / latency_ms / last_tested_at /
-    /// error) so existing pre-3B blobs in production SharedPreferences
-    /// stay readable post-migration.
-    /// </summary>
     private sealed class ServerTestResultDtoShape
     {
         [JsonPropertyName("status")]
@@ -422,9 +329,6 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void ServerTestResultDto_LegacyNewtonsoftBlob_DeserializesCleanly()
     {
-        // What Newtonsoft's [JsonProperty]-annotated writer produced pre-3B
-        // (verbatim from a captured blob on a real Android install — exact
-        // shape pinned). The new STJ reader must accept this byte-for-byte.
         const string legacyJson = """
             {"status":1,"latency_ms":120,"last_tested_at":"2026-05-10T08:15:30.0000000+00:00","error":null}
             """;
@@ -438,17 +342,6 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Null(parsed.Error);
     }
 
-    // ── DTO 7: GitHubRelease / GitHubAsset (UpdateChecker's
-    //          ex-anonymous-type DTOs) ─────────────────────────────────────
-
-    /// <summary>
-    /// Mirror of UpdateChecker's internal GitHubRelease — the real type is
-    /// private to UpdateChecker. We pin the contract: snake_case wire keys
-    /// (tag_name / html_url / browser_download_url) per the GitHub Releases
-    /// API spec. A real GitHub Releases API response is the upstream
-    /// contract; this test guards against accidentally renaming our DTO
-    /// fields in a way that breaks update detection silently.
-    /// </summary>
     private sealed class GitHubReleaseShape
     {
         [JsonPropertyName("tag_name")]
@@ -485,10 +378,6 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void GitHubRelease_LegacyApiResponse_ParsesViaStj()
     {
-        // Real-shape GitHub API response slice (truncated to the fields we
-        // consume). Pre-3B Newtonsoft DeserializeAnonymousType inferred this
-        // shape from the anonymous-template; post-3B we use explicit DTOs.
-        // The wire contract is exactly the same — this test is the proof.
         const string json = """
             [
               {
@@ -524,11 +413,6 @@ public sealed class Phase3StjJsonRoundTripTests
     [Fact]
     public void GitHubRelease_UnknownFields_Ignored()
     {
-        // STJ skips unknown fields by default (matching Newtonsoft's
-        // permissive behaviour). The real GitHub API response carries many
-        // fields we don't read (id, author, target_commitish, created_at,
-        // published_at, tarball_url, zipball_url, ...). Pin that we tolerate
-        // them rather than throwing.
         const string json = """
             {
               "id": 12345,
@@ -552,16 +436,9 @@ public sealed class Phase3StjJsonRoundTripTests
         Assert.Empty(release.Assets);
     }
 
-    // ── End-to-end: ProfileCollection migration through SafeJsonOptions ──
-
     [Fact]
     public void ProfileCollection_FullRoundTripUnderDosGuard()
     {
-        // Sanity check: a realistic profile collection round-trips cleanly
-        // through SafeJsonOptions (MaxDepth=32, case-insensitive, indented).
-        // The MaxDepth limit is asserted separately by
-        // ProfileManagerJsonDosGuardTests; this just confirms a normal
-        // multi-profile catalog fits comfortably.
         var coll = new ProfileCollection
         {
             Profiles = new List<Profile>

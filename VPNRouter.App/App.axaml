@@ -11,20 +11,9 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- v2.16.0 Arctic design tokens (Light + Dark via ThemeDictionaries) -->
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/Tokens.axaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- v2.28.6-r7: Twemoji-Mozilla COLR/CPAL emoji font.
-                 Windows Segoe UI Emoji renders Regional Indicator pairs
-                 (🇩🇪 = U+1F1E9 + U+1F1EA) as letter boxes ("DE") instead
-                 of country flags. Mac and Linux do render proper colored
-                 flags via Apple Color Emoji / Noto Color Emoji. Embedding
-                 Twemoji-Mozilla (~1.4 MB COLR-format) gives Avalonia /
-                 Skia a font with proper colored flag glyphs that works
-                 identically across all three OSes.
-                 License: MIT (Mozilla / Twitter Twemoji).
-                 Source: https://github.com/mozilla/twemoji-colr -->
             <FontFamily x:Key="EmojiFlagFont">avares://VPNRouter.App/Assets/Fonts/Twemoji.Mozilla.ttf#Twemoji Mozilla</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
@@ -32,11 +21,6 @@
     <Application.Styles>
         <FluentTheme />
 
-        <!-- v2.37.0-r31: ToggleButton styled as underline tab. Used by
-             DpiBypassPage + TelegramPage sub-tab strips. No radio glyph
-             (RadioButton in r29 looked like settings options per user
-             feedback). Inactive: muted text. Active: accent underline +
-             bolder text. Matches the main app's top tabs visual. -->
         <Style Selector="ToggleButton.TabStripPill">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0,0,0,2"/>
@@ -61,24 +45,16 @@
             <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
 
-        <!-- r33: explicit TextElement.Foreground on :checked template/
-             ContentPresenter. FluentTheme's default :checked sets
-             TextElement.Foreground to SystemControlForegroundOnAccentBrush
-             (white), which appeared on light theme as unreadable. Our
-             Foreground setter on the ToggleButton itself was ignored
-             because the inner ContentPresenter has its own value. -->
         <Style Selector="ToggleButton.TabStripPill:checked /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
 
-        <!-- Pressed state — keep readable in both themes -->
         <Style Selector="ToggleButton.TabStripPill:pressed /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
             <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
 
-        <!-- Checked + hovered combination — keep dark text on light bg -->
         <Style Selector="ToggleButton.TabStripPill:checked:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
             <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>

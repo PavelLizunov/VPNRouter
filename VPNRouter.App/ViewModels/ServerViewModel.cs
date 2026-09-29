@@ -7,14 +7,8 @@ using CoreStrings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// ViewModel for a single VLESS server entry.
-/// Preserves the full VlessServerEntry so TLS, Transport, and Reality
-/// configs survive SaveSettings → Load round-trips.
-/// </summary>
 public partial class ServerViewModel : ViewModelBase
 {
-    // Keep the original entry for fields not exposed in UI (TLS, Transport, etc.)
     private VlessServerEntry _originalEntry;
 
     [ObservableProperty] private string _name = string.Empty;
@@ -29,34 +23,16 @@ public partial class ServerViewModel : ViewModelBase
     [ObservableProperty] private string _shortId = string.Empty;
     [ObservableProperty] private bool _isSelected;
 
-    /// <summary>True when this server is the one VPN is currently connected through.</summary>
     [ObservableProperty] private bool _isActive;
 
-    /// <summary>
-    /// v2.32 (r10, F-C) — True if this entry lives in <c>vless.servers[]</c>
-    /// but is NOT part of any active subscription. Surfaces an "Not in
-    /// subscription" badge in ServersPage so the user can spot legacy
-    /// manual entries that survived the F-B migration cleanup (e.g. user
-    /// manually re-added an entry after migration, or migration didn't
-    /// fire yet on a brand-new install).
-    /// </summary>
     [ObservableProperty] private bool _isOrphanFromSubscription;
 
-    /// <summary>
-    /// r8 #6: true when a real UDP-capable sibling (Hysteria2 / TUIC) exists for
-    /// this naive entry — set by <see cref="RefreshUdpSiblingFlags"/> via the same
-    /// <see cref="VPNRouter.Core.Services.NaivePairing"/> logic config-gen uses, so
-    /// the subtitle shows "naive + hy2" only when the generator would actually pair.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HostSubtitle))]
     [NotifyPropertyChangedFor(nameof(ProtocolUseCase))]
     [NotifyPropertyChangedFor(nameof(ProtocolUseCaseTooltip))]
     private bool _hasUdpSibling;
 
-    // ── Connectivity test state (v2.15.2) ────────────────────────────────
-
-    /// <summary>Last TCP+TLS probe outcome. Unknown = never tested.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PingDisplay))]
     [NotifyPropertyChangedFor(nameof(StatusDot))]
@@ -64,26 +40,17 @@ public partial class ServerViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasTestResult))]
     private ServerProbeStatus _testStatus = ServerProbeStatus.Unknown;
 
-    /// <summary>Measured round-trip latency (ms) from the last probe. 0 = never tested.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PingDisplay))]
     private int _pingMs;
 
-    /// <summary>Human-readable error from last probe (null = no error / success).</summary>
     [ObservableProperty] private string? _testError;
 
-    /// <summary>True while a Test operation is running for this server — disables the per-row button.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusDot))]
     [NotifyPropertyChangedFor(nameof(StatusDotBrush))]
     private bool _isTesting;
 
-    // ── Computed display properties ──────────────────────────────────────
-
-    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers
-    /// (was leaking the fully-qualified class name "VPNRouter.App.ViewModels.ServerViewModel").
-    /// Gives the row a meaningful identification for keyboard navigation +
-    /// automation tools.</summary>
     public override string ToString()
     {
         var portStr = Port > 0 ? $":{Port}" : string.Empty;
@@ -91,16 +58,8 @@ public partial class ServerViewModel : ViewModelBase
         return $"{Server}{portStr}";
     }
 
-    /// <summary>True once any probe has completed (TestStatus != Unknown).</summary>
     public bool HasTestResult => TestStatus != ServerProbeStatus.Unknown;
 
-    /// <summary>
-    /// Compact ping text for the list column: "42 ms", "—" when not tested,
-    /// "×" when unreachable/timeout.
-    /// v2.31.6-r16: <see cref="ServerProbeStatus.SkippedNotApplicable"/>
-    /// renders as a neutral "—" — quick TCP+TLS probe doesn't apply to
-    /// this protocol (e.g. unknown), so we don't claim a result.
-    /// </summary>
     public string PingDisplay => TestStatus switch
     {
         ServerProbeStatus.Unknown                          => "—",
@@ -111,7 +70,6 @@ public partial class ServerViewModel : ViewModelBase
         _                                                  => PingMs > 0 ? $"{PingMs} ms" : "—"
     };
 
-    /// <summary>One-character status dot (filled/hollow) or testing spinner text.</summary>
     public string StatusDot => IsTesting ? "…" : TestStatus switch
     {
         ServerProbeStatus.Ok                   => "●",
@@ -124,10 +82,6 @@ public partial class ServerViewModel : ViewModelBase
         _                                      => "○"
     };
 
-    /// <summary>Brush for <see cref="StatusDot"/>. Resolves from the token
-    /// dictionary (Tokens.axaml) so the dot adapts to theme variant in v2.16.5.
-    /// v2.31.6-r16: SkippedNotApplicable maps to TextMutedBrush — same visual
-    /// treatment as Unknown, signalling "we didn't actually test this".</summary>
     public IBrush StatusDotBrush
     {
         get
@@ -159,10 +113,6 @@ public partial class ServerViewModel : ViewModelBase
         return null;
     }
 
-    /// <summary>
-    /// Called by the parent MainWindowViewModel when the theme variant
-    /// changes so the list-row repaints with the palette-adjusted dot colour.
-    /// </summary>
     public void NotifyThemeChanged()
     {
         OnPropertyChanged(nameof(StatusDotBrush));
@@ -176,7 +126,6 @@ public partial class ServerViewModel : ViewModelBase
         OnPropertyChanged(nameof(HealthTooltip));
     }
 
-    /// <summary>Apply a probe result to this VM (updates PingMs, Status, Error, clears IsTesting).</summary>
     public void ApplyProbeResult(ServerProbeResult result)
     {
         IsTesting = false;
@@ -186,31 +135,18 @@ public partial class ServerViewModel : ViewModelBase
         RecomputeHealthVerdict();
     }
 
-    // ── Phased health verdict (urltest R2, audit batch-1 #3) ─────────────
-    // The audit's wording rule: never render "works" off ping/TCP alone. The
-    // quick-probe + deep-verify outcomes are folded through the pure
-    // mapper/classifier into ONE honest verdict line per row.
-
-    /// <summary>Merged health verdict from the quick probe + deep verify phases.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HealthVerdictText))]
     [NotifyPropertyChangedFor(nameof(HealthTooltip))]
     [NotifyPropertyChangedFor(nameof(HasHealthVerdict))]
     private ServerHealthVerdict _healthVerdict = ServerHealthVerdict.Unknown;
 
-    /// <summary>Deep-verify contribution to the phases (kept so a later quick probe re-merges).</summary>
     private ServerHealthPhases _deepPhases = new();
 
-    /// <summary>Hide the verdict line until at least one probe produced a signal.</summary>
     public bool HasHealthVerdict => HealthVerdict != ServerHealthVerdict.Unknown;
 
-    /// <summary>Row verdict label (RU/EN), e.g. "TCP открыт, VPN-протокол не проверен".</summary>
     public string HealthVerdictText => CoreStrings.HealthVerdictLabel(HealthVerdict);
 
-    /// <summary>
-    /// Rich tooltip: verdict + the audit's RU-block / canary explanation where the
-    /// verdict warrants it + the raw probe errors for diagnostics.
-    /// </summary>
     public string HealthTooltip
     {
         get
@@ -220,10 +156,8 @@ public partial class ServerViewModel : ViewModelBase
                 sb.Append("\n\n").Append(CoreStrings.HealthRuBlockWarning);
             else if (HealthVerdict == ServerHealthVerdict.OnlyControlWorks)
                 sb.Append("\n\n").Append(CoreStrings.HealthCanaryFailedWarning);
-            // R3: subnet-level risk (set pool-wide by RefreshProviderRiskFlags).
             if (IsProviderHighRisk)
                 sb.Append("\n\n").Append(CoreStrings.HealthProviderHighRisk);
-            // R5: verdict age from the persisted store (survives restarts).
             var rec = _originalEntry != null ? ServerHealthStore.GetFreshRecord(_originalEntry) : null;
             if (rec != null)
                 sb.Append('\n').Append(CoreStrings.HealthCheckedAgo(DateTimeOffset.UtcNow - rec.RecordedAt));
@@ -239,11 +173,6 @@ public partial class ServerViewModel : ViewModelBase
         HealthVerdict = ServerHealthClassifier
             .Classify(ServerHealthPhaseMapper.Merge(quick, _deepPhases))
             .Verdict;
-        // R5: persist (best-effort) so the verdict survives a restart and can
-        // inform the Auto/urltest pool (ConfigGenerator drops fresh blocked
-        // members). Unknown is ignored by the store. R3: attach the offline
-        // provider/subnet key — literal-IP fast path inline; a hostname resolves
-        // in the background and re-records (store preserves the key afterwards).
         if (_originalEntry != null)
         {
             var entry = _originalEntry;
@@ -256,11 +185,6 @@ public partial class ServerViewModel : ViewModelBase
                 {
                     var resolved = await ProviderKey.ResolveAsync(entry.Server).ConfigureAwait(false);
                     if (resolved == null) return;
-                    // r8: a newer probe may have recorded a fresher verdict while DNS
-                    // resolved (up to 3s) — attach the key to the CURRENT record
-                    // (preserving its verdict + timestamp) instead of resurrecting the
-                    // captured one; the captured verdict is only the fallback for a
-                    // record the synchronous Record above failed to persist.
                     var cur = ServerHealthStore.GetFreshRecord(entry);
                     if (cur != null)
                         ServerHealthStore.Record(entry, cur.Verdict, cur.RecordedAt, resolved);
@@ -269,25 +193,13 @@ public partial class ServerViewModel : ViewModelBase
                 });
             }
         }
-        // Verdict may be unchanged while the underlying error text moved — the
-        // tooltip must still refresh.
         OnPropertyChanged(nameof(HealthTooltip));
     }
 
-    // ── R3: provider/subnet risk flag (pool-wide, set by RefreshProviderRiskFlags) ──
-
-    /// <summary>True when this row's provider/subnet key is flagged HighRisk.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HealthTooltip))]
     private bool _isProviderHighRisk;
 
-    /// <summary>
-    /// Pool-wide grouped risk (mirrors <see cref="RefreshUdpSiblingFlags"/>): reads
-    /// each row's fresh store record, runs
-    /// <see cref="ServerHealthClassifier.AnalyzeProviderRisk"/> over (key, verdict)
-    /// pairs and flags rows whose subnet is HighRisk. Call after a collection
-    /// rebuild or a probe batch. Best-effort — store failures leave flags off.
-    /// </summary>
     public static void RefreshProviderRiskFlags(System.Collections.Generic.IEnumerable<ServerViewModel> vms)
     {
         var list = new System.Collections.Generic.List<ServerViewModel>(vms);
@@ -296,7 +208,7 @@ public partial class ServerViewModel : ViewModelBase
         {
             ServerHealthRecordDto? rec = null;
             try { if (vm._originalEntry != null) rec = ServerHealthStore.GetFreshRecord(vm._originalEntry); }
-            catch { /* best-effort */ }
+            catch { }
             withRecs.Add((vm, rec));
         }
 
@@ -313,48 +225,39 @@ public partial class ServerViewModel : ViewModelBase
             vm.IsProviderHighRisk = rec?.ProviderKey != null && highRisk.Contains(rec.ProviderKey);
     }
 
-    // ── Deep verify state (v2.15.3) ──────────────────────────────────────
-
-    /// <summary>True while a deep-verify (sing-box + HTTP) probe is running.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DeepDisplay))]
     private bool _isDeepTesting;
 
-    /// <summary>True if the last deep-verify pass completed successfully (HTTP trace through proxy).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DeepDisplay))]
     [NotifyPropertyChangedFor(nameof(HasDeepResult))]
     private bool _isDeepVerified;
 
-    /// <summary>True if the last deep-verify failed. Mutually exclusive with IsDeepVerified.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DeepDisplay))]
     [NotifyPropertyChangedFor(nameof(HasDeepResult))]
     private bool _isDeepFailed;
 
-    /// <summary>HTTP latency through the spawned sing-box SOCKS proxy (ms).</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DeepDisplay))]
     private int _httpLatencyMs;
 
-    /// <summary>Measured download throughput through proxy (Mbps). 0 = not measured.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DeepDisplay))]
     private int _bandwidthMbps;
 
-    /// <summary>Deep verify failure reason (null on success).</summary>
     [ObservableProperty] private string? _deepError;
 
     public bool HasDeepResult => IsDeepVerified || IsDeepFailed;
 
-    /// <summary>Compact one-line deep-verify summary for the list column.</summary>
     public string DeepDisplay
     {
         get
         {
             if (IsDeepTesting) return "⏳";
             if (IsDeepFailed) return "✗";
-            if (IsDeepInconclusive) return "!";   // local/unsupported — not a server verdict
+            if (IsDeepInconclusive) return "!";
             if (IsDeepVerified)
             {
                 if (BandwidthMbps > 0) return $"✓ {BandwidthMbps}M";
@@ -365,16 +268,10 @@ public partial class ServerViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// True when the last deep verify neither passed nor condemned the server —
-    /// a local/infra failure (our sing-box broke) or the verifier can't test this
-    /// protocol on this build. R2: these must NOT render as a server "✗".
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DeepDisplay))]
     private bool _isDeepInconclusive;
 
-    /// <summary>Apply a deep-verify outcome.</summary>
     public void ApplyDeepResult(DeepVerifyResult result)
     {
         IsDeepTesting = false;
@@ -391,9 +288,6 @@ public partial class ServerViewModel : ViewModelBase
         else
         {
             IsDeepVerified = false;
-            // Single source of truth: only a mapper-confirmed server-meaningful
-            // failure (ProxiedHttpControl=Fail) condemns the server; local-infra
-            // and unsupported-by-verifier outcomes are inconclusive.
             var condemning = _deepPhases.ProxiedHttpControl == PhaseOutcome.Fail;
             IsDeepFailed = condemning;
             IsDeepInconclusive = !condemning;
@@ -410,16 +304,12 @@ public partial class ServerViewModel : ViewModelBase
     public ServerViewModel(VlessServerEntry entry)
     {
         _originalEntry = entry;
-        // R5: hydrate the last persisted verdict (fresh-only) so the row shows an
-        // honest state right after app start — e.g. a blocked-likely server the
-        // Auto pool is excluding displays WHY instead of looking untested. A live
-        // probe this session recomputes and overwrites it.
         try
         {
             var persisted = ServerHealthStore.GetFresh(entry);
             if (persisted.HasValue) _healthVerdict = persisted.Value;
         }
-        catch { /* best-effort — a broken cache must never break row construction */ }
+        catch { }
         Name = entry.Name;
         Server = entry.Server;
         Port = entry.Port;
@@ -427,8 +317,6 @@ public partial class ServerViewModel : ViewModelBase
         Flow = entry.Flow;
         Security = entry.Security;
 
-        // Pick fields based on security type, not object nullity
-        // (YamlDotNet creates empty objects even when YAML has no values)
         var isReality = Security?.Equals("reality", StringComparison.OrdinalIgnoreCase) == true;
 
         if (isReality && entry.Reality != null)
@@ -445,16 +333,10 @@ public partial class ServerViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Convert back to VlessServerEntry, preserving TLS/Transport/Reality
-    /// that the UI doesn't edit directly.
-    /// </summary>
     public VlessServerEntry ToEntry()
     {
-        // Start from original entry to preserve TLS, Transport, etc.
         var entry = _originalEntry ?? new VlessServerEntry();
 
-        // Apply UI-editable fields
         entry.Name = Name;
         entry.Server = Server;
         entry.Port = Port;
@@ -462,7 +344,6 @@ public partial class ServerViewModel : ViewModelBase
         entry.Flow = Flow;
         entry.Security = Security;
 
-        // Update Reality from UI fields
         if (Security?.Equals("reality", StringComparison.OrdinalIgnoreCase) == true)
         {
             entry.Reality ??= new VlessRealityConfig();
@@ -473,7 +354,6 @@ public partial class ServerViewModel : ViewModelBase
             entry.Reality.ShortId = ShortId;
         }
 
-        // Update TLS SNI from UI if TLS mode
         if (Security?.Equals("tls", StringComparison.OrdinalIgnoreCase) == true)
         {
             entry.Tls ??= new VlessTlsConfig();
@@ -492,34 +372,13 @@ public partial class ServerViewModel : ViewModelBase
             ? "dns-tunnel"
             : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
 
-    /// <summary>
-    /// v2.25.3 — compact protocol/security subtitle shown in the Servers /
-    /// Subscribe list design ("tcp + reality"). Helps distinguish entries
-    /// with similar names (e.g. same host on multiple ports with different
-    /// transports). Returns empty string for legacy entries without these
-    /// fields so the XAML can hide the subtitle row when irrelevant.
-    /// </summary>
     public string HostSubtitle
     {
         get
         {
-            // v2.42.0-r2: detect dns-tunnel by its payload fields, not just the
-            // Protocol string — Android's JSON cache can drop Protocol back to
-            // "vless" while the dns fields survive, which mislabeled a working
-            // dns-tunnel server as "tcp + reality". IsDnsTunnel is field-based.
-            // v2.45.0-r3: same treatment for AmneziaWG — an awg entry carries an
-            // Awg block (and empty Uuid / default Security="reality"), so without
-            // a field check it fell through to the VLESS default and showed
-            // "tcp + reality" (user-reported: "при добавлении AWG пишет что это
-            // vless"). Detect by the Awg payload so the label is right even if a
-            // future round-trip drops Protocol.
             var protocol = ProtocolKey;
             var parts = new System.Collections.Generic.List<string>();
 
-            // v2.30.1-r3: for non-VLESS protocols (Hysteria2 / TUIC / SS),
-            // the subtitle displays the protocol name plus its salient
-            // sub-feature (obfs / plugin / cipher) instead of the
-            // VLESS-specific "transport + security" pair.
             switch (protocol)
             {
                 case "hysteria2":
@@ -544,35 +403,21 @@ public partial class ServerViewModel : ViewModelBase
                     break;
 
                 case "naive":
-                    // r8 #6: "naive + hy2" ONLY when a real UDP-capable sibling
-                    // actually exists (HasUdpSibling, set by RefreshUdpSiblingFlags
-                    // via the same NaivePairing logic config-gen uses) — so the
-                    // label can't claim a pairing the generator wouldn't make.
-                    // Else "naive" (was mislabeled "tcp + reality" pre-r4: naive
-                    // carries default Security/Transport fields the outbound ignores).
                     parts.Add(HasUdpSibling ? "naive + hy2" : "naive");
                     break;
 
                 case "dns-tunnel":
-                    // DNS-tunnel (slipstream) — VLESS tunnelled over DNS. The
-                    // generated outbound is plain VLESS to a local port, but the
-                    // subtitle must show the real transport so users can tell this
-                    // last-resort server apart from a normal one.
                     parts.Add("dns-tunnel");
                     break;
 
                 case "amneziawg":
                 case "awg":
-                    // AmneziaWG (WireGuard + obfuscation). Show the protocol plus
-                    // a hint that obfuscation is active when junk-packet params
-                    // are set, so it reads distinctly from a plain VLESS row.
                     parts.Add("amneziawg");
                     if (_originalEntry?.Awg != null && _originalEntry.Awg.Jc > 0)
                         parts.Add("obfs");
                     break;
 
                 default:
-                    // VLESS — keep original "transport + security" format
                     var transport = _originalEntry?.Transport?.Type;
                     if (!string.IsNullOrWhiteSpace(transport))
                         parts.Add(transport!.ToLowerInvariant());
@@ -626,12 +471,6 @@ public partial class ServerViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// r8 #6: set <see cref="HasUdpSibling"/> on every naive VM in the collection
-    /// by asking <see cref="VPNRouter.Core.Services.NaivePairing"/> (the same logic
-    /// ConfigGenerator uses) whether a UDP-capable sibling actually exists in the
-    /// pool. Call after (re)building a Servers / SubscriptionServers collection.
-    /// </summary>
     public static void RefreshUdpSiblingFlags(System.Collections.Generic.IEnumerable<ServerViewModel> vms)
     {
         var list = new System.Collections.Generic.List<ServerViewModel>(vms);

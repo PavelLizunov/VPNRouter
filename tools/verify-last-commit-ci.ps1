@@ -1,6 +1,3 @@
-# verify-last-commit-ci.ps1 - hard precondition for ship-rolling-candidate.
-# See .githooks/pre-push + .dsh/skills/ship-rolling-candidate/SKILL.md
-# for context. Bails (exit 1/2/3) if previous commit CI is not green.
 
 param(
     [string]$Repo,
@@ -26,7 +23,6 @@ if ($Strict) {
     if (-not $RequiredWorkflows) {
         $RequiredWorkflows = 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT Repository,Verify Release Integrity,Auto-Update Integration Test (Windows)'
     }
-    # A release gate must not inherit developer waivers from the caller.
     $TolerateFailure = $null
 }
 else {
@@ -51,8 +47,6 @@ if (-not $head -or $resolveExitCode -ne 0) {
 $head = $head.Trim()
 Write-Host "Verifying CI for $Commit : $head" -ForegroundColor Cyan
 
-# Explicit pages work with older gh versions, without concatenated JSON or --slurp.
-# Reject changing/truncated populations rather than certify partial evidence.
 function Get-ApiItems([string]$Path, [string]$Property) {
     $items = New-Object System.Collections.ArrayList
     $ids = @{}
@@ -137,10 +131,6 @@ if ($Strict -and $RequiredSuccess) {
     }
 }
 
-# audit P2-3 (2026-06-25): TOLERATE_FAILURE is allowlist-restricted + audited.
-# Pre-fix it could silently wave through ANY named red check with no trace (the
-# r24..r29 red-X streak the hook was built to prevent). Now: only known-flaky
-# checks, only with the corroborating sentinel, only with a logged reason.
 if ($failOk.Count -gt 0) {
     $allowedTolerate = @('test')   # Linux MVM characterization hash-drift only
     $repoRoot = (git rev-parse --show-toplevel 2>$null)
@@ -271,10 +261,6 @@ foreach ($c in $checks) {
         } elseif ($Strict) {
             [void]$hardRed.Add("$name [skipped, unexpected] $($c.html_url)")
         } else {
-            # audit P2-3: an UNEXPECTED skipped (path filter narrowed / `if:`
-            # flipped) on a check that should have run must not silently read as
-            # green. Surfaced loudly (not hard-red, which would break legit
-            # conditional jobs).
             [void]$tolerated.Add("$name [skipped, UNEXPECTED - confirm it should skip]")
             Write-Host "::warning::Unexpected skipped check '$name' on $head - confirm it was meant to skip." -ForegroundColor Yellow
         }

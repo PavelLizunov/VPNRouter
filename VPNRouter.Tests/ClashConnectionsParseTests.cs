@@ -4,11 +4,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// F2 (v2.45.0): the streaming /connections summary parser reads totals + the
-/// connection count via Utf8JsonReader without materializing a JsonElement per
-/// connection (the ~2s connected-poll hot path).
-/// </summary>
 public sealed class ClashConnectionsParseTests
 {
     private static (long down, long up, int count) Parse(string json)
@@ -59,9 +54,6 @@ public sealed class ClashConnectionsParseTests
     [Fact]
     public void NestedConnectionFieldsDoNotLeak()
     {
-        // A connection element carrying its OWN nested downloadTotal / connections
-        // must NOT override the top-level totals or inflate the count — Skip()
-        // walks past each element's subtree.
         var (d, u, c) = Parse(
             "{\"downloadTotal\":100,\"connections\":[" +
             "{\"metadata\":{\"downloadTotal\":999,\"connections\":[1,2,3]}}],\"uploadTotal\":50}");
@@ -80,9 +72,6 @@ public sealed class ClashConnectionsParseTests
     [Fact]
     public void NonInt64Total_ReturnsFalse()
     {
-        // review fix: a float / out-of-range total makes GetInt64 throw
-        // FormatException — the widened catch honours the "false on bad body"
-        // contract (caller -> zeroed tick, no crash) instead of escaping.
         Assert.False(ClashSingBoxApi.ParseConnectionsSummary(
             Encoding.UTF8.GetBytes("{\"downloadTotal\":1.5,\"uploadTotal\":2,\"connections\":[]}"),
             out _, out _, out _));

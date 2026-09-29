@@ -68,8 +68,6 @@ public sealed class PostShipVerifierContractTests
             File.WriteAllText(Path.Combine(fakes, "git.cmd"), scenario.Contains("unresolved", StringComparison.Ordinal)
                 ? "@exit /b 1"
                 : "@echo off\r\necho 1111111111111111111111111111111111111111\r\nexit /b 0\r\n");
-            // Route by endpoint and page, never by call ordering. Unknown requests fail closed.
-            // A PowerShell shim avoids cmd.exe interpreting the API query ampersands.
             File.WriteAllText(Path.Combine(fakes, "gh.ps1"), """
                 $endpoint = [string]$args[1]
                 Add-Content -LiteralPath (Join-Path $PSScriptRoot 'calls.txt') -Value $endpoint
@@ -750,7 +748,6 @@ public sealed class PostShipVerifierContractTests
         }
         catch
         {
-            // best-effort cleanup on Windows where background process/antivirus can briefly lock files
         }
     }
 }

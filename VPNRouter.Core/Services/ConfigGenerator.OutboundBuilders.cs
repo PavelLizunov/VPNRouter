@@ -4,37 +4,14 @@ namespace VPNRouter.Core.Services;
 
 public static partial class ConfigGenerator
 {
-    /// <summary>
-    /// r5: when the active server is NaiveProxy (UDP-incapable), find a
-    /// co-located UDP-capable sibling so UDP (Discord voice, games) can route
-    /// through it. Pairing key, in priority order:
-    /// <list type="number">
-    /// <item><see cref="VlessServerEntry.PairGroup"/> — the subscription's
-    /// <c>pair=</c> tag (bulletproof; the backend marks naive + its same-node
-    /// HY2 with the same value).</item>
-    /// <item>Base-name match — strip the protocol token and compare the
-    /// remainder (transition fallback before a refresh ships the tag).</item>
-    /// </list>
-    /// Returns the sibling (preferring Hysteria2/TUIC for best UDP), or null
-    /// when the active server isn't naive or no UDP sibling exists (caller then
-    /// falls back to the standard flow/no-flow logic).
-    /// </summary>
     private static VlessServerEntry? FindNaiveUdpSibling(
         List<VlessServerEntry> activeServers, List<VlessServerEntry> pool,
         Func<VlessServerEntry, bool>? isServerAlive = null)
     {
-        // r8 #6: pairing logic lives in NaivePairing so config-gen and the UI
-        // ("naive + hy2" label) share ONE source of truth — the label can never
-        // claim a pairing the generator wouldn't make.
-        // RB1: pass the liveness probe so a dead UDP sibling is never selected.
         var naive = activeServers.FirstOrDefault(NaivePairing.IsNaive);
         return naive == null ? null : NaivePairing.FindUdpSibling(naive, pool, isServerAlive);
     }
 
-    /// <summary>
-    /// Add a group of VLESS outbounds. Single server → direct outbound.
-    /// Multiple servers → individual outbounds + urltest wrapper.
-    /// </summary>
     private static void AddOutboundGroup(List<SingBoxOutbound> outbounds,
         List<VlessServerEntry> servers, string groupTag, string childPrefix)
     {
@@ -75,21 +52,13 @@ public static partial class ConfigGenerator
         }
     }
 
-    /// <summary>
-    /// Build a single proxy outbound from a server entry. v2.30.1-r3
-    /// dispatches on <see cref="VlessServerEntry.Protocol"/> to support
-    /// VLESS+Reality / Hysteria2 / TUIC v5 / Shadowsocks 2022 (with
-    /// optional ShadowTLS plugin) from a single entry-point. Existing
-    /// callers keep working — VLESS remains the default protocol when
-    /// the discriminator is empty or unset.
-    /// </summary>
     private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
     {
         var protocol = (entry.Protocol ?? "vless").ToLowerInvariant();
         return protocol switch
         {
             "hysteria2"   => BuildHysteria2Outbound(entry, tag),
-            "hy2"         => BuildHysteria2Outbound(entry, tag),   // r10 (Codex #2): hy2 alias parity with VlessDeepVerifier
+            "hy2"         => BuildHysteria2Outbound(entry, tag),
             "tuic"        => BuildTuicOutbound(entry, tag),
             "shadowsocks" => BuildShadowsocksOutbound(entry, tag),
             "ss"          => BuildShadowsocksOutbound(entry, tag),
@@ -99,15 +68,6 @@ public static partial class ConfigGenerator
         };
     }
 
-    /// <summary>
-    /// DNS-tunnel (slipstream) outbound. The VLESS traffic rides over the local
-    /// slipstream-client front (started separately by SlipstreamManager /
-    /// VpnEngine), so the outbound targets <c>127.0.0.1:&lt;localPort&gt;</c> with
-    /// the uuid set and <b>no TLS / Reality / flow / transport</b> — the tunnel
-    /// provides its own QUIC-TLS. The real server domain + resolvers + leaf cert
-    /// live in the dns-tunnel profile and are consumed by SlipstreamManager, not
-    /// here. No domain_resolver: the server is a literal loopback IP.
-    /// </summary>
     private static SingBoxOutbound BuildDnsTunnelOutbound(VlessServerEntry entry, string tag)
     {
         return new SingBoxOutbound
@@ -120,13 +80,6 @@ public static partial class ConfigGenerator
         };
     }
 
-    /// <summary>
-    /// Extract literal IP addresses from dns-tunnel resolver strings
-    /// (<c>"1.2.3.4:53"</c>, <c>"[2001:db8::1]:53"</c>, <c>"9.9.9.9"</c>),
-    /// skipping hostnames (those are covered by the process_name exclusion).
-    /// Returns bare IPs suitable for a sing-box <c>ip_cidr</c> rule (a bare IP
-    /// is treated as /32 or /128). Order-preserving, de-duplicated.
-    /// </summary>
     private static List<string> ExtractResolverIps(IEnumerable<string>? resolvers)
     {
         var ips = new List<string>();
@@ -136,7 +89,7 @@ public static partial class ConfigGenerator
             if (string.IsNullOrWhiteSpace(raw)) continue;
             var s = raw.Trim();
             string host;
-            if (s.StartsWith("[", StringComparison.Ordinal))          // [ipv6]:port
+            if (s.StartsWith("[", StringComparison.Ordinal))
             {
                 var end = s.IndexOf(']');
                 if (end <= 1) continue;
@@ -146,9 +99,6 @@ public static partial class ConfigGenerator
             {
                 var firstColon = s.IndexOf(':');
                 var lastColon  = s.LastIndexOf(':');
-                // Strip a trailing :port only for the unambiguous ipv4:port shape
-                // (exactly one colon). A bare IPv6 literal has multiple colons and
-                // no brackets — keep it whole.
                 host = (firstColon >= 0 && firstColon == lastColon)
                     ? s.Substring(0, lastColon)
                     : s;
@@ -159,10 +109,8 @@ public static partial class ConfigGenerator
         return ips;
     }
 
-    /// <summary>VLESS+Reality outbound (the original implementation).</summary>
     private static SingBoxOutbound BuildVlessOutboundCore(VlessServerEntry entry, string tag)
     {
-        // Null-safe: YamlDotNet may leave nested objects null if YAML has empty keys
         var transport = entry.Transport ?? new VlessTransportConfig();
         var transportType = transport.Type ?? "tcp";
 
@@ -173,8 +121,6 @@ public static partial class ConfigGenerator
             Server     = entry.Server,
             ServerPort = entry.Port,
             Uuid       = entry.Uuid,
-            // XHTTP is incompatible with XTLS-Vision (protocol limitation) — drop the flow
-            // even if a stray one is present, so a VLESS+XHTTP+Reality config is valid.
             Flow       = (string.IsNullOrEmpty(entry.Flow)
                           || transportType.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
                 ? null : entry.Flow,
@@ -183,25 +129,11 @@ public static partial class ConfigGenerator
                 ? null
                 : BuildTransportConfig(transportType, transport),
             DomainResolver = "local-dns",
-            // v2.36 F4 fix (EOStārāTheia 2026-05-23 — Android ~5 min
-            // auto-disconnect). sing-box 1.13's default tcp_keep_alive
-            // initial period is 5m, which doesn't beat ISP/NAT idle
-            // timeouts on mobile (typically 30-180s). Forces the
-            // connection to drop silently right at the 5-min mark.
-            // Setting both fields to 30s makes OS-level keepalive
-            // probes fire BEFORE NAT mappings expire. Cross-platform
-            // (also helps desktop on flaky home routers / corporate
-            // NATs). See plans/android-disconnect-investigation-v2.36.md.
             TcpKeepAlive         = "30s",
             TcpKeepAliveInterval = "30s",
         };
     }
 
-    /// <summary>
-    /// Hysteria2 outbound. ALPN defaults to <c>["h3"]</c> per Hysteria2
-    /// spec (it's QUIC-only). When <see cref="VlessServerEntry.ObfsType"/>
-    /// is "salamander", emits the obfs block.
-    /// </summary>
     private static SingBoxOutbound BuildHysteria2Outbound(VlessServerEntry entry, string tag)
     {
         var tls = new TlsConfig
@@ -220,10 +152,6 @@ public static partial class ConfigGenerator
             ServerPort     = entry.Port,
             Password       = entry.Password,
             Tls            = tls,
-            // 2026-06-08 (scout #2 #6): Hysteria2 dials its server over QUIC/UDP.
-            // In the naive+HY2 pairing it carries ALL the UDP, so on an IPv6-less
-            // host it hits the SAME "address not valid in its context" failure the
-            // naive fix targets. prefer_ipv4 = IPv4-first server resolution.
             DomainResolver = new DomainResolverValue("local-dns", "prefer_ipv4"),
         };
 
@@ -236,11 +164,6 @@ public static partial class ConfigGenerator
             };
         }
 
-        // T2 (2026-06-27): Brutal CC calibration. When both up/down are set (>0), engage
-        // Brutal — it ignores loss and paces to the declared ceiling, masking the access-leg
-        // loss/jitter that times RakNet out (Roblox 277) on a TSPU-throttled RU path. Both
-        // required (sing-box wants the pair); 0/unset -> omit -> BBR (prior behaviour). The
-        // value MUST be ~70-80% of measured goodput — over-declaring self-induces loss.
         if (entry.HysteriaUpMbps > 0 && entry.HysteriaDownMbps > 0)
         {
             ob.UpMbps   = entry.HysteriaUpMbps;
@@ -250,10 +173,6 @@ public static partial class ConfigGenerator
         return ob;
     }
 
-    /// <summary>
-    /// Normalize AmneziaWG 3.0 HeaderProtectionKey to a 64-character lowercase hex string.
-    /// Accepts 32-byte Base64 (from `awg genkey` or .conf) or 64-character hex.
-    /// </summary>
     internal static string? NormalizeHeaderProtectionKey(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
@@ -269,17 +188,10 @@ public static partial class ConfigGenerator
         }
         catch
         {
-            // Not valid base64, return trimmed as fallback
         }
         return trimmed;
     }
 
-    /// <summary>
-    /// AmneziaWG (AWG2 / AWG3) endpoint for a sing-box-lx / sing-box-vpnctl (with_awg) client. The schema —
-    /// a <c>wireguard</c> endpoint with promoted obfuscation fields + peer with
-    /// <c>persistent_keepalive_interval</c> — supports AWG 1.0, AWG 2.0 (CPS i1..i5), and
-    /// AWG 3.x (header_protection_key, content_padding_addition, random_trailers, disable_cookies).
-    /// </summary>
     internal static SingBoxEndpoint BuildAmneziaWgEndpoint(VlessServerEntry entry, string tag)
     {
         var awg = entry.Awg ?? new AwgConfig();
@@ -291,7 +203,6 @@ public static partial class ConfigGenerator
         var s3 = awg.S3;
         var s4 = awg.S4;
 
-        // AmneziaWG 3.0 requirement: s1..s4 must each be >= 12 bytes when header protection key is used
         if (!string.IsNullOrEmpty(hpk))
         {
             if (s1 < 12) s1 = 12;
@@ -332,9 +243,6 @@ public static partial class ConfigGenerator
         };
     }
 
-    /// <summary>
-    /// TUIC v5 outbound. ALPN defaults to <c>["h3"]</c> per TUIC spec.
-    /// </summary>
     private static SingBoxOutbound BuildTuicOutbound(VlessServerEntry entry, string tag)
     {
         var tls = new TlsConfig
@@ -356,19 +264,10 @@ public static partial class ConfigGenerator
             CongestionControl = string.IsNullOrEmpty(entry.CongestionControl) ? "bbr" : entry.CongestionControl,
             UdpRelayMode      = string.IsNullOrEmpty(entry.UdpRelayMode) ? "native" : entry.UdpRelayMode,
             Tls               = tls,
-            // 2026-06-08 (scout #2 #6): TUIC dials its server over QUIC/UDP — same
-            // IPv6-less-host hazard as Hysteria2/naive. prefer_ipv4 server resolution.
             DomainResolver    = new DomainResolverValue("local-dns", "prefer_ipv4"),
         };
     }
 
-    /// <summary>
-    /// Shadowsocks outbound. Supports SS 2022 ciphers natively via
-    /// <see cref="VlessServerEntry.Method"/>. When
-    /// <see cref="VlessServerEntry.Plugin"/> is "shadow-tls" (or any
-    /// other plugin name sing-box recognises), emits the plugin /
-    /// plugin_opts pair and lets sing-box wire it up.
-    /// </summary>
     private static SingBoxOutbound BuildShadowsocksOutbound(VlessServerEntry entry, string tag)
     {
         return new SingBoxOutbound
@@ -385,17 +284,6 @@ public static partial class ConfigGenerator
         };
     }
 
-    /// <summary>
-    /// NaiveProxy outbound. sing-box 1.13's naive outbound is deliberately
-    /// minimal — username/password basic auth + a plain TLS block. It does
-    /// NOT accept <c>tls.insecure=true</c>, uTLS, or <c>alpn</c> (sing-box
-    /// rejects them at outbound init), so the TLS here is just
-    /// <c>{enabled, server_name}</c> (insecure defaults to false, which IS
-    /// accepted). Requires <c>libcronet.{dll,so}</c> next to the sing-box
-    /// binary → Windows + Linux only (SagerNet ships no macOS Cronet, on any
-    /// version). macOS naive servers are filtered out before generation so we
-    /// never emit a config that FATALs at sing-box start.
-    /// </summary>
     private static SingBoxOutbound BuildNaiveOutbound(VlessServerEntry entry, string tag)
     {
         return new SingBoxOutbound
@@ -406,20 +294,12 @@ public static partial class ConfigGenerator
             ServerPort     = entry.Port,
             Username       = entry.Username,
             Password       = entry.Password,
-            Quic           = entry.NaiveQuic ? true : (bool?)null, // r7 #1: HTTP/3 over QUIC
+            Quic           = entry.NaiveQuic ? true : (bool?)null,
             Tls            = new TlsConfig
             {
                 Enabled    = true,
                 ServerName = string.IsNullOrEmpty(entry.Tls?.ServerName) ? entry.Server : entry.Tls.ServerName,
             },
-            // 2026-06-08 (Pavel "Latvia NAIVE" run): force IPv4-first server
-            // resolution via the 1.13 domain_resolver object form. naive_quic
-            // dials the server over UDP/QUIC; on an IPv6-less host sing-box was
-            // picking the server's AAAA and failing with "open UDP connection to
-            // [2001:...]: address not valid in its context" (17x). prefer_ipv4
-            // tries the A record first, falling back to IPv6 only if there's no
-            // A — safe for IPv6-only servers too. (The legacy top-level
-            // domain_strategy outbound option is FATAL in sing-box 1.13.)
             DomainResolver = new DomainResolverValue("local-dns", "prefer_ipv4"),
         };
     }
@@ -430,15 +310,10 @@ public static partial class ConfigGenerator
         return alpn.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
-    // ─── Transport ────────────────────────────────────────────────────────────
-
     private static TransportConfig BuildTransportConfig(string type, VlessTransportConfig source)
     {
         var isGrpc = type.Equals("grpc", StringComparison.OrdinalIgnoreCase);
 
-        // XHTTP (sing-box-lx with_xhttp): VLESS over plain HTTP/2, composes with Reality,
-        // incompatible with XTLS-Vision. host is a TOP-LEVEL field (not in headers). Schema
-        // verified vs `sing-box-lx check`. See plans/amneziawg-fork-implementation-plan-2026-06-27.md.
         if (type.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
         {
             return new TransportConfig
@@ -456,15 +331,11 @@ public static partial class ConfigGenerator
         return new TransportConfig
         {
             Type        = type,
-            // gRPC: service_name (no path, no headers)
-            // WS: path + headers
             Path        = isGrpc ? null : source.Path,
             ServiceName = isGrpc ? source.Path : null,
             Headers     = isGrpc ? null : (source.Headers?.Count > 0 ? source.Headers : null)
         };
     }
-
-    // ─── TLS / Reality ────────────────────────────────────────────────────────
 
     private static TlsConfig BuildTlsConfig(VlessServerEntry entry)
     {
@@ -488,26 +359,14 @@ public static partial class ConfigGenerator
                 {
                     Enabled   = true,
                     PublicKey = reality.PublicKey,
-                    // v2.40.0-r9 (#2 core-audit): drop a structurally-invalid short_id.
-                    // sing-box's hex.Decode PANICS (index out of range) on a Reality
-                    // short_id > 8 bytes (16 hex chars) — a 10/20-hex sid from a
-                    // copy-paste/generator bug would crash sing-box at config load AND
-                    // crash-loop the HealthMonitor Advisory reload (→ routed traffic
-                    // falls direct). An empty short_id is valid, so degrade to "" → a
-                    // clean handshake attempt instead of a panic.
                     ShortId   = VlessUriParser.IsValidRealityShortId(reality.ShortId)
                                     ? reality.ShortId : string.Empty
                 },
-                // TLS record fragmentation: splits ClientHello across multiple TLS
-                // records to bypass DPI that inspects the first record for SNI.
-                // Available since sing-box 1.12.0. Falls back to normal handshake
-                // if fragmented attempt doesn't complete within 500ms.
                 RecordFragment = true,
                 FragmentFallbackDelay = "500ms"
             };
         }
 
-        // Plain TLS (e.g. VLESS+WS+TLS via CDN)
         var tls = entry.Tls ?? new VlessTlsConfig();
         var tlsConfig = new TlsConfig
         {
@@ -516,7 +375,6 @@ public static partial class ConfigGenerator
             Insecure   = tls.Insecure
         };
 
-        // uTLS fingerprint (critical for Cloudflare CDN — without it, handshake fails)
         if (!string.IsNullOrEmpty(tls.Fingerprint))
         {
             tlsConfig.Utls = new UtlsConfig
@@ -526,7 +384,6 @@ public static partial class ConfigGenerator
             };
         }
 
-        // ALPN (e.g. "http/1.1" for WebSocket, "h2" for gRPC)
         if (!string.IsNullOrEmpty(tls.Alpn))
         {
             tlsConfig.Alpn = tls.Alpn

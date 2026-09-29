@@ -6,56 +6,31 @@ using Serilog;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-/// <summary>
-/// v2.14.1 — fetches pre-aggregated pool.json from GitHub Releases.
-///
-/// Pool is produced by the <c>build-free-pool.yml</c> GitHub Actions workflow
-/// every 6 hours: fetches all 14 sources, parses, dedups, GeoIP-enriches, publishes
-/// as a single JSON file. Client saves ~10 minutes of local processing per refresh.
-///
-/// No validation (TCP/TLS/HTTP) is done on server — that's per-user from their network.
-/// The pool provides METADATA only (host, port, SNI, country) + raw vless:// URI.
-///
-/// ETag-based conditional GET: client only downloads when pool has changed.
-///
-/// v2.39.0 (audit #4 fix): the primary fetch is the COMPRESSED asset
-/// <c>pool.json.gz</c> (~3.9 MB) instead of raw <c>pool.json</c> (~27 MB) — a 7x
-/// smaller download that no longer times out on slow / mobile / RU networks and
-/// cuts memory pressure. Decompression is bounded (defeats gzip bombs), the
-/// payload is validated before it replaces the last-known-good local cache
-/// (atomic temp+rename), and the raw asset stays as a legacy fallback.
-/// </summary>
 public sealed class FreeConfigPoolFetcher
 {
     private const string ReleaseBase =
         "https://github.com/PavelLizunov/VPNRouter/releases/download/free-pool-latest/";
-    private const string PoolGzUrl = ReleaseBase + "pool.json.gz"; // primary (~3.9 MB)
-    private const string PoolUrl   = ReleaseBase + "pool.json";    // legacy raw fallback (~27 MB)
+    private const string PoolGzUrl = ReleaseBase + "pool.json.gz";
+    private const string PoolUrl   = ReleaseBase + "pool.json";
 
-    // Bomb / runaway guards. The live pool is ~3.9 MB gz -> ~27 MB json; cap well
-    // above that but bounded so a hostile or corrupt asset can't exhaust memory/disk.
-    internal const long MaxCompressedBytes = 32L * 1024 * 1024;  // reject a .gz larger than 32 MB
-    internal const long MaxExpandedBytes   = 128L * 1024 * 1024; // abort decompression past 128 MB
+    internal const long MaxCompressedBytes = 32L * 1024 * 1024;
+    internal const long MaxExpandedBytes   = 128L * 1024 * 1024;
 
     private readonly string _cachePath;
-    private readonly string _etagPath;     // raw pool.json etag
-    private readonly string _gzEtagPath;   // pool.json.gz etag
+    private readonly string _etagPath;
+    private readonly string _gzEtagPath;
     private readonly HttpClient _http;
     private readonly ILogger _logger;
 
     public FreeConfigPoolFetcher(ILogger logger)
         : this(logger, new HttpClientHandler { AutomaticDecompression = DecompressionMethods.None }) { }
 
-    /// <summary>Test seam: inject a message handler (e.g. a fake) to drive the fetch flow.</summary>
     internal FreeConfigPoolFetcher(ILogger logger, HttpMessageHandler handler)
     {
         _logger = logger;
         _cachePath  = Path.Combine(AppPaths.CacheDir, "pool.json");
         _etagPath   = _cachePath + ".etag";
         _gzEtagPath = _cachePath + ".gz.etag";
-        // AutomaticDecompression is OFF on purpose: we fetch the .gz ASSET and
-        // decompress it ourselves with a bounded reader. Letting HttpClient
-        // transparently inflate would bypass the expanded-size guard.
         _http = new HttpClient(handler)
         {
             Timeout = TimeSpan.FromSeconds(30),
@@ -65,26 +40,17 @@ public sealed class FreeConfigPoolFetcher
 
     private enum Outcome { Success, NotModified, Failed }
 
-    /// <summary>
-    /// Try to fetch the pool with ETag-conditional GET. Prefers the compressed
-    /// asset; falls back to the raw asset, then to the local cache.
-    /// Returns null only if the pool is unavailable AND no local cache exists —
-    /// caller should then fall back to direct source fetch.
-    /// </summary>
     public async Task<List<FreeConfigEntry>?> FetchPoolAsync(CancellationToken ct = default)
     {
-        // 1) compressed primary
         var (outcome, entries) = await TryFetchAsync(PoolGzUrl, gzip: true, _gzEtagPath, ct);
         if (outcome == Outcome.Success) return entries;
         if (outcome == Outcome.NotModified) return LoadFromLocalCache();
 
-        // 2) raw legacy fallback (e.g. an old release without the .gz asset)
         _logger.Information("Pool fetch: compressed asset unavailable, trying raw pool.json");
         (outcome, entries) = await TryFetchAsync(PoolUrl, gzip: false, _etagPath, ct);
         if (outcome == Outcome.Success) return entries;
         if (outcome == Outcome.NotModified) return LoadFromLocalCache();
 
-        // 3) last-known-good
         return LoadFromLocalCache();
     }
 
@@ -118,9 +84,6 @@ public sealed class FreeConfigPoolFetcher
                 return (Outcome.Failed, null);
             }
 
-            // Decompress (bounded) into a temp file, validate, THEN atomically
-            // replace the last-known-good cache. A truncated/garbage download
-            // never clobbers the previous good pool.
             Directory.CreateDirectory(AppPaths.CacheDir);
             var tmp = _cachePath + ".tmp";
             try
@@ -147,7 +110,7 @@ public sealed class FreeConfigPoolFetcher
             }
             finally
             {
-                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort */ }
+                try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -158,12 +121,6 @@ public sealed class FreeConfigPoolFetcher
         }
     }
 
-    /// <summary>
-    /// Stream-copy <paramref name="source"/> (gunzipping if <paramref name="gzip"/>)
-    /// into <paramref name="destination"/>, aborting if the expanded size exceeds
-    /// <paramref name="maxExpandedBytes"/> — defeats decompression bombs. The
-    /// source stream is left open (the caller owns it).
-    /// </summary>
     internal static async Task DecompressBoundedAsync(
         Stream source, bool gzip, Stream destination, long maxExpandedBytes, CancellationToken ct)
     {
@@ -212,10 +169,6 @@ public sealed class FreeConfigPoolFetcher
         }
     }
 
-    /// <summary>
-    /// Parse pool.json into FreeConfigEntry list.
-    /// Schema: { updatedAt, version, sourceCount, totalConfigs, servers: [{id,host,port,uuid,sni,transport,security,country,resolvedIp,source,raw,firstSeen}] }
-    /// </summary>
     internal static List<FreeConfigEntry> ParsePool(Stream json)
     {
         using var doc = JsonDocument.Parse(json);
@@ -259,7 +212,7 @@ public sealed class FreeConfigPoolFetcher
                 if (!string.IsNullOrEmpty(entry.Id) && !string.IsNullOrEmpty(entry.RawUri))
                     result.Add(entry);
             }
-            catch { /* skip malformed entry */ }
+            catch { }
         }
         return result;
     }

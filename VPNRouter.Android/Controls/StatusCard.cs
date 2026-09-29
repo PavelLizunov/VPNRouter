@@ -6,22 +6,6 @@ using Avalonia.Media;
 
 namespace VPNRouter.UI.Controls;
 
-/// <summary>
-/// Code-only re-creation of the StatusCard UserControl that lived briefly in
-/// VPNRouter.UI/Controls/StatusCard.axaml (foundation chip 1e96dfc).
-///
-/// Per the desktop revert (2026-05-09) the shared VPNRouter.UI project was
-/// removed because the user explicitly said «we should not have touched
-/// desktop at all». Existing Android UI code still calls `new StatusCard {
-/// IsOn=…, IsOff=…, Title=…, Subtitle=… }` so this file keeps that surface
-/// alive for the Android port. Desktop SimplePage went back to its inline
-/// Border + Ellipse + TextBlock layout from v2.32.0.
-///
-/// Visual treatment: 1px BorderDefaultBrush border, SurfaceBaseBrush bg,
-/// RadiusMd corners, 14px padding. One of three Ellipse dots visible at a
-/// time (Success / Warning / TextMuted). Bold title next to the dot, muted
-/// subtitle wrapped on the next line, both indented 20px from the left.
-/// </summary>
 public class StatusCard : UserControl
 {
     public static readonly StyledProperty<bool> IsOnProperty =
@@ -56,13 +40,6 @@ public class StatusCard : UserControl
         BindBrush(_dotWarn, Shape.FillProperty, "WarningSolidBrush");
         BindBrush(_dotOff, Shape.FillProperty, "TextMutedBrush");
 
-        // Bug-AND-010 (2026-05-16) — 5" small-phone audit. brat reported
-        // "у меня телефон 5 дюймов и все в приложении немного
-        // большеваное". StatusCard was the largest single element on
-        // Simple page (Title 15px + Padding 14 + Subtitle 10 lineheight
-        // 15 + StackPanel spacing 8 ≈ ~120dp tall). Tightened to ~92dp
-        // by trimming font / padding / line-height; visual hierarchy
-        // (Bold accent dot title, muted subtitle) preserved.
         _titleText = new TextBlock { FontSize = 14, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
         BindBrush(_titleText, TextBlock.ForegroundProperty, "TextPrimaryBrush");
 

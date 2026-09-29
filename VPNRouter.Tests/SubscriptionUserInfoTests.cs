@@ -4,7 +4,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>P2 (2026-06-21) — Subscription-Userinfo header parser + summary.</summary>
 public class SubscriptionUserInfoTests
 {
     [Fact]
@@ -25,7 +24,7 @@ public class SubscriptionUserInfoTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("garbage-no-equals")]
-    [InlineData("foo=bar; baz=qux")]   // unknown keys, non-numeric
+    [InlineData("foo=bar; baz=qux")]
     public void Parse_BlankOrUnparseable_ReturnsNull(string? header)
     {
         Assert.Null(SubscriptionUserInfo.Parse(header));
@@ -34,11 +33,11 @@ public class SubscriptionUserInfoTests
     [Fact]
     public void Parse_PartialHeader_TolerantOfMissingKeys()
     {
-        var ui = SubscriptionUserInfo.Parse("total=1073741824; expire=0");  // expire=0 = unlimited
+        var ui = SubscriptionUserInfo.Parse("total=1073741824; expire=0");
         Assert.NotNull(ui);
         Assert.Equal(1073741824, ui!.Total);
-        Assert.Null(ui.Expire);               // expire=0 ignored
-        Assert.Equal(1073741824, ui.RemainingBytes);  // nothing used
+        Assert.Null(ui.Expire);
+        Assert.Equal(1073741824, ui.RemainingBytes);
     }
 
     [Fact]
@@ -46,7 +45,7 @@ public class SubscriptionUserInfoTests
     {
         var ui = SubscriptionUserInfo.Parse("upload=100; download=200");
         Assert.NotNull(ui);
-        Assert.Null(ui!.RemainingBytes);   // no total → remaining unknown
+        Assert.Null(ui!.RemainingBytes);
         Assert.Equal(300, ui.Used);
     }
 
@@ -55,9 +54,9 @@ public class SubscriptionUserInfoTests
     {
         var now = DateTimeOffset.FromUnixTimeSeconds(1_000_000);
         var future = SubscriptionUserInfo.Parse($"expire={1_000_000 + (int)TimeSpan.FromDays(5.9).TotalSeconds}");
-        Assert.Equal(5, future!.DaysLeft(now));         // floored
+        Assert.Equal(5, future!.DaysLeft(now));
         var past = SubscriptionUserInfo.Parse($"expire={1_000_000 - 100}");
-        Assert.Equal(0, past!.DaysLeft(now));           // clamped, never negative
+        Assert.Equal(0, past!.DaysLeft(now));
     }
 
     [Fact]
@@ -67,6 +66,6 @@ public class SubscriptionUserInfoTests
         var ui = SubscriptionUserInfo.Parse("download=6174315146; total=107374182400; expire=" + (1_000_000 + 86400 * 10));
         var s = ui!.FormatSummary(now);
         Assert.False(string.IsNullOrEmpty(s));
-        Assert.Contains("GB", s);            // human-readable bytes
+        Assert.Contains("GB", s);
     }
 }

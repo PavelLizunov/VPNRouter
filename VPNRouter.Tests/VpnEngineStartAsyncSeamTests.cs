@@ -1,31 +1,3 @@
-// Phase 2G follow-up (Task #22, 2026-05-21) — VpnEngine.StartAsync invoke
-// tests pinning the early-throw paths.
-//
-// Why: VpnEngineOrchestratorTests (commit 14c512e, 16 tests) explicitly
-// documented the gap:
-//   "The full StartAsync→Connected→Stop matrix is intentionally NOT covered
-//    here because VpnEngine.StartAsync requires (1) the sing-box binary on
-//    disk, (2) Windows-only firewall via netsh, (3) profiles JSON in
-//    %ProgramData%. Today there's no test seam that lets us stub those
-//    in-memory."
-//
-// The Phase 3+ IProcessRunner adoption (commit e9c31be) made SingBoxManager
-// testable via FakeProcessRunner, but the lifecycle BEFORE SingBoxManager is
-// constructed — StartupPipeline phases 6 (netsh + TunAdapterDiagnostics)
-// and 8 (WindowsDnsHardening HKLM mutation) — still calls static helpers
-// that mutate real Windows OS state. That blocker is documented in detail
-// in plans/phase2G-vpnengine-startasync-seam-2026-05-21.md "Surprises".
-//
-// This batch delivers the achievable subset: characterization tests for the
-// EARLY-THROW paths through VpnEngine.StartAsync that abort cleanly in
-// phases 1-2 (ResolveProfileAndServers) before reaching any destructive
-// OS call. All tests configure settings to skip the phase-0 OS shell-outs:
-//   - FlushDnsOnStart = false   → skip ipconfig
-//   - BypassRussianTraffic = false → skip geo HTTP download
-//   - skipVpnConflictCheck: true  → skip ConflictingVpnDetector
-//
-// Brief: plans/phase2G-vpnengine-startasync-seam-2026-05-21.md.
-
 #nullable enable
 
 using VPNRouter.Core;
@@ -35,33 +7,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization tests for the early-throw paths of
-/// <see cref="VpnEngine.StartAsync"/>. Each test drives a full
-/// <see cref="VpnEngine"/> instance (not a standalone <see cref="StartupPipeline"/>)
-/// through to the first phase that throws — pinning that the engine
-/// surfaces the actionable error to the caller and does NOT mutate
-/// post-throw state.
-///
-/// <para>Cross-references:
-/// <see cref="VpnEngineOrchestratorTests"/> (idle Stop / Dispose / static
-/// helpers — does NOT call StartAsync);
-/// <see cref="StartupPipelineTests"/> (HotReload-mode pipeline coverage —
-/// does NOT exercise the full <c>VpnEngine</c> wrapper);
-/// <see cref="VpnEngineApplyEscalationTests"/> (source-string pins for the
-/// hot-reload escalation triggers).</para>
-///
-/// <para>The full happy-path lifecycle (Start → Connected → Stop) plus
-/// crash-then-restart, hot-reload Apply on a running engine, and
-/// Stop-during-restart are explicitly DEFERRED to a follow-up brief
-/// pending the NullDnsFlusher / NullWindowsDnsHardening /
-/// NullTunAdapterDiagnostics abstractions. See the brief's "Tests
-/// deferred" table for the full list.</para>
-/// </summary>
 public sealed class VpnEngineStartAsyncSeamTests
 {
-    // ─── Inline stubs (mirrors VpnEngineOrchestratorTests pattern) ───────
-
     private sealed class StubProcessScanner : IProcessScanner
     {
         public ScanResult ScanForProfile(Profile profile) => new();
@@ -179,13 +126,6 @@ public sealed class VpnEngineStartAsyncSeamTests
         public void RaiseDummy() { ProcessStarted?.Invoke(this, new()); ProcessStopped?.Invoke(this, new()); }
     }
 
-    /// <summary>
-    /// Build an idle VpnEngine wired to no-op stubs. The
-    /// <see cref="VpnEngine"/> ctor is decorated with
-    /// <c>[Obsolete(error: false)]</c> — Phase 4 will replace it with a
-    /// factory, but tests can use it under <c>#pragma warning disable</c>
-    /// per the attribute's docs.
-    /// </summary>
 #pragma warning disable CS0618
     private static VpnEngine BuildEngine(IFirewallManager? firewall = null, IProcessScanner? scanner = null) =>
         new VpnEngine(
@@ -195,18 +135,6 @@ public sealed class VpnEngineStartAsyncSeamTests
             logger: null);
 #pragma warning restore CS0618
 
-    /// <summary>
-    /// Build an <see cref="AppSettings"/> configured so ColdStart can reach
-    /// the early-throw paths without triggering OS-mutating shell-outs.
-    /// The three guards:
-    /// <list type="bullet">
-    ///   <item><c>FlushDnsOnStart = false</c> → no <c>ipconfig /flushdns</c></item>
-    ///   <item><c>BypassRussianTraffic = false</c> → no geo HTTP download</item>
-    ///   <item>Caller passes <c>skipVpnConflictCheck: true</c> → no
-    ///   ConflictingVpnDetector probe (we still pass it through, but the
-    ///   detector is read-only so the difference is academic).</item>
-    /// </list>
-    /// </summary>
     private static AppSettings BuildSafePreStartSettings(
         string configMode = "generated",
         string routingMode = "split") =>
@@ -228,19 +156,9 @@ public sealed class VpnEngineStartAsyncSeamTests
             ActiveProfile = "TestProfile",
         };
 
-    // ─── 1. Empty VLESS servers — subscribe mode ────────────────────────
-
     [Fact]
     public async Task StartAsync_EmptyServers_SubscribeMode_ThrowsActionableMessage()
     {
-        // v2.28.2 silent-leak class: subscribe mode with no enabled subs +
-        // no manual fallback. The hard guard at phase 2
-        // (StartupPipeline.ResolveProfileAndServersAsync) must throw an
-        // InvalidOperationException whose message routes through
-        // VlessServersResolver.DescribeEmptyReason — actionable text the
-        // UI can surface verbatim ("Subscribe mode is selected but no
-        // subscription URLs are configured. Add a subscription in the
-        // Subscribe tab.").
         var settings = BuildSafePreStartSettings(configMode: "subscribe");
 
         using var engine = BuildEngine();
@@ -248,31 +166,15 @@ public sealed class VpnEngineStartAsyncSeamTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
-        // The exact message is owned by VlessServersResolver.DescribeEmptyReason;
-        // we pin on the user-facing actionable hint rather than the literal
-        // string so a future translation / phrasing change doesn't break
-        // this characterization test.
         Assert.NotNull(ex.Message);
         Assert.NotEmpty(ex.Message);
-        // Verify the engine did NOT silently transition to running on the
-        // throw path. Empty servers must remain in an inert state.
         Assert.False(engine.IsRunning);
         Assert.Null(engine.SingBoxPid);
     }
 
-    // ─── Conflict-skip remembered for failover/reconnect re-entry (2026-06-15) ───
-
     [Fact]
     public async Task StartAsync_RemembersSkipVpnConflictCheck_ForFailoverReentry()
     {
-        // Reconnect fix: StartAsync records its skipVpnConflictCheck argument up
-        // front (before any phase), so the internal AutoFailover restart delegates
-        // re-enter StartAsync with the SAME skip. Without it, a removed-config
-        // failover re-ran the Phase 0 ConflictingVpnDetector pre-flight WITHOUT the
-        // user's "Ignore", threw ConflictingVpnException, and the VPN stayed down
-        // while a tolerated VPN (AmneziaWG / WireGuard) was up. Drive the cheap
-        // empty-servers early-throw (phase 2) — the skip is already stored by then —
-        // and assert the remembered value tracks the argument both ways.
         var settings = BuildSafePreStartSettings(configMode: "subscribe");
         using var engine = BuildEngine();
 
@@ -288,11 +190,6 @@ public sealed class VpnEngineStartAsyncSeamTests
     [Fact]
     public async Task StartAsync_SubscribeMode_AllSubscriptionsDisabled_Throws()
     {
-        // Pin a subtle variant: subscriptions configured but all disabled.
-        // The resolver's scope guard must treat this as the same empty case
-        // — without the Enabled gate, the guard would aggregate disabled
-        // subscriptions and route them as "active" servers, which is the
-        // bug class v2.28.2-r1 fixed.
         var settings = BuildSafePreStartSettings(configMode: "subscribe");
         settings.App.Subscriptions = new List<SubscriptionEntry>
         {
@@ -300,7 +197,7 @@ public sealed class VpnEngineStartAsyncSeamTests
             {
                 Name = "main",
                 Url = "https://example.com",
-                Enabled = false, // disabled — should be ignored
+                Enabled = false,
                 Servers = new List<VlessServerEntry>
                 {
                     new()
@@ -322,17 +219,10 @@ public sealed class VpnEngineStartAsyncSeamTests
         Assert.False(engine.IsRunning);
     }
 
-    // ─── 2. Empty VLESS servers — generated mode ────────────────────────
-
     [Fact]
     public async Task StartAsync_EmptyServers_GeneratedMode_Throws()
     {
-        // Generated mode with empty Vless.Servers + empty Subscriptions —
-        // same hard-guard path as subscribe mode, different actionable
-        // message ("VLESS server is not configured. Add a server manually
-        // in the Servers tab, or enable a subscription.").
         var settings = BuildSafePreStartSettings(configMode: "generated");
-        // Vless.Servers is empty by default, Subscriptions empty by default.
 
         using var engine = BuildEngine();
 
@@ -341,23 +231,16 @@ public sealed class VpnEngineStartAsyncSeamTests
 
         Assert.NotNull(ex.Message);
         Assert.False(engine.IsRunning);
-        Assert.Empty(engine.ActiveProfileName); // never reached profile resolution
+        Assert.Empty(engine.ActiveProfileName);
     }
 
     [Fact]
     public async Task StartAsync_EmptyServers_DoesNotMutateState()
     {
-        // Defence-in-depth pin: an empty-servers throw must leave the engine
-        // in EXACTLY the same state as a freshly-constructed engine. No
-        // ActiveServerAddress set, no profile resolved, no event listeners
-        // fired. UI code reads these getters when displaying error toasts;
-        // any leaked partial state would show "VPN is configured for X"
-        // alongside the "no servers" error.
         var settings = BuildSafePreStartSettings(configMode: "generated");
 
         using var engine = BuildEngine();
 
-        // Snapshot pre-throw state.
         var preIsRunning = engine.IsRunning;
         var preActiveProfile = engine.ActiveProfileName;
         var preServerAddress = engine.ActiveServerAddress;
@@ -366,23 +249,15 @@ public sealed class VpnEngineStartAsyncSeamTests
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
-        // Post-throw state must match pre-throw state.
         Assert.Equal(preIsRunning, engine.IsRunning);
         Assert.Equal(preActiveProfile, engine.ActiveProfileName);
         Assert.Equal(preServerAddress, engine.ActiveServerAddress);
         Assert.Equal(preMonitored, engine.MonitoredProcesses.Count);
     }
 
-    // ─── 3. No active profile in split mode ─────────────────────────────
-
     [Fact]
     public async Task StartAsync_NoActiveProfile_SplitMode_Throws()
     {
-        // Phase 1 throws BEFORE phase 2 server resolution when the user has
-        // valid servers but the profile name is empty/null in split-tunnel
-        // mode. Full-tunnel mode is allowed without a profile (FullTunnel
-        // synthetic profile is created instead); split mode requires an
-        // explicit choice.
         var settings = BuildSafePreStartSettings(
             configMode: "generated", routingMode: "split");
         settings.ActiveProfile = null!;
@@ -411,24 +286,13 @@ public sealed class VpnEngineStartAsyncSeamTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
-        // The phase-1 throw site message is "No active profile specified
-        // in config." — pin loosely on the actionable substring "active
-        // profile" so phrasing changes don't break the test.
         Assert.Contains("profile", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(engine.IsRunning);
     }
 
-    // ─── 4. Custom config mode — missing file ───────────────────────────
-
     [Fact]
     public async Task StartAsync_CustomMode_MissingFile_Throws()
     {
-        // ConfigMode=custom routes phase 1 to a different branch:
-        // VpnEngine.ResolveCustomConfigPath + File.Exists guard. When the
-        // path doesn't resolve to an existing file, throws
-        // InvalidOperationException with the path-in-error format
-        // ("Custom config not found: <path>. Add a config in the Servers
-        // tab.").
         var settings = BuildSafePreStartSettings(configMode: "custom");
         settings.App.CustomConfig =
             @"C:\definitely\does\not\exist\custom-test.json";
@@ -440,8 +304,6 @@ public sealed class VpnEngineStartAsyncSeamTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
-        // Pin the path-in-message format so the actionable error stays
-        // useful.
         Assert.Contains("Custom config not found", ex.Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.False(engine.IsRunning);
@@ -450,13 +312,8 @@ public sealed class VpnEngineStartAsyncSeamTests
     [Fact]
     public async Task StartAsync_CustomMode_InvalidJson_Throws()
     {
-        // Same phase 1 branch, different rejection: file exists but
-        // CustomConfigInjector.Validate fails. The throw message lists the
-        // validation errors so the user can fix the JSON.
         var settings = BuildSafePreStartSettings(configMode: "custom");
 
-        // Write garbage to a temp file. Use a unique name to avoid colliding
-        // with parallel test runs.
         var tempPath = Path.Combine(
             Path.GetTempPath(),
             $"vpnrouter-test-custom-{Guid.NewGuid():N}.json");
@@ -470,34 +327,20 @@ public sealed class VpnEngineStartAsyncSeamTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
-            // The exact wording is owned by CustomConfigInjector.Validate,
-            // but it has to contain "validation" or equivalent to be
-            // actionable.
             Assert.Contains("validation", ex.Message,
                 StringComparison.OrdinalIgnoreCase);
             Assert.False(engine.IsRunning);
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { /* best-effort */ }
+            try { File.Delete(tempPath); } catch { }
         }
     }
-
-    // ─── 5. Cancellation propagation ────────────────────────────────────
 
     [Fact]
     public async Task StartAsync_PreCancelledToken_ThrowsOperationCanceled()
     {
-        // Pin: a pre-cancelled CT propagates as OperationCanceledException
-        // (NOT swallowed as a generic InvalidOperationException). The
-        // pipeline checks ct.ThrowIfCancellationRequested() at multiple
-        // phase boundaries; the first one inside ResolveProfileAndServers
-        // fires when we hit it with the token already in the cancelled
-        // state. No destructive OS code runs because the throw is in
-        // phase 1 / 2, before phases 6-8.
         var settings = BuildSafePreStartSettings(configMode: "generated");
-        // Populate servers so the resolver doesn't throw the empty-servers
-        // path first — we want the cancellation to win.
         settings.Vless.Servers = new List<VlessServerEntry>
         {
             new()
@@ -520,85 +363,42 @@ public sealed class VpnEngineStartAsyncSeamTests
 
         using var engine = BuildEngine();
         using var cts = new CancellationTokenSource();
-        cts.Cancel();   // pre-cancel
+        cts.Cancel();
 
-        // OperationCanceledException OR TaskCanceledException (subclass) is
-        // acceptable — both signal the cancellation contract correctly.
         var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await engine.StartAsync(settings, cts.Token, skipVpnConflictCheck: true));
 
-        // The CT is the one we passed (not a wrapped CTS). Assert it
-        // carries the cancellation signal so callers can correlate which
-        // cancellation source fired.
         Assert.True(cts.Token.IsCancellationRequested);
-        // No engine state mutation on cancellation either.
         Assert.False(engine.IsRunning);
     }
-
-    // ─── 6. ApplyAsync delegates correctly on idle engine ───────────────
 
     [Fact]
     public async Task ApplyAsync_OnIdleEngine_ReturnsFalseWithoutInvokingPipeline()
     {
-        // Companion to VpnEngineOrchestratorTests.ApplyAsync_IdleEngine_ReturnsFalse
-        // but with the safe settings shape this test class uses. Pins that
-        // the early-return at the top of ApplyAsync (lines 202-206) catches
-        // the "sing-box not running" case BEFORE entering the StartupPipeline
-        // HotReload mode. Without this guard, an Apply on an idle engine
-        // would trigger pipeline phase 1 server resolution and throw the
-        // empty-servers exception — confusing UX.
         var settings = BuildSafePreStartSettings(configMode: "generated");
-        // Intentionally empty servers so we'd see InvalidOperationException
-        // from the pipeline IF the guard wasn't there.
 
         using var engine = BuildEngine();
 
         var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.False(result);
-        // Engine state unchanged.
         Assert.False(engine.IsRunning);
     }
-
-    // ─── 7. SkipVpnConflictCheck parameter is honoured ──────────────────
 
     [Fact]
     public async Task StartAsync_SkipVpnConflictCheck_DefaultFalse_StillRunsEmptyServersGuard()
     {
-        // Pin the Bug-r10-B (v2.32.1-r5) "Ignore" button contract: when the
-        // user clicks "Ignore" on the conflicting-VPN banner, the UI calls
-        // StartAsync(skipVpnConflictCheck: true). When they DON'T click it
-        // (default), the value is false and the conflict check runs.
-        //
-        // We can't directly assert "the conflict detector was called" without
-        // a seam, but we CAN verify that the parameter's default value
-        // doesn't block reaching the phase-2 throw on empty servers — i.e.
-        // the conflict check (when no conflicts are present, which is the
-        // normal CI state) doesn't itself throw.
         var settings = BuildSafePreStartSettings(configMode: "generated");
 
         using var engine = BuildEngine();
 
-        // Default skipVpnConflictCheck = false. Should still reach empty-
-        // servers throw assuming no real VPN client is hogging wintun on
-        // the CI machine (which there shouldn't be).
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await engine.StartAsync(settings, TestContext.Current.CancellationToken));
-        // No assert on engine state — already covered by other tests.
     }
-
-    // ─── 8. v2.44.3 failover-restart resurrection guard (cross-platform) ──
 
     [Fact]
     public async Task ExecuteProbeFailoverRestart_NeverConnected_ReturnsFalse_NoBringUp()
     {
-        // v2.44.3 (P0): the production failover-restart seam must NOT bring a
-        // tunnel up when there is no live session. A never-connected engine has
-        // a null session CTS, so ExecuteProbeFailoverRestartAsync hits the
-        // resurrection guard and returns false BEFORE reaching StartAsyncInternal
-        // — no pipeline, no ProgramData I/O — which lets this pin the production
-        // seam's guard cross-platform (the Windows-only VpnEngineLifecycleTests
-        // pin the full cancelled-probe-token bring-up + the after-Stop abort).
         var settings = BuildSafePreStartSettings(configMode: "generated");
         using var engine = BuildEngine();
 
@@ -608,8 +408,6 @@ public sealed class VpnEngineStartAsyncSeamTests
         Assert.False(ok, "failover restart must not bring up a tunnel with no live session");
         Assert.False(engine.IsRunning);
     }
-
-    // ─── 9. VENG-01: Stop() cancels in-flight StartAsync bring-up ─────────
 
     [Fact]
     public async Task StartAsync_StopCalledDuringBringUp_AbortsImmediatelyAndReleasesGate()
@@ -639,29 +437,25 @@ public sealed class VpnEngineStartAsyncSeamTests
             }
             catch (OperationCanceledException)
             {
-                // Expected when Stop() cancels the linked session token
             }
             catch (Exception)
             {
-                // Or if aborted downstream
             }
         });
 
         await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        // When Stop() is called, it cancels _sessionCts. Because _sessionCts is linked to
-        // StartAsyncInternal, unblocking holdBringUp allows StartAsync to observe cancellation.
         var stopTask = Task.Run(() => engine.Stop());
+        // Give Stop time to cancel the session before the bring-up resumes, otherwise the start runs on into the
+        // five-second sing-box wait and this test races its own timeout.
+        await Task.Delay(500);
 
         holdBringUp.TrySetResult();
 
-        // Both startTask and stopTask should complete rapidly without waiting 5+ seconds.
         await Task.WhenAll(startTask, stopTask).WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(engine.IsRunning);
     }
-
-    // ─── 10. VENG-02: Startup failure tears down partial state & firewall rules ─
 
     [Fact]
     public async Task StartAsync_FailureDuringBringUp_TearsDownFirewallRulesAndState()
@@ -682,8 +476,6 @@ public sealed class VpnEngineStartAsyncSeamTests
             "TeardownInternal must clean up firewall rules when bring-up throws");
         Assert.False(engine.IsRunning);
     }
-
-    // ─── 11. VENG-01/02: Cancellation during bring-up invokes teardown ────
 
     [Fact]
     public async Task StartAsync_CancelledDuringBringUp_InvokesTeardownAndReleasesState()

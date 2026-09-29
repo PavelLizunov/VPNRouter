@@ -1,8 +1,5 @@
 name: Build Linux AppImage + .deb
 
-# Triggered by:
-#  - pushing a v* tag (automatic on release)
-#  - manual dispatch (re-run on existing releases for missing assets)
 on:
   push:
     tags:
@@ -80,10 +77,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Phase 1 Q9 — NuGet package cache. `dotnet publish` restores packages
-      # from nuget.org on cold runs (~30–60 s). Caching ~/.nuget/packages
-      # keyed on the union hash of every .csproj keeps the cache fresh
-      # without manual invalidation. Q11 will pin actions/cache to a SHA.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -91,29 +84,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      # ── .NET publish ────────────────────────────────────────────────────
-      # Self-contained so end users don't need dotnet installed.
-      # --runtime linux-x64 handles ~99 % of desktop Linux (x86_64 Intel/AMD).
-      # ARM64 (Raspberry Pi, Asahi Linux) would need a second job; deferred.
       - name: dotnet publish (linux-x64, self-contained)
-        # Only VPNRouter.App. VPNRouter.CLI and VPNRouter.Service target
-        # net8.0-windows specifically — CLI pulls Service which in turn
-        # uses ETW (Microsoft.Diagnostics.Tracing.TraceEvent) that's
-        # guarded by #if PLATFORM_WINDOWS in VPNRouter.Core. Building CLI
-        # on linux-x64 breaks because the ETW symbols aren't compiled
-        # in, Service can't find them, and the chain fails. Desktop
-        # Linux only needs the Avalonia app anyway; CLI / service
-        # management on Linux is a v2.22+ story (systemd user unit).
         run: |
           dotnet publish VPNRouter.App/VPNRouter.App.csproj \
             -c Release -r linux-x64 --self-contained true \
             -o publish/linux-x64
 
-      # Bundle sing-box next to VPNRouter.App so the first-run Deploy step (in
-      # MainWindowViewModel.cs) can copy it into ~/.config/vpnrouter/bin/ + chmod +x.
-      #
-      # Ships sing-box-vpnctl release with native AmneziaWG + XHTTP + Clash API.
-      # libcronet.so is fetched from upstream archive for NaiveProxy support.
       - name: Bundle sing-box-vpnctl-linux-amd64 + libcronet
         run: |
           set -euo pipefail
@@ -126,7 +102,6 @@ jobs:
           cp "/tmp/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64/sing-box" publish/linux-x64/sing-box
           chmod +x publish/linux-x64/sing-box
 
-          # libcronet.so — from upstream (NaiveProxy dlopen's it at runtime)
           SINGBOX_VER="1.13.14"
           SINGBOX_SHA256="f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697"
           curl -sSL -o /tmp/singbox.tar.gz \
@@ -139,15 +114,6 @@ jobs:
           publish/linux-x64/sing-box version
           publish/linux-x64/sing-box version | grep -q with_awg
 
-      # ── AppImage ────────────────────────────────────────────────────────
-      # AppImage layout:
-      #   VPNRouter.AppDir/
-      #     AppRun                      (entrypoint script chosen by AppImage runtime)
-      #     vpnrouter.desktop           (menu metadata, required at root)
-      #     vpnrouter.png               (icon, required at root, must match .desktop Icon=)
-      #     usr/bin/VPNRouter.App       (the actual binary)
-      #     usr/bin/*.dll, *.so         (runtime deps)
-      #     usr/share/icons/.../vpnrouter.png  (conventional icon location)
       - name: Assemble AppDir
         run: |
           set -euo pipefail
@@ -156,25 +122,17 @@ jobs:
           mkdir -p "$APPDIR/usr/share/applications"
           mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
-          # Payload
           cp -R publish/linux-x64/. "$APPDIR/usr/bin/"
           chmod +x "$APPDIR/usr/bin/VPNRouter.App" || true
 
-          # Icon
           cp VPNRouter.App/Assets/penguin_mascot_tile.png "$APPDIR/vpnrouter.png"
           cp VPNRouter.App/Assets/penguin_mascot_tile.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
 
-          # .desktop
           cp packaging/linux/vpnrouter.desktop "$APPDIR/vpnrouter.desktop"
           cp packaging/linux/vpnrouter.desktop "$APPDIR/usr/share/applications/vpnrouter.desktop"
-          # AppImage convention: Exec= must point to the real binary name
-          # inside usr/bin/, not the launcher shim.
           sed -i 's|^Exec=.*|Exec=VPNRouter.App|' "$APPDIR/vpnrouter.desktop"
           sed -i 's|^Exec=.*|Exec=VPNRouter.App|' "$APPDIR/usr/share/applications/vpnrouter.desktop"
 
-          # AppRun — AppImage entrypoint. Sets LD_LIBRARY_PATH so the bundled
-          # Avalonia native libs (libHarfBuzzSharp, libSkiaSharp) are picked
-          # over any stale system copies, then execs the real binary.
           cat > "$APPDIR/AppRun" <<'APPRUN'
           #!/usr/bin/env bash
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -189,16 +147,6 @@ jobs:
       - name: Build AppImage
         run: |
           set -euo pipefail
-          # appimagetool is a single-file ELF. Pin the IMMUTABLE release asset
-          # (repo AppImage/appimagetool, tag 1.9.1, asset appimagetool-x86_64.AppImage).
-          # The old retired AppImageKit rolling ref changed on every upstream CI
-          # build — a supply-chain RCE vector; never reintroduce a rolling ref.
-          # To update: bump the tag in APPIMAGETOOL_URL to the next immutable
-          # release, re-read the asset size via
-          # `gh api repos/AppImage/appimagetool/releases/tags/<tag>` into
-          # APPIMAGETOOL_SIZE, and re-capture the SHA256 from the official release
-          # asset (one-time CI/owner download over github TLS) into APPIMAGETOOL_SHA256.
-          # Fail-closed: any size/digest mismatch aborts the build before chmod/exec.
           APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
           APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
           APPIMAGETOOL_SIZE=15092216
@@ -206,15 +154,11 @@ jobs:
           [ "$(stat -c %s appimagetool)" = "$APPIMAGETOOL_SIZE" ]
           echo "${APPIMAGETOOL_SHA256}  appimagetool" | sha256sum -c -
           chmod +x appimagetool
-          # --appimage-extract-and-run avoids needing FUSE on the runner.
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run \
             VPNRouter.AppDir \
             "VPNRouter-v${{ steps.version.outputs.version }}-linux-x86_64.AppImage"
           ls -lh "VPNRouter-v${{ steps.version.outputs.version }}-linux-x86_64.AppImage"
 
-      # ── .deb (Debian/Ubuntu/Mint) ──────────────────────────────────────
-      # Classic dpkg-deb layout. Installs to /opt/vpnrouter with /usr/bin/
-      # wrapper + .desktop launcher for menu integration.
       - name: Build .deb
         run: |
           set -euo pipefail
@@ -226,49 +170,30 @@ jobs:
           mkdir -p "$PKG/usr/share/applications"
           mkdir -p "$PKG/usr/share/icons/hicolor/256x256/apps"
 
-          # Payload → /opt/vpnrouter
           cp -R publish/linux-x64/. "$PKG/opt/vpnrouter/"
           chmod +x "$PKG/opt/vpnrouter/VPNRouter.App" || true
 
-          # Wrapper on PATH
           cat > "$PKG/usr/bin/vpnrouter" <<'WRAP'
           #!/usr/bin/env bash
           exec /opt/vpnrouter/VPNRouter.App "$@"
           WRAP
           chmod +x "$PKG/usr/bin/vpnrouter"
 
-          # v2.22.2-r8: polkit-based passwordless update.
-          # The helper script does the privileged cp+chmod+pkill in one
-          # atomic unit. The .policy file references the helper's path
-          # and grants allow_active=yes so local users don't get a
-          # password prompt. Without the annotate exec.path, allow_active
-          # would be ignored.
           mkdir -p "$PKG/usr/libexec"
           mkdir -p "$PKG/usr/share/polkit-1/actions"
-          # Defensive CRLF strip — .gitattributes handles this for fresh
-          # clones, but an old working copy committed before the attrs
-          # change could still carry CR bytes.
           sed 's/\r$//' packaging/linux/vpnrouter-update-helper > "$PKG/usr/libexec/vpnrouter-update-helper"
           sed 's/\r$//' packaging/linux/com.vpnrouter.update.policy > "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
           chmod 755 "$PKG/usr/libexec/vpnrouter-update-helper"
           chmod 644 "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
 
-          # v2.28.0: passwordless VPN start via POSIX capabilities.
-          # postinst runs `setcap cap_net_admin,cap_net_bind_service=+eip`
-          # on the bundled sing-box so the app can spawn it as a normal
-          # user, no pkexec / password prompts. postrm cleans up running
-          # processes on uninstall. Both must be mode 0755 inside the
-          # .deb or dpkg refuses to execute them.
           sed 's/\r$//' packaging/linux/postinst > "$PKG/DEBIAN/postinst"
           sed 's/\r$//' packaging/linux/postrm   > "$PKG/DEBIAN/postrm"
           chmod 755 "$PKG/DEBIAN/postinst" "$PKG/DEBIAN/postrm"
 
-          # .desktop + icon
           cp packaging/linux/vpnrouter.desktop "$PKG/usr/share/applications/vpnrouter.desktop"
           sed -i 's|^Exec=.*|Exec=/usr/bin/vpnrouter|' "$PKG/usr/share/applications/vpnrouter.desktop"
           cp VPNRouter.App/Assets/penguin_mascot_tile.png "$PKG/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
 
-          # control metadata
           SIZE_KB=$(du -sk "$PKG" | cut -f1)
           cat > "$PKG/DEBIAN/control" <<CTRL
           Package: vpnrouter
@@ -287,12 +212,10 @@ jobs:
            deep-verify, and multiple subscriptions.
           CTRL
 
-          # Build .deb
           dpkg-deb --build --root-owner-group "$PKG"
           mv "${PKG}.deb" "VPNRouter-v${VER}-linux-amd64.deb"
           ls -lh "VPNRouter-v${VER}-linux-amd64.deb"
 
-      # ── tar.gz (unchanged, for advanced users / non-Debian distros) ──
       - name: Build tar.gz
         run: |
           set -euo pipefail
@@ -309,7 +232,6 @@ jobs:
           ( cd stage && tar -czf "../VPNRouter-v${VER}-linux.tar.gz" VPNRouter )
           ls -lh "VPNRouter-v${VER}-linux.tar.gz"
 
-      # ── sha256 sidecars ────────────────────────────────────────────────
       - name: Compute SHA256 checksums
         run: |
           set -euo pipefail
@@ -346,7 +268,6 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           VER="${{ steps.version.outputs.version }}"
 
-          # Re-resolve the remote tag after the build; never upload stale provenance.
           git fetch --no-tags origin "refs/tags/$TAG"
           if [ "$(git rev-parse 'FETCH_HEAD^{commit}')" != "$GITHUB_SHA" ]; then
             echo "::error::Remote tag changed since this workflow started."

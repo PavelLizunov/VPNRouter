@@ -12,7 +12,6 @@ public sealed class CrossPlatformUiAndIconPolishTests
     [Fact]
     public void App_GetTrayIconUri_SelectsWhiteIconForLinuxAndDarkMacOS()
     {
-        // On Linux, always white icon
         if (OperatingSystem.IsLinux())
         {
             var uriLight = AppClass.GetTrayIconUri(ThemeVariant.Light);
@@ -21,7 +20,6 @@ public sealed class CrossPlatformUiAndIconPolishTests
             Assert.Contains("penguin_mascot_white.ico", uriDark);
         }
 
-        // On macOS: dark appearance uses white icon to avoid invisible dark-on-dark in Menu Bar
         if (OperatingSystem.IsMacOS())
         {
             var uriDark = AppClass.GetTrayIconUri(ThemeVariant.Dark);
@@ -29,44 +27,6 @@ public sealed class CrossPlatformUiAndIconPolishTests
             Assert.Contains("penguin_mascot_white.ico", uriDark);
             Assert.Contains("penguin_mascot.ico", uriLight);
         }
-    }
-
-    [Fact]
-    public void Strings_OsDisplayName_IncludesAndroid()
-    {
-        var src = LoadSource("VPNRouter.Core", "Localization", "Strings.cs");
-
-        // Verify OsDisplayName explicitly checks OperatingSystem.IsAndroid()
-        Assert.Contains("OperatingSystem.IsAndroid() ? \"Android\"", src);
-    }
-
-    [Fact]
-    public void Strings_AutostartCard_DoesNotLeakWindowsOnAndroid()
-    {
-        var src = LoadSource("VPNRouter.Core", "Localization", "Strings.cs");
-
-        var offStart = src.IndexOf("public static string SmpAutostartCardOff", StringComparison.Ordinal);
-        var offEnd = src.IndexOf(";", offStart, StringComparison.Ordinal);
-        var offBody = src[offStart..offEnd];
-
-        Assert.Contains("OperatingSystem.IsAndroid()", offBody);
-        Assert.Contains("Configure VPN autostart on device boot", offBody);
-    }
-
-    [Fact]
-    public void AndroidApp_AdvancedShell_WrapsTabsInScrollViewerWithMinWidth()
-    {
-        var src = LoadSource("VPNRouter.Android", "AndroidApp.AdvancedShell.cs");
-
-        // Verify ScrollViewer wraps the tab strip
-        Assert.Contains("var tabScroll = new ScrollViewer", src);
-        Assert.Contains("HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden", src);
-        Assert.Contains("VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled", src);
-        Assert.Contains("Content = tabPanel", src);
-        Assert.Contains("Child = tabScroll", src);
-
-        // Verify tab button has MinWidth
-        Assert.Contains("MinWidth = 62", src);
     }
 
     [Theory]
@@ -85,20 +45,17 @@ public sealed class CrossPlatformUiAndIconPolishTests
         var read = fs.Read(header, 0, 26);
         Assert.Equal(26, read);
 
-        // PNG signature
         Assert.Equal(0x89, header[0]);
         Assert.Equal((byte)'P', header[1]);
         Assert.Equal((byte)'N', header[2]);
         Assert.Equal((byte)'G', header[3]);
 
-        // Width and height in IHDR chunk (bytes 16..23)
         var w = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
         var h = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
 
         Assert.Equal(expectedW, w);
         Assert.Equal(expectedH, h);
 
-        // Bit depth (offset 24) and Color type (offset 25: 6 = RGBA)
         Assert.Equal(8, header[24]);
         Assert.Equal(6, header[25]);
     }

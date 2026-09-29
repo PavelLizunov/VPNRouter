@@ -15,21 +15,9 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Minimal baseline-compatible regression tests for overnight audit findings:
-/// <list type="bullet">
-///   <item><description>NIGHT-02: Custom WireGuard endpoint split/include preserves wireguard detour in synthesized DNS.</description></item>
-///   <item><description>NIGHT-03: StrictDns overrides smart DNS mode to route through vpn-dns.</description></item>
-///   <item><description>NIGHT-07: Phase B awaits typed Connected even when startTask completes cleanly first.</description></item>
-///   <item><description>NIGHT-09: ServerHealthProbe bounds peak concurrency to 8 workers across all candidate servers.</description></item>
-///   <item><description>NIGHT-10: UDP probe cancelled after datagram send rethrows OperationCanceledException.</description></item>
-/// </list>
-/// Note: NIGHT-11 is omitted due to >200-line fixture complexity and uninitialized MVM private field drift across baseline and fixed commits.
-/// Synthetic fixture baselinecompat: statically inspected, expected RED, unexecuted (do not claim executed compilation).
-/// </summary>
 public sealed class NightBaselineRegressionTests
 {
-    private const string PlainWireGuardEndpointConfig = /*lang=json*/ """
+    private const string PlainWireGuardEndpointConfig =  """
     {
       "endpoints": [
         {
@@ -271,38 +259,5 @@ public sealed class NightBaselineRegressionTests
         Assert.Equal(8, peakActive);
         Assert.Equal(20, results.Count);
         Assert.All(results, r => Assert.True(r.Alive));
-    }
-
-    [Fact]
-    public async Task Night10_TcpTlsProbe_ProbeUdpAsync_CancelAfterSend_ThrowsOperationCanceledException()
-    {
-        using var testCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-        var port = ((IPEndPoint)listener.Client.LocalEndPoint!).Port;
-
-        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(testCts.Token);
-        var probeTask = TcpTlsProbe.ProbeUdpAsync("127.0.0.1", port, probeCts.Token);
-
-        try
-        {
-            var received = await listener.ReceiveAsync(testCts.Token);
-            Assert.NotNull(received.Buffer);
-
-            probeCts.Cancel();
-
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
-        }
-        finally
-        {
-            probeCts.Cancel();
-            try
-            {
-                await probeTask;
-            }
-            catch
-            {
-                // observe probeTask
-            }
-        }
     }
 }

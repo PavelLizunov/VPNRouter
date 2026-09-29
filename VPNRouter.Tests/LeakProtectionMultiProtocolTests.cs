@@ -2,21 +2,11 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// LeakProtection — v2.30.1-r4 per-protocol outbound validation
-//
-// Pre-r4 the validator unconditionally called ValidateVlessOutbound on every
-// urltest child, rejecting valid Hysteria2 / TUIC / SS entries with bogus
-// "uuid is empty" errors. The fix dispatches by outbound type.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class LeakProtectionMultiProtocolTests
 {
     private static VPNRouter.Core.Models.SingBoxConfig BaseConfig()
     {
-        // Minimal config with sniff/hijack-dns/private route prefix and
-        // a TUN inbound — covers the "well-formed config skeleton" the
-        // validator's other checks expect.
         return new VPNRouter.Core.Models.SingBoxConfig
         {
             Log = new VPNRouter.Core.Models.SingBoxLog { Level = "info" },
@@ -106,8 +96,6 @@ public class LeakProtectionMultiProtocolTests
             Tag = "proxy",
             Server = "1.2.3.4",
             ServerPort = 8388,
-            // v2.40.0-r9 (#8): a standard AEAD cipher (SS2022 key-length validation is
-            // covered by its own property test). The placeholder password is fine here.
             Method = "aes-256-gcm",
             Password = "secret"
         });
@@ -119,9 +107,6 @@ public class LeakProtectionMultiProtocolTests
     [Fact]
     public void Urltest_WithMixedProtocols_AllChildrenValidatedByOwnRules()
     {
-        // Repro of the user-reported bug: urltest with VLESS + Hysteria2
-        // children. Pre-r4 the validator ran VLESS rules on the Hy2 child
-        // and complained about the missing uuid.
         var cfg = BaseConfig();
         cfg.Outbounds.Add(new VPNRouter.Core.Models.SingBoxOutbound
         {
@@ -134,7 +119,7 @@ public class LeakProtectionMultiProtocolTests
         cfg.Outbounds.Add(new VPNRouter.Core.Models.SingBoxOutbound
         {
             Type = "hysteria2",
-            Tag = "vless-hy2-test",  // tag prefix is misleading by design (cosmetic)
+            Tag = "vless-hy2-test",
             Server = "2.2.2.2",
             ServerPort = 9443,
             Password = "hy2pw",
@@ -163,7 +148,6 @@ public class LeakProtectionMultiProtocolTests
             Tag = "proxy",
             Server = "1.2.3.4",
             ServerPort = 443,
-            // Password intentionally missing.
         });
 
         var result = VPNRouter.Core.Services.LeakProtection.ValidateConfig(cfg);

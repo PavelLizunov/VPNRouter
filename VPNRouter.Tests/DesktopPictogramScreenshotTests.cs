@@ -7,7 +7,6 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>Real pages with synthetic state; never captures the installed desktop.</summary>
 [Collection(SafeModeStateCollection.Name)]
 public class DesktopPictogramScreenshotTests
 {
@@ -23,7 +22,6 @@ public class DesktopPictogramScreenshotTests
         try
         {
             using var vm = new MainWindowViewModel(new InMemorySettingsStore());
-            // The real VM applies its saved theme during construction.
             app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
             Assert.IsType<VPNRouter.App.App>(app);
             Assert.NotEmpty(app.Styles);

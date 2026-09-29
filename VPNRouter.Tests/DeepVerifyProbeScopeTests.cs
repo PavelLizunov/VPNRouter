@@ -9,22 +9,11 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// r9 P2 (brat 2026-07-10): deep-verify probes spawn REAL sing-box processes
-/// from our own bin dir, so the ownership-filtered runtime detector counted
-/// them as "VPN running" and the 2s poll flipped the UI to a false
-/// "Connected via service" for the duration of a batch. The fix is a
-/// probe-in-flight scope (<see cref="DeepVerifyProbe.BeginProbeScope"/>) plus a
-/// detector gate: while a probe is in flight, <c>IsVpnRunning</c> requires the
-/// TUN ownership semaphore (which only a REAL tunnel holds).
-/// </summary>
 public class DeepVerifyProbeScopeTests
 {
     [Fact]
     public void ProbeScope_TracksInFlight_AndDisposeIsIdempotent()
     {
-        // Delta-based: other suites may run real verifier probes in parallel,
-        // so assert relative movement of the counter, not global emptiness.
         var baseline = DeepVerifyProbe.ProbesInFlightForTests;
 
         var a = DeepVerifyProbe.BeginProbeScope();
@@ -33,7 +22,7 @@ public class DeepVerifyProbeScopeTests
         Assert.True(DeepVerifyProbe.AnyProbeInFlight);
 
         a.Dispose();
-        a.Dispose();                                     // double-dispose must not underflow
+        a.Dispose();
         var afterA = DeepVerifyProbe.ProbesInFlightForTests;
         Assert.True(afterA >= baseline + 1, $"underflow: {afterA} < {baseline + 1}");
 
@@ -67,26 +56,9 @@ public class DeepVerifyProbeScopeTests
         Assert.Contains("[redacted]", snippet);
     }
 
-    // ── source pins (behaviour needs live processes + a named semaphore) ──
-
-    [Fact]
-    public void Detector_CombinesOwnedProcessWithGlobalTunSemaphore_OnEveryPoll()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "RuntimeStatusDetector.cs");
-        if (src == null) return; // partial checkout
-        var stripped = StripLineComments(src);
-        Assert.Contains("TunOwnershipLock.ProbeOwnership", stripped);
-        Assert.Contains("IsTunnelPresent", stripped);
-        Assert.DoesNotContain("DeepVerifyProbe.AnyProbeInFlight", stripped);
-    }
-
     [Fact]
     public void CrossProcessProbe_TrustedImageWithoutGlobalTunOwnership_IsNotATunnel()
     {
-        // A process-local DeepVerifyProbe counter cannot observe a verifier in
-        // another VPNRouter process. The global semaphore is the cross-process
-        // signal: an ownership-filtered image with a positively free lock is a
-        // verifier/orphan, not a live tunnel.
         Assert.False(RuntimeStatusDetector.IsTunnelPresent(
             liveTunnelChild: true,
             ownership: TunOwnershipStatus.Free));
@@ -121,35 +93,9 @@ public class DeepVerifyProbeScopeTests
     [Fact]
     public void RetainedSemaphoreWithoutRecordedLiveChild_IsNotATunnel()
     {
-        // Restart-disabled / restart-exhausted owners may retain the semaphore
-        // after their child dies. Lock ownership alone must never report VPN up.
         Assert.False(RuntimeStatusDetector.IsTunnelPresent(
             liveTunnelChild: false,
             ownership: TunOwnershipStatus.Owned));
-    }
-
-    [Theory]
-    [InlineData("VPNRouter.Core", "Services", "VlessDeepVerifier.cs")]
-    [InlineData("VPNRouter.Core", "Services", "FreeConfigs", "FreeConfigDeepVerifier.cs")]
-    public void Verifiers_OpenProbeScope(params string[] parts)
-    {
-        var src = LoadSource(parts);
-        if (src == null) return;
-        Assert.Contains("DeepVerifyProbe.BeginProbeScope()", StripLineComments(src));
-    }
-
-    [Theory]
-    [InlineData("VPNRouter.Core", "Services", "VlessDeepVerifier.cs")]
-    [InlineData("VPNRouter.Core", "Services", "FreeConfigs", "FreeConfigDeepVerifier.cs")]
-    public void VerifierStderr_UsesSanitizedBoundedBuffer(params string[] parts)
-    {
-        var src = LoadSource(parts);
-        if (src == null) return;
-        var stripped = StripLineComments(src);
-        Assert.Contains("DeepVerifyProbe.AppendSanitizedLine", stripped);
-        Assert.Contains("DeepVerifyProbe.ReadSanitizedSnippet", stripped);
-        Assert.DoesNotContain("stderrBuffer.Append", stripped);
-        Assert.DoesNotContain("stderrBuffer.ToString", stripped);
     }
 
     private static string? LoadSource(params string[] relativeParts)

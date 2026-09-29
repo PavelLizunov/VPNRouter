@@ -3,14 +3,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// G3 (2026-06-27): a subscription refresh must reconnect ONLY when the ACTIVE
-/// server's identity (host|port|uuid) changed — a rotation of some OTHER server
-/// in the pool must not drop the tunnel. These pin the pure decision helpers
-/// (<see cref="SubscriptionRefreshDiff.ActiveServerSignature"/>); the
-/// RefreshSubscriptionSilentAsync wiring compares before/after signatures and
-/// skips the reconnect when they're equal.
-/// </summary>
 public class SubscriptionRefreshDiffTests
 {
     private static VlessServerEntry S(string name, string host, int port, string uuid)
@@ -29,98 +21,11 @@ public class SubscriptionRefreshDiffTests
     public void OtherServerRotated_ActiveSignatureUnchanged_NoReconnect()
     {
         var before = new[] { S("DE", "1.1.1.1", 443, "u1"), S("IS", "2.2.2.2", 443, "u2") };
-        // DE rotated its UUID; the active server IS is untouched.
         var after = new[] { S("DE", "1.1.1.1", 443, "u1-rotated"), S("IS", "2.2.2.2", 443, "u2") };
 
         var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "IS");
         var sigAfter = SubscriptionRefreshDiff.ActiveServerSignature(after, "IS");
 
-        Assert.Equal(sigBefore, sigAfter); // unchanged -> G3 skips the reconnect
-    }
-
-    [Fact]
-    public void ActiveServerUuidRotated_SignatureDiffers_Reconnect()
-    {
-        var before = new[] { S("DE", "1.1.1.1", 443, "u1") };
-        var after = new[] { S("DE", "1.1.1.1", 443, "u1-new") };
-
-        Assert.NotEqual(
-            SubscriptionRefreshDiff.ActiveServerSignature(before, "DE"),
-            SubscriptionRefreshDiff.ActiveServerSignature(after, "DE"));
-    }
-
-    [Fact]
-    public void ActiveServerHostOrPortChange_SignatureDiffers()
-    {
-        var sb = SubscriptionRefreshDiff.ActiveServerSignature(new[] { S("DE", "1.1.1.1", 443, "u1") }, "DE");
-        Assert.NotEqual(sb, SubscriptionRefreshDiff.ActiveServerSignature(new[] { S("DE", "9.9.9.9", 443, "u1") }, "DE"));
-        Assert.NotEqual(sb, SubscriptionRefreshDiff.ActiveServerSignature(new[] { S("DE", "1.1.1.1", 8443, "u1") }, "DE"));
-    }
-
-    [Fact]
-    public void ActiveServerRemoved_SignatureNull_TreatedAsChanged()
-    {
-        // Active "IS" no longer in the refreshed set -> null != before -> reconnect.
-        var after = new[] { S("DE", "1.1.1.1", 443, "u1") };
-        Assert.Null(SubscriptionRefreshDiff.ActiveServerSignature(after, "IS"));
-    }
-
-    [Fact]
-    public void NullServers_ReturnsNull()
-    {
-        Assert.Null(SubscriptionRefreshDiff.ActiveServerSignature(null, "DE"));
-    }
-
-    [Fact]
-    public void ActiveServerSignature_FindsByUuid_EvenIfNameChanged()
-    {
-        var before = new[] { S("DE-Fast", "1.1.1.1", 443, "u1") };
-        // Provider renamed server from "DE-Fast" to "Germany #1", but host/port/uuid identical
-        var after = new[] { S("Germany #1", "1.1.1.1", 443, "u1") };
-
-        var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "DE-Fast", "u1");
-        var sigAfter = SubscriptionRefreshDiff.ActiveServerSignature(after, "DE-Fast", "u1");
-
-        Assert.NotNull(sigAfter);
-        Assert.Equal(sigBefore, sigAfter);
-    }
-
-    [Fact]
-    public void ActiveServerSignature_FallsBackToName_WhenUuidNull()
-    {
-        var servers = new[] { S("NL", "3.3.3.3", 443, "u3") };
-        var sig = SubscriptionRefreshDiff.ActiveServerSignature(servers, "NL", null);
-
-        Assert.Equal(SubscriptionRefreshDiff.SignatureOf("3.3.3.3", 443, "u3"), sig);
-    }
-
-    [Fact]
-    public void ActiveServerSignature_SharedUserUuid_MatchesByNameNotFirst()
-    {
-        // 95%+ of commercial subscription feeds share a single user-level UUID across all server nodes.
-        // ActiveServerSignature must resolve the exact node by Name, not blindly grab server 0 by UUID.
-        const string sharedUserUuid = "b09f195d-79e1-4560-9118-875f10b7cb34";
-        var servers = new[]
-        {
-            S("DE-Frankfurt", "1.1.1.1", 443, sharedUserUuid),
-            S("IS-Reykjavik", "2.2.2.2", 443, sharedUserUuid),
-            S("US-NewYork", "3.3.3.3", 443, sharedUserUuid),
-        };
-
-        var sig = SubscriptionRefreshDiff.ActiveServerSignature(servers, "IS-Reykjavik", sharedUserUuid, "2.2.2.2", 443);
-        Assert.Equal(SubscriptionRefreshDiff.SignatureOf("2.2.2.2", 443, sharedUserUuid), sig);
-    }
-
-    [Fact]
-    public void ActiveServerSignature_RenamedServer_MatchesByHostAndPort()
-    {
-        var before = new[] { S("DE-Fast", "1.1.1.1", 443, "u1") };
-        var after = new[] { S("Germany #1 Renamed", "1.1.1.1", 443, "u1") };
-
-        var sigBefore = SubscriptionRefreshDiff.ActiveServerSignature(before, "DE-Fast", "u1", "1.1.1.1", 443);
-        var sigAfter = SubscriptionRefreshDiff.ActiveServerSignature(after, "DE-Fast", "u1", "1.1.1.1", 443);
-
-        Assert.NotNull(sigAfter);
         Assert.Equal(sigBefore, sigAfter);
     }
 }

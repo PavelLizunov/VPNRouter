@@ -1,25 +1,4 @@
 #nullable enable
-// ============================================================================
-// VlessDeepVerifierTests.cs — Phase 2G sub-wave 7c-1 (v3.0 refactor, 2026-05-18)
-// ============================================================================
-//
-// Pinned behaviour for `VlessDeepVerifier` — the deep server probe gating
-// admission to the Servers / Subscriptions pools. HIGH priority per
-// test-coverage-audit-2026-05-17.md §2 (false positive → bad server marked
-// good → user's traffic silently fails).
-//
-// This file covers Layer 1 (sing-box JSON config builder) + Layer 4 (helper
-// utilities). The placeholder-credential gate, binary-missing fallback, and
-// cancellation behaviour live in <see cref="VlessDeepVerifierBehaviourTests"/>.
-// Split to stay under the per-file 300-LOC gate from
-// plans/phase2-2G-untested-services-2026-05-17.md.
-//
-// Integration probe (real Process.Start + SOCKS5 round-trip) is OUT of
-// scope — Wave 6's IProcessRunner/IHttpClient/ISingBoxApi seams are the
-// path to a full-stack rewrite of VerifyAsync that's testable end-to-end.
-// We restrict scope to the parts that can be exercised without spawning
-// a real sing-box (per brief §"Scope boundaries": minimal seam wiring only).
-// ============================================================================
 
 using System.Net;
 using System.Text.Json;
@@ -49,35 +28,25 @@ public sealed class VlessDeepVerifierTests
         },
     };
 
-    // ─── P2 (2026-07-10): SOCKS-bind wait scales with concurrency ─────────
-
     [Theory]
-    [InlineData(1, 1500)]   // no contention → flat warmup
-    [InlineData(5, 2700)]   // default: 1500 + 4*300
-    [InlineData(8, 3600)]   // heavier pool → more slack
+    [InlineData(1, 1500)]
+    [InlineData(5, 2700)]
+    [InlineData(8, 3600)]
     public void EffectiveSocksBindWait_ScalesWithConcurrency(int concurrency, int expectedMs)
     {
         var v = new VlessDeepVerifier(Serilog.Log.Logger) { MaxConcurrency = concurrency };
         Assert.Equal(expectedMs, (int)v.EffectiveSocksBindWait.TotalMilliseconds);
     }
 
-    // ─── Layer 1: sing-box config builder (BuildSingleOutboundConfig) ─────
-
     [Fact]
     public void BuildSingleOutboundConfig_HappyPathVless_ProducesValidShape()
     {
-        // The verifier-spawned sing-box must have a SOCKS inbound, a single
-        // proxy outbound, a direct dns-direct-out outbound, and the Clash
-        // API enabled — those are the four invariants the production
-        // probe path depends on. If the config builder drifts, every
-        // VerifyAsync verdict turns to noise.
         var entry = CleanVlessEntry();
         var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, socksPort: 10808, clashPort: 9090);
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        // SOCKS inbound on loopback at the chosen port (used by the HTTP probe).
         var inbounds = root.GetProperty("inbounds");
         Assert.Equal(1, inbounds.GetArrayLength());
         var socksIn = inbounds[0];
@@ -85,8 +54,6 @@ public sealed class VlessDeepVerifierTests
         Assert.Equal("127.0.0.1", socksIn.GetProperty("listen").GetString());
         Assert.Equal(10808, socksIn.GetProperty("listen_port").GetInt32());
 
-        // Two outbounds: the protocol-tagged proxy + the dns-direct-out
-        // helper (required to break the DNS hijack-dns loop on 1.13+).
         var outbounds = root.GetProperty("outbounds");
         Assert.Equal(2, outbounds.GetArrayLength());
         Assert.Equal("vless", outbounds[0].GetProperty("type").GetString());
@@ -94,14 +61,8 @@ public sealed class VlessDeepVerifierTests
         Assert.Equal("direct", outbounds[1].GetProperty("type").GetString());
         Assert.Equal("dns-direct-out", outbounds[1].GetProperty("tag").GetString());
 
-        // route.final routes everything through the proxy — split-tunnel
-        // semantics don't apply here (we want ALL traffic through the
-        // candidate so the verdict reflects the proxy's reachability).
         Assert.Equal("proxy", root.GetProperty("route").GetProperty("final").GetString());
 
-        // Clash API on the chosen port (used by HealthMonitor / hot-reload
-        // in production; not used here but the schema is shared so we keep
-        // the surface honest).
         var clash = root.GetProperty("experimental").GetProperty("clash_api");
         Assert.Equal($"127.0.0.1:9090", clash.GetProperty("external_controller").GetString());
     }
@@ -109,10 +70,6 @@ public sealed class VlessDeepVerifierTests
     [Fact]
     public void BuildSingleOutboundConfig_VlessRealityCredentials_FlowDownToProxyOutbound()
     {
-        // VLESS-specific fields must end up on the proxy outbound — uuid,
-        // flow, reality.public_key, reality.short_id, server, server_port.
-        // Skip this and a verifier "passes" with wrong creds because the
-        // sing-box config silently dropped them.
         var entry = CleanVlessEntry();
         var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
 
@@ -138,10 +95,6 @@ public sealed class VlessDeepVerifierTests
     [Fact]
     public void BuildSingleOutboundConfig_Hysteria2Protocol_DispatchesToHysteria2Builder()
     {
-        // v2.31.6-r16 fix (iter#7 Phase 2): pre-r16 hard-coded "vless"
-        // here, so Hy2/TUIC/SS deep-verify ALWAYS failed because sing-box
-        // rejected the config. Pin that the dispatcher now hits the
-        // right builder.
         var entry = new VlessServerEntry
         {
             Name = "hy2-test",
@@ -164,7 +117,6 @@ public sealed class VlessDeepVerifierTests
         Assert.Equal("hysteria2", proxy.GetProperty("type").GetString());
         Assert.Equal("auth-password", proxy.GetProperty("password").GetString());
 
-        // ALPN forced to h3 — required by Hy2 spec.
         var alpn = proxy.GetProperty("tls").GetProperty("alpn");
         Assert.Equal(1, alpn.GetArrayLength());
         Assert.Equal("h3", alpn[0].GetString());
@@ -222,10 +174,6 @@ public sealed class VlessDeepVerifierTests
     [Fact]
     public void BuildVlessOutbound_TransportWs_AppliesWebsocketShape()
     {
-        // Branch coverage: VLESS+Reality+WS — the v2.31.6-r16 protocol
-        // dispatcher kept this branch from BuildVlessOutbound. Pre-r16
-        // this was hard-coded as `type=vless` with no transport block,
-        // so WS-only servers failed deep-verify with a connect timeout.
         var entry = CleanVlessEntry();
         entry.Transport = new VlessTransportConfig { Type = "ws", Path = "/vlessws" };
 
@@ -238,37 +186,26 @@ public sealed class VlessDeepVerifierTests
         Assert.Equal("/vlessws", transport["path"]!.GetValue<string>());
     }
 
-    // ─── Layer 4: helper utilities ───────────────────────────────────────
-
     [Fact]
     public void FindFreePort_ReturnsHighEphemeralPort()
     {
-        // Smoke test: returns a positive port that's currently free on
-        // loopback. The probe path uses two FindFreePort calls (SOCKS +
-        // Clash) — they MUST differ in production, but that's a separate
-        // race-condition concern; here we pin that the call succeeds.
         var port = NetPortUtil.FindFreePort();
         Assert.InRange(port, 1, 65535);
     }
 
     [Theory]
-    [InlineData("127.0.0.1", true)]    // Loopback
-    [InlineData("10.0.0.5", true)]     // 10.0.0.0/8
-    [InlineData("172.16.5.42", true)]  // 172.16.0.0/12 (low end)
-    [InlineData("172.31.0.1", true)]   // 172.16.0.0/12 (high end)
-    [InlineData("192.168.1.1", true)]  // 192.168.0.0/16
-    [InlineData("100.64.0.1", true)]   // 100.64.0.0/10 (CGN range)
-    [InlineData("1.1.1.1", false)]     // Cloudflare public DNS
-    [InlineData("8.8.8.8", false)]     // Google public DNS
-    [InlineData("172.15.0.1", false)]  // Just below RFC1918
-    [InlineData("172.32.0.1", false)]  // Just above RFC1918
+    [InlineData("127.0.0.1", true)]
+    [InlineData("10.0.0.5", true)]
+    [InlineData("172.16.5.42", true)]
+    [InlineData("172.31.0.1", true)]
+    [InlineData("192.168.1.1", true)]
+    [InlineData("100.64.0.1", true)]
+    [InlineData("1.1.1.1", false)]
+    [InlineData("8.8.8.8", false)]
+    [InlineData("172.15.0.1", false)]
+    [InlineData("172.32.0.1", false)]
     public void IsPrivateOrLoopback_ClassifiesIpsCorrectly(string ipString, bool expected)
     {
-        // The verifier rejects "verified" if the Cloudflare trace endpoint
-        // returns an ip= line that's private/loopback — that's the
-        // signature of a transparent proxy or a sandboxed VM picking up
-        // ITS OWN egress instead of the proxy's. A bug in this classifier
-        // → wrong-IP verdicts slip through.
         var ip = IPAddress.Parse(ipString);
         Assert.Equal(expected, DeepVerifyProbe.IsPrivateOrLoopback(ip));
     }
@@ -276,13 +213,10 @@ public sealed class VlessDeepVerifierTests
     [Fact]
     public void TrimSnippet_LongInput_TruncatesWithEllipsis()
     {
-        // Used for stderr-snippet trimming when sing-box stderr is too
-        // verbose to surface inline. Long input → truncated + ellipsis;
-        // newlines → collapsed to spaces (so log line stays single-line).
         var verbose = string.Join('\n', new[] { "line one of stderr", "line two with more", "line three more text" });
         var snip = DeepVerifyProbe.TrimSnippet(verbose, 20);
 
-        Assert.True(snip.Length <= 21); // 20 + ellipsis (1-char "…")
+        Assert.True(snip.Length <= 21);
         Assert.DoesNotContain('\n', snip);
         Assert.DoesNotContain('\r', snip);
         Assert.EndsWith("…", snip);
@@ -291,8 +225,6 @@ public sealed class VlessDeepVerifierTests
     [Fact]
     public void TrimSnippet_ShortInput_NoEllipsis()
     {
-        // Input shorter than the budget passes through clean (after
-        // newline collapsing).
         var snip = DeepVerifyProbe.TrimSnippet("short", 80);
         Assert.Equal("short", snip);
         Assert.DoesNotContain("…", snip);

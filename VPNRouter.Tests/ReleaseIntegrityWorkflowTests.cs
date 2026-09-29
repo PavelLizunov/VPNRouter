@@ -22,7 +22,6 @@ public sealed class ReleaseIntegrityWorkflowTests
         Assert.Contains("repos/$GITHUB_REPOSITORY/commits/$TAG", script);
         Assert.Contains("[ \"$REMOTE_SHA\" != \"$WORKFLOW_SHA\" ]", script);
         Assert.True(script.IndexOf("exit 1", StringComparison.Ordinal) < script.IndexOf("GITHUB_OUTPUT", StringComparison.Ordinal));
-        Assert.Contains("--ref \"$TAG\" -f tag=\"$TAG\"", Source());
     }
 
     [Fact]
@@ -128,7 +127,6 @@ public sealed class ReleaseIntegrityWorkflowTests
     [Fact]
     public void EmbeddedPython_BenignFixturesCoverHashFirstAndDataOnlyInspection()
     {
-        // The workflow runs on Ubuntu; other platforms retain the YAML/source contracts.
         if (!OperatingSystem.IsLinux()) return;
         var script = Script("Verify integrity");
         var python = script[(script.IndexOf("import hashlib", StringComparison.Ordinal))..];

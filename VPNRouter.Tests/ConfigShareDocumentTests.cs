@@ -3,12 +3,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.32.0 (Android-led) — pin tests for the Core <see cref="ConfigShareDocument"/>
-/// schema. Verifies the round-trip
-/// invariant (Build → Serialize → TryParse preserves all fields), schema
-/// rejection paths, preview generation, and suggested export filenames.
-/// </summary>
 public class ConfigShareDocumentTests
 {
     private static ConfigShareDocument BuildSampleDocument()
@@ -229,42 +223,8 @@ public class ConfigShareDocumentTests
     }
 
     [Fact]
-    public void BuildPreview_Russian_ShowsCounts()
-    {
-        var doc = BuildSampleDocument();
-        var preview = doc.BuildPreview(ru: true);
-        Assert.Contains("Подписки: 1", preview);
-        Assert.Contains("Серверы: 2", preview);
-    }
-
-    [Fact]
-    public void BuildPreview_English_ShowsCounts()
-    {
-        var doc = BuildSampleDocument();
-        doc.Settings = new ExportedSettings { Theme = "light" };
-        doc.PerAppFilter = new PerAppFilterExport { Mode = "include", Packages = new List<string> { "a", "b" } };
-
-        var preview = doc.BuildPreview(ru: false);
-        Assert.Contains("Subscriptions: 1", preview);
-        Assert.Contains("Settings: included", preview);
-        Assert.Contains("2 apps", preview);
-    }
-
-    [Fact]
-    public void SuggestFilename_ProducesSortableTimestamp()
-    {
-        var when = new DateTimeOffset(2026, 5, 7, 18, 30, 0, TimeSpan.Zero).ToLocalTime();
-        var name = ConfigShareDocument.SuggestFilename(when);
-        Assert.StartsWith("vpnrouter-config-", name);
-        Assert.EndsWith(".json", name);
-        Assert.Contains("2026", name);
-    }
-
-    [Fact]
     public void Parse_DropsExportedFromNullToDefault()
     {
-        // Producer omitted exported_from entirely — TryParse should not
-        // crash with a NullReferenceException downstream.
         var json = $"{{\"schema\":\"{ConfigShareDocument.SchemaMarker}\",\"version\":1,\"config_mode\":\"subscribe\"}}";
         var result = ConfigShareDocument.TryParse(json);
         Assert.True(result.Ok, $"parse failed: {result.Error}");

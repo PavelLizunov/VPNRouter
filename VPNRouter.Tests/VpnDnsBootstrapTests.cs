@@ -54,11 +54,6 @@ public sealed class VpnDnsBootstrapTests : IDisposable
     [Fact]
     public void AwgFullTunnel_BlockAds_UsesPlainUdpDnsInsideTunnel()
     {
-        // r8 (2026-07-01): over a UDP-native AmneziaWG tunnel the DoH TLS handshake
-        // blackholes on the fixed 1280 endpoint MTU (diag 20260701-122336: cold DoH
-        // exchanges 12-56s -> Dota region pings time out). vpn-dns therefore switches
-        // to PLAIN UDP inside the already-encrypted tunnel — no handshake, no
-        // DoH-hostname bootstrap. AdGuard's plain-DNS IP keeps ad-blocking.
         var config = ConfigGenerator.Generate(
             new Profile { Name = "awg", DnsMode = "vpn_only" },
             Array.Empty<string>(),
@@ -66,9 +61,9 @@ public sealed class VpnDnsBootstrapTests : IDisposable
 
         var vpnDns = Assert.Single(config.Dns.Servers, s => s.Tag == "vpn-dns");
         Assert.Equal("udp", vpnDns.Type);
-        Assert.Equal("94.140.14.14", vpnDns.Server);       // AdGuard plain-DNS (ad-block)
+        Assert.Equal("94.140.14.14", vpnDns.Server);
         Assert.Equal("proxy", vpnDns.Detour);
-        Assert.Null(vpnDns.DomainResolver);                // literal IP => no bootstrap
+        Assert.Null(vpnDns.DomainResolver);
         Assert.Null(vpnDns.Path);
         Assert.Equal("vpn-dns", config.Dns.Final);
         Assert.NotNull(config.Endpoints);
@@ -130,7 +125,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
             var stderrTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(10000))
             {
-                try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                try { proc.Kill(entireProcessTree: true); } catch { }
                 Assert.Fail($"sing-box check timed out for {label} after 10 seconds.");
             }
 
@@ -142,7 +137,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
         }
         finally
         {
-            try { File.Delete(tempPath); } catch { /* best-effort */ }
+            try { File.Delete(tempPath); } catch { }
         }
     }
 

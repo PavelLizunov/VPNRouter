@@ -8,14 +8,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P1.5 AutoFailover User-Intent Guard (audit handoff): a failover swap is
-/// committed/persisted ONLY when the replacement start is confirmed. When the
-/// restart delegate returns false — the shape <c>ExecuteProbeFailoverRestartAsync</c>
-/// takes after a user Disconnect cancels the session mid-failover — the engine must
-/// roll the in-memory selection back, persist NOTHING, and surface NO message, so
-/// the next Connect uses the server the user last intentionally chose.
-/// </summary>
 public sealed class AutoFailoverUserIntentGuardTests
 {
     private static AppSettings SubscribeWith(params string[] names)
@@ -40,8 +32,6 @@ public sealed class AutoFailoverUserIntentGuardTests
         return s;
     }
 
-    // Test 1 + 2 — restart returns false (user Disconnect / failed bring-up):
-    // no persist, in-memory reverted, no user-facing message.
     [Fact]
     public async Task RestartReturnsFalse_DoesNotPersist_RevertsSelection_StaysQuiet()
     {
@@ -49,20 +39,19 @@ public sealed class AutoFailoverUserIntentGuardTests
         var store = new InMemorySettingsStore();
         var engine = new AutoFailoverEngine(
             settings, new ConfigSanityCheck(),
-            restart: _ => Task.FromResult(false),   // ExecuteProbeFailoverRestartAsync after a user Disconnect
+            restart: _ => Task.FromResult(false),
             store: store);
 
         var o = await engine.HandleDeadConfigAsync("dead", CancellationToken.None);
 
         Assert.False(o.Switched);
         Assert.Null(o.NewActiveServer);
-        Assert.Null(o.UserFacingMessage);                              // no failover announcement post-disconnect
-        Assert.Equal("srv-1", settings.Vless.ActiveServer);            // in-memory reverted to the user's choice
+        Assert.Null(o.UserFacingMessage);
+        Assert.Equal("srv-1", settings.Vless.ActiveServer);
         Assert.Equal("srv-1", settings.App.ActiveSubscriptionServer);
-        Assert.Equal(0, store.SaveCount);                             // nothing persisted to disk
+        Assert.Equal(0, store.SaveCount);
     }
 
-    // Test 3 — restart succeeds: the new server is persisted and the switch is committed.
     [Fact]
     public async Task RestartSucceeds_PersistsNewServer_Switched()
     {
@@ -79,11 +68,9 @@ public sealed class AutoFailoverUserIntentGuardTests
         Assert.Equal("srv-2", o.NewActiveServer);
         Assert.Equal("srv-2", settings.Vless.ActiveServer);
         Assert.True(store.SaveCount >= 1);
-        Assert.Equal("srv-2", store.LastSave!.Value.Settings.Vless.ActiveServer);   // committed B on disk
+        Assert.Equal("srv-2", store.LastSave!.Value.Settings.Vless.ActiveServer);
     }
 
-    // Test 4 — null delegate (pre-start / caller-driven recovery) preserves the
-    // legacy switch+persist behaviour.
     [Fact]
     public async Task NullDelegate_PreservesSwitchAndPersist()
     {
@@ -98,7 +85,6 @@ public sealed class AutoFailoverUserIntentGuardTests
         Assert.True(store.SaveCount >= 1);
     }
 
-    // A thrown (non-cancellation) restart is also "not confirmed" — same guard.
     [Fact]
     public async Task RestartThrows_DoesNotPersist_Reverts()
     {
