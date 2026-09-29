@@ -15,6 +15,8 @@ to skip.
 - `docs/test-workers.md`: preflight step 3 lists what to measure (CPU load and running build
   processes, RAM and swap, disk, SDK) and says to record the numbers and stop when headroom is
   unclear; the mutation limits forbid local substitutes for a worker.
+- `docs/test-workers.md` scheduling: `windows-worker` is the main worker for Windows and, by owner
+  decision 2026-09-29, for Android builds via a private toolchain in `C:\android-build\`.
 
 ## Verification
 

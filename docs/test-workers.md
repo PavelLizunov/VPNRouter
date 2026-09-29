@@ -56,6 +56,6 @@ Before a build, deployment, package operation, or test scenario:
 
 ## Scheduling guidance
 
-- `windows-worker`: reserve for Windows-only UI, installer, updater, VPN, firewall, and dataplane verification.
+- `windows-worker`: main worker for Windows verification and, by owner decision on 2026-09-29, for Android builds. Android builds use the private toolchain in `C:\android-build\` (own .NET, JDK 17, Android SDK 36; the shared `C:\dotnet` is not touched), run unsigned on an exact SHA, one job at a time and never during a WINBRAT live scenario. Remove the per-run source checkout afterwards.
 - `linux-worker`: use only after confirming the required SDK/toolchain and sufficient disk/RAM; keep parallelism conservative on the 4 GiB node.
 - `mac-worker`: use only after a fresh disk check; its observed free space is constrained, so do not start heavy builds until dependencies and output headroom are proven.
