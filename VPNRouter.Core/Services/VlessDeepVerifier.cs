@@ -291,13 +291,13 @@ public sealed class VlessDeepVerifier
         }
     }
 
-    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int clashPort)
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort)
     {
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
-
-        JsonNode? awgEndpoint = null;
         JsonObject? outbound = null;
-        if (protocol is "amneziawg" or "awg")
+        JsonNode? awgEndpoint = null;
+
+        if (protocol is "amneziawg" or "awg" or "awg3" or "amneziawg3")
         {
             awgEndpoint = System.Text.Json.JsonSerializer.SerializeToNode(
                 ConfigGenerator.BuildAmneziaWgEndpoint(s, "proxy"));
@@ -306,15 +306,20 @@ public sealed class VlessDeepVerifier
         {
             outbound = protocol switch
             {
-                "hysteria2"   => BuildHysteria2Outbound(s),
-                "hy2"         => BuildHysteria2Outbound(s),
-                "tuic"        => BuildTuicOutbound(s),
-                "shadowsocks" => BuildShadowsocksOutbound(s),
-                "ss"          => BuildShadowsocksOutbound(s),
-                "naive"       => BuildNaiveOutbound(s),
-                _             => BuildVlessOutbound(s),
+                "hysteria2" or "hy2"  => BuildHysteria2Outbound(s),
+                "tuic"                => BuildTuicOutbound(s),
+                "shadowsocks" or "ss" => BuildShadowsocksOutbound(s),
+                "naive"               => BuildNaiveOutbound(s),
+                _                     => BuildVlessOutbound(s),
             };
         }
+
+        var outboundsArray = new JsonArray();
+        if (outbound != null)
+        {
+            outboundsArray.Add((JsonNode?)outbound);
+        }
+        outboundsArray.Add((JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true });
 
         var root = new JsonObject
         {
@@ -338,16 +343,7 @@ public sealed class VlessDeepVerifier
                     ["sniff"] = false,
                 },
             },
-            ["outbounds"] = outbound != null
-                ? new JsonArray
-                {
-                    (JsonNode?)outbound,
-                    (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
-                }
-                : new JsonArray
-                {
-                    (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
-                },
+            ["outbounds"] = outboundsArray,
             ["route"] = new JsonObject
             {
                 ["final"] = "proxy",
@@ -358,17 +354,23 @@ public sealed class VlessDeepVerifier
                     (JsonNode?)new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
                 },
             },
-            ["experimental"] = new JsonObject
-            {
-                ["clash_api"] = new JsonObject
-                {
-                    ["external_controller"] = $"127.0.0.1:{clashPort}",
-                },
-            },
         };
 
         if (awgEndpoint != null)
+        {
             root["endpoints"] = new JsonArray { awgEndpoint };
+        }
+
+        if (clashPort is int port)
+        {
+            root["experimental"] = new JsonObject
+            {
+                ["clash_api"] = new JsonObject
+                {
+                    ["external_controller"] = $"127.0.0.1:{port}",
+                },
+            };
+        }
 
         return root.ToJsonString();
     }

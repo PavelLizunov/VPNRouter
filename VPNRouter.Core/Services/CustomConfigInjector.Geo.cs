@@ -164,7 +164,7 @@ public static partial class CustomConfigInjector
                 rules.RemoveAt(i);
         }
 
-        int insertAt = FindGeoInsertIndex(rules, isActionBased);
+        int insertAt = FindRouteInsertIndex(rules, isActionBased);
 
         var geoRule = new JsonObject
         {
@@ -179,49 +179,5 @@ public static partial class CustomConfigInjector
             geoRule["action"] = "route";
 
         rules.Insert(insertAt, geoRule);
-    }
-
-    private static int FindGeoInsertIndex(JsonArray rules, bool isActionBased)
-    {
-        int index = 0;
-        for (int i = 0; i < rules.Count; i++)
-        {
-            var rule = rules[i] as JsonObject;
-            if (rule == null) continue;
-
-            if (isActionBased)
-            {
-                var action = StjNodeHelpers.AsString(rule["action"]);
-                if (action == "sniff" || action == "hijack-dns")
-                {
-                    index = i + 1;
-                    continue;
-                }
-            }
-            else
-            {
-                if (StjNodeHelpers.AsString(rule["protocol"]) == "dns")
-                {
-                    index = i + 1;
-                    continue;
-                }
-            }
-
-            if (StjNodeHelpers.AsBool(rule["ip_is_private"]) == true)
-            {
-                index = i + 1;
-                continue;
-            }
-
-            if (rule["clash_mode"] != null)
-            {
-                index = i + 1;
-                continue;
-            }
-
-            break;
-        }
-
-        return index;
     }
 }
