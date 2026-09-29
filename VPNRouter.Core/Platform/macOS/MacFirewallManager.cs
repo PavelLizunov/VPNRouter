@@ -399,6 +399,9 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         sb.AppendLine("pass out quick inet from any to 172.16.0.0/12");
         sb.AppendLine("pass out quick inet from any to 192.168.0.0/16");
         sb.AppendLine("pass out quick inet from any to 169.254.0.0/16");
+        sb.AppendLine("pass out quick inet from any to 100.64.0.0/10");
+        sb.AppendLine("pass out quick inet6 from any to fe80::/10");
+        sb.AppendLine("pass out quick inet6 from any to fc00::/7");
         foreach (var ip in serverIps)
         {
             var family = ip.Contains(':') ? "inet6" : "inet";
