@@ -10,7 +10,7 @@ only two cases of that code were tested. Any later refactor of the probe or star
 
 ## What
 
-`VPNRouter.Tests/ZapretParsingTests.cs`, 22 tests, no production change:
+`VPNRouter.Tests/ZapretParsingTests.cs`, 21 tests, no production change:
 
 - `ZapretUpdater.ExtractWinwsArgsFromLines`: a realistic multi-line `general.bat` (path placeholders resolved, game
   filter ports removed with their commas, a segment that only carried the game filter dropped), no `winws` line,
