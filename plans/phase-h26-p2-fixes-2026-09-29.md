@@ -32,4 +32,5 @@ exact-head CI.
 
 ## Outcome
 
-Pending.
+On `windows-worker` at cbb16167: `CrashReporterScrubberTests` and `FreeConfigAggregatorPreserveTests`
+77 of 77 passed. Negative check with both fixes reverted: both new tests fail. Exact-head CI: pending.
