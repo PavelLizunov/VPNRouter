@@ -65,4 +65,61 @@ public class UpdateCheckerStagingTests
             }
         }
     }
+
+    [Theory]
+    [InlineData("file:///C:/Windows/win.ini")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/update.zip")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("gopher://example.com")]
+    [InlineData("not-a-url")]
+    [InlineData("data:text/plain;base64,SGVsbG8=")]
+    [InlineData("/updates/update.zip")]
+    [InlineData("../updates/update.zip")]
+    public async Task DownloadAndStageAsync_RejectsInvalidOrNonHttpDownloadUrls(string invalidUrl)
+    {
+        var http = new FakeHttpClient();
+        var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
+        var info = new UpdateInfo
+        {
+            LatestVersion = "9.9.9",
+            DownloadUrl = invalidUrl,
+            SizeBytes = 0,
+            FullChecksumSha256 = new string('a', 64),
+            HasLiteUpdate = false,
+        };
+
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => checker.DownloadAndStageAsync(info, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Invalid or non-http(s) update download URL", ex.Message);
+        Assert.Empty(http.SentStreamingRequests);
+    }
+
+    [Theory]
+    [InlineData("file:///C:/Windows/win.ini")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("ftp://example.com/update.zip.sha256")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("not-a-url")]
+    public async Task DownloadAndStageAsync_RejectsInvalidOrNonHttpChecksumUrls(string invalidChecksumUrl)
+    {
+        var http = new FakeHttpClient();
+        var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
+        var info = new UpdateInfo
+        {
+            LatestVersion = "9.9.9",
+            DownloadUrl = DownloadUrl,
+            SizeBytes = 0,
+            FullChecksumUrl = invalidChecksumUrl,
+            FullChecksumSha256 = null,
+            HasLiteUpdate = false,
+        };
+
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => checker.DownloadAndStageAsync(info, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Invalid or non-http(s) update checksum URL", ex.Message);
+        Assert.Empty(http.SentRequests);
+    }
 }

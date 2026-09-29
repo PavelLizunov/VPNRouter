@@ -64,7 +64,9 @@ public sealed class GitHubReleaseSource : IUpdateSource
         foreach (var candidate in newer)
         {
             var asset = FindFullAsset(candidate.Release.Assets, candidate.Tag);
-            if (asset == null)
+            if (asset == null ||
+                !Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out var assetUri) ||
+                (assetUri.Scheme != Uri.UriSchemeHttp && assetUri.Scheme != Uri.UriSchemeHttps))
                 continue;
 
             var sha = await FetchChecksumAsync(candidate.Release.Assets, asset, ct)
@@ -110,7 +112,9 @@ public sealed class GitHubReleaseSource : IUpdateSource
         foreach (var candidate in candidates)
         {
             var asset = FindFullAsset(candidate.Release.Assets, candidate.Tag);
-            if (asset == null)
+            if (asset == null ||
+                !Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out var assetUri) ||
+                (assetUri.Scheme != Uri.UriSchemeHttp && assetUri.Scheme != Uri.UriSchemeHttps))
                 continue;
 
             var sha = await FetchChecksumAsync(candidate.Release.Assets, asset, ct)
@@ -181,11 +185,13 @@ public sealed class GitHubReleaseSource : IUpdateSource
         CancellationToken ct)
     {
         var shaAsset = FindChecksumAsset(assets, asset);
-        if (shaAsset == null)
+        if (shaAsset == null ||
+            !Uri.TryCreate(shaAsset.BrowserDownloadUrl, UriKind.Absolute, out var shaUri) ||
+            (shaUri.Scheme != Uri.UriSchemeHttp && shaUri.Scheme != Uri.UriSchemeHttps))
             return null;
 
         var response = await _http.SendAsync(
-            new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(shaAsset.BrowserDownloadUrl)),
+            new HttpRequest(System.Net.Http.HttpMethod.Get, shaUri),
             ct).ConfigureAwait(false);
         if (!response.IsSuccess())
             return null;

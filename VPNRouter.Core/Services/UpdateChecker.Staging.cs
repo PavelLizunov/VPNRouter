@@ -81,6 +81,24 @@ public partial class UpdateChecker
         var downloadUrl = useLite ? info.LiteDownloadUrl! : info.DownloadUrl;
         var expectedSize = useLite ? info.LiteSizeBytes : info.SizeBytes;
         var checksumUrl = useLite ? info.LiteChecksumUrl : info.FullChecksumUrl;
+
+        if (string.IsNullOrWhiteSpace(downloadUrl) ||
+            !Uri.TryCreate(downloadUrl, UriKind.Absolute, out var downloadUri) ||
+            (downloadUri.Scheme != Uri.UriSchemeHttp && downloadUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException($"Invalid or non-http(s) update download URL: '{downloadUrl}'.");
+        }
+
+        Uri? checksumUri = null;
+        if (!string.IsNullOrEmpty(checksumUrl))
+        {
+            if (!Uri.TryCreate(checksumUrl, UriKind.Absolute, out checksumUri) ||
+                (checksumUri.Scheme != Uri.UriSchemeHttp && checksumUri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException($"Invalid or non-http(s) update checksum URL: '{checksumUrl}'.");
+            }
+        }
+
         var label = useLite ? "lite update" : "full update";
 
         StatusChanged?.Invoke($"Downloading {label}...");
@@ -99,7 +117,7 @@ public partial class UpdateChecker
 
         long totalBytes;
         await using (var response = await _http.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(downloadUrl)),
+            new HttpRequest(HttpMethod.Get, downloadUri),
             ct).ConfigureAwait(false))
         {
             if (!response.IsSuccess())
@@ -132,10 +150,10 @@ public partial class UpdateChecker
                 $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
 
         string? expectedSha = info.FullChecksumSha256;
-        if (string.IsNullOrEmpty(expectedSha) && !string.IsNullOrEmpty(checksumUrl))
+        if (string.IsNullOrEmpty(expectedSha) && checksumUri != null)
         {
             var shaResponse = await _http.SendAsync(
-                new HttpRequest(HttpMethod.Get, new Uri(checksumUrl)),
+                new HttpRequest(HttpMethod.Get, checksumUri),
                 ct);
             if (!shaResponse.IsSuccess())
                 throw new InvalidOperationException(
