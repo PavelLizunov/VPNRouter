@@ -14,9 +14,7 @@ for the SDK, owning `.csproj` files for frameworks/packages, and platform build
 scripts/workflows for bundled runtime versions; do not infer one version for all targets.
 
 All repository zones are owned by Pavel Lizunov (`PavelLizunov`) and may be
-edited. `tools/zapret/` is a legacy vendored Zapret copy: the app downloads
-Zapret on demand and no build or test consumes these files; do not delete it
-without an owner decision. Generated upstream source/build caches such as `tools/singbox-cache/`
+edited. Generated upstream source/build caches such as `tools/singbox-cache/`
 remain untracked.
 
 Read the relevant zone document before changing that area:

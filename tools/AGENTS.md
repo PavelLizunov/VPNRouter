@@ -15,7 +15,6 @@ target defined in the "Release and WINBRAT contract" section of `docs/agent-cont
 
 ## Tracked payloads and generated caches
 
-- `tools/zapret/` is a legacy vendored Zapret copy; the app downloads Zapret on demand and nothing consumes these files. Do not delete it without an owner decision.
 - Generated source/build caches such as `tools/singbox-cache/` remain untracked. Do not commit or broadly clean generated caches without exact owner approval.
 
 ## Zone checks
