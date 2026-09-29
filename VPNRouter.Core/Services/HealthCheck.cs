@@ -20,6 +20,32 @@ public static class HealthCheck
     public static List<Result> RunAll()
     {
         var results = new List<Result>();
+        var parsedSettings = CheckConfigYaml(results);
+        CheckUserCatalogue(results);
+        CheckSingBoxBinary(results);
+
+        var receipt = UpdateChecker.CheckInstallReceipt(VPNRouter.Core.AppVersion.Version);
+        if (!string.IsNullOrEmpty(receipt))
+            results.Add(new(Level.Warn, receipt));
+
+        CheckRecentProxyTimeouts(results);
+        if (OperatingSystem.IsWindows() && parsedSettings != null)
+            CheckPathMtu(results, parsedSettings.Tun?.Mtu ?? TunSettings.DefaultMtu);
+
+        CheckLinuxPrivileges(results);
+        CheckStateFile(results);
+        CheckLockFile(results);
+        CheckProcessInventory(results);
+        CheckDirectories(results);
+
+        foreach (var advice in RunAdvice(parsedSettings))
+            results.Add(new(MapAdviceLevel(advice.Severity), FormatAdvice(advice)));
+
+        return results;
+    }
+
+    private static AppSettings? CheckConfigYaml(List<Result> results)
+    {
         AppSettings? parsedSettings = null;
 
         var configPath = AppPaths.ConfigYamlPath;
@@ -83,6 +109,11 @@ public static class HealthCheck
                 $"config.yaml missing at {configPath} (will be created on first launch)"));
         }
 
+        return parsedSettings;
+    }
+
+    private static void CheckUserCatalogue(List<Result> results)
+    {
         var userCatalogue = Path.Combine(AppPaths.ProfilesDir, "default.json");
         if (File.Exists(userCatalogue))
         {
@@ -121,7 +152,10 @@ public static class HealthCheck
         {
             results.Add(new(Level.Ok, "no user catalogue override (using bundled — recommended)"));
         }
+    }
 
+    private static void CheckSingBoxBinary(List<Result> results)
+    {
         var singboxPath = AppPaths.SingBoxExePath;
         if (File.Exists(singboxPath))
         {
@@ -139,15 +173,10 @@ public static class HealthCheck
                 results.Add(new(Level.Err,
                     $"sing-box not found at {singboxPath} OR bundled at {bundled}"));
         }
+    }
 
-        var receipt = UpdateChecker.CheckInstallReceipt(VPNRouter.Core.AppVersion.Version);
-        if (!string.IsNullOrEmpty(receipt))
-            results.Add(new(Level.Warn, receipt));
-
-        CheckRecentProxyTimeouts(results);
-        if (OperatingSystem.IsWindows() && parsedSettings != null)
-            CheckPathMtu(results, parsedSettings.Tun?.Mtu ?? TunSettings.DefaultMtu);
-
+    private static void CheckLinuxPrivileges(List<Result> results)
+    {
         if (OperatingSystem.IsLinux())
         {
             var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
@@ -169,7 +198,10 @@ public static class HealthCheck
                     "configured. Install policykit-1 (apt) or polkit (dnf)."));
             }
         }
+    }
 
+    private static void CheckStateFile(List<Result> results)
+    {
         var statePath = AppPaths.StatePath;
         if (File.Exists(statePath))
         {
@@ -220,7 +252,10 @@ public static class HealthCheck
         {
             results.Add(new(Level.Ok, "no running-state file (app is stopped)"));
         }
+    }
 
+    private static void CheckLockFile(List<Result> results)
+    {
         var lockPath = Path.Combine(AppPaths.DataDir, "running.lock");
         if (File.Exists(lockPath))
         {
@@ -244,7 +279,10 @@ public static class HealthCheck
             }
             catch { }
         }
+    }
 
+    private static void CheckProcessInventory(List<Result> results)
+    {
         try
         {
             var singboxProcs = Process.GetProcessesByName("sing-box");
@@ -274,17 +312,15 @@ public static class HealthCheck
         {
             results.Add(new(Level.Warn, $"process inventory check failed: {ex.Message}"));
         }
+    }
 
+    private static void CheckDirectories(List<Result> results)
+    {
         foreach (var dir in new[] { AppPaths.DataDir, AppPaths.LogsDir, AppPaths.CacheDir, AppPaths.BinDir, AppPaths.ProfilesDir })
         {
             if (!Directory.Exists(dir))
                 results.Add(new(Level.Warn, $"directory missing: {dir} (will be created on first launch)"));
         }
-
-        foreach (var advice in RunAdvice(parsedSettings))
-            results.Add(new(MapAdviceLevel(advice.Severity), FormatAdvice(advice)));
-
-        return results;
     }
 
     public static List<HealthAdvice> RunAdvice(AppSettings? settings = null)
