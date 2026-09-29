@@ -30,4 +30,25 @@ Exact-head CI on this PR; the release steps above are recorded in the Outcome as
 
 ## Outcome
 
-Pending.
+Published 2026-09-29 as prerelease `v2.50.0-r10` (`--latest=false`; Latest stayed `v2.49.3`), tag on
+`6bae0234` (AppVersion bump #366; #336, #331 and #332 merged just before, #335 not merged because the
+Spectre.Console.Cli 0.55 API breaks the CLI build, #337 closed).
+
+- Assets: exactly 16. Android, macOS and Linux from the tag-triggered workflows; the two Windows archives
+  and sidecars built on `windows-worker` (`build.ps1 -Version 2.50.0-r10 -BundleSplitDriver`, unsigned
+  path, no SignPath settings exist) and uploaded to the draft without clobber. Both archives contain the
+  split-tunnel driver and their sidecars match.
+- Tag CI green: macOS, Linux, Android, Windows update test and `dotnet test`.
+- The draft-time run of `Verify Release Integrity` failed with HTTP 404 because it read the release through
+  `releases/tags/<tag>`, which does not return drafts (r9 failed the same way at draft time). The workflow's
+  own Python check, run locally on the downloaded draft assets, passed (0 errors; warnings only for tools
+  missing on the local machine). After publication the `release: published` integrity run and the APT run both
+  succeeded.
+- `check-open-p0.ps1` reported 4 open owner-gated P1 lines; the owner waived them for this cut (2026-09-29).
+- Published Windows archive smoke check on `windows-worker` (not an install): hash equals the sidecar, the CLI
+  reports `2.50.0-r10`, sing-box `1.14.0-vpnctl.5`, driver files present, unsigned as expected.
+- Post-ship gate (`tools/post-ship-verify.ps1`): NOT run. It needs the owner's Windows PC (WinRM credential
+  file, local .NET SDK) which is offline, and its visual gate runs the six `PageScreenshotTests` that fail on
+  `windows-worker`. The candidate is therefore published but not verified; run
+  `tools/post-ship-verify.ps1 -Version 2.50.0-r10 -Cycles 2` from that PC.
+- Follow-up in H-32: the integrity workflow now finds draft releases.

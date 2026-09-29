@@ -90,7 +90,8 @@ jobs:
             "VPNRouter-v${EXPECTED_VERSION}-android-arm64.apk.sha256"
           )
           printf '%s\n' "${EXPECTED_FILES[@]}" | LC_ALL=C sort > expected-assets.txt
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG" > release-before.json
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --jq '.[] | select(.tag_name == env.EXPECTED_TAG)' \
+            | jq -s 'if length == 1 then .[0] else error("expected exactly one release for the tag") end' > release-before.json
           jq -e '.id > 0 and (.assets | all(.id > 0 and .size > 0 and .state == "uploaded"))' release-before.json > /dev/null
           jq -r '.assets[].name' release-before.json | LC_ALL=C sort > actual-assets.txt
           jq -S '{id, tag_name, draft, prerelease, assets: [.assets[] | {id,name,size,updated_at,digest,state}] | sort_by(.name)}' release-before.json > inventory-before.json
@@ -219,7 +220,8 @@ jobs:
           set -euo pipefail
           REMOTE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_TAG" --jq '.sha')
           test "$REMOTE_SHA" = "$WORKFLOW_SHA"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG" > release-after.json
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --jq '.[] | select(.tag_name == env.EXPECTED_TAG)' \
+            | jq -s 'if length == 1 then .[0] else error("expected exactly one release for the tag") end' > release-after.json
           jq -r '.assets[].name' release-after.json | LC_ALL=C sort > final-assets.txt
           diff -u expected-assets.txt final-assets.txt
           jq -S '{id, tag_name, draft, prerelease, assets: [.assets[] | {id,name,size,updated_at,digest,state}] | sort_by(.name)}' release-after.json > inventory-after.json
