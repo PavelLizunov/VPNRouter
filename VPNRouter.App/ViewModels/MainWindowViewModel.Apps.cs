@@ -124,7 +124,7 @@ public partial class MainWindowViewModel
         try { SaveSettings(); }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[VM] SaveSettings on apps mode change failed");
+            _logger.Warning(ex, "[VM] SaveSettings on apps mode change failed");
         }
         MarkRoutingSettingsChanged();
     }
@@ -165,7 +165,7 @@ public partial class MainWindowViewModel
         try { SaveSettings(); }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[VM] SaveSettings on per-app mode-aware toggle failed");
+            _logger.Warning(ex, "[VM] SaveSettings on per-app mode-aware toggle failed");
         }
         MarkRoutingSettingsChanged();
     }
@@ -211,7 +211,7 @@ public partial class MainWindowViewModel
         try { SaveSettings(); }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[VM] SaveSettings on per-app list toggle failed");
+            _logger.Warning(ex, "[VM] SaveSettings on per-app list toggle failed");
         }
         var editsActiveList = isIncludeList == !string.Equals(
             _settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
@@ -256,7 +256,7 @@ public partial class MainWindowViewModel
                 if (!vm._isLoadingUI)
                 {
                     try { vm.SaveSettings(); }
-                    catch (Exception ex) { vm._logger?.Warning(ex, "[VM] SaveSettings after batch update failed"); }
+                    catch (Exception ex) { vm._logger.Warning(ex, "[VM] SaveSettings after batch update failed"); }
                     vm.MarkRoutingSettingsChanged();
                 }
             }

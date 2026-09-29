@@ -52,7 +52,7 @@ public partial class MainWindowViewModel
                 if (seen.Add(n))
                     _settings.App.RoutingAppsInclude.Add(n);
             }
-            _logger?.Information(
+            _logger.Information(
                 "[VM] AM-3: seeded RoutingAppsInclude with {Count} entries " +
                 "from legacy profile/custom state on first load",
                 _settings.App.RoutingAppsInclude.Count);
@@ -111,7 +111,7 @@ public partial class MainWindowViewModel
             }
             catch (Exception ex)
             {
-                _logger?.Warning(ex, "Failed to load profiles");
+                _logger.Warning(ex, "Failed to load profiles");
             }
         }
 
@@ -274,7 +274,7 @@ public partial class MainWindowViewModel
             }
             catch (Exception ex)
             {
-                _logger?.Warning(ex, "[VM] AM-3 legacy seed: failed to read profiles");
+                _logger.Warning(ex, "[VM] AM-3 legacy seed: failed to read profiles");
             }
         }
 
@@ -346,7 +346,7 @@ public partial class MainWindowViewModel
         {
             MarkRoutingSettingsChanged();
             try { SaveSettings(); }
-            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AppGroup change failed"); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on AppGroup change failed"); }
         }
     }
 
@@ -382,7 +382,7 @@ public partial class MainWindowViewModel
             if (sender is AppItemViewModel item && item.WriteMode != null) return;
 
             try { SaveSettings(); }
-            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AppItem change failed"); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on AppItem change failed"); }
         }
     }
 

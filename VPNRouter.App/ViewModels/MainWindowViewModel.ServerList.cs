@@ -73,11 +73,11 @@ public partial class MainWindowViewModel
         {
             if (_isLoadingUI) return;
             try { ServerViewModel.RefreshUdpSiblingFlags(Servers); }
-            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
             try { ServerViewModel.RefreshProviderRiskFlags(Servers); }
-            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshProviderRiskFlags on Servers change failed"); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto RefreshProviderRiskFlags on Servers change failed"); }
             try { MarkOrphanServers(); }
-            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
         };
     }
 
@@ -153,7 +153,7 @@ public partial class MainWindowViewModel
             SelectedServer = Servers.FirstOrDefault();
 
         SaveSettings();
-        _logger?.Information(
+        _logger.Information(
             "[VM] RemoveServerByEntry: persisted deletion of '{Name}' ({Server}:{Port}) — {Remaining} servers remain",
             entry.Name, entry.Server, entry.Port, Servers.Count);
 
@@ -260,7 +260,7 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
         if (value.IsActive) return;
-        _logger?.Information(
+        _logger.Information(
             "[VM] OnSelectedSubscriptionServerChanged name={N} ip={Ip} IsConnected={C} IsSubscribeMode={S} IsConnecting={IC}",
             value.DisplayName, value.Server, IsConnected, IsSubscribeMode, IsConnecting);
         if (IsConnected && IsSubscribeMode && !IsConnecting)
@@ -274,7 +274,7 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
 
-        _logger?.Information(
+        _logger.Information(
             "[VM] OnSelectedServerChanged name={N} ip={Ip} IsConnected={C} IsVlessMode={V} IsSubscribeMode={S} IsConnecting={IC}",
             value.DisplayName, value.Server, IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
         if (IsConnected && IsVlessMode && !IsConnecting)

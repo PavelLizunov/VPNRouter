@@ -254,7 +254,7 @@ public partial class MainWindowViewModel
         IsConnecting = true;
         try
         {
-            var kind = SimpleInputDetector.Classify(_smpInput);
+            var kind = SimpleInputDetector.Classify(SmpInput);
 
             var hasExistingConfig =
                 (_settings.Vless.Servers?.Count > 0) ||
@@ -276,7 +276,7 @@ public partial class MainWindowViewModel
             }
             else if (kind == SmpInputKind.ServerUri)
             {
-                if (!TryApplyVless(_smpInput.Trim()))
+                if (!TryApplyVless(SmpInput.Trim()))
                 {
                     IsConnecting = false;
                     return;
@@ -284,7 +284,7 @@ public partial class MainWindowViewModel
             }
             else if (kind == SmpInputKind.SubscriptionUrl)
             {
-                if (!TryApplySubscriptionUrl(_smpInput.Trim()))
+                if (!TryApplySubscriptionUrl(SmpInput.Trim()))
                 {
                     IsConnecting = false;
                     return;

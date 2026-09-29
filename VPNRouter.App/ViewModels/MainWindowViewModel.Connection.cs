@@ -35,7 +35,7 @@ public partial class MainWindowViewModel
             StatusText = text;
             _lastConnectionAlert = text;
             RaiseSimpleAlertProps();
-            _logger?.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
+            _logger.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
         });
     }
 
@@ -55,7 +55,7 @@ public partial class MainWindowViewModel
             };
             IsTrueSplitActive = state is TrueSplitState.Active;
             IsTrueSplitProblem = state is TrueSplitState.DriverMissing or TrueSplitState.Fallback;
-            _logger?.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
+            _logger.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
         });
 
     private void MarkTrueSplitServiceManagedIfNeeded()
@@ -284,7 +284,7 @@ public partial class MainWindowViewModel
             {
                 _settings.Vless.Servers = aggregatedServers;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _logger?.Information(
+                _logger.Information(
                     "[VM] ToggleConnectionAsync.Connect.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
                     aggregatedServers.Count, _settings.Vless.ActiveServer);
             }
@@ -651,7 +651,7 @@ public partial class MainWindowViewModel
             ? $"Переключение на {configName}..."
             : $"Switching to {configName}...";
 
-        _logger?.Information(
+        _logger.Information(
             "[VM] ReconnectAsync target={Target} intent={Intent} ConfigMode={CM} IsVlessMode={V} IsSubscribeMode={S}",
             configName, intent,
             _settings.App.ConfigMode, IsVlessMode, IsSubscribeMode);
@@ -683,7 +683,7 @@ public partial class MainWindowViewModel
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
-            _logger?.Information(
+            _logger.Information(
                 "[VM] ReconnectAsync after Save+Reload: ConfigMode={CM} VlessActive={VA} SubActive={SA} VlessServers={N}",
                 _settings.App.ConfigMode,
                 _settings.Vless.ActiveServer,
@@ -700,7 +700,7 @@ public partial class MainWindowViewModel
                 _settings.App.ConfigMode = "generated";
                 _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
                 _settings.Vless.ActiveServer = configName;
-                _logger?.Information(
+                _logger.Information(
                     "[VM] ReconnectAsync.ManualVless: forced ConfigMode=generated, Vless.Servers={N}, ActiveServer={A}",
                     _settings.Vless.Servers.Count, configName);
             }
@@ -709,14 +709,14 @@ public partial class MainWindowViewModel
             {
                 _settings.Vless.Servers = aggregated;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _logger?.Information(
+                _logger.Information(
                     "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
                     aggregated.Count, _settings.Vless.ActiveServer);
             }
 
             if (applyInPlace)
             {
-                _logger?.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
+                _logger.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
                 var applied = await Task.Run(() => _engine.ApplyAsync(
                     _settings,
                     CancellationToken.None,
@@ -725,11 +725,11 @@ public partial class MainWindowViewModel
                 {
                     RestoreConnectedStatus();
                     try { RefreshActiveIndicator(); }
-                    catch (Exception ex) { _logger?.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
+                    catch (Exception ex) { _logger.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
                     return;
                 }
 
-                _logger?.Warning("[VM] ReconnectAsync ApplyAsync returned false; falling back to Stop+Start");
+                _logger.Warning("[VM] ReconnectAsync ApplyAsync returned false; falling back to Stop+Start");
                 await Task.Run(() => _engine.Stop());
             }
 
@@ -792,7 +792,7 @@ public partial class MainWindowViewModel
             }
 
             try { RefreshActiveIndicator(); }
-            catch (Exception ex) { _logger?.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
+            catch (Exception ex) { _logger.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
         }
         catch (OperationCanceledException)
         {
