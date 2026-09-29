@@ -31,4 +31,4 @@ before merging, or accept the residual compile risk explicitly.
 
 ## Outcome
 
-Pending.
+Merged as #339 on 2026-09-29; exact-head CI green.

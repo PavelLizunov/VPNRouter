@@ -17,4 +17,4 @@ demand and `build.ps1` states Zapret is not bundled. Owner decision 2026-09-29: 
 
 ## Outcome
 
-Pending CI.
+Merged as #350 on 2026-09-29; exact-head CI green.

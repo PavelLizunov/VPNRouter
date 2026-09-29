@@ -25,4 +25,4 @@ Exact-head CI (Windows job runs the full suite including both firewall test clas
 
 ## Outcome
 
-Pending CI.
+Merged as #353 on 2026-09-29; exact-head CI green.
