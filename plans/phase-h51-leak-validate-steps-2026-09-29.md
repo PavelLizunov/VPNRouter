@@ -24,4 +24,4 @@ the full suite.
 
 ## Outcome
 
-Pending equivalence run and CI.
+Merged after green exact-head CI. Worker equivalence check passed on 2026-09-30: 4,912 generated configs validated as generated and 4,912 after a random mutation, identical ordered error and warning lists at the parent SHA and at this branch, corpus deterministic on a rerun (6,000 Generate results identical as well).
