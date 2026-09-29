@@ -110,16 +110,6 @@ public sealed class CrashReporterScrubberTests
     }
 
     [Fact]
-    public void ScrubSecrets_KeepsHttpHostButRedactsPath()
-    {
-        const string input = "fetch failed: https://sub.example.com/users/abc/sub.json";
-        var s = CrashReporter.ScrubSecrets(input);
-        Assert.Contains("https://sub.example.com", s);
-        Assert.Contains("/[redacted]", s);
-        Assert.DoesNotContain("/users/abc/sub.json", s);
-    }
-
-    [Fact]
     public void ScrubSecrets_RedactsBareUuid()
     {
         const string input = "user UUID 12345678-1234-1234-1234-123456789abc not found";

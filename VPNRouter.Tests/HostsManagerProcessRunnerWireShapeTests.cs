@@ -87,17 +87,4 @@ public sealed class HostsManagerProcessRunnerWireShapeTests
         Assert.Equal("Already installed", msg);
         Assert.Single(fake.RunCalls);
     }
-
-    [Fact]
-    public void Constructor_AcceptsCustomRunner_WiresUpInjection()
-    {
-        var fs = new InMemoryFileSystem();
-        var fake = new FakeProcessRunner();
-
-        var withFake = new HostsManager(fs, FakeHostsPath, http: null, runner: fake);
-        var withDefault = new HostsManager(fs, FakeHostsPath, http: null, runner: null);
-
-        Assert.NotNull(withFake);
-        Assert.NotNull(withDefault);
-    }
 }

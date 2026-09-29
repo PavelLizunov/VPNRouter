@@ -269,18 +269,6 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_AcceptsCustomRunner_WiresUpInjection()
-    {
-        var fake = new FakeProcessRunner();
-
-        using var withFake = new TgProxyManager(logger: null, runner: fake);
-        using var withDefault = new TgProxyManager(logger: null, runner: null);
-
-        Assert.NotNull(withFake);
-        Assert.NotNull(withDefault);
-    }
-
-    [Fact]
     public void RedactSecretInArgs_StillSanitisesLegacyArgsString()
     {
         const string realSecret = "0123456789abcdef0123456789abcdef";

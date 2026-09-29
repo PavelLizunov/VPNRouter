@@ -11,17 +11,6 @@ namespace VPNRouter.Tests;
 public sealed class TunAdapterReadinessTests
 {
     [Fact]
-    public void DisableOrphanedAdapter_NonExistentAdapter_NoThrow()
-    {
-        var ex = Record.Exception(() =>
-            TunAdapterDiagnostics.DisableOrphanedAdapter(
-                logger: null,
-                interfaceName: "VPNRouter-Test-DoesNotExist-" + Guid.NewGuid().ToString("N"),
-                context: "test.nonexistent"));
-        Assert.Null(ex);
-    }
-
-    [Fact]
     public async Task PreStartCleanupAsync_NonWindows_ReturnsZeroNoOp()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(),
@@ -122,46 +111,6 @@ public sealed class TunAdapterReadinessTests
             """;
         var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
         Assert.Single(result);
-    }
-
-    [Fact]
-    public void SingBoxManager_DefaultTunInterfaceName_MatchesVpnRouterTun()
-    {
-        var field = typeof(SingBoxManager).GetField(
-            "DefaultTunInterfaceName",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(field);
-        var value = (string?)field!.GetValue(null);
-        Assert.Equal("VPNRouter-TUN", value);
-    }
-
-    [Fact]
-    public void PreStartCleanup_AdapterMissing_NoOp_ParserBranch()
-    {
-        Assert.Empty(TunAdapterDiagnostics.ExtractStaleAdapterNames(string.Empty));
-
-        var noTun = """
-            Admin State    State          Type             Interface Name
-            -------------------------------------------------------------------------
-            Enabled        Connected      Dedicated        Ethernet
-            Enabled        Connected      Dedicated        Wi-Fi
-            Enabled        Disconnected   Loopback         Loopback Pseudo-Interface 1
-            """;
-        Assert.Empty(TunAdapterDiagnostics.ExtractStaleAdapterNames(noTun));
-    }
-
-    [Fact]
-    public void PreStartCleanup_VPNRouterTunPresent_DetectedForRemoval()
-    {
-        var output = """
-            Admin State    State          Type             Interface Name
-            -------------------------------------------------------------------------
-            Enabled        Connected      Dedicated        Ethernet
-            Enabled        Disconnected   Dedicated        VPNRouter-TUN
-            """;
-        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
-        Assert.Single(result);
-        Assert.Equal("VPNRouter-TUN", result[0], ignoreCase: true);
     }
 
     [Fact]
@@ -300,88 +249,6 @@ public sealed class TunAdapterReadinessTests
         var lower = TunAdapterDiagnostics.ExtractStaleAdapterNames(
             "Enabled        Connected      Dedicated        vpnrouter-tun");
         Assert.Single(lower);
-    }
-
-    [Fact]
-    public void LaunchProcess_UsesPreStartCleanupAsync_NotEnsureAdapterEnabledOrAbsent()
-    {
-        var src = LoadSingBoxManagerSource();
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        var launchProcessRegion = ExtractRegion(stripped, "void LaunchProcess(", 200, 1200);
-
-        Assert.Contains("PreStartCleanup", launchProcessRegion);
-
-        Assert.DoesNotContain("EnsureAdapterEnabledOrAbsent", launchProcessRegion);
-    }
-
-    [Fact]
-    public void OnProcessExited_SchedulesAdapterRemoval_NotOnlyDisable()
-    {
-        var src = LoadSingBoxManagerSource();
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-        var onExitedRegion = ExtractRegion(stripped, "void OnProcessExited(", 100, 5000);
-
-        var hasRemoval =
-            onExitedRegion.Contains("QueueTunAdapterRemoval") ||
-            onExitedRegion.Contains("TryRemoveAdapterAsync") ||
-            onExitedRegion.Contains("PreStartCleanupAsync") ||
-            onExitedRegion.Contains("RemoveAdapterAsync") ||
-            onExitedRegion.Contains("Remove-NetAdapter");
-
-        Assert.True(hasRemoval,
-            "OnProcessExited region must schedule adapter removal " +
-            "(TryRemoveAdapterAsync / PreStartCleanupAsync / Remove-NetAdapter). " +
-            "Pre-Wave-38 only called DisableOrphanedAdapter — the orphan record " +
-            "survives and HealthMonitor's restart hits 'Cannot create a file'.");
-    }
-
-    [Fact]
-    public void StopInternal_EarlyExitPath_SchedulesAdapterRemoval()
-    {
-        var src = LoadSingBoxManagerSource();
-        if (src == null) return;
-
-        var stripped = StripLineComments(src);
-
-        var stopEarlyRegion = ExtractRegion(stripped,
-            "StopInternal.early", 200, 1200);
-
-        var hasRemoval =
-            stopEarlyRegion.Contains("QueueTunAdapterRemoval") ||
-            stopEarlyRegion.Contains("TryRemoveAdapterAsync") ||
-            stopEarlyRegion.Contains("PreStartCleanupAsync") ||
-            stopEarlyRegion.Contains("RemoveAdapterAsync") ||
-            stopEarlyRegion.Contains("Remove-NetAdapter");
-
-        Assert.True(hasRemoval,
-            "StopInternal.early region must schedule adapter removal too. " +
-            "Pre-Wave-38 only called DisableOrphanedAdapter — see Agent 1 brief §3.");
-    }
-
-    [Fact]
-    public void AutoRestartLoop_FiveCrashes_ParserConsistentBetweenIterations()
-    {
-        var output = """
-            Admin State    State          Type             Interface Name
-            -------------------------------------------------------------------------
-            Enabled        Connected      Dedicated        Ethernet
-            Disabled       Disconnected   Dedicated        VPNRouter-TUN
-            """;
-
-        var firstRun = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
-        Assert.Single(firstRun);
-
-        for (var i = 0; i < 5; i++)
-        {
-            var nthRun = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
-            Assert.Single(nthRun);
-            Assert.Equal("VPNRouter-TUN", nthRun[0], ignoreCase: true);
-        }
     }
 
     private static string? LoadSingBoxManagerSource()

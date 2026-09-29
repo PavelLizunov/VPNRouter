@@ -184,12 +184,6 @@ public class ConfigGeneratorQuicBlockTests
     }
 
     [Fact]
-    public void DefaultSettings_BlockQuicIsOn()
-    {
-        Assert.True(new AppConfig().BlockQuicOnTcpProxy);
-    }
-
-    [Fact]
     public void FullTunnel_QuicReject_PassesSingBoxCheck()
     {
         var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";

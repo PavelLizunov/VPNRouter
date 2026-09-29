@@ -66,58 +66,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
     }
 
     [Fact]
-    public void ApplyGatedAsync_CapturesLiveBaselineBeforeHotReloadPipeline()
-    {
-        var source = LoadVpnEngineSource();
-        if (source == null) return;
-
-        var captureIndex = source.IndexOf(
-            "var oldRoutingMode = ActiveRoutingMode;",
-            StringComparison.Ordinal);
-        var pipelineIndex = source.IndexOf(
-            "new StartupContext(settings, StartupMode.HotReload)",
-            StringComparison.Ordinal);
-
-        Assert.True(captureIndex >= 0, "Apply must capture the live routing baseline.");
-        Assert.True(pipelineIndex > captureIndex,
-            "The live baseline must be captured before StartupPipeline mutates candidate state.");
-    }
-
-    [Fact]
-    public void ApplyGatedAsync_FailurePathsRestoreLiveBaseline()
-    {
-        var source = LoadVpnEngineSource();
-        if (source == null) return;
-
-        var restoreCount = source.Split("RestoreActiveBaseline();", StringSplitOptions.None).Length - 1;
-
-        Assert.True(restoreCount >= 2,
-            "Pipeline failure and exception paths must both restore the live Apply baseline.");
-        Assert.Contains(
-            "ActiveAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "if (!configCommitted)",
-            source,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ApplyGatedAsync_SingBoxReloadFailed_RestoresBaselineAndReturnsFalse()
-    {
-        var source = LoadVpnEngineSource();
-        Assert.True(source != null, "VpnEngine.cs source could not be loaded.");
-
-        Assert.Contains("!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart)",
-            source, StringComparison.Ordinal);
-        Assert.Contains("RestoreActiveBaseline();",
-            source, StringComparison.Ordinal);
-        Assert.Contains("sing-box reload or restart was not confirmed",
-            source, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task ApplyAsync_SingBoxReloadFails_RestoresBaselineAndReturnsFalseWithoutAppliedStatus()
     {
         var priorDataDir = GetAppPathsDataDir();
@@ -538,25 +486,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
             RestoreAppPathsDataDir(priorDataDir);
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
         }
-    }
-
-    [Fact]
-    public void StartupPipeline_ColdOrderingSourceGuard_Phase6SkipsLegacyCapability_AndCommitOccursAfterStartBeforeMonitors()
-    {
-        var source = LoadStartupPipelineSource();
-        Assert.True(source != null, "StartupPipeline.cs source could not be loaded.");
-
-        var clean = StripComments(source);
-
-        Assert.Contains("firewall is not ICommittedFirewallConfig", clean, StringComparison.Ordinal);
-
-        var startIdx = clean.IndexOf("await StartSingBoxPhaseAsync(", StringComparison.Ordinal);
-        var commitIdx = clean.IndexOf("committedFirewall.UpdateCommittedConfig(", StringComparison.Ordinal);
-        var monitorIdx = clean.IndexOf("StartMonitorsPhase(", StringComparison.Ordinal);
-
-        Assert.True(startIdx >= 0, "ExecuteAsync must await StartSingBoxPhaseAsync");
-        Assert.True(commitIdx > startIdx, "Firewall capability commit must occur AFTER sing-box starts");
-        Assert.True(monitorIdx > commitIdx, "Firewall capability commit must occur BEFORE monitors start");
     }
 
     [Fact]

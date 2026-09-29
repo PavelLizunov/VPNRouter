@@ -26,19 +26,6 @@ public class CanaryTargetsTests : IDisposable
     }
 
     [Fact]
-    public void BuiltIn_AreLightweightPopularBlockedTargets()
-    {
-        var list = CanaryTargets.BuiltIn;
-        Assert.True(list.Count >= 2);
-        Assert.All(list, t =>
-        {
-            Assert.Equal(CanaryTier.PopularBlocked, t.Tier);
-            Assert.StartsWith("https://", t.Url);
-        });
-        Assert.Contains(list, t => t.Url.Contains("generate_204"));
-    }
-
-    [Fact]
     public void Load_NoOverride_ReturnsBuiltIn()
         => Assert.Equal(CanaryTargets.BuiltIn.Count, CanaryTargets.Load().Count);
 

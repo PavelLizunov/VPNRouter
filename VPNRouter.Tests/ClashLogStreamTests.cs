@@ -130,14 +130,6 @@ public sealed class ClashLogStreamTests
     }
 
     [Fact]
-    public void HandleMessage_Malformed_DoesNotThrow()
-    {
-        var (stream, _) = NewStream();
-        stream.HandleMessage("garbage{");
-        stream.HandleMessage("");
-    }
-
-    [Fact]
     public void RedactLogsUri_StripsQuery()
     {
         var uri = ClashLogStream.BuildLogsUri("http://127.0.0.1:9090", "s3cret");

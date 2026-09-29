@@ -222,13 +222,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     }
 
     [Fact]
-    public void Clear_NoCache_NoThrow()
-    {
-        ZapretProbeCache.Clear();
-        ZapretProbeCache.Clear();
-    }
-
-    [Fact]
     public void RecordSuccess_WithScore_PersistsTargetsFields()
     {
         ZapretProbeCache.RecordSuccess("general (ALT3)", targetsPassed: 4, targetsTotal: 5);

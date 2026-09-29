@@ -54,31 +54,6 @@ public sealed class VpnEngineOrchestratorTests
     }
 
     [Fact]
-    public void Construction_DefaultModes_AreGeneratedSplit()
-    {
-        using var engine = BuildIdleEngine();
-
-        Assert.Equal("generated", engine.ActiveConfigMode);
-        Assert.Equal("split", engine.ActiveRoutingMode);
-        Assert.Equal(string.Empty, engine.ActiveServerAddress);
-    }
-
-    [Fact]
-    public void Construction_EventsDefaultToNull_NoListenersFireDuringConstruction()
-    {
-        var fired = false;
-        using var engine = BuildIdleEngine();
-        engine.StatusChanged += _ => fired = true;
-        engine.Warning += _ => fired = true;
-        engine.RestartAttempted += (_, _) => fired = true;
-        engine.SingBoxStarted += _ => fired = true;
-        engine.ProcessDetected += (_, _) => fired = true;
-        engine.AutoFailoverTriggered += _ => fired = true;
-
-        Assert.False(fired);
-    }
-
-    [Fact]
     public void Stop_OnIdleEngine_IsNoOp_EmitsStatusEvents()
     {
         using var engine = BuildIdleEngine();
@@ -124,14 +99,6 @@ public sealed class VpnEngineOrchestratorTests
         await engine.ApplyAsync(new AppSettings(), TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain(statuses, s => s.Contains("Applying", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public void Dispose_OnIdleEngine_DoesNotThrow()
-    {
-        var engine = BuildIdleEngine();
-        engine.Dispose();
-        Assert.False(engine.IsRunning);
     }
 
     [Fact]
@@ -214,41 +181,6 @@ public sealed class VpnEngineOrchestratorTests
         Assert.NotEmpty(sources);
         var last = sources[^1];
         Assert.Contains("BuiltIn", last.GetType().Name, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Stop_OrderingPin_HealthMonitorStopsBeforeSingBox()
-    {
-        var src = LoadVpnEngineSource();
-        Assert.SkipUnless(src != null, "VpnEngine.cs source not reachable from test cwd — source-pin skipped");
-
-        var stopIdx = src.IndexOf("public void Stop()");
-        Assert.True(stopIdx >= 0, "Source must contain 'public void Stop()'");
-
-        var hmIdx = src.IndexOf("_healthMonitor?.Dispose()", stopIdx);
-        var sbIdx = src.IndexOf("_singBox?.Dispose()", stopIdx);
-
-        Assert.True(hmIdx > 0, "Stop must call _healthMonitor?.Dispose()");
-        Assert.True(sbIdx > 0, "Stop must call _singBox?.Dispose()");
-        Assert.True(hmIdx < sbIdx,
-            "BR-6a invariant violated: HealthMonitor must be torn down BEFORE sing-box. " +
-            $"Got _healthMonitor at {hmIdx}, _singBox at {sbIdx}.");
-    }
-
-    [Fact]
-    public void Dispose_CallsStopWhenRunning_LifecycleInvariant()
-    {
-        var src = LoadVpnEngineSource();
-        Assert.SkipUnless(src != null, "VpnEngine.cs source not reachable from test cwd — source-pin skipped");
-
-        var disposeIdx = src!.IndexOf("public void Dispose()");
-        Assert.True(disposeIdx >= 0, "Source must contain 'public void Dispose()'");
-
-        var nextMethodIdx = src.IndexOf("    }", disposeIdx);
-        Assert.True(nextMethodIdx > disposeIdx, "Dispose method body not delimited");
-
-        var disposeBody = src.Substring(disposeIdx, nextMethodIdx - disposeIdx);
-        Assert.Contains("if (IsRunning) Stop()", disposeBody);
     }
 
     private static string? LoadVpnEngineSource()

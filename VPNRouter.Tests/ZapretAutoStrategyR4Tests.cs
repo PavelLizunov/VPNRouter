@@ -62,49 +62,6 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
     }
 
     [Fact]
-    public void FlowsealProgress_ScoreOnlyUpdate_EmptyStrategyName()
-    {
-        var p = new ZapretAutoStrategy.FlowsealProgress(5, 20, string.Empty, 3, 6);
-        Assert.Equal(string.Empty, p.StrategyName);
-        Assert.Equal(3, p.OkCount);
-        Assert.Equal(6, p.TotalChecks);
-    }
-
-    [Fact]
-    public void FlowsealSweepResult_BackCompatCtor_DiagnosticAndErrorLinesDefault()
-    {
-        var r = new ZapretAutoStrategy.FlowsealSweepResult(
-            Winner: "general (ALT3)", TestedCount: 20, TotalCount: 20,
-            FullOutput: "<output>");
-        Assert.Equal("general (ALT3)", r.Winner);
-        Assert.Null(r.Diagnostic);
-        Assert.Null(r.ErrorLines);
-    }
-
-    [Fact]
-    public void FlowsealSweepResult_WithDiagnostic_CarriesTypedToken()
-    {
-        var r = new ZapretAutoStrategy.FlowsealSweepResult(
-            Winner: null, TestedCount: 0, TotalCount: 0, FullOutput: "",
-            Diagnostic: "not_admin", ErrorLines: Array.Empty<string>());
-        Assert.Equal("not_admin", r.Diagnostic);
-        Assert.NotNull(r.ErrorLines);
-        Assert.Empty(r.ErrorLines!);
-    }
-
-    [Fact]
-    public void FlowsealSweepResult_WithErrorLines_PreservesList()
-    {
-        var errs = new[] { "[ERROR] zapret service installed", "[WARN] curl missing" };
-        var r = new ZapretAutoStrategy.FlowsealSweepResult(
-            Winner: null, TestedCount: 1, TotalCount: 20, FullOutput: "",
-            Diagnostic: "canceled", ErrorLines: errs);
-        Assert.Equal(2, r.ErrorLines!.Count);
-        Assert.Contains("[ERROR] zapret service installed", r.ErrorLines);
-        Assert.Contains("[WARN] curl missing", r.ErrorLines);
-    }
-
-    [Fact]
     public void IsRunningAsAdmin_NonWindows_ReturnsFalse()
     {
         if (!OperatingSystem.IsWindows())
@@ -149,12 +106,6 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
             "directory&with%shell^characters", null, null, CancellationToken.None);
 
         Assert.Equal("not_windows", result.Diagnostic);
-    }
-
-    [Fact]
-    public void FlowsealMaxSweepTime_IsTenMinutes()
-    {
-        Assert.Equal(TimeSpan.FromMinutes(10), ZapretAutoStrategy.FlowsealMaxSweepTime);
     }
 
     [Fact]

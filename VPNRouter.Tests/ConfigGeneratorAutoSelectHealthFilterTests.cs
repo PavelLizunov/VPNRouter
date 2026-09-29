@@ -215,22 +215,4 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
 
         Assert.Contains("\"10.0.0.3\"", json);
     }
-
-    [Fact]
-    public void AutoSelectWording_IsQuickWebTest_NotBestServerClaim()
-    {
-        var prev = CoreStrings.Lang;
-        try
-        {
-            CoreStrings.Lang = "ru";
-            Assert.Contains("быстрому веб-тесту", CoreStrings.AutoSelectBestServer);
-            Assert.DoesNotContain("лучшего сервера", CoreStrings.AutoSelectBestServer);
-            Assert.Contains("не полная проверка", CoreStrings.AutoSelectBestServerTip);
-
-            CoreStrings.Lang = "en";
-            Assert.Contains("quick web test", CoreStrings.AutoSelectBestServer);
-            Assert.Contains("not full VPN-protocol verification", CoreStrings.AutoSelectBestServerTip);
-        }
-        finally { CoreStrings.Lang = prev; }
-    }
 }

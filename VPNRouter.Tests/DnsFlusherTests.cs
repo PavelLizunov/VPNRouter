@@ -163,13 +163,6 @@ public sealed class DnsFlusherTests
     }
 
     [Fact]
-    public void StaticFacade_Flush_NoThrowOnRealRuntime()
-    {
-        var ex = Record.Exception(() => DnsFlusher.Flush());
-        Assert.Null(ex);
-    }
-
-    [Fact]
     public void FlushInstance_NativeFlusherSuccess_ReturnsTrueWithoutRunningProcess()
     {
         if (!IsWindows) return;

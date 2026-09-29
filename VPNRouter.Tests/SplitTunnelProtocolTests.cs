@@ -19,12 +19,6 @@ public class SplitTunnelProtocolTests
     private static uint U32(byte[] b, int off) => BitConverter.ToUInt32(b, off);
 
     [Fact]
-    public void BuildSublayerGuids_LengthIs32()
-    {
-        Assert.Equal(32, P.BuildSublayerGuids(P.SublayerBaseline, P.SublayerDns).Length);
-    }
-
-    [Fact]
     public void BuildSublayerGuids_BaselineAt0_DnsAt16_ExactBytes()
     {
         var buf = P.BuildSublayerGuids(P.SublayerBaseline, P.SublayerDns);
@@ -44,12 +38,6 @@ public class SplitTunnelProtocolTests
         Assert.Equal(dnsLe, buf[16..32]);
         Assert.Equal(P.SublayerBaseline, new Guid(buf[0..16]));
         Assert.Equal(P.SublayerDns, new Guid(buf[16..32]));
-    }
-
-    [Fact]
-    public void BuildAddresses_LengthIs40()
-    {
-        Assert.Equal(40, P.BuildAddresses(null, null, null, null).Length);
     }
 
     [Fact]

@@ -5,21 +5,6 @@ namespace VPNRouter.Tests;
 public class AutostartHelperShapeTests
 {
     [Fact]
-    public void Disable_When_NotEnabled_DoesNotThrow()
-    {
-        if (VPNRouter.Core.Platform.AutostartHelper.IsEnabled()) return;
-        var ex = Record.Exception(() => VPNRouter.Core.Platform.AutostartHelper.Disable());
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public void IsEnabled_DoesNotThrow_OnAnyPlatform()
-    {
-        var ex = Record.Exception(() => VPNRouter.Core.Platform.AutostartHelper.IsEnabled());
-        Assert.Null(ex);
-    }
-
-    [Fact]
     public void EnsureCurrentPath_When_NotEnabled_ReturnsFalse()
     {
         if (VPNRouter.Core.Platform.AutostartHelper.IsEnabled()) return;

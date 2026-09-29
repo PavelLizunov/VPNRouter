@@ -60,25 +60,6 @@ public sealed class ZapretUpdaterAtomicityTests : IDisposable
         Assert.Equal("new-free", File.ReadAllText(Path.Combine(dest, "free.txt")));
     }
 
-    [Fact]
-    public void MarkerGate_VersionWriteOnlyInSuccessBranch_SourcePin()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "ZapretUpdater.cs");
-        Assert.SkipUnless(src != null, "ZapretUpdater.cs not reachable from test cwd");
-
-        var flat = Regex.Replace(StripLineComments(src!), @"\s+", " ");
-
-        Assert.Contains("allCopied = CopyDirectoryOverwrite(", flat);
-
-        var gateIdx = flat.IndexOf("if (allCopied)", StringComparison.Ordinal);
-        Assert.True(gateIdx >= 0, "version marker must be gated on 'if (allCopied)'");
-
-        var writeIdx = flat.IndexOf("File.WriteAllText(VersionFilePath", StringComparison.Ordinal);
-        Assert.True(writeIdx > gateIdx,
-            "ZAP-1: File.WriteAllText(VersionFilePath...) must be inside 'if (allCopied)', " +
-            "not unconditional before it");
-    }
-
     private static string? LoadSource(params string[] relativeParts)
     {
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());

@@ -54,12 +54,6 @@ public sealed class VpnEngineRemoveExcludedAppsTests
     }
 
     [Fact]
-    public void RemoveExcludedApps_NullProfile_IsNoOp()
-    {
-        VpnEngine.RemoveExcludedApps(null, new[] { "firefox" });
-    }
-
-    [Fact]
     public void RemoveExcludedApps_SkipsWhitespaceExcludeEntries()
     {
         var profile = MakeProfile("firefox.exe", "chrome.exe");

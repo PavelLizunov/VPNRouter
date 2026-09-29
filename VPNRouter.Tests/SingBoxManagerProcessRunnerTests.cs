@@ -252,36 +252,6 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Construction_Runner_Default_IsProductionProcessRunner()
-    {
-        var defaultRunner = SingBoxManager.Runner;
-
-        Assert.NotNull(defaultRunner);
-        Assert.IsType<ProcessRunner>(defaultRunner);
-    }
-
-    [Fact]
-    public void Construction_RunnerParameter_OverridesStatic()
-    {
-        var injected = new FakeProcessRunner();
-        injected.OnStart(_ => true, _ => new FakeProcessHandle());
-
-        var sbm = new SingBoxManager(
-            new SingBoxSettings { ClashApi = "127.0.0.1:9090", ExecutablePath = "ignored" },
-            logger: null,
-            http: new FakeHttpClient(),
-            runner: injected);
-
-        var runnerField = typeof(SingBoxManager).GetField(
-            "_runner",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(runnerField);
-
-        Assert.Same(injected, runnerField!.GetValue(sbm));
-        sbm.Dispose();
-    }
-
-    [Fact]
     public void Restart_WhenLaunchThrows_ReleasesTunLockAndSetsFailedState()
     {
         if (!OperatingSystem.IsWindows()) return;

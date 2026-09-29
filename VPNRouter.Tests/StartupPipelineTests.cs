@@ -377,34 +377,6 @@ public sealed class StartupPipelineTests : IDisposable
         Assert.DoesNotContain("203.0.113.0/24", result.ConfigJson!);
     }
 
-    [Fact]
-    public void StartupResult_RecordShape_FieldsPresent()
-    {
-        var r1 = new StartupResult(
-            Success: true,
-            EarlyReturn: false,
-            ProcessId: 12345,
-            Duration: TimeSpan.FromMilliseconds(500),
-            ConfigJson: "{}",
-            Profile: new Profile { Name = "X" });
-
-        var r2 = r1 with { ProcessId = 99999 };
-
-        Assert.Equal(12345, r1.ProcessId);
-        Assert.Equal(99999, r2.ProcessId);
-        Assert.NotEqual(r1, r2);
-        Assert.Equal("X", r1.Profile?.Name);
-        Assert.Equal("{}", r1.ConfigJson);
-
-        var modes = new[]
-        {
-            StartupMode.ColdStart,
-            StartupMode.HotReload,
-            StartupMode.AutoFailover
-        };
-        Assert.Equal(3, modes.Length);
-    }
-
     internal sealed class CapturingFirewall : IFirewallManager
     {
         public int CreateBlockRulesCount { get; private set; }

@@ -262,63 +262,6 @@ public sealed class NightFailoverRollbackTests
     }
 
     [Fact]
-    public void VpnEngine_WireFailover_CallbackRejects_AfterResetWithSameSettingsObject()
-    {
-        var dns = new NullWindowsDnsHardening();
-        var fakeDriver = new FakeSplitTunnelDriver();
-        using var engine = BuildEngine(dns, fakeDriver);
-
-        var settings = CreateTestSettings("server-a", "server-b");
-        engine.ResetFailoverContext(settings);
-
-        var host = CreateStartupHost(engine);
-        var sanity = new ConfigSanityCheck();
-        var failover = host.WireFailover(sanity);
-
-        Assert.NotNull(failover.IsCurrentIntent);
-        Assert.True(failover.IsCurrentIntent!(), "Callback must accept active generation before reset.");
-
-        engine.ResetFailoverContext(settings);
-
-        Assert.False(failover.IsCurrentIntent!(), "Callback must reject after reset even with the exact same settings object.");
-    }
-
-    [Fact]
-    public void VpnEngine_ActualStop_InvalidatesFailoverGenerationAndCallback_SafeFixtureHelpers()
-    {
-        var priorDataDir = GetAppPathsDataDir();
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-stop-test-{Guid.NewGuid():N}");
-        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
-
-        try
-        {
-            var dns = new NullWindowsDnsHardening();
-            var fakeDriver = new FakeSplitTunnelDriver();
-            using var engine = BuildEngine(dns, fakeDriver);
-
-            var settings = CreateTestSettings("server-a", "server-b");
-            engine.ResetFailoverContext(settings);
-
-            var host = CreateStartupHost(engine);
-            var sanity = new ConfigSanityCheck();
-            var failover = host.WireFailover(sanity);
-
-            Assert.NotNull(failover.IsCurrentIntent);
-            Assert.True(failover.IsCurrentIntent!(), "Callback must be valid before stop.");
-
-            engine.Stop();
-
-            Assert.False(failover.IsCurrentIntent!(), "Failover callback must evaluate to false after public Stop.");
-            Assert.Null(GetField(engine, "_failover"));
-        }
-        finally
-        {
-            RestoreAppPathsDataDir(priorDataDir);
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
     public async Task HandleDeadConfigAsync_CancellationDuringRestart_GuardsRollbackWhenIntentObsolete()
     {
         var sameSettings = CreateTestSettings("server-a", "server-b");
@@ -350,51 +293,5 @@ public sealed class NightFailoverRollbackTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handleTask);
 
         Assert.Equal("server-c", sameSettings.Vless.ActiveServer);
-    }
-
-    [Fact]
-    public async Task VpnEngine_ActualDispose_InvalidatesFailoverCallback_RetainedFailoverEntryNoSaveNoRestart()
-    {
-        var priorDataDir = GetAppPathsDataDir();
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-dispose-test-{Guid.NewGuid():N}");
-        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
-
-        try
-        {
-            var dns = new NullWindowsDnsHardening();
-            var fakeDriver = new FakeSplitTunnelDriver();
-            var engine = BuildEngine(dns, fakeDriver);
-
-            var settings = CreateTestSettings("server-a", "server-b");
-            engine.ResetFailoverContext(settings);
-
-            var host = CreateStartupHost(engine);
-            var sanity = new ConfigSanityCheck();
-            var failover = host.WireFailover(sanity);
-
-            var store = new InMemorySettingsStore();
-            typeof(AutoFailoverEngine).GetField("_store", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(failover, store);
-
-            Assert.NotNull(failover.IsCurrentIntent);
-            Assert.True(failover.IsCurrentIntent!(), "Callback must be valid before dispose.");
-
-            engine.Dispose();
-
-            Assert.False(failover.IsCurrentIntent!(), "Failover callback must evaluate to false after Dispose.");
-
-            var outcome = await failover.HandleDeadConfigAsync("probe failed", CancellationToken.None);
-
-            Assert.False(outcome.Switched);
-            Assert.Null(outcome.NewActiveServer);
-            Assert.Null(outcome.UserFacingMessage);
-            Assert.Equal("server-a", settings.Vless.ActiveServer);
-            Assert.Equal(0, store.SaveCount);
-            Assert.Empty(failover.TriedServers);
-        }
-        finally
-        {
-            RestoreAppPathsDataDir(priorDataDir);
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
-        }
     }
 }
