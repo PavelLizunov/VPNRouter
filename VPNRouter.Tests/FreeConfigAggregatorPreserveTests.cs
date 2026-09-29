@@ -256,4 +256,37 @@ public class FreeConfigAggregatorPreserveTests
             try { tempDir.Delete(recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public void MergeWithCache_CarriesDeepVerifyMemoryToFreshEntry()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
+        {
+            using var logger = new LoggerConfiguration().CreateLogger();
+            var cache = new FreeConfigCache(
+                logger, Path.Combine(tempDir.FullName, "free_configs.json"));
+            var aggregator = new FreeConfigAggregator(logger, cache);
+
+            var deepVerifiedAt = DateTime.UtcNow.AddHours(-1);
+            var failedAt = DateTime.UtcNow.AddHours(-2);
+            var cached = MakeEntry("same", FreeConfigStatus.Verified, lastTestedAt: DateTime.UtcNow.AddHours(-1));
+            cached.LastDeepVerifyAt = deepVerifiedAt;
+            cached.LastVerifyFailedAt = failedAt;
+            cache.Save(new FreeConfigCache.CacheFile { Configs = { cached } });
+
+            var fresh = MakeEntry("same");
+
+            var result = aggregator.MergeWithCache(new List<FreeConfigEntry> { fresh });
+
+            var merged = Assert.Single(result, c => c.Id == "same");
+            Assert.Equal(FreeConfigStatus.Verified, merged.Status);
+            Assert.Equal(deepVerifiedAt, merged.LastDeepVerifyAt);
+            Assert.Equal(failedAt, merged.LastVerifyFailedAt);
+        }
+        finally
+        {
+            try { tempDir.Delete(recursive: true); } catch { }
+        }
+    }
 }
