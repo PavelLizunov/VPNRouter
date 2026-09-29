@@ -7,9 +7,10 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r9 (prerelease, 2026-09-13), not
-  promoted to stable. Main carries later product fixes and still declares
-  `AppVersion` 2.50.0-r9, so the next candidate needs a version bump.
+- **Latest published candidate:** v2.50.0-r10 (prerelease, 2026-09-29), not
+  promoted to stable and not yet through the full fixed-WINBRAT post-ship gate
+  (see `plans/phase-h31-release-2.50.0-r10-2026-09-29.md`). Main declares
+  `AppVersion` 2.50.0-r10.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
