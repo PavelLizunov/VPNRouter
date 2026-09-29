@@ -35,4 +35,9 @@ worker, then exact-head CI (Ubuntu plus the Windows job).
 
 ## Outcome
 
-Pending.
+- First generation failed on the worker: new files lost the `#if PLATFORM_WINDOWS` guard around
+  `using System.Management` and `VpnEngine`/`UpdateChecker` lacked `partial`. The splitter now copies
+  the whole file header verbatim and always adds `partial`.
+- Fixed head: Android Release build on `windows-worker` 0 errors, 84 warnings (same as before the
+  split); full `VPNRouter.Tests` 2777 cases, 2753 passed, 17 skipped, the same 7 known failures as on
+  `origin/main` (6 `PageScreenshotTests`, 1 fixed by H-19). Exact-head CI: pending.
