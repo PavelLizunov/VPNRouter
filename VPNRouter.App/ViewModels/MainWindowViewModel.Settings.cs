@@ -589,6 +589,30 @@ public partial class MainWindowViewModel
         _isLoadingUI = true;
         try
         {
+            LoadAppearanceIntoUI();
+            LoadRoutingIntoUI();
+            LoadNetworkOptionsIntoUI();
+            LoadZapretIntoUI();
+            LoadWindowsToolsIntoUI();
+
+            ReceivePrereleases = _settings.Update.IsExperimental;
+
+            LoadServersIntoUI();
+            LoadSubscriptionsIntoUI();
+            LoadCustomConfigsIntoUI();
+
+            LoadApps();
+
+            RefreshLocalization();
+        }
+        finally
+        {
+            _isLoadingUI = false;
+        }
+    }
+
+    private void LoadAppearanceIntoUI()
+    {
         var storedLang = _settings.App.Language ?? string.Empty;
         if (string.IsNullOrWhiteSpace(storedLang))
         {
@@ -602,7 +626,10 @@ public partial class MainWindowViewModel
 
         ThemePreference = NormalizeThemePref(_settings.App.Theme);
         ApplyTheme();
+    }
 
+    private void LoadRoutingIntoUI()
+    {
         IsSimpleMode = true;
 
         var firstEnabledSub = _settings.App.Subscriptions
@@ -635,7 +662,10 @@ public partial class MainWindowViewModel
         }
         finally { _isSyncingCustomRules = false; }
         RebuildCustomRulesList();
+    }
 
+    private void LoadNetworkOptionsIntoUI()
+    {
         StrictMode = _settings.App.StrictMode;
         TunMtu = _settings.Tun.Mtu;
 
@@ -653,6 +683,10 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
         AutostartUi = AutostartHelper.IsEnabled();
 #endif
+    }
+
+    private void LoadZapretIntoUI()
+    {
         LoadZapretStrategies();
         ZapretCustomArgs = _settings.App.ZapretCustomArgs;
         if (IsZapretRunning())
@@ -665,7 +699,10 @@ public partial class MainWindowViewModel
             ZapretEnabled = false;
             ZapretStatus = Strings.Stopped;
         }
+    }
 
+    private void LoadWindowsToolsIntoUI()
+    {
 #if PLATFORM_WINDOWS
         DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
         FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
@@ -701,9 +738,10 @@ public partial class MainWindowViewModel
             TgProxyStatus = Strings.Stopped;
         }
 #endif
+    }
 
-        ReceivePrereleases = _settings.Update.IsExperimental;
-
+    private void LoadServersIntoUI()
+    {
         Servers.Clear();
         ServerViewModel? activeServer = null;
         foreach (var entry in _settings.Vless.GetEffectiveServers())
@@ -719,7 +757,10 @@ public partial class MainWindowViewModel
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
 
         MarkOrphanServers();
+    }
 
+    private void LoadSubscriptionsIntoUI()
+    {
         if (_settings.App.Subscriptions.Count == 0
             && !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl))
         {
@@ -740,7 +781,10 @@ public partial class MainWindowViewModel
             Subscriptions.Add(new SubscriptionViewModel(entry));
 
         RebuildSubscriptionPool();
+    }
 
+    private void LoadCustomConfigsIntoUI()
+    {
         CustomConfigs.Clear();
         CustomConfigViewModel? activeConfig = null;
         foreach (var entry in _settings.App.CustomConfigs ?? new())
@@ -765,15 +809,6 @@ public partial class MainWindowViewModel
         _logger.Information(
             "[VM] Sub-tab init: ServerModeIndex={Idx} (manual={M}, custom={C}, configMode={CM})",
             subTabIndex, Servers.Count, CustomConfigs.Count, _settings.App.ConfigMode);
-
-        LoadApps();
-
-        RefreshLocalization();
-        }
-        finally
-        {
-            _isLoadingUI = false;
-        }
     }
 
     [RelayCommand]
@@ -840,6 +875,20 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI) return;
 
+        BackupConfigFile();
+        ApplyConfigModeToSettings();
+        ApplySubscriptionsToSettings();
+        ApplyRoutingToSettings();
+        ApplyOptionsToSettings();
+        ApplyServersToSettings();
+        ApplyCustomConfigsToSettings();
+        ApplyAppSelectionToSettings();
+
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
+    }
+
+    private void BackupConfigFile()
+    {
         try
         {
             var configPath = AppPaths.ConfigYamlPath;
@@ -847,7 +896,10 @@ public partial class MainWindowViewModel
                 File.Copy(configPath, configPath + ".bak", overwrite: true);
         }
         catch (Exception ex) { _logger.Debug(ex, "[Settings] Backup failed"); }
+    }
 
+    private void ApplyConfigModeToSettings()
+    {
         var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
         var hasCustomConfig = !string.IsNullOrWhiteSpace(_settings.App.ActiveCustomConfig)
                               || !string.IsNullOrWhiteSpace(_settings.App.CustomConfig)
@@ -872,7 +924,10 @@ public partial class MainWindowViewModel
         {
             _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
         }
+    }
 
+    private void ApplySubscriptionsToSettings()
+    {
         _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
 
         var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
@@ -880,7 +935,10 @@ public partial class MainWindowViewModel
 
         _settings.App.SubscriptionUrl = string.Empty;
         _settings.App.SubscriptionServers = new();
+    }
 
+    private void ApplyRoutingToSettings()
+    {
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
 
         var appsModeCanon = (RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
@@ -906,7 +964,10 @@ public partial class MainWindowViewModel
         {
             _logger.Error(ex, "[VM] CustomRules parse failed");
         }
+    }
 
+    private void ApplyOptionsToSettings()
+    {
         _settings.App.BypassRussianTraffic = BypassRussianTraffic;
         _settings.App.CustomRulesPriority = CustomRulesAboveToggles ? "custom_first" : "toggles_first";
 
@@ -940,7 +1001,10 @@ public partial class MainWindowViewModel
         _settings.App.Theme = NormalizeThemePref(ThemePreference);
         _settings.App.Language = IsRussian ? "ru" : "en";
         _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
+    }
 
+    private void ApplyServersToSettings()
+    {
         _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
         var activeVless = SelectedServer ?? Servers.FirstOrDefault();
         _settings.Vless.ActiveServer = activeVless?.Name ?? "";
@@ -954,11 +1018,17 @@ public partial class MainWindowViewModel
             _settings.Vless.Security = entry.Security;
             _settings.Vless.Reality = entry.Reality;
         }
+    }
 
+    private void ApplyCustomConfigsToSettings()
+    {
         _settings.App.CustomConfigs = CustomConfigs.Select(c => c.ToEntry()).ToList();
         var active = CustomConfigs.FirstOrDefault(c => c.IsActive);
         _settings.App.ActiveCustomConfig = active?.Name ?? "";
+    }
 
+    private void ApplyAppSelectionToSettings()
+    {
         if (_appsLoaded)
         {
             var activeProfileNames = AppGroups
@@ -1017,8 +1087,6 @@ public partial class MainWindowViewModel
                 _settings.ExcludedApps = excluded;
             }
         }
-
-        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
     partial void OnReceivePrereleasesChanged(bool value)

@@ -25,4 +25,4 @@ behaviour of the commands is not exercised automatically.
 
 ## Outcome
 
-Pending CI.
+Merged in #374 after green exact-head CI.

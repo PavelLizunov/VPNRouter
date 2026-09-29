@@ -103,7 +103,23 @@ public static class SubscriptionFetcher
         var result = new List<VlessServerEntry>();
         if (string.IsNullOrWhiteSpace(responseBody)) return result;
 
-        string decoded;
+        if (!TryDecodeBody(responseBody, logger, out var decoded))
+            return result;
+
+        var lines = SplitToShareUris(decoded, logger);
+
+        result = ParseShareUris(lines, logger, out droppedPlaceholders);
+
+        result = DeduplicateServers(result, logger);
+
+        if (result.Count >= 500)
+            logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
+
+        return result;
+    }
+
+    private static bool TryDecodeBody(string responseBody, ILogger? logger, out string decoded)
+    {
         var trimmed = responseBody.Trim();
 
         if (trimmed.StartsWith("{"))
@@ -120,7 +136,8 @@ public static class SubscriptionFetcher
                 else
                 {
                     logger?.Warning("[Subscription] JSON response has no 'config' field");
-                    return result;
+                    decoded = string.Empty;
+                    return false;
                 }
             }
             catch (Exception ex)
@@ -141,6 +158,11 @@ public static class SubscriptionFetcher
             }
         }
 
+        return true;
+    }
+
+    private static string[] SplitToShareUris(string decoded, ILogger? logger)
+    {
         string[] lines;
         if (ClashYamlParser.LooksLikeClashYaml(decoded))
         {
@@ -152,6 +174,15 @@ public static class SubscriptionFetcher
         {
             lines = decoded.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }
+
+        return lines;
+    }
+
+    private static List<VlessServerEntry> ParseShareUris(
+        string[] lines, ILogger? logger, out int droppedPlaceholders)
+    {
+        droppedPlaceholders = 0;
+        var result = new List<VlessServerEntry>();
 
         foreach (var line in lines)
         {
@@ -181,6 +212,11 @@ public static class SubscriptionFetcher
             }
         }
 
+        return result;
+    }
+
+    private static List<VlessServerEntry> DeduplicateServers(List<VlessServerEntry> result, ILogger? logger)
+    {
         var seen = new HashSet<string>();
         var deduped = new List<VlessServerEntry>(result.Count);
         foreach (var e in result)
@@ -191,12 +227,7 @@ public static class SubscriptionFetcher
         if (deduped.Count < result.Count)
             logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
                 result.Count, deduped.Count);
-        result = deduped;
-
-        if (result.Count >= 500)
-            logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
-
-        return result;
+        return deduped;
     }
 
     public static async Task<int> RefreshEntryAsync(

@@ -22,4 +22,4 @@ directory path, own PID and the 8.8.8.8 path MTU lines are normalised). Exact-he
 
 ## Outcome
 
-Pending equivalence run and CI.
+Merged in #375 after green exact-head CI. Worker equivalence check passed (comment on the PR).

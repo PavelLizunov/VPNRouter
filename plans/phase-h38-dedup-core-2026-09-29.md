@@ -28,4 +28,4 @@ run of `Inject`/`Generate` hashes against the pre-change SHA on `windows-worker`
 
 ## Outcome
 
-Pending CI and equivalence run.
+Merged in #373 after green exact-head CI. Worker equivalence check passed (comment on the PR).

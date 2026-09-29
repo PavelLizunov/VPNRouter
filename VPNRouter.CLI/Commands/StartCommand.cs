@@ -35,7 +35,7 @@ public class StartCommand : AsyncCommand<StartSettings>
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
     }
 
-    public override async Task<int> ExecuteAsync(CommandContext context, StartSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, StartSettings settings, CancellationToken cancellationToken)
     {
         AnsiConsole.Write(new FigletText("VPNRouter").Color(Color.Cyan1));
 
