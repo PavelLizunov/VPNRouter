@@ -2,8 +2,6 @@
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-/// <summary>v2.30.0-r3: tests for the 3-format import/export of
-/// custom rules (CSV / VPNRouter JSON / sing-box-native).</summary>
 public class CustomRulesImportExportTests
 {
     [Fact]
@@ -40,7 +38,7 @@ public class CustomRulesImportExportTests
         };
         var csv = VPNRouter.Core.Services.CustomRulesImportExport
             .ExportToText(original, VPNRouter.Core.Services.CustomRulesImportExport.Format.Csv);
-        Assert.Contains("ads, tracker", csv);  // multi-value preserved
+        Assert.Contains("ads, tracker", csv);
         var imported = VPNRouter.Core.Services.CustomRulesImportExport
             .ImportFromText(csv, VPNRouter.Core.Services.CustomRulesImportExport.Format.Csv);
         Assert.Empty(imported.Warnings);
@@ -110,13 +108,11 @@ public class CustomRulesImportExportTests
     [Fact]
     public void SingBoxJson_ExplodesMultiMatchRule()
     {
-        // sing-box rule with both domain_suffix AND ip_cidr in one rule.
-        // Our schema is one-match-per-rule, so we explode it into 2 entries.
         var sb = "[{\"domain_suffix\":[\".corp\"],\"ip_cidr\":[\"10.0.0.0/8\"],\"outbound\":\"proxy\"}]";
         var imported = VPNRouter.Core.Services.CustomRulesImportExport
             .ImportFromText(sb, VPNRouter.Core.Services.CustomRulesImportExport.Format.SingBoxJson);
         Assert.Equal(2, imported.Rules.Count);
-        Assert.NotEmpty(imported.Warnings); // warning about explosion
+        Assert.NotEmpty(imported.Warnings);
         Assert.All(imported.Rules, r => Assert.Equal("proxy", r.Action));
     }
 
@@ -145,7 +141,6 @@ public class CustomRulesImportExportTests
             .ExportToText(original, VPNRouter.Core.Services.CustomRulesImportExport.Format.SingBoxJson);
         Assert.Contains("\"outbound\": \"direct\"", sb);
         Assert.Contains("\"action\": \"reject\"", sb);
-        // Round-trip via SingBoxJson import.
         var imported = VPNRouter.Core.Services.CustomRulesImportExport
             .ImportFromText(sb, VPNRouter.Core.Services.CustomRulesImportExport.Format.SingBoxJson);
         Assert.Equal(2, imported.Rules.Count);

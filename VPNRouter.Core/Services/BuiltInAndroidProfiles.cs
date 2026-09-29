@@ -2,20 +2,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Android counterpart to <see cref="BuiltInProfiles"/>. The desktop catalog
-/// keys on <c>process_name</c> ("Discord.exe", "chrome.exe"); Android's
-/// VpnService API operates on package IDs ("com.discord", "com.android.chrome"),
-/// so the two catalogs share the same category names and intent but cannot
-/// share rule data — process names don't translate to Android's app
-/// sandboxing model.
-///
-/// <para>Mirrors the JSON file <c>profiles/default-android.json</c> verbatim
-/// so the desktop reference catalog stays in lockstep with what the Android
-/// app surfaces. The file is the canonical source for review; this code is
-/// the canonical source for runtime — the Android port reads this directly
-/// to avoid bundling assets and copying them into FilesDir on first launch.</para>
-/// </summary>
 public static class BuiltInAndroidProfiles
 {
     public static ProfileCollection Get() => new()

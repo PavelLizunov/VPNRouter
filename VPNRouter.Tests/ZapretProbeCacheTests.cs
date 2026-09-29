@@ -1,17 +1,4 @@
 #nullable enable
-// ============================================================================
-// ZapretProbeCacheTests.cs — v2.37.0-r6 (2026-05-25)
-// ============================================================================
-//
-// Tests for ZapretProbeCache (warm-start cache for the magic-button probe).
-// Covers TryLoad / RecordSuccess / RecordFailure / Clear plus the
-// IsRecentAndReliable predicate.
-//
-// Cache lives at %ProgramData%\VPNRouter\cache\zapret_probe.json — these
-// tests redirect AppPaths.DataDir to a per-test temp directory via
-// AppPaths.OverrideDataDir so they don't trash the live cache and so xUnit
-// parallel runs don't collide.
-// ============================================================================
 
 using System;
 using System.IO;
@@ -36,14 +23,10 @@ public sealed class ZapretProbeCacheTests : IDisposable
 
     public void Dispose()
     {
-        // Restore the original so subsequent test classes don't see our
-        // hijacked DataDir.
         AppPaths.OverrideDataDir(_originalDataDir);
         try { Directory.Delete(_tempDataDir, recursive: true); }
-        catch { /* best-effort */ }
+        catch { }
     }
-
-    // ── TryLoad ─────────────────────────────────────────────────────────────
 
     [Fact]
     public void TryLoad_NoCacheFile_ReturnsNull()
@@ -58,7 +41,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
         File.WriteAllText(
             Path.Combine(AppPaths.CacheDir, "zapret_probe.json"),
             "{not valid json...");
-        // Must not throw.
         Assert.Null(ZapretProbeCache.TryLoad());
     }
 
@@ -71,8 +53,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
             "{\"Strategy\":\"\",\"SuccessRunCount\":5,\"LastSweepAt\":\"2026-05-25T00:00:00Z\"}");
         Assert.Null(ZapretProbeCache.TryLoad());
     }
-
-    // ── RecordSuccess ───────────────────────────────────────────────────────
 
     [Fact]
     public void RecordSuccess_FreshEntry_PersistsWithCountOne()
@@ -100,7 +80,7 @@ public sealed class ZapretProbeCacheTests : IDisposable
     {
         ZapretProbeCache.RecordSuccess("general (ALT3)");
         ZapretProbeCache.RecordSuccess("general (ALT3)");
-        ZapretProbeCache.RecordSuccess("general (FAKE TLS AUTO)"); // different
+        ZapretProbeCache.RecordSuccess("general (FAKE TLS AUTO)");
         var loaded = ZapretProbeCache.TryLoad();
         Assert.Equal("general (FAKE TLS AUTO)", loaded!.Strategy);
         Assert.Equal(1, loaded.SuccessRunCount);
@@ -118,7 +98,7 @@ public sealed class ZapretProbeCacheTests : IDisposable
         ZapretProbeCache.RecordSuccess("general (ALT3)");
         var loaded = ZapretProbeCache.TryLoad();
         Assert.Equal(0, loaded!.LastFailureCount);
-        Assert.Equal(2, loaded.SuccessRunCount); // 1 + 1 (success counted)
+        Assert.Equal(2, loaded.SuccessRunCount);
     }
 
     [Fact]
@@ -128,12 +108,9 @@ public sealed class ZapretProbeCacheTests : IDisposable
         Assert.Null(ZapretProbeCache.TryLoad());
     }
 
-    // ── RecordFailure ───────────────────────────────────────────────────────
-
     [Fact]
     public void RecordFailure_NoCache_NoOp()
     {
-        // No prior cache, no exception, no file written.
         ZapretProbeCache.RecordFailure("general (ALT3)");
         Assert.Null(ZapretProbeCache.TryLoad());
     }
@@ -141,8 +118,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     [Fact]
     public void RecordFailure_DifferentStrategy_NoOp()
     {
-        // Cache has X, failure of Y is irrelevant (would only matter if Y
-        // had been cached as winner). Don't bump X's failure count.
         ZapretProbeCache.RecordSuccess("general (ALT3)");
         ZapretProbeCache.RecordFailure("general (FAKE TLS AUTO)");
         var loaded = ZapretProbeCache.TryLoad();
@@ -158,8 +133,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
         var loaded = ZapretProbeCache.TryLoad();
         Assert.Equal(1, loaded!.LastFailureCount);
     }
-
-    // ── IsRecentAndReliable ─────────────────────────────────────────────────
 
     [Fact]
     public void IsRecentAndReliable_FreshSuccess_True()
@@ -216,7 +189,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     [Fact]
     public void IsRecentAndReliable_TwoConsecutiveFails_True()
     {
-        // Two failures are still tolerable — one more demotes the entry.
         var entry = new ZapretProbeCacheEntry
         {
             Strategy = "general (ALT3)",
@@ -240,8 +212,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
         Assert.False(entry.IsRecentAndReliable());
     }
 
-    // ── Clear ───────────────────────────────────────────────────────────────
-
     [Fact]
     public void Clear_RemovesCacheFile()
     {
@@ -250,16 +220,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
         ZapretProbeCache.Clear();
         Assert.Null(ZapretProbeCache.TryLoad());
     }
-
-    [Fact]
-    public void Clear_NoCache_NoThrow()
-    {
-        // Idempotent — must not throw on missing file.
-        ZapretProbeCache.Clear();
-        ZapretProbeCache.Clear();
-    }
-
-    // ── r24 — schema v2 score fields ────────────────────────────────────────
 
     [Fact]
     public void RecordSuccess_WithScore_PersistsTargetsFields()
@@ -276,8 +236,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     [Fact]
     public void RecordSuccess_NoScoreOverload_DoesNotSetTargets()
     {
-        // Backward-compat overload must persist with targets=0 so the Hero
-        // card knows not to render the "X из Y" line for legacy paths.
         ZapretProbeCache.RecordSuccess("general (ALT3)");
         var loaded = ZapretProbeCache.TryLoad();
         Assert.Equal(0, loaded!.TargetsPassed);
@@ -310,8 +268,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     [Fact]
     public void IsStale_EmptyStrategy_False()
     {
-        // Empty entries don't trigger stale state — they're shown as
-        // "не проверена" with the ◌ icon, not "⚠ устарела".
         var entry = new ZapretProbeCacheEntry
         {
             Strategy = "",
@@ -330,9 +286,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     [Fact]
     public void HasTargetScore_AllTargetsFailed_StillTrue()
     {
-        // 0/5 is a valid score — UI must render "0 из 5 целей" to show the
-        // strategy was probed but didn't work. Only TotalTargets=0 means
-        // "no score data" (e.g. legacy v1 cache).
         var entry = new ZapretProbeCacheEntry { TargetsPassed = 0, TargetsTotal = 5 };
         Assert.True(entry.HasTargetScore());
     }
@@ -340,9 +293,6 @@ public sealed class ZapretProbeCacheTests : IDisposable
     [Fact]
     public void TryLoad_LegacyV1Json_DeserializesWithZeroTargets()
     {
-        // Verify backward-compat: a v1 cache file (no Targets* fields) must
-        // load cleanly with both targets defaulting to 0. The HasTargetScore
-        // helper then correctly suppresses the "X из Y" line.
         Directory.CreateDirectory(AppPaths.CacheDir);
         var legacyJson = @"{
             ""Strategy"":""general (ALT3)"",

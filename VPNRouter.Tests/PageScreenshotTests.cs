@@ -9,35 +9,6 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Captures a PNG of each main page in the app into
-/// <see cref="ScreenshotHelper.ScreenshotsDir"/>. Pages are hosted inside a
-/// <see cref="Window"/> with a real <see cref="MainWindowViewModel"/> as
-/// <c>DataContext</c> — same wiring production uses — so bindings resolve
-/// and the screenshot reflects what a user actually sees at first launch
-/// (localization, theme, default values).
-///
-/// <para>Two jobs:</para>
-/// <list type="number">
-///   <item>
-///     <b>Regression for view-tree assembly + bindings.</b> Broken template
-///     resolution, missing StaticResource, or a renamed VM property (so a
-///     <c>{Binding Foo}</c> can't resolve) surface either as a thrown
-///     exception during rendering or as a visible hole in the PNG.
-///   </item>
-///   <item>
-///     <b>Inspectable artefacts per release.</b> A PNG per page lets me
-///     (or a reviewer) eyeball the app without launching the full GUI.
-///     Screenshots land in <c>VPNRouter.Tests/screenshots/</c>; see
-///     <c>plans/ui-testing-workflow.md</c> for the post-release routine.
-///   </item>
-/// </list>
-///
-/// <para>Each test creates and disposes a background-disabled ViewModel on
-/// Avalonia's dispatcher thread. The test assembly redirects AppPaths to a
-/// temporary directory, so screenshots cannot read or write the installed
-/// application's settings, logs or runtime state.</para>
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public class PageScreenshotTests
 {
@@ -100,42 +71,21 @@ public class PageScreenshotTests
             width: 360, height: 800);
     }
 
-    /// <summary>
-    /// NetworkPage has a left-rail navigator with 6 sections (Routing /
-    /// Rules / Leak Protection / Content / Updates / Autostart). The default
-    /// screenshot above captures Routing; this one explicitly selects
-    /// Autostart (index 5) before rendering so the v2.27 Bug C redesign
-    /// surface is visible in the PNG suite. Without this we'd ship the
-    /// whole UX redesign and have no visual record of what it looks like.
-    /// <para>v2.31.10: index corrected from 4 to 5 — the v2.30.0-r2 Rules
-    /// section addition shifted everything down by one, but the test stayed
-    /// on 4 (Updates) and was silently capturing the wrong page for
-    /// multiple releases.</para>
-    /// </summary>
     [AvaloniaFact]
     public void NetworkPage_AutostartTab()
     {
         using var vm = GetVm();
-        vm.SelectedSettingsIndex = 5; // Autostart tab
+        vm.SelectedSettingsIndex = 5;
         try
         {
             ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart");
         }
         finally
         {
-            vm.SelectedSettingsIndex = 0; // restore default so sibling tests aren't affected
+            vm.SelectedSettingsIndex = 0;
         }
     }
 
-    /// <summary>
-    /// Reproduction of the v2.27.0-r1 user report: "обводка не умещается
-    /// когда сужаю окно". Captures the Autostart and Routing tabs at a
-    /// narrow 720x800 viewport — same resolution as an undocked half of a
-    /// 1440p screen. If cards, borders or wrapping labels overflow the
-    /// viewport, the diff in the PNG is immediately visible. Goal of any
-    /// fix: content wraps inside borders, borders stretch to available
-    /// width, no horizontal scroll.
-    /// </summary>
     [AvaloniaFact]
     public void NetworkPage_Autostart_Narrow720()
     {
@@ -152,7 +102,7 @@ public class PageScreenshotTests
     public void NetworkPage_Routing_Narrow720()
     {
         using var vm = GetVm();
-        vm.SelectedSettingsIndex = 0; // Routing
+        vm.SelectedSettingsIndex = 0;
         ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-routing-narrow", width: 720, height: 800);
     }
 
@@ -164,7 +114,7 @@ public class PageScreenshotTests
         {
             using var vm = GetVm();
             vm.SetLanguageRussianCommand.Execute(null);
-            vm.SelectedSettingsIndex = 4; // Updates
+            vm.SelectedSettingsIndex = 4;
             vm.UpdateVm.IsVersionHistoryVisible = true;
             vm.UpdateVm.StableVersions.Add(new RollbackReleaseItemViewModel(
                 "2.49.3", isInstalled: true, info: null, onSelect: null));
@@ -194,10 +144,6 @@ public class PageScreenshotTests
         }
     }
 
-    /// <summary>Extra-narrow 500px variant — pushes past the point where
-    /// native window chrome still renders comfortably. Goal: identify the
-    /// control that overflows so we can pin HorizontalAlignment="Stretch"
-    /// / TextWrapping="Wrap" on the exact offender.</summary>
     [AvaloniaFact]
     public void NetworkPage_Autostart_Narrow500()
     {
@@ -210,9 +156,6 @@ public class PageScreenshotTests
         finally { vm.SelectedSettingsIndex = 0; }
     }
 
-    /// <summary>Absolute-worst-case 400px. User's real test shrunk the
-    /// window until borders visibly broke; this reproduces what they saw
-    /// without depending on their WM chrome.</summary>
     [AvaloniaFact]
     public void NetworkPage_Autostart_Narrow400()
     {
@@ -225,17 +168,6 @@ public class PageScreenshotTests
         finally { vm.SelectedSettingsIndex = 0; }
     }
 
-    /// <summary>
-    /// v2.31.10 (autostart UX clarity): renders the Network → Autostart
-    /// sub-tab with the Service NOT installed. Per-component status
-    /// badges below VPN/Zapret/TgProxy CheckBoxes show the red ⛔ "won't
-    /// fire without service" wording — this is the dominant pre-install
-    /// state for new users, and the badge is what the user-reported
-    /// "Auto-start with Windows for tgproxy doesn't work" feedback
-    /// resolves. Capturing this state explicitly so a future regression
-    /// (status badge removed, IsAutostart*StatusBad binding broken)
-    /// shows up in the visual artefact.
-    /// </summary>
     [AvaloniaFact]
     public void NetworkPage_AutostartTab_ServiceNotInstalled()
     {
@@ -257,15 +189,6 @@ public class PageScreenshotTests
         }
     }
 
-    /// <summary>
-    /// v2.31.10 (autostart UX clarity): same Autostart sub-tab, but with
-    /// the Service installed and running. All three component badges
-    /// flip to green ✓ "via Windows Service (boot)" — this is the steady
-    /// "everything wired up" state. Pinning both branches per release
-    /// catches a regression where the binding stays stuck on one
-    /// status (e.g. ServiceVm.PropertyChanged handler unhooked or Bool
-    /// ⇄ String wiring broken).
-    /// </summary>
     [AvaloniaFact]
     public void NetworkPage_AutostartTab_ServiceInstalled()
     {
@@ -290,16 +213,6 @@ public class PageScreenshotTests
         }
     }
 
-    /// <summary>
-    /// v2.31.10 (autostart UX clarity): Service installed but NOT
-    /// running. Status badge logic deliberately stays on the green ✓
-    /// boot branch because the boot semantics depend on IsInstalled
-    /// alone (SCM brings the service back up at next reboot regardless
-    /// of current runtime state). This screenshot pins that intent —
-    /// if a future change makes the badge flip to amber/red just
-    /// because the service is currently stopped, the diff highlights
-    /// the regression.
-    /// </summary>
     [AvaloniaFact]
     public void NetworkPage_AutostartTab_ServiceInstalledStopped()
     {
@@ -324,17 +237,6 @@ public class PageScreenshotTests
         }
     }
 
-    /// <summary>
-    /// v2.31.6-r3 — render TelegramPage at app window width (520 px) to
-    /// confirm the design-handoff cell 6 layout (description + 2-col
-    /// Port|Secret grid + info banner + 3-button row + note paragraph
-    /// + secondary footer) wraps cleanly without horizontal overflow.
-    ///
-    /// The default <see cref="TelegramPage"/> capture above uses 1200 px,
-    /// which leaves the 2-column grid generously spaced; the real risk
-    /// is overflow at 520 px when the Secret hex string forces the
-    /// flex grid wider than the column allows. That's caught here.
-    /// </summary>
     [AvaloniaFact]
     public void TelegramPage_Narrow520()
     {
@@ -345,13 +247,6 @@ public class PageScreenshotTests
             width: 520, height: 800);
     }
 
-    /// <summary>
-    /// v2.31.6-r3 — render with TgProxyEnabled=true so the banner
-    /// status line shows the "Running" wording instead of "Stopped".
-    /// Pinning both branches per release prevents a regression where
-    /// the runtime status binding silently breaks (e.g. setter no
-    /// longer fires <c>OnPropertyChanged</c> on TgProxyStatus).
-    /// </summary>
     [AvaloniaFact]
     public void TelegramPage_RunningStateBanner()
     {

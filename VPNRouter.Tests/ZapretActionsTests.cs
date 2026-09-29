@@ -1,20 +1,4 @@
 #nullable enable
-// ============================================================================
-// ZapretActionsTests.cs — Phase 2G sub-wave 7b-2 (2026-05-18)
-// ============================================================================
-//
-// Tests for the largest previously-untested service in VPNRouter.Core (562
-// LOC). Brief: plans/phase2-2G-untested-services-2026-05-17.md.
-//
-// Coverage:
-//   * IProcessRunner-routed methods: IsServiceRunning, ServiceExists,
-//     IsAnyServiceMatching, RunSc, RunNetsh. Migrated in this commit.
-//   * Cygwin .bat regression: ZapretManager.BuildCygwinLaunchBat
-//     (extracted helper) pins the SET BIN= / SET LISTS= contract from
-//     the v2.9.x Cygwin launch lesson.
-//   * Strategy parser: ZapretUpdater.ExtractWinwsArgsFromLines (pure
-//     helper extracted in this commit).
-// ============================================================================
 
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
@@ -22,19 +6,8 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// xUnit suite for <see cref="ZapretActions"/>. Each test sets up its own
-/// <see cref="FakeProcessRunner"/> for tight isolation, then resets the
-/// shared seam back to the default <see cref="ProcessRunner"/>. Tests are
-/// sealed and live in the same assembly via InternalsVisibleTo so we can
-/// call the internal helpers directly.
-/// </summary>
 public sealed class ZapretActionsTests : IDisposable
 {
-    // Snapshot the existing process runner before we override so a teardown
-    // can restore it. This protects parallel test classes from picking up
-    // our FakeProcessRunner instance (xUnit may run classes in parallel
-    // by default; ZapretActions._processRunner is static).
     private readonly IProcessRunner _originalRunner;
 
     public ZapretActionsTests()
@@ -44,13 +17,8 @@ public sealed class ZapretActionsTests : IDisposable
 
     public void Dispose()
     {
-        // Restore the production-default runner so subsequent test classes
-        // (e.g. an integration test running real `sc`) don't inherit our
-        // fake.
         ZapretActions.ProcessRunner = _originalRunner;
     }
-
-    // ── helpers ──
 
     private static ProcessResult Ok(string stdout) =>
         new(ExitCode: 0, Stdout: stdout, Stderr: "",
@@ -60,9 +28,6 @@ public sealed class ZapretActionsTests : IDisposable
         new(ExitCode: exitCode, Stdout: "", Stderr: stderr,
             Duration: TimeSpan.FromMilliseconds(5), TimedOut: false);
 
-    // Canned `sc query` outputs that match what Windows emits in practice.
-    // Pinning the exact wording protects against an accidental parser
-    // regression where someone fuzzily matches "Run" instead of "RUNNING".
     private const string ScQueryRunning =
         "SERVICE_NAME: BFE\r\n" +
         "        TYPE               : 20 WIN32_SHARE_PROCESS\r\n" +
@@ -76,14 +41,12 @@ public sealed class ZapretActionsTests : IDisposable
         "        STATE              : 1  STOPPED\r\n" +
         "        WIN32_EXIT_CODE    : 0  (0x0)\r\n";
 
-    // ── 1. Service detection: RUNNING → true ──
-
     [Fact]
     public void IsServiceRunning_OutputContainsRunning_ReturnsTrue()
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == "sc"
+            r => r.ExecutablePath == ZapretActions.ScExecutablePath
               && r.Arguments.Count == 2
               && r.Arguments[0] == "query"
               && r.Arguments[1] == "BFE",
@@ -93,93 +56,61 @@ public sealed class ZapretActionsTests : IDisposable
         var actual = ZapretActions.IsServiceRunning("BFE");
 
         Assert.True(actual);
-        // Pin the runner shape so a future regression where someone
-        // unconditionally adds e.g. `state=` would surface here.
         Assert.Single(fake.RunCalls);
         var req = fake.RunCalls[0];
-        Assert.Equal("sc", req.ExecutablePath);
+        Assert.Equal(ZapretActions.ScExecutablePath, req.ExecutablePath);
         Assert.Equal(new[] { "query", "BFE" }, req.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromSeconds(2), req.Timeout);
         Assert.True(req.CaptureStdout, "must capture stdout to parse RUNNING token");
     }
 
-    // ── 2. Service detection: STOPPED → false (NOT a false positive) ──
-
     [Fact]
     public void IsServiceRunning_OutputContainsStoppedOnly_ReturnsFalse()
     {
-        // Regression: legacy parser used to check for "STATE" presence,
-        // which would falsely match a STOPPED service's status block.
-        // The correct contract is "matches 'RUNNING' substring".
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc", Ok(ScQueryStopped));
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(ScQueryStopped));
         ZapretActions.ProcessRunner = fake;
 
         Assert.False(ZapretActions.IsServiceRunning("zapret"));
     }
 
-    // ── 3. Service detection: process throws (e.g. missing sc.exe) → false ──
-
     [Fact]
     public void IsServiceRunning_RunnerThrows_ReturnsFalse()
     {
-        // FakeProcessRunner without a matching predicate throws
-        // InvalidOperationException — this exercises the catch-all `return false`
-        // in IsServiceRunning, mirroring "sc.exe not on PATH" on a stripped
-        // Windows install or a non-Windows host. Behavioural contract:
-        // ZapretActions must NEVER let an exception escape to the diagnostic
-        // pipeline; the per-svc line would just say "not running" silently.
-        var fake = new FakeProcessRunner(); // no OnRun() registered
+        var fake = new FakeProcessRunner();
         ZapretActions.ProcessRunner = fake;
 
         Assert.False(ZapretActions.IsServiceRunning("any-svc"));
     }
 
-    // ── 4. ServiceExists: positive (SERVICE_NAME header in stdout) ──
-
     [Fact]
     public void ServiceExists_OutputContainsServiceName_ReturnsTrue()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc", Ok(ScQueryStopped));
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(ScQueryStopped));
         ZapretActions.ProcessRunner = fake;
 
-        // Note: ServiceExists checks for SERVICE_NAME *or* STATE — so even a
-        // stopped service counts as "exists". That's the right semantic for
-        // StopDeleteServiceLineAsync which then unconditionally calls
-        // `sc stop` + `sc delete` to clean it up.
         Assert.True(ZapretActions.ServiceExists("zapret"));
     }
-
-    // ── 5. ServiceExists: 1060-style "not found" output → false ──
 
     [Fact]
     public void ServiceExists_EmptyOrErrorOutput_ReturnsFalse()
     {
-        // Windows emits "[SC] EnumQueryServicesStatus:OpenService FAILED 1060"
-        // to stderr (not stdout) when a service doesn't exist. The parser
-        // only inspects stdout, so a missing service produces empty stdout
-        // and the SERVICE_NAME/STATE tokens are absent.
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == "sc",
+            r => r.ExecutablePath == ZapretActions.ScExecutablePath,
             Fail(1060, "[SC] EnumQueryServicesStatus:OpenService FAILED 1060"));
         ZapretActions.ProcessRunner = fake;
 
         Assert.False(ZapretActions.ServiceExists("nonexistent-svc"));
     }
 
-    // ── 6. IsAnyServiceMatching: substring glob hits → true ──
-
     [Fact]
     public void IsAnyServiceMatching_OutputContainsSubstring_ReturnsTrue()
     {
-        // Simulate `sc query state= all` dumping every service. The diagnostic
-        // pipeline calls this with "vpn" to spot conflicting VPN services
-        // (RuVPN, NordVPN, etc.). Match is case-insensitive substring.
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == "sc"
+            r => r.ExecutablePath == ZapretActions.ScExecutablePath
               && r.Arguments.Count == 3
               && r.Arguments[0] == "query"
               && r.Arguments[1] == "state="
@@ -189,57 +120,41 @@ public sealed class ZapretActionsTests : IDisposable
 
         Assert.True(ZapretActions.IsAnyServiceMatching("vpn"));
 
-        // Verify the arg-list shape — `state=` and `all` are distinct tokens.
-        // sing-box-style argument splitting must not collapse them into one.
         var req = fake.RunCalls[0];
         Assert.Equal(new[] { "query", "state=", "all" }, req.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromSeconds(3), req.Timeout);
     }
 
-    // ── 7. IsAnyServiceMatching: substring miss → false ──
-
     [Fact]
     public void IsAnyServiceMatching_OutputMissesSubstring_ReturnsFalse()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc",
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath,
             Ok("SERVICE_NAME: DnsCache\r\nSERVICE_NAME: BFE\r\n"));
         ZapretActions.ProcessRunner = fake;
 
         Assert.False(ZapretActions.IsAnyServiceMatching("zapret"));
     }
 
-    // ── 8. RunSc: ProcessRequest shape (executable, args, timeout) ──
-
     [Fact]
     public async Task RunSc_PassesParsedArgsAndTimeout()
     {
-        // Pin the contract that the legacy shell-string "stop zapret" gets
-        // split into ["stop", "zapret"] and routed to "sc" with the 5s
-        // timeout. Quotes in legacy strings would break here — the brief
-        // notes this is acceptable because actual callers only pass simple
-        // verb+name without spaces.
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "sc", Ok(""));
+        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(""));
         ZapretActions.ProcessRunner = fake;
 
         await ZapretActions.RunSc("stop zapret");
 
         Assert.Single(fake.RunCalls);
         var req = fake.RunCalls[0];
-        Assert.Equal("sc", req.ExecutablePath);
+        Assert.Equal(ZapretActions.ScExecutablePath, req.ExecutablePath);
         Assert.Equal(new[] { "stop", "zapret" }, req.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromSeconds(5), req.Timeout);
     }
 
-    // ── 9. RunNetsh: success exit-code path + stdout out-param ──
-
     [Fact]
     public void RunNetsh_ZeroExitCode_ReturnsTrueAndPopulatesOutput()
     {
-        // CheckTcpTimestampsLine relies on RunNetsh capturing stdout so it
-        // can grep for "Timestamps: enabled". Pin both: returns true on
-        // exit 0 + stdout flows through the `out string output` param.
         const string netshOut =
             "Querying active state...\r\n" +
             "TCP Global Parameters\r\n" +
@@ -257,22 +172,14 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.True(ok);
         Assert.Contains("Timestamps", captured);
         Assert.Contains("enabled", captured);
-        // Verify the arg-split contract: shell-string → ArgumentList tokens
-        // with embedded spaces collapsed (StringSplitOptions.RemoveEmptyEntries).
         var req = fake.RunCalls[0];
         Assert.Equal("netsh", req.ExecutablePath);
         Assert.Equal(new[] { "interface", "tcp", "show", "global" }, req.Arguments.ToArray());
     }
 
-    // ── 10. RunNetsh: nonzero exit-code surfaces failure ──
-
     [Fact]
     public void RunNetsh_NonzeroExitCode_ReturnsFalseButStillPopulatesOutput()
     {
-        // netsh emits diagnostics on stdout even when failing (e.g. policy
-        // not configured = exit 1 + "The system cannot find the file specified").
-        // The contract is: callers see the exit code via the bool return, but
-        // can still read the partial stdout for diagnostic display.
         var fake = new FakeProcessRunner();
         fake.OnRun(r => r.ExecutablePath == "netsh",
             new ProcessResult(
@@ -289,46 +196,20 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("cannot find", captured);
     }
 
-    // ── 11. Cygwin .bat regression-prevention (v2.9.x lesson) ──
-
     [Fact]
     public void BuildCygwinLaunchBat_UsesSetBinAndSetLists_NotLiteralPaths()
     {
-        // Critical Cygwin contract: winws.exe needs SET %VARS% in .bat,
-        // not literal Windows paths. hostfakesplit + SNI spoofing
-        // (sni=www.google.com) is what makes Discord work (ALT3).
-        //
-        // This test pins the contract. The .bat content MUST contain:
-        //   1. `set "BIN=<path>\"`   (Cygwin's POSIX resolver needs CMD var
-        //                              expansion to handle the path)
-        //   2. `set "LISTS=<path>\"` (same reason)
-        //   3. `cd /d "%BIN%"`       (use the var, not literal path, when cd-ing)
-        //   4. `winws.exe %args%`    (invocation should not embed binDir literal
-        //                              as `<binDir>\winws.exe` — Cygwin breaks)
-        //
-        // Regression history: in v2.9.x we used to write `cd /d "<actual\\path>"`
-        // and `<actual\\path>\winws.exe`. winws.exe printed "cannot access
-        // file" and silently exited. The fix was to switch to SET %VARS%.
         const string fakeBinDir = @"C:\ProgramData\VPNRouter\zapret\bin";
         const string fakeListsDir = @"C:\ProgramData\VPNRouter\zapret\lists";
         const string args = "--wf-tcp=443 --dpi-desync=fake,split2";
 
         var bat = ZapretManager.BuildCygwinLaunchBat(fakeBinDir, fakeListsDir, args);
 
-        // Critical assertion: SET BIN= must be present.
         Assert.Contains("set \"BIN=", bat);
-        // Critical assertion: SET LISTS= must be present.
         Assert.Contains("set \"LISTS=", bat);
-        // The cd must use %BIN% (CMD variable expansion), not the literal path.
         Assert.Contains("cd /d \"%BIN%\"", bat);
-        // The literal binDir must NOT appear in a cd /d position — that
-        // would be the regression case. (It DOES appear inside the
-        // `set "BIN=..."` line, which is fine — CMD expands it correctly.)
         Assert.DoesNotContain($"cd /d \"{fakeBinDir}", bat);
-        // The args must be present unchanged (no escaping).
         Assert.Contains(args, bat);
-        // The trailing slash on SET values is required by downstream Flowseal
-        // scripts that build paths via `%BIN%winws.exe`-style joins.
         Assert.Contains($"set \"BIN={fakeBinDir}{System.IO.Path.DirectorySeparatorChar}", bat);
         Assert.Contains($"set \"LISTS={fakeListsDir}{System.IO.Path.DirectorySeparatorChar}", bat);
     }
@@ -352,15 +233,9 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("Zapret arguments contain disallowed shell metacharacters", ex.Message);
     }
 
-    // ── 12. Strategy parser: extracts winws args from Flowseal-shape .bat ──
-
     [Fact]
     public void ExtractWinwsArgsFromLines_SingleLine_StripsExeAndReturnsArgs()
     {
-        // Synthesised general.bat shape from Flowseal upstream. Real release
-        // .bats have `start "" "%BIN%winws.exe" --foo --bar` invocations,
-        // often with line continuations (^). This test pins the
-        // single-line happy path.
         var lines = new[]
         {
             "@echo off",
@@ -374,24 +249,17 @@ public sealed class ZapretActionsTests : IDisposable
             listsPath: "%LISTS%");
 
         Assert.NotNull(args);
-        // Args should not include `winws.exe` or the wrapping quotes.
         Assert.DoesNotContain("winws.exe", args!);
         Assert.Contains("--wf-tcp=443", args);
         Assert.Contains("--dpi-desync=fake,split2", args);
         Assert.Contains("--dpi-desync-fooling=md5sig", args);
     }
 
-    // ── 12b. RunTests: throws FileNotFoundException when script is missing ──
-
     [Fact]
     public void RunTests_MissingScriptFile_ThrowsFileNotFoundException()
     {
-        // When utils/test zapret.ps1 is absent in ZapretDir, RunTests throws
-        // FileNotFoundException before attempting to spawn powershell.
         Assert.Throws<FileNotFoundException>(() => ZapretActions.RunTests());
     }
-
-    // ── 12b2. RunTests: throws ArgumentException when path contains metacharacters ──
 
     [Theory]
     [InlineData("zapret_dir_&_calc_")]
@@ -401,8 +269,9 @@ public sealed class ZapretActionsTests : IDisposable
     [InlineData("zapret_dir_\"_quote_")]
     public void RunTests_PathWithMetacharacters_ThrowsArgumentException(string folderPrefix)
     {
-        // Path contains shell metacharacters -> RunTests throws ArgumentException
-        // before attempting Process.Start.
+        Assert.SkipWhen(OperatingSystem.IsWindows() && folderPrefix.IndexOfAny(new[] { '"', '|' }) >= 0,
+            "Windows forbids this character in a directory name, so the fixture cannot be created.");
+
         var tempDir = Path.Combine(Path.GetTempPath(), $"{folderPrefix}{Guid.NewGuid():N}");
         var utilsDir = Path.Combine(tempDir, "zapret", "utils");
         Directory.CreateDirectory(utilsDir);
@@ -412,8 +281,6 @@ public sealed class ZapretActionsTests : IDisposable
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var dataDir = Path.Combine(appData, "VPNRouter");
 
-        // Temporarily override data dir via AppPaths if possible, or test path directly if ZapretDir can be affected.
-        // Note: ZapretUpdater.ZapretDir uses AppPaths.DataDir.
         AppPaths.OverrideDataDir(tempDir);
         try
         {
@@ -427,18 +294,17 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
-    // ── 12c. OpenServiceMenu: throws ArgumentException when path contains metacharacters ──
-
     [Fact]
     public void OpenServiceMenu_PathWithMetacharacters_ThrowsArgumentException()
     {
-        // Path contains shell metacharacters -> OpenServiceMenu throws ArgumentException
-        // before attempting Process.Start.
         var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_dir_&_calc_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-        var servicePath = Path.Combine(tempDir, "service.bat");
+        var zapretDir = Path.Combine(tempDir, "zapret");
+        Directory.CreateDirectory(zapretDir);
+        var servicePath = Path.Combine(zapretDir, "service.bat");
         File.WriteAllText(servicePath, "@echo off");
 
+        var originalDataDir = AppPaths.DataDir;
+        AppPaths.OverrideDataDir(tempDir);
         try
         {
             var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(servicePath));
@@ -446,11 +312,10 @@ public sealed class ZapretActionsTests : IDisposable
         }
         finally
         {
+            AppPaths.OverrideDataDir(originalDataDir);
             try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
-
-    // ── 12d. OpenHostsEditHelpers: throws ArgumentException when paths contain disallowed characters ──
 
     [Theory]
     [InlineData("temp\rpath", "valid_hosts")]
@@ -472,17 +337,57 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers("valid_temp", null!));
     }
 
-    // ── 13. Strategy parser: handles ^ line continuation + var substitution ──
+    [Fact]
+    public void OpenServiceMenu_PathOutsideZapretDir_ThrowsArgumentException()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
+        var zapretDir = Path.Combine(tempDir, "zapret");
+        Directory.CreateDirectory(zapretDir);
+
+        var outsideBat = Path.Combine(tempDir, "outside.bat");
+        File.WriteAllText(outsideBat, "@echo off");
+
+        var originalDataDir = AppPaths.DataDir;
+        AppPaths.OverrideDataDir(tempDir);
+        try
+        {
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(outsideBat));
+            Assert.Contains("Zapret directory", ex.Message);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(originalDataDir);
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void OpenServiceMenu_NonBatExtension_ThrowsArgumentException()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
+        var zapretDir = Path.Combine(tempDir, "zapret");
+        Directory.CreateDirectory(zapretDir);
+
+        var exePath = Path.Combine(zapretDir, "service.exe");
+        File.WriteAllText(exePath, "fake");
+
+        var originalDataDir = AppPaths.DataDir;
+        AppPaths.OverrideDataDir(tempDir);
+        try
+        {
+            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(exePath));
+            Assert.Contains(".bat file", ex.Message);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(originalDataDir);
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
 
     [Fact]
     public void ExtractWinwsArgsFromLines_LineContinuation_JoinsAndSubstitutesPlaceholders()
     {
-        // Real Flowseal .bats use `^` to continue commands across lines and
-        // reference %BIN% / %LISTS% placeholders. Parser must:
-        //   1. Stitch continuation lines together
-        //   2. Substitute %BIN% / %LISTS% with the supplied resolved paths
-        //   3. Strip game-filter-only --new segments (here we use the
-        //      ipset-loaded form so no game filter to strip)
         var lines = new[]
         {
             "@echo off",
@@ -493,13 +398,12 @@ public sealed class ZapretActionsTests : IDisposable
 
         var args = ZapretUpdater.ExtractWinwsArgsFromLines(
             lines,
-            binPath: "%BIN%",          // pass through unchanged
+            binPath: "%BIN%",
             listsPath: "/RESOLVED/lists/");
 
         Assert.NotNull(args);
         Assert.Contains("--wf-tcp=443", args!);
         Assert.Contains("--dpi-desync=fake,split2", args);
-        // %LISTS% must have been substituted with our supplied path.
         Assert.Contains("/RESOLVED/lists/tls_clienthello_www_google_com.bin", args);
         Assert.DoesNotContain("%LISTS%", args);
     }

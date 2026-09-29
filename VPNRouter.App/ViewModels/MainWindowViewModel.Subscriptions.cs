@@ -11,41 +11,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
-/// <summary>
-/// Phase 2B (Wave 8, 2026-05-18) — Subscription tab commands + auto-refresh
-/// timer split out of the <c>MainWindowViewModel</c> god-class. Hosts the
-/// user-facing Subscribe-tab surface:
-///
-/// <list type="bullet">
-///   <item><see cref="RebuildSubscriptionPool"/> — aggregator that
-///   flattens enabled <c>Subscriptions[]</c> into the
-///   <see cref="MainWindowViewModel.SubscriptionServers"/>
-///   <c>ObservableCollection</c> the Subscribe tab binds to.</item>
-///   <item><see cref="AddSubscriptionAsync"/> / <see cref="RemoveSubscription"/>
-///   — explicit user actions on individual subscription cards.</item>
-///   <item><see cref="RefreshSubscriptionAsync"/> /
-///   <see cref="RefreshAllSubscriptionsAsync"/> — single + bulk manual
-///   refresh of subscription contents.</item>
-///   <item><see cref="SyncSubscriptionAsync"/> — legacy single-URL sync
-///   path (kept for users who haven't migrated to the multi-sub UI).</item>
-///   <item><see cref="ClearSubscription"/> — wipe the subscription pool +
-///   legacy URL field in one click.</item>
-///   <item><see cref="StartSubRefreshTimer"/> /
-///   <see cref="StopSubRefreshTimer"/> — periodic (1-hour) refresh while
-///   VPN is connected in subscribe mode.</item>
-///   <item><see cref="RefreshSubscriptionSilentAsync"/> — the silent
-///   refresh body the periodic timer fires; v2.31.8-r3 added UUID
-///   comparison so unchanged server sets don't trigger reconnects.</item>
-/// </list>
-///
-/// <para>Server-model wiring (<see cref="MainWindowViewModel.Servers"/>,
-/// active-indicator refresh, orphan tracking) stays in the main file
-/// because it overlaps with manual-VLESS-mode and connect/reconnect
-/// orchestration. This partial only owns the Subscribe surface.</para>
-/// </summary>
 public partial class MainWindowViewModel
 {
-    /// <summary>Rebuild aggregated server pool from all enabled subscriptions.</summary>
     private void RebuildSubscriptionPool()
     {
         var prevLoading = _isLoadingUI;
@@ -64,15 +31,9 @@ public partial class MainWindowViewModel
                 foreach (var serverEntry in sub.UnderlyingEntry.Servers)
                     SubscriptionServers.Add(new ServerViewModel(serverEntry));
             }
-            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
-            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3: subnet-risk flags from the store
+            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
+            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            // Restore selection prioritizing matching the same server identity:
-            // 1. Name + (Uuid or Host/Port)
-            // 2. Name alone
-            // 3. Host + Port (if renamed by provider)
-            // 4. Uuid alone (only if unique in the pool, to prevent collapsing to server 0 when all share one client UUID)
-            // 5. Fallback to first
             SelectedSubscriptionServer = (!string.IsNullOrEmpty(selectedName)
                 ? SubscriptionServers.FirstOrDefault(s =>
                     string.Equals(s.Name, selectedName, StringComparison.Ordinal) &&
@@ -103,7 +64,6 @@ public partial class MainWindowViewModel
         var url = (NewSubUrl ?? "").Trim();
         if (string.IsNullOrWhiteSpace(url)) return;
 
-        // Security: enforce absolute URI validation restricted to http and https schemes
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -122,26 +82,15 @@ public partial class MainWindowViewModel
         NewSubName = string.Empty;
         NewSubUrl = string.Empty;
 
-        // Auto-switch to Subscribe tab so user sees the newly added subscription
-        // and its fetched servers. Without this, if user adds subscription while
-        // on Manual (VLESS) tab, the result happens "behind the scenes" and user
-        // has no visual confirmation, leading to the "invisible add" perception.
         if (!IsSubscribeMode)
         {
             IsSubscribeMode = true;
             IsVlessMode = false;
-            SelectedTabIndex = 1; // Subscribe tab
+            SelectedTabIndex = 1;
         }
 
-        // Immediately refresh this new subscription.
-        // RefreshSubscriptionAsync now has fail-safe RebuildSubscriptionPool + SaveSettings
-        // in its finally block, so even if fetch fails (bad URL, network), the UI
-        // shows the subscription entry (just without servers) instead of appearing
-        // to have done nothing.
         await RefreshSubscriptionAsync(svm);
 
-        // Belt-and-suspenders: rebuild one more time after Refresh in case
-        // Refresh's finally was short-circuited by some future exception path.
         RebuildSubscriptionPool();
         SaveSettings();
     }
@@ -162,7 +111,6 @@ public partial class MainWindowViewModel
         if (sub == null || string.IsNullOrWhiteSpace(sub.Url)) return;
         if (sub.IsRefreshing) return;
 
-        // Snapshot active server identity before refresh to prevent dropping active connection
         var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
         var activeUuid = SelectedSubscriptionServer?.Uuid;
         var activeHost = SelectedSubscriptionServer?.Server;
@@ -177,10 +125,6 @@ public partial class MainWindowViewModel
         {
             var count = await SubscriptionFetcher.RefreshEntryAsync(
                 sub.UnderlyingEntry, _logger, CancellationToken.None);
-            // r7: count==0 = fetch failed/empty. RefreshEntryAsync KEEPS the
-            // cached servers, so show the real cache count + flag the failure
-            // (honest "couldn't refresh — showing cached" badge) instead of
-            // dropping the card to "0s" (which read as "configs lost / banned").
             sub.LastRefreshFailed = count == 0;
             sub.LastServerCount = count > 0 ? count : (sub.UnderlyingEntry.Servers?.Count ?? 0);
             sub.LastRefreshedAt = sub.UnderlyingEntry.LastRefreshedAt;
@@ -194,16 +138,10 @@ public partial class MainWindowViewModel
         finally
         {
             sub.IsRefreshing = false;
-            // Always rebuild + save, even on exception. Previously these only ran
-            // on the happy path, so a fetch failure left the UI with zero servers
-            // visible for the new subscription — user thought nothing happened.
-            // Now: failure means "sub entry exists, no servers" rather than
-            // "sub entry exists but UI still shows old state".
             RebuildSubscriptionPool();
             SaveSettings();
         }
 
-        // G3: preserve active connection if active server configuration didn't change
         if (IsConnected && IsSubscribeMode && !IsConnecting && activeSigBefore != null)
         {
             var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
@@ -237,7 +175,6 @@ public partial class MainWindowViewModel
         var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
         if (enabled.Count == 0) return;
 
-        // Snapshot active server identity before refresh to prevent dropping active connection
         var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
         var activeUuid = SelectedSubscriptionServer?.Uuid;
         var activeHost = SelectedSubscriptionServer?.Server;
@@ -256,7 +193,7 @@ public partial class MainWindowViewModel
                 {
                     var count = await SubscriptionFetcher.RefreshEntryAsync(
                         s.UnderlyingEntry, _logger, CancellationToken.None);
-                    s.LastRefreshFailed = count == 0;       // r7: cache kept on empty
+                    s.LastRefreshFailed = count == 0;
                     s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
                     s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
                 }
@@ -271,14 +208,10 @@ public partial class MainWindowViewModel
         finally
         {
             foreach (var s in enabled) s.IsRefreshing = false;
-            // Rebuild + save in finally so even if Task.WhenAll itself throws
-            // (shouldn't normally — inner try/catch per entry — but defensive),
-            // the UI still reflects any entries that did complete successfully.
             RebuildSubscriptionPool();
             SaveSettings();
         }
 
-        // G3: preserve active connection if active server configuration didn't change
         if (IsConnected && IsSubscribeMode && !IsConnecting && activeSigBefore != null)
         {
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
@@ -325,14 +258,12 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // Replace subscription servers list
             SubscriptionServers.Clear();
             foreach (var entry in entries)
                 SubscriptionServers.Add(new ServerViewModel(entry));
-            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
-            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers); // R3
+            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
+            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            // Select first server as active
             SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();
             SaveSettings();
             StatusText = Strings.SyncComplete(entries.Count);
@@ -354,18 +285,11 @@ public partial class MainWindowViewModel
         StatusText = Strings.SubscriptionCleared;
     }
 
-    // ── Subscription auto-refresh ──
-
-    /// <summary>Start periodic subscription refresh (when VPN connected in subscribe mode).</summary>
     private void StartSubRefreshTimer()
     {
         StopSubRefreshTimer();
         if (!(_settings.App.ConfigMode ?? "generated")
             .Equals("subscribe", StringComparison.OrdinalIgnoreCase)) return;
-        // v2.31.0-r3 (VM-1): multi-sub model uses Subscriptions[] — pre-fix
-        // condition only checked the legacy single SubscriptionUrl field, so
-        // users who had migrated to the multi-sub UI never got auto-refresh
-        // even when they had multiple working subs. Accept either source.
         var hasLegacyUrl = !string.IsNullOrWhiteSpace(SubscriptionUrl);
         var hasEnabledMultiSub = Subscriptions.Any(s =>
             s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
@@ -379,17 +303,12 @@ public partial class MainWindowViewModel
             SubRefreshIntervalMs);
     }
 
-    /// <summary>Stop the subscription refresh timer.</summary>
     private void StopSubRefreshTimer()
     {
         _subRefreshTimer?.Dispose();
         _subRefreshTimer = null;
     }
 
-    /// <summary>
-    /// Silent subscription refresh — fetches new servers, compares UUIDs,
-    /// and reconnects if they changed (e.g. server rotated UUID).
-    /// </summary>
     private async Task RefreshSubscriptionSilentAsync()
     {
         if (!IsConnected || !(_settings.App.ConfigMode ?? "generated")
@@ -398,7 +317,6 @@ public partial class MainWindowViewModel
         var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
         if (enabled.Count == 0) return;
 
-        // Cancel previous refresh if still running (prevents concurrent fetches on slow network)
         _subRefreshCts?.Cancel();
         _subRefreshCts = new CancellationTokenSource();
         var ct = _subRefreshCts.Token;
@@ -407,13 +325,8 @@ public partial class MainWindowViewModel
         {
             _logger.Information("[SubRefresh] Checking {Count} subscription(s)...", enabled.Count);
 
-            // Snapshot current aggregated UUIDs
             var beforeUuids = SubscriptionServers.Select(s => s.Uuid).OrderBy(u => u).ToList();
 
-            // G3 (2026-06-27): snapshot the ACTIVE server's identity so we only
-            // reconnect when IT specifically changed — a rotation of some OTHER
-            // server in the pool must not drop the tunnel (the hourly-refresh
-            // reconnect that killed long-lived TCP conns like claude.exe).
             var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
             var activeUuid = SelectedSubscriptionServer?.Uuid;
             var activeHost = SelectedSubscriptionServer?.Server;
@@ -423,13 +336,12 @@ public partial class MainWindowViewModel
                 ? null
                 : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
 
-            // Parallel refresh, ignore per-entry failures
             await Task.WhenAll(enabled.Select(async s =>
             {
                 try
                 {
                     var count = await SubscriptionFetcher.RefreshEntryAsync(s.UnderlyingEntry, _logger, ct);
-                    s.LastRefreshFailed = count == 0;       // r7: cache kept on empty
+                    s.LastRefreshFailed = count == 0;
                     s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
                     s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
                 }
@@ -443,33 +355,6 @@ public partial class MainWindowViewModel
 
             if (ct.IsCancellationRequested) return;
 
-            // v2.31.8-r3: compare against UnderlyingEntry.Servers BEFORE
-            // RebuildSubscriptionPool — the previous code rebuilt the
-            // SubscriptionServers ObservableCollection unconditionally on
-            // every hourly refresh. Clear() drops the
-            // SelectedSubscriptionServer reference, then the
-            // "restore selection" line at the end of
-            // RebuildSubscriptionPool re-assigns SelectedSubscriptionServer
-            // to a NEW ServerViewModel instance. The setter fires
-            // OnSelectedSubscriptionServerChanged, which (when IsConnected
-            // && IsSubscribeMode) triggers ReconnectAsync — full sing-box
-            // stop+start cycle, ~3-4 s VPN downtime EVERY HOUR even when
-            // the server set didn't change.
-            //
-            // Caught in brat-2026-05-05 logs: every hourly SubRefresh tick
-            // disconnected/reconnected the tunnel even though the
-            // "No UUID changes, no reconnect needed" log line was emitted
-            // right after. Symptom user-reported: long-running TCP
-            // connections (e.g. claude.exe → Anthropic API) failed during
-            // each window, sometimes returning 403 because traffic
-            // briefly fell back to direct route during the gap.
-            //
-            // Fix: compute afterUuids from UnderlyingEntry.Servers (the
-            // model layer that the fetch actually populated), make the
-            // change decision FIRST, and only call RebuildSubscriptionPool
-            // when something actually changed. SaveSettings still runs in
-            // both branches so the refreshed LastRefreshedAt timestamp
-            // lands in YAML.
             var afterUuids = enabled
                 .SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>())
@@ -486,12 +371,6 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // G3: the server SET changed — but only RECONNECT if the ACTIVE
-            // server's identity changed. Refresh the in-memory pool either way so
-            // the UI reflects new servers, guarded by _isLoadingUI so the
-            // SelectedSubscriptionServer re-assignment inside RebuildSubscriptionPool
-            // doesn't fire OnSelectedSubscriptionServerChanged -> a spurious
-            // reconnect (we decide that explicitly below).
             var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
                 enabled.SelectMany(s => s.UnderlyingEntry.Servers
                     ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),

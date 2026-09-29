@@ -19,12 +19,6 @@ using VPNRouter.App.ViewModels;
 
 namespace VPNRouter.App.Services;
 
-/// <summary>
-/// Embedded localhost-only HTTP automation & telemetry bridge.
-/// Enabled only when launched with `--automation-port <port>` or `VPNROUTER_AUTOMATION_PORT`.
-/// Allows gathering real-time telemetry (RAM, CPU, GC, Dispatcher latency) and programmatic
-/// UI inspection / actions on Windows, macOS, and Linux without native OS UI automation dependencies.
-/// </summary>
 public static class AppAutomationDriver
 {
     private static HttpListener? _listener;
@@ -144,7 +138,6 @@ public static class AppAutomationDriver
 
         try
         {
-            // Authenticate if token configured
             if (!string.IsNullOrEmpty(_token))
             {
                 var authHeader = req.Headers["Authorization"] ?? "";

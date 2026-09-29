@@ -2,25 +2,6 @@ using SkiaSharp;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pixel-tolerance diff for screenshot regression testing. Decodes two PNGs
-/// via SkiaSharp (already a transitive dependency through Avalonia.Skia
-/// in <see cref="TestAppBuilder"/>'s <c>UseSkia()</c> chain), compares
-/// pixel-by-pixel with an intensity threshold, and reports the fraction
-/// of differing pixels.
-///
-/// <para>Anti-aliasing noise typically diffs by 5–15 sum-RGB units per
-/// pixel; visible regressions (control moved, theme inverted, text
-/// changed) diff by 100+. The default 30-unit threshold sits between,
-/// so AA jitter slips through but real layout drift trips the test.</para>
-///
-/// <para>Used by <see cref="VisualDiffTests"/>. Baselines live in
-/// <c>screenshots/baseline/</c> and are committed to the repo. Live test
-/// runs write to <c>screenshots/</c> directly (gitignored). On dimension
-/// mismatch the result reports <see cref="DiffResult.DimensionsMatch"/>
-/// = false and treats every pixel as differing — a resized window IS
-/// the regression we want to catch.</para>
-/// </summary>
 public static class VisualDiffHelper
 {
     public sealed class DiffResult
@@ -37,12 +18,6 @@ public static class VisualDiffHelper
             BaselineWidth == ActualWidth && BaselineHeight == ActualHeight;
     }
 
-    /// <summary>
-    /// Per-pixel diff. <paramref name="intensityThreshold"/> is the sum
-    /// |R-R'| + |G-G'| + |B-B'| above which a pixel counts as "different".
-    /// Alpha is ignored — opaque page renders coming out of
-    /// <c>CaptureRenderedFrame</c> have a constant alpha channel.
-    /// </summary>
     public static DiffResult Compare(
         string baselinePath,
         string actualPath,
@@ -62,9 +37,6 @@ public static class VisualDiffHelper
 
         if (baseline.Width != actual.Width || baseline.Height != actual.Height)
         {
-            // Dimension mismatch counted as 100% diff. Caller can branch on
-            // DimensionsMatch for a clearer error message, but the metric
-            // stays consistent (≥ MaxDifferingFraction → fail).
             var totalBaseline = baseline.Width * baseline.Height;
             return new DiffResult
             {
@@ -82,10 +54,6 @@ public static class VisualDiffHelper
         int total = w * h;
         int differing = 0;
 
-        // SKBitmap.Pixels allocates a fresh SKColor[width*height] — for our
-        // worst case 1200x800 page that's ~3.7 MB transient, GC'd after
-        // the test. Cheaper than mucking around with raw pin-buffer access
-        // in a one-shot diff.
         var bp = baseline.Pixels;
         var ap = actual.Pixels;
 

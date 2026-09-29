@@ -11,19 +11,8 @@
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
-  <!-- v2.25.5 — Applications page redesign per Claude Design handoff
-       section 5. Split trimmed 160 → 120. Category counter flipped from
-       pill-badge (solid arctic bg + white "23" inside) to plain mono
-       muted number — the badge visual was too much like a notification
-       count and pulled focus; the number is already enough signal of
-       "size of the group". Selected category row gets surface-base fg
-       highlight + arctic fg name. App rows on the right become soft
-       pill-like rounded blocks to make the checkbox grid read as a
-       stack of separate items rather than a raw list. -->
-
   <UserControl.Styles>
 
-    <!-- Category row — title + mono counter -->
     <Style Selector="TextBlock.cat-name">
       <Setter Property="FontSize" Value="11"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
@@ -39,7 +28,6 @@
       <Setter Property="Margin" Value="4,0,4,0"/>
     </Style>
 
-    <!-- Active (selected) category — arctic fg + highlighted background -->
     <Style Selector="ListBox.cat-list ListBoxItem:selected /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
     </Style>
@@ -51,7 +39,6 @@
       <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
     </Style>
 
-    <!-- Each app row = soft rounded block -->
     <Style Selector="Border.app-row">
       <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
       <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
@@ -62,7 +49,6 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- Custom-app badge — subtle mono pill, not loud -->
     <Style Selector="Border.custom-badge">
       <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
       <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
@@ -70,7 +56,6 @@
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- Routing mode semantic status badges -->
     <Style Selector="Border.routing-badge">
       <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
       <Setter Property="Padding" Value="4,1"/>
@@ -100,20 +85,7 @@
     </Style>
   </UserControl.Styles>
 
-  <!-- v2.29.0 — full-tunnel banner replaces the silent IsEnabled disable
-       that previously read as "broken" to Mac testers (feedback 2026-04-29).
-       Banner sits as Row 0; main grid sits as Row 1 with reduced opacity
-       + IsHitTestVisible=false instead of IsEnabled=false (visual hint
-       that selection is unused, not that the page is broken).
-       When IsSplitTunnel = true the banner row collapses (Height=Auto +
-       IsVisible=false → 0px).
-       v2.32 (r10) — added Row 1: Include/Exclude segmented toggle.
-       Master-detail moved to Row 2. -->
-
   <UserControl.Styles>
-    <!-- v2.32 — segmented mode toggle (Include / Exclude). Pattern
-         mirrors the existing radio-styled buttons elsewhere; active
-         button gets AccentSolid background. -->
     <Style Selector="ToggleButton.apps-mode-seg">
       <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
       <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
@@ -134,7 +106,6 @@
 
   <Grid RowDefinitions="Auto,Auto,Auto,*">
 
-    <!-- Full-tunnel hint banner — shown only when IsFullTunnel -->
     <Border Grid.Row="0"
             IsVisible="{Binding IsFullTunnel}"
             Background="{DynamicResource WarningBgBrush}"
@@ -160,8 +131,6 @@
       </Grid>
     </Border>
 
-    <!-- Row 1: Apps Mode segmented toggle (v2.32 r10).
-         Only meaningful in Split-tunnel mode; collapsed in Full-tunnel. -->
     <Border Grid.Row="1"
             IsVisible="{Binding IsSplitTunnel}"
             IsEnabled="{Binding !IsApplying}"
@@ -197,7 +166,6 @@
       </StackPanel>
     </Border>
 
-    <!-- True Split status: keep retry visible before the app list, not buried in the footer. -->
     <Border Grid.Row="2"
             IsVisible="{Binding IsTrueSplitStatusVisible}"
             Background="{DynamicResource WarningBgBrush}"
@@ -224,12 +192,6 @@
       </Grid>
     </Border>
 
-    <!-- v2.30.3-r1 (BUG-36 fix): when Full Tunnel is active the sidebar
-         category list looked clickable (low opacity but no cursor hint),
-         users clicked categories 5+ times before realizing it's no-op.
-         Now the disabled state is more pronounced + a not-allowed cursor
-         appears on hover so the visual disabled-ness matches the actual
-         IsHitTestVisible=false behaviour. -->
     <Grid Grid.Row="3"
           ColumnDefinitions="120,*"
           IsEnabled="{Binding !IsApplying}"
@@ -237,7 +199,6 @@
           IsHitTestVisible="{Binding IsSplitTunnel}"
           Cursor="{Binding IsFullTunnel, Converter={x:Static conv:FullTunnelCursorConverter.Instance}}">
 
-    <!-- ─── MASTER (left): category list + inline add ─── -->
     <Border Grid.Column="0"
             BorderThickness="0,0,1,0"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -256,9 +217,6 @@
               <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,4">
                 <TextBlock Grid.Column="0" Classes="cat-name"
                            Text="{Binding DisplayName}"/>
-                <!-- v2.25.5: counter is now plain mono muted number,
-                     not a filled arctic pill. Hidden at 0 to keep the
-                     visual weight aligned with the single-line nav. -->
                 <TextBlock Grid.Column="1" Classes="cat-count"
                            Text="{Binding Apps.Count}"
                            IsVisible="{Binding Apps.Count}"/>
@@ -267,7 +225,6 @@
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- New category input -->
         <TextBox Grid.Row="1" x:Name="NewCategoryInput"
                  Text="{Binding NewCategoryName}"
                  PlaceholderText="{Binding L_CategoryNamePrompt}"
@@ -283,13 +240,11 @@
       </Grid>
     </Border>
 
-    <!-- ─── DETAIL (right): header + master toggle + apps + add ─── -->
     <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto"
           DataContext="{Binding SelectedActiveAppGroup}"
           x:DataType="vm:AppGroupViewModel"
           IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
-      <!-- Header: DisplayName + Delete button (custom only) -->
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
             Margin="14,10,14,6">
         <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="13" FontWeight="Bold"
@@ -304,8 +259,6 @@
                 ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}"/>
       </Grid>
 
-      <!-- Explicit bulk actions; unlike the old master checkbox they never
-           pretend to represent a third, separately persisted group state. -->
       <Border Grid.Row="1" Padding="14,4,14,8">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_SelectAllApps}"
@@ -317,13 +270,11 @@
         </StackPanel>
       </Border>
 
-      <!-- Empty state -->
       <TextBlock Grid.Row="2" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsGroupEmpty}"
                  HorizontalAlignment="Center" VerticalAlignment="Center"
                  FontSize="11" Opacity="0.5" FontStyle="Italic"
                  IsVisible="{Binding !Apps.Count}"/>
 
-      <!-- Apps list — each row is a soft rounded block -->
       <ListBox Grid.Row="2"
                Classes="apps-list"
                ItemsSource="{Binding Apps}"
@@ -380,7 +331,6 @@
         </ListBox.ItemTemplate>
       </ListBox>
 
-      <!-- Add app input + Apply button -->
       <Border Grid.Row="3"
               Padding="10,8"
               BorderThickness="0,1,0,0"
@@ -408,16 +358,13 @@
                   HorizontalContentAlignment="Center"
                   FontSize="11" FontWeight="SemiBold"
                   Padding="0,5" CornerRadius="{StaticResource RadiusSm}"/>
-          <!-- Two-tier clean OpenDesign add panel: Row 0 full-width input, Row 1 action buttons -->
           <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
-            <!-- Row 0: Full width TextBox -->
             <TextBox Grid.Row="0" x:Name="CustomAppInput"
                      PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
                      FontSize="11" Padding="8,5"
                      CornerRadius="{StaticResource RadiusSm}"
                      HorizontalAlignment="Stretch"/>
 
-            <!-- Row 1: Action buttons row -->
             <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
               <Button Grid.Column="0" x:Name="BrowseExeButton"
                       Click="OnBrowseExeClicked"
@@ -448,7 +395,6 @@
       </Border>
     </Grid>
 
-    <!-- Empty state when no group selected -->
     <TextBlock Grid.Column="1"
                icons:PictogramText.Icons="arrow-left" icons:PictogramText.Text="{Binding L_SelectCategoryHint}"
                HorizontalAlignment="Center" VerticalAlignment="Center"

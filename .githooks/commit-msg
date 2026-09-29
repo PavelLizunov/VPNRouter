@@ -1,17 +1,4 @@
 #!/bin/bash
-# .githooks/commit-msg — VPNRouter v3.0 methodology commit-message check.
-#
-# Runs AFTER user writes the commit message but BEFORE it's stored.
-# Checked separately from pre-commit because the message file is only
-# available at this stage of the git hook lifecycle.
-#
-# Gates:
-#   M1. Subject line max 72 chars
-#   M2. Subject in conventional <scope>: <subject> form (scope in
-#       core/app/cli/service/android/tests/ci/docs/build OR free-form
-#       project verb like "fix:", "feat:")
-#
-# Bypass: git commit --no-verify
 
 set -e
 COMMIT_MSG_FILE="$1"
@@ -24,18 +11,15 @@ NC='\033[0m'
 ERRORS=()
 WARNINGS=()
 
-# ─── M1 — subject length ────────────────────────────────────────────────
 subject=$(head -1 "$COMMIT_MSG_FILE")
 if [ "${#subject}" -gt 72 ]; then
   ERRORS+=("M1: subject is ${#subject} chars (max 72). Move detail to body.")
 fi
 
-# ─── M2 — conventional commit prefix ────────────────────────────────────
 if ! echo "$subject" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|ci|build|style)(\([a-z]+\))?: '; then
   WARNINGS+=("M2: subject not in 'type(scope): subject' form. Recommended: feat/fix/docs/refactor/test/chore/ci/build.")
 fi
 
-# ─── Verdict ─────────────────────────────────────────────────────────────
 if [ "${#WARNINGS[@]}" -gt 0 ]; then
   echo ""
   for w in "${WARNINGS[@]}"; do echo -e "  ${YELLOW}⚠ $w${NC}"; done

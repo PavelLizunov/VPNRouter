@@ -3,7 +3,6 @@ using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Models;
 
-/// <summary>A user-created Applications category.</summary>
 public class CustomCategory
 {
     [YamlMember(Alias = "name")]

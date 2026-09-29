@@ -15,10 +15,6 @@
         <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
     </UserControl.Resources>
 
-    <!-- r46 — colored status badges in the strategy ComboBox.
-         TextBlock.zglyph-* classes drive Foreground via DynamicResource brushes
-         (theme-safe: light/dark switch repaints without reload).
-         Used by ComboBox.ItemTemplate AND inline in legend below dropdown. -->
     <UserControl.Styles>
         <Style Selector="TextBlock.zglyph-success">
             <Setter Property="Foreground" Value="{DynamicResource SuccessSolidBrush}"/>
@@ -33,72 +29,20 @@
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
         <Style Selector="TextBlock.zglyph-stale">
-            <!-- WarningSolidBrush — stale is orange/amber per design system -->
             <Setter Property="Foreground" Value="{DynamicResource WarningSolidBrush}"/>
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
         <Style Selector="TextBlock.zglyph-muted">
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-            <!-- r49: bold matches success/warning/danger/stale glyphs so the
-                 prefix column has uniform vertical rhythm in the dropdown. -->
             <Setter Property="FontWeight" Value="Bold"/>
         </Style>
     </UserControl.Styles>
 
-    <!--
-      v2.36.0-r8 — Zapret OneTap redesign per
-      `plans/research-one-button-zapret-deep-2026-05-24.md` (variant A
-      Centered stack, mirroring the TgProxyOneTap r7 pattern).
-
-      Pre-r8 the page was a 5-section master-detail (Status / Strategy / Hosts
-      / Filters / Advanced) requiring 4-6 clicks for first-run config. r8
-      consolidates into:
-        1. Hero card with shield icon, state-driven title/lede, big primary
-           magic button, 3 step chips (stopped state).
-        2. AV-block toast (Bug-r9-G) preserved verbatim.
-        3. «Тонкая настройка» expander stows every r5-era control —
-           Strategy ComboBox, Update Zapret, Custom args, IPSet, Game filter,
-           Discord/Flowseal hosts toggles, Run diagnostics, Clear cache,
-           Service menu, Folder/GitHub. Nothing removed.
-        4. Footer kept (mirrors TgProxyOneTap) — status dot + compact toggle.
-
-      The hero magic button binds to ZapretOneClickCommand which orchestrates:
-        download (if missing) → Discord hosts ensure-installed → auto-probe
-        loop (ALT3 → general → general (ALT) with HEAD probe to youtube.com).
-      Per-attempt progress surfaces as state-aware lede ("Тестирую (2/3):
-      general — пробую открыть youtube.com…"). On Tier1 winner stays running.
-
-      Don'ts (carried from TgProxyOneTap):
-        - No emoji in copy.
-        - No "1-click" phrasing — implicit, not stated.
-      -->
-
     <Grid RowDefinitions="*,Auto">
 
-        <!-- r27: outer ScrollViewer REMOVED. r25 (Expander→TabControl) and
-             r26 (MaxHeight + inner per-tab ScrollViewer) both failed to
-             solve the user's complaint «не получается доскролить до низа
-             вкладки». Root cause: outer ScrollViewer gave TabControl
-             unbounded vertical space → Avalonia 11 TabControl's Carousel
-             clipped its content based on layout-slot height without
-             propagating actual measured height back to the parent. Inner
-             ScrollViewers never engaged because they never saw a bounded
-             parent.
-             r27 fixes this structurally: Grid with Auto/* rows where
-             TabControl is in a * row. Now TabControl has a real bounded
-             viewport, inner ScrollViewer in each TabItem engages
-             deterministically when content exceeds the bound. -->
-        <!-- r31: 4-row Grid. Hero card + TabStrip are ALWAYS VISIBLE
-             (Auto rows). TabContent gets remaining * row, scrolls inside
-             per-tab ScrollViewer if overflows. User rule: «магия одного
-             клика значит что кнопка всегда должна быть видна без скролла».
-             Compact Hero (r31: 3 step chips removed, padding 24→14)
-             keeps it under ~260 px so always fits. -->
         <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*" Margin="12,8,14,8">
             <StackPanel Grid.Row="0" Spacing="8">
 
-                    <!-- ════════ Download progress (visible while downloading
-                         zapret or installing hosts via the magic button). -->
                     <StackPanel IsVisible="{Binding IsZapretDownloading}" Spacing="6">
                         <ProgressBar IsIndeterminate="True"
                                      Height="3"
@@ -111,10 +55,6 @@
                                    Foreground="{DynamicResource TextSecondaryBrush}"/>
                     </StackPanel>
 
-                    <!-- ════════ Bug-r9-G AV-block toast — preserved verbatim
-                         from pre-r8. Auto-clears after 8 s; Copy path button
-                         puts whitelist dir on clipboard. Suppressed during
-                         OneTap probing via _suppressZapretAvToast. -->
                     <Border IsVisible="{Binding HasZapretAvBlockToast}"
                             Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource DangerBgBrush}"
@@ -149,10 +89,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- ════════ Hero card — accent glow + centered stack.
-                         r31: Padding 24→14 + Spacing 12→8 + icon 46→38 → ~260 px
-                         total, fits in viewport without scroll (rule: one-click
-                         magic means user sees the button NO scroll needed). -->
                     <Border CornerRadius="{StaticResource RadiusLg}"
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -160,8 +96,6 @@
                             Padding="16,10,16,12"
                             ClipToBounds="True">
                         <Grid>
-                            <!-- Soft accent glow disc — smaller after r48 layout
-                                 change (icon-left instead of icon-top). -->
                             <Ellipse Width="140" Height="140"
                                      HorizontalAlignment="Right"
                                      VerticalAlignment="Top"
@@ -177,15 +111,6 @@
 
                             <StackPanel Spacing="10" HorizontalAlignment="Stretch" MaxWidth="420">
 
-                                <!-- r48: icon-LEFT header. Pre-r48 icon was
-                                     centered on top, then title + lede stacked
-                                     below — vertical scan, ~110px just for
-                                     icon+title. r48 puts icon col 0 + title/
-                                     lede col 1 side-by-side, saving ~40px and
-                                     surfacing the title at the very top of the
-                                     Hero (visible without scroll on narrow
-                                     windows). Icon shrunk 46→36 to match the
-                                     more compact rhythm. -->
                                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
                                     <Border Grid.Column="0" Grid.RowSpan="2"
                                             Width="36" Height="36"
@@ -219,10 +144,6 @@
                                                Margin="0,3,0,0"/>
                                 </Grid>
 
-                                <!-- Magic button — fires ZapretOneClickCommand
-                                     which orchestrates the whole flow. Same
-                                     command bound to footer button (muscle
-                                     memory). Disabled during download/probing. -->
                                 <Button Command="{Binding ZapretOneClickCommand}"
                                         IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                         Background="{DynamicResource AccentSolidBrush}"
@@ -250,20 +171,6 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- r34: Quick-strategy mini-row for power users.
-                                     ComboBox со списком стратегий + ▶ кнопка
-                                     запуска без probe. По дефолту главная
-                                     кнопка делает probe автоматически; эта
-                                     строка для тех кто знает свою стратегию
-                                     и не хочет ждать 2-7 мин probe.
-                                     Hidden during probe/running to avoid clutter. -->
-                                <!-- r50: Hero quick-strategy row reworked per design review.
-                                     - Mini ▶ replaced with explicit label "Запустить"
-                                       (user said unlabeled icon was unclear).
-                                     - Legend MOVED INTO ComboBox tooltip (was free-
-                                       floating below, disconnected from dropdown).
-                                     - ComboBox + button grid kept; sunken bg dropped
-                                       for cleaner card-on-card hierarchy. -->
                                 <Border IsVisible="{Binding HasZapretStrategiesForQuickStart}"
                                         Padding="0"
                                         Margin="0,4,0,0"
@@ -296,7 +203,6 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <!-- r50: explicit label "Запустить" instead of bare ▶ glyph -->
                                         <Button Grid.Column="1"
                                                 Command="{Binding StartZapretWithSelectedStrategyCommand}"
                                                 IsEnabled="{Binding !IsZapretProbing}"
@@ -316,12 +222,6 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- r51: legend restored as compact visible row
-                                     (user feedback: tooltip-only too hidden).
-                                     Smaller font (8) + tighter ItemSpacing so
-                                     it sits right below ComboBox like a
-                                     caption strip. Still attached to dropdown
-                                     by tight Margin top=0. -->
                                 <WrapPanel IsVisible="{Binding HasZapretStrategiesForQuickStart}"
                                            HorizontalAlignment="Center"
                                            ItemSpacing="6"
@@ -349,15 +249,6 @@
                                     </StackPanel>
                                 </WrapPanel>
 
-                                <!-- r47: "Open probe log" button MOVED out of Hero
-                                     to Дополнительно tab — Hero was getting too
-                                     tall after r45/r46 added legend + colored
-                                     badges, pushing the tab strip below the
-                                     520x680 default window viewport. -->
-
-                                <!-- Probe progress bar (only during probing).
-                                     r33: + Cancel button so user can abort the
-                                     2-7 min sweep at any time. -->
                                 <StackPanel IsVisible="{Binding IsZapretProbing}"
                                             Spacing="6"
                                             HorizontalAlignment="Center">
@@ -366,18 +257,12 @@
                                                  Width="240"
                                                  CornerRadius="{StaticResource RadiusXs}"
                                                  Foreground="{DynamicResource AccentSolidBrush}"/>
-                                    <!-- r21 — live elapsed time + ETA estimate.
-                                         Surfaces "Прошло 0:25 · осталось ~3:40"
-                                         so users see the probe is actually
-                                         making progress (and how long left). -->
                                     <TextBlock Text="{Binding LblZapretProbeElapsed}"
                                                FontSize="10"
                                                Opacity="0.7"
                                                Foreground="{DynamicResource TextSecondaryBrush}"
                                                TextAlignment="Center"
                                                HorizontalAlignment="Center"/>
-                                    <!-- r33: Cancel button. Triggers cts.Cancel
-                                         in MVM → proc.Kill in ZapretAutoStrategy. -->
                                     <Button Content="{Binding L_ZapretCancelProbeButton}"
                                             Command="{Binding CancelZapretProbeCommand}"
                                             FontSize="10" Padding="10,3"
@@ -389,7 +274,6 @@
                                             Foreground="{DynamicResource DangerSolidBrush}"/>
                                 </StackPanel>
 
-                                <!-- Air pill (only when running). -->
                                 <Border IsVisible="{Binding ZapretEnabled}"
                                         CornerRadius="{StaticResource RadiusPill}"
                                         Background="{DynamicResource SuccessBgBrush}"
@@ -413,30 +297,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- ════════ r24 — Hero strategy summary card.
-                         Sits between the main button and Тонкая настройка so
-                         the user sees "what's cached, how fresh, is it OK"
-                         at a glance without opening the expander.
-
-                         Hidden entirely when no cache exists (clean slate
-                         for first-time users — they just see the magic
-                         button without a confusing empty card).
-
-                         The 2 buttons:
-                           [Перепроверить] → ForceFreshProbeCommand
-                                              (full re-sweep, same as
-                                              "Найти стратегию заново")
-                           [Подробнее]     → ExpandZapretTuneSection
-                                              (programmatically opens the
-                                              expander below) -->
-                    <!-- r50: minimal summary strip. Pre-r50 had big card with
-                         redundant "Стратегия XXX работает" title that
-                         duplicated the ComboBox ✓ badge. User design feedback:
-                         "блок 'Стратегия "general (ALT3)" работает' + футер
-                         дублируют информацию о текущей стратегии". Reduced
-                         to a single line: only the cache-age + Re-verify
-                         button. No card border, no big icon — just a status
-                         hint that ties to the ComboBox above. -->
                     <Grid IsVisible="{Binding IsZapretSummaryVisible}"
                           ColumnDefinitions="*,Auto"
                           Margin="0,4,0,0">
@@ -462,36 +322,8 @@
                                 BorderThickness="1"/>
                     </Grid>
 
-                    <!-- ════════ r25 — Тонкая настройка as TabControl, not Expander.
-                         Historical bug we hit repeatedly r10..r22: an Expander
-                         inside the outer ScrollViewer wouldn't reliably scroll
-                         to the bottom of its expanded content. Padding bumps
-                         (10→24→60) were workarounds, not fixes — the underlying
-                         layout pathology stayed.
-                         TabControl makes each section its own viewport-sized
-                         page, so no nested scroll, no overflow ambiguity, and
-                         the chronic complaint ("не получается доскролить до
-                         самого низа") is structurally gone. Pattern matches
-                         the Apps page sidebar (different visual orientation —
-                         tabs are horizontal here for the narrower 520px
-                         default window). -->
-
-                    <!-- r32: Description + Warning REMOVED from Row 0. They
-                         duplicated the Hero card's lede ("Скачаем zapret,
-                         поставим Discord hosts, подберём рабочую стратегию")
-                         and ate ~100px that pushed tabs off-screen. Warning
-                         "Только Windows" already conveyed by the platform-
-                         gated commands themselves (tabs are no-ops on
-                         Linux/macOS). User rule satisfied: main button
-                         always visible + tabs always visible. -->
-
             </StackPanel>
 
-            <!-- r31 tab strip — ToggleButton with underline-active style,
-                 matching the main app's top tabs (Серверы/Подписка/etc.).
-                 No radio dot. Just text + accent underline on selected.
-                 r29 used RadioButton which user feedback flagged as
-                 «похоже на пубо настроки» — radio glyph wrong for tabs. -->
             <UniformGrid Grid.Row="1" Rows="1" Columns="4" Margin="0,8,0,0">
                 <ToggleButton IsChecked="{Binding IsZapretTab0}"
                               Command="{Binding SetZapretTabCommand}"
@@ -523,14 +355,11 @@
                               HorizontalContentAlignment="Center"/>
             </UniformGrid>
 
-            <!-- Optional thin divider between strip and content -->
             <Border Grid.Row="2"
                     Height="1"
                     Background="{DynamicResource BorderSubtleBrush}"
                     Margin="0,0,0,6"/>
 
-            <!-- Tab content area (Grid.Row=3, gets * remaining space).
-                 Panel hosts all 4 ScrollViewers, only one visible. -->
             <Border Grid.Row="3"
                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                     BorderThickness="1"
@@ -538,7 +367,6 @@
                     Padding="10,6">
                 <Panel>
 
-                        <!-- ─── Tab 0: Strategy ─── -->
                         <ScrollViewer IsVisible="{Binding IsZapretTab0}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -547,12 +375,6 @@
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                <!-- r49: parity with Hero ComboBox — bind to
-                                     ZapretStrategiesDisplay (colored badges)
-                                     instead of raw ZapretStrategies. User
-                                     was seeing two different visual treatments
-                                     for the same data ('◌ general (ALT3)' in
-                                     Hero vs bare 'general (ALT3)' here). -->
                                 <ComboBox ItemsSource="{Binding ZapretStrategiesDisplay}"
                                           SelectedIndex="{Binding ZapretStrategyIndex}"
                                           HorizontalAlignment="Stretch"
@@ -575,13 +397,6 @@
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <!-- r50 — REMOVED "Запустить с этой стратегией"
-                                     button + help-text per design review:
-                                     duplicate CTA. Hero magic button + Hero
-                                     mini ▶ cover both "auto-pick" and
-                                     "use selected" intents already. Strategy
-                                     tab is now a pure setting (which strategy
-                                     to use), not a third action. -->
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{Binding ZapretVersionText}"
                                                FontSize="10" Opacity="0.5"
@@ -614,7 +429,6 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- ─── Tab 1: Hosts ─── -->
                         <ScrollViewer IsVisible="{Binding IsZapretTab1}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -658,7 +472,6 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- ─── Tab 2: Filters ─── -->
                         <ScrollViewer IsVisible="{Binding IsZapretTab2}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -693,7 +506,6 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- ─── Tab 3: Tools (Diagnostics + Cache + Service) ─── -->
                         <ScrollViewer IsVisible="{Binding IsZapretTab3}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
@@ -751,11 +563,6 @@
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"
                                         Foreground="{DynamicResource DangerSolidBrush}"/>
-                                <!-- r47: "Open probe log" — moved here from Hero.
-                                     Was in the magic-button card pre-r47 but
-                                     contributed to Hero overflow. Lives in
-                                     Дополнительно tab now so it doesn't push
-                                     Strategy/Hosts tabs below the viewport. -->
                                 <Button Content="{Binding LblOpenProbeLog}"
                                         Command="{Binding OpenProbeLogCommand}"
                                         IsVisible="{Binding HasLastProbeLog}"
@@ -786,12 +593,6 @@
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            HorizontalAlignment="Left"/>
 
-                                <!-- v2.37.0-r11 — Zapret probe cache controls — now
-                                     live INSIDE the Tools tab (was a sibling of the
-                                     Diagnostics section in the old Expander layout).
-                                     r25 — TabItem already gives this a clean viewport,
-                                     so no more padding-bump dance to keep the buttons
-                                     visible. Border-separated to group visually. -->
                                 <Border Margin="0,8,0,0" Padding="0,8,0,0"
                                         BorderBrush="{DynamicResource BorderSubtleBrush}"
                                         BorderThickness="0,1,0,0">
@@ -820,10 +621,6 @@
             </Border>
         </Grid>
 
-        <!-- ════════ Footer — same shape as TgProxyOneTap r7.
-             Status dot + ZapretStatus + compact magic button. Footer bound
-             to the same ZapretOneClickCommand so both surfaces fire the
-             same orchestrator. -->
         <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -843,13 +640,6 @@
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-                <!-- r51 — footer CTA button REMOVED. User design feedback:
-                     "Footer 'Включить обход блокировок' дублирует Hero
-                     magic button." Hero ALREADY has a big magic button
-                     at the top of the page, prominent and always visible.
-                     Footer now shows ONLY status (dot + text), no button.
-                     Saves visual noise + eliminates the "which one do I
-                     click?" confusion. -->
                 <Button Grid.Column="1"
                         IsVisible="False"
                         Content="{Binding LblZapretMagicButton}"

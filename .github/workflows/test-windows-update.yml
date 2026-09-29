@@ -1,30 +1,5 @@
 name: Auto-Update Integration Test (Windows)
 
-# Catches auto-update breakage at CI time — before users hit it. The classic
-# example is the v2.31.7-r10 helper.cmd CMD parser bug (see
-# UpdateChecker.cs ~line 421 EnableDelayedExpansion comment), which went
-# undetected for 7 days because no test exercised the actual cmd.exe
-# helper. This workflow drives the real helper end-to-end.
-#
-# What it does:
-#   1. Builds the current branch (so it tests CURRENT helper.cmd generation).
-#   2. Generates Windows install + update ZIPs via build.ps1.
-#   3. Extracts the install ZIP to a TEST install dir (NOT Program Files).
-#   4. Stages the update ZIP as the "downloaded payload".
-#   5. Invokes VPNRouter.CLI.exe test-update --staged-dir <staged>.
-#   6. The CLI calls UpdateChecker.ApplyUpdateWindows, which generates the
-#      real helper.cmd and launches it via cmd.exe.
-#   7. We poll %ProgramData%\VPNRouter\logs\update.log until "helper done"
-#      or a known failure pattern surfaces.
-#   8. We assert: helper completed, files were replaced, no parser errors.
-#
-# Why local build instead of "previous stable -> latest published":
-#   - The bug we want to catch lives in the CURRENT branch's helper.cmd
-#     generation code. Using a previously-published stable as the FROM
-#     binary would only test ITS helper.cmd, not the one we're shipping
-#     now. Local-build-as-FROM closes that loop.
-#   - No dependency on a release existing yet, so this can run on tag
-#     push, release publish, AND PR/branch dispatches.
 
 on:
   workflow_dispatch:
@@ -39,11 +14,9 @@ on:
   push:
     tags:
       - "v*"
-  # Auto-run on PRs that touch the update path or this workflow itself.
-  # Keeps regression coverage tight without burning CI minutes on every PR.
   pull_request:
     paths:
-      - "VPNRouter.Core/Services/UpdateChecker.cs"
+      - "VPNRouter.Core/Services/UpdateChecker*.cs"
       - "VPNRouter.CLI/Commands/TestUpdateCommand.cs"
       - "VPNRouter.CLI/Program.cs"
       - "VPNRouter.Core/AppVersion.cs"
@@ -67,10 +40,6 @@ jobs:
         with:
           global-json-file: global.json
 
-      # Phase 1 Q9 — NuGet package cache. build.ps1 publishes three projects
-      # self-contained (App + CLI + Service) which restores hundreds of MB of
-      # packages on cold runs. Keyed on the union hash of every .csproj so a
-      # package bump invalidates cleanly. Q11 will pin actions/cache to a SHA.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ~/.nuget/packages
@@ -78,11 +47,6 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      # Phase 1 Q9 — sing-box upstream tarball cache. build.ps1 caches the
-      # downloaded ZIP under tools\singbox-cache\ and skips the download
-      # when the cached file is already present. Key pins SingBoxVersion
-      # (1.13.14 at the time of writing) so cache invalidates automatically
-      # when build.ps1 bumps the upstream. Q11 will pin actions/cache to SHA.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: tools/singbox-cache/
@@ -97,16 +61,6 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          # We use whatever AppVersion.cs already has on this branch. build.ps1
-          # has a hard guard that `-Version` MUST match AppVersion.cs literal,
-          # so we can't pass an arbitrary label without bumping the source.
-          # Reading the constant directly avoids that whole class of mismatch
-          # bugs. The dispatch input is preserved for future extensions but
-          # not consumed today.
-          # v2.32.1-r2: AppVersion switched const string -> static readonly
-          # string (see AppVersion.cs comments for the verify-release-
-          # integrity alignment fix). Regex widened to substring 'string
-          # Version =' so it matches both modifier shapes.
           $line = Get-Content VPNRouter.Core/AppVersion.cs |
                   Select-String 'string Version =' |
                   Select-Object -First 1
@@ -119,10 +73,6 @@ jobs:
       - name: Build Windows install + update ZIPs
         shell: pwsh
         run: |
-          # build.ps1 publishes App + CLI + Service self-contained, builds
-          # the Go stub, downloads sing-box, and emits two ZIPs in repo root:
-          #   VPNRouter-v<ver>-win.zip          (install layout)
-          #   VPNRouter-update-v<ver>-win.zip   (bootstrap layout)
           ./build.ps1 -Version "${{ steps.ver.outputs.version }}"
 
       - name: Validate libcronet.dll and sing-box naive check
@@ -136,7 +86,6 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $sha256 = [System.Security.Cryptography.SHA256]::Create()
 
-          # Validate libcronet.dll in BOTH install and update ZIPs in memory (no external tools)
           foreach ($zipPath in @($installZipPath, $updateZipPath)) {
             $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
             try {
@@ -160,7 +109,6 @@ jobs:
           }
           $sha256.Dispose()
 
-          # Clean temp directory containing ONLY sing-box.exe and libcronet.dll from install payload
           $cleanDir = "C:\TestVPNRouter\cronet-validation"
           Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $cleanDir | Out-Null
@@ -178,10 +126,6 @@ jobs:
             $zip.Dispose()
           }
 
-          # Naive outbound config with loopback 127.0.0.1:9 and fake credentials constant.
-          # No real traffic, listeners, TUN, or credentials.
-          # Note: `sing-box check -c` calls NewNaiveClient during config validation,
-          # loading Cronet to validate outbound construction (validation-only, not engine initialization).
           $naiveConfigPath = Join-Path $cleanDir "naive-check.json"
           $naiveConfig = '{"outbounds":[{"type":"naive","tag":"naive-out","server":"127.0.0.1","server_port":9,"username":"fakeusername","password":"fakepassword","tls":{"enabled":true,"server_name":"localhost"}}]}'
           Set-Content -Path $naiveConfigPath -Value $naiveConfig -Encoding utf8
@@ -215,7 +159,6 @@ jobs:
             }
           }
 
-          # Positive check: sing-box check -c with co-located libcronet.dll in clean owned cwd
           $sbExe = Join-Path $cleanDir "sing-box.exe"
           $posResult = Invoke-BoundedProcess $sbExe "check -c naive-check.json" $cleanDir
           Write-Host "sing-box check output (with libcronet.dll):`n$($posResult.Output)"
@@ -224,9 +167,6 @@ jobs:
           }
           Write-Host "OK: sing-box check -c exited with code 0 (libcronet loaded)"
 
-          # Negative control: clean folder with only sing-box.exe and same config (missing libcronet.dll).
-          # Avoid PATH library fallback by clean owned cwd and only copies.
-          # Fail-closed: missing DLL must result in non-zero exit code and 'libcronet' in error output.
           $negDir = "C:\TestVPNRouter\cronet-negative-control"
           Remove-Item -Recurse -Force $negDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $negDir | Out-Null
@@ -262,9 +202,6 @@ jobs:
         id: layout
         shell: pwsh
         run: |
-          # Using C:\TestVPNRouter\install\ avoids Program Files file
-          # locking quirks on shared CI runners and ensures rm -rf cleanup
-          # in the always-run cleanup step.
           $installRoot = "C:\TestVPNRouter\install"
           $stagedDir   = "C:\TestVPNRouter\staged"
           Remove-Item -Recurse -Force $installRoot -ErrorAction SilentlyContinue
@@ -283,8 +220,6 @@ jobs:
             Get-ChildItem $installRoot -Recurse | Select-Object FullName | Format-Table -AutoSize
             throw "VPNRouter.CLI.exe not found at $cliExe"
           }
-          # Different data in old/new installs proves real copying, without
-          # corrupting assemblies required to run the old updater.
           Set-Content -LiteralPath (Join-Path $appDir 'update-copy-probe.txt') -Value 'old' -Encoding ascii
           Set-Content -LiteralPath (Join-Path $stagedDir '_bootstrap\update-copy-probe.txt') -Value 'new' -Encoding ascii
           $expectedHashes = @{}
@@ -307,18 +242,10 @@ jobs:
       - name: Reset receipt + update.log (so we see only this run's output)
         shell: pwsh
         run: |
-          # Wipe any prior receipt + update.log so post-update assertions
-          # see ONLY this run's helper output.
           Remove-Item "$env:ProgramData\VPNRouter\.update-installed-version" -Force -ErrorAction SilentlyContinue
           Remove-Item "$env:ProgramData\VPNRouter\logs\update.log"           -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path "$env:ProgramData\VPNRouter\logs" | Out-Null
 
-          # Sanity: confirm the install we just laid out has Core.dll where
-          # we expect. We deliberately do NOT capture mtime — xcopy preserves
-          # source timestamps, and source = dest = same build, so a "did it
-          # advance" check would always be a false negative. The helper's
-          # own `xcopy exit=N` log line is the ground truth and is checked
-          # in the post-update assertion step instead.
           $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
           if (-not (Test-Path $coreDll)) { throw "Pre-update Core.dll missing at $coreDll" }
 
@@ -331,8 +258,6 @@ jobs:
           $staged = "${{ steps.layout.outputs.stagedDir }}"
           $target = "${{ steps.ver.outputs.version }}"
 
-          # CLI exits as soon as it dispatches helper.cmd. The helper then
-          # waits for THIS process tree to exit before xcopy.
           & $cli test-update --target $target --staged-dir $staged
           $rc = $LASTEXITCODE
           Write-Host "test-update exit code: $rc"
@@ -349,12 +274,6 @@ jobs:
           $deadline = (Get-Date).AddMinutes(5)
           $sawDone = $false
 
-          # Known CMD parser failure modes — match either source.
-          # 'was unexpected at this time' = the v2.31.7-r10 signature
-          # (empty if-condition from %VAR% pre-expansion bug).
-          # The CI-only stderr capture (UpdateChecker.cs skipRelaunchForCi)
-          # tees cmd.exe stderr to helper-stderr.log so we catch parser
-          # errors that abort BEFORE the helper writes its own update.log.
           $failPattern = 'was unexpected at this time|syntax of the command is incorrect'
 
           function Check-FailPatterns {
@@ -387,8 +306,6 @@ jobs:
             Start-Sleep -Seconds 3
           }
 
-          # Whether or not we saw 'helper done', dump everything we have
-          # for postmortem visibility.
           foreach ($p in @($updateLog, $stderrLog)) {
             if (Test-Path $p) {
               Write-Host "::group::Final $p"
@@ -410,12 +327,6 @@ jobs:
       - name: Assert files were replaced
         shell: pwsh
         run: |
-          # The helper.cmd writes its own ground-truth status to update.log:
-          #   "<n> File(s) copied" — xcopy's own success line
-          #   "xcopy exit=<N>"     — our wrapper, 0 = success
-          # We don't check mtime because xcopy preserves source timestamps,
-          # and source + dest were generated from the same build, so a
-          # mtime-advance check is always a false negative.
           $log = "$env:ProgramData\VPNRouter\logs\update.log"
           $content = Get-Content $log -Raw
           if ($content -notmatch 'xcopy exit=(\d+)') {
@@ -423,8 +334,6 @@ jobs:
           }
           $xcopyExit = [int]$Matches[1]
           if ($xcopyExit -ne 0) {
-            # 4 = error, 5 = disk write fail. Exit 1 in xcopy means "no files
-            # found" — also a failure for our purposes.
             throw "xcopy exit=$xcopyExit (expected 0). update.log contents: $content"
           }
           Write-Host "OK: xcopy exit=0"
@@ -434,15 +343,10 @@ jobs:
           }
           $copiedCount = [int]$Matches[1]
           if ($copiedCount -lt 50) {
-            # Sanity: a real update copy should land 90+ files (DLLs, exes,
-            # sing-box, profiles). Anything under 50 is suspicious.
             throw "Only $copiedCount files copied — expected 90+. helper.cmd may be skipping content."
           }
           Write-Host "OK: $copiedCount files copied"
 
-          # The dir layout assertions: Core.dll + sing-box.exe must still
-          # exist post-copy (xcopy /Y overwrites; if it had wiped them
-          # they'd be gone).
           $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
           if (-not (Test-Path $coreDll)) {
             throw "Post-update Core.dll missing at $coreDll — xcopy may have wiped/skipped"
@@ -502,14 +406,10 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          # Kill anything we may have left running. The CI-mode helper
-          # skips the relaunch step (see UpdateChecker.cs skipRelaunchForCi),
-          # but be defensive against stragglers.
           Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI, sing-box `
             -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 1
           Remove-Item -Recurse -Force "C:\TestVPNRouter"             -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$env:ProgramData\VPNRouter"   -ErrorAction SilentlyContinue
-          # Leftover update helpers in TEMP — best-effort.
           Get-ChildItem $env:TEMP -Filter "vpnrouter-update-*.cmd" -ErrorAction SilentlyContinue |
             Remove-Item -Force -ErrorAction SilentlyContinue

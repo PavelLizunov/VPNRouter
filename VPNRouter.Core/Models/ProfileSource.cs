@@ -6,7 +6,7 @@ namespace VPNRouter.Core.Models;
 public class ProfileSource
 {
     [YamlMember(Alias = "type")]
-    public string Type { get; set; } = string.Empty; // github | local
+    public string Type { get; set; } = string.Empty;
 
     [YamlMember(Alias = "url")]
     public string? Url { get; set; }

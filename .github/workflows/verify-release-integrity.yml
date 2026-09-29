@@ -1,16 +1,5 @@
 name: Verify Release Integrity
 
-# Final gate: explicitly verify a completed draft before publishing, then check
-# published releases again. Asset uploads are not a completion signal.
-# Dispatch MUST select the requested tag as the workflow ref, for example:
-# gh workflow run verify-release-integrity.yml --ref "$TAG" -f tag="$TAG" -f auto_draft_on_failure=false
-# The remote tag commit must equal github.sha; old tags without this workflow
-# cannot acquire trustworthy verification by dispatching code from another ref.
-# All 16 assets and paired hashes are mandatory before any archive is inspected.
-# Windows embedded AppVersion is a hard check. Other platforms remain soft
-# because AOT/assembly compression can remove the literal. AppImage embedded
-# version inspection is deliberately unavailable: never execute release payloads.
-# Sidecars establish consistency, not publisher authenticity or reproducibility.
 
 on:
   release:
@@ -62,7 +51,6 @@ jobs:
             echo '::error::Run this workflow with --ref set to the requested release tag'
             exit 1
           fi
-          # The commits endpoint peels both annotated and lightweight tags.
           REMOTE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq '.sha')
           if [ "$REMOTE_SHA" != "$WORKFLOW_SHA" ]; then
             echo "::error::Remote release tag does not match the workflow commit"
@@ -102,7 +90,6 @@ jobs:
             "VPNRouter-v${EXPECTED_VERSION}-android-arm64.apk.sha256"
           )
           printf '%s\n' "${EXPECTED_FILES[@]}" | LC_ALL=C sort > expected-assets.txt
-          # Compare ALL names, not only VPNRouter-*; duplicate names also fail.
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG" > release-before.json
           jq -e '.id > 0 and (.assets | all(.id > 0 and .size > 0 and .state == "uploaded"))' release-before.json > /dev/null
           jq -r '.assets[].name' release-before.json | LC_ALL=C sort > actual-assets.txt
@@ -244,7 +231,6 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          # Defense in depth: dry-run disables both drafting AND release-note edits.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$AUTO_DRAFT_INPUT" != "true" ]; then
             echo '::notice::Dry run: no release mutations'
             exit 0

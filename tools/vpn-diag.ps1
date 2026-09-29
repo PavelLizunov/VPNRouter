@@ -1,13 +1,3 @@
-<#
-  vpn-diag.ps1 — VPNRouter network diagnostic suite (Windows).
-  PowerShell twin of tools/vpn-diag.sh. Run once with the VPN OFF (baseline) and
-  once with it ON, then compare — that's how we quantify what the tunnel changes
-  (e.g. the full-tunnel ChatGPT failure). Uses the bundled curl.exe (Win10/11) for
-  HTTP/throughput so the -w metrics match the bash version.
-
-  Usage:  powershell -ExecutionPolicy Bypass -File vpn-diag.ps1 baseline
-          powershell -ExecutionPolicy Bypass -File vpn-diag.ps1 vpn-full
-#>
 param([string]$Label = "run")
 $ErrorActionPreference = "SilentlyContinue"
 $ts  = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -27,13 +17,11 @@ Log " VPNRouter diagnostic - label='$Label'  $(Get-Date -Format o)"
 Log " host=$env:COMPUTERNAME  os=$([System.Environment]::OSVersion.VersionString)"
 Log "============================================================"
 
-# 1) Egress IP + geo
 HR; Log "[1] Egress IP + geolocation"
 $geo = & $curl -s -m 8 "https://ipinfo.io/json" | ConvertFrom-Json
 if ($geo.ip) { Log "    IP=$($geo.ip)  $($geo.city)/$($geo.country)  $($geo.org)" }
 else { Log "    FAILED to reach ipinfo.io (no egress / DNS down)" }
 
-# 2) DNS resolution (timed)
 HR; Log "[2] DNS resolution (timed)"
 foreach ($d in $DNS) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -43,7 +31,6 @@ foreach ($d in $DNS) {
   else    { Log ("    {0,-22} RESOLVE FAILED" -f $d) }
 }
 
-# 3) ICMP ping (RTT + loss)
 HR; Log "[3] ICMP ping (10 pkts: avg RTT + loss)"
 foreach ($p in $PING) {
   $o = ping.exe -n 10 $p 2>$null
@@ -52,7 +39,6 @@ foreach ($p in $PING) {
   Log ("    {0,-10} lost={1}/10  avg={2} ms" -f $p, $loss, $avg)
 }
 
-# 4) TCP+TLS connect latency :443
 HR; Log "[4] TCP+TLS connect latency :443 (3 tries each)"
 foreach ($h in $TCP) {
   $best = $null
@@ -66,7 +52,6 @@ foreach ($h in $TCP) {
   } else { Log ("    {0,-22} CONNECT FAILED" -f "$h`:443") }
 }
 
-# 5) HTTP reachability (the key check)
 HR; Log "[5] HTTP reachability - status + TTFB + total + bytes"
 foreach ($u in $HTTP) {
   $r = & $curl -s -A "Mozilla/5.0 vpn-diag" -m 20 -o NUL -w "%{http_code}|%{time_starttransfer}|%{time_total}|%{size_download}" $u 2>$null
@@ -79,7 +64,6 @@ foreach ($u in $HTTP) {
   } else { Log ("    {0,-30} **UNREACHABLE (curl failed)**" -f $u) }
 }
 
-# 6) Throughput (download)
 HR; Log "[6] Throughput (download)"
 $dn = $false
 foreach ($src in @("https://cachefly.cachefly.net/10mb.test","https://speed.cloudflare.com/__down?bytes=25000000")) {
@@ -94,7 +78,6 @@ foreach ($src in @("https://cachefly.cachefly.net/10mb.test","https://speed.clou
 }
 if (-not $dn) { Log "    download: FAILED/throttled on all sources" }
 
-# 7) Path-MTU probe (DF flag)
 HR; Log "[7] Path-MTU probe (largest unfragmented to $MTUTARGET)"
 $found = $false
 foreach ($payload in 1472,1464,1422,1392,1352,1252) {

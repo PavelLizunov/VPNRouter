@@ -9,125 +9,34 @@ using Serilog;
 
 namespace VPNRouter.App.Services;
 
-/// <summary>
-/// Single-instance enforcement for the GUI app. v2.31.7-r2.
-///
-/// <para>Pre-r2 we relied on <c>OrphanCleanup.KillOrphans</c> at startup to
-/// kill any other <c>VPNRouter.App</c> processes. That worked, but had a
-/// pathological UX: clicking the Start Menu / taskbar shortcut while the
-/// app was already running (window minimized to tray, hidden behind other
-/// windows, on a virtual desktop the user wasn't on) killed the existing
-/// instance and started fresh. The fresh window didn't always reach
-/// foreground (Windows ForegroundLockTimeout, focus-stealing prevention),
-/// so the symptom was «I clicked the icon and nothing happened — and now
-/// my VPN status reset». spark-wraith 2026-05-04: *«не открывается, не
-/// показывается нигде, никак его не проконтролировать»*.</para>
-///
-/// <para>r2 replaces the brutal kill-and-restart with a Mutex + named-pipe
-/// IPC pattern: the first instance acquires a system Mutex and listens on
-/// a named pipe. Subsequent launches detect the held Mutex, send a
-/// «show» message via the pipe, and exit silently. The first instance
-/// brings its window to foreground in response. No process churn, no
-/// state reset, window always reachable.</para>
-///
-/// <para>Cross-platform — Mutex on Windows uses kernel objects, on
-/// Mac/Linux .NET 8 backs it with a file lock under <c>/tmp/.dotnet/</c>.
-/// NamedPipeServerStream on Mac/Linux uses Unix domain sockets. The
-/// behaviour is identical from the caller's perspective.</para>
-/// </summary>
 public static class SingleInstance
 {
-    // v2 suffix on the names — leave room to bump if we need a flag-day
-    // change to the protocol later (e.g. send the requested action / args
-    // through the pipe instead of a single byte).
     private const string MutexName = "Global\\VPNRouter.App.SingleInstance.v2";
     private const string PipeName = "VPNRouter.App.ShowWindow.v2";
 
-    // 0x01 = "bring window to foreground". Reserved space for future verbs
-    // (0x02 = "connect", 0x03 = "disconnect", etc.) without breaking the
-    // wire protocol.
     private const byte SignalShowWindow = 0x01;
 
-    // 0x02 = "route this app through VPN" (Explorer context-menu verb,
-    // v2.38.0). Wire format: [0x02][int32 little-endian length][UTF-8 path].
-    // The path is the "%1" the shell verb hands us (an .exe or .lnk); the
-    // running instance resolves + adds it to RoutingAppsInclude + toasts.
     private const byte SignalRouteApp = 0x02;
 
-    // 0x03 = "remove this app from VPN routing" (Explorer context-menu verb,
-    // v2.38.0-r5). Wire format: [0x03][int32 little-endian length][UTF-8 path].
-    // Mirrors 0x02 (path only — no category); the running instance resolves +
-    // removes it from RoutingAppsInclude + custom groups.
     private const byte SignalUnrouteApp = 0x03;
 
-    // Sanity cap on the path payload so a malformed/hostile client can't make
-    // us allocate an arbitrary buffer. MAX_PATH-era paths are <260 chars;
-    // long-path UNC can reach ~32k chars → 64 KB UTF-8 is comfortably above.
     private const int MaxRouteAppPayloadBytes = 64 * 1024;
 
-    // r6 (audit finding #4): the route/unroute probes run on the COLD path
-    // (first right-click after boot — no instance listening) BEFORE this launch
-    // proceeds to start the app. A 2 s connect timeout there stalls the launch
-    // by ~2 s. A LIVE instance accepts the pipe instantly, so a short probe
-    // suffices; on the cold path we fail fast and fall through to normal
-    // startup. (TrySignalShow keeps 2 s — it's not on a latency-critical path.)
     private const int RouteProbeConnectMs = 400;
 
     private static Mutex? _mutex;
     private static CancellationTokenSource? _serverCts;
 
-    /// <summary>
-    /// Fired (on the Avalonia UI thread) when a second-instance launch
-    /// has signalled this process to surface the main window. Subscribe
-    /// from <c>App.OnFrameworkInitializationCompleted</c>.
-    /// </summary>
     public static event Action? ShowWindowRequested;
 
-    /// <summary>
-    /// Fired (on the Avalonia UI thread) when a second-instance launch
-    /// invoked <c>--route-app "&lt;path&gt;"</c> (the Explorer context-menu
-    /// verb). The argument is the raw <c>%1</c> path (an <c>.exe</c> or
-    /// <c>.lnk</c>); the handler resolves it to a process-name, adds it to
-    /// the split-tunnel list and toasts. v2.38.0.
-    /// </summary>
     public static event Action<string, string?>? RouteAppRequested;
 
-    /// <summary>
-    /// Fired (on the Avalonia UI thread) when a second-instance launch invoked
-    /// <c>--unroute-app "&lt;path&gt;"</c> (the Explorer "remove from VPN"
-    /// context-menu verb). The argument is the raw <c>%1</c> path; the handler
-    /// resolves it to a process-name and removes it from the split-tunnel list.
-    /// v2.38.0-r5.
-    /// </summary>
     public static event Action<string>? UnrouteAppRequested;
 
-    /// <summary>
-    /// Try to claim the single-instance slot. Call this BEFORE any
-    /// expensive startup work so the second-instance path costs ~ms.
-    /// </summary>
-    /// <returns>
-    /// <c>true</c> if this is the first instance — caller should
-    /// continue normal startup. <c>false</c> if another instance was
-    /// already running and we signalled it; caller should exit
-    /// immediately (we already disposed our Mutex handle).
-    /// </returns>
     public static bool TryAcquireOrSignal(ILogger? logger = null)
     {
         try
         {
-            // v2.31.10-r1 — fix to v2.31.7-r2 mutex-not-owned bug. Pre-r1
-            // we used `initiallyOwned: false` AND only called WaitOne(0)
-            // in the `!createdNew` branch. That meant the FIRST instance
-            // created the mutex but NEVER acquired it. The second
-            // instance saw createdNew=false, called WaitOne(0), and it
-            // returned true (mutex unowned!) — second instance fell
-            // through to the "first instance" path and the original got
-            // killed by OrphanCleanup. F-4 night-shift 2026-05-06.
-            //
-            // Fix: ALWAYS call WaitOne(0). It's the atomic acquisition
-            // primitive — succeeds iff no other process owns the mutex.
-            // The createdNew flag becomes useful only for diagnostic
-            // logging (distinguishes fresh-create from inherit-existing).
             _mutex = new Mutex(initiallyOwned: false, MutexName, out var createdNew);
 
             bool acquired;
@@ -137,10 +46,6 @@ public static class SingleInstance
             }
             catch (AbandonedMutexException)
             {
-                // Previous owner died without releasing. Per .NET docs,
-                // ownership transfers to us anyway. Safe for our use
-                // case (process-singleton); we don't share state via
-                // the mutex itself.
                 logger?.Information("[SingleInstance] previous owner abandoned the mutex — claiming ownership");
                 acquired = true;
             }
@@ -154,8 +59,6 @@ public static class SingleInstance
                 return false;
             }
 
-            // We hold the Mutex. Start the pipe server so future
-            // second-instance launches can reach us.
             _serverCts = new CancellationTokenSource();
             _ = Task.Run(() => RunPipeServerLoop(_serverCts.Token, logger));
             logger?.Debug("[SingleInstance] acquired single-instance slot (createdNew={CreatedNew})", createdNew);
@@ -163,20 +66,11 @@ public static class SingleInstance
         }
         catch (Exception ex)
         {
-            // Mutex creation can theoretically fail on Windows under
-            // unusual SDDL configurations (e.g. some kiosk lockdowns).
-            // Fall back to "this is the first instance" so the app
-            // still runs — worst case is the pre-r2 OrphanCleanup
-            // behaviour for THIS launch.
             logger?.Warning(ex, "[SingleInstance] mutex acquisition failed — falling back to single-instance off");
             return true;
         }
     }
 
-    /// <summary>
-    /// Release the Mutex on graceful shutdown so the next launch sees a
-    /// clean slot. Idempotent.
-    /// </summary>
     public static void Release()
     {
         try { _serverCts?.Cancel(); } catch { }
@@ -186,8 +80,6 @@ public static class SingleInstance
         }
         catch (ApplicationException)
         {
-            // ReleaseMutex throws if we never acquired it (e.g. fallback
-            // path from TryAcquireOrSignal exception). Safe to ignore.
         }
         try { _mutex?.Dispose(); } catch { }
         _mutex = null;
@@ -198,9 +90,6 @@ public static class SingleInstance
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
-            // 2 s connect timeout — if the existing instance is utterly
-            // hung (rare), we don't want to block the user's second
-            // launch indefinitely. Better to exit silently than spin.
             client.Connect(2000);
             client.WriteByte(SignalShowWindow);
             client.Flush();
@@ -208,33 +97,20 @@ public static class SingleInstance
         }
         catch (Exception ex)
         {
-            // Pipe doesn't exist / connect timed out / etc. The existing
-            // instance might be a zombie holding the Mutex but no longer
-            // running its server. Let the user's second launch exit
-            // silently anyway — a third launch (or an explicit kill +
-            // restart of the zombie via Task Manager) will fix it.
             logger?.Warning(ex, "[SingleInstance] failed to signal existing instance");
         }
     }
 
-    /// <summary>
-    /// Hand a route-app request to an already-running instance via the pipe.
-    /// </summary>
-    /// <returns><c>true</c> if a running instance received it (caller should
-    /// exit); <c>false</c> if no instance is listening (caller is/will be the
-    /// first instance and must process the path itself after startup).</returns>
     public static bool TrySendRouteAppToRunningInstance(string path, string? category = null, ILogger? logger = null)
     {
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
-            client.Connect(RouteProbeConnectMs); // r6 #4: fast cold-path probe
+            client.Connect(RouteProbeConnectMs);
             var bytes = Encoding.UTF8.GetBytes(path ?? string.Empty);
             client.WriteByte(SignalRouteApp);
             client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
             client.Write(bytes, 0, bytes.Length);
-            // r4: optional category payload — [int32 len][UTF-8 name]. Omitted
-            // when routing to the default group; the server reads it as null.
             if (!string.IsNullOrWhiteSpace(category))
             {
                 var catBytes = Encoding.UTF8.GetBytes(category);
@@ -252,19 +128,12 @@ public static class SingleInstance
         }
     }
 
-    /// <summary>
-    /// Hand an unroute-app request to an already-running instance via the pipe
-    /// (v2.38.0-r5). Wire format: [0x03][int32 len][UTF-8 path] — no category.
-    /// </summary>
-    /// <returns><c>true</c> if a running instance received it (caller should
-    /// exit); <c>false</c> if no instance is listening (caller is/will be the
-    /// first instance and must process the path itself after startup).</returns>
     public static bool TrySendUnrouteAppToRunningInstance(string path, ILogger? logger = null)
     {
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
-            client.Connect(RouteProbeConnectMs); // r6 #4: fast cold-path probe
+            client.Connect(RouteProbeConnectMs);
             var bytes = Encoding.UTF8.GetBytes(path ?? string.Empty);
             client.WriteByte(SignalUnrouteApp);
             client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
@@ -280,7 +149,6 @@ public static class SingleInstance
         }
     }
 
-    /// <summary>Read exactly <paramref name="count"/> bytes or return false.</summary>
     private static bool ReadExact(Stream s, byte[] buf, int count)
     {
         int read = 0;
@@ -293,18 +161,6 @@ public static class SingleInstance
         return true;
     }
 
-    /// <summary>
-    /// r6 (audit finding #6): create the pipe server with a DACL scoped to the
-    /// current user on Windows. The mutating verbs 0x02/0x03 change the split-
-    /// tunnel routing set + drive .lnk COM parsing inside the (elevated) first
-    /// instance, so the IPC channel is a real trust boundary now — the pre-v2.38
-    /// pipe carried only the harmless 0x01 show-window verb. A current-user-only
-    /// ACL drops any broader default grant; the elevated instance's default
-    /// high-integrity mandatory label already blocks lower-integrity writers
-    /// (no-write-up). On non-Windows, PipeSecurity is unsupported — use the
-    /// plain constructor. Best-effort: any failure falls back to the default
-    /// DACL (worst case = pre-r6 behaviour).
-    /// </summary>
     private static NamedPipeServerStream CreateServerStream(ILogger? logger)
     {
         if (OperatingSystem.IsWindows())
@@ -340,8 +196,6 @@ public static class SingleInstance
             {
                 using var server = CreateServerStream(logger);
 
-                // WaitForConnectionAsync respects the cancellation token —
-                // graceful shutdown via Release().
                 var connectTask = server.WaitForConnectionAsync(ct);
                 connectTask.GetAwaiter().GetResult();
 
@@ -350,8 +204,6 @@ public static class SingleInstance
                 var verb = server.ReadByte();
                 if (verb == SignalShowWindow)
                 {
-                    // Bounce onto the UI thread — handlers will touch
-                    // Avalonia controls.
                     Dispatcher.UIThread.Post(() =>
                     {
                         try { ShowWindowRequested?.Invoke(); }
@@ -360,9 +212,6 @@ public static class SingleInstance
                 }
                 else if (verb == SignalRouteApp)
                 {
-                    // [0x02][int32 len][UTF-8 path] then OPTIONALLY
-                    // [int32 len][UTF-8 category] (r4). No category bytes (older
-                    // shell verb / default group) → the stream ends → null.
                     var lenBuf = new byte[4];
                     if (ReadExact(server, lenBuf, 4))
                     {
@@ -374,7 +223,6 @@ public static class SingleInstance
                             {
                                 var path = Encoding.UTF8.GetString(pathBuf);
 
-                                // Optional trailing category payload.
                                 string? category = null;
                                 var catLenBuf = new byte[4];
                                 if (ReadExact(server, catLenBuf, 4))
@@ -403,7 +251,6 @@ public static class SingleInstance
                 }
                 else if (verb == SignalUnrouteApp)
                 {
-                    // [0x03][int32 len][UTF-8 path] — path only (no category).
                     var lenBuf = new byte[4];
                     if (ReadExact(server, lenBuf, 4))
                     {
@@ -427,15 +274,10 @@ public static class SingleInstance
                         }
                     }
                 }
-                // Unknown verbs: silently ignored. Future-proofing for
-                // protocol additions.
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                // Transient pipe error (e.g. client disconnected mid-handshake).
-                // Sleep briefly then re-create the server to avoid a hot
-                // error loop in the rare case the pipe layer is broken.
                 logger?.Debug(ex, "[SingleInstance] pipe server iteration error");
                 try { Thread.Sleep(200); } catch { }
             }

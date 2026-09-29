@@ -3,24 +3,8 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Forward migrates <see cref="AppSettings"/> from an older schema
-/// version to the current one. Each migration step is a pure function
-/// from settings@N to settings@N+1. Migrator chains them from the
-/// file's recorded version up to <see cref="AppSettings.CurrentSchemaVersion"/>.
-///
-/// Called by <see cref="SettingsLoader.Parse"/> on load. After migration,
-/// settings get re-saved so the next load starts clean.
-///
-/// v2.24.0 Level 3 of plans/vpnrouter-self-healing.md.
-/// </summary>
 public static class SettingsMigrator
 {
-    /// <summary>
-    /// Walk from <paramref name="from"/> to <paramref name="to"/>,
-    /// applying step functions. Returns the (same) settings instance
-    /// with fields mutated + SchemaVersion updated.
-    /// </summary>
     public static AppSettings Migrate(AppSettings settings, int from, int to, ILogger? logger = null)
     {
         if (from >= to) return settings;
@@ -54,48 +38,11 @@ public static class SettingsMigrator
         return settings;
     }
 
-    /// <summary>
-    /// v2.32.3 (2026-05-17): aggressive one-shot sweep that strips
-    /// <i>any</i> entry tagged as a known-bad placeholder by
-    /// <see cref="PlaceholderDefense"/> from the persisted settings tree.
-    /// Targets the legacy <see cref="VlessConfig.Server"/> scalar trio,
-    /// the manual <see cref="VlessConfig.Servers"/> list, and every
-    /// <see cref="SubscriptionEntry.Servers"/> list on every
-    /// <see cref="AppConfig.Subscriptions"/> entry.
-    ///
-    /// <para>The Reality placeholder <c>DnT9hI…</c> leaked from old
-    /// Android smoke-test code and has lived in real user configs for
-    /// weeks. F-A / F-D / F-E catch it at start/validate/runtime but
-    /// each layer rejects-or-bypasses; only this migrator step actually
-    /// purges the bytes from disk so the user stops seeing the dead
-    /// entry in the Servers tab.</para>
-    ///
-    /// <para>Conservative wipe semantics — never touches an entry that
-    /// <see cref="PlaceholderDefense"/> reports as clean. For the scalar
-    /// trio (<see cref="VlessConfig.Server"/> +
-    /// <see cref="VlessConfig.Reality"/>), a single hit zeroes the
-    /// related fields atomically (server, port, uuid, reality) because
-    /// the bad pubkey usually surfaces together with bad server/uuid
-    /// values from the same placeholder source; leaving the port or
-    /// uuid behind would invite another silent half-config.</para>
-    ///
-    /// <para>If <see cref="VlessConfig.ActiveServer"/> pointed at an
-    /// entry we just removed, clear it — caller / UI is expected to
-    /// auto-pick or prompt. We deliberately don't auto-promote a
-    /// surviving entry because the placeholder set is small and the
-    /// risk of picking another stale entry as "active" outweighs the
-    /// UX hit of one extra click.</para>
-    ///
-    /// <para>Returns the total number of items removed (scalar wipe =
-    /// 1, plus one per list element). Idempotent — re-running on
-    /// already-cleaned state returns 0 with no log noise.</para>
-    /// </summary>
     public static int PruneKnownPlaceholders(AppSettings settings, ILogger? logger)
     {
         if (settings == null) return 0;
         int removed = 0;
 
-        // (a) Scalar Vless.* trio — pubkey/sid/server.
         var vless = settings.Vless;
         if (vless != null)
         {
@@ -118,7 +65,6 @@ public static class SettingsMigrator
                 removed++;
             }
 
-            // (b) Vless.Servers list.
             if (vless.Servers != null && vless.Servers.Count > 0)
             {
                 var initial = vless.Servers.Count;
@@ -138,7 +84,6 @@ public static class SettingsMigrator
             }
         }
 
-        // (c) Each subscription's Servers list.
         var subs = settings.App?.Subscriptions;
         if (subs != null)
         {
@@ -162,10 +107,6 @@ public static class SettingsMigrator
             }
         }
 
-        // (d) ActiveServer pointed at something we removed → clear it.
-        // Caller / UI handles graceful replacement (we deliberately do
-        // NOT auto-pick — the surviving entries may be from a different
-        // subscription / different mode than the user expected).
         if (vless != null && !string.IsNullOrEmpty(vless.ActiveServer))
         {
             var effective = vless.GetEffectiveServers();
@@ -183,10 +124,6 @@ public static class SettingsMigrator
         return removed;
     }
 
-    /// <summary>Truncate a placeholder value for log output (full value
-    /// is reconstructable via the static hash-sets in
-    /// <see cref="ConfigSanityCheck"/>; here we only need enough to
-    /// disambiguate which fingerprint matched).</summary>
     private static string TruncateForLog(string? v)
     {
         if (string.IsNullOrEmpty(v)) return "(empty)";
@@ -213,42 +150,12 @@ public static class SettingsMigrator
         };
     }
 
-    /// <summary>
-    /// Cleanup orphan <see cref="VlessConfig.Servers"/> entries that
-    /// aren't part of any enabled subscription. Closes the
-    /// stas-class shadow-override bug at the config-load layer
-    /// (F-B in <c>plans/r10-stas-confirmed-and-apps-2mode.md</c>).
-    ///
-    /// <para>Triggered as part of v2→v3 migration AND callable
-    /// independently (idempotent — no-op when there's no
-    /// subscription mode active OR when <c>vless.servers</c> is
-    /// already empty).</para>
-    ///
-    /// <para>Heuristic: when <i>any</i> enabled subscription has
-    /// at least one server, treat <see cref="VlessConfig.Servers"/>
-    /// as a legacy list and strip entries that don't appear in any
-    /// enabled subscription's server list (matched by the composite
-    /// key <c>name|server|port|uuid</c>). When no enabled
-    /// subscription exists, treat <see cref="VlessConfig.Servers"/>
-    /// as the user's direct-mode manual list and leave it
-    /// untouched.</para>
-    ///
-    /// <para>If <see cref="VlessConfig.ActiveServer"/> pointed at a
-    /// removed entry, it gets reassigned to the first surviving
-    /// entry's name (or cleared if nothing remains). Both branches
-    /// keep the field in a consistent state.</para>
-    /// </summary>
-    /// <remarks>Internal so unit tests can call directly.</remarks>
     internal static void CleanupOrphanVlessServers(AppSettings settings, ILogger? logger = null)
     {
         var app = settings.App;
         var vless = settings.Vless;
         if (app == null || vless == null) return;
 
-        // Are any subscriptions enabled with at least one server? Only
-        // then do we treat `vless.servers` as legacy. Otherwise the
-        // user may still be in direct VLESS mode and `vless.servers`
-        // is the source of truth.
         var enabledSubs = app.Subscriptions?
             .Where(s => s != null && s.Enabled && s.Servers != null && s.Servers.Count > 0)
             .ToList() ?? new List<SubscriptionEntry>();
@@ -262,10 +169,6 @@ public static class SettingsMigrator
             return;
         }
 
-        // Build a key-set of subscription-owned servers. We don't
-        // collapse on (server,port,uuid) alone because the same IP +
-        // port may legitimately be served under different names /
-        // different uuids — keep the full composite key.
         var subKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var sub in enabledSubs)
         {
@@ -276,17 +179,6 @@ public static class SettingsMigrator
             }
         }
 
-        // BR-4 (brat 2026-05-19): preserve the entry referenced by
-        // vless.active_server even when it doesn't match a subscription
-        // server key. That entry is the user's intentional manual
-        // fallback — wiping it broke brat's connect-via-Ignore path on
-        // r5. Original F-B heuristic assumed every vless.servers[] entry
-        // outside the subscription list was an auto-migrated duplicate
-        // from the stas-class shadow-override bug; in practice users
-        // also add manual servers via the Servers tab, and those land
-        // in the same list. Use ActiveServer membership as the user-
-        // intent signal: if the user selected this row as active, it's
-        // not a stale auto-migrated leftover.
         var activeServerName = vless.ActiveServer ?? string.Empty;
 
         var keep = new List<VlessServerEntry>(vless.Servers.Count);
@@ -318,7 +210,6 @@ public static class SettingsMigrator
 
         vless.Servers = keep;
 
-        // Reset ActiveServer when its target was removed.
         if (!string.IsNullOrEmpty(vless.ActiveServer))
         {
             var stillPresent = keep.Any(s =>
@@ -336,10 +227,6 @@ public static class SettingsMigrator
         }
     }
 
-    /// <summary>Composite identity key for orphan detection. Case-
-    /// insensitive across all components (host casing is irrelevant;
-    /// uuid is conventionally lower-case but YAML may carry mixed).
-    /// </summary>
     private static string MakeServerKey(VlessServerEntry s)
     {
         var name = s.Name ?? string.Empty;
@@ -348,32 +235,11 @@ public static class SettingsMigrator
         return $"{name}|{server}|{s.Port}|{uuid}";
     }
 
-    // ─── individual migration steps ──────────────────────────────────────
-
-    /// <summary>
-    /// Baseline: "no schema_version in yaml" -> schema_version 1. Nothing
-    /// structural to change — v0 and v1 have the same field layout. We
-    /// just tag the file with its version so future migrations have a
-    /// reference point.
-    /// </summary>
     private static AppSettings Migrate_0_to_1(AppSettings s)
     {
         return s;
     }
 
-    /// <summary>
-    /// v2.30.0: migrate <see cref="AppConfig.CustomDirectRules"/>
-    /// (v2.29.0-r4..r8 schema) to <see cref="AppConfig.CustomRules"/>
-    /// with explicit Action="direct". Preserves Type, Value, Comment,
-    /// Enabled. After migration the legacy field is left empty in
-    /// memory but the property is retained on the AppConfig class for
-    /// back-compat with v2.29 binaries that may share the same yaml
-    /// file (no-op for them).
-    ///
-    /// <para>Idempotent: if <see cref="AppConfig.CustomRules"/> is
-    /// already populated (v2.30+ user already migrated), skips. If
-    /// <see cref="AppConfig.CustomDirectRules"/> is empty, also skips.</para>
-    /// </summary>
     private static AppSettings Migrate_1_to_2(AppSettings s, ILogger? logger)
     {
         if (s.App.CustomRules.Count > 0)
@@ -386,14 +252,13 @@ public static class SettingsMigrator
 
         if (s.App.CustomDirectRules.Count == 0)
         {
-            // Nothing to migrate — first-run / clean install.
             return s;
         }
 
         var migrated = s.App.CustomDirectRules
             .Select(legacy => new CustomRule
             {
-                Action = "direct",  // legacy CustomDirectRule was direct-only
+                Action = "direct",
                 Type = legacy.Type,
                 Value = legacy.Value,
                 Comment = string.IsNullOrEmpty(legacy.Comment)
@@ -404,9 +269,6 @@ public static class SettingsMigrator
             .ToList();
 
         s.App.CustomRules = migrated;
-        // Empty the legacy list so future loads don't double-migrate.
-        // Keep the property on AppConfig (class shape stays); just clear
-        // the data.
         s.App.CustomDirectRules = new List<CustomDirectRule>();
 
         logger?.Information(
@@ -415,46 +277,10 @@ public static class SettingsMigrator
         return s;
     }
 
-    /// <summary>
-    /// v2.32.x (AM-1 + F-B, 2026-05-11): bundle two related changes
-    /// that both touch settings load:
-    ///
-    /// <list type="number">
-    /// <item><b>AM-1</b> — populate
-    /// <see cref="AppConfig.RoutingAppsInclude"/> from
-    /// <see cref="AppConfig.CustomApps"/> on first-time-after-upgrade.
-    /// <see cref="AppConfig.RoutingAppsMode"/> stays at its default
-    /// ("include") so legacy users see no behaviour change. The
-    /// <see cref="AppConfig.CustomApps"/> list is NOT cleared — it's
-    /// still consumed by <see cref="VpnEngine"/> as a process-name
-    /// source for the legacy <see cref="Profile.Processes"/> path and
-    /// removing it would silently break that fallback. Idempotent:
-    /// if <see cref="AppConfig.RoutingAppsInclude"/> already has
-    /// entries we treat it as already-migrated and skip the copy.</item>
-    ///
-    /// <item><b>F-B</b> — one-shot cleanup of orphan
-    /// <see cref="VlessConfig.Servers"/> entries when a subscription
-    /// is active. Closes the stas-class shadow-override bug at the
-    /// config-load layer. See
-    /// <c>plans/r10-stas-confirmed-and-apps-2mode.md</c> §1 Fix-B for
-    /// the full context. The cleanup is implemented in
-    /// <see cref="CleanupOrphanVlessServers"/> so the same routine can
-    /// be invoked outside the migrator (defensive runtime sanity
-    /// passes, manual reset, tests).</item>
-    /// </list>
-    /// </summary>
     private static AppSettings Migrate_2_to_3(AppSettings s, ILogger? logger)
     {
-        // AM-1: seed the include list from legacy top-level CustomApps
-        // (yaml: `custom_apps:`) if the new field is empty. Migration
-        // is one-shot — once RoutingAppsInclude is non-empty, future
-        // loads must respect user-driven edits.
         if (s.App.RoutingAppsInclude.Count == 0 && (s.CustomApps?.Count ?? 0) > 0)
         {
-            // De-dupe with OrdinalIgnoreCase but preserve casing for the
-            // surviving entries — sing-box `process_name` matching is
-            // case-sensitive (see VPNRouter.Core/AGENTS.md), so we never
-            // mutate the user's casing here.
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var seeded = new List<string>(s.CustomApps!.Count);
             foreach (var app in s.CustomApps)
@@ -473,20 +299,14 @@ public static class SettingsMigrator
             }
         }
 
-        // Ensure mode is canonical even when migrating fresh installs.
         if (string.IsNullOrWhiteSpace(s.App.RoutingAppsMode))
             s.App.RoutingAppsMode = "include";
 
-        // F-B: legacy vless.servers cleanup. Idempotent.
         CleanupOrphanVlessServers(s, logger);
 
         return s;
     }
 
-    /// <summary>
-    /// v3->v4 schema migration. wgturn channel has been retired; any legacy binary
-    /// in the shared bin directory is cleaned up best-effort.
-    /// </summary>
     private static AppSettings Migrate_3_to_4(AppSettings s, ILogger? logger)
     {
         try
@@ -511,67 +331,16 @@ public static class SettingsMigrator
         return s;
     }
 
-    /// <summary>
-    /// v2.35.0-r5 Wave 39 (2026-05-19): introduces
-    /// <see cref="AppConfig.DnsLeakLockdown"/> — a firewall-level outbound
-    /// block on UDP/53, TCP/53, and TCP/853 to prevent the Windows DNS
-    /// Client multi-resolver race from leaking queries to ISP resolvers
-    /// despite our SMHNR/ParallelAAAA registry hardening.
-    ///
-    /// <para>Fresh installs inherit the C# default <c>true</c> (active
-    /// protection out of the box). For users upgrading from an older
-    /// schema (anyone whose yaml records a schema version &lt; 5), we
-    /// flip the flag to <c>false</c> so we don't surprise people running
-    /// a local DNS proxy on a non-loopback IP (dnscrypt-proxy on a LAN
-    /// address, AdGuard Home on a sibling NIC, etc.). They can opt in
-    /// later via the Settings toggle once they understand the
-    /// implications.</para>
-    ///
-    /// <para>Detection: the schema-version walker only enters this step
-    /// when the file's recorded version was &lt; 5, which by definition
-    /// means "existing user from before the field existed". Fresh
-    /// installs never run this step because <see cref="AppSettings.SchemaVersion"/>
-    /// defaults to <see cref="AppSettings.CurrentSchemaVersion"/>.</para>
-    ///
-    /// <para>Idempotent: re-running on a v5 settings tree is a no-op
-    /// because the migrator's outer loop only fires steps whose source
-    /// version is below the target. The body is a single field write so
-    /// even a manually-triggered re-run is harmless.</para>
-    /// </summary>
     private static AppSettings Migrate_4_to_5(AppSettings s, ILogger? logger)
     {
         if (s.App == null)
         {
-            // Defensive — shouldn't happen because AppSettings ctor
-            // initialises App, but the migrator chain shouldn't NRE on
-            // a hand-edited yaml with a stripped section.
             logger?.Warning(
                 "[SettingsMigrator] v4->v5 (Wave 39): settings.App was null, " +
                 "skipping DnsLeakLockdown setup");
             return s;
         }
 
-        // BR-5 (brat 2026-05-19): flipped from opt-out (false) to
-        // opt-in (true) for upgrade users. Original Wave 39 logic was
-        // BR-10 (post-v2.35.0, 2026-05-20) — flipped BACK to opt-out
-        // by default for upgrade users. Reasoning:
-        //   - BR-5 (r9) defaulted ON to catch the brat 2026-05-19 RU ISP
-        //     DNS leak class. That worked but turned out too disruptive:
-        //     anyone running a LAN DNS proxy (dnscrypt-proxy on a non-
-        //     loopback IP, AdGuard Home on a sibling NIC) lost DNS
-        //     resolution and didn't know why.
-        //   - r17 BR-9 fixed the narrow-block-via-complement semantics
-        //     so the feature actually works correctly when enabled,
-        //     but that doesn't change the policy question: should it be
-        //     on for everyone or only for users who explicitly want it?
-        //   - Sing-box already routes app DNS via VLESS:443 (DoH to
-        //     AdGuard/Cloudflare) — the firewall block is defence-in-
-        //     depth, not the primary leak protection. The primary
-        //     protection is the proxy outbound + DNS rules in
-        //     ConfigGenerator + LeakProtection.ValidateConfig.
-        //
-        // Policy: keep DnsLeakLockdown OFF by default. User opts in via
-        // Settings → Leak Protection if they want the extra layer.
         s.App.DnsLeakLockdown = false;
         logger?.Information(
             "[SettingsMigrator] v4->v5 (Wave 39 + BR-10): set DnsLeakLockdown=false for " +
@@ -581,19 +350,6 @@ public static class SettingsMigrator
         return s;
     }
 
-    /// <summary>
-    /// v2.42.0-r3 (2026-06-11): lower the TUN MTU off the old 9000 jumbo default.
-    /// With <c>stack=system</c> a 9000-byte TUN MTU put oversized HTTP/2 segments
-    /// on the wire that the real 1500-MTU path can't carry; with PMTUD broken they
-    /// were RST, so browsers got <c>ERR_CONNECTION_CLOSED</c> on YouTube / Google
-    /// over TCP-only (VLESS) proxies — while small clients (curl --http1.1,
-    /// PowerShell IWR) squeaked through and UDP/QUIC proxies bypassed it entirely.
-    /// Confirmed via diagnose.ps1 on a real user (h2 FAIL + tun mtu 9000).
-    ///
-    /// <para>Only rewrites the exact old default (9000) so a user who deliberately
-    /// set a custom MTU keeps it. 1280 is the IPv6 minimum link MTU, not a
-    /// guarantee that every underlay path can carry it unchanged. Idempotent.</para>
-    /// </summary>
     private static AppSettings Migrate_5_to_6(AppSettings s, ILogger? logger)
     {
         if (s.Tun != null && s.Tun.Mtu == 9000)
@@ -607,18 +363,6 @@ public static class SettingsMigrator
         return s;
     }
 
-    /// <summary>
-    /// v2.44.4 (2026-06-27): lower the legacy 1500 AND the stuck jumbo 9000 TUN
-    /// MTU that older configs can still carry. 1500 is fine on a bare NIC but too
-    /// optimistic once VLESS/Reality/Hysteria2/TUIC encapsulation is added; large
-    /// UDP packets can exceed the real path MTU and disappear. 9000 is the pre-v2.42
-    /// jumbo default — its 9000->1280 fix lives in the v5->v6 step, so a config that
-    /// already passed v5->v6 on an older build never re-ran it and is STUCK at 9000
-    /// (diag 20260627-203104: tester on schema v6 + mtu 9000 -> PMTUD blackhole ->
-    /// stalled DoH/joins -> Roblox Error 277). Both known-bad defaults are rewritten;
-    /// deliberate custom values such as 1400 stay. (ConfigGenerator.NormalizeTunMtu
-    /// is the belt-and-suspenders clamp at generation time.)
-    /// </summary>
     private static AppSettings Migrate_6_to_7(AppSettings s, ILogger? logger)
     {
         if (s.Tun != null && (s.Tun.Mtu == 1500 || s.Tun.Mtu == 9000))
@@ -633,12 +377,6 @@ public static class SettingsMigrator
         return s;
     }
 
-    /// <summary>
-    /// v2.46.0-r10 (2026-07-06): generic VLESS/TCP TUN default moves to 1420.
-    /// Roblox/VLESS probing showed 1420 passes while 1423 fragments, and 1280
-    /// regresses Steam Datagram Relay-class game UDP (~1328 byte IP packets).
-    /// Rewrite only known defaults/invalid values; preserve explicit custom MTUs.
-    /// </summary>
     private static AppSettings Migrate_7_to_8(AppSettings s, ILogger? logger)
     {
         if (s.Tun == null) return s;

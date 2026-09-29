@@ -10,16 +10,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Spec-derived tests for VPNRouter app-config client detour handling.
-/// Pins:
-/// 1. VLESS URI parser preserves outbound/detour query metadata.
-/// 2. Subscription fetch sends X-VPNRouter-Capabilities: detour-v1.
-/// 3. GetActiveServers includes the upstream entry when a chained target is active.
-/// 4. ConfigGenerator emits upstream outbound + target proxy outbound with exact detour.
-/// 5. Missing upstream for a chained target fails closed with an exception.
-/// 6. Ordinary single/no-detour outbound has no detour property set.
-/// </summary>
 [Collection(SubscriptionFetcherCollection.Name)]
 public class AppConfigDetourTests
 {
@@ -74,10 +64,8 @@ public class AppConfigDetourTests
     [Fact]
     public void Parse_VlessUriWithOutboundAndDetour_PreservesMetadataOnEntry()
     {
-        // Arrange & Act
         var entry = VlessUriParser.Parse(ChainedTargetUri);
 
-        // Assert
         Assert.NotNull(entry);
         Assert.Equal("target-node-1", entry.OutboundId);
         Assert.Equal("upstream-node-1", entry.DetourVia);
@@ -86,7 +74,6 @@ public class AppConfigDetourTests
     [Fact]
     public async Task FetchAsync_SubscriptionFetch_SendsDetourCapabilityHeader()
     {
-        // Arrange
         const string subUrl = "https://provider.example/api/v1/app/config/test-device";
         var fake = new FakeHttpClient().Setup(subUrl, $"{OrdinaryUri}\n");
         var previous = SubscriptionFetcher.Http;
@@ -94,11 +81,9 @@ public class AppConfigDetourTests
 
         try
         {
-            // Act
             var servers = await SubscriptionFetcher.FetchAsync(
                 subUrl, ct: TestContext.Current.CancellationToken);
 
-            // Assert
             Assert.NotEmpty(servers);
             var requests = fake.SentRequests;
             Assert.Single(requests);
@@ -121,7 +106,6 @@ public class AppConfigDetourTests
     [Fact]
     public void GetActiveServers_ChainedTargetSelected_IncludesUpstreamServer()
     {
-        // Arrange
         var upstream = new VlessServerEntry
         {
             Name = "Upstream-Server",
@@ -151,10 +135,8 @@ public class AppConfigDetourTests
             Servers = new List<VlessServerEntry> { upstream, target }
         };
 
-        // Act
         var activeServers = vlessConfig.GetActiveServers();
 
-        // Assert
         Assert.Equal(2, activeServers.Count);
         Assert.Contains(activeServers, s => s.Name == "Upstream-Server" && s.OutboundId == "upstream-node-1");
         Assert.Contains(activeServers, s => s.Name == "Chained-Target" && s.OutboundId == "target-node-1");
@@ -223,7 +205,6 @@ public class AppConfigDetourTests
     [Fact]
     public void Generate_ChainedTarget_EmitsUpstreamAndTargetProxyWithExactDetour()
     {
-        // Arrange
         var upstream = new VlessServerEntry
         {
             Name = "Upstream-Node",
@@ -253,10 +234,8 @@ public class AppConfigDetourTests
         var profile = CreateTestProfile();
         var processes = new[] { "Discord.exe" };
 
-        // Act
         var config = ConfigGenerator.Generate(profile, processes, settings);
 
-        // Assert
         var proxy = Assert.Single(config.Outbounds, outbound => outbound.Tag == "proxy");
         Assert.Equal("proxy", config.Outbounds[0].Tag);
         Assert.Equal("chain-entry", proxy.Detour);
@@ -274,7 +253,6 @@ public class AppConfigDetourTests
     [Fact]
     public void Generate_MissingUpstream_FailsClosedWithException()
     {
-        // Arrange
         var target = new VlessServerEntry
         {
             Name = "Orphan-Target",
@@ -293,7 +271,6 @@ public class AppConfigDetourTests
         var profile = CreateTestProfile();
         var processes = new[] { "Discord.exe" };
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(profile, processes, settings));
     }
 
@@ -355,7 +332,6 @@ public class AppConfigDetourTests
     [Fact]
     public void Generate_OrdinaryNoDetourServer_ProxyOutboundHasNoDetour()
     {
-        // Arrange
         var ordinaryServer = new VlessServerEntry
         {
             Name = "Ordinary-Server",
@@ -373,10 +349,8 @@ public class AppConfigDetourTests
         var profile = CreateTestProfile();
         var processes = new[] { "Discord.exe" };
 
-        // Act
         var config = ConfigGenerator.Generate(profile, processes, settings);
 
-        // Assert
         var proxy = config.Outbounds.First(o => o.Tag == "proxy");
         Assert.Equal("vless", proxy.Type);
         Assert.True(string.IsNullOrEmpty(proxy.Detour), "Ordinary no-detour generated outbound proxy must not have detour set");

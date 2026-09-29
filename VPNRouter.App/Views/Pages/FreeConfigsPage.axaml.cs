@@ -22,9 +22,6 @@ public partial class FreeConfigsPage : UserControl
         AvaloniaXamlLoader.Load(this);
     }
 
-    /// <summary>
-    /// Double-click on a row triggers Connect immediately (native app convention).
-    /// </summary>
     private void ConfigsList_DoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is MainWindowViewModel mainVm)

@@ -246,7 +246,7 @@ public sealed class ReleaseToolingContractTests
     public void WindowsInstaller_KeepsCallerValuesOutOfElevatedSource()
     {
         var script = Read("packaging", "windows", "install.ps1");
-        var elevation = script[..script.IndexOf("# From here on: admin rights confirmed.", StringComparison.Ordinal)];
+        var elevation = script[..script.IndexOf("Say \"VPNRouter installer running as Administrator\"", StringComparison.Ordinal)];
         const string launch = "Start-Process -FilePath $WindowsPowerShell -Verb RunAs -ArgumentList \"-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedBootstrap\"";
 
         Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(elevation, System.Text.RegularExpressions.Regex.Escape(launch)).Count);
@@ -413,13 +413,11 @@ public sealed class ReleaseToolingContractTests
     {
         var postrm = Read("packaging", "linux", "postrm");
 
-        // Verify path-scoped kill patterns
         Assert.Contains("pkill -f /opt/vpnrouter/sing-box", postrm);
         Assert.Contains("pkill -f /opt/vpnrouter/VPNRouter.App", postrm);
         Assert.Contains("pkill -f /usr/local/vpnrouter/sing-box", postrm);
         Assert.Contains("pkill -f /usr/local/vpnrouter/VPNRouter.App", postrm);
 
-        // Verify that un-scoped pattern kills are absent
         var strippedApp = postrm
             .Replace("/opt/vpnrouter/VPNRouter.App", "")
             .Replace("/usr/local/vpnrouter/VPNRouter.App", "");

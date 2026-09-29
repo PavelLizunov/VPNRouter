@@ -8,16 +8,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins R1 AWG/XHTTP deep-verify parity (OPEN-DEFECTS P2, audit batch-1 #10):
-/// pre-R1 an AWG entry fell into the VLESS builder (garbage config → bind-fail)
-/// and an xhttp entry was probed over plain TCP (false ProtocolBlocked). Now:
-/// core lacks the tag → typed <see cref="DeepVerifyFailurePhase.UnsupportedByVerifier"/>;
-/// core has it → a REAL verify config (AWG endpoint / xhttp transport).
-///
-/// <para>Convention: SingBoxFeatures overrides set in try/finally — no test may
-/// probe the real installed binary.</para>
-/// </summary>
 public class VlessDeepVerifierProtocolSupportTests
 {
     private static ILogger SilentLogger() => new LoggerConfiguration().CreateLogger();
@@ -46,7 +36,7 @@ public class VlessDeepVerifierProtocolSupportTests
         Server = "1.2.3.4",
         Port = 443,
         Uuid = "11111111-2222-3333-4444-555555555555",
-        Flow = "xtls-rprx-vision",   // must be DROPPED for xhttp
+        Flow = "xtls-rprx-vision",
         Transport = new VlessTransportConfig { Type = "xhttp", Path = "/probe" },
     };
 
@@ -65,8 +55,6 @@ public class VlessDeepVerifierProtocolSupportTests
         try { await body(); }
         finally { SingBoxFeatures.ResetForTests(); }
     }
-
-    // ── Unsupported core → typed UnsupportedByVerifier (never a server verdict) ──
 
     [Fact]
     public async Task VerifyAsync_Awg_CoreWithoutAwg_ReturnsUnsupportedByVerifier()
@@ -96,17 +84,12 @@ public class VlessDeepVerifierProtocolSupportTests
     public async Task VerifyAsync_Awg_CoreWithAwg_PassesGate_FailsOnMissingBinaryAsLocalSpawn()
         => await WithOverridesAsync(awg: true, xhttp: false, async () =>
         {
-            // With the tag present the gate lets AWG through to the normal pipeline —
-            // here that pipeline stops at the (deliberately) missing binary, and that
-            // is a typed LOCAL failure, not a server verdict.
             var verifier = new VlessDeepVerifier(SilentLogger(), NoBinaryPath);
             var r = await verifier.VerifyAsync(AwgEntry(), measureBandwidth: false,
                 TestContext.Current.CancellationToken);
             Assert.False(r.Ok);
             Assert.Equal(DeepVerifyFailurePhase.LocalSpawn, r.FailurePhase);
         });
-
-    // ── Verify-config shapes (what a supported core would actually run) ──────
 
     [Fact]
     public void BuildSingleOutboundConfig_Awg_EmitsEndpointNotVlessOutbound()
@@ -118,10 +101,9 @@ public class VlessDeepVerifierProtocolSupportTests
         var ep = Assert.IsType<JsonObject>(endpoints[0]);
         Assert.Equal("wireguard", (string?)ep["type"]);
         Assert.Equal("proxy", (string?)ep["tag"]);
-        Assert.Equal(4, (int?)ep["jc"]);                       // AWG obfuscation carried
+        Assert.Equal(4, (int?)ep["jc"]);
         Assert.Equal("1.2.3.4", (string?)ep["peers"]![0]!["address"]);
 
-        // No vless outbound was fabricated; route.final still resolves the endpoint tag.
         var outbounds = Assert.IsType<JsonArray>(root["outbounds"]);
         Assert.DoesNotContain(outbounds, o => (string?)o?["type"] == "vless");
         Assert.Equal("proxy", (string?)root["route"]!["final"]);
@@ -134,10 +116,9 @@ public class VlessDeepVerifierProtocolSupportTests
 
         var t = Assert.IsType<JsonObject>(outbound["transport"]);
         Assert.Equal("xhttp", (string?)t["type"]);
-        Assert.Equal("auto", (string?)t["mode"]);              // default mode mirrored
+        Assert.Equal("auto", (string?)t["mode"]);
         Assert.Equal("/probe", (string?)t["path"]);
 
-        // XHTTP is incompatible with XTLS-Vision — the stray flow must be dropped.
         Assert.True(outbound["flow"] is null);
     }
 }

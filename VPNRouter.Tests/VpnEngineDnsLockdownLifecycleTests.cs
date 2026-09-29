@@ -1,54 +1,3 @@
-// Task #49 (2026-05-21) — Symmetric ON-case test for the BR-7 deferred
-// DNS-leak lockdown branch in the warmup probe, completing Agent C's
-// Task #36-C Group 5 deferred coverage.
-//
-// Background: Task #36-C (commit 681b61c) shipped the OFF-case test
-// (Start_DnsLeakLockdownOff_DoesNotInvokeEnableLockdown) but punted on
-// the symmetric ON case. Agent C's brief documented:
-//
-//   > The symmetric DnsLeakLockdown=true → EnableLockdownCount=1 case is
-//   > deferred: the BR-7 success branch in ScheduleWarmupProbe uses
-//   > `new HttpClient` directly (not injected) and probes
-//   > https://www.gstatic.com/generate_204 for real. Deterministic
-//   > coverage of the success path needs an IHttpClientFactory injection
-//   > into StartupPipeline — separate seam, out of scope.
-//
-// Task #49 adds the seam: `StartupPipeline.WarmupHttp` static IHttpClient
-// field with null default (preserving the inline `new HttpClient`
-// production behaviour). Tests overwrite to a FakeHttpClient that returns
-// 200 OK on the gstatic probe URL, swap restored in cleanup. Mirrors the
-// existing static-seam patterns for SingBoxManager.Runner and
-// TunAdapterDiagnostics.Runner.
-//
-// ── Scope realised ───────────────────────────────────────────────────────
-//
-// 2 tests, Windows-only:
-//
-//   1. Start_DnsLeakLockdownOn_WarmupSuccess_InvokesEnableLockdown — drives
-//      a successful warmup probe via the new IHttpClient seam, then polls
-//      NullWindowsDnsHardening.EnableLockdownCount for up to 5s to wait
-//      for the fire-and-forget Task.Run body to complete. Asserts the
-//      BR-7 success branch fired EnableLockdownIfConfigured with settings
-//      carrying DnsLeakLockdown=true.
-//
-//   2. Start_DnsLeakLockdownOn_WarmupFailure_DoesNotInvokeEnableLockdown
-//      — symmetric defence pin: even with DnsLeakLockdown=true, a failing
-//      warmup probe (FakeHttpClient ThrowOn the gstatic URL) does NOT
-//      fire EnableLockdownIfConfigured. The warmup loop expires after
-//      15 attempts × 1s; we Stop the engine after 2s to short-circuit
-//      the loop via the ct (faster than waiting the full 15s). Pin:
-//      EnableLockdownCount stays at 0.
-//
-// Why polling vs. signal:
-//   The fire-and-forget Task.Run inside ScheduleWarmupProbe has no
-//   awaitable handle exposed by the pipeline. We could add one (a
-//   TaskCompletionSource exposed via a new IStartupHost callback or via
-//   a "WarmupCompleted" event on VpnEngine), but that's scope creep — the
-//   poll-with-timeout approach gets us deterministic coverage in O(1s)
-//   wall-clock without further production-API surface area.
-//
-// Brief: plans/phase4-lifecycle-test-gaps-task49-2026-05-21.md.
-
 #nullable enable
 
 using System.Net.Http;
@@ -61,20 +10,9 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization tests for the BR-7 deferred-lockdown success branch
-/// in <see cref="StartupPipeline.ScheduleWarmupProbe"/>. Companion to
-/// <see cref="VpnEngineLifecycleTests"/>'s Group 5 OFF-case test.
-///
-/// <para>Cross-references:
-/// <see cref="VpnEngineLifecycleTests"/> (Group 5 OFF-case),
-/// <see cref="StartupPipeline.WarmupHttp"/> (the seam this file exercises),
-/// <see cref="WindowsDnsHardeningInjectionTests"/> (DNS-hardening seam wiring).</para>
-/// </summary>
+[Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineDnsLockdownLifecycleTests
 {
-    // ─── Inline stubs (mirrors VpnEngineLifecycleTests pattern) ──────────
-
     private sealed class StubProcessScanner : IProcessScanner
     {
         public ScanResult ScanForProfile(Profile profile) =>
@@ -109,9 +47,6 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         public void Dispose() => DisposeCount++;
     }
 
-    // ─── W1.2 split-tunnel driver wiring (reuses BuildEngine + the stubs) ────
-
-    // Drives the engage hook directly (internal helper) — no ProgramData-touching StartAsync needed.
     [Fact]
     public async Task SplitDriver_StartHook_EngagesInWindowsExcludeMode()
     {
@@ -124,8 +59,6 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
 
         await engine.TryEngageSplitDriverAsync(s, default);
 
-        // ShouldEngage gates on OperatingSystem.IsWindows() — engage only fires on Windows (fail-open
-        // no-op elsewhere). Both branches are a real assertion of the wiring.
         Assert.Equal(OperatingSystem.IsWindows() ? 1 : 0, fake.EngageCount);
     }
 
@@ -136,7 +69,7 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         var engine = BuildEngine(new Fakes.NullWindowsDnsHardening(), out _, out _, splitDriver: fake);
         var s = BuildHappyPathSettings("x");
         s.App.RoutingMode = "split";
-        s.App.RoutingAppsMode = "include";       // include-mode never engages, any platform
+        s.App.RoutingAppsMode = "include";
         s.App.RoutingAppsExclude = new List<string> { "curl.exe" };
 
         await engine.TryEngageSplitDriverAsync(s, default);
@@ -150,12 +83,10 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         var fake = new Fakes.FakeSplitTunnelDriver();
         var engine = BuildEngine(new Fakes.NullWindowsDnsHardening(), out _, out _, splitDriver: fake);
 
-        engine.Dispose();   // hook 4
+        engine.Dispose();
 
         Assert.Equal(1, fake.DisposeCount);
     }
-
-    // ─── Engine + Settings factories ─────────────────────────────────────
 
 #pragma warning disable CS0618
     private static VpnEngine BuildEngine(
@@ -274,12 +205,6 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         return (runner, handle);
     }
 
-    /// <summary>
-    /// Build a FakeHttpClient that returns 200 OK on the gstatic warmup
-    /// probe URL. The body is the canonical "" (the real gstatic.com
-    /// returns HTTP 204 with empty body — we use 200 + empty body which
-    /// still hits the IsSuccess() branch in ScheduleWarmupProbe).
-    /// </summary>
     private static FakeHttpClient BuildWarmupSuccessHttpClient() =>
         new FakeHttpClient().Setup(
             "gstatic.com/generate_204",
@@ -289,20 +214,11 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
                 Body: Array.Empty<byte>(),
                 Duration: TimeSpan.FromMilliseconds(1)));
 
-    /// <summary>
-    /// Build a FakeHttpClient that throws on the gstatic warmup probe URL,
-    /// simulating a network-level probe failure (no TUN routing).
-    /// </summary>
     private static FakeHttpClient BuildWarmupFailureHttpClient() =>
         new FakeHttpClient().ThrowOn(
             "gstatic.com/generate_204",
             new HttpRequestException("simulated TUN-not-routing"));
 
-    /// <summary>
-    /// Wait up to <paramref name="timeout"/> for <paramref name="predicate"/>
-    /// to return true. Polls every 50 ms. Returns true if the predicate
-    /// fires, false if the timeout elapsed.
-    /// </summary>
     private static async Task<bool> WaitForAsync(
         Func<bool> predicate, TimeSpan timeout)
     {
@@ -342,32 +258,19 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         {
             if (_disposed) return;
             _disposed = true;
-            try { _engine.Stop(); } catch { /* best-effort */ }
-            try { _engine.Dispose(); } catch { /* best-effort */ }
+            try { _engine.Stop(); } catch { }
+            try { _engine.Dispose(); } catch { }
             SingBoxManager.Runner = _prevSingBoxRunner;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             StartupPipeline.WarmupHttp = _prevWarmupHttp;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-            try { File.Delete(_stubExe); } catch { /* best-effort */ }
+            try { File.Delete(_stubExe); } catch { }
         }
     }
-
-    // ─── Tests ───────────────────────────────────────────────────────────
 
     [Fact]
     public async Task Start_DnsLeakLockdownOn_WarmupSuccess_InvokesEnableLockdown()
     {
-        // Drives a full ColdStart with DnsLeakLockdown=true AND a
-        // FakeHttpClient seam that returns 200 on the gstatic probe.
-        // The fire-and-forget warmup probe's success branch must fire
-        // _dnsHardening.EnableLockdownIfConfigured exactly once.
-        //
-        // Why we poll instead of awaiting: ScheduleWarmupProbe's
-        // background Task.Run isn't observable from the caller — there's
-        // no completion signal exposed by the pipeline. We poll the
-        // NullWindowsDnsHardening capture surface for up to 5s — well
-        // under the 15s warmup-loop budget but generous against any
-        // CI/dev VM jitter.
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart drives SingBoxManager's Windows spawn path; Linux uses pkexec + getcap shell-outs not behind IProcessRunner.");
 
@@ -381,8 +284,6 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         SingBoxManager.Runner = singBoxRunner;
         TunAdapterDiagnostics.Runner = BuildTunCleanupFake();
 
-        // Install the warmup seam BEFORE engine.StartAsync so the fire-
-        // and-forget Task.Run snapshot picks it up.
         var fakeWarmupHttp = BuildWarmupSuccessHttpClient();
         StartupPipeline.WarmupHttp = fakeWarmupHttp;
 
@@ -397,16 +298,11 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
 
         await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
 
-        // Phase 8 fired Apply with settings carrying DnsLeakLockdown=true.
         Assert.Equal(1, dnsHardening.ApplyCount);
         var applyCall = dnsHardening.Calls.First(c => c.Op == "Apply");
         Assert.NotNull(applyCall.Settings);
         Assert.True(applyCall.Settings!.App.DnsLeakLockdown);
 
-        // Wait for the warmup probe's fire-and-forget Task.Run to fire
-        // EnableLockdownIfConfigured. The probe has `await Task.Delay(1000)`
-        // before the first HTTP attempt, so we expect a minimum 1s delay
-        // before the success branch runs. 5s timeout is conservative.
         var fired = await WaitForAsync(
             () => dnsHardening.EnableLockdownCount >= 1,
             TimeSpan.FromSeconds(5));
@@ -416,14 +312,11 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
             $"Actual EnableLockdownCount={dnsHardening.EnableLockdownCount}, " +
             $"FakeHttpClient.SentRequests={fakeWarmupHttp.SentRequests.Count}");
 
-        // EnableLockdownIfConfigured was called with settings carrying
-        // DnsLeakLockdown=true.
         Assert.Equal(1, dnsHardening.EnableLockdownCount);
         var lockdownCall = dnsHardening.Calls.First(c => c.Op == "EnableLockdownIfConfigured");
         Assert.NotNull(lockdownCall.Settings);
         Assert.True(lockdownCall.Settings!.App.DnsLeakLockdown);
 
-        // The FakeHttpClient received at least one probe request.
         Assert.True(fakeWarmupHttp.SentRequests.Count >= 1);
         Assert.Contains(
             fakeWarmupHttp.SentRequests,
@@ -431,19 +324,50 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
     }
 
     [Fact]
+    public async Task Start_DnsLeakLockdownOn_StaleWarmup_DoesNotInvokeEnableLockdown()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart drives SingBoxManager's Windows spawn path; Linux uses pkexec + getcap shell-outs not behind IProcessRunner.");
+
+        var prevSingBoxRunner = SingBoxManager.Runner;
+        var prevTunDiagRunner = TunAdapterDiagnostics.Runner;
+        var prevWarmupHttp = StartupPipeline.WarmupHttp;
+        TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(false);
+
+        var (singBoxRunner, handle) = BuildSingBoxSpawnFake();
+        SingBoxManager.Runner = singBoxRunner;
+        TunAdapterDiagnostics.Runner = BuildTunCleanupFake();
+
+        var fakeWarmupHttp = BuildWarmupSuccessHttpClient();
+        StartupPipeline.WarmupHttp = fakeWarmupHttp;
+
+        var stubExe = CreateStubExe();
+        var dnsHardening = new NullWindowsDnsHardening();
+        var engine = BuildEngine(dnsHardening, out var firewall, out var monitor);
+
+        var settings = BuildHappyPathSettings(stubExe, dnsLeakLockdown: true);
+
+        using var cleanup = new DnsLockdownCleanup(
+            engine, stubExe, prevSingBoxRunner, prevTunDiagRunner, prevWarmupHttp);
+
+        await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
+
+        // A failover restart supersedes this start's generation before its warm-up probe completes.
+        engine.ResetFailoverContext(settings);
+
+        var probed = await WaitForAsync(
+            () => fakeWarmupHttp.SentRequests.Count >= 1,
+            TimeSpan.FromSeconds(5));
+        Assert.True(probed, "The warm-up probe never reached the HTTP seam.");
+
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Equal(0, dnsHardening.EnableLockdownCount);
+    }
+
+    [Fact]
     public async Task Start_DnsLeakLockdownOn_WarmupFailure_DoesNotInvokeEnableLockdown()
     {
-        // Symmetric defence pin: even with DnsLeakLockdown=true, a
-        // FAILING warmup probe (HTTP throws) must NOT fire the BR-7
-        // EnableLockdownIfConfigured branch. The probe's warning-only
-        // failure-path (line 1185 in StartupPipeline.cs at the time of
-        // writing) is the only path that doesn't reach the
-        // EnableLockdownIfConfigured call.
-        //
-        // We Stop the engine after 2s to short-circuit the 15-attempt
-        // warmup loop via the cancellation token — otherwise we'd wait
-        // ~15s for the loop to naturally expire (each attempt does
-        // Task.Delay(1000) + HTTP-throws-immediately).
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "ColdStart prerequisite is Windows-only.");
 
@@ -471,31 +395,15 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
 
         await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
 
-        // Phase 8 fired Apply with DnsLeakLockdown=true.
         Assert.Equal(1, dnsHardening.ApplyCount);
 
-        // Let the warmup probe attempt at least once (probe has
-        // Task.Delay(1000) before HTTP). 2s gives the probe time to
-        // hit the throwing fake at least once + fall into the failure
-        // path — but isn't long enough for the full 15-attempt loop
-        // to expire on its own (15s).
         await Task.Delay(2000, TestContext.Current.CancellationToken);
 
-        // Stop the engine — cancels the warmup probe's ct, so the
-        // failure branch's final "warmup failed" warning runs without
-        // EnableLockdownIfConfigured firing.
         engine.Stop();
 
-        // Final assertion: even with DnsLeakLockdown=true, the failure
-        // branch did NOT fire EnableLockdownIfConfigured. The Stop
-        // cancelled the warmup loop's ct before its 15-attempt expiry,
-        // but either way the failure branch never reaches the lockdown
-        // call (the BR-7 lockdown is ONLY in the success branch).
         Assert.Equal(0, dnsHardening.EnableLockdownCount);
-        Assert.Equal(1, dnsHardening.RestoreCount);   // Stop drove Restore
+        Assert.Equal(1, dnsHardening.RestoreCount);
 
-        // The FakeHttpClient received at least one probe request before
-        // we stopped — confirms the seam was actually used.
         Assert.True(fakeWarmupHttp.SentRequests.Count >= 1,
             $"Expected at least one warmup probe request via the seam, got {fakeWarmupHttp.SentRequests.Count}");
     }

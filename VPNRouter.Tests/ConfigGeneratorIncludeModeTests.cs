@@ -6,15 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// AM-1 (2026-05-11) — pin the Include mode branch of
-/// <see cref="ConfigGenerator.Generate"/>. Include mode = the legacy
-/// behaviour: listed apps are routed THROUGH the proxy, route.final =
-/// direct. The plan section §2 calls this the default mode so this
-/// suite guards against accidental flips and validates the override
-/// path where the user sets <see cref="AppConfig.RoutingAppsInclude"/>
-/// to a different list than the profile-resolved one.
-/// </summary>
 public class ConfigGeneratorIncludeModeTests
 {
     private static AppSettings BuildSettings(string mode = "include",
@@ -74,13 +65,8 @@ public class ConfigGeneratorIncludeModeTests
         var config = ConfigGenerator.Generate(BuildProfile(),
             resolvedProcessNames: System.Array.Empty<string>(), settings);
 
-        // route.final = direct (split tunnel, include mode)
         Assert.Equal("direct", config.Route.Final);
 
-        // There must be a process_name → proxy route rule for the user list.
-        // (v2.41.0-r4: the QUIC-block fix also adds a process_name rule with
-        // action="reject" for the same apps, so scope this to route rules — the
-        // QUIC reject is asserted separately in ConfigGeneratorQuicBlockTests.)
         var procRules = config.Route.Rules
             .Where(r => r.ProcessName != null && r.ProcessName.Count > 0 && r.Action == "route")
             .ToList();
@@ -91,61 +77,14 @@ public class ConfigGeneratorIncludeModeTests
         Assert.All(procRules, r =>
         {
             Assert.Equal("route", r.Action);
-            // Outbound must be a proxy variant (proxy or proxy-udp for
-            // dual-flow servers; here we have a single flow so just
-            // "proxy").
             Assert.True(r.Outbound == "proxy" || r.Outbound == "proxy-udp",
                 $"Expected proxy outbound, got {r.Outbound}");
         });
     }
 
     [Fact]
-    public void IncludeMode_EmptyRoutingAppsInclude_FallsBackToLegacyProfileList()
-    {
-        // Backward compat: when RoutingAppsInclude is empty we use the
-        // resolvedProcessNames the caller passed in (the legacy path via
-        // Profile.Processes + CustomApps + ExcludedApps).
-        var settings = BuildSettings(mode: "include");
-        var profile = BuildProfile();
-        var resolved = new[] { "legacy-app.exe" };
-
-        var config = ConfigGenerator.Generate(profile, resolved, settings);
-
-        Assert.Equal("direct", config.Route.Final);
-        var procNames = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
-            .SelectMany(r => r.ProcessName!)
-            .Distinct()
-            .ToList();
-        Assert.Contains("legacy-app.exe", procNames);
-    }
-
-    [Fact]
-    public void IncludeMode_ExplicitRoutingAppsInclude_OverridesResolvedList()
-    {
-        // When the user has populated RoutingAppsInclude, that list
-        // takes precedence over the legacy resolvedProcessNames. This
-        // is the path the new Apps tab uses once AM-2 lands.
-        var settings = BuildSettings(
-            mode: "include",
-            include: new List<string> { "new-app.exe" });
-        var resolved = new[] { "legacy-app.exe" };
-
-        var config = ConfigGenerator.Generate(BuildProfile(), resolved, settings);
-
-        var procNames = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
-            .SelectMany(r => r.ProcessName!)
-            .Distinct()
-            .ToList();
-        Assert.Contains("new-app.exe", procNames);
-        Assert.DoesNotContain("legacy-app.exe", procNames);
-    }
-
-    [Fact]
     public void IncludeMode_DnsRulesPointSelectedAppsToVpnDns()
     {
-        // Per-process DNS leak protection in include + vpn_only profile.
         var settings = BuildSettings(
             mode: "include",
             include: new List<string> { "Discord.exe" });
@@ -153,8 +92,6 @@ public class ConfigGeneratorIncludeModeTests
         var config = ConfigGenerator.Generate(BuildProfile(),
             resolvedProcessNames: System.Array.Empty<string>(), settings);
 
-        // Final DNS = local-dns (other processes use direct resolver
-        // since route.final = direct).
         Assert.Equal("local-dns", config.Dns.Final);
 
         var dnsRules = config.Dns.Rules

@@ -48,7 +48,6 @@ public sealed class AntiCensorshipDnsTests
         Assert.NotNull(config.Dns);
         Assert.NotEmpty(config.Dns.Rules);
 
-        // Find the anti-censorship ECH suppression rule
         var echRule = config.Dns.Rules.FirstOrDefault(r =>
             r.Action == "reject" &&
             r.QueryType != null &&
@@ -60,7 +59,6 @@ public sealed class AntiCensorshipDnsTests
         Assert.Contains("HTTPS", echRule.QueryType!);
         Assert.Contains("SVCB", echRule.QueryType!);
 
-        // Verify JSON serialization format for sing-box 1.14
         var json = JsonSerializer.Serialize(config, AppJsonContext.Default.SingBoxConfig);
         Assert.Contains("\"query_type\"", json);
         Assert.Contains("\"HTTPS\"", json);

@@ -1,73 +1,3 @@
-// Task #41 Stage 1 (PinkuDani 2026-05-21) — VpnEngine.Connected event
-// characterization tests.
-//
-// Why: a prior "Fix #2" attempt wanted to split the App-side 30s VM Start
-// timer into Phase A (start budget — wait for sing-box to come up) +
-// Phase B (TUN warm-up budget — wait for confirmed routability).
-// The implementation was correctly REFUSED because the only existing
-// "Connected" signal was the StatusChanged string "Connected (PID N)",
-// which StartupPipeline.ScheduleWarmupProbe emits on BOTH the success
-// branch (line ~1073, gstatic probe succeeded) AND the failure branch
-// (line ~1101, 15-attempt loop expired). Phase B sniffing on that
-// string would accept warmup failure as success.
-//
-// Stage 1 (this file's subject under test) adds a typed
-// VpnEngine.Connected event that fires ONLY on actual TUN-ready
-// confirmation. Stage 2 (App-side two-phase VM timer in
-// MainWindowViewModel) will subscribe to this event for the unambiguous
-// Phase B completion signal.
-//
-// ── Scope realised vs scope deferred ──────────────────────────────────────
-//
-// What this file delivers (4 tests):
-//
-//   1. Connected_SuccessBranchOnly_FiresViaHostAdapter — drives
-//      VpnEngineStartupHost.OnConnected (the nested adapter that
-//      StartupPipeline calls) via reflection and pins that the engine's
-//      public Connected event fires with the right PID. This is the
-//      success-branch wiring contract.
-//
-//   2. Connected_FailureBranchSilent_SourcePin — defence pin via
-//      File.ReadAllText on StartupPipeline.cs source. Verifies the
-//      ScheduleWarmupProbe method has EXACTLY ONE call site for
-//      _host.OnConnected and that call is BEFORE the for-loop exit
-//      (i.e. the success branch only). The failure branch's symmetric
-//      OnStatus("Connected (PID ...") emission still exists for back-
-//      compat but does NOT call OnConnected.
-//
-//   3. Connected_FiresOncePerLifecycle_TwoCallsTwoEvents — pins the
-//      per-lifecycle semantic: a fresh Start → success → second Start
-//      → success fires Connected twice (not deduplicated). The engine
-//      itself does no de-dup; that's the host adapter's contract.
-//
-//   4. Connected_NullSubscription_DoesNotThrow — defensive: invoking
-//      the host's OnConnected with no Connected subscription on the
-//      engine must not NRE (mirrors the C# event invocation idiom
-//      "event?.Invoke(...)" — pin so a future refactor that drops
-//      the null-conditional silently regresses).
-//
-// What's intentionally NOT here:
-//
-//   • End-to-end "real warmup probe succeeds → Connected fires" via
-//     a full ColdStart through StartupPipeline. ScheduleWarmupProbe
-//     instantiates `new HttpClient` inline (not via IHttpClientFactory)
-//     and probes https://www.gstatic.com/generate_204 against the real
-//     internet. Driving it deterministically needs an IHttpClient seam
-//     that's separate to Stage 1. The same gap is documented in
-//     VpnEngineLifecycleTests's "Group 5" file-header — once that seam
-//     lands, Stage 1's Test 1 can be upgraded from "drive the adapter
-//     directly" to "drive the full warmup loop."
-//
-// Cross-references:
-//   • plans/phase2G-vpnengine-startasync-seam-2026-05-21.md (Agent B's
-//     refusal that motivated Stage 1)
-//   • plans/phase4-vpnengine-connected-event-stage1-2026-05-21.md
-//     (this brief)
-//   • StartupPipeline.cs:1088 (success branch — _host.OnConnected call)
-//   • StartupPipeline.cs:1120 (failure branch — OnStatus emission only)
-//   • VpnEngine.cs:Connected event field
-//   • VpnEngine.VpnEngineStartupHost.OnConnected (event-raising adapter)
-
 #nullable enable
 
 using System.Collections.Generic;
@@ -84,20 +14,8 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization tests for the <see cref="VpnEngine.Connected"/> event
-/// (Task #41 Stage 1).
-///
-/// <para>The event is a typed, success-branch-only signal that App-side
-/// consumers use to detect actual TUN-ready confirmation (vs. the
-/// ambiguous <c>"Connected (PID N)"</c> <c>StatusChanged</c> string
-/// which is emitted on BOTH success and failure of the warmup probe
-/// for pre-#41 back-compat).</para>
-/// </summary>
 public sealed class VpnEngineConnectedEventTests
 {
-    // ─── Inline stubs (mirrors VpnEngineOrchestratorTests pattern) ──────
-
     private sealed class StubProcessScanner : IProcessScanner
     {
         public ScanResult ScanForProfile(Profile profile) => new();
@@ -139,13 +57,6 @@ public sealed class VpnEngineConnectedEventTests
         field.SetValue(target, value);
     }
 
-    /// <summary>
-    /// Construct an idle VpnEngine wired to no-op stubs. Suppresses the
-    /// CS0618 Obsolete warning on the constructor — direct construction
-    /// is deprecated in production code (use PlatformServices factory)
-    /// but the test-friendly seam stays compiled for exactly this purpose
-    /// per the attribute's <c>error: false</c> setting.
-    /// </summary>
 #pragma warning disable CS0618
     private static VpnEngine BuildIdleEngine() =>
         new VpnEngine(
@@ -209,17 +120,6 @@ public sealed class VpnEngineConnectedEventTests
         SetField(engine, "_singBox", null);
     }
 
-    /// <summary>
-    /// Construct VpnEngine's nested <c>VpnEngineStartupHost</c> adapter via
-    /// reflection. The host is the implementation of <c>IStartupHost</c>
-    /// that <c>StartupPipeline</c> calls; its <c>OnConnected(int pid)</c>
-    /// method is what fires the engine's public <c>Connected</c> event.
-    ///
-    /// <para>We poke the adapter directly (rather than driving a full
-    /// ColdStart) because <c>ScheduleWarmupProbe</c> probes the real
-    /// internet via an inline <c>new HttpClient</c> — see file-header
-    /// scope notes for why an end-to-end test is deferred.</para>
-    /// </summary>
     private static object BuildHostAdapter(VpnEngine engine)
     {
         var hostType = typeof(VpnEngine).GetNestedType(
@@ -250,15 +150,9 @@ public sealed class VpnEngineConnectedEventTests
         method.Invoke(host, new object?[] { pid });
     }
 
-    // ─── Test 1: Success branch fires Connected via host adapter ────────
-
     [Fact]
     public void Connected_SuccessBranchOnly_FiresViaHostAdapter()
     {
-        // The pipeline's success branch calls _host.OnConnected(pidSnapshot).
-        // VpnEngineStartupHost.OnConnected raises the engine's public
-        // Connected event. Drive that adapter call directly and pin the
-        // event fires once with the supplied PID.
         using var sessionCts = new CancellationTokenSource();
         using var engine = BuildIdleEngine();
         SetField(engine, "_sessionCts", sessionCts);
@@ -280,89 +174,9 @@ public sealed class VpnEngineConnectedEventTests
         SafeDetach(engine);
     }
 
-    // ─── Test 2: Failure branch is silent (source-string defence pin) ───
-
-    [Fact]
-    public void Connected_FailureBranchSilent_SourcePin()
-    {
-        // Defence pin: ScheduleWarmupProbe in StartupPipeline.cs has TWO
-        // sites that emit the "Connected (PID N)" StatusChanged string —
-        // the success branch (after http.GetStringAsync succeeded) and
-        // the failure branch (after the 15-attempt for-loop expired).
-        // ONLY the success branch must call _host.OnConnected; the
-        // failure branch must NOT, otherwise Stage 2's App-side two-phase
-        // VM timer would accept warmup failure as success.
-        //
-        // We pin this by source-scanning StartupPipeline.cs and asserting
-        // ScheduleWarmupProbe has EXACTLY ONE _host.OnConnected call site.
-        // Locating the source file via repo-root walk so the test works
-        // from both `dotnet test` and `dotnet test --no-build` cwd.
-        var sourcePath = LocateStartupPipelineSource();
-        var source = File.ReadAllText(sourcePath);
-
-        // Total _host.OnConnected sites across the whole pipeline must
-        // be exactly 1 (the success branch). If a refactor accidentally
-        // adds a second one — especially inside the failure branch — the
-        // count breaks and this test fires.
-        var totalSites = CountSubstring(source, "_host.OnConnected(");
-        Assert.True(totalSites == 1,
-            $"Expected exactly 1 _host.OnConnected call site in " +
-            $"StartupPipeline.cs, found {totalSites}. If the new site is " +
-            $"intentional (e.g. Stage 3+ migration), update this test to " +
-            $"reflect the new contract.");
-
-        // Locate the ScheduleWarmupProbe method body and the failure branch
-        // within it. The failure branch sits AFTER the for-loop closing
-        // brace — we slice the method body and assert OnConnected is NOT
-        // mentioned in the failure half.
-        var methodStart = source.IndexOf(
-            "private void ScheduleWarmupProbe(",
-            StringComparison.Ordinal);
-        Assert.True(methodStart >= 0,
-            "Could not locate ScheduleWarmupProbe in StartupPipeline.cs " +
-            "source. Has the method been renamed?");
-
-        // The failure branch begins with the Logger?.Warning call about
-        // "TUN warm-up failed after". Everything between that anchor and
-        // the lambda's closing "}, ct);" is the failure path.
-        var failureBranchStart = source.IndexOf(
-            "TUN warm-up failed after",
-            methodStart,
-            StringComparison.Ordinal);
-        Assert.True(failureBranchStart > methodStart,
-            "Could not locate failure-branch anchor 'TUN warm-up failed " +
-            "after' inside ScheduleWarmupProbe.");
-
-        var failureBranchEnd = source.IndexOf("}, ct);",
-            failureBranchStart, StringComparison.Ordinal);
-        Assert.True(failureBranchEnd > failureBranchStart,
-            "Could not locate failure-branch terminator '}, ct);'.");
-
-        var failureBranch = source.Substring(
-            failureBranchStart, failureBranchEnd - failureBranchStart);
-        Assert.DoesNotContain("_host.OnConnected(", failureBranch);
-
-        // Defence-in-depth: the failure branch must still emit the
-        // back-compat OnStatus string so pre-#41 consumers that scan
-        // StatusChanged for "Connected (PID" aren't broken. If a future
-        // change strips both, that's a separate migration that needs to
-        // touch every StatusChanged consumer — this test fires until
-        // they do.
-        Assert.Contains("OnStatus($\"Connected (PID {pidSnapshot})", failureBranch);
-    }
-
-    // ─── Test 3: Two lifecycles fire Connected twice (no de-dup) ────────
-
     [Fact]
     public void Connected_FiresOncePerLifecycle_TwoCallsTwoEvents()
     {
-        // The host adapter does NOT de-duplicate Connected invocations across lifecycles:
-        // each lifecycle's call to OnConnected raises the event. Stage 2's App-side
-        // VM is responsible for any per-lifecycle gating (e.g. unsubscribe
-        // after first fire) — Stage 1 just wires the raw signal.
-        //
-        // Pin this with two distinct lifecycles (distinct host and manager refs)
-        // and assert the event fires twice with matching PIDs.
         using var sessionCts = new CancellationTokenSource();
         using var engine = BuildIdleEngine();
         SetField(engine, "_sessionCts", sessionCts);
@@ -370,14 +184,12 @@ public sealed class VpnEngineConnectedEventTests
         var captured = new List<int>();
         engine.Connected += pid => captured.Add(pid);
 
-        // Lifecycle 1
         var host1 = BuildHostAdapter(engine);
         var (manager1, handle1) = CreateFakeManager(11111);
         InvokeSetSingBoxManager(host1, manager1);
         InvokeOnSingBoxStarted(host1, 11111);
         InvokeOnConnected(host1, pid: 11111);
 
-        // Lifecycle 2
         var host2 = BuildHostAdapter(engine);
         var (manager2, handle2) = CreateFakeManager(22222);
         InvokeSetSingBoxManager(host2, manager2);
@@ -393,37 +205,23 @@ public sealed class VpnEngineConnectedEventTests
         SafeDetach(engine);
     }
 
-    // ─── Test 4: Null subscription tolerated (no NRE) ───────────────────
-
     [Fact]
     public void Connected_NullSubscription_DoesNotThrow()
     {
-        // C# event invocation idiom: `event?.Invoke(args)`. If a refactor
-        // drops the null-conditional (writes `Connected.Invoke(pid)`) and
-        // there's no subscriber, an NRE propagates out of the warmup
-        // probe's success branch into the fire-and-forget Task.Run —
-        // which would surface as an unobserved task exception (silent on
-        // .NET 8 default unless TaskScheduler.UnobservedTaskException is
-        // wired). The defensive pin: with NO subscriber, invoking
-        // OnConnected on the host must NOT throw.
         using var sessionCts = new CancellationTokenSource();
         using var engine = BuildIdleEngine();
         SetField(engine, "_sessionCts", sessionCts);
 
-        // Explicitly do NOT subscribe.
         var host = BuildHostAdapter(engine);
         var (manager, handle) = CreateFakeManager(99999);
         InvokeSetSingBoxManager(host, manager);
         InvokeOnSingBoxStarted(host, 99999);
 
-        // Should be a clean no-op.
         var ex = Record.Exception(() => InvokeOnConnected(host, pid: 99999));
         Assert.Null(ex);
 
         SafeDetach(engine);
     }
-
-    // ─── Test 5: Same manager same PID handle replacement suppressed ───
 
     [Fact]
     public void Connected_SameManagerSamePid_HandleReplacement_Suppressed()
@@ -440,7 +238,6 @@ public sealed class VpnEngineConnectedEventTests
         InvokeSetSingBoxManager(host, manager);
         InvokeOnSingBoxStarted(host, 44444);
 
-        // Replace handle on same manager with a new handle having same PID
         var replacementHandle = new FakeProcessHandle(44444);
         SetField(manager, "_handle", replacementHandle);
 
@@ -450,8 +247,6 @@ public sealed class VpnEngineConnectedEventTests
 
         SafeDetach(engine);
     }
-
-    // ─── Test 6: Failstop via actual engine.Stop uses fake/seams and suppresses event without networking ─
 
     [Fact]
     public void Connected_FailStop_ActualEngineStop_UsesFakeSeams_SuppressedWithoutNetworking()
@@ -468,7 +263,6 @@ public sealed class VpnEngineConnectedEventTests
         InvokeSetSingBoxManager(host, manager);
         InvokeOnSingBoxStarted(host, 55555);
 
-        // Fail-stop: invoke actual engine.Stop() which uses fake/seams
         engine.Stop();
 
         InvokeOnConnected(host, pid: 55555);
@@ -478,8 +272,6 @@ public sealed class VpnEngineConnectedEventTests
 
         SafeDetach(engine);
     }
-
-    // ─── Test 7: Failstop via exited handle or non-running state suppresses event without networking ─
 
     [Fact]
     public void Connected_FailStop_HandleExitedOrStateNotRunning_SuppressedWithoutNetworking()
@@ -496,7 +288,6 @@ public sealed class VpnEngineConnectedEventTests
         InvokeSetSingBoxManager(host, manager);
         InvokeOnSingBoxStarted(host, 66666);
 
-        // Case A: Handle exited
         handle.Kill();
         Assert.True(handle.HasExited);
 
@@ -504,7 +295,6 @@ public sealed class VpnEngineConnectedEventTests
         Assert.Empty(captured);
         Assert.Empty(GetFakeHttp(manager).SentRequests);
 
-        // Case B: State is not Running
         var (manager2, handle2) = CreateFakeManager(77777);
         InvokeSetSingBoxManager(host, manager2);
         InvokeOnSingBoxStarted(host, 77777);
@@ -519,14 +309,6 @@ public sealed class VpnEngineConnectedEventTests
         SafeDetach(engine);
     }
 
-    // ─── Test helpers ────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Locate <c>StartupPipeline.cs</c> by walking up from the test binary
-    /// directory until a folder containing <c>VPNRouter.sln</c> is found.
-    /// Works from both <c>dotnet test</c> (cwd = build output) and the
-    /// repo-root run patterns the CI uses.
-    /// </summary>
     private static string LocateStartupPipelineSource()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

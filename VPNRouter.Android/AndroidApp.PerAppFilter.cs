@@ -26,20 +26,10 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    // ── Phase 7.5 — Per-app filter UI (handbook §5.5) ───────────────────
-
     private void OnTunnelModeRadioChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // IsChecked changes fire on BOTH the previously-selected and the
-        // newly-selected radio when group toggles, so dedupe by checking
-        // the actual state.
         var splitOn = _splitRadio?.IsChecked == true;
 
-        // v3.0 v2.32.0 — when the user toggles split ON, restore the last
-        // active per-app mode ("include" or "exclude"); first-time users
-        // get "include" via the GetPerAppLastMode default. Toggling split
-        // OFF writes "off" to the active mode but preserves last-mode so
-        // the next ON toggle is sticky.
         if (splitOn)
         {
             var current = AndroidStorage.GetPerAppMode();
@@ -57,8 +47,6 @@ public partial class AndroidApp
             }
         }
 
-        // Show/hide the "Choose apps…" sub-stack we tagged on the split
-        // radio in BuildSimplePageView.
         if (_splitRadio?.Tag is StackPanel perAppStack)
         {
             perAppStack.IsVisible = splitOn;
@@ -67,14 +55,6 @@ public partial class AndroidApp
         UpdatePerAppFormCountLabel();
     }
 
-    /// <summary>
-    /// v3.0 v2.32.0 (2026-05-07) — keeps the form-side "Selected: N" label
-    /// in sync with the saved package count + the active mode. The label
-    /// suffix differs by mode so a user glancing at the form can tell
-    /// whether "Selected: 3" means "3 apps go via VPN" (include) or
-    /// "3 apps bypass VPN" (exclude). Called from
-    /// <see cref="OnTunnelModeRadioChanged"/> + <see cref="OnAppPickerSaveClicked"/>.
-    /// </summary>
     private void UpdatePerAppFormCountLabel()
     {
         if (_perAppCountLabel is null) return;
@@ -93,36 +73,14 @@ public partial class AndroidApp
 
     private void ShowAppPicker()
     {
-        // AND-MIGRATE-OVERLAYS (2026-05-09): "Choose apps" button now
-        // deeplinks to the Advanced shell on the Applications tab. Re-seed
-        // happens inside ReseedAppPickerTabState (called by the shell on
-        // tab activation). AND-ADV-CHROME (2026-05-10): tab renamed
-        // Apps → Applications to match desktop v2.32.0.
         OpenAdvancedShell(AdvancedTab.Applications);
     }
 
-    /// <summary>
-    /// Re-seed Apps tab state from persisted storage. Called by the
-    /// Advanced shell on tab activation. Replaces the body of the old
-    /// ShowAppPicker.
-    /// <para>Phase D: also rebuilds the category sidebar (10 built-ins +
-    /// any user-defined custom categories from
-    /// <see cref="AndroidStorage.GetCustomCategories"/>) and restores the
-    /// last-active category id from
-    /// <see cref="AndroidStorage.GetApplicationsActiveCategory"/>. Empty / no
-    /// active id falls back to the catch-all category.</para>
-    /// </summary>
     private async void ReseedAppPickerTabState()
     {
-        // Seed the selection set from storage so check states match what
-        // the user previously saved.
         _appPickerSelected = new HashSet<string>(AndroidStorage.GetPerAppPackages(),
                                                  System.StringComparer.OrdinalIgnoreCase);
 
-        // v3.0 v2.32.0 — seed the picker mode. If storage is currently
-        // "off" (user opened the picker after toggling split on but before
-        // mode persisted), restore the last active mode; default to
-        // "include" via GetPerAppLastMode for first-run.
         var storedMode = AndroidStorage.GetPerAppMode();
         _appPickerMode = storedMode switch
         {
@@ -142,18 +100,6 @@ public partial class AndroidApp
             _appPickerList.ItemsSource = new[] { Localization.PerAppLoading };
         }
 
-        // Phase D — build the sidebar before the cache load so the row
-        // styling (active highlight) is in place when the user lands on
-        // the tab. Counts paint as zeros first; UpdateAllCategoryCounts
-        // refreshes them after the cache returns.
-        //
-        // Bug #2 (2026-05-11) — mobile redesign: default to the
-        // CustomCatchAll category on first open (no saved active id) so
-        // the apps list is immediately populated. Pre-fix the right pane
-        // showed a "← Select a category" placeholder, which on phone read
-        // as "the tab is empty" — users had to discover the chip row to
-        // get any apps to show. Defaulting to CustomCatchAll = "all apps"
-        // matches user intent ("выбор приложений неудобен на телефоне").
         _advAppsCustomCategories = AndroidStorage.GetCustomCategories();
         var savedActiveId = AndroidStorage.GetApplicationsActiveCategory();
         _advAppsActiveCategoryId = ResolveActiveCategoryId(savedActiveId)
@@ -175,10 +121,6 @@ public partial class AndroidApp
         ApplyAppPickerFilter();
     }
 
-    /// <summary>Validate the persisted active-category id against the current
-    /// built-in list + user-defined categories. Returns null if the id no
-    /// longer maps (e.g. user removed a custom category between sessions),
-    /// so catch-all opens instead of orphan styling.</summary>
     private string? ResolveActiveCategoryId(string? id)
     {
         if (string.IsNullOrEmpty(id)) return null;
@@ -190,15 +132,9 @@ public partial class AndroidApp
     private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         AndroidStorage.SetPerAppPackages(_appPickerSelected);
-        // v3.0 v2.32.0 — persist mode + sticky-restore key in one step so
-        // the next split-radio toggle restores the same mode.
         AndroidStorage.SetPerAppMode(_appPickerMode);
         AndroidStorage.SetPerAppLastMode(_appPickerMode);
         UpdatePerAppFormCountLabel();
-        // AND-MIGRATE-OVERLAYS (2026-05-09): Save no longer dismisses the
-        // surface — Apps lives as a tab inside the Advanced shell. The
-        // count label refresh + storage flush is enough; the user closes
-        // the shell when they're done.
     }
 
     private void OnAppPickerModeIncludeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -215,12 +151,6 @@ public partial class AndroidApp
         ApplyPickerModeVisuals();
     }
 
-    /// <summary>
-    /// v3.0 v2.32.0 (2026-05-07) — repaints the include/exclude segment
-    /// buttons + the hint TextBlock based on <see cref="_appPickerMode"/>.
-    /// Mirrors how the kebab menu's theme/language segment row paints
-    /// active/inactive (see <see cref="MakeSegmentButton"/>).
-    /// </summary>
     private void ApplyPickerModeVisuals()
     {
         var includeActive = _appPickerMode == "include";
@@ -249,8 +179,6 @@ public partial class AndroidApp
         var newValue = _appPickerSystemToggle?.IsChecked == true;
         if (newValue == _appPickerSystemAppsVisible) return;
         _appPickerSystemAppsVisible = newValue;
-        // Reload list with the new include-system flag. This might take a
-        // beat on slow devices; reuse the show flow for the loading state.
         _ = ReloadAppPickerCacheAsync();
     }
 
@@ -295,24 +223,11 @@ public partial class AndroidApp
         timer.Start();
     }
 
-    /// <summary>
-    /// Apply the current search term to <see cref="_appPickerCache"/> and
-    /// refresh the ListBox with a row factory that builds CheckBox + label
-    /// per visible app. Each row's CheckedChanged updates
-    /// <see cref="_appPickerSelected"/> immediately so Save just persists
-    /// the in-memory set.
-    /// <para>Phase D: rows are first scoped to the active category. Built-in
-    /// categories filter to their hint-package list; the catch-all "Custom"
-    /// shows all apps; user-created categories show all apps too (the
-    /// CustomCategory.Apps[] tag list grows as the user checks them while
-    /// the category is active).</para>
-    /// </summary>
     private void ApplyAppPickerFilter()
     {
         if (_appPickerList is null) return;
         var search = _appPickerSearch?.Text?.Trim() ?? string.Empty;
 
-        // Category scope is the first filter.
         IEnumerable<AppListLoader.AppEntry> scoped = ScopeAppsToActiveCategory(_appPickerCache);
 
         var filtered = string.IsNullOrEmpty(search)
@@ -321,11 +236,6 @@ public partial class AndroidApp
                 a.Label.Contains(search, System.StringComparison.OrdinalIgnoreCase)
                 || a.PackageName.Contains(search, System.StringComparison.OrdinalIgnoreCase));
 
-        // v3.0 — Selected / Available split mirrors desktop ApplicationsPage
-        // category structure. Sections are computed only at filter time
-        // (search/system-toggle change); per-row checkbox toggles update
-        // the selected count but leave rows in their current section so
-        // the user doesn't lose scroll position mid-tap.
         var selectedRows = new List<AppListLoader.AppEntry>();
         var availableRows = new List<AppListLoader.AppEntry>();
         foreach (var app in filtered)
@@ -350,12 +260,6 @@ public partial class AndroidApp
 
         _appPickerList.ItemsSource = rows;
         UpdateAppPickerCount();
-        // Bug #2 (2026-05-11) — surface the visible-app count so users
-        // can verify the launcher-activities fallback in AppListLoader is
-        // doing its job. Sum of selectedRows + availableRows == filtered
-        // apps within active category scope (post-search). When the user
-        // toggles "System apps" the reload reseeds _appPickerCache before
-        // this runs.
         if (_appPickerShowingCount is not null)
         {
             _appPickerShowingCount.Text = string.Format(
@@ -364,18 +268,11 @@ public partial class AndroidApp
         }
     }
 
-    /// <summary>Filter the installed-app cache down to the apps that belong
-    /// to the active category. Built-ins use a static hint package set; the
-    /// catch-all + user-defined custom categories surface all installed
-    /// apps. Empty / unknown active id returns an empty sequence.</summary>
     private IEnumerable<AppListLoader.AppEntry> ScopeAppsToActiveCategory(IEnumerable<AppListLoader.AppEntry> source)
     {
         if (string.IsNullOrEmpty(_advAppsActiveCategoryId))
             return System.Linq.Enumerable.Empty<AppListLoader.AppEntry>();
 
-        // Custom catch-all + user-created custom categories: scope = all
-        // installed apps. Same code path so the user can pick freely from
-        // the full list either way.
         if (AndroidCategoryDefaults.IsCustomCatchAll(_advAppsActiveCategoryId)
             || IsUserDefinedCategory(_advAppsActiveCategoryId))
         {
@@ -408,15 +305,6 @@ public partial class AndroidApp
 
     private Control BuildAppRow(AppListLoader.AppEntry app)
     {
-        // v3.0 — visual parity with desktop ApplicationsPage Border.app-row:
-        // sunken-bg rounded block, padding 10/7, 4-pt margin between rows.
-        // Desktop has no per-app icon (Windows doesn't expose a uniform
-        // per-process icon API) so the icon slot is Android-only polish;
-        // typography (TextPrimary name + TextMuted secondary) and the
-        // rounded-block surround mirror desktop one-to-one. CheckBox sits
-        // trailing per Material list convention — desktop puts it leading,
-        // but the touch ergonomics differ (large finger tapping a leading
-        // checkbox occludes the icon/label readability mid-tap).
         var label = new TextBlock
         {
             Text = app.Label,
@@ -454,21 +342,8 @@ public partial class AndroidApp
             else
                 _appPickerSelected.Remove(app.PackageName);
 
-            // Bug-AND-013 (2026-05-16) — persist on every toggle so the
-            // selection survives a tab rebuild (theme/lang switch goes
-            // through ReseedAppPickerTabState which reads
-            // AndroidStorage.GetPerAppPackages back into the in-memory
-            // set). Pre-fix the Save button was the only persist path,
-            // and a theme flip mid-edit silently dropped every unsaved
-            // tap. Now the Done button is purely a visual "close"
-            // affordance (storage is already up to date).
             AndroidStorage.SetPerAppPackages(_appPickerSelected);
 
-            // Phase D — when active category is a user-defined custom one,
-            // mirror the toggle into its Apps[] tag list so the sidebar
-            // count + persisted membership reflect what the user just did.
-            // Built-in hint lists are static; toggling there only affects
-            // _appPickerSelected.
             if (!string.IsNullOrEmpty(_advAppsActiveCategoryId))
             {
                 var custom = FindUserDefinedCategory(_advAppsActiveCategoryId);
@@ -492,9 +367,6 @@ public partial class AndroidApp
             UpdateAllCategoryCounts();
         };
 
-        // 32dp icon — Material medium list-icon size, matches the touch
-        // density of the rounded-block row. Cached Bitmap from
-        // AppIconCache; null slot stays blank rather than placeholder.
         var iconImage = new Image
         {
             Width = 32,
@@ -527,32 +399,9 @@ public partial class AndroidApp
             Child = grid,
         };
         rowBorder.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
-        // Bug-AND-008 / Bug-AND-013 (2026-05-16) — synthetic "tap row
-        // to toggle" was the source of the scroll-toggle accidents in
-        // the original brat report. Every implementation candidate had
-        // an issue:
-        //   - Bare PointerPressed: fired mid-scroll → mass toggles.
-        //   - Manual time+distance: ListBoxItem captures the pointer
-        //     for selection, swallowing PointerReleased on the inner
-        //     Border so even genuine taps were ignored.
-        //   - Tapped event: ScrollViewer's recognizer marks it Handled
-        //     on scrolls before it bubbles past the inner Border.
-        // Resolution: drop the row-Border tap handler. Users toggle via
-        // the explicit CheckBox at the row's trailing edge — the
-        // checkbox handler (above) is the single source of selection
-        // truth and already auto-persists to AndroidStorage (Bug-AND-013).
-        // CheckBox is large enough (32 dp visual + 44 dp implicit
-        // Material touch target) to remain ergonomic with one hand.
         return rowBorder;
     }
 
-    /// <summary>
-    /// Section header for the per-app picker — mirrors desktop
-    /// ApplicationsPage cat-name + cat-count style: SemiBold secondary
-    /// label on the left, mono muted count on the right. Used to split
-    /// the picker into "Selected" / "Available" subsections so users
-    /// see at a glance what's currently routed via VPN vs the rest.
-    /// </summary>
     private Control BuildPickerSectionHeader(string label, int count)
     {
         var nameTb = new TextBlock
@@ -597,54 +446,15 @@ public partial class AndroidApp
             _appPickerCount.Text = string.Format(Localization.PerAppCount, _appPickerSelected.Count);
     }
 
-    /// <summary>
-    /// Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — Applications tab body.
-    /// Mirrors desktop <c>ApplicationsPage.axaml</c> two-column master/detail
-    /// layout: ~140dp category sidebar on the left (with an inline
-    /// "+ New category" form at the bottom) and the per-category app list on
-    /// the right. The right pane shows the include/exclude mode picker, a
-    /// search box, the system-apps toggle, and a scoped checkbox list of
-    /// installed apps. The shell provides the title bar / close button.
-    /// <para>The 10 built-in categories come from <see cref="AndroidCategoryDefaults"/>;
-    /// user-created categories live in <see cref="AndroidStorage.GetCustomCategories"/>
-    /// and are appended below the catch-all "Custom" row.</para>
-    /// </summary>
     private Control BuildAppPickerTabContent()
     {
-        // Bug #2 (2026-05-11) — single-column mobile-first layout. The
-        // pre-fix design cloned desktop's 2-pane Grid (140dp sidebar +
-        // right pane) which left ~330dp for the right pane on a 1080-px
-        // phone — too cramped for icon + label + package + checkbox.
-        // Replaced with a vertical DockPanel: search → horizontal
-        // category chip row → +New row → mode picker → mode hint →
-        // count/system-toggle row → app list (fills) → sticky Save.
-        //
-        // ── Category chip grid (categories) ──────────────────────────
-        // Bug-AND-008 (2026-05-16) — replaced horizontal-scrollable strip
-        // with a WrapPanel. The previous design (Horizontal StackPanel
-        // inside a ScrollViewer) had three issues on Android:
-        //   1. ScrollViewer's gesture recogniser preemptively captured
-        //      every chip-press as a possible scroll-start, so chip
-        //      activation needed unreliable tap-detection heuristics.
-        //   2. "Custom" was offscreen-right and required a long swipe
-        //      to reach (the catch-all is the most-used scope).
-        //   3. Horizontal scrolling itself is awkward on a phone — users
-        //      had to swipe with one hand while reading labels.
-        // WrapPanel makes every chip simultaneously visible and tappable
-        // — at typical font sizes 10 built-in categories fit in 2 rows
-        // on a 1080dp screen. Custom now leads the first row
-        // (RebuildAppCategorySidebar ordering).
         var chipWrapHost = new WrapPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
-            // Use an outer Border per row by laying chips directly in
-            // a WrapPanel — children flow left-to-right and wrap to
-            // the next line as needed.
             Margin = new Thickness(8, 4, 8, 4),
         };
         _advAppsCategoryWrapHost = chipWrapHost;
 
-        // ── "+ New category" inline row (always visible, compact) ────
         _advAppsNewCategoryInput = new TextBox
         {
             Watermark = Localization.AdvAppsCategoryNamePlaceholder,
@@ -681,7 +491,6 @@ public partial class AndroidApp
         addCategoryRow.Children.Add(_advAppsNewCategoryInput);
         addCategoryRow.Children.Add(_advAppsAddCategoryBtn);
 
-        // ── Scope body (mode picker + filters + apps list + Save) ────
         var scopeBody = BuildAppPickerScopeBody();
         _advAppsRightPaneScopeContainer = new Border
         {
@@ -701,14 +510,6 @@ public partial class AndroidApp
         return body;
     }
 
-    /// <summary>
-    /// Right-pane content used when a category is active: include/exclude
-    /// segmented control + hint + search + system-apps toggle + apps ListBox
-    /// + Save bar. Factored out of <see cref="BuildAppPickerTabContent"/> so
-    /// the placeholder ("← Select a category") and the scoped body can swap
-    /// via <see cref="_advAppsRightPaneScopeContainer"/> visibility without
-    /// rebuilding the widget tree.
-    /// </summary>
     private Control BuildAppPickerScopeBody()
     {
         _appPickerModeLabel = new TextBlock
@@ -787,11 +588,6 @@ public partial class AndroidApp
         };
         _appPickerCount.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
-        // Bug #2 (2026-05-11) — "Showing N apps" hint sits next to the
-        // system-toggle so users can verify the enumeration is producing
-        // a sane count. Pre-fix the user reported apps missing on Xiaomi
-        // MIUI; the launcher-activities fallback in AppListLoader plus
-        // this visible count makes the regression detectable at a glance.
         _appPickerShowingCount = new TextBlock
         {
             Text = string.Format(Localization.PerAppShowingCount, 0),
@@ -812,7 +608,6 @@ public partial class AndroidApp
         filterRow.Children.Add(_appPickerSearch);
         filterRow.Children.Add(_appPickerCount);
 
-        // Compact row: [☐ System apps]   spacer   Showing: N
         var togglesRow = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
@@ -846,13 +641,6 @@ public partial class AndroidApp
         _appPickerSaveBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _appPickerSaveBtn.Click += OnAppPickerSaveClicked;
 
-        // Bug #2 (2026-05-11) — mobile-first dock order: search-first at
-        // the top (most-used on phone, thumb-reach), then include/exclude
-        // mode + hint, then the system-toggle / showing-count row, then
-        // the apps list (fills), and a sticky Save button at the bottom.
-        // Pre-fix put mode label + buttons above search; on phone that
-        // wasted prime thumb-reach real estate on a setting users rarely
-        // change after first run.
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(filterRow, Dock.Top);
         DockPanel.SetDock(_appPickerModeLabel!, Dock.Top);
@@ -870,19 +658,8 @@ public partial class AndroidApp
         return dock;
     }
 
-    /// <summary>
-    /// Rebuild the left category sidebar: 10 built-ins + any user-created
-    /// custom categories. Each row is a clickable Border so the whole pill
-    /// reacts to taps; the active row gets <c>AccentBgSubtleBrush</c> +
-    /// <c>AccentFgBrush</c> styling. Counts come from
-    /// <see cref="ComputeCategoryCount"/> against the cached app list.
-    /// </summary>
     private void RebuildAppCategorySidebar()
     {
-        // Bug-AND-008 (2026-05-16) — WrapPanel host replaces the
-        // scroll-strip StackPanel. Write chips into the WrapPanel so
-        // they wrap to multiple rows instead of overflowing into a
-        // horizontal ScrollViewer.
         var host = _advAppsCategoryWrapHost;
         if (host is null) return;
         host.Children.Clear();
@@ -890,10 +667,6 @@ public partial class AndroidApp
         _advAppsCategoryCountMap.Clear();
         _advAppsCategoryNameMap.Clear();
 
-        // Bug-AND-008c (2026-05-16) — render Custom (the catch-all
-        // "all apps" scope) FIRST. brat reported having to scroll
-        // a long way right to reach Custom; with the WrapPanel layout
-        // the chip is now on the first row at the top-left.
         var customDef = AndroidCategoryDefaults.All
             .FirstOrDefault(d => AndroidCategoryDefaults.IsCustomCatchAll(d.Id));
         if (customDef is not null)
@@ -905,7 +678,6 @@ public partial class AndroidApp
             host.Children.Add(customRow);
         }
 
-        // Built-ins next (skip Custom — already added).
         foreach (var def in AndroidCategoryDefaults.All)
         {
             if (AndroidCategoryDefaults.IsCustomCatchAll(def.Id)) continue;
@@ -914,7 +686,6 @@ public partial class AndroidApp
             host.Children.Add(row);
         }
 
-        // User-created custom categories below the built-ins.
         foreach (var cat in _advAppsCustomCategories)
         {
             if (string.IsNullOrWhiteSpace(cat.Name)) continue;
@@ -926,15 +697,6 @@ public partial class AndroidApp
         StyleActiveCategoryRow();
     }
 
-    /// <summary>One chip in the horizontal category strip — name + optional
-    /// count rendered inline as a compact pill. Whole chip is tappable; active
-    /// chip repaints via <see cref="StyleActiveCategoryRow"/> with an accent
-    /// border and tinted background.
-    /// <para>Bug #2 (2026-05-11): replaced the vertical sidebar row layout
-    /// with a compact horizontal pill (Material filter-chip pattern). The
-    /// pre-fix row spanned the full sidebar width (~120dp); chip width is now
-    /// driven by content + 10/6 padding so 6-8 chips fit in a single 1080px
-    /// row with horizontal scroll for the rest.</para></summary>
     private Border MakeAppsCategoryRow(string id, string displayName, bool isCustom)
     {
         var nameTb = new TextBlock
@@ -973,21 +735,10 @@ public partial class AndroidApp
             Child = inner,
         };
         border.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
-        // Bug-AND-008 (2026-05-16) — chip strip is now a WrapPanel (no
-        // surrounding ScrollViewer), so plain PointerPressed activation
-        // is safe: no horizontal scroll to mistakenly trigger. Every
-        // category is simultaneously visible and tappable.
         border.PointerPressed += (_, _) => SetActiveAppCategory(id);
 
-        // Bug-AND-019 (2026-05-16) — long-press on a user-defined custom
-        // category brings up a delete confirmation. Built-in categories
-        // (Discord, Browsers, Custom catch-all, etc.) are immutable and
-        // ignore the gesture.
         if (isCustom)
         {
-            // Wave 23 (2026-05-18) — Avalonia 12 made Gestures internal;
-            // hoist the same routed event off InputElement (it's the same
-            // RoutedEvent instance underneath, just publicly re-exposed).
             border.AddHandler(InputElement.HoldingEvent, (_, e) =>
             {
                 if (e.HoldingState == HoldingState.Started)
@@ -1001,7 +752,6 @@ public partial class AndroidApp
         return border;
     }
 
-    /// <summary>Recompute "selected ∩ scope" count for every sidebar row.</summary>
     private void UpdateAllCategoryCounts()
     {
         foreach (var def in AndroidCategoryDefaults.All)
@@ -1019,9 +769,6 @@ public partial class AndroidApp
         }
     }
 
-    /// <summary>Selected packages within this built-in category's hint scope.
-    /// For the catch-all, that's "selected NOT in any built-in hint" so the
-    /// counts across all sidebar rows partition the selected set.</summary>
     private int ComputeCategoryCount(string id)
     {
         if (AndroidCategoryDefaults.IsCustomCatchAll(id))
@@ -1041,9 +788,6 @@ public partial class AndroidApp
         return hits;
     }
 
-    /// <summary>Selected packages within a user-defined custom category's
-    /// tagged Apps[] list (mirrors desktop's Apps.Count display semantics for
-    /// custom categories: shows the user's own membership view).</summary>
     private int ComputeCustomCategoryCount(VPNRouter.Core.Models.CustomCategory cat)
     {
         if (cat.Apps is null || cat.Apps.Count == 0) return 0;
@@ -1053,11 +797,6 @@ public partial class AndroidApp
         return hits;
     }
 
-    /// <summary>Repaint the active chip with an accent border + tinted
-    /// background. Bug #2 (2026-05-11): pre-fix this used the desktop's
-    /// "lifted-card" affordance (SurfaceBaseBrush) which was illegible on a
-    /// horizontal chip strip — chips need a visible border state, not a
-    /// background lift. Now uses BorderAccentBrush + AccentBgSubtleBrush.</summary>
     private void StyleActiveCategoryRow()
     {
         var activeBg = GetBrush("AccentBgSubtleBrush");
@@ -1082,17 +821,8 @@ public partial class AndroidApp
         }
     }
 
-    /// <summary>Switch active category. Persists via
-    /// <see cref="AndroidStorage.SetApplicationsActiveCategory"/> so the next
-    /// open lands on the same category.
-    /// <para>The mobile layout has one content surface; the chip strip drives
-    /// the filter.</para></summary>
     private void SetActiveAppCategory(string? id)
     {
-        // Bug-AND-019 — intercept the tap for pending-delete confirm.
-        // If we committed a delete the sidebar was rebuilt; activation
-        // for the deleted id should be skipped (Custom catch-all
-        // already became active inside the consume helper).
         if (ConsumePendingDeleteIfMatches(id)) return;
         _advAppsActiveCategoryId = id;
         AndroidStorage.SetApplicationsActiveCategory(id);
@@ -1100,13 +830,6 @@ public partial class AndroidApp
         ApplyAppPickerFilter();
     }
 
-    /// <summary>
-    /// Bug-AND-019 (2026-05-16) — track which user-defined custom
-    /// category was just long-pressed. The chip enters an inline
-    /// "tap-to-confirm-delete" state; a second tap on the same chip
-    /// drops it from <see cref="_advAppsCustomCategories"/>, a tap on
-    /// anything else (different chip, app row, etc.) cancels.
-    /// </summary>
     private string? _pendingDeleteCategoryId;
 
     private void PromptDeleteCustomCategory(string id)
@@ -1114,9 +837,6 @@ public partial class AndroidApp
         if (string.IsNullOrEmpty(id)) return;
         if (!IsUserDefinedCategory(id)) return;
         _pendingDeleteCategoryId = id;
-        // Repaint the chip's text to surface the inline confirmation
-        // ("✗ Tap again to delete"). Active state still applies so the
-        // chip stays visually anchored.
         if (_advAppsCategoryNameMap.TryGetValue(id, out var tb) && tb is not null)
         {
             tb.Text = "✗ " + Localization.AndroidDeleteCategoryConfirm;
@@ -1124,10 +844,6 @@ public partial class AndroidApp
         }
     }
 
-    /// <summary>Called by SetActiveAppCategory when the user taps a chip.
-    /// If a delete is pending and the user tapped the SAME chip, commit
-    /// the delete. Otherwise (different chip or different surface),
-    /// cancel and revert the inline state.</summary>
     private bool ConsumePendingDeleteIfMatches(string? tappedId)
     {
         var pending = _pendingDeleteCategoryId;
@@ -1135,13 +851,9 @@ public partial class AndroidApp
         _pendingDeleteCategoryId = null;
         if (!string.Equals(pending, tappedId, System.StringComparison.OrdinalIgnoreCase))
         {
-            // Cancel — repaint the original label on the previously
-            // pending chip via a sidebar rebuild (cheaper than tracking
-            // original label).
             RebuildAppCategorySidebar();
             return false;
         }
-        // Commit delete.
         try
         {
             _advAppsCustomCategories.RemoveAll(c =>
@@ -1160,15 +872,11 @@ public partial class AndroidApp
         return true;
     }
 
-    /// <summary>Add a user-created custom category from the sidebar's
-    /// "+ New category" form. Trims input, ignores duplicates, persists, and
-    /// auto-activates the new row.</summary>
     private void OnAdvAppsAddCategoryClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var raw = _advAppsNewCategoryInput?.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(raw)) return;
 
-        // Skip dupes: built-in id collision OR existing custom name.
         if (AndroidCategoryDefaults.Find(raw) is not null) return;
         foreach (var existing in _advAppsCustomCategories)
             if (string.Equals(existing.Name, raw, System.StringComparison.OrdinalIgnoreCase))
@@ -1187,36 +895,10 @@ public partial class AndroidApp
         SetActiveAppCategory(raw);
     }
 
-    private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        try
-        {
-            // A6 (2026-06-13) — surface FilesDir/singbox.log (private sandbox,
-            // Bug-AND-011), the path the service actually writes. Was the
-            // GetExternalFilesDir path, so the value copied to the clipboard
-            // pointed at a file that never exists post-Bug-AND-011.
-            var logPath = AndroidDiagnosticsExporter.ResolveSingboxLogPath();
-            if (logPath is null)
-            {
-                ShowMenuFeedback(Localization.SaveStatusUnknown);
-                return;
-            }
-            CopyToClipboard("singbox-log-path", logPath);
-            ShowMenuFeedback(logPath);
-        }
-        catch (Exception ex)
-        {
-            ShowMenuFeedback($"Error: {ex.GetType().Name}");
-        }
-    }
 
     private void OnMenuUpdateCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        // v2.32.0 (2026-05-07) — wires the kebab item to the real
-        // Android auto-update flow (AndroidUpdater + REQUEST_INSTALL_PACKAGES).
-        // Pre-2.32.0 this just showed "coming in next release" toast.
         _ = RunUpdateCheckAsync(manual: true);
     }
 
@@ -1224,7 +906,6 @@ public partial class AndroidApp
     {
         if (_resetConfirmPending)
         {
-            // Second tap — actually wipe.
             if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
             _resetConfirmPending = false;
             if (_menuResetSettingsItem is not null)
@@ -1236,9 +917,6 @@ public partial class AndroidApp
                 AndroidStorage.SetSubscriptionUrl(null);
                 AndroidStorage.SetServers(null);
                 AndroidStorage.SetSelectedServerName(null);
-                // Theme + language preserved (those are UI prefs, not
-                // routing config) — same behaviour as desktop "Reset
-                // routing settings" not nuking theme.
                 ShowMenuFeedback(Localization.MenuItemResetDone);
             }
             catch (Exception ex)
@@ -1248,8 +926,6 @@ public partial class AndroidApp
             return;
         }
 
-        // First tap — show confirm prompt inline. Don't dismiss the
-        // popup so the user can read the warning + tap the row again.
         _resetConfirmPending = true;
         if (_menuResetSettingsItem is not null)
             _menuResetSettingsItem.Content = Localization.MenuItemResetConfirm;

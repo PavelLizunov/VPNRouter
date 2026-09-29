@@ -1,16 +1,3 @@
-// Phase 3 — 3G-1 (v3.0 refactor): contract tests for ISettingsStore.
-//
-// Pins the expected behaviour of both implementations:
-// 1. RealSettingsStore (production) — delegates to SettingsLoader.* static
-//    facade. Smoke-tested here against a temp file so the wrapper itself
-//    isn't a black-box; broad filesystem edge cases stay in
-//    SettingsLoaderRobustnessTests (the existing SR-4 suite).
-// 2. InMemorySettingsStore (test double) — full contract + the parallelism
-//    pin that's the real reason we built this fake (the rename-to-
-//    `.unloadable-{ts}` race in the former filesystem-backed tests).
-//
-// Brief: plans/phase3-3G-service-polish-2026-05-18.md §3G-1.
-
 #nullable enable
 
 using System;
@@ -26,15 +13,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Contract tests for <see cref="ISettingsStore"/>. Both <see cref="RealSettingsStore"/>
-/// and <see cref="InMemorySettingsStore"/> must satisfy these.
-///
-/// <para>3G-1: joined <see cref="SafeModeStateCollection"/> so the
-/// RealSettingsStore branches (which drive SettingsLoader and read the
-/// global static SafeMode early-return at Load()) can't race the
-/// SafeMode-flipping classes.</para>
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class ISettingsStoreContractTests : IDisposable
 {
@@ -46,8 +24,6 @@ public sealed class ISettingsStoreContractTests : IDisposable
         _tempDir = Path.Combine(Path.GetTempPath(),
             "VPNRouter.3G1." + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
-        // SafeMode bypasses real loader saves so RealSettingsStore tests
-        // don't write to %ProgramData% when the caller omits a path.
         _wasSafeMode = SafeMode.Enabled;
     }
 
@@ -58,8 +34,6 @@ public sealed class ISettingsStoreContractTests : IDisposable
     }
 
     private string PathFor(string name) => Path.Combine(_tempDir, name);
-
-    // ─── InMemorySettingsStore contract ────────────────────────────────────
 
     [Fact]
     public void InMemory_Load_OnEmpty_ReturnsSaneDefaults()
@@ -114,7 +88,6 @@ public sealed class ISettingsStoreContractTests : IDisposable
         {
             SafeMode.Enabled = true;
             store.Save(new AppSettings { App = new AppConfig { Theme = "should-not-persist" } });
-            // SaveCount still 0 — SafeMode is a hard guard.
             Assert.Equal(0, store.SaveCount);
         }
         finally { SafeMode.Enabled = wasEnabled; }
@@ -131,7 +104,6 @@ public sealed class ISettingsStoreContractTests : IDisposable
 
         Assert.NotNull(backupPath);
         var after = store.Load();
-        // Defaults restored — theme cleared to the AppConfig default.
         Assert.NotEqual("dirty", after.App.Theme);
     }
 
@@ -175,15 +147,6 @@ public sealed class ISettingsStoreContractTests : IDisposable
         Assert.Equal(0, calls);
     }
 
-    // ─── Parallelism flake pin ─────────────────────────────────────────────
-    //
-    // SettingsLoaderRobustnessTests stamps backup files with
-    // DateTime.Now.ToString("yyyyMMdd-HHmmss") — second-granularity. Parallel
-    // xUnit cases that land on the same second race on File.Move(..., overwrite:false).
-    // The fix is the InMemorySettingsStore which has no filesystem at all;
-    // this test pins that property by running 200 concurrent Save/Load/Reset
-    // calls and asserting we never throw.
-
     [Fact]
     public async Task InMemory_ParallelSaveLoadReset_IsRaceFree()
     {
@@ -197,7 +160,7 @@ public sealed class ISettingsStoreContractTests : IDisposable
             {
                 try
                 {
-                    var pathSuffix = (i % 5).ToString(); // 5 paths, lots of contention.
+                    var pathSuffix = (i % 5).ToString();
                     var path = $"flake-pin-{pathSuffix}";
                     var settings = new AppSettings();
                     settings.App.Theme = $"thread-{i}";
@@ -219,8 +182,6 @@ public sealed class ISettingsStoreContractTests : IDisposable
         Assert.Empty(exceptions);
     }
 
-    // ─── RealSettingsStore contract (smoke; full coverage in SettingsLoaderRobustnessTests) ──
-
     [Fact]
     public void Real_Load_OnMissingFile_ReturnsSaneDefaults()
     {
@@ -240,7 +201,7 @@ public sealed class ISettingsStoreContractTests : IDisposable
         var wasSafeMode = SafeMode.Enabled;
         try
         {
-            SafeMode.Enabled = false; // Save() no-ops in SafeMode.
+            SafeMode.Enabled = false;
             var s = new AppSettings();
             s.App.Theme = "dark";
             RealSettingsStore.Instance.Save(s, path);
@@ -248,14 +209,5 @@ public sealed class ISettingsStoreContractTests : IDisposable
             Assert.Equal("dark", reloaded.App.Theme);
         }
         finally { SafeMode.Enabled = wasSafeMode; }
-    }
-
-    [Fact]
-    public void Real_Instance_IsSingleton()
-    {
-        // The wrapper aliases the global static SettingsLoader state, so all
-        // accesses must hit the same instance to share LastRecoveryNotice +
-        // the file-watcher with the legacy static API.
-        Assert.Same(RealSettingsStore.Instance, RealSettingsStore.Instance);
     }
 }

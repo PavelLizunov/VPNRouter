@@ -2,28 +2,15 @@ using System;
 
 namespace VPNRouter.App;
 
-/// <summary>What the user pasted into the Simple-mode input field.</summary>
 public enum SmpInputKind
 {
-    /// <summary>Empty, whitespace, or unknown prefix.</summary>
     Invalid,
 
-    /// <summary>
-    /// Single-server share-link URI in any supported scheme:
-    /// <c>vless://</c> / <c>hysteria2://</c> / <c>hy2://</c> /
-    /// <c>tuic://</c> / <c>ss://</c>.
-    /// (Renamed from <c>Vless</c> for v2.30.1-r3 multi-protocol support.)
-    /// </summary>
     ServerUri,
 
-    /// <summary>http(s)://... — subscription URL returning base64 or newline-delimited share-link URIs.</summary>
     SubscriptionUrl,
 }
 
-/// <summary>
-/// Prefix-based classifier for the Simple-mode input. Cheap and
-/// unambiguous — no regex, no network.
-/// </summary>
 public static class SimpleInputDetector
 {
     public static SmpInputKind Classify(string? input)
@@ -31,26 +18,15 @@ public static class SimpleInputDetector
         if (string.IsNullOrWhiteSpace(input)) return SmpInputKind.Invalid;
         var trimmed = input.Trim();
 
-        // v2.30.1-r3 / r8: any supported share-link scheme — VLESS, Hysteria2,
-        // TUIC, Shadowsocks, NaiveProxy (Windows/Linux runtime). Subscriber/Simple
-        // paths both delegate the actual parsing to ServerUriParser.
         if (trimmed.StartsWith("vless://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("hysteria2://",   StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("hy2://",         StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("tuic://",        StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("ss://",          StringComparison.OrdinalIgnoreCase) ||
-            // r8 #4: NaiveProxy share-links (Win/Linux runtime; platform-gated at
-            // apply time so the parser doesn't blame an "invalid link" on macOS).
             trimmed.StartsWith("naive://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase) ||
-            // dns-tunnel (slipstream) last-resort transport (Win/Linux runtime;
-            // platform-gated at apply time, like naive).
             trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase) ||
-            // P2 (2026-07-10): AmneziaWG share-links. Recognised at intake so the
-            // user gets real parsing/feedback instead of "invalid link"; the
-            // SingBoxFeatures with_awg gate refuses them at APPLY time on a
-            // non-lx core (same core-gated pattern as naive/dns-tunnel).
             trimmed.StartsWith("awg://",         StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("amneziawg://",   StringComparison.OrdinalIgnoreCase))
             return SmpInputKind.ServerUri;

@@ -3,12 +3,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Headless coverage for the macOS DNS-hardening parsers (Fix #1, deep-audit
-/// 2026-06-04). These pin the bug-prone parsing of networksetup / route output
-/// before the Mac-only orchestrator wires them to live commands. Run on the
-/// Windows test build because the parsers live outside the platform guard.
-/// </summary>
 public class MacDnsParsersTests
 {
     [Theory]
@@ -24,8 +18,8 @@ public class MacDnsParsersTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not-an-ip")]
-    [InlineData("1.2.3")]          // too few octets
-    [InlineData("1.2.3.999")]      // octet out of range
+    [InlineData("1.2.3")]
+    [InlineData("1.2.3.999")]
     public void DeriveDnsTarget_rejects_malformed(string? cidr)
     {
         Assert.Null(MacDnsParsers.DeriveDnsTarget(cidr));
@@ -34,7 +28,6 @@ public class MacDnsParsersTests
     [Fact]
     public void ParseGetDnsServers_empty_when_none_set()
     {
-        // The literal sentinel networksetup prints when DNS is DHCP-managed.
         var result = MacDnsParsers.ParseGetDnsServers("There aren't any DNS Servers set on Wi-Fi.");
         Assert.Empty(result);
     }
@@ -92,14 +85,14 @@ public class MacDnsParsersTests
     [Theory]
     [InlineData("en0", "Wi-Fi")]
     [InlineData("en1", "Ethernet")]
-    [InlineData("en5", "iPhone USB")]   // service name with a space
+    [InlineData("en5", "iPhone USB")]
     public void ParseServiceForDevice_maps_device_to_service(string device, string expected)
     {
         Assert.Equal(expected, MacDnsParsers.ParseServiceForDevice(ListOrder, device));
     }
 
     [Theory]
-    [InlineData("en99")]   // no such device
+    [InlineData("en99")]
     [InlineData(null)]
     [InlineData("")]
     public void ParseServiceForDevice_null_when_absent(string? device)

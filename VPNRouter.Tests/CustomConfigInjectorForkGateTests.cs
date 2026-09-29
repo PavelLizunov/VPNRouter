@@ -6,20 +6,9 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins the custom-config fork-only feature gate (OPEN-DEFECTS P1, audit
-/// batch-1 #6): AWG obfuscation fields / xhttp transport in raw custom JSON
-/// must be rejected with an actionable error when the active sing-box core
-/// lacks with_awg / with_xhttp — instead of FATALing sing-box at start.
-/// Plain wireguard endpoints (official sing-box 1.11+) must NOT be gated.
-///
-/// <para>Convention (OPEN-DEFECTS P2, SingBoxFeatures probe): every test sets
-/// <see cref="SingBoxFeatures.OverrideAwg"/>/<see cref="SingBoxFeatures.OverrideXhttp"/>
-/// in try/finally so no test ever probes the real installed binary.</para>
-/// </summary>
 public class CustomConfigInjectorForkGateTests
 {
-    private const string AwgEndpointConfig = /*lang=json*/ """
+    private const string AwgEndpointConfig =  """
         {
           "endpoints": [
             {
@@ -36,7 +25,7 @@ public class CustomConfigInjectorForkGateTests
         }
         """;
 
-    private const string PlainWireGuardEndpointConfig = /*lang=json*/ """
+    private const string PlainWireGuardEndpointConfig =  """
         {
           "endpoints": [
             {
@@ -51,7 +40,7 @@ public class CustomConfigInjectorForkGateTests
         }
         """;
 
-    private const string XhttpOutboundConfig = /*lang=json*/ """
+    private const string XhttpOutboundConfig =  """
         {
           "outbounds": [
             {
@@ -75,8 +64,6 @@ public class CustomConfigInjectorForkGateTests
         finally { SingBoxFeatures.ResetForTests(); }
     }
 
-    // ── Validate: AWG fields ────────────────────────────────────────────────
-
     [Fact]
     public void Validate_AwgFields_CoreWithoutAwg_IsRejectedWithActionableError()
         => WithOverrides(awg: false, xhttp: false, () =>
@@ -98,13 +85,9 @@ public class CustomConfigInjectorForkGateTests
     public void Validate_PlainWireGuardEndpoint_IsOfficial_NeverGated()
         => WithOverrides(awg: false, xhttp: false, () =>
         {
-            // Official upstream construct (sing-box 1.11+): no AWG fields → no gate,
-            // and the endpoint counts as the proxy egress (no false "No proxy outbound").
             var (isValid, errors) = CustomConfigInjector.Validate(PlainWireGuardEndpointConfig);
             Assert.True(isValid, string.Join("; ", errors));
         });
-
-    // ── Validate: xhttp transport ───────────────────────────────────────────
 
     [Fact]
     public void Validate_XhttpTransport_CoreWithoutXhttp_IsRejectedWithActionableError()
@@ -123,8 +106,6 @@ public class CustomConfigInjectorForkGateTests
             Assert.True(isValid, string.Join("; ", errors));
         });
 
-    // ── Inject: runtime backstop ────────────────────────────────────────────
-
     [Fact]
     public void Inject_AwgFields_CoreWithoutAwg_ThrowsActionable_NotSingBoxFatal()
         => WithOverrides(awg: false, xhttp: false, () =>
@@ -138,17 +119,9 @@ public class CustomConfigInjectorForkGateTests
     public void Inject_XhttpTransport_CoreWithXhttp_DoesNotThrowForkGate()
         => WithOverrides(awg: false, xhttp: true, () =>
         {
-            // Should sail past the fork gate (whatever later phases do with the
-            // config, the gate itself must not fire when the core carries the tag).
             var json = CustomConfigInjector.Inject(XhttpOutboundConfig, new[] { "Discord.exe" }, new AppSettings());
             Assert.Contains("xhttp", json);
         });
-
-    // ── Inject: endpoints-only configs must route to the ENDPOINT's tag (F2, r8) ──
-    // Validate accepts a wireguard-endpoint egress since v2.47.0-r1, but the
-    // injector's proxy-tag resolver only scanned outbounds — an endpoints-only
-    // config got route.final / rules pointing at a fabricated "custom-proxy" tag
-    // nothing carries, and sing-box FATALed at start ("valid" -> opaque crash).
 
     [Fact]
     public void Inject_PlainWireGuardEndpoint_FullTunnel_RoutesFinalToEndpointTag()
@@ -169,13 +142,12 @@ public class CustomConfigInjectorForkGateTests
         => WithOverrides(awg: true, xhttp: false, () =>
         {
             var json = CustomConfigInjector.Inject(
-                AwgEndpointConfig, new[] { "Discord.exe" }, new AppSettings()); // default split
+                AwgEndpointConfig, new[] { "Discord.exe" }, new AppSettings());
 
             Assert.DoesNotContain("custom-proxy", json);
             var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
             var rules = root["route"]?["rules"]?.AsArray();
             Assert.NotNull(rules);
-            // The injected process rule must egress via the endpoint's tag.
             Assert.Contains(rules!, r =>
                 r is System.Text.Json.Nodes.JsonObject o
                 && (string?)o["outbound"] == "proxy"

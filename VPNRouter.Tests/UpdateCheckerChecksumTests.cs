@@ -13,13 +13,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// P01 UPD-1: the desktop update gate MUST hash-verify the downloaded asset
-/// against the inline SHA256 threaded from <c>UpdateSourceInfo.AssetSha256</c>
-/// (via <c>UpdateInfo.FullChecksumSha256</c>) BEFORE extraction — the
-/// <c>IUpdateSource.DownloadAsync</c> MUST-validate contract. A missing digest
-/// refuses extraction (no size-only fallback).
-/// </summary>
 public class UpdateCheckerChecksumTests
 {
     private const string DownloadUrl = "https://example.test/VPNRouter-update.zip";
@@ -29,7 +22,6 @@ public class UpdateCheckerChecksumTests
         using var ms = new MemoryStream();
         using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {
-            // Marker files so ValidateExtractedContent passes on any platform.
             zip.CreateEntry("app/VPNRouter.GUI.dll");
             zip.CreateEntry("VPNRouter.App.dll");
             zip.CreateEntry("VPNRouter.Mac.dll");
@@ -44,7 +36,7 @@ public class UpdateCheckerChecksumTests
     {
         LatestVersion = version,
         DownloadUrl = DownloadUrl,
-        SizeBytes = 0,             // 0 → skip the "too small" guard
+        SizeBytes = 0,
         FullChecksumSha256 = inlineSha,
         HasLiteUpdate = false,
     };
@@ -62,8 +54,6 @@ public class UpdateCheckerChecksumTests
             Assert.True(Directory.Exists(dir), $"staged dir missing: {dir}");
             Assert.NotEmpty(Directory.GetFileSystemEntries(dir));
 
-            // The inline digest is authoritative — the gate must NOT re-fetch
-            // the .sha256 sidecar over HTTP.
             Assert.DoesNotContain(
                 http.SentRequests,
                 r => r.Uri.ToString().Contains(".sha256", StringComparison.OrdinalIgnoreCase));
@@ -86,13 +76,10 @@ public class UpdateCheckerChecksumTests
             ? Directory.GetDirectories(stagingBase).ToHashSet(StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal);
 
-        // Well-formed (64 hex) but wrong digest → reaches the compare step.
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => checker.DownloadAndStageAsync(Info("8.8.8", new string('b', 64))));
         Assert.Contains("checksum mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
 
-        // The gate fires BEFORE extraction: the per-attempt dir holds neither
-        // the downloaded ZIP (deleted on mismatch) nor an "extracted" dir.
         var newDirs = Directory.Exists(stagingBase)
             ? Directory.GetDirectories(stagingBase).Where(d => !dirsBefore.Contains(d)).ToArray()
             : Array.Empty<string>();
@@ -113,7 +100,6 @@ public class UpdateCheckerChecksumTests
         var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
-        // A non-64-char digest is rejected before any compare/extract.
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => checker.DownloadAndStageAsync(Info("5.5.5", "abc")));
     }

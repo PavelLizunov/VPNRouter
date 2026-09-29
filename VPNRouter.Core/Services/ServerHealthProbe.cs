@@ -8,26 +8,6 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// G1 (2026-06-27) — Smart Connect pre-flight. Probes subscription candidate
-/// servers for liveness BEFORE bringing the tunnel up, so Connect lands on a
-/// server that actually responds instead of a dead one (the Latvia-HY2 i/o
-/// timeout that caused the "часто теряется" restart-storm in user diags).
-///
-/// <para>Reuses the mature, PROTOCOL-AWARE <see cref="TcpTlsProbe.ProbeServerAsync"/>
-/// (VLESS+Reality → TCP-only, plain TLS → full handshake, Hy2/TUIC → UDP) so a
-/// Reality server isn't false-flagged dead by a naive TLS probe. Runs the pool
-/// with a bounded worker pool (up to <see cref="MaxConcurrency"/> = 8 workers)
-/// within a short deadline — cheap enough for the connect path, unlike
-/// <see cref="VlessDeepVerifier"/> which spins up a real sing-box per server.
-/// A server that's reachable but whose proxy is broken is caught by the
-/// post-connect AutoFailover layer (G4); the two layers compose like the
-/// engine-vs-GUI split in Clash/sing-box/Hiddify.</para>
-///
-/// <para><see cref="PickBest"/> / <see cref="AliveRanked"/> are pure (no I/O) so
-/// the exclude-dead + fastest-wins + none-alive selection is deterministically
-/// testable; the network probe is injectable via the constructor.</para>
-/// </summary>
 public sealed class ServerHealthProbe
 {
     internal const int MaxConcurrency = 8;
@@ -43,13 +23,6 @@ public sealed class ServerHealthProbe
         _probe = probeOverride ?? ((s, ct) => TcpTlsProbe.ProbeServerAsync(s, ct));
     }
 
-    /// <summary>
-    /// Probe every server in parallel, bounded by <paramref name="overallDeadline"/> and
-    /// <see cref="MaxConcurrency"/> (8 workers).
-    /// Servers that don't complete in time, error, or come back not-reachable are
-    /// reported dead. Pre-cancellation throws immediately; unstarted or cancelled
-    /// servers remain dead.
-    /// </summary>
     public async Task<List<ServerLiveness>> ProbeAllAsync(
         IReadOnlyList<VlessServerEntry> servers,
         TimeSpan overallDeadline,
@@ -130,10 +103,6 @@ public sealed class ServerHealthProbe
         return results.ToList();
     }
 
-    /// <summary>
-    /// Pure selector: the fastest ALIVE server, or null if none are alive.
-    /// Dead servers are never returned — the v2rayN "delay = -1" lesson.
-    /// </summary>
     public static VlessServerEntry? PickBest(IEnumerable<ServerLiveness> results)
         => results?
             .Where(r => r.Alive)
@@ -141,12 +110,6 @@ public sealed class ServerHealthProbe
             .Select(r => r.Server)
             .FirstOrDefault();
 
-    /// <summary>
-    /// G1 connect decision: KEEP the currently-active server if it's alive
-    /// (respect an explicit pick), otherwise the fastest LIVE server, otherwise
-    /// null — all dead, so the caller surfaces an honest error instead of
-    /// connecting blind to a dead server. Pure / unit-tested.
-    /// </summary>
     public static VlessServerEntry? PickForConnect(IEnumerable<ServerLiveness> results, string? activeName)
     {
         var list = results?.ToList();
@@ -156,22 +119,10 @@ public sealed class ServerHealthProbe
         {
             var active = list.FirstOrDefault(r =>
                 r.Alive && string.Equals(r.Server.Name, activeName, StringComparison.Ordinal));
-            if (active != null) return active.Server; // explicit pick is alive — keep it
+            if (active != null) return active.Server;
         }
-        return PickBest(list); // else fastest live (or null if none alive)
+        return PickBest(list);
     }
-
-    /// <summary>The alive servers, fastest-first — for building a live-only
-    /// urltest pool (G1: pool excludes dead nodes).</summary>
-    public static List<VlessServerEntry> AliveRanked(IEnumerable<ServerLiveness> results)
-        => results?
-            .Where(r => r.Alive)
-            .OrderBy(r => r.LatencyMs)
-            .Select(r => r.Server)
-            .ToList() ?? new List<VlessServerEntry>();
 }
 
-/// <summary>One server's liveness result. LatencyMs is int.MaxValue when dead so
-/// it naturally sorts last. (Distinct from <see cref="ServerProbeResult"/>, which
-/// is the raw protocol-probe outcome without the server pairing.)</summary>
 public sealed record ServerLiveness(VlessServerEntry Server, bool Alive, int LatencyMs);

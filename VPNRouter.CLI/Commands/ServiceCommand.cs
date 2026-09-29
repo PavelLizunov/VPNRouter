@@ -4,8 +4,6 @@ using System.ServiceProcess;
 
 namespace VPNRouter.CLI.Commands;
 
-// ─── service install ──────────────────────────────────────────────────────────
-
 public class ServiceInstallSettings : CommandSettings
 {
     [CommandOption("--exe <PATH>")]
@@ -24,7 +22,6 @@ public class ServiceInstallCommand : Command<ServiceInstallSettings>
             return 1;
         }
 
-        // Locate the service binary
         var exePath = settings.ExePath;
         if (string.IsNullOrEmpty(exePath))
         {
@@ -66,8 +63,6 @@ public class ServiceInstallCommand : Command<ServiceInstallSettings>
     }
 }
 
-// ─── service uninstall ────────────────────────────────────────────────────────
-
 public class ServiceUninstallCommand : Command
 {
     public override int Execute(CommandContext context)
@@ -88,8 +83,6 @@ public class ServiceUninstallCommand : Command
         return result.Success ? 0 : 1;
     }
 }
-
-// ─── service start ────────────────────────────────────────────────────────────
 
 public class ServiceStartCommand : Command
 {
@@ -112,8 +105,6 @@ public class ServiceStartCommand : Command
     }
 }
 
-// ─── service stop ─────────────────────────────────────────────────────────────
-
 public class ServiceStopCommand : Command
 {
     public override int Execute(CommandContext context)
@@ -134,8 +125,6 @@ public class ServiceStopCommand : Command
         return result.Success ? 0 : 1;
     }
 }
-
-// ─── service status ───────────────────────────────────────────────────────────
 
 public class ServiceStatusCommand : Command
 {

@@ -7,9 +7,6 @@ public sealed class BratVerifierContractTests
     {
         var script = Read("tools", "brat-verify.ps1");
 
-        // Fixed transport endpoint is the Tailscale peer; the WINBRAT identity
-        // check stays mandatory. The legacy LAN-era credential filename is
-        // retained on purpose so no secret copy/migration is required.
         Assert.Contains("$BratIp          = '100.115.182.0'", script);
         Assert.Contains("$BratMachineName = 'WINBRAT'", script);
         Assert.Contains(".testpc-cred-192.168.0.106.xml", script);
@@ -45,19 +42,13 @@ public sealed class BratVerifierContractTests
         Assert.Contains("-RunLevel Highest", script);
         Assert.DoesNotContain("-FromSession", script);
 
-        // Controller wait = UI match budget + 30 s transport/startup slack.
         Assert.Contains("$TimeoutSeconds + 30", script);
-        // Result JSON is published atomically: .tmp write, then Move-Item -Force.
         Assert.Contains("$ResultPath.tmp", script);
         Assert.Contains("Move-Item", script);
-        // tscon runs through a unique transient SYSTEM console task, no password.
         Assert.Contains("-UserId 'SYSTEM' -LogonType ServiceAccount", script);
-        // Cleanup stops the transient task before unregister/delete.
         Assert.Contains("Stop-ScheduledTask", script);
         Assert.Contains("Remote helper cleanup failed", script);
         Assert.Contains("Remove-Item -LiteralPath $RequestPath", script);
-        // UIA target prefers the real Avalonia app; VPNRouter.GUI is only the
-        // bootstrap/update host and may remain alive without owning controls.
         var gui = script.IndexOf("Get-Process -Name VPNRouter.GUI", StringComparison.Ordinal);
         var app = script.IndexOf("Get-Process -Name VPNRouter.App", StringComparison.Ordinal);
         Assert.True(app >= 0 && gui > app, "brat-verify.ps1 must prefer VPNRouter.App and fall back to VPNRouter.GUI.");
@@ -101,8 +92,6 @@ public sealed class BratVerifierContractTests
         Assert.Contains("ReceiptConsumed", script);
         Assert.Contains("ReceiptNotConsumed", script);
 
-        // The deploy action must gate on the exact artifact + sidecar SHA256
-        // before it ever contacts the brat box (fail closed on any problem).
         var deployStart = script.IndexOf("'deploy' {", StringComparison.Ordinal);
         var deployEnd = script.IndexOf("'uia' {", StringComparison.Ordinal);
         Assert.True(deployStart >= 0 && deployEnd > deployStart, "brat-verify.ps1 must keep a 'deploy' action before 'uia'.");
@@ -113,8 +102,6 @@ public sealed class BratVerifierContractTests
         Assert.Contains("SHA256", deploy);
         Assert.Contains("mismatch", deploy);
         Assert.Contains("Failing closed", deploy);
-        // deploy hands the already-resolved credential to the generic deploy
-        // script explicitly, so it never prompts or caches a new-IP credential.
         Assert.Contains("-Credential (Import-Clixml $CredFile)", deploy);
         Assert.Contains("-ExpectedMachineName $BratMachineName", deploy);
 
@@ -180,12 +167,8 @@ public sealed class BratVerifierContractTests
     {
         var testvm = Read("tools", "testvm-control.ps1");
 
-        // Default WinRM transport endpoint is the fixed Tailscale peer.
         Assert.Contains("$VmIp = '100.115.182.0'", testvm);
 
-        // ensure-ready probes the Tailscale WinRM endpoint before its first
-        // Proxmox-backed Get-VmStatus call, so an already-reachable VM reports
-        // ready with no Proxmox API/token requirement.
         var actionStart = testvm.IndexOf("'ensure-ready' {", StringComparison.Ordinal);
         Assert.True(actionStart >= 0, "testvm-control.ps1 must keep an 'ensure-ready' action.");
         var ensureReady = testvm.Substring(actionStart);
@@ -204,15 +187,11 @@ public sealed class BratVerifierContractTests
 
         foreach (var script in new[] { brat, testvm })
         {
-            // Both standalone scripts carry the duplicated credential-resolution helper.
             var fnStart = script.IndexOf("function Resolve-CredentialFile", StringComparison.Ordinal);
             Assert.True(fnStart >= 0, "Each script must define Resolve-CredentialFile.");
 
-            // Primary-worktree fallback via Git's common directory, anchored to the
-            // checkout root ($LocalRoot) so it is independent of the caller's CWD.
             Assert.Contains("git -C $LocalRoot rev-parse --git-common-dir", script);
 
-            // Local-first: the helper checks the current checkout before the git fallback.
             var fn = script.Substring(fnStart);
             var localCheck = fn.IndexOf("Test-Path $local", StringComparison.Ordinal);
             var gitFallback = fn.IndexOf("git -C $LocalRoot rev-parse --git-common-dir", StringComparison.Ordinal);
@@ -220,11 +199,9 @@ public sealed class BratVerifierContractTests
                 "Resolve-CredentialFile must check the local checkout (Test-Path $local) before the git common-dir fallback.");
         }
 
-        // Fail-closed: the callers guard on the resolved path and throw when missing.
         Assert.Contains("Test-Path $CredFile", brat);
         Assert.Contains("Test-Path $TokenFile", testvm);
 
-        // Credential files are never copied into task worktrees.
         Assert.DoesNotContain("Copy-Item", testvm);
         Assert.DoesNotContain("Copy-Item -Path $CredFile", brat);
         Assert.DoesNotContain("Copy-Item -Path $TokenFile", brat);

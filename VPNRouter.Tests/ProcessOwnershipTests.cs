@@ -6,11 +6,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// S1 (v2.45.0): the pure ownership decision (image path under the VPNRouter bin
-/// dir) that gates both runtime "connected" detection and the takeover sing-box
-/// kill, so a third-party / dev sing-box is never treated as ours.
-/// </summary>
 public sealed class ProcessOwnershipTests
 {
     [Fact]
@@ -38,8 +33,6 @@ public sealed class ProcessOwnershipTests
     [Fact]
     public void SiblingDirWithSharedPrefix_IsNotOwned()
     {
-        // "vpnr-bin2" must NOT count as under "vpnr-bin" — the trailing-separator
-        // guard prevents a prefix-only false match.
         var dir = Path.Combine(Path.GetTempPath(), "vpnr-bin");
         var sibling = Path.Combine(Path.GetTempPath(), "vpnr-bin2", "sing-box.exe");
         Assert.False(ProcessOwnership.IsUnderDirectory(sibling, dir));
@@ -56,14 +49,10 @@ public sealed class ProcessOwnershipTests
     [Fact]
     public void IsSamePath_RecognisesCustomExecutablePath()
     {
-        // S1 review fix: a custom executable_path OUTSIDE the bin dir is owned
-        // when it matches the registered ConfiguredExePath (IsSamePath), even
-        // though IsUnderDirectory(binDir) is false.
         var custom = Path.Combine(Path.GetTempPath(), "custom-loc", "sing-box.exe");
         var binDir = Path.Combine(Path.GetTempPath(), "vpnr-bin");
         Assert.True(ProcessOwnership.IsSamePath(custom, custom));
-        Assert.False(ProcessOwnership.IsUnderDirectory(custom, binDir));   // not the default dir
-        // normalises ".." segments + (Windows) casing
+        Assert.False(ProcessOwnership.IsUnderDirectory(custom, binDir));
         Assert.True(ProcessOwnership.IsSamePath(
             Path.Combine(Path.GetTempPath(), "custom-loc", "..", "custom-loc", "sing-box.exe"), custom));
         Assert.False(ProcessOwnership.IsSamePath(custom, Path.Combine(Path.GetTempPath(), "other", "sing-box.exe")));
@@ -74,7 +63,7 @@ public sealed class ProcessOwnershipTests
     [Fact]
     public void CaseInsensitiveOnWindows()
     {
-        if (!OperatingSystem.IsWindows()) return; // Linux/macOS paths are case-sensitive
+        if (!OperatingSystem.IsWindows()) return;
         var dir = Path.Combine(Path.GetTempPath(), "VpnR-Bin");
         var file = Path.Combine(Path.GetTempPath(), "vpnr-bin", "SING-BOX.exe");
         Assert.True(ProcessOwnership.IsUnderDirectory(file, dir));
@@ -174,7 +163,6 @@ public sealed class ProcessOwnershipTests
         var procName = cur.ProcessName;
 
         Assert.True(ProcessQuery.AnyAlive(procName));
-        // Second call exercises the PID-cached fast path
         Assert.True(ProcessQuery.AnyAlive(procName));
         Assert.False(ProcessQuery.AnyAlive("nonexistent-proc-" + Guid.NewGuid().ToString("N")));
     }

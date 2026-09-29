@@ -7,13 +7,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// T2 (2026-06-27): Hysteria2 Brutal calibration. VPNRouter used to emit no up/down on
-/// the HY2 outbound -> sing-box ran BBR, which on a TSPU-throttled RU path can't mask the
-/// access-leg loss that times Roblox out (277). A calibrated up/down (parsed from the
-/// hysteria2 URI ?up=&down=) engages Brutal. Unset (0) keeps BBR (backward-compatible).
-/// Value must be ~70-80% of measured goodput; see plans/roblox-tester-vps-spec-2026-06-27.md.
-/// </summary>
 public sealed class HysteriaBrutalCalibrationTests
 {
     [Fact]
@@ -56,7 +49,7 @@ public sealed class HysteriaBrutalCalibrationTests
     {
         var cfg = ConfigGenerator.Generate(MakeProfile(), Array.Empty<string>(), MakeHy2Settings(up: 0, down: 0));
         var hy2 = cfg.Outbounds.First(o => o.Type == "hysteria2");
-        Assert.Null(hy2.UpMbps);   // omitted -> sing-box BBR
+        Assert.Null(hy2.UpMbps);
         Assert.Null(hy2.DownMbps);
     }
 

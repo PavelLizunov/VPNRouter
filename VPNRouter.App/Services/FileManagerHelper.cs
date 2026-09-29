@@ -5,14 +5,8 @@ using System.IO;
 
 namespace VPNRouter.App.Services;
 
-/// <summary>
-/// Helper for building OS file manager process execution parameters securely.
-/// </summary>
 internal static class FileManagerHelper
 {
-    /// <summary>
-    /// Builds the ProcessStartInfo for opening the OS file manager with safe argument separation.
-    /// </summary>
     public static ProcessStartInfo BuildRevealStartInfo(string filePath)
     {
         var psi = new ProcessStartInfo();

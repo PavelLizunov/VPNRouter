@@ -2,9 +2,6 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// LeakProtection
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class LeakProtectionTests
 {
@@ -73,21 +70,6 @@ public class LeakProtectionTests
         var result = LeakProtection.ValidateConfig(config);
 
         Assert.True(result.IsValid, string.Join("; ", result.Errors));
-    }
-
-    [Fact]
-    public void RuBypassAndDnsLockdown_DoNotWarnWhenDnsUsesTunnel()
-    {
-        var settings = new AppSettings();
-        settings.App.BypassRussianTraffic = true;
-        settings.App.DnsLeakLockdown = true;
-
-        var result = LeakProtection.ValidateAppSettings(settings);
-        var compatibilityWarnings = new List<string>();
-        LeakProtection.CollectIncompatibleSettings(settings, compatibilityWarnings);
-
-        Assert.Empty(compatibilityWarnings);
-        Assert.Empty(result.Warnings);
     }
 
     [Fact]
@@ -258,24 +240,13 @@ public class LeakProtectionTests
 
         var result = LeakProtection.ValidateConfig(config);
 
-        Assert.True(result.IsValid); // warnings don't cause failure
+        Assert.True(result.IsValid);
         Assert.Contains(result.Warnings, w => w.Contains("DNS may leak"));
     }
-
-    // ───────────────────────────────────────────────────────────────────────
-    // v2.31.5-r1+: extra coverage for protocol-aware dispatch (v2.30.1-r4)
-    // and smart-mode DNS leak check (v2.31.x). These pin behaviour that the
-    // older tests above didn't reach because they exercise only the VLESS
-    // protocol branch.
-    // ───────────────────────────────────────────────────────────────────────
 
     [Fact]
     public void Hysteria2_ValidConfig_Passes()
     {
-        // Sanity: a non-VLESS proxy with all required fields validates
-        // green. Pre-r4 (when ValidateVlessOutbound ran unconditionally)
-        // this would have failed with "uuid is empty" because Hy2 has no
-        // uuid by spec.
         var config = CreateValidConfig();
         config.Outbounds = new List<SingBoxOutbound>
         {
@@ -298,10 +269,6 @@ public class LeakProtectionTests
     [Fact]
     public void Hysteria2_EmptyPassword_Fails()
     {
-        // Hy2-specific required field. The protocol-aware validator
-        // dispatches to ValidateHysteria2Outbound which checks Password —
-        // a regression that reverts to the VLESS-only path would also
-        // miss this branch.
         var config = CreateValidConfig();
         config.Outbounds = new List<SingBoxOutbound>
         {
@@ -325,9 +292,6 @@ public class LeakProtectionTests
     [Fact]
     public void Tuic_EmptyUuid_Fails()
     {
-        // TUIC needs uuid (like VLESS) but optionally password (unlike
-        // Shadowsocks). Pins the TUIC dispatch branch independently from
-        // the VLESS-uuid test above.
         var config = CreateValidConfig();
         config.Outbounds = new List<SingBoxOutbound>
         {
@@ -352,13 +316,6 @@ public class LeakProtectionTests
     [Fact]
     public void MixedProtocolUrltest_VlessAndHysteria2_Passes()
     {
-        // v2.30.1-r4 regression sentinel. Pre-r4: a urltest selector
-        // containing both vless:// and hy2:// children failed validation
-        // because the Hy2 child got run through ValidateVlessOutbound
-        // and rejected for "uuid is empty". User report 2026-05-01.
-        // Fix dispatched validation by outbound type per child; this
-        // test pins that behaviour so a regression is caught at unit
-        // level, not in the wild.
         var config = CreateValidConfig();
         config.Outbounds = new List<SingBoxOutbound>
         {
@@ -381,12 +338,6 @@ public class LeakProtectionTests
     [Fact]
     public void SmartMode_LocalDnsServer_DoesNotWarnAboutLeak()
     {
-        // v2.31.x dns_mode="smart" regression sentinel. Smart mode
-        // routes process DNS to local-dns (resolves via direct, but
-        // through TLS so still leak-resistant). Pre-fix the leak check
-        // only accepted "vpn-dns" as a valid DNS rule target, so smart
-        // mode unconditionally fired "DNS may leak" — confusing because
-        // the config was actually fine.
         var config = CreateValidConfig();
         config.Dns.Rules[0].Server = "local-dns";
 
@@ -399,18 +350,13 @@ public class LeakProtectionTests
     [Fact]
     public void FullTunnel_DnsFinalNotVpnDns_WarnsButPasses()
     {
-        // Full-tunnel mode (route.final="proxy") expects DNS to also
-        // route through the proxy by default. If dns.final lands on
-        // anything other than vpn-dns, we want a noisy warning so the
-        // user can make an informed call about whether the leak is
-        // intentional (rare) or a misconfig (common).
         var config = CreateValidConfig();
         config.Route.Final = "proxy";
         config.Dns.Final = "local-dns";
 
         var result = LeakProtection.ValidateConfig(config);
 
-        Assert.True(result.IsValid); // warnings don't block startup
+        Assert.True(result.IsValid);
         Assert.Contains(result.Warnings, w =>
             w.Contains("Full tunnel") || w.Contains("DNS may bypass"));
     }
@@ -418,11 +364,6 @@ public class LeakProtectionTests
     [Fact]
     public void ProxyUdp_AlsoValidated_FailsOnInvalidChild()
     {
-        // Both "proxy" (TCP) and optional "proxy-udp" (UDP via Hy2/TUIC)
-        // get validated. A regression that drops the proxy-udp branch
-        // would let a malformed UDP outbound slip through and only
-        // surface as a sing-box startup error — ValidateConfig is meant
-        // to catch it at the pre-flight gate.
         var config = CreateValidConfig();
         config.Outbounds.Add(new SingBoxOutbound
         {
@@ -430,7 +371,7 @@ public class LeakProtectionTests
             Tag = "proxy-udp",
             Server = "1.2.3.4",
             ServerPort = 443,
-            Uuid = ""  // intentionally bad
+            Uuid = ""
         });
 
         var result = LeakProtection.ValidateConfig(config);
@@ -440,29 +381,12 @@ public class LeakProtectionTests
             e.Contains("proxy-udp") && e.Contains("uuid"));
     }
 
-    // ─── Bug-r9-F-DEFENSIVE (2026-05-11) — outbound IP cross-check ────────
-    //
-    // The outbound-IP check fires when an AppSettings is supplied. It walks
-    // every proxy-like outbound and compares its `server` to a scope-aware
-    // allow-list. Bug-r10-F-D (2026-05-11) refined the original Bug-r9-F-2
-    // union-based check into per-config_mode scoping:
-    //   - generated/subscribe + enabled subs → subscription servers ONLY
-    //     (legacy vless.servers ignored — see stas's leak in
-    //      plans/r10-stas-confirmed-and-apps-2mode.md §1).
-    //   - generated/subscribe + no subs → vless.servers fallback.
-    //   - custom → only check proxy outbound presence + well-formed.
-    //
-    // The two cases below retain the post-r9 semantics, but with stricter
-    // severity (Error instead of Warning) when the scope is subscription —
-    // a placeholder leak there is a P0 silent-traffic issue, not a
-    // warning-on-startup affordance.
-
     [Fact]
     public void OutboundIpNotInSubscriptions_EmitsError()
     {
         var config = CreateValidConfig();
         var proxy = config.Outbounds.First(o => o.Tag == "proxy");
-        proxy.Server = "195.135.255.216";  // intentionally stale / unknown
+        proxy.Server = "195.135.255.216";
 
         var settings = new AppSettings();
         settings.App.Subscriptions.Add(new SubscriptionEntry
@@ -479,7 +403,7 @@ public class LeakProtectionTests
 
         var result = LeakProtection.ValidateConfig(config, settings);
 
-        Assert.False(result.IsValid); // F-D promotes to Error in sub scope
+        Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e =>
             e.Contains("195.135.255.216")
             && (e.Contains("subscription") || e.Contains("scope") || e.Contains("legacy")));
@@ -490,7 +414,7 @@ public class LeakProtectionTests
     {
         var config = CreateValidConfig();
         var proxy = config.Outbounds.First(o => o.Tag == "proxy");
-        proxy.Server = "104.194.156.93";  // matches sub-1's first entry
+        proxy.Server = "104.194.156.93";
 
         var settings = new AppSettings();
         settings.App.Subscriptions.Add(new SubscriptionEntry

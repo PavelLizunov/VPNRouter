@@ -4,23 +4,6 @@ using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Tests;
-// ═══════════════════════════════════════════════════════════════════════════════
-// FreeConfigAggregator.PreservePreviousValidation — v2.28.3-r5 regression
-//
-// Triggering bug (2026-04-27): user re-ran Refresh with new criteria and lost
-// their previously-Verified configs. Root cause: aggregator built byId from
-// freshly-fetched pool only, so cache entries not in the new pool were
-// silently dropped. The server-side pool.json regenerates every 6h and rotates
-// entries, so verified results from yesterday could vanish after one Refresh.
-//
-// PreservePreviousValidation merges "interesting" cache entries back into the
-// fresh-pool dictionary. These tests pin the contract:
-//   - Verified entries always survive (regardless of age).
-//   - Ok entries survive only if tested within the last 24h.
-//   - Other statuses get dropped — they're not worth preserving.
-//   - Entries already in byId aren't touched (live pool wins).
-//   - Empty-id entries (corrupt cache) are skipped without throwing.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 public class FreeConfigAggregatorPreserveTests
 {
@@ -229,8 +212,6 @@ public class FreeConfigAggregatorPreserveTests
         Assert.Empty(configs);
     }
 
-    // ─── DATA-4: MergeWithCache duplicate-ID tolerance ─────────────────
-
     [Fact]
     public void MergeWithCache_DuplicateIds_FirstWins_VerifiedPreserved()
     {
@@ -269,6 +250,39 @@ public class FreeConfigAggregatorPreserveTests
             Assert.Equal("first.example.com", dups[0].Host);
             Assert.Contains(result, c => c.Id == "verified-gone"
                 && c.Status == FreeConfigStatus.Verified);
+        }
+        finally
+        {
+            try { tempDir.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void MergeWithCache_CarriesDeepVerifyMemoryToFreshEntry()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
+        {
+            using var logger = new LoggerConfiguration().CreateLogger();
+            var cache = new FreeConfigCache(
+                logger, Path.Combine(tempDir.FullName, "free_configs.json"));
+            var aggregator = new FreeConfigAggregator(logger, cache);
+
+            var deepVerifiedAt = DateTime.UtcNow.AddHours(-1);
+            var failedAt = DateTime.UtcNow.AddHours(-2);
+            var cached = MakeEntry("same", FreeConfigStatus.Verified, lastTestedAt: DateTime.UtcNow.AddHours(-1));
+            cached.LastDeepVerifyAt = deepVerifiedAt;
+            cached.LastVerifyFailedAt = failedAt;
+            cache.Save(new FreeConfigCache.CacheFile { Configs = { cached } });
+
+            var fresh = MakeEntry("same");
+
+            var result = aggregator.MergeWithCache(new List<FreeConfigEntry> { fresh });
+
+            var merged = Assert.Single(result, c => c.Id == "same");
+            Assert.Equal(FreeConfigStatus.Verified, merged.Status);
+            Assert.Equal(deepVerifiedAt, merged.LastDeepVerifyAt);
+            Assert.Equal(failedAt, merged.LastVerifyFailedAt);
         }
         finally
         {

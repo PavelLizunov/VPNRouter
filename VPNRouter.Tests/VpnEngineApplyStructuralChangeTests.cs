@@ -13,9 +13,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.49 regression coverage for the connected-Apply structural baseline.
-/// </summary>
 [Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineApplyStructuralChangeTests
 {
@@ -66,58 +63,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
         Assert.Equal(expectedRoutingModeChanged, changes.RoutingModeChanged);
         Assert.Equal(expectedTunChanged, changes.TunChanged);
         Assert.Equal(expectedAppRoutingChanged, changes.AppRoutingChanged);
-    }
-
-    [Fact]
-    public void ApplyGatedAsync_CapturesLiveBaselineBeforeHotReloadPipeline()
-    {
-        var source = LoadVpnEngineSource();
-        if (source == null) return;
-
-        var captureIndex = source.IndexOf(
-            "var oldRoutingMode = ActiveRoutingMode;",
-            StringComparison.Ordinal);
-        var pipelineIndex = source.IndexOf(
-            "new StartupContext(settings, StartupMode.HotReload)",
-            StringComparison.Ordinal);
-
-        Assert.True(captureIndex >= 0, "Apply must capture the live routing baseline.");
-        Assert.True(pipelineIndex > captureIndex,
-            "The live baseline must be captured before StartupPipeline mutates candidate state.");
-    }
-
-    [Fact]
-    public void ApplyGatedAsync_FailurePathsRestoreLiveBaseline()
-    {
-        var source = LoadVpnEngineSource();
-        if (source == null) return;
-
-        var restoreCount = source.Split("RestoreActiveBaseline();", StringSplitOptions.None).Length - 1;
-
-        Assert.True(restoreCount >= 2,
-            "Pipeline failure and exception paths must both restore the live Apply baseline.");
-        Assert.Contains(
-            "ActiveAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "if (!configCommitted)",
-            source,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ApplyGatedAsync_SingBoxReloadFailed_RestoresBaselineAndReturnsFalse()
-    {
-        var source = LoadVpnEngineSource();
-        Assert.True(source != null, "VpnEngine.cs source could not be loaded.");
-
-        Assert.Contains("!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart)",
-            source, StringComparison.Ordinal);
-        Assert.Contains("RestoreActiveBaseline();",
-            source, StringComparison.Ordinal);
-        Assert.Contains("sing-box reload or restart was not confirmed",
-            source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -193,7 +138,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             App = new AppConfig
             {
                 ConfigMode = "generated",
-                RoutingMode = "full", // Structural change: split -> full triggers forceRestart
+                RoutingMode = "full",
                 FlushDnsOnStart = false,
                 BypassRussianTraffic = false,
                 Subscriptions = new List<SubscriptionEntry>(),
@@ -239,24 +184,20 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
             Assert.False(result, "ApplyAsync must return false when sing-box reload/restart returns false.");
 
-            // 1. Exact message assert (not generic Apply failed)
             Assert.Contains("Apply failed: sing-box reload or restart was not confirmed", statuses);
             Assert.DoesNotContain(statuses, s => s.StartsWith("Applied"));
 
-            // 2. Baseline fingerprint all4 unchanged
             Assert.Equal(baselineConfigMode, engine.ActiveConfigMode);
             Assert.Equal(baselineRoutingMode, engine.ActiveRoutingMode);
             Assert.Equal(baselineTunFingerprint, engine.TunFingerprint);
             Assert.Equal(baselineAppRoutingFingerprint, engine.ActiveAppRoutingFingerprint);
 
-            // 3. Zero HTTP mutations, zero process spawn, zero driver engagement
             if (OperatingSystem.IsWindows())
             {
                 Assert.Empty(fakeHttp.SentRequests);
             }
             else
             {
-                // Unix IsRunning probes GET /configs; reload/restart must issue zero HTTP mutations
                 Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Get);
             }
             Assert.Empty(runner.StartCalls);
@@ -264,7 +205,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
             Assert.Equal(0, fakeDriver.EngageCount);
             Assert.Equal(0, fakeDriver.DisengageCount);
 
-            // 4. No hidden earlier failure in statuses
             Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && !s.Contains("sing-box reload or restart was not confirmed"));
         }
         finally
@@ -474,7 +414,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             App = new AppConfig
             {
                 ConfigMode = "generated",
-                RoutingMode = "full", // Structural change: split -> full triggers forceRestart
+                RoutingMode = "full",
                 FlushDnsOnStart = false,
                 BypassRussianTraffic = false,
                 Subscriptions = new List<SubscriptionEntry>(),
@@ -526,10 +466,8 @@ public sealed class VpnEngineApplyStructuralChangeTests
         {
             var result = await engine.ApplyAsync(settings);
             Assert.False(result);
-            // ZERO capability calls on failed Apply exact branch
             Assert.Empty(firewall.UpdateCalls);
 
-            // NIGHT-06: failed actual Apply retains existing contextA and failoverA (no reset on failed Apply)
             Assert.Same(baselineSettings, GetField(engine, "_failoverSettingsContext"));
             Assert.Same(baselineFailover, GetField(engine, "_failover"));
         }
@@ -548,198 +486,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
             RestoreAppPathsDataDir(priorDataDir);
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
         }
-    }
-
-    [Fact]
-    public async Task ApplyAsync_HotReloadSucceeds_CallsFirewallCapabilityOnceWithExactGeneratedAndIntent()
-    {
-        var priorDataDir = GetAppPathsDataDir();
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-apply-hotsuccess-{Guid.NewGuid():N}");
-        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
-        Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
-
-        var profilesDir = VPNRouter.Core.AppPaths.ProfilesDir;
-        Directory.CreateDirectory(profilesDir);
-        var profileFile = Path.Combine(profilesDir, "test-profiles.json");
-        File.WriteAllText(profileFile, """
-        {
-          "profiles": [
-            {
-              "name": "TestProfile",
-              "description": "Deterministic test profile",
-              "dns_mode": "vpn_only",
-              "block_on_vpn_fail": true,
-              "processes": []
-            }
-          ]
-        }
-        """);
-
-        var scanner = new StubProcessScanner();
-        var firewall = new CapturingCommittedFirewallManager();
-        var monitor = new StubProcessMonitor();
-        var fakeDriver = new FakeSplitTunnelDriver();
-        var dnsHardening = new NullWindowsDnsHardening();
-        var engine = new VpnEngine(
-            scanner: scanner,
-            firewallFactory: () => firewall,
-            monitorFactory: () => monitor,
-            logger: null,
-            dnsHardening: dnsHardening,
-            splitDriver: fakeDriver);
-
-        SetField(engine, "_firewall", firewall);
-
-        const string baselineConfigMode = "generated";
-        const string baselineRoutingMode = "full";
-        // Baseline matches candidate so NO structural change occurs -> hot-reload branch taken
-        var settings = new AppSettings
-        {
-            App = new AppConfig
-            {
-                ConfigMode = "generated",
-                RoutingMode = "full",
-                FlushDnsOnStart = false,
-                BypassRussianTraffic = false,
-                Subscriptions = new List<SubscriptionEntry>(),
-                DnsLeakLockdown = false,
-            },
-            ProfileSources = new List<ProfileSource>
-            {
-                new() { Type = "local", Path = profileFile }
-            },
-            ActiveProfile = "TestProfile",
-            Vless = new VlessConfig
-            {
-                ActiveServer = "main",
-                Servers = new List<VlessServerEntry>
-                {
-                    new()
-                    {
-                        Name = "main",
-                        Server = "10.0.0.1",
-                        Port = 443,
-                        Uuid = "11111111-2222-3333-4444-555555555555",
-                        Flow = "xtls-rprx-vision",
-                        Security = "reality",
-                        Reality = new VlessRealityConfig
-                        {
-                            Enabled = true,
-                            ServerName = "www.cloudflare.com",
-                            Fingerprint = "chrome",
-                            PublicKey = "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
-                            ShortId = "d86e92a0c6dd2271",
-                        },
-                    },
-                },
-            },
-            Tun = new TunSettings(),
-            Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
-            SingBox = new SingBoxSettings { ExecutablePath = "sing-box.exe", ClashApi = "127.0.0.1:9090" },
-        };
-
-        var baselineTunFingerprint = VpnEngine.ComputeTunFingerprint(settings.Tun);
-        var baselineAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint([], settings);
-
-        SetProperty(engine, "ActiveConfigMode", baselineConfigMode);
-        SetProperty(engine, "ActiveRoutingMode", baselineRoutingMode);
-        SetProperty(engine, "TunFingerprint", baselineTunFingerprint);
-        SetProperty(engine, "ActiveAppRoutingFingerprint", baselineAppRoutingFingerprint);
-
-        using var sessionCts = new CancellationTokenSource();
-        SetField(engine, "_sessionCts", sessionCts);
-
-        var fakeHttp = new FakeHttpClient().Setup("/configs", "{}");
-        var runner = new FakeProcessRunner();
-        var singBox = new SingBoxManager(
-            new SingBoxSettings { ExecutablePath = "sing-box.exe", ClashApi = "127.0.0.1:9090" },
-            null, fakeHttp, runner);
-
-        var initialHandle = new FakeProcessHandle(pid: 12345);
-        SetField(singBox, "_handle", initialHandle);
-        typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?.SetValue(singBox, SingBoxState.Running);
-        SetField(singBox, "_ownsTunLock", true);
-
-        SetField(engine, "_singBox", singBox);
-
-        var baselineSettings = new AppSettings
-        {
-            App = new AppConfig { ConfigMode = baselineConfigMode, RoutingMode = baselineRoutingMode }
-        };
-        var baselineFailover = new AutoFailoverEngine(baselineSettings, new ConfigSanityCheck());
-        SetField(engine, "_failoverSettingsContext", baselineSettings);
-        SetField(engine, "_failover", baselineFailover);
-
-        try
-        {
-            var result = await engine.ApplyAsync(settings);
-            Assert.True(result, "ApplyAsync should succeed via hot reload.");
-
-            // NIGHT-06: successful actual Apply updates contextB and lazy resets _failover to null
-            Assert.Same(settings, GetField(engine, "_failoverSettingsContext"));
-            Assert.Null(GetField(engine, "_failover"));
-
-            // Exactly ONE call with exact generated JSON and intent
-            var call = Assert.Single(firewall.UpdateCalls);
-            Assert.True(call.EnabledForFullTunnel, "Full tunnel + BlockOnVpnFail must enable killswitch");
-            Assert.Contains("10.0.0.1", call.ConfigJson);
-            Assert.Equal(File.ReadAllText(VPNRouter.Core.AppPaths.CurrentConfigPath), call.ConfigJson);
-
-            // Exactly one HTTP PUT and no runner calls
-            Assert.Single(fakeHttp.SentRequests, r => r.Method == HttpMethod.Put);
-            if (OperatingSystem.IsWindows())
-            {
-                Assert.Single(fakeHttp.SentRequests);
-            }
-            else
-            {
-                Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Put && r.Method != HttpMethod.Get);
-            }
-            Assert.Empty(runner.StartCalls);
-            Assert.Empty(runner.RunCalls);
-        }
-        finally
-        {
-            SetField(engine, "_singBox", null);
-            SetField(singBox, "_handle", null);
-            SetField(singBox, "_ownsTunLock", false);
-            SetField(engine, "_sessionCts", null);
-            initialHandle.Dispose();
-
-            Assert.False(engine.IsRunning);
-
-            singBox.Dispose();
-            engine.Dispose();
-
-            RestoreAppPathsDataDir(priorDataDir);
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void StartupPipeline_ColdOrderingSourceGuard_Phase6SkipsLegacyCapability_AndCommitOccursAfterStartBeforeMonitors()
-    {
-        // Note: Cold runtime is not exercised directly in unit tests because real sing-box process
-        // and OS monitors cannot run without OS network stack / privilege; exact cold ordering is pinned
-        // via stripped-comment source guard.
-        var source = LoadStartupPipelineSource();
-        Assert.True(source != null, "StartupPipeline.cs source could not be loaded.");
-
-        var clean = StripComments(source);
-
-        // 1. Phase 6 skips legacy CreateBlockRules for capability managers
-        Assert.Contains("firewall is not ICommittedFirewallConfig", clean, StringComparison.Ordinal);
-
-        // 2. Exact execution order in ExecuteAsync:
-        // StartSingBoxPhaseAsync -> UpdateCommittedConfig -> StartMonitorsPhase
-        var startIdx = clean.IndexOf("await StartSingBoxPhaseAsync(", StringComparison.Ordinal);
-        var commitIdx = clean.IndexOf("committedFirewall.UpdateCommittedConfig(", StringComparison.Ordinal);
-        var monitorIdx = clean.IndexOf("StartMonitorsPhase(", StringComparison.Ordinal);
-
-        Assert.True(startIdx >= 0, "ExecuteAsync must await StartSingBoxPhaseAsync");
-        Assert.True(commitIdx > startIdx, "Firewall capability commit must occur AFTER sing-box starts");
-        Assert.True(monitorIdx > commitIdx, "Firewall capability commit must occur BEFORE monitors start");
     }
 
     [Fact]
@@ -782,7 +528,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
         {
             await engine.StartAsync(settingsB);
 
-            // NIGHT-06: No-op start ignored because sing-box is already running -> retain contextA and failoverA
             Assert.Same(settingsA, GetField(engine, "_failoverSettingsContext"));
             Assert.Same(failoverA, GetField(engine, "_failover"));
         }

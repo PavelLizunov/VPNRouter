@@ -3,16 +3,8 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins <see cref="ServerHealthPhaseMapper"/>: the pure bridge from the existing quick
-/// (<see cref="ServerProbeStatus"/>) and deep (<see cref="DeepVerifyResult"/>) probe
-/// outputs into <see cref="ServerHealthPhases"/>. The load-bearing rule: a LOCAL sing-box
-/// failure must never read as a server protocol block.
-/// </summary>
 public class ServerHealthPhaseMapperTests
 {
-    // ── Quick probe → phases ────────────────────────────────────────────────
-
     [Theory]
     [InlineData(ServerProbeStatus.Ok, PhaseOutcome.Pass)]
     [InlineData(ServerProbeStatus.Slow, PhaseOutcome.Pass)]
@@ -40,8 +32,6 @@ public class ServerHealthPhaseMapperTests
         Assert.Equal(PhaseOutcome.Unknown, p.TlsCamouflage);
     }
 
-    // ── Deep verify → phases ────────────────────────────────────────────────
-
     [Fact]
     public void FromDeepVerify_Ok_IsProxiedHttpPass()
         => Assert.Equal(PhaseOutcome.Pass,
@@ -56,7 +46,6 @@ public class ServerHealthPhaseMapperTests
     [InlineData("cancelled")]
     public void FromDeepVerify_LocalInfraError_IsInconclusive_NotFail(string error)
     {
-        // The point: our sing-box never carried a request, so this says NOTHING about the server.
         var p = ServerHealthPhaseMapper.FromDeepVerify(DeepVerifyResult.Failed(error));
         Assert.Equal(PhaseOutcome.Unknown, p.ProxiedHttpControl);
     }
@@ -72,8 +61,6 @@ public class ServerHealthPhaseMapperTests
     [Fact]
     public void FromDeepVerify_Null_IsAllUnknown()
         => Assert.Equal(PhaseOutcome.Unknown, ServerHealthPhaseMapper.FromDeepVerify(null).ProxiedHttpControl);
-
-    // ── R1: typed failure phases (string heuristic = legacy fallback only) ──
 
     [Theory]
     [InlineData(DeepVerifyFailurePhase.Precondition)]
@@ -103,8 +90,6 @@ public class ServerHealthPhaseMapperTests
     [Fact]
     public void FromDeepVerify_TypedPhase_BeatsContradictoryErrorString()
     {
-        // The typed phase is authoritative: an error TEXT that looks server-meaningful
-        // ("http failed") must not override a typed local-infra phase.
         var r = DeepVerifyResult.Failed("http failed", DeepVerifyFailurePhase.LocalSpawn);
         Assert.Equal(PhaseOutcome.Unknown,
             ServerHealthPhaseMapper.FromDeepVerify(r).ProxiedHttpControl);
@@ -113,8 +98,6 @@ public class ServerHealthPhaseMapperTests
     [Fact]
     public void TcpOk_UnsupportedByVerifier_ClassifiesAsUntested_NeverBlocked()
     {
-        // E2E guardrail: an AWG/xhttp server on a core that can't verify it must read
-        // as "protocol untested" — never as ProtocolHandshakeBlockedLikely.
         var phases = ServerHealthPhaseMapper.Merge(
             ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok),
             ServerHealthPhaseMapper.FromDeepVerify(
@@ -128,11 +111,6 @@ public class ServerHealthPhaseMapperTests
     [Fact]
     public void TcpOk_UserCancelledDeepVerify_ClassifiesAsUntested_NeverBlocked()
     {
-        // F1 (r8) e2e guardrail: a user Cancel mid-deep-verify surfaces as the typed
-        // Cancelled phase (DeepVerifyProbe rethrows external cancellation instead of
-        // swallowing it as "http timeout"). Merged with a passing quick probe it must
-        // read "protocol untested" — never ProtocolHandshakeBlockedLikely, which
-        // would persist to the store and exclude the server from the Auto pool.
         var phases = ServerHealthPhaseMapper.Merge(
             ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok),
             ServerHealthPhaseMapper.FromDeepVerify(
@@ -142,8 +120,6 @@ public class ServerHealthPhaseMapperTests
         Assert.NotEqual(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, verdict);
     }
 
-    // ── R4: blocked-target canary rides the deep-verify result ──────────────
-
     [Fact]
     public void FromDeepVerify_OkWithCanaryFail_YieldsOnlyControlWorks()
     {
@@ -152,7 +128,6 @@ public class ServerHealthPhaseMapperTests
         Assert.Equal(PhaseOutcome.Pass, phases.ProxiedHttpControl);
         Assert.Equal(PhaseOutcome.Fail, phases.BlockedTargetCanary);
 
-        // The audit's key case end-to-end: tunnel up, blocked service still dark.
         Assert.Equal(ServerHealthVerdict.OnlyControlWorks,
             ServerHealthClassifier.Classify(phases).Verdict);
     }
@@ -160,25 +135,20 @@ public class ServerHealthPhaseMapperTests
     [Fact]
     public void FromDeepVerify_OkWithoutCanary_StaysHealthy_BackCompat()
     {
-        // Old results / skipped canaries (Unknown default) must not change the verdict.
         var phases = ServerHealthPhaseMapper.FromDeepVerify(new DeepVerifyResult(true, 120, null, null));
         Assert.Equal(PhaseOutcome.Unknown, phases.BlockedTargetCanary);
         Assert.Equal(ServerHealthVerdict.Healthy, ServerHealthClassifier.Classify(phases).Verdict);
     }
 
-    // ── Merge ───────────────────────────────────────────────────────────────
-
     [Fact]
     public void Merge_LaterNonUnknownWins_UnionsPhases()
     {
-        var quick = ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok);           // TcpConnect=Pass
-        var deep = ServerHealthPhaseMapper.FromDeepVerify(DeepVerifyResult.Failed("timeout")); // ProxiedHttp=Fail
+        var quick = ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok);
+        var deep = ServerHealthPhaseMapper.FromDeepVerify(DeepVerifyResult.Failed("timeout"));
         var merged = ServerHealthPhaseMapper.Merge(quick, deep);
         Assert.Equal(PhaseOutcome.Pass, merged.TcpConnect);
         Assert.Equal(PhaseOutcome.Fail, merged.ProxiedHttpControl);
     }
-
-    // ── End-to-end through the classifier (the whole point of the bridge) ────
 
     [Fact]
     public void TcpOk_ProxiedHttpFail_ClassifiesAsProtocolBlockedLikely()
@@ -193,8 +163,6 @@ public class ServerHealthPhaseMapperTests
     [Fact]
     public void TcpOk_LocalSingBoxFailure_DoesNotClassifyAsBlocked()
     {
-        // GUARDRAIL: a reachable host whose deep verify failed only because OUR sing-box
-        // couldn't start must NOT be condemned as protocol-blocked — it stays "protocol untested".
         var phases = ServerHealthPhaseMapper.Merge(
             ServerHealthPhaseMapper.FromQuickProbe(ServerProbeStatus.Ok),
             ServerHealthPhaseMapper.FromDeepVerify(DeepVerifyResult.Failed("sing-box spawn failed")));

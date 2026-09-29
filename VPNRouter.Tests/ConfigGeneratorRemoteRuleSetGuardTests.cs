@@ -8,24 +8,6 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// v2.31.9-r5 regression pin: <see cref="ConfigGenerator"/> must NEVER
-/// emit <c>type:remote</c> rule-set entries.
-///
-/// <para>The brat-2026-05-05 P0 closed in -r3 was caused by an
-/// AdBlock <c>type:remote</c> rule-set that sing-box treats as a
-/// MANDATORY synchronous fetch on startup — TLS timeout = process
-/// FATAL = HealthMonitor crash loop. -r3 routed the AdBlock URL
-/// through <see cref="RuleSetCacheManager"/> + emitted <c>type:local</c>.
-/// -r5 fixed the same pattern in
-/// <see cref="ConfigGenerator.ApplyCustomRules"/> for user-defined
-/// geosite / geoip rules.</para>
-///
-/// <para>This test scans the generated config across the
-/// representative toggle matrix and asserts no rule-set ever has
-/// <c>Type == "remote"</c>. A future feature that adds another
-/// <c>type:remote</c> entry will fail here loudly.</para>
-/// </summary>
 public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
 {
     private readonly string _origDataDir;
@@ -33,14 +15,9 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
 
     public ConfigGeneratorRemoteRuleSetGuardTests()
     {
-        // Isolate cache dir so the rule-set fetch in ApplyAdBlock does
-        // not corrupt the user's real %ProgramData% during tests.
         _testDir = Path.Combine(Path.GetTempPath(), "vpnr-cfggen-rs-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_testDir);
         _origDataDir = Environment.GetEnvironmentVariable("ProgramData") ?? "";
-        // We can't easily redirect AppPaths without DI; rely on the
-        // fact that even if RuleSetCacheManager populates the real
-        // %CacheDir%, we only assert the SHAPE of the generated config.
     }
 
     public void Dispose()
@@ -80,9 +57,6 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
     [InlineData(true, true)]
     public void Generate_ToggleMatrix_NoRemoteRuleSets(bool blockAds, bool bypassRu)
     {
-        // BypassRu silently disables itself if geo files aren't
-        // available on the host (intentional gate). That's fine — we're
-        // checking that whatever DOES end up in the config is type:local.
         var settings = BuildSettings(blockAds, bypassRu);
         var profile = BuildProfile();
         var processes = new[] { "Discord.exe" };
@@ -102,9 +76,6 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
     [Fact]
     public void Generate_WithCustomGeositeRule_NoRemoteRuleSets()
     {
-        // Even with user-defined geosite rules — which pre-r5 emitted
-        // type:remote pointing at SagerNet's GitHub raw — the result
-        // must be type:local (or omitted on cache+fetch failure).
         var customRules = new List<CustomRule>
         {
             new() { Enabled = true, Type = "geosite", Action = "direct", Value = "ru,cn" },

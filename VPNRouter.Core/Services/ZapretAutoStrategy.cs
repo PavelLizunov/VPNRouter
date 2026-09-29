@@ -1,39 +1,3 @@
-// =============================================================================
-// ZapretAutoStrategy — v2.37.0-r1 multi-target probe orchestrator.
-//
-// Per `plans/research-one-button-zapret-deep-2026-05-24.md` §3.3 option E +
-// companion `plans/research-zapret-auto-probe-methodology-2026-05-24.md` §1.
-//
-// v2.37 evolution from r9's single-target probe:
-//
-//   - Probes the canonical Flowseal target set in parallel (Discord ×4 +
-//     YouTube ×4 = 8 endpoints) instead of just youtube.com. Targets mirror
-//     `utils/targets.txt` from Flowseal/zapret-discord-youtube — same list
-//     their `test zapret.ps1` exercises, just via HttpClient instead of
-//     curl.exe + DPI-timing analysis. Per-target HEAD with 5s timeout, all
-//     8 in flight concurrently → ~2 s wall-clock per attempt regardless of
-//     count.
-//
-//   - Tier classification: >=70 % pass → Tier1 (confirmed), 30-70 → Tier2
-//     (partial — usable but not all targets reachable), <30 → Tier3 (failed).
-//     MVP treats Tier1+Tier2 both as success (the partial may be ok for the
-//     user's actual sites); polish phase will split them.
-//
-//   - Score-aware progress: per-attempt result carries "N/8 ok" counter so
-//     the UI lede can render "Тестирую (1/3): general (ALT3) — 7/8 ok" and
-//     the air-pill on win can say "В эфире · general (ALT3) · 7/8".
-//
-// Substrate-agnostic delegate-driven API preserved verbatim — zapret2
-// migration is still ~30 LOC (swap start/stop delegates, same probe layer).
-//
-// NOT IN SCOPE for r1 (deferred to v2.37 polish):
-//   - DPI-checker mode (TCP 16-20 freeze detection) via PowerShell wrapper
-//     to Flowseal's `test zapret.ps1`. Phase 2.
-//   - Per-ISP catalog (option D from research §3.1).
-//   - Probe result caching to `%ProgramData%/VPNRouter/cache/zapret_probe.json`.
-//   - Multi-protocol probe (HTTP/3 / QUIC).
-// =============================================================================
-
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -46,64 +10,28 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// One-button auto-strategy probe orchestrator. Substrate-agnostic — driven
-/// via delegates so it works the same on Flowseal winws.exe today and on
-/// any future zapret2 winws2.exe substitute.
-/// </summary>
 public static class ZapretAutoStrategy
 {
-    /// <summary>
-    /// Default seed order — Flowseal community-validated highest-hit-rate
-    /// strategies. ALT3 first per ZapretUpdater.ParseStrategies sort
-    /// heuristic (line 679+).
-    /// </summary>
-    public static readonly IReadOnlyList<string> DefaultSeedOrder = new[]
-    {
-        "general (ALT3)",
-        "general",
-        "general (ALT)",
-    };
-
-    /// <summary>
-    /// Canonical DPI-blocked target set, mirroring Flowseal's
-    /// `utils/targets.txt` Discord + YouTube subsets. Probed in parallel.
-    /// Hardcoded as the v2.37 default; `ProbeTargetsAsync` will optionally
-    /// override from the actual targets.txt file if installed.
-    /// </summary>
     public static readonly IReadOnlyList<string> DefaultProbeTargets = new[]
     {
-        // Discord — the #2 use-case, voice depends on these unblocking
         "https://discord.com",
         "https://gateway.discord.gg",
         "https://cdn.discordapp.com",
         "https://updates.discord.com",
-        // YouTube — the #1 DPI-blocked target in the RU footprint
         "https://www.youtube.com",
         "https://youtu.be",
         "https://i.ytimg.com",
         "https://redirector.googlevideo.com",
     };
 
-    /// <summary>Per-strategy soak before probing. WinDivert binds in ~1 s;
-    /// 20 s gives the new filter chain time to settle without making the
-    /// magic-button wait feel infinite.</summary>
     public static readonly TimeSpan SoakDelay = TimeSpan.FromSeconds(20);
 
-    /// <summary>Per-target HEAD probe timeout. Real successes are sub-second
-    /// on a working strategy; anything past 5 s is DPI hang.</summary>
     public static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>Wait window for ImmediateExitDetected (Bug-r9-G) to short-
-    /// circuit a doomed strategy attempt.</summary>
     public static readonly TimeSpan ImmediateExitWindow = TimeSpan.FromSeconds(3);
 
-    /// <summary>Tier1 threshold — % of probes that must pass for a strategy
-    /// to be declared "confirmed".</summary>
     public const int Tier1MinPassPercent = 70;
 
-    /// <summary>Tier2 threshold — % of probes for "partial" verdict. Below
-    /// this → Tier3 fail.</summary>
     public const int Tier2MinPassPercent = 30;
 
     public sealed record AttemptResult(
@@ -116,15 +44,10 @@ public static class ZapretAutoStrategy
 
     public enum AttemptTier
     {
-        /// <summary>>=70 % of probes succeeded — strategy works.</summary>
         Tier1Confirmed,
-        /// <summary>30-70 % succeeded — partial bypass (usable but degraded).</summary>
         Tier2Partial,
-        /// <summary>HEAD probes failed at <30 % but winws.exe stayed up.</summary>
         Tier3Failed,
-        /// <summary>winws.exe died fast (Bug-r9-G AV/syntax).</summary>
         ImmediateExit,
-        /// <summary>Probe couldn't reach ANYTHING — likely no internet, abort sweep.</summary>
         NoSignal,
     }
 
@@ -154,11 +77,6 @@ public static class ZapretAutoStrategy
         Failed,
     }
 
-    /// <summary>
-    /// Run the probe loop. Each attempt: start strategy → race
-    /// ImmediateExit vs soak → multi-target HEAD probe → classify tier.
-    /// On Tier1+Tier2 — winner stays running, sweep returns the name.
-    /// </summary>
     public static async Task<SweepResult> ProbeAsync(
         IReadOnlyList<string> candidateStrategies,
         IReadOnlyCollection<string>? availableStrategyNames,
@@ -172,7 +90,6 @@ public static class ZapretAutoStrategy
     {
         var attempts = new List<AttemptResult>(capacity: candidateStrategies.Count);
 
-        // Filter the seed list against what's actually installed.
         var available = availableStrategyNames is null
             ? null
             : new HashSet<string>(availableStrategyNames, StringComparer.OrdinalIgnoreCase);
@@ -190,8 +107,6 @@ public static class ZapretAutoStrategy
             return new SweepResult(null, AttemptTier.Tier3Failed, 0, 0, attempts, NoSignal: false);
         }
 
-        // Load probe targets — prefer Flowseal's targets.txt if it exists
-        // (lets community curation flow through to us). Fall back to hardcoded.
         var targets = LoadTargets(logger);
         logger?.Information("[ZapretAutoStrategy] Probe targets: {Count} URLs", targets.Count);
 
@@ -215,7 +130,6 @@ public static class ZapretAutoStrategy
                 continue;
             }
 
-            // Race immediate-exit detection against the soak window.
             progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Soaking));
             var immediateExitTask = immediateExitTrigger();
             var soakTask = Task.Delay(SoakDelay, ct);
@@ -230,7 +144,6 @@ public static class ZapretAutoStrategy
                 continue;
             }
 
-            // Multi-target probe.
             progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Probing));
             var probeReport = await ProbeAllTargetsAsync(targets, httpClient, logger, ct).ConfigureAwait(false);
 
@@ -249,42 +162,32 @@ public static class ZapretAutoStrategy
                 logger?.Warning("[ZapretAutoStrategy] NoSignal — likely offline, abort sweep");
                 progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Stopping,
                     probeReport.PassCount, targets.Count));
-                try { await stopStrategy().ConfigureAwait(false); } catch { /* defensive */ }
+                try { await stopStrategy().ConfigureAwait(false); } catch { }
                 progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Failed));
                 return new SweepResult(null, tier, probeReport.PassCount, targets.Count, attempts, NoSignal: true);
             }
 
             if (tier == AttemptTier.Tier1Confirmed || tier == AttemptTier.Tier2Partial)
             {
-                // Winner — keep running. Surface counts in the progress event
-                // so the air-pill text can render N/8.
                 progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Succeeded,
                     probeReport.PassCount, targets.Count));
                 return new SweepResult(name, tier, probeReport.PassCount, targets.Count, attempts, NoSignal: false);
             }
 
-            // Tier3 — strategy doesn't bypass DPI here. Stop, escalate.
             progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Stopping,
                 probeReport.PassCount, targets.Count));
             try { await stopStrategy().ConfigureAwait(false); }
             catch (Exception ex) { logger?.Warning(ex, "[ZapretAutoStrategy] stopStrategy() threw"); }
             progress?.Report(new ProgressUpdate(i, resolved.Count, name, AttemptPhase.Failed));
 
-            // Brief WinDivert handle release window between strategies.
             await Task.Delay(500, ct).ConfigureAwait(false);
         }
 
         return new SweepResult(null, AttemptTier.Tier3Failed, 0, targets.Count, attempts, NoSignal: false);
     }
 
-    /// <summary>Aggregated outcome of the per-strategy multi-target probe.</summary>
     public sealed record ProbeReport(int PassCount, int FailCount, int NoSignalCount);
 
-    /// <summary>
-    /// Probe all targets in parallel via HEAD. Each target counts as:
-    /// pass (HTTP < 500), fail (timeout/TLS error/etc), or nosignal (network
-    /// down). NoSignalCount > targets.Count*0.6 → likely offline.
-    /// </summary>
     public static async Task<ProbeReport> ProbeAllTargetsAsync(
         IReadOnlyList<string> targets,
         HttpClient httpClient,
@@ -307,7 +210,6 @@ public static class ZapretAutoStrategy
         return new ProbeReport(pass, fail, noSignal);
     }
 
-    /// <summary>Single HEAD probe.</summary>
     public static async Task<ProbeOutcome> ProbeOneTargetAsync(
         string url,
         HttpClient httpClient,
@@ -361,46 +263,6 @@ public static class ZapretAutoStrategy
         NoSignal,
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // v2.37.0-r3 — delegate-to-Flowseal probe (the canonical, slow, accurate
-    // path). Spawns `utils/test zapret.ps1` hidden, pipes "2\n1\n" stdin to
-    // auto-answer (DPI checkers mode + all configs), streams stdout to parse
-    // per-config progress + final "Best config: X" winner.
-    //
-    // WHY: r1/r2 HTTP HEAD probe is too lenient — HTTP HEAD 200 OK can pass
-    // even when DPI mangles the actual TLS stream afterwards. Flowseal's DPI
-    // checker (mode 2) does TCP-byte-level analysis detecting the "16-20
-    // freeze" pattern that's signature of DPI. Takes 2-5 minutes per full
-    // sweep but the verdict is trustworthy.
-    //
-    // USER (2026-05-25): «у тебя прошел очень быстро, через bat файл занимает
-    // минуты времени» — that's the cost of accuracy.
-    //
-    // Hidden console (CreateNoWindow + WindowStyle.Hidden + UseShellExecute
-    // false) — user never sees the powershell window; only the in-app progress
-    // chip "Тестирую (5/20): general (FAKE TLS AUTO ALT2)…".
-    //
-    // Caller responsibilities:
-    //   - Cancellation: CancellationToken kills the powershell process.
-    //   - On success: caller invokes startStrategy(winner) to apply.
-    //   - On failure (null winner): caller surfaces fallback UI.
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Result of one Flowseal script sweep.
-    /// </summary>
-    /// <remarks>
-    /// r4 added <paramref name="Diagnostic"/> and <paramref name="ErrorLines"/>:
-    /// - Diagnostic carries a short token explaining short-circuit reasons
-    ///   ("not_admin", "not_windows", "sweep_timeout", "missing_script") so
-    ///   the ViewModel can surface a specific toast instead of generic "no
-    ///   strategy matched". Empty/null for the happy path.
-    /// - ErrorLines is a ring-buffered tail of the last 8 [ERROR]/[WARN]
-    ///   lines the Flowseal script emitted on stdout. Useful for surfacing
-    ///   "zapret service installed", "curl missing", "DPI suite fetch failed"
-    ///   conditions instead of swallowing them in debug log.
-    /// Both fields default to empty for back-compat with r3 callers.
-    /// </remarks>
     public sealed record FlowsealSweepResult(
         string? Winner,
         int TestedCount,
@@ -408,40 +270,9 @@ public static class ZapretAutoStrategy
         string FullOutput,
         string? Diagnostic = null,
         IReadOnlyList<string>? ErrorLines = null,
-        // r37 — per-strategy results captured during the sweep. Each strategy
-        // that produced at least one status line ends up here. Allows the
-        // Hero ComboBox to badge every probed strategy, not just the winner.
-        // Null/empty when sweep failed before any strategy completed.
         IReadOnlyDictionary<string, ZapretStrategyTestResult>? PerStrategyResults = null,
-        // r39 — path to the per-probe log file (%ProgramData%\VPNRouter\logs\
-        // zapret-probe-{timestamp}.log) so the UI can surface a "Open log"
-        // button next to the result. Null if log file couldn't be created
-        // (disk permissions, etc.) — UI hides the link in that case.
         string? ProbeLogPath = null,
-        // r39 — true if the sweep was killed early because a winner aced
-        // enough targets. UI uses this to show "Winner found at config N —
-        // remaining M skipped (faster)" instead of letting the user think
-        // the sweep stopped due to a problem.
         bool EarlyWinner = false);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Flowseal stdout parser — shared regexes + pure transcript parser.
-    //
-    // r53 (2026-05-28): the status-line regex previously required a
-    // two-bracket "[TargetId][HTTP] … status=OK" shape. Flowseal's current
-    // `test zapret.ps1` mode-2 output moved the target id onto a separate
-    //   === [flag][provider] TARGET ===
-    // header line, so the per-test lines are now a BARE single bracket:
-    //   [HTTP]   code=405 … status=OK
-    //   [TLS1.2] code=405 … status=OK
-    //   [TLS1.3] code=405 … status=OK
-    // The old regex never matched → every strategy scored 0/0 → early-winner
-    // never fired, perStrategyResults stayed empty, and the winner fell
-    // through to "no strategy / стратегия не найдена" even though ALT3
-    // (45/108) and ALT9 (75/108) clearly passed (user report Z:\zapret
-    // 2026-05-28). The leading target-id bracket is now OPTIONAL so BOTH the
-    // historical two-bracket and the current single-bracket formats parse.
-    // ─────────────────────────────────────────────────────────────────────
 
     internal static readonly System.Text.RegularExpressions.Regex ConfigHeaderRx =
         new(@"\[(\d+)/(\d+)\]\s+(.+?)(?:\.bat)?\s*$",
@@ -459,122 +290,12 @@ public static class ZapretAutoStrategy
         new(@"^\s*\[(?:ERROR|WARN|WARNING)\]",
             System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    // r54 (2026-05-28): Flowseal's `test zapret.ps1` enumerates EVERY *.bat
-    // (line 376: Get-ChildItem -Filter "*.bat" excludes only "service*"), so
-    // the all-configs sweep also tests VPNRouter's own runtime wrapper
-    // "_vpnrouter_silent.bat" (created by ZapretManager when a strategy is
-    // started). That wrapper runs the SAME args as the currently-active
-    // strategy, so it scores as high as the best real one — and best-by-score
-    // would then return "_vpnrouter_silent", which has NO catalogue entry →
-    // the UI reports "Winner _vpnrouter_silent not found in strategy list"
-    // → "стратегия не найдена" recurs even after the r53 regex fix. The
-    // wrapper is an ephemeral internal artifact, never a user-selectable
-    // strategy, so it is excluded from BOTH the per-strategy table and the
-    // winner candidates. Match is on the catalogue name (".bat" already
-    // stripped by ConfigHeaderRx / WinnerRx).
     internal const string SilentWrapperStrategyName = "_vpnrouter_silent";
 
     private static bool IsSilentWrapper(string? name) =>
         string.Equals(name?.Trim(), SilentWrapperStrategyName, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Pure, testable parse of a full Flowseal sweep transcript. Returns the
-    /// winner strategy name plus a per-strategy pass/total table.
-    /// <para>
-    /// Winner selection is empirical: the strategy with the most passing
-    /// labels wins (tie-break by pass ratio). This is authoritative because
-    /// it avoids the "last <c>Best config:</c> line wins" ordering bug when
-    /// each strategy is probed in its own <c>[1/1]</c> run, and it agrees
-    /// with Flowseal's own verdict in a single multi-strategy sweep. The
-    /// explicit <c>Best config:</c> line is used only as a fallback when no
-    /// status lines were parseable at all.
-    /// </para>
-    /// </summary>
-    internal static (string? Winner,
-                     Dictionary<string, ZapretStrategyTestResult> PerStrategy)
-        ParseFlowsealTranscript(string? transcript)
-    {
-        var perStrategy = new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
-        string? explicitWinner = null;
-        string current = string.Empty;
-        int ok = 0, total = 0;
-
-        void Flush()
-        {
-            // r54: never record the runtime wrapper as a strategy result —
-            // it is not user-selectable and must not win or show a badge.
-            if (!string.IsNullOrEmpty(current) && total > 0 && !IsSilentWrapper(current))
-            {
-                // Last writer wins if a strategy name repeats across runs —
-                // a fresh probe of the same strategy supersedes the older one.
-                perStrategy[current] = new ZapretStrategyTestResult
-                {
-                    Passed = ok,
-                    Total = total,
-                    At = DateTime.UtcNow,
-                };
-            }
-        }
-
-        if (!string.IsNullOrEmpty(transcript))
-        {
-            foreach (var raw in transcript.Split('\n'))
-            {
-                var line = raw.TrimEnd('\r');
-
-                var hdr = ConfigHeaderRx.Match(line);
-                if (hdr.Success)
-                {
-                    Flush();
-                    current = hdr.Groups[3].Value.Trim();
-                    ok = 0;
-                    total = 0;
-                    continue;
-                }
-
-                var st = StatusLineRx.Match(line);
-                if (st.Success)
-                {
-                    total++;
-                    var status = st.Groups[1].Value;
-                    // UNSUPPORTED = endpoint doesn't speak this protocol, NOT
-                    // a strategy failure — counts as pass (see r38 rationale).
-                    if (status.Equals("OK", StringComparison.OrdinalIgnoreCase)
-                        || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ok++;
-                    }
-                    continue;
-                }
-
-                var w = WinnerRx.Match(line);
-                if (w.Success)
-                {
-                    var cand = w.Groups[1].Value.Trim();
-                    // r54: ignore "Best config: _vpnrouter_silent" — the runtime
-                    // wrapper is not a user-selectable catalogue strategy.
-                    if (!IsSilentWrapper(cand))
-                        explicitWinner = cand;
-                }
-            }
-        }
-        Flush();
-
-        // scoreWinner (empirical best, preferred — avoids the per-[1/1]
-        // ordering bug) wins; explicit "Best config:" is the degenerate-case
-        // fallback (no parseable status lines but a summary line present).
-        var scoreWinner = BestStrategyByScore(perStrategy);
-        var winner = !string.IsNullOrEmpty(scoreWinner) ? scoreWinner : explicitWinner;
-        return (winner, perStrategy);
-    }
-
-    /// <summary>
-    /// Pick the strategy with the most passing labels (tie-break by pass
-    /// ratio). Returns null when the table is empty or no strategy passed a
-    /// single label. Shared by <see cref="ParseFlowsealTranscript"/> and the
-    /// live-probe post-exit winner fallback so both agree.
-    /// </summary>
-    internal static string? BestStrategyByScore(
+internal static string? BestStrategyByScore(
         IReadOnlyDictionary<string, ZapretStrategyTestResult> perStrategy)
     {
         string? best = null;
@@ -609,7 +330,6 @@ public static class ZapretAutoStrategy
             CreateNoWindow = true,
             UseShellExecute = false,
             WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
-            // Keep UTF-8 decoding for Flowseal status lines.
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
@@ -621,31 +341,12 @@ public static class ZapretAutoStrategy
         return psi;
     }
 
-    /// <summary>
-    /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
-    /// configs=all), parse stdout for per-config progress + final winner.
-    /// Returns null winner if all configs failed.
-    /// </summary>
-    /// <param name="zapretInstallDir">Where Flowseal is installed (parent of utils/).</param>
-    /// <param name="progress">Per-config progress reporter: emits as each
-    /// `[N/M] strategy.bat` line is parsed from stdout.</param>
-    /// <param name="logger">For diagnostic logging.</param>
-    /// <param name="ct">Cancellation — kills the powershell process.</param>
     public static async Task<FlowsealSweepResult> RunFlowsealProbeAsync(
         string zapretInstallDir,
         IProgress<FlowsealProgress>? progress,
         ILogger? logger,
         CancellationToken ct)
     {
-        // C.3 (r4): admin pre-check. Flowseal's `test zapret.ps1` exits
-        // immediately on non-admin with [ERROR] Run as Administrator. If
-        // we don't surface that, the user sees "no strategy matched" with
-        // no clue why. Returning a typed Diagnostic="not_admin" lets the
-        // ViewModel render a specific localized error toast instead.
-        //
-        // Our desktop app already requires admin for TUN setup so this is
-        // double-coverage — defensive against UAC quirks / scheduled
-        // task / service-mode restarts that could lose elevation.
         if (!OperatingSystem.IsWindows())
         {
             logger?.Information("[ZapretAutoStrategy] Flowseal probe only runs on Windows");
@@ -670,11 +371,6 @@ public static class ZapretAutoStrategy
 
         var psi = BuildFlowsealProbeStartInfo(zapretInstallDir, scriptPath);
 
-        // r38: per-probe persistent log file. Captures EVERY stdout/stderr
-        // line with a timestamp so the user can grep for "what did probe see
-        // for general (ALT3)" instead of relying on the swallowed FullOutput
-        // field. Path: %ProgramData%\VPNRouter\logs\zapret-probe-{stamp}.log
-        // Best-effort — never throws.
         var probeLogPath = Path.Combine(AppPaths.LogsDir,
             $"zapret-probe-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
         StreamWriter? probeLog = null;
@@ -702,61 +398,29 @@ public static class ZapretAutoStrategy
         int testedCount = 0;
         int totalCount = 0;
 
-        // r4 Part A — live X/Y status counter state. Each config-header line
-        // ("  [N/M] strategy.bat") resets these to 0; each per-test status
-        // line ("[TargetId][HTTP|TLS1.2|TLS1.3] code=... status=OK|FAIL|...")
-        // increments TotalChecks; status=OK additionally increments OkCount.
-        // The progress event fires on every status line so the UI lede can
-        // render "Тестирую (5/20): general (ALT3) · 12/18" with sub-second
-        // updates instead of waiting for the next config header.
-        //
-        // Locked behind a sync object — Process.OutputDataReceived can fire
-        // on the threadpool. Mutations of int fields are atomic on x64 but
-        // we still need the (ok, total) pair to be coherent for the progress
-        // snapshot.
         int currentOkCount = 0;
         int currentTotalChecks = 0;
         var counterLock = new object();
 
-        // r33: track current strategy name so early-winner detection can
-        // record the winner. Flowseal's "Best config:" line comes at the
-        // very end after iterating EVERY strategy — that's the 2-7 min
-        // wait user complained about. Early-exit kills the script as
-        // soon as a strategy aces enough targets to be confident.
         string currentStrategyName = string.Empty;
         bool earlyWinnerKilled = false;
 
-        // r37: per-strategy results table. Filled out as each strategy
-        // completes (the NEXT configHeaderRx match closes out the
-        // previous one). Also finalized once after the loop ends to
-        // capture the very last strategy's score.
         var perStrategyResults = new Dictionary<string, ZapretStrategyTestResult>(
             StringComparer.Ordinal);
         var perStrategyLock = new object();
 
-        // r4 C.4 — error-line ring buffer. Captures the last 8 [ERROR]/
-        // [WARN]/[WARNING] lines for surface to the user via toast when
-        // sweep returns no winner. Bounded so a chatty script can't OOM.
         var errorLines = new List<string>(capacity: 8);
 
-        // r53: pre-compiled regexes are now shared static fields (single
-        // source of truth with the pure ParseFlowsealTranscript parser).
-        // statusLineRx now tolerates the current single-bracket "[HTTP] …
-        // status=OK" format AND the historical "[TargetId][HTTP] …" form.
         var configHeaderRx = ConfigHeaderRx;
         var statusLineRx = StatusLineRx;
         var winnerRx = WinnerRx;
         var errorLineRx = ErrorLineRx;
 
-        // Per-line stdout handler. Script writes via Write-Host so we get
-        // each Write-Host invocation as one line on stdout.
         proc.OutputDataReceived += (sender, args) =>
         {
             if (args.Data == null) return;
             var line = args.Data;
             outputBuilder.AppendLine(line);
-            // r38: also stream to the per-probe log file with a timestamp
-            // so the user has a grep'able record after probe ends.
             if (probeLog != null)
             {
                 try
@@ -766,19 +430,14 @@ public static class ZapretAutoStrategy
                         probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
                     }
                 }
-                catch { /* best-effort */ }
+                catch { }
             }
 
-            // Per-config progress: "  [12/20] general (ALT5).bat" — resets
-            // the running OK/total counters for the new config.
             var m = configHeaderRx.Match(line);
             if (m.Success
                 && int.TryParse(m.Groups[1].Value, out var n)
                 && int.TryParse(m.Groups[2].Value, out var t))
             {
-                // r37: finalize previous strategy's result BEFORE resetting
-                // counters. The very first configHeaderRx hit has empty
-                // currentStrategyName so this skips cleanly.
                 int prevOk, prevTotal;
                 string prevName;
                 lock (counterLock)
@@ -805,22 +464,11 @@ public static class ZapretAutoStrategy
                 }
 
                 var strategy = m.Groups[3].Value.Trim();
-                currentStrategyName = strategy;  // r33: remember for early-winner
+                currentStrategyName = strategy;
                 progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
                 return;
             }
 
-            // Per-test status: "[YT_LIVE@0][HTTP] code=200 size=... status=OK"
-            // Each config has multiple targets × 3 test labels.
-            //
-            // r38: pass criteria expanded. Flowseal emits these status values:
-            //   - OK              → traffic flowed normally (pass)
-            //   - UNSUPPORTED     → endpoint doesn't speak this protocol — NOT a strategy fail
-            //                       (pre-r38 we counted as fail → false "конфиги не прошли"
-            //                       on machines where one of the probe targets is offline
-            //                       or doesn't implement HTTP/3)
-            //   - LIKELY_BLOCKED  → DPI partially fought back (TCP up, no response) → fail
-            //   - FAIL            → clear network/DPI failure → fail
             var s = statusLineRx.Match(line);
             if (s.Success)
             {
@@ -840,18 +488,9 @@ public static class ZapretAutoStrategy
                 }
                 if (snapN > 0 && snapT > 0)
                 {
-                    // Re-emit with same strategy name we don't have here;
-                    // ViewModel keeps last-known StrategyName so empty is fine.
-                    // Use empty-string strategy to signal "score update only".
                     progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
                 }
 
-                // r33: early-winner detection. If the current strategy has
-                // ALL checks pass (100%) AND we've gathered enough samples
-                // (>=16, typical strategy = 24 status lines: 8 targets × 3
-                // test labels HTTP/TLS1.2/TLS1.3), declare it the winner
-                // and kill the script. Saves user 2-7 min of waiting
-                // through every remaining strategy that won't beat 100%.
                 if (!earlyWinnerKilled
                     && snapOk == snapTotal
                     && snapTotal >= 16
@@ -862,8 +501,6 @@ public static class ZapretAutoStrategy
                     logger?.Information(
                         "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
                         winner, snapOk, snapTotal);
-                    // r38: also write to per-probe log so the user can grep
-                    // "Early winner" to understand why config N+1..N+M never ran.
                     if (probeLog != null)
                     {
                         try
@@ -875,9 +512,6 @@ public static class ZapretAutoStrategy
                         }
                         catch { }
                     }
-                    // r38: emit progress with strategy name + score so the UI
-                    // can show "Winner found: general (ALT3) — 24/24" instead
-                    // of the score quietly disappearing when the script dies.
                     progress?.Report(new FlowsealProgress(
                         snapN, snapT, currentStrategyName, snapOk, snapTotal));
                     try { proc.Kill(entireProcessTree: true); }
@@ -889,7 +523,6 @@ public static class ZapretAutoStrategy
                 return;
             }
 
-            // Error / warning lines — ring buffer (cap at 8).
             if (errorLineRx.IsMatch(line))
             {
                 lock (counterLock)
@@ -901,7 +534,6 @@ public static class ZapretAutoStrategy
                 return;
             }
 
-            // Final winner: "Best config: general (ALT3).bat"
             var w = winnerRx.Match(line);
             if (w.Success)
             {
@@ -914,7 +546,6 @@ public static class ZapretAutoStrategy
             if (!string.IsNullOrEmpty(args.Data))
             {
                 logger?.Debug("[ZapretAutoStrategy] flowseal-stderr: {Line}", args.Data);
-                // r38: stderr also goes to the per-probe log
                 if (probeLog != null)
                 {
                     try
@@ -924,18 +555,11 @@ public static class ZapretAutoStrategy
                             probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [STDERR] {args.Data}");
                         }
                     }
-                    catch { /* best-effort */ }
+                    catch { }
                 }
             }
         };
 
-        // r38: snapshot winws.exe PIDs BEFORE spawning probe, so the
-        // post-probe orphan cleanup can distinguish "winws that existed
-        // before us" (user's already-running Zapret, leave alone) from
-        // "winws spawned by the probe" (clean up — Flowseal's
-        // `test zapret.ps1` mode 2 spawns winws to each strategy then
-        // doesn't always reap them on exit, leaving a phantom console
-        // window the user has to close manually).
         var preExistingWinwsPids = new HashSet<int>();
         try
         {
@@ -956,10 +580,6 @@ public static class ZapretAutoStrategy
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
-        // Auto-answer the two prompts: 2=DPI checker mode, 1=all configs.
-        // Script reads via Read-Host; piping via stdin reaches it once it
-        // calls Read-Host. Close stdin after answering so any subsequent
-        // Read-Host fails cleanly instead of hanging.
         try
         {
             await proc.StandardInput.WriteLineAsync("2".AsMemory(), ct).ConfigureAwait(false);
@@ -971,11 +591,6 @@ public static class ZapretAutoStrategy
             logger?.Warning(ex, "[ZapretAutoStrategy] Failed to pipe Flowseal answers");
         }
 
-        // r4 C.2 — hard timeout cap. Theoretical worst case is bounded by
-        // script's per-test 5 s timeout × test-suite-count × config-count,
-        // which can spiral past 10 min on flaky networks. We define a hard
-        // 10-min cap and kill the process tree if breached. Reasonable user
-        // patience ceiling per r3 release notes ("2-7 minutes typical").
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(FlowsealMaxSweepTime);
         bool hitTimeout = false;
@@ -987,8 +602,6 @@ public static class ZapretAutoStrategy
             {
                 if (!proc.HasExited)
                 {
-                    // Distinguish user-cancel from timeout-cancel — only the
-                    // latter is "abnormal" and worth surfacing as a diagnostic.
                     if (!ct.IsCancellationRequested)
                     {
                         hitTimeout = true;
@@ -997,7 +610,7 @@ public static class ZapretAutoStrategy
                     proc.Kill(entireProcessTree: true);
                 }
             }
-            catch { /* defensive — process may have finished */ }
+            catch { }
         }))
         {
             try
@@ -1012,7 +625,6 @@ public static class ZapretAutoStrategy
                     logger?.Information("[ZapretAutoStrategy] Flowseal sweep canceled by user");
                     IReadOnlyList<string> errSnap;
                     lock (counterLock) { errSnap = errorLines.ToArray(); }
-                    // r38: clean up orphan winws.exe + close probe log
                     CleanupOrphanWinws(preExistingWinwsPids, logger);
                     CloseProbeLog(probeLog, probeLogLock, "canceled", null, logger);
                     return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString(),
@@ -1026,19 +638,8 @@ public static class ZapretAutoStrategy
         IReadOnlyList<string> finalErrors;
         lock (counterLock) { finalErrors = errorLines.ToArray(); }
 
-        // r38: orphan cleanup — Flowseal's test zapret.ps1 mode 2 spawns
-        // winws.exe per strategy to actively probe DPI. When we early-kill
-        // PowerShell (winner detected) or it hits the 10-min cap, those
-        // winws children sometimes outlive their parent because they were
-        // spawned via Start-Process (detached) rather than as child handles
-        // of the PS host. Result: phantom winws.exe + console window the
-        // user has to close with Alt+F4. We scan for NEW winws PIDs (not
-        // in the pre-spawn snapshot) and kill them.
         CleanupOrphanWinws(preExistingWinwsPids, logger);
 
-        // r37: finalize the very last strategy's result (the loop only
-        // records previous strategies when a NEW configHeaderRx matches,
-        // so the last one — possibly the winner — needs an explicit close).
         int lastOk, lastTotal;
         string lastName;
         lock (counterLock)
@@ -1067,14 +668,6 @@ public static class ZapretAutoStrategy
                 perStrategyResults, StringComparer.Ordinal);
         }
 
-        // r53: winner fallback. The live inline path only sets `winner` when
-        // either (a) early-winner fired (a strategy aced 100%) or (b) a
-        // "Best config:" line matched. If neither happened but we DID score
-        // strategies (e.g. no strategy hit 100% and Flowseal's summary line
-        // format drifted), promote the empirical best-scoring strategy so the
-        // probe still yields a usable winner instead of "стратегия не найдена"
-        // — the exact symptom from the Z:\zapret 2026-05-28 report where ALT9
-        // scored 75/108 yet the app reported no winner.
         if (string.IsNullOrEmpty(winner))
         {
             var fallback = BestStrategyByScore(perStrategySnap);
@@ -1092,7 +685,6 @@ public static class ZapretAutoStrategy
             proc.HasExited ? proc.ExitCode : -1, testedCount, totalCount,
             winner ?? "<none>", finalErrors.Count, perStrategySnap.Count);
 
-        // r38: close the per-probe log with a summary footer.
         CloseProbeLog(probeLog, probeLogLock,
             outcome: winner != null ? "winner" : (timeoutDiagnostic ?? "no_winner"),
             winner: winner,
@@ -1105,14 +697,6 @@ public static class ZapretAutoStrategy
             EarlyWinner: earlyWinnerKilled);
     }
 
-    /// <summary>
-    /// r38 — kill any winws.exe instance that wasn't in the pre-spawn
-    /// snapshot. Flowseal's mode-2 DPI probe spawns winws.exe per strategy
-    /// and (in some failure modes — early-kill, timeout, OS signal race)
-    /// leaves them running after the PowerShell parent exits. Cleanup keeps
-    /// "no phantom console after probe" promise. Best-effort: failures are
-    /// logged at Debug and don't propagate.
-    /// </summary>
     private static void CleanupOrphanWinws(HashSet<int> preExistingPids, Serilog.ILogger? logger)
     {
         int killed = 0;
@@ -1144,10 +728,6 @@ public static class ZapretAutoStrategy
             logger?.Information("[ZapretAutoStrategy] Cleaned up {N} orphan winws.exe", killed);
     }
 
-    /// <summary>
-    /// r38 — close the per-probe log file with an end-of-run summary.
-    /// Idempotent / null-tolerant — safe to call from any exit path.
-    /// </summary>
     private static void CloseProbeLog(StreamWriter? probeLog, object probeLogLock,
         string outcome, string? winner, Serilog.ILogger? logger)
     {
@@ -1166,23 +746,8 @@ public static class ZapretAutoStrategy
         }
     }
 
-    /// <summary>
-    /// Hard cap on Flowseal sweep wall-time. Per r3 release notes the
-    /// typical sweep is 2–7 min; anything beyond 10 min is a script bug or
-    /// network catastrophe and should be aborted with a clear diagnostic.
-    /// </summary>
     public static readonly TimeSpan FlowsealMaxSweepTime = TimeSpan.FromMinutes(10);
 
-    /// <summary>
-    /// Extended in r4: <paramref name="OkCount"/> and <paramref name="TotalChecks"/>
-    /// carry the running per-config check tally so the UI lede can render
-    /// «Тестирую (5/20): general (ALT3) · 12/18». r3 callers ignore the
-    /// defaulted fields and stay correct.
-    ///
-    /// When the parser emits a "score-only update" (per-test status line
-    /// processed but no new config header), <paramref name="StrategyName"/>
-    /// is empty — the ViewModel keeps its last known strategy name.
-    /// </summary>
     public sealed record FlowsealProgress(
         int CurrentIndex,
         int TotalCount,
@@ -1190,10 +755,6 @@ public static class ZapretAutoStrategy
         int OkCount = 0,
         int TotalChecks = 0);
 
-    /// <summary>
-    /// True if the current process is running as a Windows administrator.
-    /// Returns false on non-Windows (caller is expected to gate by OS).
-    /// </summary>
     public static bool IsRunningAsAdmin()
     {
         if (!OperatingSystem.IsWindows()) return false;
@@ -1209,15 +770,6 @@ public static class ZapretAutoStrategy
         }
     }
 
-    /// <summary>
-    /// r4 Part B — check for orphaned ipset switch flag left by an
-    /// interrupted Flowseal sweep. The script writes `ipset_switched.flag`
-    /// at zapret root after backing up `lists/ipset-all.txt` to
-    /// `lists/ipset-all.test-backup.txt` and switching the live list to
-    /// "any" mode. On graceful exit / Ctrl+C the script restores; our
-    /// Process.Kill(entireProcessTree:true) bypasses both finally and trap
-    /// so we adopt the safety net ourselves.
-    /// </summary>
     public static bool HasOrphanedIpsetFlag(string zapretInstallDir)
     {
         try
@@ -1228,15 +780,6 @@ public static class ZapretAutoStrategy
         catch { return false; }
     }
 
-    /// <summary>
-    /// r4 Part B — restore `lists/ipset-all.txt` from the script's backup
-    /// and delete the orphan flag. Idempotent: no-op if no flag exists.
-    /// Matches Flowseal's `Set-IpsetMode -mode "restore"` semantics:
-    /// Move backup over the live file (overwrite). If the backup is
-    /// missing but the flag is present, leave the live file alone (don't
-    /// guess) and just delete the stale flag — the script handles this
-    /// case the same way on next run.
-    /// </summary>
     public static void RestoreIpsetAfterKill(string zapretInstallDir, ILogger? logger)
     {
         try
@@ -1244,7 +787,7 @@ public static class ZapretAutoStrategy
             var flagPath = Path.Combine(zapretInstallDir, "ipset_switched.flag");
             if (!File.Exists(flagPath))
             {
-                return; // nothing to do — common case
+                return;
             }
 
             var listsDir = Path.Combine(zapretInstallDir, "lists");
@@ -1270,12 +813,8 @@ public static class ZapretAutoStrategy
         }
     }
 
-    /// <summary>
-    /// Tier classifier — turns per-attempt pass/fail counts into the verdict.
-    /// </summary>
     private static AttemptTier ClassifyTier(ProbeReport report, int totalTargets, int passPercent)
     {
-        // If ALL probes report NoSignal — no internet at all, abort.
         if (totalTargets > 0 && report.NoSignalCount >= (int)(totalTargets * 0.6))
             return AttemptTier.NoSignal;
 
@@ -1284,12 +823,6 @@ public static class ZapretAutoStrategy
         return AttemptTier.Tier3Failed;
     }
 
-    /// <summary>
-    /// Try to load probe targets from Flowseal's installed `utils/targets.txt`
-    /// (per `targets.txt` format: KeyName = "https://..." lines, # comments).
-    /// Falls back to hardcoded DefaultProbeTargets if file missing / unparseable.
-    /// Lets community curation flow through to our probe.
-    /// </summary>
     public static IReadOnlyList<string> LoadTargets(ILogger? logger)
     {
         try
@@ -1307,12 +840,9 @@ public static class ZapretAutoStrategy
             {
                 var line = raw.Trim();
                 if (line.Length == 0 || line.StartsWith("#")) continue;
-                // Format: KeyName = "https://host"  OR  KeyName = "PING:1.2.3.4"
                 var eq = line.IndexOf('=');
                 if (eq < 0) continue;
                 var value = line.Substring(eq + 1).Trim().Trim('"');
-                // Skip ping-only entries (we don't do ICMP probes — too noisy on
-                // censored networks anyway) and keep only HTTPS targets.
                 if (value.StartsWith("PING:", StringComparison.OrdinalIgnoreCase)) continue;
                 if (!value.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
                     !value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) continue;
@@ -1325,9 +855,6 @@ public static class ZapretAutoStrategy
                 return DefaultProbeTargets;
             }
 
-            // Cap to 12 to keep probe-time bounded even if upstream targets.txt
-            // grows. The first ~12 entries are Discord/YouTube/Google which are
-            // the highest-signal DPI targets anyway.
             if (result.Count > 12) result = result.Take(12).ToList();
             return result;
         }

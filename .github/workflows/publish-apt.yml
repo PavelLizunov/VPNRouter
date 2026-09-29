@@ -1,9 +1,5 @@
 name: Publish APT Repository
 
-# Every trigger reindexes the latest published canonical stable with a DEB/sidecar.
-# Retain that stable only, not ancient releases without Debian assets. Candidate
-# runs gate tag/SHA provenance and stable APT health, NOT candidate DEB inclusion.
-# Manual runs must use --ref <tag>; optional input tag must match that run ref.
 on:
   release:
     types: [published]
@@ -14,16 +10,9 @@ on:
         required: false
         default: ""
 
-# Pushing to gh-pages needs write permission on the default token.
 permissions:
   contents: write
 
-# Serialize all runs across the gh-pages workspace to eliminate the
-# push-rejected race that fired on rapid back-to-back releases (r3→r4
-# delete-and-republish dance, May 2026). The publish step force-pushes a
-# single orphan commit, so `concurrency` is what guarantees two runs
-# never force-push over each other. Subsequent triggers queue instead of
-# running in parallel.
 concurrency:
   group: publish-apt-gh-pages
   cancel-in-progress: false
@@ -87,13 +76,10 @@ jobs:
               exit 1
           fi
 
-          # Write to file so gpg can parse reliably. echo | gpg had issues
-          # with some secret contents — write-then-import is robust.
           KEYFILE=$(mktemp)
           printf '%s\n' "$APT_SIGNING_KEY" > "$KEYFILE"
           chmod 600 "$KEYFILE"
 
-          # Diagnostic: size + first/last line (safe to show — headers only)
           echo "Key file size: $(wc -c < "$KEYFILE") bytes"
           echo "First line: $(head -n 1 "$KEYFILE")"
           echo "Last line:  $(tail -n 1 "$KEYFILE")"
@@ -112,7 +98,6 @@ jobs:
 
           echo "--- secret keys now in keyring ---"
           gpg --list-secret-keys --keyid-format=long
-          # Confirm the key ID we expect is actually present.
           if ! gpg --list-secret-keys "$APT_SIGNING_KEY_ID" > /dev/null 2>&1; then
               echo "::error::Key $APT_SIGNING_KEY_ID not found after import"
               exit 1
@@ -122,8 +107,6 @@ jobs:
         env:
           APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
         run: |
-          # reprepro calls gpg internally; we want zero prompting for a
-          # passphrase or trust agent dialog on a headless runner.
           mkdir -p ~/.gnupg
           chmod 700 ~/.gnupg
           {
@@ -136,10 +119,6 @@ jobs:
             echo "max-cache-ttl 21600"
           } >> ~/.gnupg/gpg-agent.conf
           gpgconf --kill gpg-agent || true
-          # Mark our key as ultimately trusted so reprepro doesn't choke
-          # on "no trust path" warnings. import-ownertrust needs the full
-          # 40-char fingerprint, not the short key id — look it up from
-          # what we just imported.
           FPR=$(gpg --list-secret-keys --with-colons "$APT_SIGNING_KEY_ID" \
                 | awk -F: '/^fpr:/ {print $10; exit}')
           if [ -z "$FPR" ]; then
@@ -171,21 +150,12 @@ jobs:
 
       - name: Lay out apt repo skeleton
         run: |
-          # Existing package state remains intact until a stable DEB is validated.
           mkdir -p gh-pages-dir/apt/conf
           cp packaging/apt-repo/distributions gh-pages-dir/apt/conf/distributions
-          # Serve the public key in BOTH formats:
-          #  - key.gpg  : binary (dearmored) — what apt wants when users do
-          #               `curl ... | sudo tee /etc/apt/keyrings/vpnrouter.gpg`.
-          #               Previous version shipped armored here and apt
-          #               complained `NO_PUBKEY ...` during `apt update`.
-          #  - vpnrouter.asc : ASCII-armored — human-readable, useful for
-          #                    inspection with `gpg --show-keys`.
           gpg --dearmor \
               < packaging/apt-repo/vpnrouter-apt-public.asc \
               > gh-pages-dir/apt/key.gpg
           cp packaging/apt-repo/vpnrouter-apt-public.asc gh-pages-dir/apt/vpnrouter.asc
-          # Simple landing page for the apt URL
           cat > gh-pages-dir/apt/index.html <<'HTML'
           <!DOCTYPE html>
           <meta charset="utf-8">
@@ -209,9 +179,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir .apt-debs
-          # Pagination includes stable releases beyond any number of candidates.
-          # Retain the latest published stable. Its missing assets must fail,
-          # never silently fall back to an older release. Candidates stay out.
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" > .apt-releases.json
           TAG=$(jq -ers '
             [ .[][]
@@ -220,7 +187,6 @@ jobs:
               ] | sort_by(.published_at) | last | .tag_name // error("No published stable release")
           ' .apt-releases.json)
           [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          # Re-read selected release metadata; API/download failures are fatal.
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
               --json tagName,isDraft,isPrerelease,assets > .apt-selected.json
           DEB="VPNRouter-$TAG-linux-amd64.deb"
@@ -234,7 +200,6 @@ jobs:
           cd .apt-debs
           test -s "$DEB"
           test -s "$DEB.sha256"
-          # Require the sole checksum record to name this DEB, not another path.
           read -r HASH FILE < "$DEB.sha256"
           [[ "$HASH" =~ ^[a-fA-F0-9]{64}$ ]]
           test "$FILE" = "$DEB"
@@ -247,77 +212,27 @@ jobs:
 
       - name: Ensure gh-pages root metadata (CNAME, .nojekyll, index.md)
         run: |
-          # Custom domain: vpn.ninitux.com. This CNAME file is what tells
-          # GitHub Pages to serve gh-pages content at the custom hostname
-          # and to issue + renew a Let's Encrypt cert for it. Must be
-          # present at gh-pages root; regenerating here so it survives any
-          # future full rewrite of gh-pages content (e.g. if we ever wipe
-          # the branch to rebuild from scratch).
-          #
-          # A single FQDN, no newline — GitHub's parser is strict about
-          # trailing whitespace.
           printf 'vpn.ninitux.com' > gh-pages-dir/CNAME
 
-          # gh-pages is now published as a single ORPHAN commit on every
-          # run (see the final "Publish gh-pages" step), so EVERY file the
-          # site needs must be (re)materialised here — nothing survives
-          # implicitly from a previous commit. These two were previously
-          # written only when the branch was first created:
-          #   .nojekyll — disables Jekyll so paths starting with "_" and
-          #               the apt/ tree are served verbatim.
-          #   index.md  — trivial root marker (index.html is the real page).
           touch gh-pages-dir/.nojekyll
           echo "# VPNRouter APT Repository" > gh-pages-dir/index.md
 
       - name: Publish install scripts (Linux + Windows) to gh-pages root
         run: |
-          # v2.28.0: ship a user-friendly installer script at the gh-pages
-          # root so people can do `curl -fsSL .../install.sh | sudo sh`
-          # without typing any apt-source-list incantations.
-          #
-          # Also available at the pretty redirect URLs configured by the
-          # user's own landing page (e.g. vpn.ninitux.com -> CNAME or
-          # 302 -> this script). See packaging/apt-repo/install.sh for the
-          # script content.
           sed 's/\r$//' packaging/apt-repo/install.sh > gh-pages-dir/install.sh
           chmod 755 gh-pages-dir/install.sh
-          # Copy to /apt/ too so both URLs work: install.sh and apt/install.sh.
           cp gh-pages-dir/install.sh gh-pages-dir/apt/install.sh
 
-          # v2.28.1: Windows install.ps1 + uninstall.ps1 for symmetric
-          # one-liner UX across platforms:
-          #   PowerShell:  iwr -useb https://vpn.ninitux.com/install.ps1 | iex
-          # See packaging/windows/install.ps1 for the script content.
-          # Both files must keep CRLF stripping (even though they're PS1
-          # not sh) because .gitattributes auto-converts and we want
-          # deterministic byte content on GitHub Pages.
           sed 's/\r$//' packaging/windows/install.ps1   > gh-pages-dir/install.ps1
           sed 's/\r$//' packaging/windows/uninstall.ps1 > gh-pages-dir/uninstall.ps1
-          # diagnose.ps1 — read-only YouTube/connectivity layer-probe a user runs
-          # while connected on a full-tunnel config:
-          #   iwr -useb https://vpn.ninitux.com/diagnose.ps1 | iex
           sed 's/\r$//' packaging/windows/diagnose.ps1  > gh-pages-dir/diagnose.ps1
 
-          # Android download / install page at /android. Client-side JS
-          # resolves the latest VPNRouter-v*-android.apk from the GitHub API
-          # (graceful fallback to the releases page if no APK is attached yet).
           mkdir -p gh-pages-dir/android
           cp packaging/android-page/index.html gh-pages-dir/android/index.html
-          # v2.31.8-r8: repair.cmd is a self-contained recovery tool for
-          # users with broken installs (mixed-version DLLs, app crashes
-          # at launch, "did not take effect" loop). Browser-downloadable;
-          # right-click → Run as administrator → ~60 s automated repair.
-          # CRLF line endings preserved (cmd.exe is fine with either,
-          # but a copy-via-browser may get LF normalised; explicit
-          # restoration is defensive). Mode 755 so it's executable on
-          # case the user runs it via WSL/Cygwin.
           sed 's/\r$//' packaging/windows/repair.cmd > /tmp/repair-lf.cmd
-          # Re-add CRLF for genuine Windows execution semantics.
           sed 's/$/\r/' /tmp/repair-lf.cmd > gh-pages-dir/repair.cmd
           chmod 755 gh-pages-dir/repair.cmd
           chmod 644 gh-pages-dir/install.ps1 gh-pages-dir/uninstall.ps1 gh-pages-dir/diagnose.ps1
-          # Simple landing page at gh-pages root linking to the installer +
-          # apt repo. Prevents the 404 that Pages currently returns for `/`.
           cat > gh-pages-dir/index.html <<'HTML'
           <!DOCTYPE html>
           <html lang="en">
@@ -362,7 +277,6 @@ jobs:
           shopt -s nullglob
           debs=(.apt-debs/*.deb)
           test "${#debs[@]}" -eq 1
-          # Only local generated package state is replaced; publish stays gated.
           rm -rf gh-pages-dir/apt/db gh-pages-dir/apt/pool gh-pages-dir/apt/dists
           reprepro -Vb gh-pages-dir/apt includedeb stable "${debs[0]}"
           reprepro -b gh-pages-dir/apt check
@@ -383,21 +297,6 @@ jobs:
       - name: Publish gh-pages (single orphan commit, force-push)
         run: |
           cd gh-pages-dir
-          # gh-pages is a FULLY GENERATED branch: the apt indices, pool,
-          # install scripts and landing pages are all rebuilt from scratch
-          # on every run, and the .deb source-of-truth lives on GitHub
-          # Releases. It therefore needs NO git history.
-          #
-          # We publish it as a single ORPHAN commit and force-push. This:
-          #   1. permanently prevents the branch from accumulating obsolete
-          #      pool/*.deb blobs in history. Each stable version's .deb is
-          #      a unique ~53 MB blob; on a long-lived branch they were
-          #      never pruned, so gh-pages history had grown to ~13 GB /
-          #      309 dead .deb blobs — effectively the entire repo's bloat.
-          #   2. doubles as the one-time cleanup: the first run after this
-          #      change collapses all that history into a single commit.
-          # The `concurrency:` guard at the top serialises runs, so the
-          # force-push can never race another publish.
           git checkout --orphan _publish
           git add -A
           if git diff --cached --quiet; then

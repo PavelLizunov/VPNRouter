@@ -5,7 +5,6 @@ using System.Linq;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>Read-only counts over the current rolling window.</summary>
 public sealed record ConnHealthSnapshot(
     string? Node,
     int RelayOpenAttempts,
@@ -16,30 +15,8 @@ public sealed record ConnHealthSnapshot(
     double FailureRate,
     bool WouldWarn);
 
-/// <summary>
-/// Observe-only rolling-window aggregator of <see cref="ConnLogEvent"/>s.
-///
-/// <para>It computes a <see cref="ConnHealthSnapshot.WouldWarn"/> flag (sustained
-/// high relay-open failure rate over a minimum sample) purely for <em>calibration</em>
-/// — B0 never acts on it. The warning (backlog C) and failover (backlog B) are
-/// separate, later stages that consume a calibrated version of this state. Keeping
-/// B0 silent is the explicit lesson from the independent review (§E7): a warning
-/// shipped before the classifier is calibrated would blame the proxy for the user's
-/// own local closes.</para>
-///
-/// <para><strong>Denominator.</strong> Failure rate is
-/// <see cref="ConnHealthCategory.RelayOpenFail"/> / total relay-open
-/// <em>attempts</em> (<see cref="ConnHealthCategory.RelayOpenAttempt"/>), as the
-/// review's §E2 requires a defined population. Local closes and non-proxy resets
-/// never enter the numerator.</para>
-///
-/// <para>Thread-safe: the Clash <c>/logs</c> reader records from a background loop
-/// while the UI/health-tick may snapshot concurrently.</para>
-/// </summary>
 public sealed class ConnectionHealthState
 {
-    // Defaults: 5-minute observation window; need a real sample before WouldWarn
-    // means anything; "high" = at least half of relay-open attempts failing.
     private static readonly TimeSpan DefaultWindow = TimeSpan.FromMinutes(5);
     private const int DefaultMinSample = 20;
     private const double DefaultWarnThreshold = 0.5;
@@ -67,14 +44,12 @@ public sealed class ConnectionHealthState
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
     }
 
-    /// <summary>Label the proxy node currently in use (for per-node attribution).</summary>
     public void SetActiveNode(string? node)
     {
         lock (_gate)
             _activeNode = node;
     }
 
-    /// <summary>Record one classified event into the window.</summary>
     public void Record(ConnLogEvent ev)
     {
         if (ev is null)
@@ -88,7 +63,6 @@ public sealed class ConnectionHealthState
         }
     }
 
-    /// <summary>Snapshot of the whole window (all nodes).</summary>
     public ConnHealthSnapshot Snapshot()
     {
         lock (_gate)
@@ -99,7 +73,6 @@ public sealed class ConnectionHealthState
         }
     }
 
-    /// <summary>Per-node snapshots over the window.</summary>
     public IReadOnlyList<ConnHealthSnapshot> SnapshotByNode()
     {
         lock (_gate)
@@ -135,10 +108,6 @@ public sealed class ConnectionHealthState
             }
         }
 
-        // Clamp to [0,1]: classifier marker asymmetry (e.g. a UDP relay-open
-        // failure counted while its "packet connection" attempt wording isn't)
-        // can leave fails > attempts at a window edge, which would otherwise
-        // render a nonsensical >100% rate. No-op for the normal fails<=attempts.
         double rate = attempts > 0 ? Math.Min(1.0, (double)fails / attempts) : 0.0;
         bool wouldWarn = attempts >= _minSample && rate >= _warnThreshold;
         return new ConnHealthSnapshot(node, attempts, fails, streamErrors, locals, other, rate, wouldWarn);

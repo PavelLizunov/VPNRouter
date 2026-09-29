@@ -14,12 +14,6 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Unit tests for VPNCTL-06 fakeip migration in <see cref="CustomConfigInjector"/>.
-/// Tests migration of legacy global dns.fakeip to sing-box 1.12+ typed format,
-/// rejection of conflicts and malformed definitions, preservation of pools and rules,
-/// and prevention of detour: "dns-direct" injection onto fakeip servers.
-/// </summary>
 public class VpnctlFakeIpMigrationTests
 {
     private static AppSettings CreateSettings() => new()
@@ -33,12 +27,10 @@ public class VpnctlFakeIpMigrationTests
         return JsonNode.Parse(result)!.AsObject();
     }
 
-    // ── disabled: enabled:false ──────────────────────────────────────────────
-
     [Fact]
     public void Inject_FakeIpDisabled_NoLegacyServer_RemovesGlobalFakeIpObject()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -65,7 +57,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpDisabled_WithLegacyServer_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -91,7 +83,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpEmptyObject_NoLegacyServer_TreatedAsDisabledAndRemovesObject()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -114,7 +106,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpEmptyObject_WithLegacyServer_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -138,7 +130,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpNull_NoLegacyServer_RemovesExplicitNull()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -161,7 +153,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpNull_WithLegacyServer_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -181,12 +173,10 @@ public class VpnctlFakeIpMigrationTests
         Assert.Contains("null", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── enabled: explicit ranges, tags, rules, and reference preservation ────
-
     [Fact]
     public void Inject_FakeIpEnabled_ExplicitRangesAndTagAndRules_Preserved()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -234,7 +224,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpEnabled_ExplicitV4Only_NoSynthesizedV6()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -269,7 +259,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpEnabled_OmittedRanges_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -291,12 +281,10 @@ public class VpnctlFakeIpMigrationTests
         Assert.Contains("requires at least one of 'inet4_range' or 'inet6_range'", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── typed: no extra dialer / detour, no remote DNS transport classification ──
-
     [Fact]
     public void Inject_TypedFakeIp_NoExtraDialerOrDetour_NotClassifiedAsRemoteTransport()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -312,7 +300,7 @@ public class VpnctlFakeIpMigrationTests
         """;
 
         var settings = CreateSettings();
-        settings.App.RoutingMode = "full"; // wantRemoteDns = true
+        settings.App.RoutingMode = "full";
         var root = InjectConfig(json, settings);
 
         var servers = root["dns"]?["servers"]?.AsArray();
@@ -321,17 +309,14 @@ public class VpnctlFakeIpMigrationTests
         Assert.NotNull(fakeipServer);
         Assert.Null(fakeipServer!["detour"]);
 
-        // dns.final must NOT be set to fakeip-dns
         var finalDns = (string?)root["dns"]?["final"];
         Assert.NotEqual("fakeip-dns", finalDns);
     }
 
-    // ── mixed conflict ───────────────────────────────────────────────────────
-
     [Fact]
     public void Inject_MixedLegacyAndTypedFakeIp_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -356,7 +341,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_TypedFakeIp_ConflictingGlobalRange_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -384,7 +369,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_TypedFakeIp_CompatibleGlobalRange_KeepsAuthoredOptionsAndRemovesGlobal()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -417,7 +402,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_TypedFakeIp_MissingRangesInTyped_FilledFromGlobalOnly_PreservesOmitted()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -449,7 +434,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_TypedFakeIp_MissingBothRangesInTyped_FilledFromGlobal()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -482,7 +467,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_TypedFakeIp_MalformedNonStringRange_ExplicitlyRejected()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -505,8 +490,6 @@ public class VpnctlFakeIpMigrationTests
         Assert.Contains("must be a valid IPv4 CIDR", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── malformed enabled / ranges ───────────────────────────────────────────
-
     [Theory]
     [InlineData("""{"dns": {"fakeip": "invalid"}, "outbounds": [{"type": "vless", "tag": "proxy"}, {"type": "direct", "tag": "direct"}]}""", "expected a JSON object")]
     [InlineData("""{"dns": {"servers": [{"tag": "f", "address": "fakeip"}], "fakeip": {"enabled": "true"}}, "outbounds": [{"type": "vless", "tag": "proxy"}, {"type": "direct", "tag": "direct"}]}""", "must be a boolean")]
@@ -520,12 +503,10 @@ public class VpnctlFakeIpMigrationTests
         Assert.Contains(expectedSubstring, ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── idempotent ───────────────────────────────────────────────────────────
-
     [Fact]
     public void Inject_FakeIpMigration_IsIdempotent()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -562,12 +543,10 @@ public class VpnctlFakeIpMigrationTests
         Assert.Null(fakeipServer["detour"]);
     }
 
-    // ── absent fakeip / generated no addition ────────────────────────────────
-
     [Fact]
     public void Inject_AbsentFakeIp_NoFakeIpServer_NoAddition()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -591,7 +570,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_AbsentFakeIp_WithLegacyServer_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -613,7 +592,7 @@ public class VpnctlFakeIpMigrationTests
     [Fact]
     public void Inject_FakeIpEnabled_WithoutServer_ThrowsActionableException()
     {
-        var json = /*lang=json*/ """
+        var json =  """
         {
           "dns": {
             "servers": [
@@ -633,8 +612,6 @@ public class VpnctlFakeIpMigrationTests
         var ex = Assert.Throws<InvalidOperationException>(() => InjectConfig(json));
         Assert.Contains("no fakeip DNS server", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
-
-    // ── edge 1: legacy type variants (null, empty, "legacy") ─────────────────
 
     [Theory]
     [InlineData(null)]
@@ -672,8 +649,6 @@ public class VpnctlFakeIpMigrationTests
         Assert.Null(fakeipServer["address"]);
         Assert.Equal("198.18.0.0/15", (string?)fakeipServer["inet4_range"]);
     }
-
-    // ── edge 1: legacy unsupported options requiring manual migration ────────
 
     [Theory]
     [InlineData("strategy", "\"strategy\": \"prefer_ipv4\"")]
@@ -785,8 +760,6 @@ public class VpnctlFakeIpMigrationTests
         Assert.False(fakeip.ContainsKey("client_subnet"));
     }
 
-    // ── edge 2: full-mode vpnrouter-vpn-dns collision ────────────────────────
-
     [Fact]
     public void Inject_FullMode_ReservedVpnDnsTagCollision_ThrowsActionableException()
     {
@@ -811,8 +784,6 @@ public class VpnctlFakeIpMigrationTests
         Assert.Contains("vpnrouter-vpn-dns", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("choose another FakeIP server tag", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
-
-    // ── edge 2: bootstrap vpnrouter-dns-direct collision ─────────────────────
 
     [Fact]
     public void Inject_BootstrapDomainResolver_ReservedDnsDirectTagCollision_ThrowsActionableException()
@@ -862,8 +833,6 @@ public class VpnctlFakeIpMigrationTests
         Assert.NotNull(fakeipServer);
         Assert.Equal("fakeip", (string?)fakeipServer!["type"]);
     }
-
-    // ── Native sing-box check: VPNCTL_TEST_CORE integration ─────────────────
 
     public static IEnumerable<object[]> Native_MigratedFakeIp_Cases => new[]
     {

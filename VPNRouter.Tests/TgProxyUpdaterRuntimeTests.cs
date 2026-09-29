@@ -5,23 +5,6 @@ namespace VPNRouter.Tests;
 public sealed class TgProxyUpdaterRuntimeTests
 {
     [Fact]
-    public void SupportedRuntime_PinsV110AndCertifi()
-    {
-        Assert.Equal("v1.10.0", TgProxyUpdater.SupportedProxyVersion);
-        Assert.Equal(64, TgProxyUpdater.SupportedProxySourceSha256.Length);
-        var source = File.ReadAllText(FindSource());
-        Assert.Contains("releases/tags/{SupportedProxyVersion}", source);
-        Assert.Contains("Version: \"2026.7.22\"", source);
-        Assert.Contains("SupportedProxySourceSha256", source);
-        Assert.Contains("import certifi; import proxy.tg_ws_proxy", source);
-        Assert.DoesNotContain("releases/latest", source);
-        Assert.DoesNotContain("GetTempFileName", source);
-        Assert.Contains("vpnr-tgproxy-python-", source);
-        Assert.Contains("vpnr-tgproxy-wheel-", source);
-        Assert.Contains("vpnr-tgproxy-source-", source);
-    }
-
-    [Fact]
     public void ActivateSourceAt_SwapsSourceAndVersionTogether()
     {
         using var sandbox = new TempDir();

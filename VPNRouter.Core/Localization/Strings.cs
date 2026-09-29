@@ -1,91 +1,39 @@
 namespace VPNRouter.Core.Localization;
 
-/// <summary>
-/// Bilingual string provider (EN/RU). Single source of truth for all UI labels
-/// shared across <c>VPNRouter.App</c> (desktop Avalonia) and
-/// <c>VPNRouter.Android</c> (Android Avalonia). Both projects expose thin
-/// wrapper classes (<c>VPNRouter.App.Localization.Strings</c> and
-/// <c>VPNRouter.Android.Localization</c>) that delegate every member here so
-/// the legacy public surface stays compatible while the actual translations
-/// live in one file. Migration log: F-01 in <c>parity-audit/findings.md</c>.
-/// </summary>
 public static partial class Strings
 {
     public static string Lang { get; set; } = "en";
     internal static bool Ru => Lang.Equals("ru", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>v2.38.0 — Explorer "route through VPN" context-menu verb label
-    /// (used by ShellMenuRegistrar; public so VPNRouter.App can read it since
-    /// <see cref="Ru"/> is internal to Core).</summary>
     public static string ShellMenuRouteLabel =>
         Ru ? "Добавить в VPNRouter (через VPN)" : "Add to VPNRouter (route through VPN)";
 
-    /// <summary>v2.38.0-r4 — parent label for the cascading "VPNRouter ▸"
-    /// submenu shown only when the user has more than one app-category
-    /// (the submenu items are the category names). Single-category users
-    /// keep the flat <see cref="ShellMenuRouteLabel"/> verb (no submenu).</summary>
     public static string ShellMenuParentLabel =>
         Ru ? "Добавить в VPNRouter" : "Add to VPNRouter";
 
-    /// <summary>v2.38.0-r5 — Explorer "remove from VPN" context-menu verb
-    /// (separate flat verb alongside the Add verb; always visible — no COM
-    /// conditional display — so it no-ops with a toast if the app wasn't
-    /// routed).</summary>
     public static string ShellMenuUnrouteLabel =>
         Ru ? "Убрать из VPNRouter" : "Remove from VPNRouter";
 
-    /// <summary>v2.38.0-r7 — subscription card badge when the last refresh
-    /// failed but cached servers are preserved. Turns the bare "0s · —" (which
-    /// reads as "configs lost / banned") into an honest "couldn't refresh,
-    /// servers are still cached" signal. See Z:\surito diagnosis 2026-05-29
-    /// (provider DPI-flap → fetch failed → list looked empty/lost).</summary>
     public static string SubRefreshFailedCached =>
         Ru ? "не обновилось — показаны кэшированные серверы"
            : "refresh failed — showing cached servers";
 
-    /// <summary>v2.38.0-r7 — subscription card badge when the last refresh
-    /// failed AND there are no cached servers to fall back on (provider
-    /// unreachable / blocked). Distinguishes a network/block failure from
-    /// genuine "empty subscription".</summary>
     public static string SubRefreshFailedEmpty =>
         Ru ? "не удалось загрузить — провайдер недоступен (проверьте сеть/Zapret)"
            : "couldn't load — provider unreachable (check network/Zapret)";
 
-    // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
-    // users were seeing "Windows" hardcoded in Simple-mode autostart card
-    // and Network → Autostart labels (reported 2026-04-29). Now Strings
-    // detect runtime platform and substitute "macOS" / "Linux" / "Windows"
-    // into RU+EN templates. Does NOT change Windows-Service-tech labels
-    // (those reference an actual Windows-only API surface).
     public static string OsDisplayName =>
         OperatingSystem.IsWindows() ? "Windows" :
         OperatingSystem.IsMacOS() ? "macOS" :
         OperatingSystem.IsAndroid() ? "Android" : "Linux";
 
-    // ── Tabs ──
     public static string TabServers => Ru ? "Серверы" : "Servers";
     public static string TabApps => Ru ? "Приложения" : "Applications";
     public static string TabNetwork => Ru ? "Сеть" : "Network";
     public static string TabSettings => Ru ? "Настройки" : "Settings";
     public static string TabZapret => "Zapret";
-    // v2.30.6-r1 (UX-46 fix): sub-tab + every reference elsewhere in app
-    // ("Telegram-прокси" in Simple-mode hints, ServiceMasterSubtitle,
-    // AutostartBootSectionSub, etc.) used the user-friendly name. Sub-tab
-    // and all VM labels (LblTabTelegram / LblToolTgProxy) read from this.
     public static string TabTgWsProxy => Ru ? "Telegram-прокси" : "Telegram proxy";
 
-    // ── Advanced shell tab labels (AND-ADV-CHROME 2026-05-10) ──
-    // Six-tab parity with desktop MainWindow.axaml v2.32.0 ListBoxItem
-    // bindings (LblTabManual / LblTabSubscribe / LblTabNetwork / LblTabApps /
-    // LblTabTools / LblTabFreeConfigs). Defined as their own keys (rather
-    // than reusing the older TabServers / ModeSubscribe / TabSettings /
-    // TabApps / TabFreeConfigs strings) so future Android-specific copy
-    // tweaks don't bleed into Simple-mode placeholders. AdvSimpleToggle is
-    // the back-to-Simple button in the Advanced shell header. Mobile design
-    // 2026-05-11 swapped the "+ Simple" plus-prefix (read as "add Simple")
-    // for "◂ Simple" — standard Android back-affordance and matches the
-    // design's `.ahdr .back` style at Mobile.html line 78. Same glyph
-    // works for RU and EN since it's a typographic arrow not a word.
     public static string TabAdvServers => Ru ? "Серверы" : "Servers";
     public static string TabAdvSubscribe => Ru ? "Подписка" : "Subscribe";
     public static string TabAdvSettings => Ru ? "Настройки" : "Settings";
@@ -96,20 +44,12 @@ public static partial class Strings
     public static string TabAdvPublic => Ru ? "Публичные" : "Public";
     public static string AdvSimpleToggle => Ru ? "◂ Простой" : "◂ Simple";
 
-    // ── Config mode ──
-    // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
-    // "Серверы" / "Servers" — the sub-tab is no longer VLESS-specific
-    // conceptually; future protocol support (Hysteria2, TUIC, SS2022)
-    // would also live here, so the VLESS prefix would be misleading.
     public static string VlessServers => Ru ? "Серверы" : "Servers";
     public static string CustomConfigJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
     public static string ModeManual => Ru ? "Ручной" : "Manual";
     public static string ModeSubscribe => Ru ? "Подписка" : "Subscribe";
     public static string ModeCustomConfig => Ru ? "Свой конфиг" : "Custom Config";
     public static string SubscribeMode => Ru ? "Подписка" : "Subscribe";
-    // v2.30.5-r1 (UX-34 fix): drop the EN duplicate inside RU placeholder.
-    // Pre-r1 was "URL подписки (subscription link)" — same translation
-    // shown twice. Now just "URL подписки".
     public static string SubscriptionUrlHint => Ru ? "URL подписки" : "Subscription URL";
     public static string SyncButton => Ru ? "Обновить" : "Sync";
     public static string Syncing => Ru ? "Обновление…" : "Syncing…";
@@ -118,7 +58,6 @@ public static partial class Strings
     public static string SyncEmpty => Ru ? "Подписка вернула 0 серверов" : "Subscription returned 0 servers";
     public static string PasteVlessUri => Ru ? "Вставьте VLESS URI:" : "Paste VLESS URI(s):";
 
-    // ── Buttons ──
     public static string StartVPN => Ru ? "\u25b6  Запустить VPN" : "\u25b6  Start VPN";
     public static string StopVPN => Ru ? "\u2b1b  Остановить VPN" : "\u2b1b  Stop VPN";
     public static string AddServers => Ru ? "Добавить сервер(ы)" : "Add Server(s)";
@@ -128,7 +67,6 @@ public static partial class Strings
     public static string BtnAdd => Ru ? "Добавить" : "Add";
     public static string RemoveChecked => Ru ? "Удалить выбранные" : "Remove checked";
 
-    // ── Apps tab ──
     public static string SplitTunnel => Ru ? "Раздельный туннель (выбранные приложения)" : "Split Tunnel (selected apps)";
     public static string FullTunnel => Ru ? "Полный туннель (весь трафик)" : "Full Tunnel (all traffic)";
     public static string AppsHint => Ru
@@ -137,9 +75,6 @@ public static partial class Strings
     public static string CustomAppLabel => Ru
         ? "Добавить приложение (имя процесса):"
         : "Add custom app (process name):";
-    // v2.30.6-r1 (UX-41 fix): bilingual button label for the Apps tab
-    // "+ Add" button. Pre-r1 was hardcoded EN string in
-    // ApplicationsPage.axaml (D1 rule violation).
     public static string AddCustomAppBtn => Ru ? "+ Добавить" : "+ Add";
     public static string BrowseExe => Ru ? "Обзор..." : "Browse...";
     public static string BrowseExeTooltip => Ru ? "Выбрать исполняемый файл (.exe)" : "Select executable file (.exe)";
@@ -151,11 +86,9 @@ public static partial class Strings
     public static string LoadingProcesses => Ru ? "Загрузка процессов..." : "Loading processes...";
     public static string NoRunningProcessesFound => Ru ? "Процессы не найдены" : "No processes found";
 
-    // ── Header ──
     public static string ThemeDark => Ru ? "\u25cf Тёмная" : "\u25cf Dark";
     public static string ThemeLight => Ru ? "\u25cb Светлая" : "\u25cb Light";
 
-    // ── Status ──
     public static string NotConnected => Ru ? "Не подключено" : "Not connected";
     public static string Connected(string mode, string? serverName, string? serverIp)
     {
@@ -167,33 +100,17 @@ public static partial class Strings
         return $"{prefix} → {name}{ip}";
     }
 
-    // ── Action states ──
     public static string Starting => Ru ? "Запуск..." : "Starting...";
     public static string Stopping => Ru ? "Остановка..." : "Stopping...";
 
-    // v2.37.0-r7 — idle/quiescent state for Zapret + TgProxy status fields.
-    // Distinct from Stopping («Остановка...») which is an active transition.
-    // Pre-r7 multiple sites used inline `IsRussian ? "Остановлен" : "Stopped"`
-    // ternaries + string-literal field defaults that hardcoded the English
-    // word, violating the bilingual-UI invariant (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
-    // v2.37.0-r18 — RuntimeStatus tooltips + Subscriptions status text.
-    // RuntimeStatus tooltips were inline `IsRussian ? "VPN" : "VPN"`
-    // ternaries with **identical** strings in both branches — pointless
-    // overhead. Translation only differs on the meaningful word in two of
-    // them; VPN stays "VPN" universally.
     public static string BadgeTooltipVpn => "VPN";
     public static string BadgeTooltipZapret => Ru ? "Zapret обход DPI" : "Zapret DPI bypass";
     public static string BadgeTooltipTgProxy => Ru ? "Telegram прокси" : "Telegram proxy";
     public static string SubscriptionEnterUrl => Ru ? "Введите URL подписки" : "Enter subscription URL";
     public static string SubscriptionCleared => Ru ? "Подписка удалена" : "Subscription cleared";
 
-    // v2.37.0-r17 — ServerTesting tab labels (Test all / Cancel /
-    // Deep verify / Stop) + progress text. Pre-r17 these were inline
-    // `IsRussian` ternaries in MainWindowViewModel.ServerTesting.cs
-    // partial. Moving them to Strings.cs makes the localization
-    // inventory greppable.
     public static string ServerTestCancel => Ru ? "Отмена" : "Cancel";
     public static string ServerTestAll => Ru ? "Проверить все" : "Test all";
     public static string ServerDeepStop => Ru ? "Остановить" : "Stop";
@@ -203,29 +120,18 @@ public static partial class Strings
     public static string ServerTestNoServers => Ru ? "Нет серверов" : "No servers";
     public static string ServerTestCancelled => Ru ? "Отменено" : "Cancelled";
 
-    // v2.38.2 (surito Bug A) — the ping probe is a plain socket from this
-    // process; under an active TUN (especially full tunnel) it routes through
-    // the proxy, so every server measures the SAME tunnel RTT, not its own.
     public static string PingUnavailableWhenConnected => Ru
         ? "Пинг измеряется только при отключённом VPN — через туннель он показывает RTT туннеля, а не сервера"
         : "Ping is measured only while the VPN is disconnected — through the tunnel it shows the tunnel's RTT, not the server's";
     public static string ServerDeepVerifyManual => Ru ? "Глубокая проверка Manual" : "Deep verify Manual";
     public static string ServerDeepVerifySubscription => Ru ? "Глубокая проверка подписки" : "Deep verify subscription";
 
-    // v2.37.0-r16 — TgProxy stats labels (Active / Total prefixes).
-    // ParseStatsShort returns "Active: N | Total: N | ↑bytes ↓bytes";
-    // the up/down arrows are universal symbols (no localization needed)
-    // but the textual prefixes were English-only. Now localized.
     public static string TgProxyStatsActive => Ru ? "Активных" : "Active";
     public static string TgProxyStatsTotal => Ru ? "Всего" : "Total";
     public static string TgProxyStopFailed => Ru
         ? "Не удалось остановить (проверьте права)"
         : "Couldn't stop (check permissions)";
 
-    // v2.37.0-r14 — short status / toast strings still inline in MVM.
-    // Sites swept: "нет value" (rule validation), "✓ Удалено все правила"
-    // (toast), "Уже отсортировано" (sort toast), "Пустое значение" (form
-    // validation), "Нажмите на конфиг для активации" (free-config hint).
     public static string RuleParserMissingValue => Ru ? "нет value" : "missing value";
     public static string RuleParserUnknownType(string type) => Ru
         ? $"неизвестный тип «{type}»"
@@ -237,14 +143,6 @@ public static partial class Strings
         ? "Нажмите на конфиг для активации"
         : "Click a config to activate it";
 
-    // v2.37.0-r13 — Custom Rules type-help text. Pre-r13 these lived as
-    // inline IsRussian-ternaries in MainWindowViewModel.NewRuleActionHint
-    // (lines 918-924) + NewRuleTypeHint (lines 930-944). Moving them into
-    // Strings.cs (the canonical location for all localized text) makes the
-    // inventory greppable and the call sites cleaner.
-    //
-    // The dispatch switch (rule type → display name) stays in the VM —
-    // these are just per-type localized strings.
     public static string RuleActionHintDirect => Ru ? "напрямую (мимо VPN)" : "direct (bypass VPN)";
     public static string RuleActionHintProxy => Ru ? "через VPN-туннель" : "through the VPN tunnel";
     public static string RuleActionHintBlock => Ru ? "блокировать соединение" : "block the connection";
@@ -261,10 +159,6 @@ public static partial class Strings
     public static string RuleTypeHintGeosite => Ru ? "тег geosite (cn, ads, …)" : "geosite tag (cn, ads, …)";
     public static string RuleTypeHintGeoip => Ru ? "тег geoip (cn, us, private)" : "geoip tag (cn, us, private)";
 
-    // v2.37.0-r21 — better probe progress info + direct-start path.
-    // User feedback: «мало информативно что происходит при проверке,
-    // нет запуска со своими настройками, чтоб если пользователь знает
-    // свою стратегию ему не приходилось ждать».
     public static string ZapretProbeElapsedAndEta(int elapsedSec, int? etaSec)
     {
         var elapsed = $"{elapsedSec / 60}:{(elapsedSec % 60):D2}";
@@ -291,11 +185,6 @@ public static partial class Strings
         ? $"Стратегия {strategy} не запустилась — возможно AV блокирует winws.exe или нужен другой выбор."
         : $"Strategy {strategy} failed to start — antivirus may be blocking winws.exe, or try another one.";
 
-    // v2.37.0-r10 — Zapret probe-cache UI controls (Tools expander).
-    // r6 added the cache silently; r10 surfaces user controls:
-    //   - "Найти заново (без кэша)" — bypasses cache, runs full sweep
-    //   - "Очистить кэш стратегий" — wipes cache file
-    //   - cache-hit info string in status when warm-start was used
     public static string ZapretForceFreshProbeButton => Ru
         ? "Найти стратегию заново"
         : "Re-probe strategy";
@@ -312,12 +201,6 @@ public static partial class Strings
         ? "Кэш пуст — следующая проверка будет полной"
         : "Cache empty — next probe will be full";
 
-    // ───── v2.37.0-r24 — Hero strategy summary card copy ─────────────────
-    //
-    // Strings used by the new card under "Включить обход блокировок". Two
-    // header variants (fresh / stale) since the user picked the no-auto-
-    // probe UX — we never silently re-run; only nudge via the badge.
-
     public static string ZapretSummaryHeaderFresh(string strategy) => Ru
         ? $"Стратегия «{strategy}» работает"
         : $"Strategy '{strategy}' is working";
@@ -326,18 +209,10 @@ public static partial class Strings
         ? $"Стратегия «{strategy}» устарела"
         : $"Strategy '{strategy}' is stale";
 
-    /// <summary>
-    /// "4 из 5 целей · проверено 12 мин назад"
-    /// "4 of 5 targets · checked 12 min ago"
-    /// </summary>
     public static string ZapretSummarySubtextWithScore(int passed, int total, string relativeTime) => Ru
         ? $"{passed} из {total} целей · проверено {relativeTime}"
         : $"{passed} of {total} targets · checked {relativeTime}";
 
-    /// <summary>
-    /// "проверено 12 мин назад" — used for legacy v1 cache entries
-    /// where target score wasn't recorded.
-    /// </summary>
     public static string ZapretSummarySubtextNoScore(string relativeTime) => Ru
         ? $"Проверено {relativeTime}"
         : $"Checked {relativeTime}";
@@ -358,14 +233,10 @@ public static partial class Strings
         ? "Стратегия проверялась более 7 дней назад. Рекомендуем перепроверить."
         : "Strategy hasn't been checked in over 7 days. Re-verify recommended.";
 
-    // r33: Cancel button shown during probe (Hero card).
     public static string ZapretCancelProbeButton => Ru
         ? "Отменить"
         : "Cancel";
 
-    // Relative-time formatter outputs (used by FormatRelativeTime).
-    // "только что" / "12 минут назад" / "2 часа назад" / "3 дня назад" /
-    // "давно".
     public static string RelativeTimeJustNow => Ru
         ? "только что"
         : "just now";
@@ -386,8 +257,6 @@ public static partial class Strings
         ? "давно"
         : "long ago";
 
-    // Russian noun-declension helpers — Ru numerals trigger different word
-    // forms for 1, 2-4, and 5+. Keep these private to Strings.cs.
     private static string RuMinutesWord(int n)
     {
         var mod10 = n % 10;
@@ -418,13 +287,6 @@ public static partial class Strings
         return "дней";
     }
 
-    // v2.37.0-r9 — Custom Rules import/export localization. Pre-r9 every
-    // toast / validation message in `ImportCustomRulesAsync` +
-    // `ExportCustomRulesAsync` was hardcoded English, violating the
-    // bilingual-UI invariant (no English in RU UI). The feature has been live since
-    // v2.30.0-r3 (2026-04-30) but the validation-error slot stayed unilingual
-    // for ~25 days — RU users saw "Import failed: ..." in an otherwise-
-    // Russian sub-section. r9 closes the gap.
     public static string RulesFilePickerOpenFailed => Ru
         ? "Не удалось открыть диалог выбора файлов"
         : "Could not open file picker";
@@ -455,44 +317,27 @@ public static partial class Strings
         ? $"Ошибка экспорта: {err}"
         : $"Export error: {err}";
 
-    // ── Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer ──
-    // Phase A diagnostic: sing-box never reported started within 60s.
-    // Real hang at firewall / TUN cleanup / wintun launch.
     public static string StartTimeoutPhaseA => Ru
         ? "Таймаут запуска (60 с). Sing-box не стартовал."
         : "Start timed out (60s). sing-box never started.";
 
-    // Phase B diagnostic: sing-box started but the TUN warmup probe never
-    // confirmed reachability within 20s. wintun driver issue, network gone,
-    // or warmup probe blocked by upstream firewall.
     public static string StartTimeoutPhaseB => Ru
         ? "Таймаут TUN (20 с). Запуск не завершён."
         : "TUN warm-up timed out (20s). Start incomplete.";
 
-    // ── Server list columns ──
     public static string ColName => Ru ? "Имя" : "Name";
     public static string ColServer => Ru ? "Сервер" : "Server";
     public static string ColPort => Ru ? "Порт" : "Port";
     public static string ColSecurity => Ru ? "Защита" : "Security";
-    // v2.25.3 — extra column labels for the redesigned Servers / Subscribe rows
     public static string ColIp => "IP";
-    // Bug-AND-016 (2026-05-16): was unilingual EN.
     public static string ColPing => Ru ? "Пинг" : "Ping";
-    // v2.30.6-r1 (UX-23/32 fix): tooltip on Ping column header — explains
-    // the "—" placeholder users see before any test has been run.
     public static string ColPingTooltip => Ru
         ? "Задержка в мс. «—» означает «не запускалось» — нажмите «Проверить все»."
         : "Latency in ms. \"—\" means not measured — click \"Test all\".";
 
-    // v2.25.4 — Settings/Routing radio-card descriptions (Phase 4 redesign).
-    // Each tunnel mode gets a one-line subtitle under the title so the user
-    // understands the choice without hovering for a tooltip.
     public static string RoutingDescription => Ru
         ? "Определяет, какой трафик пойдёт через VPN."
         : "Determines which traffic goes through the VPN.";
-    // v2.30.3-r1 (UX-9 D1 rule): localize tunnel mode titles. Previous
-    // pre-r1 used hardcoded English in both locales which violated the
-    // "no English in RU UI" project rule.
     public static string SplitTunnelTitle => Ru ? "Раздельный туннель" : "Split Tunnel";
     public static string SplitTunnelSubtitle => Ru
         ? "Только выбранные приложения. Остальное идёт напрямую."
@@ -502,17 +347,12 @@ public static partial class Strings
         ? "Весь трафик ОС через VPN, включая игры и банки."
         : "All OS traffic through VPN — games and banks included.";
 
-    // Service actions in Settings → Autostart (moved here from the footer
-    // when MainWindow compacted its footer in v2.25.0).
     public static string ServiceStatusLabel => Ru ? "Служба VPN" : "VPN Service";
     public static string ServiceRunningText => Ru ? "Работает" : "Running";
     public static string ServiceStoppedText => Ru ? "Не запущена" : "Not running";
     public static string ServiceInstalledText => Ru ? "Установлена" : "Installed";
     public static string ServiceNotInstalledText => Ru ? "Не установлена" : "Not installed";
 
-    // v2.26.0 — master service toggle + grouping labels for the refactored
-    // Autostart panel (single source of truth for the install state +
-    // clearly-named sub-groups for the two categories of autostart).
     public static string ServiceMasterTitle => Ru
         ? "Фоновая служба Windows"
         : "Windows background service";
@@ -534,11 +374,6 @@ public static partial class Strings
         ? "Пользовательский сеанс"
         : "User session";
 
-    // v2.27 Bug C — two-section layout for the Autostart panel, grouping
-    // controls by WHEN the autostart happens rather than by which Windows
-    // mechanism it's wired to. Makes "I want VPN on boot" actionable via a
-    // single checkbox instead of forcing users to understand service vs.
-    // Run-key vs. yaml flag.
     public static string AutostartBootSectionTitle => Ru
         ? "На старте Windows (до логина)"
         : "At Windows startup (before sign-in)";
@@ -548,19 +383,6 @@ public static partial class Strings
     public static string AutostartComponentsInfoHint => Ru
         ? "Эти флаги читает служба при boot. Требуется установленная служба."
         : "These flags are read by the service at boot. Requires the service to be installed.";
-    // v2.31.10 (autostart UX clarity): per-component status badge text shown
-    // below each VPN/Zapret/TgProxy autostart CheckBox. User report — "Auto-
-    // start with Windows for tgproxy doesn't work". Without a status indicator
-    // a user toggling AutostartTgProxy=true on a host without the Service has
-    // no way to learn that the toggle is a no-op. Three states cover every
-    // permutation of (Service installed?, App-side bootstrap exists?):
-    //   • Green ✓: service installed → the existing flag-driven boot path
-    //     in VPNRouterService.AutostartTgProxyAsync handles it
-    //   • Amber : no service, but App has a per-component bootstrap (after
-    //     DBG-2 lands the App-side bootstrap for vpn/zapret/tgproxy) → fires
-    //     when the user logs into the App, not at OS boot
-    //   • Red : no service AND no App-side bootstrap → the toggle does
-    //     literally nothing; show the strongest hint to install the service
     public static string AutostartStatusBoot => Ru
         ? "✓ Через службу Windows (на старте ОС)"
         : "✓ Via Windows Service (at boot)";
@@ -570,30 +392,18 @@ public static partial class Strings
     public static string AutostartStatusNoBoot => Ru
         ? "Не сработает без службы Windows"
         : "Will not fire without the Windows service";
-    // v2.31.1-r1 (F-4 / UX-6): inline CTA below the warning hint when the
-    // service isn't installed — pre-fix the only way to install was scrolling
-    // up to the master toggle, which wasn't obvious.
     public static string BtnInstallServiceInlineCta => Ru
         ? "Установить службу"
         : "Install service";
     public static string TipInstallServiceInlineCta => Ru
         ? "Установит службу VPNRouter и активирует мастер-тумблер автозапуска выше."
         : "Installs the VPNRouter Windows service and turns on the master autostart toggle above.";
-    // v2.31.1-r1 (F-6 / UX-33): tooltip explaining the subscription card
-    // metadata format `URL · Ns · refreshed-time`. Pre-fix users wondered
-    // what "7s · –" meant — the "s" plural marker on server count read as
-    // a time unit and the "–" was opaque.
     public static string TipSubscriptionMetadata => Ru
         ? "URL · число серверов в последнем обновлении · когда был последний рефреш. «—» если ни разу не обновлялась."
         : "URL · server count from last refresh · time since last refresh. \"—\" means it has never been refreshed.";
     public static string AutostartLoginSectionTitle => Ru
         ? "При входе пользователя"
         : "At user sign-in";
-    // v2.29.0: section A "At system startup (before sign-in)" only renders
-    // on Windows (Service-based, no Mac/Linux equivalent yet); section B
-    // description should not reference it on Mac/Linux. Pre-r2 EN+RU
-    // pointed at "above" assuming Section A was visible, which broke on
-    // Mac. Now branches by OS.
     public static string AutostartLoginAppDescription =>
         OperatingSystem.IsWindows()
             ? AutostartLoginAppDescriptionWindows
@@ -607,8 +417,6 @@ public static partial class Strings
         ? "Запускает приложение VPNRouter после входа. VPN придётся запустить вручную или включить «на старте Windows» выше."
         : "Launches VPNRouter after you sign in. VPN itself must be started manually, or enable \u201Cat Windows startup\u201D above.";
 
-    /// <summary>Prominent running-state line with PID, e.g. "● Running — PID 1234".
-    /// Replaces the tiny pill that was easy to miss in v2.26.x.</summary>
     public static string ServiceRunningLine(int pid) => Ru
         ? $"\u25CF Запущена \u2014 PID {pid}"
         : $"\u25CF Running \u2014 PID {pid}";
@@ -616,20 +424,10 @@ public static partial class Strings
         ? "\u25CB Остановлена"
         : "\u25CB Stopped";
 
-    // v2.27.0-r2 — Simple-mode autostart link-card. Replaces the old
-    // SmpAutostartChecked checkbox whose computed-state UX caused the
-    // "how do I disable it?" confusion in r1 testing. The card now just
-    // navigates into Advanced → Network → Autostart where the full flow
-    // (install / configure / uninstall) lives.
-    // Bug-AND-015 (2026-05-16, manual test pass iter 23) — empty-Connect
-    // error message ("No server configured…") was hardcoded EN in
-    // MainActivity.cs. Surface a localized string so RU users see RU.
     public static string AndroidErrorNoServerConfigured => Ru
         ? "Сервер не настроен. Добавьте подписку или вставьте vless://-URI."
         : "No server configured. Add a subscription or paste a vless:// URI.";
 
-    // Bug-AND-019 (2026-05-16) — long-press → tap-to-confirm delete UX
-    // for user-defined custom categories on the Applications tab.
     public static string AndroidDeleteCategoryConfirm => Ru
         ? "Удалить?"
         : "Tap to delete";
@@ -651,12 +449,6 @@ public static partial class Strings
         : (OperatingSystem.IsAndroid()
             ? "Configure VPN autostart on device boot"
             : $"Configure VPN autostart at {OsDisplayName} boot");
-    // Generic subtitle used on Android inline card (no Service-installed/stopped
-    // distinction yet — Android lifecycle differs from Windows Service).
-    // 2026-05-15 fix (Bug-AND-loc-001, brat live-test on KYOCERA A101BM):
-    // pre-fix this card said «при старте Windows» on Android too because the
-    // Russian template was hardcoded. Use OsDisplayName so the platform
-    // shows correctly (Android phones say «при загрузке Android»).
     public static string SmpAutostartCardSubtitle => Ru
         ? (OperatingSystem.IsAndroid()
             ? "Настроить автозапуск VPN при загрузке устройства"
@@ -665,7 +457,6 @@ public static partial class Strings
             ? "Configure VPN autostart on device boot"
             : $"Configure VPN autostart at {OsDisplayName} boot");
 
-    // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
     public static string LinuxTunSandboxUnsupported => Ru
         ? "Эта песочница не позволяет sing-box создать системный TUN-интерфейс. Запустите VPNRouter вне AppImage/bubblewrap, например из нативного пакета дистрибутива."
@@ -682,13 +473,11 @@ public static partial class Strings
         ? $"Конфиг '{name}' уже существует."
         : $"Config '{name}' already exists.";
 
-    // ── Tray ──
     public static string TrayStart => Ru ? "\u25b6 Запустить VPN" : "\u25b6 Start VPN";
     public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
     public static string TraySettings => Ru ? "Настройки..." : "Settings...";
     public static string TrayExit => Ru ? "Выход" : "Exit";
 
-    // ── Server detail editor ──
     public static string FieldName => Ru ? "Имя:" : "Name:";
     public static string FieldServer => Ru ? "Сервер:" : "Server:";
     public static string FieldPort => Ru ? "Порт:" : "Port:";
@@ -696,7 +485,6 @@ public static partial class Strings
     public static string FieldPublicKey => Ru ? "Открытый ключ:" : "Public Key:";
     public static string FieldShortId => Ru ? "Короткий ID:" : "Short ID:";
 
-    // ── Hints ──
     public static string DoubleClickEditServer => Ru
         ? "Двойной клик — редактировать сервер. Вставьте VLESS URI выше."
         : "Double-click to edit server. Paste VLESS URI(s) above.";
@@ -706,14 +494,10 @@ public static partial class Strings
     public static string AddCustomAppHint => Ru
         ? "Добавить приложение (имя процесса, например Discord, Chrome):"
         : "Add custom app (process name, e.g. Discord, Chrome):";
-    // v2.30.6-r1 (UX-25 fix): drop EN "Custom Config" + "outbound" inside
-    // the otherwise-Russian hint. Use natural RU "своим конфигом" +
-    // "исходящим" so the sentence reads cleanly in both languages.
     public static string TcpUdpHint => Ru
         ? "VLESS+Reality маршрутизирует TCP. Для UDP (игры, QUIC) используйте свой конфиг с TUIC- или Hysteria2-исходящим."
         : "VLESS+Reality routes TCP only. For UDP (games, QUIC) use a custom config with a TUIC or Hysteria2 outbound.";
 
-    // ── Bypass / Strict ──
     public static string BypassRussianTrafficLabel => Ru
         ? "Российский трафик через реальный IP"
         : "Russian traffic via real IP";
@@ -763,37 +547,21 @@ public static partial class Strings
         ? $"До 8.8.8.8 прошёл только IPv4 DF payload {mtu}. Он ниже пола 1332 для Steam SDR, автоматически не сохраняю."
         : $"Only IPv4 DF payload {mtu} reached 8.8.8.8. It is below the 1332 Steam SDR floor, so it was not saved automatically.";
     public static string ForceIpv4Label => Ru
-        // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
-        // a Russian sentence. Use natural RU "IPv6-утечек".
         ? "Только IPv4 (защита от IPv6-утечек)"
         : "Force IPv4 only (IPv6 leak protection)";
     public static string FlushDnsLabel => Ru
         ? "Очищать DNS кэш при подключении"
         : "Flush DNS cache on connect";
-    // v2.31.6-r18: hint expanded — user feedback iter#7 audit asked
-    // why ISP DNS sometimes appears in browserleaks.com / ipleak.net.
-    // Default split-tunnel sends non-routed apps' DNS through Cloudflare
-    // DoH on the real NIC (not ISP, but leak-tests interpret "Cloudflare
-    // DoH client = real IP" as a leak). Strict DNS forces all DNS through
-    // the VPN tunnel for that perfect-on-tests outcome.
     public static string StrictDnsLabel => Ru
         ? "Строгий DNS (весь DNS через VPN — рекомендуется при leak-тестах)"
         : "Strict DNS (all DNS via VPN — recommended for leak tests)";
-    // Wave 39 (v2.35.0-r5) — firewall-level DNS lockdown. Targets the
-    // Windows DNS Client multi-resolver race that bypasses sing-box even
-    // with SMHNR/ParallelAAAA disabled. See
-    // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md.
     public static string DnsLeakLockdownLabel => Ru
         ? "Блокировать DNS вне VPN (защита от утечек)"
         : "Block DNS outside VPN (leak protection)";
-    // v2.40.x (Fix #9): honesty note — shown only where the lockdown is still a
-    // no-op. macOS gained a working DNS-hardening backend in v2.41.0 (Fix #1),
-    // so this now applies to Linux only (no nftables kill-switch yet, task #131).
     public static string DnsLeakLockdownUnavailableNote => Ru
         ? "Пока недоступно на Linux"
         : "Not available on Linux yet";
 
-    // ── Updates ──
     public static string CheckForUpdates => Ru ? "Проверить обновления" : "Check for updates";
     public static string Checking => Ru ? "Проверка..." : "Checking...";
     public static string UpToDate => Ru ? "Актуальная версия" : "Up to date";
@@ -803,11 +571,6 @@ public static partial class Strings
         ? "Доступно обновление v{0} ({1:F1} МБ)"
         : "Update available: v{0} ({1:F1} MB)";
     public static string UpdateButton => Ru ? "Обновить" : "Update";
-    // v2.36.0-r3 (EOStārāTheia 2026-05-23 UX-3 fix): added {0} placeholder
-    // for download percentage. Pre-r3 the string was constant — the
-    // string.Format(UpdateDownloading, pct) call silently dropped the pct
-    // argument because no placeholder existed. User saw "Загрузка
-    // обновления..." indefinitely with no way to tell if hung or progressing.
     public static string UpdateDownloading => Ru ? "Загрузка обновления: {0}%" : "Downloading update: {0}%";
     public static string UpdateApplying => Ru ? "Применение обновления..." : "Applying update...";
     public static string UpdateRestarting => Ru ? "Перезапуск..." : "Restarting...";
@@ -840,11 +603,6 @@ public static partial class Strings
         ? "Откат отменён: версия имеет неверный формат."
         : "Downgrade was refused because the target version is invalid.";
 
-    // ── Channel ──
-    // v2.30.3-r1 (BUG-7 fix): footer text shortened so it fits next to
-    // the Apply button at narrow window widths (510 px) without
-    // overlapping. Pre-r1 the auto-save hint was 44 chars + 38-char
-    // button = visible truncation behind the button background.
     public static string SettingsAutosaved => Ru
         ? "Авто-сохранение"
         : "Auto-saved";
@@ -858,20 +616,12 @@ public static partial class Strings
     public static string ChannelStable => Ru ? "● Стабильная" : "● Stable";
     public static string ChannelExperimental => Ru ? "Эксперимент." : "Experimental";
 
-    // ── Autostart ──
-    // ── Subscriptions (multi) ──
     public static string SubscriptionsSection => Ru ? "Подписки" : "Subscriptions";
     public static string SubscriptionNameHint => Ru ? "Имя" : "Name";
     public static string AddSubscription => Ru ? "+ Добавить" : "+ Add";
     public static string RefreshAll => Ru ? "Обновить все" : "Refresh all";
     public static string NeverRefreshed => Ru ? "никогда" : "never";
     public static string SubUpdatedAt => Ru ? "Обновлено" : "Updated";
-    // A (2026-06-20) — opt-in urltest auto-select toggle (Android Subscribe tab,
-    // parity with desktop SubscribePage). Desktop uses VM L_AutoSelectBest*; Android
-    // reads these shared strings.
-    // urltest R5 (audit batch-1 #3): honest wording — Auto is a QUICK WEB TEST
-    // selector (one generate_204 probe), NOT full protocol verification. Never
-    // present it as having proven "the best server" works.
     public static string AutoSelectBestServer => Ru
         ? "Авто-выбор по быстрому веб-тесту"
         : "Auto-select via quick web test";
@@ -882,16 +632,9 @@ public static partial class Strings
         : "Wraps same-protocol subscription servers in a urltest group — traffic rides the node that answers "
           + "a web probe (generate_204) fastest. This is a quick web test, not full VPN-protocol verification. "
           + "Servers with a recently confirmed protocol block are excluded from the group.";
-    // B7 (2026-06-21) — Android foreground-service notification, passed to the Java
-    // VpnRouterService via intent extras (English literals stay as the Java fallback).
     public static string NotifTunnelActive => Ru ? "Туннель активен" : "Tunnel active";
     public static string NotifDisconnect => Ru ? "Отключить" : "Disconnect";
 
-    // ── App group display names ──
-    // v2.30.4-r1 (UX-37/38 fix): all profile keys now have user-facing
-    // display names. Pre-r1 only 5 of 9 categories were translated;
-    // others leaked snake_case JSON keys ("AI_Tools", "Privacy_Shell",
-    // "Messengers") into the UI.
     public static string GroupDisplayName(string internalName) => internalName switch
     {
         "Discord_Privacy" => "Discord",
@@ -927,7 +670,6 @@ public static partial class Strings
         ? $"Запускать интерфейс при входе в {OsDisplayName}"
         : $"Start UI on {OsDisplayName} logon";
 
-    // ── Service (Windows-only) ──
     public static string AutostartWithWindows => Ru
         ? $"Автозапуск с {OsDisplayName}"
         : $"Autostart with {OsDisplayName}";
@@ -936,7 +678,6 @@ public static partial class Strings
     public static string InstallingService => Ru ? "Установка службы..." : "Installing service...";
     public static string RemovingService => Ru ? "Удаление службы..." : "Removing service...";
 
-    // ── v2.15.4 UI polish: hint texts + tooltips ──
     public static string ServerListHint => Ru
         ? "Левый клик — выбрать активный. Правый клик — редактировать."
         : "Left click = select active. Right click = edit details.";
@@ -947,12 +688,6 @@ public static partial class Strings
         ? "В этой группе пока нет приложений."
         : "No apps in this group yet.";
 
-    // v2.29.0 — full-tunnel mode banner on the Apps page. Mac feedback
-    // 2026-04-29: при RoutingMode=full весь content disabled без объяс-
-    // нения; юзер думал что приложение сломано. Заменяем silent disable
-    // на banner с объяснением + кнопка "Switch to split tunnel".
-    // v2.30.3-r1: tunnel name localized to match SplitTunnelTitle/
-    // FullTunnelTitle (Раздельный/Полный туннель).
     public static string AppsFullTunnelBanner => Ru
         ? "Активен Полный туннель — выбор приложений игнорируется, весь трафик идёт через VPN."
         : "Full-tunnel mode is active. App selection is ignored — all traffic goes through VPN.";
@@ -960,23 +695,12 @@ public static partial class Strings
         ? "Переключить на Раздельный туннель"
         : "Switch to split tunnel";
 
-    // v2.29.0 — Custom direct rules (Network → Routing → expander).
-    // Mac tester request 2026-04-29: «хотелось бы расширенную настройку
-    // конфига, у меня есть кейсы с wireguard где мне хотелось бы самому
-    // прописывать direct правила».
-    // v2.30.0 — full custom rules engine (direct/proxy/block actions).
-    // Replaces v2.29.0-r4 CustomDirectRules* strings.
     public static string CustomRulesTitle => Ru
         ? "Свои правила маршрутизации (расширенно)"
         : "Custom routing rules (advanced)";
     public static string CustomRulesDescription => Ru
         ? "Свои правила для определённых доменов / IP / портов / процессов. Действия: direct (мимо VPN), proxy (через VPN), block (блокировать). ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если они включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
         : "Custom rules for specific domains / IPs / ports / processes. Actions: direct (bypass VPN), proxy (force through VPN), block (drop). ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
-    // v2.30.3-r1 (BUG-15 fix): broke long lines so the example template
-    // is readable at default ~510 px window width without horizontal
-    // scrolling. The pre-r1 placeholder had a 132-char Types comment
-    // line that was always cut off — users couldn't see the type list.
-    // Now wrapped across 3 short lines.
     public static string CustomRulesPlaceholder => Ru
         ? "# Одно правило на строку.\n# Формат: <action> <type> <value> [# комментарий]\n# Actions: direct / proxy / block\n# Types: domain · domain_suffix · domain_keyword\n#        ip_cidr · port · port_range · network\n#        process_name · geosite · geoip\n# Несколько значений через запятую.\n# Отключить — '!' в начале строки.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16  # LAN\nproxy domain_suffix .corp.example          # через VPN\nblock geosite ads                          # реклама\n!block port 53                             # отключено"
         : "# One rule per line.\n# Format: <action> <type> <value> [# comment]\n# Actions: direct / proxy / block\n# Types: domain · domain_suffix · domain_keyword\n#        ip_cidr · port · port_range · network\n#        process_name · geosite · geoip\n# Multi-value: comma-separated.\n# Disable: prefix '!'.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16  # LAN\nproxy domain_suffix .corp.example          # via VPN\nblock geosite ads                          # ads\n!block port 53                             # disabled";
@@ -987,7 +711,6 @@ public static partial class Strings
         ? "Предупреждения о конфликтах:"
         : "Conflict warnings:";
 
-    // v2.30.0-r2: structured row-table editor strings (Network → Rules section).
     public static string CustomRulesPageDescription => Ru
         ? "Свои правила маршрутизации для определённых доменов / IP / портов / процессов. ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
         : "Custom routing rules for specific domains / IPs / ports / processes. ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
@@ -1034,7 +757,6 @@ public static partial class Strings
     public static string CustomRulesMoveUp => Ru ? "Выше" : "Move up";
     public static string CustomRulesMoveDown => Ru ? "Ниже" : "Move down";
 
-    // v2.30.0-r3 — Import/Export 3 formats.
     public static string CustomRulesImport => Ru ? "Импорт..." : "Import...";
     public static string CustomRulesExport => Ru ? "Экспорт..." : "Export...";
     public static string CustomRulesImportTooltip => Ru
@@ -1044,7 +766,6 @@ public static partial class Strings
         ? "Экспорт в CSV / JSON / sing-box JSON"
         : "Export to CSV / JSON / sing-box JSON";
 
-    // v2.30.0-r4 — search filter + bulk actions for large rule lists.
     public static string CustomRulesSearchPlaceholder => Ru
         ? "Поиск по action / type / value / комментарию..."
         : "Search across action / type / value / comment...";
@@ -1068,11 +789,6 @@ public static partial class Strings
         ? "Существующие правила"
         : "Existing rules";
 
-    // ── v2.30.0-r7 — Cards / Edit view-mode toggle (RulesExplorations.html) ──
-    // Power-user editable text mode replaces the old "Advanced" expander.
-    // Cards view is the structured row-table editor (default, friendly).
-    // Edit view is a full textarea with line-numbered gutter, per-line
-    // errors, and explicit Apply / Revert (no auto-save while typing).
     public static string RulesViewCards => Ru ? "Карточки" : "Cards";
     public static string RulesViewRead => Ru ? "Список" : "Read";
     public static string RulesViewEdit => Ru ? "Текст" : "Edit";
@@ -1091,33 +807,21 @@ public static partial class Strings
     public static string RulesEditorDirty => Ru
         ? "● несохранённые изменения"
         : "● unsaved changes";
-    // v2.30.3-r1 (UX-16 fix): the parser uses '!' as the disable
-    // prefix (CustomRulesParser line 85: StartsWith("!")), not "# off"
-    // which was a misleading documentation. Brought hint in line with
-    // the actual parser + the example placeholder ('!block port 53').
     public static string RulesEditorFormatHint => Ru
         ? "Формат: action  type  value  # comment.   Выключить правило: '!' в начале строки.   Пустые строки игнорируются."
         : "Format: action  type  value  # comment.   Disable a rule: '!' at start of line.   Empty lines are ignored.";
 
-    // Help banner — replaces the dense single-paragraph description.
-    // Bullet points highlight the toggle precedence + LAN auto-direct +
-    // order-doesn't-matter facts. Dismissable via X button.
-    // v2.30.0-r11 — Filter chips + bulk-actions menu.
     public static string RulesFilterAll => Ru ? "Все" : "All";
     public static string RulesBulkActions => Ru ? "Массовые действия" : "Bulk actions";
 
-    // v2.30.0-r14 — Sort-by-type bulk action (per design `.bulk-pop`).
     public static string RulesSortByType => Ru ? "Сортировать по типу" : "Sort by type";
 
-    // v2.30.0-r18 — Clear All inline confirm bar (replaces broken
-    // two-click-in-popover pattern). Also adds a generic Cancel string.
     public static string RulesClearAllHint => Ru
         ? "Это действие нельзя отменить."
         : "This action cannot be undone.";
     public static string RulesClearAllConfirm => Ru ? "Удалить" : "Delete";
     public static string CommonCancel => Ru ? "Отмена" : "Cancel";
 
-    // v2.30.0-r17 — Custom-rules-priority CheckBox label + tooltip.
     public static string RulesCustomAboveToggles => Ru
         ? "Свои правила важнее тумблеров"
         : "Custom rules above toggles";
@@ -1125,26 +829,16 @@ public static partial class Strings
         ? "По умолчанию «Российский трафик» и «Блокировать рекламу» срабатывают раньше ваших правил. Включите чтобы ваши правила побеждали."
         : "By default «Russian traffic» and «Block ads» fire before your rules. Enable to make your rules win.";
 
-    // v2.30.0-r14 — Add-form mini-labels (uppercase, per design `.field .ftitle`).
-    // Localized so the UI is single-language end-to-end (matches user's
-    // "не использовать микс" rule).
     public static string RulesAddLabelAction  => Ru ? "ДЕЙСТВИЕ"    : "ACTION";
     public static string RulesAddLabelType    => Ru ? "ТИП"         : "TYPE";
     public static string RulesAddLabelValue   => Ru ? "ЗНАЧЕНИЕ"    : "VALUE";
     public static string RulesAddLabelComment => Ru ? "КОММЕНТАРИЙ" : "COMMENT";
     public static string RulesAddLabelOpt     => Ru ? "(опц.)"      : "(opt.)";
 
-    // v2.30.0-r12 — Help banner restructured per design RulesPage.html
-    // `.help` block: bold heading + 3 bullets with <code>-styled values
-    // for technical terms (CIDR ranges, "direct" action). Each bullet is
-    // split into prefix / emphasized-name / mid / emphasized-name / suffix
-    // pieces so the XAML can apply per-Run styling (FontWeight=SemiBold for
-    // names, FontFamily=mono for code values) without a markup parser.
     public static string RulesHelpHeader => Ru
         ? "Как работают правила."
         : "How rules work.";
 
-    // Bullet 1: «toggle1» and «toggle2» fire BEFORE your rules.
     public static string RulesHelpB1Pre  => Ru ? "Тумблеры " : "The toggles ";
     public static string RulesHelpB1T1   => Ru
         ? "«Российский трафик через реальный IP»"
@@ -1155,21 +849,16 @@ public static partial class Strings
         ? " срабатывают раньше ваших правил."
         : " fire before your rules.";
 
-    // Bullet 2: Private nets (10.0.0.0/8, ...) already go direct automatically.
     public static string RulesHelpB2Pre  => Ru ? "Локальные сети (" : "Private networks (";
     public static string RulesHelpB2Mid  => Ru ? ") уже идут " : ") already go ";
     public static string RulesHelpB2Suf  => Ru ? " автоматически." : " automatically.";
 
-    // Bullet 3: Rule order DOES NOT matter — first match wins per address.
     public static string RulesHelpB3Pre  => Ru ? "Порядок правил " : "Rule order ";
     public static string RulesHelpB3Bold => Ru ? "не важен" : "does not matter";
     public static string RulesHelpB3Suf  => Ru
         ? " — для каждого адреса выбирается первое совпавшее."
         : " — first match wins per address.";
 
-    // Legacy single-string accessor (kept for any cached XAML still binding
-    // to the pre-r12 RulesHelpBanner). New XAML uses the structured
-    // RulesHelpHeader + RulesHelpB1..B3* set instead.
     public static string RulesHelpBanner => Ru
         ? "Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» срабатывают РАНЬШЕ ваших правил.   Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.   Порядок правил не важен — для каждого адреса выбирается первое совпавшее."
         : "The toggles «Russian traffic via real IP» and «Block ads» fire BEFORE your rules.   Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.   Rule order does not matter — first match wins per address.";
@@ -1178,13 +867,6 @@ public static partial class Strings
         ? "← Выберите категорию"
         : "← Select a category";
 
-    // ── Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — Applications tab on
-    // Android. The tab now mirrors desktop ApplicationsPage with a left
-    // category sidebar + right per-category app list. These three keys are
-    // surface text the desktop already had implicit equivalents for (the
-    // "← Select a category" hint maps to SelectCategoryHint above; these
-    // are the picker-mode + bottom-row shells specific to Android's
-    // package-based picker).
     public static string AdvAppsCategoryNamePlaceholder => Ru
         ? "Имя категории"
         : "Category name";
@@ -1192,11 +874,8 @@ public static partial class Strings
         ? "+ Новая категория"
         : "+ New category";
     public static string AdvAppsSelectCategoryHint => SelectCategoryHint;
-    /// <summary>Android-only catch-all (no built-in profile maps to it).
-    /// Shown at the bottom of the sidebar, scope = all installed apps.</summary>
     public static string AdvAppsCategoryCustom => Ru ? "Свои" : "Custom";
 
-    // Tooltips — Network tab
     public static string TipBypassRu => Ru
         ? "RU-диапазоны обходят VPN и идут напрямую через ISP"
         : "RU IP ranges bypass the VPN and go direct via ISP";
@@ -1215,11 +894,6 @@ public static partial class Strings
     public static string TipLeakFlushDns => Ru
         ? "Очищать кэш DNS при старте VPN"
         : "Flush DNS cache when VPN starts";
-    // Wave 39 (v2.35.0-r5) — long-form tooltip explaining the firewall
-    // lockdown's blast radius. Copy intentionally calls out the dnscrypt-proxy
-    // / AdGuard Home / Pi-hole exception so power users know to disable it
-    // if they run a local resolver. See
-    // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md §Risk + rollback.
     public static string TipDnsLeakLockdown => Ru
         ? "Блокирует системные DNS-запросы по UDP/53, TCP/53 и TCP/853 на всех интерфейсах кроме TUN, пока VPN активен. Защищает от утечки DNS к провайдеру даже если Windows DNS Client использует множественные резолверы параллельно. Может сломать локальные DNS-прокси (dnscrypt-proxy, AdGuard Home на 127.0.0.1) — отключите если используете."
         : "Blocks system DNS queries on UDP/53, TCP/53, and TCP/853 across all non-TUN interfaces while VPN is active. Protects against DNS leaks to ISP resolvers even when Windows DNS Client races multiple resolvers in parallel. May break local DNS proxies (dnscrypt-proxy, AdGuard Home on 127.0.0.1) — disable if you use one.";
@@ -1227,12 +901,10 @@ public static partial class Strings
         ? "Блокировать известные рекламные/трекинг домены на уровне VPN DNS"
         : "Block known ad/tracker domains at the VPN DNS layer";
 
-    // Tooltips — Zapret / DPI
     public static string TipZapretAutoUpdate => Ru
         ? "Каждые 24 часа проверять обновление Zapret"
         : "Check for Zapret updates every 24 hours";
 
-    // Tooltips — Free Configs controls
     public static string TipFcFastScan => Ru
         ? "Только TCP-проверка (без TLS) — быстрее, но больше ложных «Ok»"
         : "TCP-only probe (skips TLS) — faster but more false 'Ok' hits";
@@ -1242,17 +914,13 @@ public static partial class Strings
     public static string TipFcSkipRu => Ru
         ? "Пропускать сервера в RU при deep verify"
         : "Skip servers located in RU during deep verify";
-    // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 
-    // Tooltips — MainWindow header buttons
     public static string TipOpenLogs => Ru ? "Открыть папку логов" : "Open logs folder";
     public static string TipIpLeak   => Ru ? "ipleak.net — проверка утечки" : "ipleak.net — leak test";
 
-    // Tooltips — Applications page
     public static string TipRemoveCategory => Ru ? "Удалить категорию" : "Remove category";
     public static string TipRemoveApp      => Ru ? "Удалить приложение" : "Remove app";
 
-    // Tooltips — Free Configs cleanup
     public static string TipOpenFreeConfigLogs => Ru
         ? "Открыть папку логов VPNRouter"
         : "Open VPNRouter logs folder";
@@ -1266,7 +934,6 @@ public static partial class Strings
         ? "Стереть весь кэш Free Configs"
         : "Wipe the entire Free Configs cache";
 
-    // Tooltips — Servers / Subscriptions testing
     public static string TipTcpTlsPing       => Ru ? "Пинг через TCP + TLS" : "TCP + TLS ping";
     public static string TipTestTcpTls       => Ru ? "Проверить TCP + TLS" : "Test TCP + TLS";
     public static string TipCloseServerDetail => Ru ? "Закрыть" : "Close";
@@ -1281,7 +948,6 @@ public static partial class Strings
     public static string TipRefreshSubscription => Ru ? "Обновить подписку" : "Refresh subscription";
     public static string TipRemoveSubscription  => Ru ? "Удалить подписку" : "Remove subscription";
 
-    // Form field labels (Server detail editor)
     public static string LblName      => Ru ? "Имя:"     : "Name:";
     public static string LblServer    => Ru ? "Сервер:"  : "Server:";
     public static string LblPort      => Ru ? "Порт:"    : "Port:";
@@ -1289,37 +955,24 @@ public static partial class Strings
     public static string LblPublicKey => Ru ? "Открытый ключ:" : "Public Key:";
     public static string LblShortId   => Ru ? "Короткий ID:" : "Short ID:";
 
-    // Descriptive labels
     public static string LblRoutingMode          => Ru ? "Режим маршрутизации" : "Routing mode";
     public static string LblNoServers            => Ru ? "Серверов нет" : "No servers";
     public static string LblAddSubscriptionHint  => Ru
         ? "Добавьте подписку ниже"
         : "Add a subscription below";
 
-    // Badge
     public static string LblCustomBadge => Ru ? "свой" : "custom";
 
-    // Watermarks
     public static string WmZapretCustomArgs => "--wf-tcp=443 --dpi-desync=…";
-    // v2.30.4-r1 (UX-26 fix): expand placeholder to advertise multi-protocol
-    // support shipped in v2.30.1 (vless/hysteria2/tuic/shadowsocks). Pre-r1
-    // users had no way to discover from the UI that hy2://, tuic:// or ss://
-    // are accepted in the same input.
     public static string WmVlessUri         => "vless:// / hy2:// / tuic:// / ss://...#name";
     public static string WmTgProxyPort      => "1443";
     public static string WmTgProxySecret    => Ru ? "автоген" : "auto-generated";
 
-    // Status init values
     public static string StatusStopped => Ru ? "Остановлен" : "Stopped";
     public static string StatusRunning => Ru ? "Работает"   : "Running";
 
-    // v2.30.4-r1 (SUGGEST-22 fix): manual update check inside Settings →
-    // Обновления tab.
     public static string CurrentVersion => Ru ? "Текущая версия" : "Current version";
 
-    // v2.30.5-r1 (UX-29 fix): empty-state hero for the Custom Config
-    // (JSON) sub-tab. Pre-r1 was blank + a "Нажмите на конфиг для
-    // активации" hint with nothing to click; now explains the feature.
     public static string CustomConfigsEmptyTitle => Ru
         ? "Нет добавленных конфигураций"
         : "No custom configs yet";
@@ -1327,12 +980,6 @@ public static partial class Strings
         ? "Свой конфиг — это готовый JSON-файл sing-box для протоколов TUIC, Hysteria2, Reality+gRPC и др. Нажмите «Добавить конфиг…» внизу для импорта."
         : "A custom config is a ready-made sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click \"Add config…\" below to import.";
 
-    // v2.32.0 — recovery banner shown after SettingsValidator rejected a
-    // structurally-valid but semantically-broken config.yaml (typoed
-    // config_mode, port out of range, malformed subscription URL, etc.)
-    // and the loader rewrote defaults. The backup path comes from
-    // SettingsLoader.LastRecoveryNotice and is appended verbatim by the
-    // VM, so the localized string is the prefix only.
     public static string SettingsRecoveredFromBadConfig(string backupPath) => Ru
         ? string.IsNullOrEmpty(backupPath)
             ? "Конфиг был повреждён, восстановлены настройки по умолчанию."
@@ -1340,16 +987,6 @@ public static partial class Strings
         : string.IsNullOrEmpty(backupPath)
             ? "Config was invalid; defaults restored."
             : $"Config was invalid; defaults restored. Backup: {backupPath}";
-
-    // ════════════════════════════════════════════════════════════════════
-    // Android-only keys merged in from VPNRouter.Android/Localization.cs
-    // (parity audit F-01, 2026-05-09). The 253 keys below have no desktop
-    // counterpart yet — they cover Android-specific UI surfaces (kebab
-    // menu sections, server list overlay, profiles overlay, reliability
-    // section, custom config segment, AndroidUpdater flow, etc.). When
-    // a desktop screen needs the same affordance it can bind directly to
-    // these keys without code duplication.
-    // ════════════════════════════════════════════════════════════════════
 
     public static string Title => "VPNRouter v3.0";
 
@@ -1359,12 +996,6 @@ public static partial class Strings
 
     public static string LangToggleLabel => Ru ? "EN" : "RU";
 
-    // v3.0 Phase 7.3 (2026-05-04) — segmented control labels for the
-    // kebab menu's "Вид" / "Appearance" section, mirroring desktop's
-    // SmpSegLight / SmpSegDark / SmpSegRu / SmpSegEn (see
-    // VPNRouter.App/Localization/Strings.cs:1280-1283). RU/EN labels
-    // for the language segments stay locale-independent (the segment
-    // shows what the user is switching TO, not the current language).
     public static string MenuSegLight => Ru ? "Светлая" : "Light";
 
     public static string MenuSegDark  => Ru ? "Тёмная"  : "Dark";
@@ -1401,27 +1032,22 @@ public static partial class Strings
         ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
         : "Traffic goes straight — pick a config and start the tunnel.";
 
-    /// <summary>Title format when connected — args: {0}=uptime ("0:23" or "1:23:45").</summary>
     public static string SimpleStatusTitleOnWithUptime => Ru
         ? "Подключено · {0}"
         : "Connected · {0}";
 
-    /// <summary>Healthy log probe — args: {0}=seconds since last successful probe.</summary>
     public static string DiagHealthCheckOk => Ru
         ? "✓ Проверка {0} с назад"
         : "✓ Last check {0}s ago";
 
-    /// <summary>Stale log probe — sing-box hasn't written for &gt;60 s.</summary>
     public static string DiagHealthCheckStale => Ru
         ? "Проверка не отвечает"
         : "Stale check";
 
-    /// <summary>Pending first probe — shown for the first 30 s after connect.</summary>
     public static string DiagHealthCheckPending => Ru
         ? "· Ожидаю первую проверку…"
         : "· Awaiting first check…";
 
-    /// <summary>Error one-liner — args: {0}=raw error message from EXTRA_ERROR_MESSAGE.</summary>
     public static string DiagErrorOneLiner => Ru
         ? "Ошибка: {0}"
         : "Error: {0}";
@@ -1498,7 +1124,6 @@ public static partial class Strings
         ? "Состояние туннеля повторяет иконку VPN-ключа в строке состояния."
         : "Tunnel state mirrors the system VPN-key icon in the status bar.";
 
-    // Section headers
     public static string MenuSectionView => Ru ? "Вид" : "Appearance";
 
     public static string MenuSectionDiagnostics => Ru ? "Диагностика" : "Diagnostics";
@@ -1507,7 +1132,6 @@ public static partial class Strings
 
     public static string MenuSectionAbout => Ru ? "О приложении" : "About";
 
-    // Diagnostics items
     public static string MenuItemOpenLogs => Ru ? "Открыть лог" : "Open log";
     public static string MenuItemExportDiag => Ru ? "Экспорт диагностики" : "Export diagnostics";
 
@@ -1535,7 +1159,6 @@ public static partial class Strings
         ? "Не удалось проверить обновления: {0}"
         : "Failed to check for updates: {0}";
 
-    /// <summary>Banner title — args: {0}=version, {1}=size in MB.</summary>
     public static string UpdateBannerTitle => Ru
         ? "Доступна v{0} · {1:F1} МБ"
         : "v{0} available · {1:F1} MB";
@@ -1574,7 +1197,6 @@ public static partial class Strings
         ? "Не удалось запустить установщик."
         : "Failed to launch installer.";
 
-    // Troubleshooting items
     public static string MenuItemResetSettings => Ru ? "Сбросить настройки" : "Reset settings";
 
     public static string MenuItemResetConfirm => Ru
@@ -1717,7 +1339,6 @@ public static partial class Strings
         ? "Эта функция требует Android 4.4+ Storage Access Framework."
         : "This feature requires Android 4.4+ Storage Access Framework.";
 
-    // About items
     public static string MenuItemVersion => Ru ? "Версия" : "Version";
 
     public static string MenuItemRepoLink => Ru ? "GitHub репозиторий" : "GitHub repository";
@@ -1742,11 +1363,6 @@ public static partial class Strings
 
     public static string PerAppCount => Ru ? "Выбрано: {0}" : "Selected: {0}";
 
-    // Bug #2 (2026-05-11) — Android mobile redesign of Applications tab.
-    // Shown next to the search box so the user can verify the device-wide
-    // app enumeration is producing a sane count (some OEM ROMs hide apps
-    // from PackageManager.GetInstalledApplications; we merge with launcher
-    // queries to catch them — surfaced here for transparency).
     public static string PerAppShowingCount => Ru ? "Показано: {0}" : "Showing: {0}";
 
     public static string PerAppLoading => Ru ? "Загружаю список приложений…" : "Loading app list…";
@@ -1855,25 +1471,13 @@ public static partial class Strings
 
     public static string SrvActiveBadge => Ru ? "активный" : "active";
 
-    /// <summary>Toast when the user picks a server in an Advanced tab while the
-    /// VPN is connected — the new server is applied in place (a brief reconnect)
-    /// and the user stays in Advanced (no bounce to Simple, no manual Stop+Start).
-    /// {0} = server name.</summary>
     public static string SrvSwitchedReconnect => Ru
         ? "Переключаюсь на {0}..."
         : "Switching to {0}...";
 
-    /// <summary>Toast when the user picks a server in an Advanced tab while
-    /// disconnected — saved as the active server, applies on the next Connect.
-    /// {0} = server name.</summary>
     public static string SrvSelectedActive => Ru
         ? "Активный сервер: {0}"
         : "Active server: {0}";
-
-    /// <summary>Kebab menu item that opens the Free Configs overlay.</summary>
-    public static string MenuSectionFreeConfigs => Ru ? "Публичные конфиги" : "Public configs";
-
-    public static string MenuItemOpenFreeConfigs => Ru ? "Найти сервер" : "Find a server";
 
     public static string FcOverlayTitle => Ru ? "Публичные конфиги" : "Public configs";
 
@@ -1917,13 +1521,6 @@ public static partial class Strings
         ? "Найдено {0}/{1} рабочих."
         : "Found {0}/{1} working.";
 
-    /// <summary>
-    /// Android Bug&#x202F;#1 status line — Deep Verify pass progress shown
-    /// after TCP+TLS finishes. <c>{0}</c> = entries deep-verified so far,
-    /// <c>{1}</c> = total to verify (typically the user's target N).
-    /// Desktop status flow doesn't need this string because Deep Verify
-    /// there is interleaved with TCP+TLS and reuses FcStatusTesting.
-    /// </summary>
     public static string FcStatusDeepVerifying => Ru
         ? "Deep verify · {0}/{1}…"
         : "Deep verify · {0}/{1}…";
@@ -1942,22 +1539,14 @@ public static partial class Strings
         ? "Сервер сохранён. Подключаюсь…"
         : "Server saved. Connecting…";
 
-    // v2.39.0 (apps-page audit): shown when applying a public config fails —
-    // the user's existing Servers list is explicitly left untouched.
     public static string FcApplyFailed => Ru
         ? "Не удалось применить конфиг — список серверов не тронут"
         : "Couldn't apply config — your server list is unchanged";
 
-    // v2.39.0 (public-configs audit P1): backstop message if a public config
-    // that hasn't passed deep verify is somehow tapped — Connect is gated on
-    // Verified (✓✓) status; a single-✓ TCP/TLS candidate is not connectable.
     public static string FcConnectNeedsVerify => Ru
         ? "Дождитесь проверки конфига (✓✓) перед подключением."
         : "Wait for the config to be verified (✓✓) before connecting.";
 
-    // v2.40.0 (contracts B1 #5): shown when Connect is tapped while a search /
-    // recheck is still running — adopting a config stops+starts the VPN and
-    // would race the verifier; wait until the search finishes.
     public static string FcConnectBusySearch => Ru
         ? "Дождитесь окончания поиска перед подключением."
         : "Wait for the search to finish before connecting.";
@@ -1966,8 +1555,6 @@ public static partial class Strings
 
     public static string SettingsTitle => Ru ? "Настройки" : "Settings";
 
-    // Sub-section headers (Strings.SectionRouting / SectionLeakProtection /
-    // SectionUpdates / AutostartSection in desktop)
     public static string SettingsSectionRouting => Ru ? "Маршрутизация" : "Routing";
 
     public static string SettingsSectionLeak => Ru ? "Защита от утечек" : "Leak Protection";
@@ -1976,10 +1563,8 @@ public static partial class Strings
 
     public static string SettingsSectionAutostart => Ru ? "Автозапуск" : "Autostart";
 
-    // Content section (mirrors desktop NetworkPage "Content" section).
     public static string SettingsSectionContent => Ru ? "Контент" : "Content";
 
-    // BlockAds card (mirrors desktop MainWindowViewModel.BlockAdsLabel/Hint).
     public static string SettingsBlockAdsLabel => Ru
         ? "Блокировать рекламу и трекеры"
         : "Block ads & trackers";

@@ -1,67 +1,31 @@
 #!/bin/bash
-# .githooks/pre-commit — VPNRouter v3.0 methodology enforcement.
-#
-# Authored 2026-05-17 per `docs/execution-methodology.md` §1 "Hard
-# enforcement". This hook runs BEFORE `git commit` finalizes, and exits
-# non-zero to abort the commit when any methodology gate fails.
-#
-# Activation:
-#   git config core.hooksPath .githooks
-#   (or run `pwsh ./Setup-Hooks.ps1` once)
-#
-# Bypass (emergency only — document the reason in commit message):
-#   git commit --no-verify
-#   BUT: project contract says NEVER --no-verify without explicit user
-#   approval. If an agent session needs to bypass, surface the reason to user
-#   first and get OK.
-#
-# Gates enforced (see methodology §3):
-#   1. Build clean (dotnet build VPNRouter.sln -c Release → 0 errors)
-#   2. Targeted tests green (filter by changed-file scope to keep fast)
-#   3. plans/phaseN-*-DATE.md brief exists IF Core/services touched
-#   5. No untracked test_parser.csx / *.log / .invalid-* leaked into commit
-#   6. No PowerShell-style UTF-16 BOM in *.sha256 files (Z:\kanareik trap)
-#
-# Skipped checks (intentionally — too slow / not in core scope):
-#   - Full test suite (CI runs that; this hook stays under 60s)
-#   - Avalonia visual diff (Windows-only, dispatcher thread)
-#   - sing-box check integration (requires sing-box.exe in PATH)
 
 set -e
 set -u
 set -o pipefail
 
-# Colors for terminal output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Capture the commit-message file (passed as $1 from git, or default location)
 COMMIT_MSG_FILE="${1:-.git/COMMIT_EDITMSG}"
 
 ERRORS=()
 WARNINGS=()
 
-# ─── Gate 6 — Reject UTF-16 BOM in .sha256 files (Z:\kanareik trap) ─────
-# Caught at v2.32.3-r1 ship: PowerShell `>` writes BOM, broke verify CI.
 for sha256 in $(git diff --cached --name-only --diff-filter=AM | grep -E '\.sha256$' || true); do
   if [ -f "$sha256" ]; then
-    # First byte 0xFF = UTF-16 LE BOM start
     first_byte=$(head -c 1 "$sha256" | od -An -tx1 | tr -d ' \n')
     if [ "$first_byte" = "ff" ] || [ "$first_byte" = "fe" ]; then
       ERRORS+=("Gate 6: $sha256 has UTF-16 BOM (PowerShell '>' trap). Regenerate via sha256sum | awk '{print \$1}' > $sha256")
     fi
-    # Check for uppercase hex (sha256sum produces lowercase)
     if grep -qE '[A-F]' "$sha256" 2>/dev/null; then
       WARNINGS+=("Gate 6: $sha256 contains uppercase hex. Some verifiers reject. Consider .ToLower().")
     fi
   fi
 done
 
-# ─── Gate 5 — Reject accidentally-staged garbage ────────────────────────
-# Catches the "test_parser.csx, *.log, *.invalid-*" temporary artifacts
-# removed during the 2026-05-17 cleanup. Without this gate, regrowth is likely.
 GARBAGE_PATTERNS=(
   "^test_parser\.csx$"
   "^build-.*\.log$"
@@ -78,22 +42,14 @@ for pat in "${GARBAGE_PATTERNS[@]}"; do
   done < <(git diff --cached --name-only --diff-filter=A | grep -E "$pat" || true)
 done
 
-# ─── Gate 3 — Phase brief existence (when Core services touched) ────────
-# Only fires for Core service changes (not docs, not tests, not UI). The
-# brief should be CREATED before the implementation commit, so by the time
-# you run `git commit` it must already exist in plans/phase*.
 core_touched=$(git diff --cached --name-only --diff-filter=AM | grep -E '^VPNRouter\.Core/Services/' | head -1 || true)
 if [ -n "$core_touched" ]; then
-  # Look for a phase brief from today or yesterday
   recent_briefs=$(ls plans/phase*-*-$(date +%Y-%m-%d).md plans/phase*-*-$(date -d "yesterday" +%Y-%m-%d 2>/dev/null || date +%Y-%m-%d).md 2>/dev/null | head -1 || true)
   if [ -z "$recent_briefs" ]; then
     WARNINGS+=("Gate 3: Core service touched ($core_touched) but no plans/phase*-$(date +%Y-%m-%d).md brief found. Per methodology §2, create the brief BEFORE the implementation commit. Skipping HARD-fail because this might be a follow-up commit on an existing brief; if so, ignore. Otherwise: STOP and write the brief.")
   fi
 fi
 
-# ─── Gate 1 — Build clean ────────────────────────────────────────────────
-# Run only when .cs / .csproj / .axaml staged. Skip for docs-only commits
-# (plans/, README, *.md) to keep doc workflow fast.
 needs_build=$(git diff --cached --name-only --diff-filter=AM | grep -E '\.(cs|csproj|axaml|sln)$' | head -1 || true)
 if [ -n "$needs_build" ]; then
   echo -e "${YELLOW}Gate 1: Running 'dotnet build VPNRouter.sln -c Release' (skip with --no-verify)...${NC}"
@@ -104,20 +60,10 @@ if [ -n "$needs_build" ]; then
   fi
 fi
 
-# ─── Gate 2 — Targeted tests ────────────────────────────────────────────
-# Run only when Core or Tests staged. Use --filter to keep <60s.
 needs_tests=$(git diff --cached --name-only --diff-filter=AM | grep -E '^(VPNRouter\.Core/|VPNRouter\.Tests/)' | head -1 || true)
 if [ -n "$needs_tests" ]; then
   echo -e "${YELLOW}Gate 2: Running scoped test suite...${NC}"
-  # Base: commonly-impacted classes. Full suite runs in CI.
   TEST_FILTER="FullyQualifiedName~PlaceholderGuard|FullyQualifiedName~GetEffective|FullyQualifiedName~Subscription|FullyQualifiedName~LeakProtection|FullyQualifiedName~Resolver"
-  # audit item 5 (2026-06-25): the static allowlist EXCLUDED the failover/firewall
-  # suites, so editing VpnEngine.cs ran Resolver tests but never the failover tests
-  # (a probe-gate regression would pass the local gate green). When that source is
-  # staged, append the matching PURE-logic suites. Env-dependent suites
-  # (VpnEngine*Lifecycle, HealthMonitorTunOrphanRestart — they write
-  # %ProgramData%\VPNRouter\config\current.json and throw UnauthorizedAccess on a
-  # dev box with VPNRouter installed) stay CI-only on purpose.
   staged_cs=$(git diff --cached --name-only --diff-filter=AM | grep -E '\.cs$' || true)
   if echo "$staged_cs" | grep -qE 'VpnEngine|AutoFailover|ConfigSanityCheck|StartupPipeline|HealthMonitor'; then
     TEST_FILTER="$TEST_FILTER|FullyQualifiedName~VpnEngineProbeFailoverGate|FullyQualifiedName~AutoFailover|FullyQualifiedName~ConfigSanityCheck"
@@ -133,21 +79,11 @@ if [ -n "$needs_tests" ]; then
   fi
 fi
 
-# ─── Gate 7 — No handle-leaking GetProcessesByName(...).Length ──────────
-# v2.40.0-r3 (audit Этап 1 P0 handle-leak sweep): a bare
-# GetProcessesByName(name).Length leaks one OS kernel handle per returned
-# Process until GC finalises it. On hot polling paths that was the AU-9
-# "+170 handles per VPN cycle" leak. Use ProcessQuery.AnyAlive / CountAlive
-# (they dispose the Process[] in a finally). This guard scans STAGED product
-# .cs (excludes VPNRouter.Tests + ProcessQuery.cs + comment lines) so the
-# leak can't quietly come back. DoD: no product GetProcessesByName(...).Length
-# without disposing the objects.
 leak_hits=""
 for f in $(git diff --cached --name-only --diff-filter=AM | grep -E '\.cs$' \
             | grep -E '^(VPNRouter\.Core|VPNRouter\.App|VPNRouter\.Service|VPNRouter\.CLI|VPNRouter\.Android)/' \
             | grep -v 'ProcessQuery\.cs' || true); do
   [ -f "$f" ] || continue
-  # match the leak pattern, then drop comment lines (trimmed start //, ///, or *)
   hits=$(grep -nE 'GetProcessesByName\([^)]*\)\.Length' "$f" 2>/dev/null \
          | grep -vE '^[0-9]+:[[:space:]]*(///?|\*)' || true)
   if [ -n "$hits" ]; then
@@ -158,7 +94,6 @@ if [ -n "$leak_hits" ]; then
   ERRORS+=("Gate 7: handle-leaking GetProcessesByName(...).Length in product code (${leak_hits}). Use ProcessQuery.AnyAlive/CountAlive — they dispose the Process[].")
 fi
 
-# ─── Verdict ─────────────────────────────────────────────────────────────
 if [ "${#WARNINGS[@]}" -gt 0 ]; then
   echo ""
   echo -e "${YELLOW}⚠ Warnings (non-blocking):${NC}"

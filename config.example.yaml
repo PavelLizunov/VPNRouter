@@ -1,49 +1,17 @@
-# VPN Process Router — Example Configuration
-# Copy to: %ProgramData%\VPNRouter\config.yaml
-# Required fields: vless.server, vless.uuid, vless.reality.public_key, vless.reality.short_id
-#
-# IMPORTANT: replace REPLACE_ME_* tokens before using.
-# Every value tagged REPLACE_ME_* is a placeholder — copying this file
-# verbatim into your config.yaml will be rejected by VPNRouter's placeholder
-# defense (PlaceholderDefense.cs), the runtime sanity check, and the leak
-# protection scope guard. Fill in the values from your real VLESS subscription
-# or server details before starting the service.
 
 app:
   log_level: info   # debug | info | warning | error
   log_file: "%ProgramData%\\VPNRouter\\logs\\vpnrouter.log"
 
-  # Config mode: "generated" builds config from vless section below,
-  # "custom" uses a user-provided sing-box JSON (any protocol: VLESS, Hysteria2, TUIC, etc.)
   config_mode: generated   # generated | custom
-  # custom_config: "C:\\path\\to\\sing-box-config.json"  # legacy single config
-  # active_custom_config: brat-pc   # name of active config from list below
-  # custom_configs:
-  #   - name: brat-pc
-  #     path: "%ProgramData%\\VPNRouter\\config\\custom-brat-pc.json"
-  #   - name: work-server
-  #     path: "%ProgramData%\\VPNRouter\\config\\custom-work-server.json"
 
-# Profile sources — tried in order, first success wins.
-# By default we ship a single local source; bundled defaults
-# (`profiles/default.json`) and built-in fallbacks already cover the
-# common profile catalogue. Uncomment the github block only if you
-# host your own profiles repo — leaving the placeholder URL here
-# spammed the log with 404s every reload.
 profile_sources:
   - type: local
     path: "%ProgramData%\\VPNRouter\\profiles\\custom.json"
 
-  # - type: github
-  #   url: "https://raw.githubusercontent.com/<your-org>/<your-repo>/main/profiles.json"
-  #   update_interval: 3600  # seconds
 
-# Profile to activate on start
 active_profile: Gaming_Full
 
-# VLESS + Reality connection
-# security: reality  — uses XTLS Reality (recommended, harder to detect)
-# security: tls      — uses standard TLS (fill tls section instead)
 vless:
   server: "REPLACE_ME_SERVER_HOST"        # e.g. "your.vpn.example.com" or IP
   port: 443
@@ -51,7 +19,6 @@ vless:
   flow: "xtls-rprx-vision"   # required for Reality + XTLS
   security: reality           # reality | tls
 
-  # Reality settings (used when security: reality)
   reality:
     enabled: true
     server_name: "yahoo.com"          # SNI to mimic — must be a real TLS 1.3 site
@@ -59,17 +26,14 @@ vless:
     public_key: "REPLACE_ME_REALITY_PUBLIC_KEY"
     short_id: "REPLACE_ME_SHORT_ID"
 
-  # Transport: tcp for Reality+XTLS, ws for WebSocket, grpc for gRPC
   transport:
     type: tcp
 
-  # Plain TLS fallback (used when security: tls)
   tls:
     enabled: false
     server_name: "your.server.com"
     insecure: false
 
-# TUN interface settings
 tun:
   interface_name: VPNRouter-TUN
   ipv4_address: "172.19.0.1/30"
@@ -77,23 +41,16 @@ tun:
   mtu: 1420
   auto_route: true
   strict_route: false  # Keep false — true breaks dual stack
-  # Exclude address ranges from TUN routing — traffic to these goes via system routes.
-  # Useful for coexistence with other VPNs (WireGuard, AmneziaWG, etc.)
-  # route_exclude_address:
-  #   - "10.9.1.0/24"      # Example: WireGuard/AmneziaWG subnet
 
-# DNS settings
 dns:
   strategy: ipv4_only
   vpn_dns: "https://1.1.1.1/dns-query"
   local_dns: local
 
-# sing-box binary
 singbox:
   executable_path: "%ProgramData%\\VPNRouter\\bin\\sing-box.exe"
   auto_download: true
 
-# Health monitoring
 monitoring:
   health_check_interval: 30   # seconds
   restart_on_failure: true

@@ -4,16 +4,9 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Pins <see cref="CanaryPolicy"/>: URL redaction, TTL staleness, and reducing per-target
-/// canary outcomes to the <see cref="ServerHealthPhases.BlockedTargetCanary"/> phase.
-/// Pure, no network (probing is deferred R4).
-/// </summary>
 public class CanaryPolicyTests
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 9, 12, 0, 0, TimeSpan.Zero);
-
-    // ── URL redaction (never log path/query) ────────────────────────────────
 
     [Theory]
     [InlineData("https://www.youtube.com/generate_204?foo=bar", "https://www.youtube.com")]
@@ -33,8 +26,6 @@ public class CanaryPolicyTests
     [Fact]
     public void RedactUrl_MalformedWithCredentials_StripsUserInfo()
         => Assert.Equal("https://invalid_host:port_bad", CanaryPolicy.RedactUrl("https://user:secretpassword@invalid_host:port_bad/secret_path?token=123"));
-
-    // ── Staleness ───────────────────────────────────────────────────────────
 
     [Fact]
     public void IsStale_BlockedTargetOlderThanTtl_IsStale()
@@ -57,8 +48,6 @@ public class CanaryPolicyTests
         Assert.False(CanaryPolicy.IsStale(t, Now, TimeSpan.FromDays(30)));
     }
 
-    // ── Aggregate → BlockedTargetCanary phase ───────────────────────────────
-
     [Fact]
     public void Evaluate_ControlFailed_IsUnknown()
         => Assert.Equal(PhaseOutcome.Unknown,
@@ -72,11 +61,9 @@ public class CanaryPolicyTests
     [Fact]
     public void Evaluate_AllFreshFailed_IsFail_OnlyControlWorks()
     {
-        // The audit's key case: control ok + every blocked target fails => not "connected ok".
         var agg = CanaryPolicy.Evaluate(true, new[] { (false, false), (false, false) });
         Assert.Equal(PhaseOutcome.Fail, agg.BlockedTargetCanary);
 
-        // And through the classifier this becomes OnlyControlWorks, not Healthy.
         var phases = new ServerHealthPhases(
             TcpConnect: PhaseOutcome.Pass,
             ProxiedHttpControl: PhaseOutcome.Pass,

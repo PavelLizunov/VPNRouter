@@ -26,9 +26,6 @@ public class StartSettings : CommandSettings
 
 public class StartCommand : AsyncCommand<StartSettings>
 {
-    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection for
-    // testability. Default <see cref="RealSettingsStore.Instance"/> preserves
-    // the pre-3G-1 static-loader behaviour; tests can pass InMemorySettingsStore.
     private readonly ISettingsStore _settingsStore;
 
     public StartCommand() : this(null) { }
@@ -42,7 +39,6 @@ public class StartCommand : AsyncCommand<StartSettings>
     {
         AnsiConsole.Write(new FigletText("VPNRouter").Color(Color.Cyan1));
 
-        // 1. Load app settings
         AppSettings appSettings;
         try
         {
@@ -54,7 +50,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 2. Override profile from CLI if specified
         if (!string.IsNullOrEmpty(settings.Profile))
             appSettings.ActiveProfile = settings.Profile;
 
@@ -66,11 +61,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 3. Check admin rights — but NOT for --dry-run.
-        // Dry-run only generates + validates a config JSON; no TUN adapter,
-        // no firewall rules, no registry writes. Forcing admin there made
-        // the flag useless for what it's for (debugging from a regular
-        // shell before spawning an elevated run).
         if (!settings.DryRun && !AdminHelper.IsAdmin())
         {
             AnsiConsole.MarkupLine("[red]✗ Administrator rights required for TUN interface.[/]");
@@ -79,10 +69,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 3b. Resolve subscription-mode settings → flat Vless.Servers list.
-        // Without this, subscribe-mode configs fail validation with "No 'proxy'
-        // outbound defined" because ConfigGenerator only reads Vless.* fields.
-        // Matches the logic in VPNRouterService.cs so CLI / Service are equivalent.
         var resolved = await SubscriptionResolver.ResolveAsync(
             appSettings,
             refreshFromNetwork: true,
@@ -90,11 +76,6 @@ public class StartCommand : AsyncCommand<StartSettings>
         if (resolved > 0)
             AnsiConsole.MarkupLine($"[grey]  → resolved {resolved} server(s) from subscription[/]");
 
-        // 3c. Pre-flight: verify we actually have a viable VLESS outbound source
-        // before we burn cycles on ConfigGenerator + LeakProtection only to fail
-        // with the cryptic "No 'proxy' outbound defined". Custom mode skips this
-        // check because it supplies its own JSON (and CustomConfigInjector handles
-        // missing-file errors separately).
         var isCustomMode = string.Equals(appSettings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase);
         var hasVlessSource = appSettings.Vless.Servers.Count > 0 ||
                              !string.IsNullOrWhiteSpace(appSettings.Vless.Server);
@@ -108,7 +89,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 4. Dry-run: generate config, validate, write to disk, exit
         if (settings.DryRun)
         {
             return await DryRunAsync(appSettings);
@@ -123,20 +103,8 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // v2.40.0-r10 #4 (core-audit): sweep leftover firewall kill-switch
-        // rules before taking VPN ownership. The GUI front-end has always
-        // done this on startup (App/Program.cs); the CLI did not, so a CLI
-        // crash that left block rules enabled would strand the user's internet
-        // until the GUI happened to run. `start` is admin-gated and is taking
-        // ownership here, so an unconditional sweep mirrors the GUI.
         VPNRouter.Core.Services.FirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
 
-        // v2.40.0-r10 #2 (core-audit): also sweep on process exit so an
-        // abnormal teardown that skips the engine's clean DeleteAllRules
-        // doesn't leave the kill-switch blocking the internet. Gated on
-        // !IsOwnedByAnyone() so we never nuke another live instance's rules;
-        // the startup sweep is the fail-closed backstop if we exit while
-        // still holding the lock.
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try
@@ -147,12 +115,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             catch { }
         };
 
-        // 5. Start VPN via engine
-        // 3G-4 (v3.0 refactor): use the PlatformServices factory instead of
-        // direct construction — keeps the platform-specific scanner /
-        // firewall / monitor wiring in one place. On Windows the produced
-        // services are identical to the prior hand-wired set (ProcessScanner,
-        // FirewallManager, EtwProcessMonitor).
         using var engine = VPNRouter.Core.Platform.PlatformServices
             .CreateVpnEngine(Serilog.Log.Logger);
 
@@ -168,8 +130,6 @@ public class StartCommand : AsyncCommand<StartSettings>
         engine.Warning += msg =>
             AnsiConsole.MarkupLine($"[yellow]⚠ {Markup.Escape(msg)}[/]");
 
-        // The callback and initial publication share one gate so an initial
-        // event cannot be lost and an older delayed event cannot regress state.
         var childStateGate = new object();
         OwnedProcessIdentity? latestChildIdentity = null;
         var statePublished = false;
@@ -206,9 +166,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 6. Create and register the generation-qualified stop capability
-        // before state publication. AutoResetEvent retains an early signal, so
-        // a Stop that can read this generation can never race event creation.
         using var cts = new CancellationTokenSource();
         ConsoleCancelEventHandler cancelHandler = (_, e) =>
         {
@@ -240,8 +197,6 @@ public class StartCommand : AsyncCommand<StartSettings>
                     timeout: Timeout.InfiniteTimeSpan,
                     executeOnlyOnce: true);
 
-                // Transition bridge: an already-installed older Stop binary only
-                // knows the PID-qualified name. Both capabilities cancel this run.
                 legacyStopEvent = new EventWaitHandle(
                     false,
                     EventResetMode.AutoReset,
@@ -310,7 +265,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             try { await Task.Delay(Timeout.Infinite, cts.Token); }
             catch (OperationCanceledException) { }
 
-            // 7. Graceful shutdown. A replacement generation is never deleted.
             AnsiConsole.MarkupLine("\n[yellow]Stopping...[/]");
             engine.Stop();
             if (!StateFile.ClearIfGeneration(runGeneration))
@@ -353,11 +307,6 @@ public class StartCommand : AsyncCommand<StartSettings>
     {
         try
         {
-            // Load profiles & resolve. #7 (cleanup 2026-07-10): dry-run uses the
-            // SAME source list as a real start (ProfileSourceFactory.Create) — the
-            // old private BuildDryRunSources was a near-duplicate that silently
-            // dropped the %ProgramData%\VPNRouter\profiles source, so a dry-run
-            // could preview a different profile set than the actual start used.
             var sources = ProfileSourceFactory.Create(settings);
             var manager = new ProfileManager(sources, Serilog.Log.Logger);
             var collection = await manager.LoadAsync();
@@ -389,7 +338,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             AnsiConsole.MarkupLine($"  Process rules: [yellow]{profile.Processes.Count}[/]");
             AnsiConsole.MarkupLine($"  DNS mode: [yellow]{profile.DnsMode}[/]");
 
-            // Scan & generate
             var scanner = new ProcessScanner(Serilog.Log.Logger);
             var scan = scanner.ScanForProfile(profile);
             AnsiConsole.MarkupLine($"[green]✓[/] Resolved [cyan]{scan.ProcessNames.Count}[/] process names");
@@ -420,7 +368,6 @@ public class StartCommand : AsyncCommand<StartSettings>
             else
             {
                 var sbConfig = ConfigGenerator.Generate(profile, scan.ProcessNames, settings);
-                // Bug-r9-F-DEFENSIVE: settings passed for outbound-IP cross-check.
                 var validation = LeakProtection.ValidateConfig(sbConfig, settings);
 
                 foreach (var w in validation.Warnings)
@@ -437,7 +384,6 @@ public class StartCommand : AsyncCommand<StartSettings>
                 configJson = ConfigGenerator.Serialize(sbConfig);
             }
 
-            // Write config
             var configDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
             Directory.CreateDirectory(configDir);
             var configPath = Path.Combine(configDir, "current.json");

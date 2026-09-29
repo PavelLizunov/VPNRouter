@@ -61,9 +61,9 @@ public sealed class VpnctlPackagingCharacterizationTests
     public void BuildScript_HashCheckAndExtraction_OutsideCachedExeExistenceBranch()
     {
         var script = Read("build.ps1");
-        var idx1 = script.IndexOf("# ── Bundle sing-box.exe ──", StringComparison.Ordinal);
-        var cronetMarker = "# ── Bundle libcronet.dll ──";
-        var slipstreamMarker = "# ── slipstream-client.exe";
+        var idx1 = script.IndexOf("Write-Host \"[6/9] Bundling sing-box.exe...\"", StringComparison.Ordinal);
+        var cronetMarker = "if (-not $SingBoxPath) {";
+        var slipstreamMarker = "Write-Host \"[6b/9] Bundling slipstream-client.exe";
         var idx2 = script.IndexOf(cronetMarker, idx1, StringComparison.Ordinal);
         if (idx2 < 0)
         {
@@ -84,8 +84,8 @@ public sealed class VpnctlPackagingCharacterizationTests
     public void BuildScript_LibcronetBundling_SourceContract()
     {
         var script = Read("build.ps1");
-        var idx1 = script.IndexOf("# ── Bundle libcronet.dll ──", StringComparison.Ordinal);
-        var idx2 = script.IndexOf("# ── slipstream-client.exe", idx1 >= 0 ? idx1 : 0, StringComparison.Ordinal);
+        var idx1 = script.IndexOf("if (-not $SingBoxPath) {", StringComparison.Ordinal);
+        var idx2 = script.IndexOf("Write-Host \"[6b/9] Bundling slipstream-client.exe", idx1 >= 0 ? idx1 : 0, StringComparison.Ordinal);
         Assert.True(idx1 >= 0 && idx2 > idx1, "Could not locate libcronet bundling section in build.ps1.");
 
         var section = StripComments(script.Substring(idx1, idx2 - idx1));
@@ -287,7 +287,7 @@ public sealed class VpnctlPackagingCharacterizationTests
 
     private static string ExtractHarnessScript(string buildPs1)
     {
-        var idx1 = buildPs1.IndexOf("# ── Sing-box supply-chain validation", StringComparison.Ordinal);
+        var idx1 = buildPs1.IndexOf("if ($Upload -and $SingBoxPath) {", StringComparison.Ordinal);
         var sec1 = "";
         if (idx1 >= 0)
         {
@@ -296,9 +296,9 @@ public sealed class VpnctlPackagingCharacterizationTests
             sec1 = buildPs1.Substring(idx1, idx1End - idx1);
         }
 
-        var idx2 = buildPs1.IndexOf("# ── Bundle sing-box.exe ──", StringComparison.Ordinal);
-        var cronetMarker = "# ── Bundle libcronet.dll ──";
-        var slipstreamMarker = "# ── slipstream-client.exe";
+        var idx2 = buildPs1.IndexOf("Write-Host \"[6/9] Bundling sing-box.exe...\"", StringComparison.Ordinal);
+        var cronetMarker = "if (-not $SingBoxPath) {";
+        var slipstreamMarker = "Write-Host \"[6b/9] Bundling slipstream-client.exe";
         var idx2End = buildPs1.IndexOf(cronetMarker, idx2, StringComparison.Ordinal);
         if (idx2End < 0)
         {

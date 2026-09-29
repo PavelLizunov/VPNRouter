@@ -6,45 +6,10 @@ using System.Threading.Tasks;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Retry helper for component startup with exponential backoff.
-/// Used by VPNRouter.Service to make autostart resilient against transient
-/// failures (network stack not ready, TUN adapter init delay, WinDivert driver
-/// load race, Process.Start returning null, etc.)
-///
-/// Design:
-///   - Non-retriable errors (binary missing, TUN owned by another process,
-///     user cancellation) propagate immediately — caller decides what to do.
-///   - Transient errors are retried up to N times with growing delay.
-///   - When retries are exhausted, returns false (does NOT throw) so caller
-///     can decide whether a failed component should abort the whole startup.
-/// </summary>
 public static class ResilientStarter
 {
-    /// <summary>
-    /// Default delays between attempts, in seconds: 5, 10, 20, 40.
-    /// Total wait time before giving up: 75 seconds across 5 attempts.
-    /// </summary>
     public static readonly int[] DefaultBackoffSeconds = { 5, 10, 20, 40 };
 
-    /// <summary>
-    /// Retry the async start function up to (backoffSeconds.Length + 1) times
-    /// with exponential backoff between attempts.
-    /// </summary>
-    /// <param name="componentName">Used in log messages, e.g. "VPN", "Zapret".</param>
-    /// <param name="startFn">Start function. Should throw on failure.</param>
-    /// <param name="isRetriable">
-    /// Optional predicate. Given an exception, return true to retry or false
-    /// to rethrow immediately. Default: retry everything except
-    /// FileNotFoundException and TunOwnershipException.
-    /// </param>
-    /// <param name="backoffSeconds">
-    /// Delays between attempts (array length determines max attempts - 1).
-    /// Default: { 5, 10, 20, 40 }.
-    /// </param>
-    /// <param name="logger">Optional Serilog logger for per-attempt diagnostics.</param>
-    /// <param name="ct">Cancellation token. Propagated to startFn and Task.Delay.</param>
-    /// <returns>true if any attempt succeeded; false if all attempts exhausted.</returns>
     public static async Task<bool> StartWithBackoffAsync(
         string componentName,
         Func<CancellationToken, Task> startFn,
@@ -62,9 +27,6 @@ public static class ResilientStarter
         {
             ct.ThrowIfCancellationRequested();
 
-            // v2.31.10 — emit BEFORE every attempt so partial-progress is
-            // observable when a later attempt blocks. Pre-fix the log only
-            // showed the final outcome, hiding which attempt got stuck.
             var preDelay = attempt == 1 ? 0 : backoffSeconds[attempt - 2];
             logger?.Information(
                 "[Resilient] {Component}: attempt {Attempt}/{Max}, delay={Delay}s",
@@ -122,10 +84,6 @@ public static class ResilientStarter
         return false;
     }
 
-    /// <summary>
-    /// Overload for synchronous Start() methods (ZapretManager, TgProxyManager).
-    /// Wraps the synchronous call in a Task.
-    /// </summary>
     public static Task<bool> StartWithBackoffAsync(
         string componentName,
         Action startFn,
@@ -147,20 +105,11 @@ public static class ResilientStarter
             ct);
     }
 
-    /// <summary>
-    /// Default retriable predicate:
-    ///   - FileNotFoundException  → non-retriable (binary missing, user config issue)
-    ///   - TunOwnershipException  → non-retriable (handled by outer loop in Service)
-    ///   - OperationCanceledException → non-retriable (stop requested)
-    ///   - anything else → retriable (transient network/process/driver issue)
-    /// </summary>
     private static bool DefaultIsRetriable(Exception ex)
     {
         if (ex is FileNotFoundException) return false;
         if (ex is OperationCanceledException) return false;
 
-        // Name-based check so we don't need a using for TunOwnershipException
-        // (it lives in the same namespace but we keep the helper standalone).
         if (ex.GetType().Name == "TunOwnershipException") return false;
 
         return true;

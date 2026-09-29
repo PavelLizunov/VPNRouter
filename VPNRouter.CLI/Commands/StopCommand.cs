@@ -138,9 +138,6 @@ public class StopCommand : Command
             return 1;
         }
 
-        // state.json is user-readable status, not the destructive authority.
-        // The TUN owner's v2 durable record must independently bind this exact
-        // owner and child before fallback may open the process for termination.
         if (!ProcessOwnership.IsCurrentRuntimeOwnerPair(
                 expectedOwner.Value,
                 expectedChild.Value))

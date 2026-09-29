@@ -9,21 +9,10 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
-/// <summary>
-/// Manages tg-ws-proxy process lifecycle via Python embeddable.
-/// Runs headless: python.exe -m proxy.tg_ws_proxy --port X --secret Y
-/// No tray icon, no GUI — pure background process.
-/// </summary>
 public class TgProxyManager : IDisposable
 {
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
-    // Phase 3+ (2026-05-21): IProcessRunner adoption (long-lived spawn).
-    // The legacy `Process? _process` field is gone — the handle owns Process
-    // lifetime now. Captured-stderr ring buffer feeds the early-exit log,
-    // replacing the post-exit StandardError.ReadToEnd() drain (which is
-    // unreachable through IProcessHandle by design — stderr is consumed
-    // exclusively via ErrorLine events).
     private IProcessHandle? _handle;
     private readonly StringBuilder _capturedStderr = new();
     private readonly object _stderrGate = new();
@@ -31,11 +20,6 @@ public class TgProxyManager : IDisposable
     private bool _disposed;
     private string _activeSecret = string.Empty;
 
-    /// <summary>Test-only seam: swap in a fake for the long-lived
-    /// python.exe spawn. Production paths use the default
-    /// <see cref="ProcessRunner"/>. Not thread-safe — assumes serial
-    /// xUnit execution within the fixture; tests reset in try/finally
-    /// (or use the per-instance ctor injection below).</summary>
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
     public bool IsRunning
@@ -74,10 +58,8 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>Last parsed stats line from stdout.</summary>
     public string? LastStats { get; private set; }
 
-    /// <summary>Fired when stats line is parsed from output.</summary>
     public event Action<string>? StatsUpdated;
 
     public TgProxyManager(ILogger? logger = null, IProcessRunner? runner = null)
@@ -86,9 +68,6 @@ public class TgProxyManager : IDisposable
         _runner = runner ?? Runner;
     }
 
-    /// <summary>
-    /// Start tg-ws-proxy via Python embeddable. No tray, no GUI.
-    /// </summary>
     public void Start(int port, string secret, bool verbose = false)
     {
         lock (_lifecycleGate)
@@ -112,14 +91,6 @@ public class TgProxyManager : IDisposable
         if (!Directory.Exists(TgProxyUpdater.ProxySourceDir))
             throw new FileNotFoundException("Proxy source not found. Download tg-ws-proxy first.");
 
-        // v2.36 (MVP one-button): pre-flight port availability probe.
-        // Pre-fix the spawn would proceed when 1443 was taken by another
-        // process, Python would exit silently inside the 2s watchdog
-        // window with a generic "Process exited" warning, and the user
-        // got no port-conflict breadcrumb. The TcpListener bind probe
-        // is ~5ms cost, deterministic, and lets us throw a typed
-        // exception that the App layer catches to render a port-aware
-        // toast. Owner-hint probe (netstat) is best-effort.
         if (!IsPortAvailable(port))
         {
             var ownerHint = TryResolvePortOwner(port);
@@ -132,15 +103,8 @@ public class TgProxyManager : IDisposable
         var args = $"-m proxy.tg_ws_proxy --port {port} --host 127.0.0.1 --secret {secret}";
         if (verbose) args += " --verbose";
 
-        // v2.31.10: never put the secret in plaintext into logs. The redacted
-        // copy is what gets emitted; the real one stays on the local PSI only.
         var redactedArgs = RedactSecretInArgs(args);
 
-        // Phase 3+ (2026-05-21): argv list mirrors the legacy `Arguments`
-        // string verbatim. Building a List<string> by whitespace-splitting is
-        // safe here because every value (port int, host literal, hex secret,
-        // module path) contains no whitespace itself — the legacy string was
-        // already shell-parseable as a list of bare tokens.
         var argv = new List<string>
         {
             "-m", "proxy.tg_ws_proxy",
@@ -161,9 +125,6 @@ public class TgProxyManager : IDisposable
             "[TgProxy] Spawn ProcessStartInfo: FileName={FileName}, Arguments={Arguments}, WorkingDirectory={WorkingDirectory}, CreateNoWindow={CreateNoWindow}, UseShellExecute={UseShellExecute}",
             request.ExecutablePath, redactedArgs, request.WorkingDirectory, true, false);
 
-        // Reset captured stderr for this spawn — the post-exit log on early
-        // failure pulls from this ring buffer instead of StandardError.ReadToEnd
-        // (which is unreachable via IProcessHandle).
         lock (_stderrGate) _capturedStderr.Clear();
         _activeSecret = secret;
 
@@ -177,35 +138,17 @@ public class TgProxyManager : IDisposable
             throw new InvalidOperationException("Failed to start tg-ws-proxy", ex);
         }
 
-        // IProcessHandle wires EnableRaisingEvents = true at construction
-        // (ProcessRunner.cs:155). The Exited callback fires on a threadpool
-        // thread; capture the handle in a local so the lambda sees the right
-        // instance even if Stop() nulls _handle mid-flight.
         var startedHandle = _handle;
         startedHandle.Exited += (_, code) =>
         {
             _logger.Warning("[TgProxy] Process exited (exit code: {Code})", code);
         };
 
-        // Single OnOutputLine handler subscribes to BOTH stdout and stderr —
-        // mirrors the legacy `OutputDataReceived += OnOutputData;
-        // ErrorDataReceived += OnOutputData;` pair. Stats lines come on stdout
-        // in production; the unified subscription keeps stderr noise visible
-        // via the same StatsUpdated channel if Python ever rotates which
-        // stream stats land on.
         startedHandle.OutputLine += OnOutputLineHandler;
         startedHandle.ErrorLine += OnErrorLineHandler;
 
         _logger.Information("[TgProxy] Spawned PID {Pid}", startedHandle.Pid);
 
-        // v2.31.10 — short post-spawn watchdog. Python embeddable failures
-        // (missing wheels, broken ._pth, port already in use) frequently
-        // exit within ms. Without this probe, the only signal is the
-        // generic "[TgProxy] Process exited" warning fired async, which
-        // races with the autostart-success log line above and confuses
-        // the trail. WaitForExitAsync returns naturally when the process is
-        // gone; the linked 2s CTS fires OperationCanceledException if it
-        // doesn't — same semantics as the legacy `WaitForExit(2000)` bool.
         using var probeCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(2000));
         try
         {
@@ -216,11 +159,6 @@ public class TgProxyManager : IDisposable
                     "[TgProxy] Process exited within 2s of spawn (PID {Pid}, ExitCode {ExitCode}) — likely startup failure",
                     startedHandle.Pid, exitCode);
 
-                // Captured stderr ring buffer replaces the legacy
-                // StandardError.ReadToEnd() — same observable effect
-                // (an error-tail log line for the operator), now sourced
-                // from the ErrorLine event stream which has been
-                // accumulating since spawn.
                 string stderrTail;
                 lock (_stderrGate) stderrTail = _capturedStderr.ToString();
 
@@ -246,31 +184,17 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.31.10 — strip the actual <c>--secret &lt;value&gt;</c> token from
-    /// an args string, leaving <c>--secret REDACTED</c>. Used by log lines
-    /// only; the real PSI keeps the original.
-    /// </summary>
     internal static string RedactSecretInArgs(string args)
     {
         if (string.IsNullOrEmpty(args)) return args;
-        // Match: --secret <non-space>+ . Replace with --secret REDACTED.
         return System.Text.RegularExpressions.Regex.Replace(
             args, @"--secret\s+\S+", "--secret REDACTED");
     }
 
-    // Phase 3+ (2026-05-21): IProcessHandle event shape uses
-    // `EventHandler<string>` where the string is the line directly (no
-    // DataReceivedEventArgs wrapper). The line-empty guard from the legacy
-    // OnOutputData(...) is preserved by the handle implementation itself —
-    // ProcessHandle.Begin (ProcessRunner.cs:231-238) already filters
-    // `e.Data != null` before raising OutputLine/ErrorLine, so subscribers
-    // see only real lines.
     private void OnOutputLineHandler(object? sender, string line)
     {
         if (string.IsNullOrEmpty(line)) return;
 
-        // Parse stats line: "stats: total=X active=Y ws=Z ..."
         if (line.Contains("stats:"))
         {
             LastStats = line;
@@ -282,13 +206,6 @@ public class TgProxyManager : IDisposable
     {
         if (string.IsNullOrEmpty(line)) return;
 
-        // Capture stderr to a ring buffer for the post-exit error log — the
-        // legacy code drained StandardError.ReadToEnd() on early-exit, but
-        // IProcessHandle exposes stderr only via the ErrorLine event stream.
-        // Accumulating the lines as they arrive gives the early-exit log path
-        // the same observable result (an error tail) without holding onto the
-        // raw stream reader. Cap the buffer to keep memory bounded for
-        // long-lived runs where stderr might keep emitting warnings.
         const int MaxStderrBuffer = 16 * 1024;
         lock (_stderrGate)
         {
@@ -298,10 +215,6 @@ public class TgProxyManager : IDisposable
             }
         }
 
-        // Stats lines historically arrived on either stdout OR stderr (the
-        // legacy code subscribed both event types to the same OnOutputData
-        // handler). Mirror that behaviour: stderr lines also feed the stats
-        // parser so a Python rotation between streams doesn't kill stats UX.
         if (line.Contains("stats:"))
         {
             LastStats = line;
@@ -319,23 +232,6 @@ public class TgProxyManager : IDisposable
             redacted, @"(?i)(secret(?:=|:\s*))[^\s&]+", "$1REDACTED");
     }
 
-    /// <summary>
-    /// v2.36 (MVP one-button): TCP port availability probe.
-    ///
-    /// <para>Returns true if the loopback address can bind on
-    /// <paramref name="port"/>, false if another process holds the
-    /// port (or the bind fails for any reason — defensive false so
-    /// the spawn-side error path takes over).</para>
-    ///
-    /// <para>Cost: ~5ms on Windows / Linux / macOS, no network
-    /// dependency, no admin required. Listener is disposed
-    /// immediately so the actual production spawn can claim the
-    /// port without TIME_WAIT lingering.</para>
-    ///
-    /// <para>Used by <see cref="Start"/> before invoking the spawn
-    /// runner, throwing <see cref="TgProxyPortConflictException"/>
-    /// on conflict.</para>
-    /// </summary>
     public static bool IsPortAvailable(int port)
     {
         if (port <= 0 || port > 65535) return false;
@@ -343,25 +239,16 @@ public class TgProxyManager : IDisposable
         TcpListener? listener = null;
         try
         {
-            // Bind on loopback specifically — TgProxy listens on
-            // 127.0.0.1 only (TgProxyManager.Start arg --host 127.0.0.1),
-            // so the right test is loopback bind, not all-interfaces.
             listener = new TcpListener(IPAddress.Loopback, port);
             listener.Start();
             return true;
         }
         catch (SocketException)
         {
-            // SocketError.AddressAlreadyInUse is the canonical "port
-            // is taken" path. We don't distinguish — any SocketException
-            // during the bind probe is treated as "not available".
             return false;
         }
         catch
         {
-            // Defensive: any other exception (permission denied,
-            // weird firewall) → treat as unavailable. The user gets a
-            // port-conflict toast instead of a generic crash.
             return false;
         }
         finally
@@ -370,13 +257,6 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.36 (MVP one-button): best-effort owner-process hint for the
-    /// port-conflict exception's <see cref="TgProxyPortConflictException.OwnerProcessHint"/>.
-    /// Windows-only (netstat); silently returns null on Mac/Linux or
-    /// any failure. Used solely to enrich the typed exception's
-    /// human-readable message — never on the hot path.
-    /// </summary>
     internal static string? TryResolvePortOwner(int port)
     {
         if (!OperatingSystem.IsWindows()) return null;
@@ -415,21 +295,15 @@ public class TgProxyManager : IDisposable
         }
         catch
         {
-            // Best-effort — caller treats null as "couldn't identify".
         }
         return null;
     }
 
-    /// <summary>
-    /// Build the tg://proxy deep link for Telegram Desktop.
-    /// dd prefix = random padding mode (standard MTProto).
-    /// </summary>
     public static string BuildProxyLink(string host, int port, string secret)
     {
         return $"tg://proxy?server={host}&port={port}&secret=dd{secret}";
     }
 
-    /// <summary>Open tg://proxy link in Telegram Desktop.</summary>
     public static void OpenInTelegram(string host, int port, string secret)
     {
         var url = BuildProxyLink(host, port, secret);
@@ -447,34 +321,16 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>
-    /// v2.31.6-r4 (BUG #1 fix): does Windows have an app registered
-    /// for the <c>tg://</c> URI scheme? Pre-fix the user got the OS
-    /// dialog "We can't open this 'tg' link. Your device needs a new
-    /// app to open this link." with no recourse from inside VPNRouter.
-    ///
-    /// Implementation: probe HKEY_CLASSES_ROOT for the "tg" key. The
-    /// presence of any non-empty value or sub-key indicates a handler
-    /// is registered. Telegram Desktop installs the registration; web
-    /// Telegram + Telegram Web add HKCU shell associations.
-    ///
-    /// Returns true on non-Windows (no equivalent check makes sense
-    /// — macOS/Linux deep-link routing fails through different
-    /// pipes that have their own user-visible errors).
-    /// </summary>
     public static bool IsTelegramSchemeRegistered()
     {
         if (!OperatingSystem.IsWindows()) return true;
 
         try
         {
-#pragma warning disable CA1416 // Windows-only is guarded above.
-            // HKEY_CLASSES_ROOT is the merged HKLM+HKCU classes view.
+#pragma warning disable CA1416
             using var hkcrTg = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("tg");
             if (hkcrTg != null) return true;
 
-            // Newer Edge/Chrome installs sometimes register tg via
-            // HKCU\SOFTWARE\Classes overlay only. Probe explicitly.
             using var hkcuTg = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Classes\tg");
             return hkcuTg != null;
 #pragma warning restore CA1416
@@ -482,9 +338,6 @@ public class TgProxyManager : IDisposable
         catch (Exception ex)
         {
             Log.Debug(ex, "[TgProxy] tg:// scheme probe failed (assume registered)");
-            // Defensive: don't block the user just because we couldn't
-            // read registry. If the deep-link still fails, the OS
-            // dialog is the worst case — same as pre-fix.
             return true;
         }
     }
@@ -510,7 +363,7 @@ public class TgProxyManager : IDisposable
 
             if (alreadyExited)
             {
-                try { _handle.Dispose(); } catch { /* defensive */ }
+                try { _handle.Dispose(); } catch { }
                 _handle = null;
                 _activeSecret = string.Empty;
                 return;
@@ -521,18 +374,9 @@ public class TgProxyManager : IDisposable
 
             try
             {
-                // v2.36.0-r5 (audit followup to brat r4 fix): suppress Exited
-                // event BEFORE Kill so the OS notification doesn't fire as a
-                // false "[TgProxy] Process exited (exit code: -1)" log entry
-                // on intentional Stop. Same Phase 3+ refactor regression that
-                // affected SingBoxManager (fixed in r4) — TgProxy wires
-                // startedHandle.Exited just like SingBoxManager. Sibling bug.
                 handle.SuppressExitedEvent();
                 handle.Kill(entireProcessTree: true);
 
-                // Symmetric replacement for the legacy `_process.WaitForExit(3000)`
-                // synchronisation barrier. The .GetAwaiter().GetResult() keeps
-                // Stop() sync-callable.
                 using var stopCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3000));
                 try
                 {
@@ -560,7 +404,7 @@ public class TgProxyManager : IDisposable
 
             if (confirmedExited)
             {
-                try { handle.Dispose(); } catch { /* defensive */ }
+                try { handle.Dispose(); } catch { }
                 _handle = null;
                 _activeSecret = string.Empty;
                 _logger.Information("[TgProxy] Stopped");
@@ -574,10 +418,6 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>
-    /// Check if any TCP listener is active on the configured TgProxy port (occupancy probe).
-    /// A bound port indicates occupancy or conflict, not proof of process ownership.
-    /// </summary>
     public static bool IsAnyRunning(int port = 1443)
     {
         try
@@ -586,27 +426,6 @@ public class TgProxyManager : IDisposable
             return listeners.Any(l => l.Port == port);
         }
         catch { return false; }
-    }
-
-    /// <summary>
-    /// Legacy static cleanup entry point retained for binary compatibility.
-    /// Destructive port-based kills and process sweeps have been removed.
-    /// Per-instance process lifetime is managed exclusively via <see cref="Stop"/>.
-    /// </summary>
-    /// <param name="port">Ignored. Retained for signature compatibility.</param>
-    public static void KillAll(int port = 1443)
-    {
-        // Safe no-op retained for signature compatibility.
-    }
-
-    /// <summary>
-    /// Legacy port-based kill entry point retained for binary compatibility.
-    /// Retained for signature compatibility without destructive behavior.
-    /// </summary>
-    /// <param name="port">Ignored. Retained for signature compatibility.</param>
-    public static void KillByPort(int port)
-    {
-        // Safe no-op retained for signature compatibility.
     }
 
     public void Dispose()

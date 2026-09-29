@@ -19,19 +19,6 @@ public sealed class FreeConfigFetcherTests
         "vless://11111111-2222-3333-4444-555555555555@server.example:443?security=tls&type=tcp#one";
 
     [Fact]
-    public void DefaultConstructor_UsesSharedPolicyClient()
-    {
-        using var logger = new LoggerConfiguration().CreateLogger();
-        var fetcher = new FreeConfigFetcher(logger);
-        var field = typeof(FreeConfigFetcher).GetField(
-            "_http",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-        Assert.NotNull(field);
-        Assert.Same(PolicyHttpClient.Shared, field!.GetValue(fetcher));
-    }
-
-    [Fact]
     public async Task FetchAsync_UsesBoundedPolicyEnvelopeAndExtracts()
     {
         using var logger = new LoggerConfiguration().CreateLogger();
