@@ -118,6 +118,7 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _menuAdvancedToggleBtn;
     private Avalonia.Controls.Button? _menuCheckLeaksItem;
     private Avalonia.Controls.Button? _menuHealthCheckItem;
+    private Avalonia.Controls.Button? _menuAddTileItem;
     private Avalonia.Controls.Button? _menuRestartSafeModeItem;
     private TextBlock? _menuSectionView;
     private TextBlock? _menuSectionDiagnostics;
@@ -644,6 +645,9 @@ public partial class AndroidApp : Avalonia.Application
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
                           new[] { _menuHealthCheckItem, _menuRestartSafeModeItem,
                                   _menuResetSettingsItem });
+        _menuAddTileItem = MakeMenuItem(Localization.MenuItemAddTile,
+                                        "TextPrimaryBrush", OnMenuAddTileClicked);
+        menuStack.Children.Add(_menuAddTileItem);
         menuStack.Children.Add(_menuVersionItem);
 
         var advancedToggleBtn = new Avalonia.Controls.Button
@@ -1560,6 +1564,7 @@ public partial class AndroidApp : Avalonia.Application
         RefreshAdvancedShellStrings();
         if (_menuCheckLeaksItem is not null) _menuCheckLeaksItem.Content = Localization.MenuItemCheckLeaks;
         if (_menuHealthCheckItem is not null) _menuHealthCheckItem.Content = Localization.MenuItemHealthCheck;
+        if (_menuAddTileItem is not null) _menuAddTileItem.Content = Localization.MenuItemAddTile;
         if (_menuRestartSafeModeItem is not null) _menuRestartSafeModeItem.Content = Localization.MenuItemSafeMode;
         if (_profilesOverlayTitle is not null) _profilesOverlayTitle.Text = Localization.ProfilesOverlayTitle;
         if (_profilesOverlayIntro is not null) _profilesOverlayIntro.Text = Localization.ProfilesIntro;
