@@ -1,15 +1,10 @@
 #nullable enable
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using VPNRouter.App.Localization;
 using VPNRouter.Core;
-using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
