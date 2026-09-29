@@ -183,6 +183,15 @@ public class LinuxFirewallManagerTests : IDisposable
     }
 
     [Fact]
+    public void BuildRuleset_passes_tailscale_and_ipv6_local_ranges()
+    {
+        var rules = LinuxFirewallManager.BuildRuleset(new List<string>());
+
+        Assert.Contains("100.64.0.0/10", rules);
+        Assert.Contains("output ip6 daddr { fe80::/10, fc00::/7 } accept", rules);
+    }
+
+    [Fact]
     public void BuildRuleset_omits_server_accept_line_when_no_ipv4_servers()
     {
         var rules = LinuxFirewallManager.BuildRuleset(new List<string>());

@@ -196,28 +196,4 @@ public sealed class UpdateBackupTests
         }
         finally { CleanUp(root); }
     }
-
-    private static string StripLineComments(string src)
-    {
-        return string.Join("\n",
-            src.Split('\n').Select(l =>
-                l.Contains("//") ? l[..l.IndexOf("//")] : l));
-    }
-
-    private static string? FindProgramSource() =>
-        FindSource("VPNRouter.App", "Program.cs");
-
-    private static string? FindUpdateCheckerSource() =>
-        FindSource("VPNRouter.Core", "Services", "UpdateChecker.cs");
-
-    private static string? FindSource(params string[] relativePath)
-    {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, Path.Combine(relativePath));
-            if (File.Exists(candidate)) return candidate;
-        }
-        return null;
-    }
 }
