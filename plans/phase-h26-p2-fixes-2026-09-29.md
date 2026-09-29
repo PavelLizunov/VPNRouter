@@ -45,5 +45,7 @@ exact-head CI.
 
 ## Outcome
 
-On `windows-worker` at cbb16167: `CrashReporterScrubberTests` and `FreeConfigAggregatorPreserveTests`
-77 of 77 passed. Negative check with both fixes reverted: both new tests fail. Exact-head CI: pending.
+On `windows-worker`: at cbb16167 `CrashReporterScrubberTests` + `FreeConfigAggregatorPreserveTests` 77 of
+77, negative check with both fixes reverted fails both new tests; at 669fc9f7 the firewall, crash
+reporter, aggregator and start-command classes 205 of 205; at 93478570 the MTU, MainWindowViewModel
+(including the public-surface hash) and Mtu tests 126 of 126. Exact-head CI: pending.
