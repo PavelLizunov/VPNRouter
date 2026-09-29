@@ -882,6 +882,8 @@ internal static class Localization
     public static string MenuItemCheckLeaks => global::VPNRouter.Core.Localization.Strings.MenuItemCheckLeaks;
     public static string MenuItemHealthCheck => global::VPNRouter.Core.Localization.Strings.MenuItemHealthCheck;
     public static string MenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.MenuItemSafeMode;
+
+    public static string TileSetupNeeded => global::VPNRouter.Core.Localization.Strings.TileSetupNeeded;
     public static string TipMenuItemHealthCheck => global::VPNRouter.Core.Localization.Strings.TipMenuItemHealthCheck;
     public static string TipMenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.TipMenuItemSafeMode;
     public static string TipMenuItemResetConfig => global::VPNRouter.Core.Localization.Strings.TipMenuItemResetConfig;

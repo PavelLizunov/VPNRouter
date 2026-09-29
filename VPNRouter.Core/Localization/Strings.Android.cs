@@ -215,6 +215,10 @@ public static partial class Strings
     public static string MenuItemCheckLeaks => SmpMenuCheckLeaks;
     public static string MenuItemHealthCheck => SmpMenuHealthCheck;
     public static string MenuItemSafeMode => SmpMenuSafeMode;
+
+    public static string TileSetupNeeded => Ru
+        ? "Сначала настройте подключение в приложении: после этого кнопка в шторке заработает."
+        : "Set up a connection in the app first; then the button in the shade works.";
     public static string TipMenuItemHealthCheck => TipSmpMenuHealthCheck;
     public static string TipMenuItemSafeMode => TipSmpMenuSafeMode;
     public static string TipMenuItemResetConfig => TipSmpMenuResetConfig;
