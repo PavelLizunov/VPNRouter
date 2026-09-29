@@ -50,80 +50,98 @@ sealed class Program
         VPNRouter.Core.Services.SafeMode.Enabled = SafeMode;
 
         if (SafeMode)
-        {
-            try
-            {
-                var cfg = VPNRouter.Core.AppPaths.ConfigYamlPath;
-                if (System.IO.File.Exists(cfg))
-                {
-                    var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                    var backup = $"{cfg}.backup-before-safemode-{stamp}";
-                    if (!System.IO.File.Exists(backup))
-                        System.IO.File.Copy(cfg, backup);
-                }
-            }
-            catch { }
-        }
+            BackupConfigBeforeSafeMode();
 
         if (args.Contains("--reset"))
-        {
-            try
-            {
-                var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
-                var msg = backup == null
-                    ? "VPNRouter config reset: no prior config existed, defaults written."
-                    : $"VPNRouter config reset complete.\r\nPrevious config backed up to: {backup}";
-                Console.WriteLine(msg);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"VPNRouter --reset failed: {ex.Message}");
-                Environment.Exit(1);
-            }
-            Environment.Exit(0);
-        }
+            ResetConfigAndExit();
 
 #if PLATFORM_WINDOWS
         if (OperatingSystem.IsWindows() && !IsAdmin())
         {
-            Exception? elevationError = null;
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = Environment.ProcessPath!,
-                    Arguments = string.Join(" ", args.Select(a => $"\"{a}\"")),
-                    UseShellExecute = true,
-                    Verb = "runas"
-                };
-                Process.Start(psi);
-            }
-            catch (Exception ex)
-            {
-                elevationError = ex;
-            }
-
-            if (elevationError != null)
-            {
-                var msg =
-                    "VPNRouter failed to elevate to administrator.\r\n" +
-                    $"Reason: {elevationError.GetType().Name}: {elevationError.Message}\r\n" +
-                    "Try: right-click VPNRouter.App.exe → Run as administrator.";
-                try
-                {
-                    var crashPath = System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                        "VPNRouter", "logs", "vpnrouter-launch-error.log");
-                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(crashPath)!);
-                    System.IO.File.AppendAllText(crashPath, $"[{DateTime.Now:O}] {msg}\r\n");
-                }
-                catch { }
-                try { Console.Error.WriteLine(msg); } catch { }
-            }
+            RelaunchElevated(args);
             return;
         }
 #endif
 
+        InitializeLogging();
+        RecordLaunchAttempt();
+
+#if PLATFORM_WINDOWS
+        HealServiceBinPath();
+        if (!RunInstallHealthCheck())
+            return;
+
+        if (!HandleRouteAppArguments(args))
+            return;
+
+        if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))
+            return;
+
+        CleanUpOrphansAndHookProcessExit();
+#endif
+
+#if PLATFORM_WINDOWS
+        try
+        {
+            if (VPNRouter.App.Services.ShortcutSelfHeal.EnsureTrampolineTarget())
+            {
+                try { Console.Error.WriteLine("[shortcut] Start Menu shortcut migrated to VPNRouter.GUI.exe (trampoline)"); }
+                catch { }
+            }
+        }
+        catch { }
+#endif
+
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exe) && AutostartHelper.EnsureCurrentPath(exe))
+            {
+                try { Console.Error.WriteLine($"[autostart] entry rewritten -> {exe}"); }
+                catch { }
+            }
+        }
+        catch { }
+
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
+    private static void BackupConfigBeforeSafeMode()
+    {
+        try
+        {
+            var cfg = VPNRouter.Core.AppPaths.ConfigYamlPath;
+            if (System.IO.File.Exists(cfg))
+            {
+                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                var backup = $"{cfg}.backup-before-safemode-{stamp}";
+                if (!System.IO.File.Exists(backup))
+                    System.IO.File.Copy(cfg, backup);
+            }
+        }
+        catch { }
+    }
+
+    private static void ResetConfigAndExit()
+    {
+        try
+        {
+            var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
+            var msg = backup == null
+                ? "VPNRouter config reset: no prior config existed, defaults written."
+                : $"VPNRouter config reset complete.\r\nPrevious config backed up to: {backup}";
+            Console.WriteLine(msg);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"VPNRouter --reset failed: {ex.Message}");
+            Environment.Exit(1);
+        }
+        Environment.Exit(0);
+    }
+
+    private static void InitializeLogging()
+    {
         try
         {
             VPNRouter.Core.AppPaths.EnsureDirectories();
@@ -139,7 +157,10 @@ sealed class Program
         {
             try { Console.Error.WriteLine($"[serilog] init failed: {ex.Message}"); } catch { }
         }
+    }
 
+    private static void RecordLaunchAttempt()
+    {
         try
         {
             var recoveryAction = VPNRouter.Core.Services.LaunchFailureCounter.RecommendAction();
@@ -153,8 +174,49 @@ sealed class Program
         {
             try { Console.Error.WriteLine($"[launch-counter] {ex.Message}"); } catch { }
         }
+    }
 
 #if PLATFORM_WINDOWS
+    private static void RelaunchElevated(string[] args)
+    {
+        Exception? elevationError = null;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = Environment.ProcessPath!,
+                Arguments = string.Join(" ", args.Select(a => $"\"{a}\"")),
+                UseShellExecute = true,
+                Verb = "runas"
+            };
+            Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            elevationError = ex;
+        }
+
+        if (elevationError != null)
+        {
+            var msg =
+                "VPNRouter failed to elevate to administrator.\r\n" +
+                $"Reason: {elevationError.GetType().Name}: {elevationError.Message}\r\n" +
+                "Try: right-click VPNRouter.App.exe → Run as administrator.";
+            try
+            {
+                var crashPath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "VPNRouter", "logs", "vpnrouter-launch-error.log");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(crashPath)!);
+                System.IO.File.AppendAllText(crashPath, $"[{DateTime.Now:O}] {msg}\r\n");
+            }
+            catch { }
+            try { Console.Error.WriteLine(msg); } catch { }
+        }
+    }
+
+    private static void HealServiceBinPath()
+    {
         try
         {
             var healResult = VPNRouter.App.Services.WindowsServiceHelper.EnsureCurrentBinPath();
@@ -166,7 +228,10 @@ sealed class Program
             }
         }
         catch { }
+    }
 
+    private static bool RunInstallHealthCheck()
+    {
         try
         {
             var health = VPNRouter.App.Services.InstallHealthCheck.Check();
@@ -208,13 +273,13 @@ sealed class Program
                     {
                         Console.Error.WriteLine($"[health] post-rollback relaunch failed: {ex.Message}");
                     }
-                    return;
+                    return false;
                 }
 
                 if (rollback.OperationInProgress)
                 {
                     Console.Error.WriteLine($"[health] rollback deferred: {rollback.Reason} — not starting concurrent SelfRepair");
-                    return;
+                    return false;
                 }
 
                 Console.Error.WriteLine($"[health] rollback declined: {rollback.Reason} — falling back to SelfRepair");
@@ -222,7 +287,7 @@ sealed class Program
                 if (plan.ShouldRun)
                 {
                     VPNRouter.App.Services.SelfRepair.Run();
-                    return;
+                    return false;
                 }
                 Console.Error.WriteLine($"[health] self-repair declined: {plan.Reason}");
             }
@@ -255,12 +320,18 @@ sealed class Program
             try { Console.Error.WriteLine($"[health] check failed: {ex.Message}"); } catch { }
         }
 
+
+        return true;
+    }
+
+    private static bool HandleRouteAppArguments(string[] args)
+    {
         var routeAppPath = TryGetArgValue(args, "--route-app");
         if (routeAppPath != null)
         {
             var routeAppCategory = TryGetArgValue(args, "--category");
             if (VPNRouter.App.Services.SingleInstance.TrySendRouteAppToRunningInstance(routeAppPath, routeAppCategory, Serilog.Log.Logger))
-                return;
+                return false;
             PendingRouteAppPath = routeAppPath;
             PendingRouteAppCategory = routeAppCategory;
         }
@@ -269,13 +340,16 @@ sealed class Program
         if (unrouteAppPath != null)
         {
             if (VPNRouter.App.Services.SingleInstance.TrySendUnrouteAppToRunningInstance(unrouteAppPath, Serilog.Log.Logger))
-                return;
+                return false;
             PendingUnrouteAppPath = unrouteAppPath;
         }
 
-        if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))
-            return;
 
+        return true;
+    }
+
+    private static void CleanUpOrphansAndHookProcessExit()
+    {
         try { SingBoxFeatures.Prewarm(); } catch { }
 
         try { OrphanCleanup.KillOrphans(); } catch { }
@@ -314,34 +388,9 @@ sealed class Program
             };
         }
         catch { }
-
-#endif
-
-#if PLATFORM_WINDOWS
-        try
-        {
-            if (VPNRouter.App.Services.ShortcutSelfHeal.EnsureTrampolineTarget())
-            {
-                try { Console.Error.WriteLine("[shortcut] Start Menu shortcut migrated to VPNRouter.GUI.exe (trampoline)"); }
-                catch { }
-            }
-        }
-        catch { }
-#endif
-
-        try
-        {
-            var exe = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(exe) && AutostartHelper.EnsureCurrentPath(exe))
-            {
-                try { Console.Error.WriteLine($"[autostart] entry rewritten -> {exe}"); }
-                catch { }
-            }
-        }
-        catch { }
-
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
+
+#endif
 
 #if PLATFORM_WINDOWS
     private static bool IsAdmin()
