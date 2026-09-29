@@ -90,7 +90,7 @@ public partial class UpdateChecker
         }
 
         Uri? checksumUri = null;
-        if (!string.IsNullOrEmpty(checksumUrl))
+        if (!string.IsNullOrEmpty(checksumUrl) && string.IsNullOrEmpty(info.FullChecksumSha256))
         {
             if (!Uri.TryCreate(checksumUrl, UriKind.Absolute, out checksumUri) ||
                 (checksumUri.Scheme != Uri.UriSchemeHttp && checksumUri.Scheme != Uri.UriSchemeHttps))
