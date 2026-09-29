@@ -7,6 +7,7 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
 {
     private static async Task WithFakeRunnerAsync(

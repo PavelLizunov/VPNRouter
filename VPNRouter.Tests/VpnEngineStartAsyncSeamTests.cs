@@ -446,6 +446,9 @@ public sealed class VpnEngineStartAsyncSeamTests
         await bringUpStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         var stopTask = Task.Run(() => engine.Stop());
+        // Give Stop time to cancel the session before the bring-up resumes, otherwise the start runs on into the
+        // five-second sing-box wait and this test races its own timeout.
+        await Task.Delay(500);
 
         holdBringUp.TrySetResult();
 
