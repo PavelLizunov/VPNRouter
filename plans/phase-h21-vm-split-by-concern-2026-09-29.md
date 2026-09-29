@@ -44,4 +44,4 @@ Full `VPNRouter.Tests` suite on `windows-worker`, run with no name exclusions:
   `Restart_DoesNotSpawnUntilQueuedRemovalCompletes` (fixed separately in H-19).
 - Targeted run of the ViewModel, Zapret, TgProxy and Autostart tests at a87f4066: 177 of 177
   passed, including the public-surface characterization hash.
-- Exact-head CI: pending.
+- Merged as #357; exact-head CI green.

@@ -34,3 +34,5 @@ tests here instead of merging; do not weaken assertions to get green.
   `Restart_DoesNotSpawnUntilQueuedRemovalCompletes` (timeout waiting for the second
   native lookup). It is excluded by name in `test.yml` and recorded in the ledger as
   WINDOWS-CI-COVERAGE; the hang guard (`--blame-hang-timeout 4m`) stays.
+
+Merged as #348 on 2026-09-29; exact-head CI green.

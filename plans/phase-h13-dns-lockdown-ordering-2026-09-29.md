@@ -29,4 +29,4 @@ Exact-head CI (Windows job runs the new test).
 
 ## Outcome
 
-Pending CI.
+Merged as #349 on 2026-09-29; exact-head CI green.

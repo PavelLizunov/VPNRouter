@@ -29,4 +29,4 @@ edited files (brace balance, attributes followed by methods).
 
 ## Outcome
 
-Pending CI.
+Merged as #341 on 2026-09-29; exact-head CI green.

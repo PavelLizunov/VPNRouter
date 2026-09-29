@@ -64,3 +64,5 @@ Revert the PR.
   bold P0/P1 marker, and the open P0/P1 gate set is unchanged (21 lines).
 - Checks: all edits matched exactly once; line endings preserved; workflow YAML
   parses; no broken relative Markdown link; exact-head CI recorded on PR #328.
+
+Merged as #328 on 2026-09-29; exact-head CI green.

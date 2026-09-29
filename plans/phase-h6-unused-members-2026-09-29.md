@@ -31,4 +31,4 @@ touched.
 
 ## Outcome
 
-Pending CI.
+Merged as #342 on 2026-09-29; exact-head CI green.

@@ -20,4 +20,4 @@ exact-head CI (the Windows job now includes this test again).
 
 ## Outcome
 
-Targeted run of TunAdapterPnpSettleGateTests on `windows-worker` at 427399a2: 9 of 9 passed, the re-enabled test in 928 ms. Exact-head CI: pending.
+Targeted run of TunAdapterPnpSettleGateTests on `windows-worker` at 427399a2: 9 of 9 passed, the re-enabled test in 928 ms. Merged as #355; exact-head CI green.

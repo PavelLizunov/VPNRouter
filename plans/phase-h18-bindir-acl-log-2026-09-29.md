@@ -21,4 +21,4 @@ Exact-head CI.
 
 ## Outcome
 
-Pending CI.
+Merged as #354 on 2026-09-29; exact-head CI green.

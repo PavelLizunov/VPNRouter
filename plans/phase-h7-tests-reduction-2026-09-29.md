@@ -31,4 +31,4 @@ mention `P07CliStopSourceGuardTests` stay as dated evidence.
 
 ## Outcome
 
-Pending CI.
+Merged as #343 on 2026-09-29; exact-head CI green.

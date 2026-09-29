@@ -37,4 +37,4 @@ name remains in tracked text.
 
 ## Outcome
 
-Pending CI. Lesson recorded: name scans must exclude `Set*`/`Get*` accessors of attached properties.
+Merged as #340 on 2026-09-29; exact-head CI green. Lesson recorded: name scans must exclude `Set*`/`Get*` accessors of attached properties.

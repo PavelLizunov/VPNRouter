@@ -24,4 +24,4 @@ Existing `AgentContextContractTests` pins are unchanged; exact-head CI.
 
 ## Outcome
 
-Pending CI.
+Merged as #351 on 2026-09-29; exact-head CI green.

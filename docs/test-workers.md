@@ -21,6 +21,8 @@ Observed on 2026-08-30. Capacity and installed-tool facts are point-in-time obse
 | `linux-worker` | Debian build/test worker | Debian 12; 4 CPUs; about 4 GiB RAM; about 10 GiB free | Git 2.39.5; .NET absent |
 | `mac-worker` | macOS build/test worker | macOS 26.5.2; 10 CPUs; 16 GiB RAM; about 8 GiB free | Xcode 26.6; .NET and adb absent |
 
+Observed on 2026-09-29 (historical): `windows-worker` has 16 GiB RAM and about 17 GiB free on `C:` with a private Android/.NET toolchain in `C:\android-build\`. Its Proxmox host runs with `nested_amd=1` and VM 100 uses `cpu: host`, so AMD-V is visible in the guest, but the Windows Hypervisor Platform feature is disabled: hardware-accelerated Android emulators would need that feature (a reboot) and more disk, which requires owner authorization.
+
 The fixed post-ship verifier may pin WINBRAT's canonical address and MachineName as a fail-closed identity check. Other worker access details come from the homelab runtime, not this repository.
 
 ## Mandatory preflight

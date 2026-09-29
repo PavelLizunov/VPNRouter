@@ -291,7 +291,6 @@ public partial class MainWindowViewModel
             entryToVm[entry] = vm;
         }
 
-        var done = 0;
         var total = entries.Count;
 
         try

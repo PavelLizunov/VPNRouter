@@ -96,8 +96,16 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Failed to open setup wizard");
+            _logger.Error(ex, "[ViewModel] Failed to open setup wizard");
         }
+    }
+
+    partial void OnTunMtuChanged(int value)
+    {
+        if (_isLoadingUI || value < TunSettings.MinimumMtu) return;
+        try { SaveSettings(); }
+        catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on TunMtu change failed"); }
+        MarkRoutingSettingsChanged();
     }
 
     private void ApplySetupWizardSettings(int mtu, bool splitTunnel)
@@ -175,7 +183,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Health check failed");
+            _logger.Error(ex, "[ViewModel] Health check failed");
         }
     }
 
@@ -217,7 +225,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[ViewModel] MTU auto-tune failed");
+            _logger.Warning(ex, "[ViewModel] MTU auto-tune failed");
             MtuAutoTuneStatus = Strings.MtuAutoTuneNoResult;
         }
         finally
@@ -246,7 +254,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Failed to open About dialog");
+            _logger.Error(ex, "[ViewModel] Failed to open About dialog");
         }
     }
 
@@ -328,11 +336,11 @@ public partial class MainWindowViewModel
         try
         {
             var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
-            _logger?.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
+            _logger.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[ViewModel] Config reset failed");
+            _logger.Error(ex, "[ViewModel] Config reset failed");
             return;
         }
 
@@ -417,13 +425,13 @@ public partial class MainWindowViewModel
             ShowRulesToast(IsRussian
                 ? $"Диагностика сохранена на рабочий стол: {name}"
                 : $"Diagnostics saved to Desktop: {name}");
-            _logger?.Information("[VM] Diagnostics exported: {Path} ({Entries} entries, {Warnings} warnings)",
+            _logger.Information("[VM] Diagnostics exported: {Path} ({Entries} entries, {Warnings} warnings)",
                 result.ZipPath, result.Entries.Count, result.Warnings.Count);
             RevealInFileManager(result.ZipPath);
         }
         catch (Exception ex)
         {
-            _logger?.Error(ex, "[VM] Diagnostics export failed");
+            _logger.Error(ex, "[VM] Diagnostics export failed");
             ShowRulesToast(IsRussian ? "Не удалось собрать диагностику" : "Diagnostics export failed");
         }
         finally
@@ -579,7 +587,7 @@ public partial class MainWindowViewModel
         if (!_isLoadingUI)
         {
             try { SaveSettings(); }
-            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AutostartVpn change failed"); }
+            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on AutostartVpn change failed"); }
         }
         OnPropertyChanged(nameof(SmpAutostartChecked));
     }
@@ -588,7 +596,7 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI) return;
         try { SaveSettings(); }
-        catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on IsDnsLeakLockdownEnabled change failed"); }
+        catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on IsDnsLeakLockdownEnabled change failed"); }
         MarkRoutingSettingsChanged();
     }
 
@@ -770,7 +778,7 @@ public partial class MainWindowViewModel
         var subTabHasCustom = CustomConfigs.Count > 0;
         var subTabIndex = (subTabHasManual || !subTabHasCustom) ? 0 : 1;
         SelectedServerModeIndex = subTabIndex;
-        _logger?.Information(
+        _logger.Information(
             "[VM] Sub-tab init: ServerModeIndex={Idx} (manual={M}, custom={C}, configMode={CM})",
             subTabIndex, Servers.Count, CustomConfigs.Count, _settings.App.ConfigMode);
 
@@ -866,14 +874,14 @@ public partial class MainWindowViewModel
         if (wantsCustomMode && hasActiveSubscription)
         {
             _settings.App.ConfigMode = "subscribe";
-            _logger?.Information(
+            _logger.Information(
                 "[Settings] Subscription is active — keeping ConfigMode=subscribe " +
                 "even though Custom sub-tab is selected (user is peeking, not switching)");
         }
         else if (wantsCustomMode && !hasCustomConfig)
         {
             _settings.App.ConfigMode = "generated";
-            _logger?.Information(
+            _logger.Information(
                 "[Settings] User clicked Custom sub-tab but no custom config is configured — keeping ConfigMode=generated instead of 'custom'");
         }
         else

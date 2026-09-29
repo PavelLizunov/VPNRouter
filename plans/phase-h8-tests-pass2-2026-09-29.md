@@ -26,4 +26,4 @@ Structure check (brace balance, attribute placement); exact-head CI.
 
 ## Outcome
 
-Pending CI.
+Merged as #344 on 2026-09-29; exact-head CI green.
