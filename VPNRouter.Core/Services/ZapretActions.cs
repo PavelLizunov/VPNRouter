@@ -498,18 +498,30 @@ public static class ZapretActions
 
     public static void OpenServiceMenu(string? customServicePath = null)
     {
-        var servicePath = customServicePath ?? Path.Combine(ZapretUpdater.ZapretDir, "service.bat");
-        if (!File.Exists(servicePath))
-            throw new FileNotFoundException("service.bat not found", servicePath);
+        var targetPath = customServicePath ?? Path.Combine(ZapretUpdater.ZapretDir, "service.bat");
+        var fullServicePath = Path.GetFullPath(targetPath);
+        var baseDir = Path.GetFullPath(ZapretUpdater.ZapretDir);
 
-        if (servicePath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
-            throw new ArgumentException("Service path contains disallowed shell metacharacters", nameof(servicePath));
+        if (!fullServicePath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Service path must point to a .bat file", nameof(customServicePath));
 
-        Process.Start(new ProcessStartInfo("cmd.exe", $"/k \"\"{servicePath}\"\"")
+        if (!fullServicePath.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(fullServicePath, baseDir, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Service path must be located within the Zapret directory", nameof(customServicePath));
+        }
+
+        if (!File.Exists(fullServicePath))
+            throw new FileNotFoundException("service.bat not found", fullServicePath);
+
+        if (fullServicePath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
+            throw new ArgumentException("Service path contains disallowed shell metacharacters", nameof(customServicePath));
+
+        Process.Start(new ProcessStartInfo("cmd.exe", $"/k \"\"{fullServicePath}\"\"")
         {
             UseShellExecute = true,
             Verb = "runas",
-            WorkingDirectory = Path.GetDirectoryName(servicePath) ?? ZapretUpdater.ZapretDir
+            WorkingDirectory = Path.GetDirectoryName(fullServicePath) ?? ZapretUpdater.ZapretDir
         });
     }
 
