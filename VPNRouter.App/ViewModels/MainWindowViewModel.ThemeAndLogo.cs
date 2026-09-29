@@ -1,28 +1,11 @@
 #nullable enable
-using System;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.App.Localization;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
 using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Input.Platform;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using CommunityToolkit.Mvvm.Input;
-using Serilog;
-using VPNRouter.Core;
-using VPNRouter.Core.Models;
-using VPNRouter.Core.Platform;
-using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.FreeConfigs;
-using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
