@@ -16,7 +16,7 @@ on:
       - "v*"
   pull_request:
     paths:
-      - "VPNRouter.Core/Services/UpdateChecker.cs"
+      - "VPNRouter.Core/Services/UpdateChecker*.cs"
       - "VPNRouter.CLI/Commands/TestUpdateCommand.cs"
       - "VPNRouter.CLI/Program.cs"
       - "VPNRouter.Core/AppVersion.cs"

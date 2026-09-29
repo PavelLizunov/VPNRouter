@@ -20,10 +20,10 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 
 - `Models/`: Data transfer objects, settings schema, profile structures, engine settings, and sing-box JSON configuration models (`AppSettings`, `Profile`, `ProcessRule`, `VPNConfig`, `AppConfig`, `TunSettings`, etc.).
 - `Services/`: Core service implementations and orchestration logic (see [Services/AGENTS.md](Services/AGENTS.md) for subsystem entry points and lifecycle caveats):
-  - `VpnEngine.cs`: Central VPN lifecycle orchestrator (`StartAsync`, `ApplyAsync`, `Stop`). Coordinates profile resolution, process scanning, config generation, firewall management, ETW monitoring, health checks, and true-split driver engagement.
+  - `VpnEngine.cs` (with `VpnEngine.Failover.cs`, `.TrueSplit.cs`, `.ProfileSources.cs`, `.StartupHost.cs`): Central VPN lifecycle orchestrator (`StartAsync`, `ApplyAsync`, `Stop`). Coordinates profile resolution, process scanning, config generation, firewall management, ETW monitoring, health checks, and true-split driver engagement.
   - `SingBoxManager.cs`: sing-box process lifecycle and Clash API hot-reloading manager.
   - `ConfigGenerator.cs`: JSON generator for sing-box routing, DNS, and outbounds.
-  - `CustomConfigInjector.cs`: Injects process routing and adjusts DNS/route settings in custom sing-box JSON; inspect the mode-specific branches and validation limits.
+  - `CustomConfigInjector.cs` (with `.Routing.cs`, `.Dns.cs`, `.Geo.cs`, `.Compat.cs`): Injects process routing and adjusts DNS/route settings in custom sing-box JSON; inspect the mode-specific branches and validation limits.
   - `LeakProtection.cs`: Safety validation for generated sing-box JSON configs (missing proxy outbounds, DNS strategy, strict routing).
   - `HealthMonitor.cs`: Periodic VPN connectivity health check and automatic restart/backoff logic.
   - `ConnectionHealthClassifier.cs`, `ConnectionHealthState.cs`, `ClashLogStream.cs`: Observe-only connection health telemetry parser, aggregator, and WebSocket subscriber.
@@ -34,7 +34,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
   - `ProcessQuery.cs`: Safe `GetProcessesByName` wrappers (`AnyAlive`, `CountAlive`) ensuring `Process[]` handles are disposed.
   - `RoutingAppListEditor.cs`: App routing list manager for split-tunnel configuration (`TryAddProcessName`, `TryRemoveProcessName`, `IsStillRoutedByAnother` survivor-guard).
   - `FirewallManager.cs`: Windows Firewall manager (`netsh.exe`).
-  - `SplitTunnelDriverProtocol.cs`, `SplitTunnelDriverInterop.cs`, `SplitTunnelDriverManager.cs`: True-split kernel driver protocol, P/Invoke interop, and lifecycle manager (`ISplitTunnelDriver`).
+  - `SplitTunnelDriverProtocol.cs`, `SplitTunnelDriverInterop.cs`, `SplitTunnelDriverManager.cs` (with `.Service.cs`, `.Wfp.cs`, `.Device.cs`, `.Pump.cs`, `.NetChange.cs`): True-split kernel driver protocol, P/Invoke interop, and lifecycle manager (`ISplitTunnelDriver`).
   - `ProfileManager.cs`: Merging and source priority resolution for profiles (GitHub > Local > Built-in).
   - `SettingsLoader.cs`, `SettingsMigrator.cs`: YAML settings loading/saving (YamlDotNet) and schema migrations.
   - `ZapretProbeCache.cs`: Zapret probe cache persistence (`%ProgramData%\VPNRouter\cache\zapret_probe.json`).
