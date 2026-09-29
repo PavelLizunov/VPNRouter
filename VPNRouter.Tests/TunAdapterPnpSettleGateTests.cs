@@ -141,7 +141,11 @@ public sealed class TunAdapterPnpSettleGateTests
             releaseQueuedRemoval.TrySetResult(Ok(string.Empty));
             await restart.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(2, processRunner.StartCalls.Count);
-        }, cleanup: () => DisposeAndDrain(manager), nativeLookup: _ =>
+        }, cleanup: () =>
+        {
+            releaseQueuedRemoval.TrySetResult(Ok(string.Empty));
+            DisposeAndDrain(manager);
+        }, nativeLookup: _ =>
         {
             var call = Interlocked.Increment(ref resolveCall);
             if (call == 2)
@@ -190,6 +194,7 @@ public sealed class TunAdapterPnpSettleGateTests
             Assert.Single(newProcessRunner.StartCalls);
         }, cleanup: () =>
         {
+            releaseOldRemoval.TrySetResult(Ok(string.Empty));
             DisposeAndDrain(oldManager);
             DisposeAndDrain(newManager);
         }, nativeLookup: _ =>
