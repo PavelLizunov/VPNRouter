@@ -143,7 +143,7 @@ public class CustomConfigInjectorTests
         var processRuleIndex = -1;
         for (int i = 0; i < rules!.Count; i++)
         {
-            if (rules[i]["process_name"] != null)
+            if (rules[i]?["process_name"] != null)
             {
                 processRuleIndex = i;
                 break;
@@ -196,7 +196,7 @@ public class CustomConfigInjectorTests
 
         foreach (var rule in rules!)
         {
-            Assert.Null(rule["process_name"]);
+            Assert.Null(rule?["process_name"]);
         }
     }
 
@@ -220,7 +220,7 @@ public class CustomConfigInjectorTests
         var json = (JsonNode.Parse(second) as JsonObject)!;
         var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
-        var processRules = rules!.Where(r => r["process_name"] != null).ToList();
+        var processRules = rules!.Where(r => r?["process_name"] != null).ToList();
         Assert.Single(processRules);
 
         var processNameArr = processRules[0]!["process_name"] as JsonArray;
@@ -344,26 +344,26 @@ public class CustomConfigInjectorTests
         Assert.Equal("system", tun["stack"]?.ToString());
 
         var outbounds = json["outbounds"] as JsonArray;
-        Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "block");
-        Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "dns");
+        Assert.DoesNotContain(outbounds!, o => o?["type"]?.ToString() == "block");
+        Assert.DoesNotContain(outbounds!, o => o?["type"]?.ToString() == "dns");
 
         var dnsServers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
-        var localDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
+        var localDnsServer = dnsServers!.FirstOrDefault(s => s?["tag"]?.ToString() == "local");
         Assert.Equal("dns-direct", localDnsServer?["detour"]?.ToString());
-        var remoteDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
+        var remoteDnsServer = dnsServers!.FirstOrDefault(s => s?["tag"]?.ToString() == "remote");
         Assert.Equal("proxy", remoteDnsServer?["detour"]?.ToString());
         var allOutbounds = json["outbounds"] as JsonArray;
-        var dnsDirect = allOutbounds!.FirstOrDefault(o => o["tag"]?.ToString() == "dns-direct");
+        var dnsDirect = allOutbounds!.FirstOrDefault(o => o?["tag"]?.ToString() == "dns-direct");
         Assert.NotNull(dnsDirect);
         Assert.Equal("direct", dnsDirect!["type"]?.ToString());
 
         foreach (var s in dnsServers!)
-            Assert.NotNull(s["type"]);
+            Assert.NotNull(s?["type"]);
 
-        var remoteDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
+        var remoteDns = dnsServers!.FirstOrDefault(s => s?["tag"]?.ToString() == "remote");
         Assert.Equal("https", remoteDns?["type"]?.ToString());
 
-        var localDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
+        var localDns = dnsServers!.FirstOrDefault(s => s?["tag"]?.ToString() == "local");
         Assert.NotNull(localDns);
         Assert.NotEqual("local", localDns!["type"]?.ToString());
         Assert.Equal("udp", localDns["type"]?.ToString());
@@ -406,9 +406,9 @@ public class CustomConfigInjectorTests
     {
         var json = (JsonNode.Parse(CustomConfigInjector.Inject(SelectorWithAutoOutbound, new[] { "chrome.exe" }, CreateSettings())) as JsonObject)!;
         var outbounds = json["outbounds"] as JsonArray;
-        Assert.Contains(outbounds!, o => o["type"]?.ToString() == "urltest");
+        Assert.Contains(outbounds!, o => o?["type"]?.ToString() == "urltest");
 
-        var tags = outbounds!.Select(o => o["tag"]?.ToString()).Where(t => t != null).ToList();
+        var tags = outbounds!.Select(o => o?["tag"]?.ToString()).Where(t => t != null).ToList();
         Assert.Equal(tags.Count, tags.Distinct(StringComparer.Ordinal).Count());
     }
 
@@ -539,11 +539,11 @@ public class CustomConfigInjectorTests
         var outbounds = parsed["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
 
-        var vless = outbounds!.FirstOrDefault(o => o["type"]?.ToString() == "vless");
+        var vless = outbounds!.FirstOrDefault(o => o?["type"]?.ToString() == "vless");
         Assert.NotNull(vless);
         Assert.Equal("custom-proxy", vless!["tag"]?.ToString());
 
-        Assert.DoesNotContain(outbounds!, o => o["tag"]?.ToString() == "proxy");
+        Assert.DoesNotContain(outbounds!, o => o?["tag"]?.ToString() == "proxy");
     }
 
     [Fact]
@@ -571,7 +571,7 @@ public class CustomConfigInjectorTests
 
         var routeRules = StjNodeHelpers.SelectToken(parsed, "route.rules") as JsonArray;
         Assert.NotNull(routeRules);
-        var processRule = routeRules!.FirstOrDefault(r => r["process_name"] != null);
+        var processRule = routeRules!.FirstOrDefault(r => r?["process_name"] != null);
         Assert.NotNull(processRule);
         Assert.Equal("custom-proxy", processRule!["outbound"]?.ToString());
     }
@@ -937,7 +937,7 @@ public class CustomConfigInjectorTests
         Assert.Equal("8.8.8.8", ddrServer["server"]?.ToString());
         Assert.Equal("/dns-query", ddrServer["path"]?.ToString());
         Assert.Equal("dns-direct", ddrServer["detour"]?.ToString());
-        Assert.DoesNotContain(servers.OfType<JsonObject>(), s =>
+        Assert.DoesNotContain(servers!.OfType<JsonObject>(), s =>
             s["type"]?.ToString() == "udp" && s["server"]?.ToString() == "8.8.8.8");
 
         AssertSingBoxCheckPasses(result, "domainproxy-nodns-full");

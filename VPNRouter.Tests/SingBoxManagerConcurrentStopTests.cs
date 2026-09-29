@@ -38,7 +38,7 @@ public sealed class SingBoxManagerConcurrentStopTests
             {
                 barrier.SignalAndWait();
                 mgr.Stop();
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
         await Task.WhenAll(tasks);

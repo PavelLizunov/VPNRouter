@@ -25,7 +25,7 @@ public sealed class SingBoxManagerSuppressExitedEventTests
 
         handle.SignalExit(exitCode: 0);
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, exitedFired);
         Assert.True(handle.HasExited);
@@ -40,7 +40,7 @@ public sealed class SingBoxManagerSuppressExitedEventTests
 
         handle.SignalExit(exitCode: 0);
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, exitedFired);
         Assert.True(handle.HasExited);

@@ -111,9 +111,11 @@ public sealed class TgProxyOwnershipCharacterizationTests
             DisposeCallCount++;
         }
 
+#pragma warning disable CS0067 // stub implements the interface; the events are never raised
         public event EventHandler<string>? OutputLine;
         public event EventHandler<string>? ErrorLine;
         public event EventHandler<int>? Exited;
+#pragma warning restore CS0067
     }
 
     [Fact]

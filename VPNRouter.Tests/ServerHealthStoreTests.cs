@@ -29,7 +29,7 @@ public class ServerHealthStoreTests : IDisposable
 
     private static VlessServerEntry Entry(string server = "1.2.3.4", int port = 443,
         string? protocol = "vless", string name = "n1")
-        => new() { Name = name, Server = server, Port = port, Protocol = protocol };
+        => new() { Name = name, Server = server, Port = port, Protocol = protocol! };
 
     [Fact]
     public void Record_GetFresh_RoundTrips()
