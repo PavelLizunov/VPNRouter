@@ -356,4 +356,13 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         Assert.Equal(99009, sut.Pid);
         second.SignalExit(0);
     }
+
+    [Fact]
+    public void BuildProxyLink_GeneratesValidTgProxyUri()
+    {
+        var link = TgProxyManager.BuildProxyLink("127.0.0.1", 1443, "abc123secret");
+        Assert.StartsWith("tg://proxy?", link);
+        Assert.True(Uri.TryCreate(link, UriKind.Absolute, out var uri));
+        Assert.Equal("tg", uri!.Scheme);
+    }
 }
