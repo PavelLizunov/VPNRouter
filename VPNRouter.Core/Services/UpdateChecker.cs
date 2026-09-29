@@ -7,7 +7,7 @@ using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Core.Services;
 
-public class UpdateChecker : IDesktopInstaller
+public partial class UpdateChecker : IDesktopInstaller
 {
     private readonly IHttpClient _http;
     private readonly UpdateSettings _settings;

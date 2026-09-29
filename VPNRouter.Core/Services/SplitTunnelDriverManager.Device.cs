@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -9,9 +10,12 @@ using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+#if PLATFORM_WINDOWS
 using System.Management;
+#endif
 using Microsoft.Win32.SafeHandles;
 using Serilog;
+
 using Native = VPNRouter.Core.Services.SplitTunnelDriverInterop;
 using Proto = VPNRouter.Core.Services.SplitTunnelDriverProtocol;
 

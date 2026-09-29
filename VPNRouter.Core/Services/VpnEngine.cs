@@ -6,7 +6,7 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-public class VpnEngine : IDisposable
+public partial class VpnEngine : IDisposable
 {
     private SingBoxManager? _singBox;
     private HealthMonitor? _healthMonitor;
