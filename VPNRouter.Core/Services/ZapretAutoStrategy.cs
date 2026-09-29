@@ -393,153 +393,13 @@ internal static string? BestStrategyByScore(
         var probeLogLock = new object();
 
         using var proc = new System.Diagnostics.Process { StartInfo = psi };
-        var outputBuilder = new System.Text.StringBuilder();
-        string? winner = null;
-        int testedCount = 0;
-        int totalCount = 0;
-
-        int currentOkCount = 0;
-        int currentTotalChecks = 0;
-        var counterLock = new object();
-
-        string currentStrategyName = string.Empty;
-        bool earlyWinnerKilled = false;
-
-        var perStrategyResults = new Dictionary<string, ZapretStrategyTestResult>(
-            StringComparer.Ordinal);
-        var perStrategyLock = new object();
-
-        var errorLines = new List<string>(capacity: 8);
-
-        var configHeaderRx = ConfigHeaderRx;
-        var statusLineRx = StatusLineRx;
-        var winnerRx = WinnerRx;
-        var errorLineRx = ErrorLineRx;
+        var state = new FlowsealSweepState(progress, logger, probeLog, probeLogLock,
+            () => proc.Kill(entireProcessTree: true));
 
         proc.OutputDataReceived += (sender, args) =>
         {
             if (args.Data == null) return;
-            var line = args.Data;
-            outputBuilder.AppendLine(line);
-            if (probeLog != null)
-            {
-                try
-                {
-                    lock (probeLogLock)
-                    {
-                        probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
-                    }
-                }
-                catch { }
-            }
-
-            var m = configHeaderRx.Match(line);
-            if (m.Success
-                && int.TryParse(m.Groups[1].Value, out var n)
-                && int.TryParse(m.Groups[2].Value, out var t))
-            {
-                int prevOk, prevTotal;
-                string prevName;
-                lock (counterLock)
-                {
-                    prevOk = currentOkCount;
-                    prevTotal = currentTotalChecks;
-                    prevName = currentStrategyName;
-                    currentOkCount = 0;
-                    currentTotalChecks = 0;
-                    testedCount = n;
-                    totalCount = t;
-                }
-                if (!string.IsNullOrEmpty(prevName) && prevTotal > 0)
-                {
-                    lock (perStrategyLock)
-                    {
-                        perStrategyResults[prevName] = new ZapretStrategyTestResult
-                        {
-                            Passed = prevOk,
-                            Total = prevTotal,
-                            At = DateTime.UtcNow,
-                        };
-                    }
-                }
-
-                var strategy = m.Groups[3].Value.Trim();
-                currentStrategyName = strategy;
-                progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
-                return;
-            }
-
-            var s = statusLineRx.Match(line);
-            if (s.Success)
-            {
-                var status = s.Groups[1].Value;
-                bool isPass = status.Equals("OK", StringComparison.OrdinalIgnoreCase)
-                    || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
-                int snapOk, snapTotal, snapN, snapT;
-                lock (counterLock)
-                {
-                    currentTotalChecks++;
-                    if (isPass)
-                        currentOkCount++;
-                    snapOk = currentOkCount;
-                    snapTotal = currentTotalChecks;
-                    snapN = testedCount;
-                    snapT = totalCount;
-                }
-                if (snapN > 0 && snapT > 0)
-                {
-                    progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
-                }
-
-                if (!earlyWinnerKilled
-                    && snapOk == snapTotal
-                    && snapTotal >= 16
-                    && !string.IsNullOrEmpty(currentStrategyName))
-                {
-                    earlyWinnerKilled = true;
-                    winner = currentStrategyName;
-                    logger?.Information(
-                        "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
-                        winner, snapOk, snapTotal);
-                    if (probeLog != null)
-                    {
-                        try
-                        {
-                            lock (probeLogLock)
-                            {
-                                probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} # EARLY-WINNER {currentStrategyName} ({snapOk}/{snapTotal}) — killing script, skipping remaining {snapT - snapN} configs");
-                            }
-                        }
-                        catch { }
-                    }
-                    progress?.Report(new FlowsealProgress(
-                        snapN, snapT, currentStrategyName, snapOk, snapTotal));
-                    try { proc.Kill(entireProcessTree: true); }
-                    catch (Exception ex)
-                    {
-                        logger?.Warning(ex, "[ZapretAutoStrategy] Early-kill threw (proc may already be dead)");
-                    }
-                }
-                return;
-            }
-
-            if (errorLineRx.IsMatch(line))
-            {
-                lock (counterLock)
-                {
-                    if (errorLines.Count >= 8) errorLines.RemoveAt(0);
-                    errorLines.Add(line.Trim());
-                }
-                logger?.Debug("[ZapretAutoStrategy] flowseal-script: {Line}", line.Trim());
-                return;
-            }
-
-            var w = winnerRx.Match(line);
-            if (w.Success)
-            {
-                winner = w.Groups[1].Value.Trim();
-                logger?.Information("[ZapretAutoStrategy] Flowseal sweep winner: {Strategy}", winner);
-            }
+            state.HandleLine(args.Data);
         };
         proc.ErrorDataReceived += (sender, args) =>
         {
@@ -624,10 +484,10 @@ internal static string? BestStrategyByScore(
                 {
                     logger?.Information("[ZapretAutoStrategy] Flowseal sweep canceled by user");
                     IReadOnlyList<string> errSnap;
-                    lock (counterLock) { errSnap = errorLines.ToArray(); }
+                    errSnap = state.SnapshotErrors();
                     CleanupOrphanWinws(preExistingWinwsPids, logger);
                     CloseProbeLog(probeLog, probeLogLock, "canceled", null, logger);
-                    return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString(),
+                    return new FlowsealSweepResult(null, state.TestedCount, state.TotalCount, state.Output,
                         Diagnostic: "canceled", ErrorLines: errSnap,
                         ProbeLogPath: probeLog != null ? probeLogPath : null,
                         EarlyWinner: false);
@@ -636,44 +496,19 @@ internal static string? BestStrategyByScore(
         }
 
         IReadOnlyList<string> finalErrors;
-        lock (counterLock) { finalErrors = errorLines.ToArray(); }
+        finalErrors = state.SnapshotErrors();
 
         CleanupOrphanWinws(preExistingWinwsPids, logger);
 
-        int lastOk, lastTotal;
-        string lastName;
-        lock (counterLock)
-        {
-            lastOk = currentOkCount;
-            lastTotal = currentTotalChecks;
-            lastName = currentStrategyName;
-        }
-        if (!string.IsNullOrEmpty(lastName) && lastTotal > 0)
-        {
-            lock (perStrategyLock)
-            {
-                perStrategyResults[lastName] = new ZapretStrategyTestResult
-                {
-                    Passed = lastOk,
-                    Total = lastTotal,
-                    At = DateTime.UtcNow,
-                };
-            }
-        }
+        state.RecordCurrentStrategy();
+        var perStrategySnap = state.SnapshotScores();
 
-        IReadOnlyDictionary<string, ZapretStrategyTestResult> perStrategySnap;
-        lock (perStrategyLock)
-        {
-            perStrategySnap = new Dictionary<string, ZapretStrategyTestResult>(
-                perStrategyResults, StringComparer.Ordinal);
-        }
-
-        if (string.IsNullOrEmpty(winner))
+        if (string.IsNullOrEmpty(state.Winner))
         {
             var fallback = BestStrategyByScore(perStrategySnap);
             if (!string.IsNullOrEmpty(fallback))
             {
-                winner = fallback;
+                state.Winner = fallback;
                 logger?.Information(
                     "[ZapretAutoStrategy] No explicit winner line — promoting best-scoring strategy {Strategy} ({Ok}/{Total})",
                     fallback, perStrategySnap[fallback].Passed, perStrategySnap[fallback].Total);
@@ -682,19 +517,220 @@ internal static string? BestStrategyByScore(
 
         logger?.Information(
             "[ZapretAutoStrategy] Flowseal sweep exited code={Code}, tested={N}/{Total}, winner={W}, errs={E}, perStrategy={S}",
-            proc.HasExited ? proc.ExitCode : -1, testedCount, totalCount,
-            winner ?? "<none>", finalErrors.Count, perStrategySnap.Count);
+            proc.HasExited ? proc.ExitCode : -1, state.TestedCount, state.TotalCount,
+            state.Winner ?? "<none>", finalErrors.Count, perStrategySnap.Count);
 
         CloseProbeLog(probeLog, probeLogLock,
-            outcome: winner != null ? "winner" : (timeoutDiagnostic ?? "no_winner"),
-            winner: winner,
+            outcome: state.Winner != null ? "winner" : (timeoutDiagnostic ?? "no_winner"),
+            winner: state.Winner,
             logger: logger);
 
-        return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString(),
+        return new FlowsealSweepResult(state.Winner, state.TestedCount, state.TotalCount, state.Output,
             Diagnostic: timeoutDiagnostic, ErrorLines: finalErrors,
             PerStrategyResults: perStrategySnap,
             ProbeLogPath: probeLog != null ? probeLogPath : null,
-            EarlyWinner: earlyWinnerKilled);
+            EarlyWinner: state.EarlyWinnerKilled);
+    }
+
+    private sealed class FlowsealSweepState
+    {
+        private readonly IProgress<FlowsealProgress>? _progress;
+        private readonly Serilog.ILogger? _logger;
+        private readonly StreamWriter? _probeLog;
+        private readonly object _probeLogLock;
+        private readonly Action _killScript;
+        private readonly object _counterLock = new();
+        private readonly object _perStrategyLock = new();
+        private readonly System.Text.StringBuilder _output = new();
+        private readonly Dictionary<string, ZapretStrategyTestResult> _perStrategy =
+            new(StringComparer.Ordinal);
+        private readonly List<string> _errorLines = new(capacity: 8);
+        private int _currentOk;
+        private int _currentTotal;
+        private string _currentName = string.Empty;
+
+        public FlowsealSweepState(
+            IProgress<FlowsealProgress>? progress,
+            Serilog.ILogger? logger,
+            StreamWriter? probeLog,
+            object probeLogLock,
+            Action killScript)
+        {
+            _progress = progress;
+            _logger = logger;
+            _probeLog = probeLog;
+            _probeLogLock = probeLogLock;
+            _killScript = killScript;
+        }
+
+        public string? Winner { get; set; }
+
+        public int TestedCount { get; private set; }
+
+        public int TotalCount { get; private set; }
+
+        public bool EarlyWinnerKilled { get; private set; }
+
+        public string Output => _output.ToString();
+
+        public void HandleLine(string line)
+        {
+        _output.AppendLine(line);
+        if (_probeLog != null)
+        {
+            try
+            {
+                lock (_probeLogLock)
+                {
+                    _probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
+                }
+            }
+            catch { }
+        }
+
+        var m = ConfigHeaderRx.Match(line);
+        if (m.Success
+            && int.TryParse(m.Groups[1].Value, out var n)
+            && int.TryParse(m.Groups[2].Value, out var t))
+        {
+            int prevOk, prevTotal;
+            string prevName;
+            lock (_counterLock)
+            {
+                prevOk = _currentOk;
+                prevTotal = _currentTotal;
+                prevName = _currentName;
+                _currentOk = 0;
+                _currentTotal = 0;
+                TestedCount = n;
+                TotalCount = t;
+            }
+            if (!string.IsNullOrEmpty(prevName) && prevTotal > 0)
+            {
+                lock (_perStrategyLock)
+                {
+                    _perStrategy[prevName] = new ZapretStrategyTestResult
+                    {
+                        Passed = prevOk,
+                        Total = prevTotal,
+                        At = DateTime.UtcNow,
+                    };
+                }
+            }
+
+            var strategy = m.Groups[3].Value.Trim();
+            _currentName = strategy;
+            _progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
+            return;
+        }
+
+        var s = StatusLineRx.Match(line);
+        if (s.Success)
+        {
+            var status = s.Groups[1].Value;
+            bool isPass = status.Equals("OK", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
+            int snapOk, snapTotal, snapN, snapT;
+            lock (_counterLock)
+            {
+                _currentTotal++;
+                if (isPass)
+                    _currentOk++;
+                snapOk = _currentOk;
+                snapTotal = _currentTotal;
+                snapN = TestedCount;
+                snapT = TotalCount;
+            }
+            if (snapN > 0 && snapT > 0)
+            {
+                _progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
+            }
+
+            if (!EarlyWinnerKilled
+                && snapOk == snapTotal
+                && snapTotal >= 16
+                && !string.IsNullOrEmpty(_currentName))
+            {
+                EarlyWinnerKilled = true;
+                Winner = _currentName;
+                _logger?.Information(
+                    "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
+                    Winner, snapOk, snapTotal);
+                if (_probeLog != null)
+                {
+                    try
+                    {
+                        lock (_probeLogLock)
+                        {
+                            _probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} # EARLY-WINNER {_currentName} ({snapOk}/{snapTotal}) — killing script, skipping remaining {snapT - snapN} configs");
+                        }
+                    }
+                    catch { }
+                }
+                _progress?.Report(new FlowsealProgress(
+                    snapN, snapT, _currentName, snapOk, snapTotal));
+                try { _killScript(); }
+                catch (Exception ex)
+                {
+                    _logger?.Warning(ex, "[ZapretAutoStrategy] Early-kill threw (proc may already be dead)");
+                }
+            }
+            return;
+        }
+
+        if (ErrorLineRx.IsMatch(line))
+        {
+            lock (_counterLock)
+            {
+                if (_errorLines.Count >= 8) _errorLines.RemoveAt(0);
+                _errorLines.Add(line.Trim());
+            }
+            _logger?.Debug("[ZapretAutoStrategy] flowseal-script: {Line}", line.Trim());
+            return;
+        }
+
+        var w = WinnerRx.Match(line);
+        if (w.Success)
+        {
+            Winner = w.Groups[1].Value.Trim();
+            _logger?.Information("[ZapretAutoStrategy] Flowseal sweep winner: {Strategy}", Winner);
+        
+        }
+
+        public IReadOnlyList<string> SnapshotErrors()
+        {
+            lock (_counterLock) return _errorLines.ToArray();
+        }
+
+        public void RecordCurrentStrategy()
+        {
+            int lastOk, lastTotal;
+            string lastName;
+            lock (_counterLock)
+            {
+                lastOk = _currentOk;
+                lastTotal = _currentTotal;
+                lastName = _currentName;
+            }
+            if (!string.IsNullOrEmpty(lastName) && lastTotal > 0)
+            {
+                lock (_perStrategyLock)
+                {
+                    _perStrategy[lastName] = new ZapretStrategyTestResult
+                    {
+                        Passed = lastOk,
+                        Total = lastTotal,
+                        At = DateTime.UtcNow,
+                    };
+                }
+            }
+        }
+
+        public IReadOnlyDictionary<string, ZapretStrategyTestResult> SnapshotScores()
+        {
+            lock (_perStrategyLock)
+                return new Dictionary<string, ZapretStrategyTestResult>(_perStrategy, StringComparer.Ordinal);
+        }
     }
 
     private static void CleanupOrphanWinws(HashSet<int> preExistingPids, Serilog.ILogger? logger)
