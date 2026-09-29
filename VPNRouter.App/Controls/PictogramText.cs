@@ -29,6 +29,7 @@ public sealed class PictogramText : AvaloniaObject
     public static string? GetIcons(Control control) => control.GetValue(IconsProperty);
     public static void SetIcons(Control control, string? value) => control.SetValue(IconsProperty, value);
     public static bool GetPrefixOnly(Control control) => control.GetValue(PrefixOnlyProperty);
+    public static void SetPrefixOnly(Control control, bool value) => control.SetValue(PrefixOnlyProperty, value);
 
     static PictogramText()
     {

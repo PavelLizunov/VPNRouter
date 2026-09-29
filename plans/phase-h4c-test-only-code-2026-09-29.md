@@ -22,6 +22,9 @@ and were deleted).
 
 ## Kept on purpose
 
+`PictogramText.SetPrefixOnly` (first CI run failed: it is the Avalonia
+attached-property accessor for `PrefixOnly`, used from XAML without the `Set`
+prefix; a name scan cannot see that), 
 `*ForTests` seams, methods bound through generated XAML commands
 (`TestAllServersAsync`, `SmpToggleConnectAsync`, `AddServer`, ...), and
 test-observation APIs of live classes (`ConnectionHealthState.Snapshot`,
@@ -34,4 +37,4 @@ name remains in tracked text.
 
 ## Outcome
 
-Pending CI.
+Pending CI. Lesson recorded: name scans must exclude `Set*`/`Get*` accessors of attached properties.

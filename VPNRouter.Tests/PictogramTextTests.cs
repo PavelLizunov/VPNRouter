@@ -27,6 +27,20 @@ public class PictogramTextTests
     }
 
     [AvaloniaFact]
+    public void PrefixOnlyPreservesUserSuppliedSymbols()
+    {
+        var text = new TextBlock();
+        PictogramText.SetIcons(text, "warning,arrow-right");
+        PictogramText.SetPrefixOnly(text, true);
+        PictogramText.SetText(text, "\u26a0 Server A \u2192 B!");
+        Assert.Equal(new[] { "warning" }, Ids(text));
+        Assert.Equal(" Server A \u2192 B!", Runs(text));
+        PictogramText.SetText(text, "Connected [split] \u2192 Server A \u2192 B");
+        Assert.Equal(new[] { "arrow-right" }, Ids(text));
+        Assert.Equal("Connected [split]  Server A \u2192 B", Runs(text));
+    }
+
+    [AvaloniaFact]
     public void UnmappedTextAndExplicitAccessibleNameRemainUntouched()
     {
         var text = new TextBlock();
